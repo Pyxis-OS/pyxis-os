@@ -101,5 +101,6 @@ and uncertain publication over an existing directory preserving both possible
 names. A later capture skipped the leftover temporary without changing it.
 Allocation, partial-I/O and uncertain-write cleanup remain source-reviewed
 without fault injection. Target PNG decoding and other libpng write profiles
-remain unqualified. The owner accepted milestone closure with
-[native ThinkPad qualification deferred](../technical-debt.md#native-screenshot-qualification).
+remain unqualified. The
+[native ThinkPad check](../development/screenshot-qualification.md#native-thinkpad-check)
+passed on 2026-10-08.

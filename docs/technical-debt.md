@@ -499,18 +499,10 @@ must not block early boot or panic output.
 ## Space-layer qualification
 
 The [space-layer milestone](userland/space-layers.md) closed on 2026-10-08 with
-ordinary image builds, nested QEMU interaction/debugger inspection and exact-head
-CI on `f838b21`. Native ThinkPad behavior and performance remain unqualified.
-The owner deferred that check because the machine is occupied by the Bluetooth
-stack investigation; QEMU results do not establish native input or display timing.
-
-- [ ] Owner native ThinkPad Quake check: hide/show with Super+Down/Up, confirm
-  continued game time and live terminal output, fresh held-input behavior,
-  switching away/back, queued-text clearing and hidden-layer Ctrl+C cleanup.
-  Record the tested revision, configuration and result here when the machine
-  becomes available after the Bluetooth investigation. Compare ordinary visible
-  Quake behavior/timing; current short nested-VM timedemos establish no stable
-  performance change.
+nested QEMU qualification. The owner ran the deferred native Quake check on
+2026-10-08 on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC): Super+Down/Up, continued game time and live terminal output,
+fresh held input, switching away and back, queued-text clearing and hidden-layer
+Ctrl+C behaved as specified. `timedemo demo1` ran at 684.5 and 684.7 fps.
 
 Acquisition without PRESENT, explicit repeated PRESENT while hidden, independently
 surviving capture on DISPLAY_RELEASE, shortcut releases after Super and device/
@@ -596,24 +588,6 @@ only with a separate presenter/backing ownership contract. The
 boot-framebuffer, Bochs and VirtIO PNG/monitor comparisons, shown-layer and
 resize coverage, retained snapshot checks and BUSY admission. Failure cleanup
 remains source-reviewed without injected failures.
-
-## Native screenshot qualification
-
-The owner accepted screenshot milestone closure on 2026-10-08 with the native
-ThinkPad check deferred: the machine is unavailable while Bluetooth is being
-worked on directly. QEMU qualification does not establish native framebuffer
-layout, capture/download behavior or performance on that hardware. Revisit when
-the ThinkPad is available, using the merged screenshot image and a granted shell:
-
-```text
-screenshot tmp://thinkpad.png
-xfer send tmp://thinkpad.png
-```
-
-Connect the host client with `--download-dir`, confirm the transfer, and check
-that the downloaded PNG opens and shows navigation, the selected content and
-cursor. Record the image revision and native display geometry alongside that
-result in the [qualification report](development/screenshot-qualification.md).
 
 ## Bochs boot-mode scope and aperture retention
 
@@ -1023,12 +997,13 @@ alone and 17.415 ms with local deadlines; Quake capped-loop medians were
 49.223, 59.595 and 70.291 FPS. These are nested-KVM observations, not native
 or maximum-latency guarantees. See [timekeeping](kernel/timekeeping.md).
 
-ThinkPad LAPIC calibration/power-state behavior, actual sleep/cap latency and
-sustained 32-bit HPET extension with this timer remain unqualified. Revisit when
-owner hardware is available: repeat the recorded SDL and normal Quake workloads,
-record image revision/configuration, and confirm clock continuity and interrupt
-delivery. The [task](wip/sleep-wake-granularity.md) remains open for native evidence
-or an explicitly owner-accepted qualification limit.
+Natively, the owner observed on 2026-10-08 on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC) that capped Quake
+play was much smoother than before. Its tear line stayed in about the top third
+of the screen, consistent with a 72 FPS game on an unsynchronized 60 Hz
+presenter, and `timedemo demo1` was unchanged at about 684 fps. That is an owner
+observation, not a measured native sleep or cap latency. Precise native
+latency, LAPIC power-state behaviour and long-running 32-bit HPET extension
+remain unmeasured; revisit them with a consumer that needs tighter bounds.
 
 Nanosecond units remain a representation, not a precision promise. Interrupt-
 disabled intervals, runnable load, firmware/host stalls and large due batches
@@ -1199,21 +1174,17 @@ transfers.
 
 ## SDL2 and DevilutionX native qualification
 
-The owner closed the SDL2 milestone on 2026-10-08 with its native ThinkPad
-check deferred, because the machine is busy with the Bluetooth investigation.
-QEMU runs do not establish native display, PS/2 pointer and keyboard
-behaviour, touchpad and TrackPoint feel, or frame rates on that hardware.
+The owner checked the shareware build natively on 2026-10-08 on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC). DevilutionX
+started and played with keyboard, touchpad and TrackPoint; key repeat worked in
+name entry. With the default "Limit FPS" setting it ran at 59–65 FPS, mostly
+60–62, filling the 1920x1040 content area. The results are in the
+[DevilutionX reference](userland/devilutionx.md#measurements).
 
-Revisit in the owner's batch of native ThinkPad checks after the Bluetooth
-investigation:
-
-- Boot a `DIABLO_DATA` image and play the shareware with keyboard and mouse,
-  including key repeat in name entry.
-- Note the frame rate with the default "Limit FPS" setting.
-- Run a [standalone bundle](userland/devilutionx.md#standalone-bundle) with
-  the retail data on the installed stick.
-
-Record the result in the [DevilutionX reference](userland/devilutionx.md).
+A [standalone bundle](userland/devilutionx.md#standalone-bundle) with retail
+data on the installed stick remains unchecked natively. The owner deferred it:
+the shareware result is enough for now, and moving 692 MB waits for streaming
+transfers. At the native upload rate measured the same day, about 2.5 MiB/s,
+that is roughly 4½ minutes. Revisit when the owner wants to play the retail data.
 
 ## Quake port limits
 

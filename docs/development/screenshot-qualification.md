@@ -1,8 +1,8 @@
 # Screenshot qualification
 
 The screenshot milestone closed on 2026-10-08 with QEMU qualification and the
-owner's explicit acceptance of deferred native ThinkPad checking. Native capture,
-download and performance remain [technical debt](../technical-debt.md#native-screenshot-qualification).
+owner's explicit acceptance of deferred native ThinkPad checking. The owner ran
+that [native check](#native-thinkpad-check) later the same day.
 The implemented contracts live in [screen capture](../interfaces/screen-capture.md),
 the [command reference](../userland/screenshot.md) and the
 [library profiles](ports.md#zlib-development-library).
@@ -203,3 +203,11 @@ small, debugger-profiled samples establish successful execution and observed
 cost for this static TTY scene. They do not predict graphics/noisy-image encoding
 time, transfer time or native hardware performance. All task-owned QEMU,
 debugger, remote-client and build jobs were stopped after qualification.
+
+## Native ThinkPad check
+
+On 2026-10-08 the owner ran `screenshot tmp://thinkpad.png` and
+`xfer send tmp://thinkpad.png` on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC), with the host client started with
+`--download-dir`. The downloaded PNG was 1920x1080 RGB and showed navigation, the
+selected Development space's terminal and its text cursor. Native capture cost
+was not measured.

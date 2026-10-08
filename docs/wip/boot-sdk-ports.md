@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Deadline sleep wakeups](../kernel/timekeeping.md), 2026-10-08: per-CPU
+  one-shot LAPIC deadlines with 120 Hz preemption kept; Quake's 72 Hz cap went
+  from 49 to 70 FPS in QEMU and was
+  [checked natively](../technical-debt.md#sleep-wake-granularity).
 - [AX200 Bluetooth investigation](../devices/ax200-bluetooth.md),
   2026-10-08: warm-host QEMU passthrough through identification of the MX Master
   3S; [final report](../development/bluetooth-investigation.md). Native Pyxis
@@ -19,16 +23,16 @@ Implemented behavior lives in the subsystem references listed in the
 - [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream
   SDL 2.32.10 for graphical ports, the SDK's CMake toolchain file, and
   [DevilutionX](../userland/devilutionx.md) as an opt-in, personal-use first
-  consumer; [native ThinkPad qualification is deferred](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+  consumer; [checked natively](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
 - [Screenshots](../userland/screenshot.md), 2026-10-08: reusable zlib/libpng
   ports, native CAPTURE and staged PNG output with explicit remote download;
-  [native ThinkPad qualification is deferred](../technical-debt.md#native-screenshot-qualification).
+  [checked natively](../development/screenshot-qualification.md#native-thinkpad-check).
 - [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
   first slice, with up to eight equal/BSP panes and colored scrollback.
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
   libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
-  Super+Up/Down; [native ThinkPad qualification remains open](../technical-debt.md#space-layer-qualification).
+  Super+Up/Down; [checked natively](../technical-debt.md#space-layer-qualification).
 - [Runtime SMP](../kernel/smp.md), 2026-10-06, with
   [topology-aware placement](../kernel/smp.md#placement-and-migration).
 - [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md), 2026-10-06.
@@ -62,11 +66,6 @@ Chosen by the owner, each starting with a proposal:
   the older awaiting-authorization status in the proposal. SDL2 adapter changes
   land after its milestone closes. This milestone's devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
-- **Codex** (2026-10-08): [sleep wake granularity](sleep-wake-granularity.md),
-  deadline-driven wakeups with the existing 120 Hz preemption schedule;
-  the owner accepted the three proposal defaults and authorized implementation
-  on 2026-10-08. Implementation is delivered for review; native qualification
-  remains open.
 - **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
   replacing the 16 MiB buffered `xfer` limit so large files such as retail
   game data can be sent. It starts with a baseline measurement and a

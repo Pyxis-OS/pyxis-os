@@ -1,9 +1,10 @@
 # Per-CPU deadline timer qualification
 
 Measured on 2026-10-08 after the accepted
-[sleep wake decisions](../../../wip/sleep-wake-granularity.md). Compare the
+[sleep wake decisions](../../../kernel/timekeeping.md). Compare the
 [original baseline](README.md) and separately measured [expiry IPI step](ipi.md).
-The owner authorized implementation; native ThinkPad qualification remains open.
+The owner authorized implementation; the owner's native observation is in
+[technical debt](../../../technical-debt.md#sleep-wake-granularity).
 
 The measured source was `e253f22`: the locally integrated architecture/scheduler
 change following the IPI step. Its ordinary kernel and image builds passed with

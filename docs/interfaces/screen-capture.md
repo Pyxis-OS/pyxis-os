@@ -24,9 +24,8 @@ accepted for bring-up; its revisit point is recorded under
 The packaged [screenshot command](../userland/screenshot.md) saves a PNG and
 uses the existing explicit file-download workflow. See the
 [qualification report](../development/screenshot-qualification.md) for measured
-QEMU coverage and cost, and
-[native qualification debt](../technical-debt.md#native-screenshot-qualification)
-for the deferred ThinkPad check.
+QEMU coverage and cost, and its
+[native ThinkPad check](../development/screenshot-qualification.md#native-thinkpad-check).
 
 ## Request and owned result
 
@@ -117,5 +116,6 @@ The [qualification report](../development/screenshot-qualification.md) records
 PNG/monitor comparisons across boot, Bochs and VirtIO displays, shown-layer and
 resize coverage, snapshot retention, and matched presenter/encoder measurements.
 Allocation/backend failure and stop cleanup remain source-reviewed without
-injected failures. The owner accepted milestone closure with
-[native ThinkPad qualification deferred](../technical-debt.md#native-screenshot-qualification).
+injected failures. The owner accepted milestone closure before the
+[native ThinkPad check](../development/screenshot-qualification.md#native-thinkpad-check),
+which passed later that day.

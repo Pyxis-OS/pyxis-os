@@ -26,8 +26,8 @@ authority, the immutable FILE result and presenter handoff.
 The [screenshot command](userland/screenshot.md) covers staged PNG output and
 the explicit host-download workflow. The
 [qualification report](development/screenshot-qualification.md) records QEMU
-coverage and measured cost; native ThinkPad checking remains
-[technical debt](technical-debt.md#native-screenshot-qualification).
+coverage and measured cost, and the
+[native ThinkPad check](development/screenshot-qualification.md#native-thinkpad-check).
 
 The [RTL8111 driver](devices/rtl8111.md) supports the ThinkPad's built-in port.
 Its [hardware profile](devices/rtl8111-hardware.md) records ownership and register
