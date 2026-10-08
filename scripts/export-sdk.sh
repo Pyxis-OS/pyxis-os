@@ -29,6 +29,8 @@ case "${1:-}" in
     fi
     install -C -m 644 lib/shebang.c "$sdk/share/pyxis/shebang.c"
     install -C -m 644 lib/key_layout.c "$sdk/share/pyxis/key_layout.c"
+    install -C -m 644 cmake/pyxis.cmake "$sdk/share/pyxis.cmake"
+    install -C -D -m 644 cmake/Platform/Pyxis.cmake "$sdk/share/cmake/Platform/Pyxis.cmake"
     install -C -m 644 userspace/target.mk "$sdk/share/pyxis.mk"
     ;;
   complete)

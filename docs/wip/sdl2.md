@@ -1,9 +1,10 @@
 # SDL2 with a native backend
 
-Status: **task 3 delivered for review, 2026-10-08; assigned to Claude.** Tasks
-1 and 2 are merged ([#522](https://git.internal/PyxisOS/pyxis-os/pulls/522),
-[#525](https://git.internal/PyxisOS/pyxis-os/pulls/525)). The owner accepted
-five [decisions](#accepted-decisions). Later tasks start one at a time.
+Status: **task 4 delivered for review, 2026-10-08; assigned to Claude.** Tasks
+1–3 are merged ([#522](https://git.internal/PyxisOS/pyxis-os/pulls/522),
+[#525](https://git.internal/PyxisOS/pyxis-os/pulls/525),
+[#529](https://git.internal/PyxisOS/pyxis-os/pulls/529)). The owner accepted
+eight [decisions](#accepted-decisions). Later tasks start one at a time.
 
 ## Goal and completion
 
@@ -195,16 +196,24 @@ No fork repository. The backend's parts:
 ### First consumer
 
 DevilutionX 1.5.5, single player, no network, no sound. Built with CMake
-through a toolchain file the SDK exports as `share/pyxis.cmake`, beside
-`pyxis.mk`. The probe's toolchain file is that file's starting point.
+through the SDK's [toolchain file](../development/sdk.md#cmake),
+`share/pyxis.cmake`, from task 4.
 
 Its smaller dependencies (bzip2, libmpq, SDL_image's PNG loader,
 libsmackerdec and SimpleIni) are pinned archives built inside the recipe.
 They are not separate ports. Patches as listed above, plus:
 
-- a Pyxis CMake platform file;
+- a DevilutionX platform file, selected by `CMAKE_SYSTEM_NAME STREQUAL "Pyxis"`;
 - hardware cursor off and its option hidden;
 - default paths, so a bare `devilutionx` starts without arguments.
+
+Two findings for task 5:
+
+- **Save path.** DevilutionX saves next to a writable `diablo.ini` in the
+  working directory. In task 3's run that sent saves to `host://` instead of
+  `home://devilution/`, so the default paths must take it into account.
+- **Stripping.** Its release build strips the executable after linking, which
+  `llvm-strip` cannot do to P1F.
 
 Its packaging changed after task 1; see [decision 4](#4-devilutionx-packaging).
 Before task 5, record the licence of DevilutionX, of its assets, and of each
@@ -285,6 +294,44 @@ Checked as working:
 Not covered: key repeat, because QEMU's injected PS/2 input has no typematic
 repeat, and native hardware.
 
+## Task 4: the CMake toolchain file
+
+The SDK exports `cmake/pyxis.cmake` as `share/pyxis.cmake` and
+`cmake/Platform/Pyxis.cmake` as `share/cmake/Platform/Pyxis.cmake`; the
+[SDK reference](../development/sdk.md#cmake) describes them. Choices made while
+implementing:
+
+- **The compiler prefix.** It follows `-DPYXIS_CROSS_COMPILE`, the
+  `CROSS_COMPILE` environment variable or the default prefix, and try-compile
+  projects inherit it.
+- **C headers.** C puts the SDK's headers ahead of Clang's builtin ones through
+  `CMAKE_C_STANDARD_INCLUDE_DIRECTORIES`. Without that, freestanding C got
+  Clang's `stdint.h`, with an 8-bit `int_fast8_t` instead of the SDK's 32-bit
+  one. A static assertion caught it during this task.
+- **Search prefixes.** The platform file sets them to `/usr` and `/`, so the
+  sysroot and development prefixes such as `build/ports-dev/sdl2` are both
+  searchable.
+- **fastfetch.** Its recipe keeps compile-only configure checks
+  (`CMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`), because it replaces the
+  driver's startup and libraries with its own link flags.
+
+Validation, with the [ports change](https://git.internal/PyxisOS/pyxis-ports/pulls/61)
+on main `9acf597`:
+
+- **Converted recipes.** fmt and mbedtls stage byte-identical outputs to the
+  old recipes. fastfetch differs only in the build time it compiles into
+  `version.c`: its other 50 objects are identical without debug sections, and
+  the old recipe alone already rebuilds differently.
+- **Test projects in QEMU** (nested KVM, 4 CPUs):
+  - a C program with a static library printed `hello 42`;
+  - C++ with `<format>` printed `cxx 3`;
+  - assembly printed `asm 7`;
+  - an SDL2 program, found through `CMAKE_FIND_ROOT_PATH`, rendered 60 frames
+    with the `pyxis` driver.
+
+  Configure checks found `strdup` and `fileno` and did not find `fork`; CMake
+  printed no unknown-system warning. The rebuilt fastfetch ran normally.
+
 ## Accepted decisions
 
 Accepted by the owner on 2026-10-08, as proposed in task 1.
@@ -347,6 +394,32 @@ Accepted by the owner on 2026-10-08, as the separately agreed extension that
   stream or its descriptor is closed.
 - It adds no `fdopen`, `O_RDWR` or duplication, so no new descriptor aliases.
 
+### 6. CMake system name
+
+Accepted by the owner on 2026-10-08, with task 4.
+
+- `CMAKE_SYSTEM_NAME` is `Pyxis`. The SDK ships `share/cmake/Platform/Pyxis.cmake`
+  with the `.pxe` suffix and static libraries only, and with neither `UNIX` nor
+  `WIN32` set.
+- Projects detect Pyxis by name, as fastfetch's patch already does.
+
+### 7. C language mode under CMake
+
+Accepted by the owner on 2026-10-08, with task 4.
+
+- As in `pyxis.mk`, C is freestanding and C++ is hosted.
+- Freestanding C keeps Clang from emitting calls to library functions the
+  source never made, as the probe saw.
+
+### 8. Existing CMake recipes
+
+Accepted by the owner on 2026-10-08, with task 4.
+
+- fastfetch, fmt and mbedtls switch to the SDK file and drop their own
+  toolchain files.
+- `scripts/cxx-runtime.sh` keeps its own configuration, because it builds
+  libc++ before the SDK is complete.
+
 ## Tasks
 
 1. [x] Probe and proposal: this document. Documentation only.
@@ -360,8 +433,8 @@ Accepted by the owner on 2026-10-08, as the separately agreed extension that
    - the shared US key layout (Pyxis and userland);
    - checked in QEMU with a test program that is not committed, on standard
      VGA, Bochs, and VirtIO with a resize.
-4. [ ] **SDK CMake toolchain file** (Pyxis): `share/pyxis.cmake`, documented in
-   the SDK reference.
+4. [x] **SDK CMake toolchain file**: [ports #61](https://git.internal/PyxisOS/pyxis-ports/pulls/61)
+   and its Pyxis PR. `share/pyxis.cmake` is documented in the SDK reference.
 5. [ ] **DevilutionX** (ports and Pyxis):
    - the recipe, dependencies and patches;
    - licence notices for it and each dependency;
