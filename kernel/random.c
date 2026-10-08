@@ -5,11 +5,13 @@
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/random.h>
+#include <kernel/random/generator.h>
 #include <kernel/task.h>
 #include <kernel/virtio/rng.h>
 #include <stdatomic.h>
 
 #define RNG_CALL_LIMIT 8
+#define RNG_SEED_WAIT_MS 5000
 
 enum random_source { RANDOM_NONE, RANDOM_VIRTIO, RANDOM_CPU };
 static enum random_source source;
@@ -17,7 +19,7 @@ static enum random_source source;
 enum rng_call_state { RNG_FREE, RNG_QUEUED, RNG_ACTIVE, RNG_DONE };
 struct rng_call {
   enum rng_call_state state;
-  size_t length, filled;
+  size_t length;
   uint64_t deadline;
   uint8_t bytes[RANDOM_MAX_BYTES];
   enum call_status status;
@@ -26,6 +28,16 @@ struct rng_call {
 };
 
 static struct rng_call *current; /* BSP worker only; detach before completion. */
+
+/* BSP worker only. No caller owns a seed attempt or its source DMA. */
+static struct random_generator generator;
+static bool seed_required;
+static struct {
+  uint8_t bytes[RANDOM_GENERATOR_SEED_BYTES];
+  size_t filled;
+  uint64_t deadline;
+  bool active;
+} seed;
 
 /* Shared request/notification state. All users hold the lock with IF=0.
  * DONE still owns its slot until the original caller consumes it. */
@@ -67,6 +79,9 @@ void random_notify(void)
 /* Lock held. The caller may consume and reuse the slot as soon as we unlock. */
 static void complete_call(struct rng_call *call, enum call_status status)
 {
+  if (status != CALL_OK) {
+    memzero_explicit(call->bytes, sizeof(call->bytes));
+  }
   call->status = status;
   call->state = RNG_DONE;
   struct task_wait *wait = call->wait;
@@ -132,13 +147,15 @@ enum call_status random_read(void *bytes, size_t length, uint64_t deadline)
   if (status == CALL_OK) {
     memcpy(bytes, call->bytes, length);
   }
-  *call = (struct rng_call){0};
+  memzero_explicit(call, sizeof(*call));
   unlock_rng();
   return status;
 }
 
 static void stop_service(const char *reason)
 {
+  random_generator_clear(&generator);
+  memzero_explicit(&seed, sizeof(seed));
   uint64_t flags = cpu_save_interrupts();
   current = NULL;
   lock_rng();
@@ -180,21 +197,57 @@ static bool expire_calls(void)
   return worked;
 }
 
-static void finish_chunk(size_t length)
+static void fail_seed(void)
 {
-  struct rng_call *call = current;
-  if (call) {
-    KASSERT(length <= call->length - call->filled);
-    call->filled += length;
-    if (call->filled == call->length) {
-      uint64_t flags = cpu_save_interrupts();
-      lock_rng();
-      current = NULL;
-      complete_call(call, task_deadline_expired(call->deadline) ? CALL_TIMED_OUT : CALL_OK);
-      unlock_rng();
-      cpu_restore_interrupts(flags);
+  memzero_explicit(&seed, sizeof(seed));
+  /* Keep the required reseed latched even if a later request is smaller. */
+  uint64_t flags = cpu_save_interrupts();
+  lock_rng();
+  current = NULL;
+  for (size_t i = 0; i < RNG_CALL_LIMIT; ++i) {
+    struct rng_call *call = &calls[i];
+    if (call->state == RNG_QUEUED || call->state == RNG_ACTIVE) {
+      enum call_status status = call->cancelled ? CALL_ENDPOINT_CLOSED :
+          task_deadline_expired(call->deadline) ? CALL_TIMED_OUT : CALL_UNAVAILABLE;
+      complete_call(call, status);
     }
   }
+  unlock_rng();
+  cpu_restore_interrupts(flags);
+}
+
+static bool expire_seed(void)
+{
+  if (!seed.active || !task_deadline_expired(seed.deadline)) {
+    return false;
+  }
+  fail_seed();
+  return true;
+}
+
+static void finish_seed(void)
+{
+  KASSERT(seed.active && seed.filled == sizeof(seed.bytes));
+  if (!expire_seed()) {
+    random_generator_seed(&generator, seed.bytes, arch_monotonic_ns());
+    memzero_explicit(&seed, sizeof(seed));
+    seed_required = false;
+  }
+}
+
+static void generate_reply(void)
+{
+  struct rng_call *call = current;
+  KASSERT(call && !seed_required);
+  random_generator_read(&generator, call->bytes, call->length);
+  uint64_t flags = cpu_save_interrupts();
+  lock_rng();
+  current = NULL;
+  enum call_status status = call->cancelled ? CALL_ENDPOINT_CLOSED :
+      task_deadline_expired(call->deadline) ? CALL_TIMED_OUT : CALL_OK;
+  complete_call(call, status);
+  unlock_rng();
+  cpu_restore_interrupts(flags);
 }
 
 static void select_call(void)
@@ -217,6 +270,9 @@ static void wait_for_work(void)
   uint64_t flags = cpu_save_interrupts();
   lock_rng();
   uint64_t deadline = source == RANDOM_VIRTIO ? virtio_rng_deadline() : UINT64_MAX;
+  if (seed.active && seed.deadline < deadline) {
+    deadline = seed.deadline;
+  }
   for (size_t i = 0; i < RNG_CALL_LIMIT; ++i) {
     if ((calls[i].state == RNG_QUEUED || calls[i].state == RNG_ACTIVE) &&
         calls[i].deadline < deadline) {
@@ -244,44 +300,41 @@ static void wait_for_work(void)
   cpu_restore_interrupts(flags);
 }
 
-static bool fill_cpu(void)
+static bool fill_cpu_seed(void)
 {
-  struct rng_call *call = current;
-  if (!call) {
-    return true;
-  }
-  while (current) {
+  while (seed.active) {
     expire_calls();
-    if (!current) {
+    if (expire_seed()) {
       return true;
     }
-    uint64_t word;
+    uint64_t word = 0;
     enum arch_random_result result = arch_random_word(&word);
     if (result == ARCH_RANDOM_FAILED) {
-      memset(call->bytes, 0, sizeof(call->bytes));
-      call->filled = 0;
+      memzero_explicit(&word, sizeof(word));
+      memzero_explicit(seed.bytes, sizeof(seed.bytes));
+      seed.filled = 0;
       if (!arch_random_enabled(ARCH_RANDOM_RDSEED) && !arch_random_enabled(ARCH_RANDOM_RDRAND)) {
         stop_service("no healthy CPU entropy instruction");
         return false;
       }
-      /* A failed instruction cannot contribute any byte to this request. */
+      /* A failed instruction cannot contribute any byte to the seed. */
       continue;
     }
     if (result == ARCH_RANDOM_EMPTY) {
-      uint64_t flags = cpu_save_interrupts();
-      lock_rng();
-      current = NULL;
-      complete_call(call, task_deadline_expired(call->deadline) ? CALL_TIMED_OUT : CALL_UNAVAILABLE);
-      unlock_rng();
-      cpu_restore_interrupts(flags);
+      memzero_explicit(&word, sizeof(word));
+      fail_seed();
       return true;
     }
-    size_t length = call->length - call->filled;
+    size_t length = sizeof(seed.bytes) - seed.filled;
     if (length > sizeof(word)) {
       length = sizeof(word);
     }
-    memcpy(call->bytes + call->filled, &word, length);
-    finish_chunk(length);
+    memcpy(seed.bytes + seed.filled, &word, length);
+    memzero_explicit(&word, sizeof(word));
+    seed.filled += length;
+    if (seed.filled == sizeof(seed.bytes)) {
+      finish_seed();
+    }
   }
   return true;
 }
@@ -294,7 +347,7 @@ static void entropy_worker(void *argument)
       stop_service("cannot activate transport");
       return;
     }
-    klog("virtio-rng: host random source ready, demand-driven reads\n");
+    klog("virtio-rng: host seed source ready, demand-driven reseeding\n");
   } else {
     if (!arch_random_init()) {
       stop_service("CPU entropy boot self-test failed or instructions unavailable");
@@ -307,37 +360,53 @@ static void entropy_worker(void *argument)
   }
   for (;;) {
     bool worked = expire_calls();
+    worked = expire_seed() || worked;
+    enum virtio_rng_result result = VIRTIO_RNG_IDLE;
     if (source == RANDOM_VIRTIO) {
-      struct rng_call *call = current;
       size_t length = 0;
-      enum virtio_rng_result result = virtio_rng_poll(
-          call ? call->bytes + call->filled : NULL,
-          call ? call->length - call->filled : 0, &length);
+      result = virtio_rng_poll(seed.active ? seed.bytes + seed.filled : NULL,
+          seed.active ? sizeof(seed.bytes) - seed.filled : 0, &length);
       if (result == VIRTIO_RNG_FAILED) {
         stop_service("device status, completion or watchdog failure");
         return;
       }
       if (result == VIRTIO_RNG_COMPLETE) {
-        finish_chunk(length);
+        if (seed.active) {
+          KASSERT(length <= sizeof(seed.bytes) - seed.filled);
+          seed.filled += length;
+          if (seed.filled == sizeof(seed.bytes)) {
+            finish_seed();
+          }
+        }
         worked = true;
       }
-      if (result != VIRTIO_RNG_PENDING) {
-        if (!current) {
-          select_call();
+    }
+    if (!current) {
+      select_call();
+    }
+    if (current) {
+      if (seed_required || random_generator_due(&generator, current->length,
+          arch_monotonic_ns())) {
+        seed_required = true;
+        /* An old DMA completion must be discarded before a new attempt starts. */
+        if (!seed.active && result != VIRTIO_RNG_PENDING) {
+          seed.active = true;
+          seed.deadline = task_deadline_after_ms(RNG_SEED_WAIT_MS);
+          worked = true;
         }
-        if (current && !task_deadline_expired(current->deadline)) {
-          virtio_rng_submit(current->length - current->filled);
-        }
-        worked = worked || current;
+      } else {
+        generate_reply();
+        worked = true;
       }
-    } else {
-      if (!current) {
-        select_call();
-      }
-      if (current) {
-        if (!fill_cpu()) {
+    }
+    if (seed.active) {
+      if (source == RANDOM_CPU) {
+        if (!fill_cpu_seed()) {
           return;
         }
+        worked = true;
+      } else if (result != VIRTIO_RNG_PENDING) {
+        virtio_rng_submit(sizeof(seed.bytes) - seed.filled);
         worked = true;
       }
     }

@@ -171,7 +171,7 @@ void virtio_rng_stop(const char *reason)
   bool reset = common_config()->device_status == 0;
   if (reset) {
     virtqueue_confirm_reset(&entropy.queue);
-    memset((void *)entropy.buffer.address, 0, VIRTIO_RNG_BUFFER_BYTES);
+    memzero_explicit((void *)entropy.buffer.address, VIRTIO_RNG_BUFFER_BYTES);
   }
   /* Keep shared mappings and DMA storage until reboot, even after reset. */
   klog("virtio-rng: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
@@ -201,7 +201,7 @@ enum virtio_rng_result virtio_rng_poll(void *bytes, size_t capacity, size_t *len
     }
     *length = completion.written;
     /* Only a checked used entry returned ownership, including discarded data. */
-    memset((void *)entropy.buffer.address, 0, VIRTIO_RNG_BUFFER_BYTES);
+    memzero_explicit((void *)entropy.buffer.address, VIRTIO_RNG_BUFFER_BYTES);
     return VIRTIO_RNG_COMPLETE;
   }
   if (entropy.queue.outstanding && task_deadline_expired(entropy.dma_deadline)) {

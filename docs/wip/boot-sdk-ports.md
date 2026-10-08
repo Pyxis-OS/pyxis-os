@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Kernel random generator](../devices/random-generator.md), 2026-10-08:
+  BSP-owned ChaCha20 with the accepted OpenBSD rekey construction, hardware
+  seed/reseed policy and unchanged random grant; matched VirtIO/CPU qualification
+  recorded, with [trust and availability limits](../technical-debt.md#random-generator-trust-and-availability).
 - [Deadline sleep wakeups](../kernel/timekeeping.md), 2026-10-08: per-CPU
   one-shot LAPIC deadlines with 120 Hz preemption kept; Quake's 72 Hz cap went
   from 49 to 70 FPS in QEMU and was

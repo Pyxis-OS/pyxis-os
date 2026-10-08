@@ -14,7 +14,7 @@ enum virtio_rng_result {
 /* BSP/IF=0, before AP startup. Presence and preparation failure are distinct. */
 enum virtio_rng_preparation virtio_rng_prepare(const struct boot_info *boot);
 /* BSP worker only. Poll copies/discards returned DMA data and clears the buffer;
- * NULL bytes discards a detached caller's completion. Stop retains resources. */
+ * NULL bytes discards an abandoned source request. Stop retains resources. */
 bool virtio_rng_activate(void);
 enum virtio_rng_result virtio_rng_poll(void *bytes, size_t capacity, size_t *length);
 void virtio_rng_submit(size_t length);

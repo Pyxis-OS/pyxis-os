@@ -1,0 +1,43 @@
+Remote debugging using 127.0.0.1:1241
+0xffffffff80012826 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = true
+$2 = false
+$3 = false
+$4 = (struct rng_call *) 0x0
+$5 = 0
+Hardware assisted breakpoint 1 at 0xffffffff80013313: file kernel/random/generator.c, line 49.
+Continuing.
+
+Breakpoint 1, random_generator_seed (generator=..., seed=..., now=...) at kernel/random/generator.c:49
+49	  if (generator->seeded) {
+$6 = 1
+$7 = 0
+Attempt to extract a component of a value that is not a structure.
+Attempt to extract a component of a value that is not a structure.
+$8 = true
+Run till exit from #0  random_generator_seed (generator=..., seed=..., now=...) at kernel/random/generator.c:49
+finish_seed () at kernel/random.c:233
+233	    memzero_explicit(&seed, sizeof(seed));
+$9 = 1
+$10 = 1
+234	    seed_required = false;
+236	}
+$11 = false
+tentative seed erased: True
+Continuing.
+
+Breakpoint 1, random_generator_seed (generator=..., seed=..., now=...) at kernel/random/generator.c:49
+49	  if (generator->seeded) {
+$12 = 1
+$13 = 1
+$14 = true
+$15 = 40
+$16 = true
+Run till exit from #0  random_generator_seed (generator=..., seed=..., now=...) at kernel/random/generator.c:49
+finish_seed () at kernel/random.c:233
+233	    memzero_explicit(&seed, sizeof(seed));
+234	    seed_required = false;
+236	}
+$17 = false
+tentative seed erased: True
