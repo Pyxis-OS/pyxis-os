@@ -43,6 +43,14 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
+  documentation-only proposal for program cursor images, surface routing,
+  tab clicks, terminal/mux selection and pointer lock with Super+Esc.
+  The original directions and both decision rounds are accepted on 2026-10-08;
+  selection/export, presentation/capture and delivery/closure await round three.
+  Task 1 requires explicit owner authorization, including after plan merge.
+  SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
+  clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
   upstream SDL2 with video, input and timer support over the display,
   keyboard, pointer and clock sessions; audio waits for an audio driver.
@@ -61,7 +69,7 @@ Chosen by the owner, each starting with a proposal:
 
 ## Candidates for the next milestone
 
-None is selected.
+Other candidates; current assignments are listed above.
 
 - [Terminal applications](terminal-applications.md): a single-panel file
   navigator, then operations between navigators.
@@ -70,10 +78,10 @@ None is selected.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
-- [A system pointer](pointer.md): a cursor programs can customize, tab clicks,
-  terminal selection, pointer lock with Super+Esc, and USB HID mice.
 - [Clipboard](clipboard.md): typed objects with a text form, local and shared
   across spaces.
+- USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
+  boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
 - Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
   now that [C++ in userspace](../development/cxx-userspace.md) is complete.
