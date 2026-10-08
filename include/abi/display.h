@@ -54,8 +54,9 @@ struct display_size_reply {
 
 /* DRAW authorizes every operation, only in the display's own space. ACQUIRE
  * is exclusive and returns BUSY even if this process already owns graphics.
- * PRESENT selects the mapping for periodic presentation; writes thereafter
- * may appear without another call. No snapshot, vblank or tear-free guarantee.
+ * First PRESENT selects the mapping for periodic presentation. Later PRESENT
+ * and REPLACE preserve the user's graphics/terminal layer choice; writes may
+ * appear without another call. No snapshot, vblank or tear-free guarantee.
  * PRESENT/REPLACE/RELEASE require the acquiring process. PRESENT and RELEASE
  * return no reply bytes. REPLACE returns BUSY on a generation mismatch and
  * otherwise maps a zeroed current-size buffer at a disjoint address. Success

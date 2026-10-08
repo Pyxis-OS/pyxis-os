@@ -46,12 +46,17 @@ start, so moving the mouse turns and looks up and down; the left button fires
 and the right moves forward. On a first run without a saved configuration, the
 middle button selects the next weapon rather than toggling mouse look. The
 wheel is unbound by default (`bind mwheelup "impulse 10"` binds it).
-Super+Left/Right remains space navigation.
+Super+Left/Right remains space navigation. Super+Down shows the terminal and
+Super+Up restores graphics; further frames preserve that choice.
 
 Focus loss or an input reset releases every held key and button, including
 modifiers shared by left/right keys and mouse buttons. A button held across a
-space switch must be pressed again. An inactive session blocks on keyboard input
-and its time is excluded from game time.
+space or layer switch must be pressed again. Hidden and unselected sessions keep
+polling input, advancing game time and rendering; focus only controls input
+eligibility. Open the menu or console, or use Quake's Pause binding, to pause
+single-player gameplay explicitly. Rendering continues using CPU and memory
+bandwidth while hidden. A foreground game's terminal also provides the shell's
+[Ctrl+C interrupt](shell.md#interrupting-foreground-commands).
 
 Quake requires the shell's named display, keyboard and clock grants and uses
 the pointer grant when present. Without a pointer grant or a working mouse it

@@ -24,6 +24,11 @@ static void unlock_keyboard(struct keyboard_object *keyboard)
   atomic_store_explicit(&keyboard->locked, false, memory_order_release);
 }
 
+static bool capture_focused(const struct keyboard_object *keyboard)
+{
+  return keyboard->selected && !keyboard->terminal_layer;
+}
+
 bool keyboard_owned(struct keyboard_object *keyboard, struct process *process)
 {
   uint64_t flags = cpu_save_interrupts();
@@ -56,14 +61,14 @@ static void destroy_keyboard(struct kernel_object *object)
   kfree(keyboard);
 }
 
-struct keyboard_object *keyboard_create(struct space *space, bool focused)
+struct keyboard_object *keyboard_create(struct space *space, bool selected)
 {
   KASSERT(arch_cpu_index() == 0);
   struct keyboard_object *keyboard = kmalloc(sizeof(*keyboard));
   if (!keyboard) {
     return NULL;
   }
-  *keyboard = (struct keyboard_object){.space = space, .focused = focused};
+  *keyboard = (struct keyboard_object){.space = space, .selected = selected};
   atomic_init(&keyboard->locked, false);
   object_init(&keyboard->object, OBJECT_KEYBOARD, destroy_keyboard);
   return keyboard;
@@ -75,7 +80,7 @@ static void queue_event(struct keyboard_object *keyboard, struct keyboard_event 
 {
   KASSERT(keyboard->count < KEYBOARD_EVENT_CAPACITY);
   size_t tail = (keyboard->head + keyboard->count) % KEYBOARD_EVENT_CAPACITY;
-  event.flags = keyboard->focused ? KEYBOARD_EVENT_FOCUSED : 0;
+  event.flags = capture_focused(keyboard) ? KEYBOARD_EVENT_FOCUSED : 0;
   keyboard->events[tail] = event;
   ++keyboard->count;
   struct task_wait *reader = keyboard->reader;
@@ -91,20 +96,56 @@ static void reset_keys(struct keyboard_object *keyboard)
   memset(keyboard->down, 0, sizeof(keyboard->down));
 }
 
-void keyboard_focus(struct keyboard_object *keyboard, bool focused)
+/* Keep an unread loss notification when switching away from a hidden layer:
+ * capture is already unfocused, and the latest notification remains valid. */
+static bool publish_focus(struct keyboard_object *keyboard, bool previous)
+{
+  bool focused = capture_focused(keyboard);
+  if (focused == previous) {
+    return false;
+  }
+  reset_keys(keyboard);
+  if (!keyboard->owner) {
+    return false;
+  }
+  queue_event(keyboard, (struct keyboard_event){
+    .action = focused ? KEY_FOCUS_GAINED : KEY_FOCUS_LOST,
+  });
+  return true;
+}
+
+void keyboard_focus(struct keyboard_object *keyboard, bool selected)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_keyboard(keyboard);
   bool queued = false;
-  if (keyboard->focused != focused) {
-    keyboard->focused = focused;
-    reset_keys(keyboard);
-    if (keyboard->owner) {
-      queue_event(keyboard, (struct keyboard_event){
-        .action = focused ? KEY_FOCUS_GAINED : KEY_FOCUS_LOST,
-      });
-      queued = true;
-    }
+  if (keyboard->selected != selected) {
+    bool previous = capture_focused(keyboard);
+    keyboard->selected = selected;
+    memset(keyboard->down, 0, sizeof(keyboard->down));
+    queued = publish_focus(keyboard, previous);
+  }
+  unlock_keyboard(keyboard);
+  if (queued) {
+    readiness_notify();
+  }
+}
+
+void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
+                        bool discard_input)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_keyboard(keyboard);
+  bool restore_capture = keyboard->owner && keyboard->terminal_layer && !terminal_layer;
+  bool queued = false;
+  if (keyboard->terminal_layer != terminal_layer) {
+    bool previous = capture_focused(keyboard);
+    keyboard->terminal_layer = terminal_layer;
+    memset(keyboard->down, 0, sizeof(keyboard->down));
+    queued = publish_focus(keyboard, previous);
+  }
+  if (discard_input || restore_capture) {
+    console_discard_input(keyboard->space->console);
   }
   unlock_keyboard(keyboard);
   if (queued) {
@@ -120,7 +161,8 @@ void keyboard_reset_input(struct keyboard_object *keyboard)
   bool owned = keyboard->owner != NULL;
   if (keyboard->owner) {
     queue_event(keyboard, (struct keyboard_event){.action = KEY_STATE_RESET});
-  } else {
+  }
+  if (!keyboard->owner || keyboard->terminal_layer) {
     console_input_lost(keyboard->space->console);
   }
   unlock_keyboard(keyboard);
@@ -152,15 +194,15 @@ void keyboard_route_event(struct keyboard_object *keyboard, const struct key_eve
   KASSERT(arch_cpu_index() == 0 && event->key > KEY_NONE && event->key < KEY_COUNT);
   KASSERT(event->action <= KEY_REPEAT);
   lock_keyboard(keyboard);
-  if (!keyboard->focused ||
+  if (!keyboard->selected ||
       (event->action != KEY_PRESS && !keyboard->down[event->key])) {
     unlock_keyboard(keyboard);
     return;
   }
   keyboard->down[event->key] = event->action != KEY_RELEASE;
-  unsigned modifiers = accepted_modifiers(keyboard, event->modifiers);
-  bool owned = keyboard->owner != NULL;
-  if (keyboard->owner) {
+  bool captured = keyboard->owner && !keyboard->terminal_layer;
+  if (captured) {
+    unsigned modifiers = accepted_modifiers(keyboard, event->modifiers);
     if (keyboard->count == KEYBOARD_EVENT_CAPACITY) {
       /* Losing a release invalidates every held key. Drop this event too and
        * require fresh presses after the reset instead of forwarding repeats. */
@@ -180,8 +222,20 @@ void keyboard_route_event(struct keyboard_object *keyboard, const struct key_eve
     }
   }
   unlock_keyboard(keyboard);
-  if (owned) {
+  if (captured) {
     readiness_notify();
+  }
+}
+
+static void reset_capture(struct keyboard_object *keyboard)
+{
+  if (keyboard->terminal_layer) {
+    /* Acquisition/release does not change the console destination. Preserve
+     * its queued bytes and accepted presses, including during owner cleanup. */
+    keyboard->head = keyboard->count = 0;
+  } else {
+    reset_keys(keyboard);
+    console_discard_input(keyboard->space->console);
   }
 }
 
@@ -190,8 +244,7 @@ static void release_keyboard(struct keyboard_object *keyboard)
   /* One task per process: the owner cannot release/exit while its READ sleeps. */
   KASSERT(!keyboard->reader);
   keyboard->owner = NULL;
-  reset_keys(keyboard);
-  console_discard_input(keyboard->space->console);
+  reset_capture(keyboard);
 }
 
 void keyboard_process_exit(struct process *process)
@@ -246,10 +299,9 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
       status = CALL_BUSY;
     } else {
       keyboard->owner = process;
-      reset_keys(keyboard);
-      console_discard_input(keyboard->space->console);
+      reset_capture(keyboard);
       queue_event(keyboard, (struct keyboard_event){
-        .action = keyboard->focused ? KEY_FOCUS_GAINED : KEY_FOCUS_LOST,
+        .action = capture_focused(keyboard) ? KEY_FOCUS_GAINED : KEY_FOCUS_LOST,
       });
     }
     unlock_keyboard(keyboard);

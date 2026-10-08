@@ -414,6 +414,14 @@ Input typed before Ctrl+C is discarded, so text typed into a hung command never
 runs as the next shell command. Ctrl+C at the prompt still cancels the line,
 because the shell is not armed while editing.
 
+For a foreground graphical job, Super+Down shows the terminal and routes typing
+to its normal 4 KiB queue while the game keeps running. The shell still waits for
+the job and opens no second prompt; unread text waits for a later reader.
+Super+Up restores graphics and clears unread terminal bytes. While the terminal
+is shown, Ctrl+C reaches the shell's existing armed interrupt and terminates the
+foreground job through the same authority and cleanup above. This adds no job
+control or termination authority. See [graphics layers](../interfaces/graphics.md#choosing-the-visible-layer).
+
 Programs that read lines through libterm hold passthrough only while editing a
 line. In the Lua REPL, Ctrl+C cancels a typed line, but running code is
 terminated. Kilo holds passthrough for its whole session, so Ctrl+C never ends
@@ -423,8 +431,9 @@ it or discards unsaved edits; quit with Ctrl-Q.
 - **Without the right or a clock**, jobs wait without interruption, as before.
 - **If arming fails**, the shell prints one diagnostic and runs the job without
   interruption.
-- **Raw-keyboard programs** such as Doom receive key events rather than text,
-  so they end through their own controls.
+- **Raw-keyboard programs** such as Doom receive key events rather than text
+  while capture is the destination. Use their own controls, or show a foreground
+  graphical job's terminal with Super+Down and use the armed Ctrl+C interrupt.
 
 ## Background commands
 

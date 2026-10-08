@@ -42,9 +42,15 @@ shell at its end. The two local demos identify version 109 (Doom 1.9).
 
 Arrows move/turn; Ctrl fires, Space uses, Shift runs, Alt strafes, and comma/period
 strafe left/right. Escape opens the menu. F10 then Y quits to the shell.
-Super+Left/Right remains space navigation. The port releases held game keys on
-focus loss or input reset, blocks while inactive and excludes inactive time
-from its elapsed game clock.
+Super+Left/Right remains space navigation. Super+Down shows the terminal and
+Super+Up restores graphics; further frames preserve that choice. The port
+releases held game keys on focus loss or input reset, requiring a fresh press
+after a space or layer switch. Hidden and unselected sessions keep polling input,
+advancing game time and rendering; focus only controls input eligibility. Pause
+or the single-player menu pauses gameplay explicitly; demo playback continues
+through the menu. Rendering still uses CPU and memory bandwidth while hidden.
+A foreground game's terminal also provides the shell's
+[Ctrl+C interrupt](shell.md#interrupting-foreground-commands).
 
 Doom requires the shell's named display, keyboard and clock capabilities, with
 DRAW, INPUT and READ/SLEEP rights respectively. It acquires exclusive display and
@@ -63,7 +69,8 @@ replaces its mapping and recomputes integer scaling and black borders; the game
 engine keeps its fixed frame size. A destination too small for scale one keeps
 the old mapping and clipped output until growth. Replacement failure also
 keeps the old buffer usable, with no allocation retry on every frame; another
-geometry generation permits a new attempt.
+geometry generation permits a new attempt. These checks continue while hidden or
+unselected, and replacement preserves the chosen layer.
 
 ## Saves
 

@@ -160,10 +160,22 @@ static void retire_frame(struct process *process, struct display_frame *frame,
 static void release_display(struct display_object *display)
 {
   retire_frame(display->owner, display->frame, display->user_address);
+  display->presented = false;
   display->visible = false;
   display->owner = NULL;
   display->frame = NULL;
   display->user_address = 0;
+  space_display_changed(display->space, false);
+}
+
+void display_select_layer(struct display_object *display, bool graphics)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!display->presented || display->visible == graphics) {
+    return;
+  }
+  display->visible = graphics;
+  space_display_changed(display->space, graphics);
 }
 
 static enum call_status replace_display(struct display_object *display,
@@ -229,7 +241,11 @@ static enum call_status service_display(struct display_object *display,
     return replace_display(display, process, generation, reply_address, &reply->buffer);
   }
   if (operation == DISPLAY_PRESENT) {
-    display->visible = true;
+    if (!display->presented) {
+      display->presented = true;
+      display->visible = true;
+      space_display_changed(display->space, false);
+    }
   } else {
     KASSERT(operation == DISPLAY_RELEASE);
     release_display(display);
