@@ -199,7 +199,17 @@ one baseline shell workload measured 0.05 seconds. Artifacts and captures are in
 Initial SSH fetch failed with `Permission denied (publickey)`; public HTTPS
 fetched main and exact pinned submodules without changing remotes. The owner
 reloaded the keys; SSH fetch through `/run/user/1000/ssh-agent.socket` now succeeds.
-Implement/review the unmerged probe, coordinate mouse
-pairing mode for the actual run, collect only redacted evidence, restore the
-ordinary image and deliver the scan-result PR. Do not begin the final investigation
-report or milestone proposal before the owner has seen those results.
+The implemented unmerged probe is published on `probe/bluetooth-le-scan` at
+`6c4329e4429b9a43f266dd57f44d544420313996`, based on the selected main. Normal
+Clang image build passed without warnings. Independent review found and fixed
+same-opcode enable/disable completion ambiguity and dotted-address name redaction;
+targeted re-review found no remaining findings. Address-free debugger expressions
+are prepared in `/tmp/pyxis-bluetooth-task5/scan-gdb-commands.txt`.
+
+No scan has run: the mouse's physical pairing-mode readiness is still pending.
+The paused QEMU instance was closed, and the ordinary image is being rebuilt
+after returning to the report branch. Next: obtain the owner's "ready" while the
+mouse LED blinks rapidly, boot `/tmp/pyxis-bluetooth-task5/probe.iso` with the
+accepted configuration, run the 30-second scan, collect only redacted evidence,
+restore the ordinary image and deliver the scan-result PR. Do not begin the final
+investigation report or milestone proposal before the owner has seen those results.
