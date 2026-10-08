@@ -45,6 +45,9 @@ Chosen by the owner, each starting with a proposal:
   shareware data as the leading candidate (it also needs the completed
   [C++ runtime](../development/cxx-userspace.md)). See the SDL2 entries in
   [application ports](application-ports.md#libraries-and-terminal-tools).
+- **Codex 1** (2026-10-08): the [terminal multiplexer](terminal-applications.md),
+  with its three accepted decisions, starting with a proposal for the prefix
+  key and commands, pane layout, scrollback, pane exit and how it is started.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
   PNG through new zlib and libpng ports, with the file fetched through
   pyxis-remote.
@@ -63,9 +66,9 @@ Chosen by the owner, each starting with a proposal:
 
 None is selected.
 
-- [Terminal applications](terminal-applications.md): a multiplexer (with
-  scrollback; its three decisions are accepted), then a single-panel file
-  navigator, then operations between navigators.
+- [Terminal applications](terminal-applications.md) after the assigned
+  multiplexer: a single-panel file navigator, then operations between
+  navigators.
 - [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm,
   with one terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
   through a native VFS.
