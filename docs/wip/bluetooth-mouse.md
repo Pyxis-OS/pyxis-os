@@ -1,9 +1,9 @@
 # MX Master 3S on Pyxis
 
-Status: **task 1 complete 2026-10-08, documentation and decisions only.**
+Status: **task 1 complete; task 2 assigned 2026-10-08, baseline preparation.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
-remain; task 2 and every later implementation task need explicit owner assignment.
+remain. Task 2 is assigned; tasks 3–8 still need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -11,7 +11,9 @@ assigned this proposal. Publishing, reviewing or merging it does not authorize
 implementation. The owner chooses the milestone and explicitly starts its tasks.
 The native batch is complete in [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547).
 Task 1 started from fresh main `8c4368e` and is now rebased onto main `abbeded`.
-Its contracts/dependencies are complete. Task 2 is not assigned or started.
+Its contracts/dependencies are complete. The owner explicitly assigned task 2
+after approving #548. The [runtime transport record](../development/experiments/bluetooth-runtime-hci/README.md)
+tracks its baseline and implementation handoff; no implementation is complete.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
@@ -381,13 +383,19 @@ lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
 prerequisite under the accepted policy, not a blind choice before cold evidence.
 
 New evidence that requires a policy change returns to the owner. Every
-implementation task, starting with task 2, needs a later explicit assignment.
+implementation task needs an explicit assignment. Task 2 is assigned; tasks 3–8
+remain unassigned.
 
 With the direction decided, the completed investigation is now the
 [AX200 reference](../devices/ax200-bluetooth.md), linked to the final
 report and detailed task reports. This production proposal stays in WIP; no
-implementation task is assigned and cold-firmware debt remains open. The owner
-reports the native batch completed and Fedora Bluetooth disabled. Task 1's
-branch is `docs/bluetooth-task1-contracts`, rebased onto main `abbeded`; only
-documentation is edited. Pointer drafts `304d1d7` and `a2ff720` were read, not
-changed. No QEMU, debugger, passthrough or probe job is started for this task.
+later implementation task is assigned and cold-firmware debt remains open. The owner
+reports the native batch completed and Fedora Bluetooth disabled. Task 1 used
+branch `docs/bluetooth-task1-contracts`, rebased onto main `abbeded`, with only
+documentation edits. Pointer drafts `304d1d7` and `a2ff720` were read, not
+changed. No QEMU, debugger, passthrough or probe job was started for task 1.
+
+Task 2 now uses branch `bluetooth/runtime-hci`, from fresh main `3bda2c3` after
+#548 merged. The attached-controller baseline must be
+captured before code changes; USB-node access is pending. Baseline preparation,
+current toolchain inputs and cleanup are recorded in the runtime transport note.
