@@ -722,9 +722,33 @@ interactive EOF-driven tools are explicitly in scope. The cksum port preserves
 upstream behavior; neither cksum nor restricted tee adds terminal controls or
 signal handling.
 
+## Initial terminal multiplexer limits
+
+The [multiplexer](userland/multiplexer.md) has one window and up to eight panes.
+Its native terminal subset has no alternate screen, Unicode widths or detach;
+full-screen applications reuse the shell's screen. History retains 1,024
+scrolled-off rows, with no reflow or erased-screen archive. Presentation crops
+at the terminal-session maximum; history storage retains the largest width seen.
+Maximum steady text storage is about 2.5 MiB per pane; resize can temporarily
+double this for one pane. There is no per-group CPU/memory quota.
+
+A full pane input queue can hold a prefix behind already staged ordinary input;
+bounded, lossless storage cannot bypass an arbitrary pending paste. Confirmed
+closure waits for group cleanup and output EOF, and published HOST work can
+delay cleanup indefinitely. Mux exit/fault requests termination through final
+controlling-grant closure without waiting for all cleanup. Local keyboard and
+graphics grants remain shared space facilities, so graphical launches share
+the existing one-session ownership rather than acquiring pane-local devices.
+
+Live pane resize depends on the consumer. Shell and Kilo observe RESIZED;
+Links currently reads geometry once in its native adapter. Existing vi/less
+behavior is preserved. Revisit these consumers with a focused port change;
+revisit windows, ratio adjustment, input recovery and quotas when those
+interactions are selected, rather than expanding the first slice.
+
 ## Initial independent terminal limits
 
-[Terminal sessions](userland/terminal-sessions.md) have fixed dimensions, 4 KiB
+[Terminal sessions](userland/terminal-sessions.md) have explicit resize, 4 KiB
 input and 64 KiB output queues, and one attachment. Creation has no per-space
 quota; a trusted creator can allocate multiple bounded sessions until allocation
 fails. Output backpressure has no deadline. A controller that stops draining can
@@ -746,7 +770,8 @@ is bounded at five seconds. A full guest input queue likewise holds back a
 later Ctrl+C (see [process termination and Ctrl-C](#process-termination-and-ctrl-c)). Host SIGINT/SIGTERM forces disconnect even under
 backpressure. Revisit admission
 policy, authentication and presentation breadth with a concrete non-development
-deployment or text consumer. Resize and reconnect remain separate work.
+deployment or text consumer. Remote resize negotiation and reconnect remain
+separate work.
 
 ## Libc compatibility gaps
 

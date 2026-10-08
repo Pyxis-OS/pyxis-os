@@ -112,6 +112,11 @@ return {
   including every foreground pipeline stage. Background commands and services
   do not receive it. This does not delegate the trusted launcher's CREATE_GROUP
   authority or add terminal input rights.
+- **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
+  It supplies a distinct trusted `mux_terminal` grant. After configuration and
+  service setup, the session launcher selects `boot://mux.pxe`, giving it
+  terminal CREATE and launcher CREATE_GROUP. It does not grant either resource
+  to ordinary shell commands. See the [multiplexer guide](multiplexer.md).
 - **Power.** A space that sets `power = true` receives the kernel's `power`
   resource, with power-off and restart rights, for the shell's
   [`poweroff` and `reboot`](shell.md#power-off-and-restart). Any number of spaces
