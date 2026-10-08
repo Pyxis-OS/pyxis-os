@@ -1,20 +1,17 @@
 # MX Master 3S on Pyxis
 
-Status: **task 1 authorized 2026-10-08, documentation and decisions only.**
-Rounds one and two remain accepted; the
-[first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round) is
-accepted 2026-10-08 with the source-loss adjustment, as is
-[task 1 round two](bluetooth-task1-contracts.md#accepted-second-task-1-round).
-The third round has two pending policy decisions. No code, ABI edit, probe or
-implementation is authorized.
+Status: **task 1 complete 2026-10-08, documentation and decisions only.**
+All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
+recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
+remain; task 2 and every later implementation task need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
 assigned this proposal. Publishing, reviewing or merging it does not authorize
 implementation. The owner chooses the milestone and explicitly starts its tasks.
 The native batch is complete in [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547).
-The owner has now assigned task 1 from fresh main `8c4368e`. Its decisions and
-pointer coordination must finish before later tasks receive new assignments.
+Task 1 started from fresh main `8c4368e` and is now rebased onto main `abbeded`.
+Its contracts/dependencies are complete. Task 2 is not assigned or started.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
@@ -63,15 +60,15 @@ Accepted by the owner through the orchestrator on **2026-10-08**:
    [credentials direction](credentials-and-biometrics.md); this milestone makes
    no disk-encryption claim.
 
-Other recommendations remain proposed. Task 1 presents only
-[two decisions](bluetooth-task1-contracts.md#third-task-1-decision-round) now;
-later topics remain queued under [handoff](#decision-and-investigation-handoff).
+The [three completed task 1 rounds](bluetooth-task1-contracts.md) settle the
+remaining policies. Later [measurement/implementation gates](#decision-and-investigation-handoff)
+remain prerequisites, not pending task 1 questions or implementation assignments.
 
-## Accepted ownership and proposed service lifetime
+## Accepted ownership and service lifetime
 
 The accepted stack boundary assigns these responsibilities. The service and HCI
 adapter are not implemented by the existing probes; their lifetime contracts
-below remain proposed until reviewed and accepted.
+below are accepted contracts for future implementation.
 
 | Owner | Responsibility |
 | --- | --- |
@@ -84,8 +81,9 @@ The controller grant is accepted as exclusive and process-owned, with copied HCI
 packets/results and explicit capacity, deadline, sequence/loss and terminal-state
 semantics. It grants controller control to the trusted service, not raw USB,
 physical addresses or DMA mappings. Kernel initialization finishes before handoff;
-service commands cannot race its firmware transaction. The exact protocol and
-rights need review in task 1; no placeholder ABI is proposed here.
+service commands cannot race its firmware transaction. Numeric protocol/right
+declarations belong to review of later assigned implementation under these
+accepted ownership contracts; no placeholder ABI is proposed here.
 
 Commands and ACL data need separate, bounded queues and the controller's real
 completion/credit events. A command timeout is not permission to associate a late
@@ -102,7 +100,7 @@ re-pairing. Accepted input reset/drag cancellation occurs only if the lost sourc
 held buttons; lock revokes only then or when no live source remains. A buttonless
 Bluetooth disconnect leaves the live PS/2 pointer visibly unchanged. These
 input-loss rules and controller cleanup/re-grant policy are accepted; the
-[confirmed-cleanup requirements](bluetooth-task1-contracts.md#later-decisions-and-gates)
+[confirmed-cleanup requirements](bluetooth-task1-contracts.md#implementation-and-measurement-gates)
 remain explicit.
 Teardown cannot recycle outstanding DMA. Start with the existing terminal
 transport limits and explicit reboot recovery where ownership remains uncertain.
@@ -117,7 +115,8 @@ input. Losing that continuity makes the source unavailable.
 Trusted startup starts one system-wide controller service and supplies controller,
 clock, randomness, private storage and input-source grants directly to it; it
 does not give each space a radio owner. Its configured placement and bootstrap
-handoff need review with task 1. A read-only status export can use
+handoff are implementation details within that accepted singleton/grant policy.
+A read-only status export can use
 the [native service namespace](../interfaces/namespaces.md); enrollment/forget
 management must be granted separately to a trusted local control tool, never
 ordinary shell children by incidental namespace lookup. Existing startup has no
@@ -154,9 +153,12 @@ observe the real operational boot event, apply DDC as required, and check the
 resulting version/capabilities. Under the accepted policy, an explicitly qualified
 compatible operational warm build skips SFI upload, avoiding a reset solely to
 enforce the packaged pin; unknown builds return to the owner. Record qualified
-versions separately from the packaged file pin. The actual compatibility list
-and its qualification criteria remain pending; the investigation's acceptance
-of existing operational firmware does not qualify it for production.
+versions separately from the packaged file pin. Accepted qualification requires
+transport, encrypted bond/reconnect and measured HID/pointer evidence, with
+revision/configuration and native owner evidence. Explicitly assigned provisional
+development can produce that evidence without claiming production readiness.
+The actual compatibility list follows qualification; the investigation's warm
+acceptance does not qualify a build for production.
 
 Cold support needs secure-send bulk OUT, independently owned bootloader bulk IN
 and interrupt events, and bounded progress while commands wait. Use actual vendor
@@ -174,9 +176,10 @@ HID service/appearance and run-local labels only. Scanning is an explicit contro
 action, not a perpetual background enrollment loop. An authorized local user
 selects a candidate while physically putting the mouse in pairing mode. Ambiguous
 candidates stop for selection; a matching name/service does not establish identity.
-Keep the public scanner-address policy for initial development only as a proposed
-default; privacy-address configuration and discovery/reconnect parameters need
-their own later policy review.
+The initial public scanner-address and bounded scan/reconnect profile are
+accepted; addresses remain unrecorded. Later privacy-address changes require a
+separate owner decision. Runtime connection parameters follow measurement rather
+than become fixed ABI values here.
 
 The [owner's Fedora account](../development/bluetooth-investigation.md#owner-reported-linux-pairing)
 supports an explicit scan-and-select flow: `bluetoothctl` found and paired the mouse
@@ -240,14 +243,17 @@ bonding unavailable, rather than claim RAM storage is persistent.
 
 Write a bounded bond record to a temporary file, atomically replace its entry and
 explicitly synchronize through [native filesystem operations](../interfaces/filesystem-mutations.md).
-Report durable bonding only after successful sync; on persistence failure,
-disconnect and report it, preserving uncertainty about the peer's stored bond.
+Under accepted decision 13, report usable enrollment and activate input only
+after encryption and durable storage; closing a file alone is insufficient.
+On persistence failure, stop input and reconnect, disconnect and report
+durability/peer-bond uncertainty without claiming rollback.
 Reboot must load the saved security properties and authenticate possession of
 the bond without falling back to new pairing. Authorized forgetting stops
 reconnect, disconnects, removes/syncs the record and reports durability; it cannot
-promise erasure of old disk blocks, backups or the mouse's retained key. These
-record, durability and failure details remain proposed; storage/control authority
-and the initial at-rest policy are accepted above.
+promise erasure of old disk blocks, backups or the mouse's retained key. Durable
+forgetting succeeds only after removal plus sync. Storage/control authority,
+at-rest policy and these success/failure rules are accepted; record encoding is
+an ordinary implementation choice.
 
 ## Proposed HID and pointer path
 
@@ -271,7 +277,7 @@ rather than interpreting them as relative motion. Initially rediscover GATT
 after reconnect; caching/service-change policy can follow only if needed.
 
 The owner has accepted the [system-pointer milestone](pointer.md), with kernel
-positions. Codex alpha is integrating tasks 1+2 in draft
+positions. Pointer tasks 1+2 merged in
 [#545](https://git.internal/PyxisOS/pyxis-os/pulls/545). Task 1 records the
 [owner-accepted producer, aggregation and source-loss contract](bluetooth-task1-contracts.md#input-source-contract-for-coordination)
 against initial inspected revision `304d1d7`. The orchestrator relayed alpha's
@@ -282,7 +288,7 @@ consumer APIs do not confer input-injection authority. Physical held state is
 per source. Reset/cancel only when the lost source held buttons; revoke lock then
 or when no live source remains. Idle loss of an unused mouse is invisible while
 PS/2 is live. Terminal/mux wheel remains pointer task 3, not implemented by
-this draft or Bluetooth. The agreement adds no second source or producer API;
+those tasks or Bluetooth. The agreement adds no second source or producer API;
 the future Bluetooth adapter remains to be implemented in its assigned task.
 
 ## Proposed sharing with USB HID
@@ -310,17 +316,12 @@ Every task starts only after its necessary decisions and explicit owner
 assignment. Use focused kernel/userspace/ports PRs, publish dependency commits
 first and state merge order. Probe branches remain historical evidence.
 
-- [ ] **1. Contracts and dependencies (authorized; in progress).** Refine the accepted stack/security/closure
-  direction and resolve the remaining firmware, bond-authority, scan/reconnect,
-  HID/sharing and failure-lifetime decisions in rounds of at most three. Agree
-  the packet/control and input-source contracts with pointer task 1. Identify
-  capability/report questions and their measurement gates in the later tasks;
-  owner-reported Fedora SMP answers the device security question but does not
-  establish Pyxis pairing/report support. The
-  [first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round)
-  and second round are accepted 2026-10-08. The third round presents two policies,
-  with dependency/measurement gates recorded. This task stays unchecked until
-  the two pending owner decisions finish; alpha's agreement is recorded.
+- [x] **1. Contracts and dependencies.** Complete 2026-10-08: all three
+  [decision rounds, contracts and measurement gates](bluetooth-task1-contracts.md)
+  are recorded, including owner-reported SMP evidence and alpha's agreement
+  against `a2ff720` (now merged in #545). No policy questions remain. Firmware
+  assets/compatibility data and report/runtime qualification are later gates;
+  no implementation task is assigned by this completion.
 - [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
   progress and process-exit/loss behavior. Validate warm passthrough framing and
@@ -367,29 +368,26 @@ service changes, probes, pairing or native checks.
 
 ## Decision and investigation handoff
 
-Milestone rounds one and two and both completed task 1 rounds are
-**accepted 2026-10-08**. Task 1 presents only the
-[third round's two decisions](bluetooth-task1-contracts.md#third-task-1-decision-round).
-Remaining decisions and dependency gates include later topics not presented now:
+Milestone rounds one and two and all three task 1 rounds are
+**accepted 2026-10-08**. Task 1 is complete and presents no further questions.
+Remaining measurement/implementation prerequisites are:
 
-- Durable bond success/failure and production warm-version evidence (third task 1 round).
 - Exact firmware pin/mirror and actual compatibility list, selected after measurement.
 - Later parameter qualification and ordinary implementation choices such as record encoding.
-- Alpha's input-source agreement is recorded against `a2ff720` on 2026-10-08.
 
 Producer authority, OR aggregation, conditional source loss and initial
 scan/reconnect policy are settled, as are HID scope, USB sharing and controller
 lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
 prerequisite under the accepted policy, not a blind choice before cold evidence.
 
-Obtain decisions before implementing dependent behavior. Only task 1's
-documentation is assigned; every implementation task needs a later assignment.
+New evidence that requires a policy change returns to the owner. Every
+implementation task, starting with task 2, needs a later explicit assignment.
 
 With the direction decided, the completed investigation is now the
 [AX200 reference](../devices/ax200-bluetooth.md), linked to the final
 report and detailed task reports. This production proposal stays in WIP; no
 implementation task is assigned and cold-firmware debt remains open. The owner
 reports the native batch completed and Fedora Bluetooth disabled. Task 1's
-branch is `docs/bluetooth-task1-contracts`, based on fresh main `8c4368e`; only
+branch is `docs/bluetooth-task1-contracts`, rebased onto main `abbeded`; only
 documentation is edited. Pointer drafts `304d1d7` and `a2ff720` were read, not
 changed. No QEMU, debugger, passthrough or probe job is started for this task.

@@ -60,12 +60,10 @@ Implemented behavior lives in the subsystem references listed in the
 Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
-  task 1 authorized for documentation/contracts only after native batch #547.
-  Two milestone rounds and the first task 1 round are accepted 2026-10-08,
-  including conditional per-source loss. Task 1 round two is also accepted;
-  the [third round](bluetooth-task1-contracts.md) proposes durable bond success
-  and production firmware qualification. Alpha's agreement is relayed against
-  `a2ff720`; the two owner decisions and later gates remain open; no implementation.
+  task 1 complete for documentation/contracts after native batch #547. All owner
+  [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
+  accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
+  remain prerequisites. Task 2 runtime HCI transport is not assigned or started.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   All three decision rounds are accepted; proposal #530 is merged. Task 1 is
   delivered in #545 with [qualification](../development/system-pointer-qualification.md).

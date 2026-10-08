@@ -1,13 +1,14 @@
 # Bluetooth task 1: contracts and dependencies
 
-Status: **task 1 authorized, documentation and decisions only, 2026-10-08.**
-Based on main `8c4368e`, including the owner's native batch
+Status: **task 1 complete, documentation and decisions only, 2026-10-08.**
+Started on main `8c4368e`, including the owner's native batch
 [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547). The
 [mouse milestone](bluetooth-mouse.md) retains accepted rounds one and two.
-The owner accepted both task 1 rounds below on 2026-10-08, including the
-source-loss adjustment. Alpha's agreement was relayed on 2026-10-08; the two
-third-round owner decisions remain pending. Task 1 stays open for those decisions
-and authorizes no implementation.
+All three task 1 rounds are accepted 2026-10-08, including the source-loss
+adjustment. Alpha's agreement is recorded, and pointer tasks 1+2 merged in #545.
+The branch is rebased onto main `abbeded`. No owner policy questions remain for
+task 1. Implementation and later measurement gates require explicit assignment;
+task 2 is not authorized or started.
 
 ## Accepted first task 1 round
 
@@ -53,19 +54,19 @@ Accepted by the owner through the orchestrator on **2026-10-08**:
     existing terminal-failure/DMA limits; no automatic recovery, DMA release or
     endpoint replacement is authorized.
 
-## Third task 1 decision round
+## Accepted third task 1 round
 
-Only these **two** decisions are presented now, each pending:
+Accepted by the owner through the orchestrator on **2026-10-08**:
 
-13. **Durable bond success and failure.** Recommended: report successful usable
+13. **Durable bond success and failure:** report successful usable
     enrollment and activate input only after SC encryption and durable local
     storage of the LTK/IRK/private identity. Report durable forgetting only after
     local removal and synchronization. On persistence failure, stop input and
     reconnect, disconnect and report durability/peer-bond uncertainty; never
     claim rollback, peer-key deletion or old-block erasure. A missing private
-    persistent root makes bonding unavailable. Temporary usable RAM-only bonds
-    would be an explicit alternative and would not meet accepted closure.
-14. **Warm-version qualification evidence.** Recommended: a recorded profile/build
+    persistent root makes bonding unavailable. Usable RAM-only bonding is not
+    part of this milestone.
+14. **Warm-version qualification evidence:** a recorded profile/build
     enters the production compatibility list only after HCI features/credits and
     transport, SC enrollment/encryption, durable reconnect/RPA resolution and
     measured HID/pointer input pass on that profile, with revision/configuration
@@ -73,7 +74,7 @@ Only these **two** decisions are presented now, each pending:
     may use a recorded provisional profile/build to produce this evidence; it
     does not imply production readiness, pin equivalence or closure. Unknown or
     mismatched builds outside that assignment still return to the owner. A
-    version-reply/scan-only qualification would provide weaker evidence.
+    version reply or scan alone does not qualify production compatibility.
 
 ## Owner-reported security evidence
 
@@ -133,6 +134,8 @@ buttons: `pointer_input_report` carries `buttons` and `suppressed_buttons`, and
 `pointer_source_lost` accepts the surviving physical mask and revokes lock.
 With PS/2 as the only source, the loss hook matches the accepted single-source
 case. No second source, producer API or multi-source availability was added.
+Pointer tasks 1+2 are now merged in #545 on main `abbeded`; this agreement is a
+completed dependency contract, not a claim of Bluetooth producer implementation.
 
 Future Bluetooth integration still needs the accepted per-source snapshots,
 aggregation and loss predicate before invoking reset/lock-loss handling. The
@@ -147,7 +150,8 @@ These source semantics are owner-accepted; alpha's agreement is recorded above.
 to the Bluetooth service. Acquisition is exclusive and process-owned; handle
 copies or closure do not transfer/release ownership. Owner exit or explicit
 release ends the source. The service initially owns an inactive source; it marks
-it live only after the encrypted link and decoded input map are ready. There is
+it live only after the encrypted link, decoded input map and durable stored bond
+are ready under accepted decision 13. There is
 one Bluetooth mouse/source initially, alongside the existing PS/2 source.
 
 **Submission.** Each complete normalized report carries a kernel-issued source
@@ -211,11 +215,11 @@ operations. Alpha's no-conflict agreement was relayed against `a2ff720` on
 2026-10-08. No alpha branch or ABI file was edited, and the future Bluetooth
 producer/aggregation adapter remains unimplemented.
 
-## Later decisions and gates
+## Implementation and measurement gates
 
-The third round presents durable bond success/failure and production warm-version
-qualification. Exact firmware assets, mirror and later runtime parameters remain
-measurement/implementation prerequisites, not additional policy questions now.
+No task 1 policy decisions remain. Exact firmware assets, mirror, compatibility
+list and later runtime parameters require measurement/implementation under the
+accepted policies; none authorizes implementation without a new assignment.
 
 Under accepted decision 12, confirmed cleanup means all outstanding commands, ACL credits
 and pending waits are accounted for, old connection epochs invalidated, and
@@ -229,7 +233,7 @@ reattachment. Bond authentication failure remains a separate stop for owner
 action, not permission to recover the controller or silently enroll a new peer.
 
 Milestone round two already settles pinned cold assets and qualified warm reuse.
-Decision 14 proposes the qualification evidence; exact assets remain gated. The
+Decision 14 settles the qualification evidence; exact assets remain gated. The
 [task 4 provenance](../development/experiments/bluetooth-task4/README.md#deferred-cold-upload-and-asset-provenance)
 provides candidates `intel/ibt-20-1-3.sfi` and `.ddc`, their alias targets and
 decompressed hashes, not a selected Pyxis pin. Before task 3 relies on firmware,
@@ -247,12 +251,13 @@ unqualified running version returns to the owner.
 | HCI/controller capabilities | Warm Reset/version and legacy scan worked | Task 2 checks actual supported commands, LE features, ACL lengths/credits and asynchronous progress; source review is not ACL qualification. |
 | Cold firmware/profile | Fedora's file provenance only | Task 3 captures cold facts, selects/mirrors assets, observes real upload/boot/DDC and native readiness. Warm host upload does not qualify Pyxis cold startup. |
 | Discovery/reconnect | One active scan identified the mouse | Task 4 qualifies connection/cancel/disable and identity selection; task 6 qualifies sleep/reconnect, key mismatch and bounded backoff. |
-| HID map and vendor requirements | Advertising HID UUID/appearance only | After required encryption, read long Report Map, Report References, protocol mode and required characteristics; scope approval precedes subscriptions/injection. |
+| HID map and vendor requirements | Advertising HID UUID/appearance only; basic scope accepted | After required encryption, read long Report Map, Report References, protocol mode and required characteristics; mandatory scope changes return to the owner before subscriptions/injection. |
 | Wheel units/report limits | No mouse report received by Pyxis | Task 7 derives report IDs/widths/signs/buttons/wheel conversion from the measured map; unsupported mandatory vendor behavior returns to the owner. |
-| Producer ABI and PS/2 coexistence | #545's consumer/router design inspected | Alpha coordination agrees source lifetime/aggregation and availability; task 7 qualifies held-button loss, stale epochs, locked/ordinary input and PS/2 coexistence. |
-| Terminal/mux consumption | #545 ordinary graphics and lock are draft; terminal wheel waits | Integrate only with the pointer tasks that supply each destination; qualify routing without inventing a Bluetooth terminal path. |
+| Producer ABI and PS/2 coexistence | Alpha agreement at `a2ff720` is recorded; #545's consumer/router is merged | Implement the accepted source adapter and aggregate availability; task 7 qualifies held-button loss, stale epochs, locked/ordinary input and PS/2 coexistence. |
+| Terminal/mux consumption | #545 ordinary graphics and lock are merged; terminal wheel waits for pointer task 3 | Integrate only with the pointer tasks that supply each destination; qualify routing without inventing a Bluetooth terminal path. |
 
-Task 1 remains unchecked while the two owner decisions are pending; alpha
-coordination is recorded as agreed. None of
-these gates authorizes a probe, firmware reset, pairing attempt, build or native
-check in this documentation task. No address or secret is included in its evidence.
+Task 1 is complete, with alpha coordination and all owner policies recorded.
+No runtime HCI transport, probe, firmware reset, pairing attempt, build or native
+check was performed by this documentation task. Every later implementation task,
+starting with task 2, needs explicit owner assignment. No address or secret is
+included in this task's evidence.
