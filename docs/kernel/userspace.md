@@ -70,11 +70,12 @@ to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
 `getenv` borrows these same immutable values; environment mutation is not
-implemented. The shell receives the read-only `boot` root, shared RAM-backed
-`tmp` root, terminal input/output, launcher and caller-scoped
-[private-memory service](memory.md). It starts at `tmp://`, with an empty RAM
-tree, and explicitly supplies grants, directory context and environment when
-launching foreground children. See [the shell contract](../userland/shell.md).
+implemented. The shell receives its space's roots, including read-only `boot://`
+and `bin://`, shared RAM-backed `tmp://` and normally `home://`, plus terminal
+input/output, launcher and caller-scoped [private-memory service](memory.md). It
+starts at `home://`, or `tmp://` in a space without a home root, and explicitly
+supplies grants, directory context and environment when launching foreground
+children. See the [system layout](../userland/system-layout.md) for the roots. See [the shell contract](../userland/shell.md).
 
 Normal output targets the owning space's TTY; the kernel-log syscall targets
 Caelum and serial. Use Super+Right to select a workload space before typing;

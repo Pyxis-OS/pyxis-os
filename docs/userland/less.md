@@ -1,6 +1,6 @@
 # less
 
-BusyBox less is packaged at `boot://less.pxe`, with the shared GPL-2.0-only
+BusyBox less is packaged at `bin://less.pxe`, with the shared GPL-2.0-only
 license at `boot://share/licenses/busybox/LICENSE`. The shell resolves `less`
 to it. Its [recipe notes](../../ports/busybox/README.md#less) identify the source,
 feature selection and patch.

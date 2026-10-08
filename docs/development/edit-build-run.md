@@ -10,7 +10,7 @@ make image
 make run CPUS=4
 ```
 
-Select the application space with Super+Right. From the shell's initial `tmp://`
+Select the application space with Super+Right. From the shell's initial `home://`
 directory, run `kilo hello.c` and enter:
 
 ```c
@@ -42,8 +42,9 @@ executable, or a partial file if output writing began. The shell reports nonzero
 child exit status. Kilo saves by truncating and rewriting, so a failed save can
 also leave partial content.
 
-Sources, objects and executables in `tmp://` are RAM-backed and disappear on
-reboot. For opt-in persistence, use the [USB workflow below](#persistent-usb-development)
+On a live boot, `home://` and `tmp://` are RAM-backed and disappear on reboot;
+an [installed system](../userland/installer.md) keeps `home://` on its npfs pool.
+For persistence on live boots, use the [USB workflow below](#persistent-usb-development)
 or a [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough),
 keeping source and output under the corresponding root. `boot://`, including `boot://sdk`, is
 read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
@@ -91,10 +92,14 @@ return {
   },
   spaces = {
     { name = "usb", title = "USB", init = "boot://init", network = true,
-      roots = { usb = "read-write" } },
+      launch = true, roots = { usb = "read-write" } },
   },
 }
 ```
+
+`launch = true` matches the packaged Development space, so scripts and Lua
+programs run in this space can start commands; Kilo and TCC themselves start no
+programs and do not need it. With no `home` root, the space starts in `tmp://`.
 
 Save this trusted script as `/tmp/init-usb-development.sh`:
 

@@ -1,6 +1,6 @@
 # Lua in Pyxis
 
-The boot archive includes `boot://lua.pxe`, resolved as `lua` by the shell.
+The normal image includes `bin://lua.pxe`, resolved as `lua` by the shell.
 The port uses Lua 5.5.1, pinned to upstream commit
 `7579fc9d7ed90240487251dfb69168f8e64e9294`, with the recorded upstream GC fix.
 The MIT notice is installed at `boot://share/licenses/lua/lua.h`.

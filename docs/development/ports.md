@@ -68,7 +68,12 @@ fetched source and intermediate outputs. Make source changes in the recipe/patch
 For port development with a separately managed work directory, use the
 [standalone runner](../../ports/README.md).
 
-The normal boot archive includes Kilo at `boot://kilo.pxe` and its BSD-2-Clause
+Ordinary programs live in `bin://`; live boots bind `bin://` to the boot
+archive, and installed systems keep them on the pool, with only the rescue set in
+`boot://` (see the [system layout](../userland/system-layout.md)). Packaged
+licenses and data stay under `boot://share`.
+
+The normal image includes Kilo at `bin://kilo.pxe` and its BSD-2-Clause
 license at `boot://share/licenses/kilo/LICENSE`. The shell resolves the bare
 command `kilo` to that executable. The ports-owned `install.lua` selects guest
 payloads into a dedicated tree, which the root [archive manifest](boot-archive.md)
@@ -130,7 +135,7 @@ rules; configuration, platform integration and limits are described in
 
 ## Checksums with sbase cksum
 
-The image includes `boot://cksum.pxe`, resolved as `cksum` by the shell. The
+The image includes `bin://cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../../ports/sbase/README.md) pins the task-1 source revision and
 builds cksum, a restricted tee, uniq and sha256sum with their helpers. Ordered
 patches narrow private util.h, restore the declarations uniq needs, and adapt
@@ -159,7 +164,7 @@ See the [accepted terminal limit](../technical-debt.md#console-input-completion)
 
 ## Copying streams with sbase tee
 
-The shell resolves `tee` to `boot://tee.pxe`:
+The shell resolves `tee` to `bin://tee.pxe`:
 
 ```text
 cat host://input | tee home://first home://second | cksum
@@ -182,7 +187,7 @@ for the exact upstream adaptations.
 
 ## Adjacent duplicates with sbase uniq
 
-The shell resolves `uniq` to `boot://uniq.pxe`:
+The shell resolves `uniq` to `bin://uniq.pxe`:
 
 ```text
 uniq host://input
@@ -200,7 +205,7 @@ stdout. File and pipe input is fetched in blocks by
 
 ## SHA-256 digests with sbase sha256sum
 
-The shell resolves `sha256sum` to `boot://sha256sum.pxe`:
+The shell resolves `sha256sum` to `bin://sha256sum.pxe`:
 
 ```text
 sha256sum host://image.raw home://notes.txt
@@ -220,7 +225,7 @@ See the [recipe notes](../../ports/sbase/README.md) for remaining upstream limit
 
 ## Editing in Pyxis
 
-Select the Development space with Super+Right. The shell starts at `tmp://`:
+Select the Development space with Super+Right. The shell starts at `home://`:
 
 ```text
 kilo hello.c
@@ -237,25 +242,28 @@ highlighting. It keeps Ctrl+C as editor input for its whole session, so an armed
 shell cannot terminate it; Ctrl-Q quits. See the [recipe notes](../../ports/kilo/README.md) for the source pin
 and local patches, and [terminal behavior](../userland/terminal.md) for shared facilities.
 
-The current editor is ASCII, uses fixed terminal dimensions, accepts LF/CRLF
+The current editor is ASCII, redraws at the new size when the terminal is
+[resized](../kernel/display.md), accepts LF/CRLF
 and saves LF with a final newline per row. Saves truncate before writing:
 failures can leave partial files. Ordinary status messages expire after five
 seconds using the inherited monotonic clock, including while idle; an active
 search prompt remains visible until the search ends. Actual terminal input EOF
 exits cleanly for an unchanged buffer and reports failure if unsaved edits are
 lost. Allocation failure reports an error and exits, losing unsaved edits.
-`tmp://` remains volatile across reboot, while `boot://` is read-only. An optional
-`host://` mount persists files in its host export, subject to host permissions and
-the [virtiofs setup](../devices/virtio-fs.md). Processes receive a fixed 1 MiB
+Installed systems keep `home://` on the npfs pool; on live boots `home://` and
+`tmp://` are RAM-backed, and `boot://` is always read-only. An optional `host://`
+mount persists files in its host export, subject to host permissions and the
+[virtiofs setup](../devices/virtio-fs.md). Processes receive a fixed 1 MiB
 stack with a reserved, unmapped guard page below it and no automatic growth.
 
 The same editor runs through the [remote host client](../userland/remote-terminal.md).
-Native writable disk storage and atomic replacement remain separate work.
+Pyxis has [atomic replacement](../interfaces/filesystem-mutations.md), but Kilo
+still saves in place.
 [BusyBox vi](../userland/vi.md) is packaged at `boot://vi.pxe` with its GPL-2.0-only
 license at `boot://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
 to it. It is a modal alternative to Kilo, with the same terminal grants and
 Ctrl+C passthrough; see the [recipe notes](../../ports/busybox/README.md).
-[Links](../userland/links.md) is packaged at `boot://links.pxe` with its GPL
+[Links](../userland/links.md) is packaged at `bin://links.pxe` with its GPL
 license at `boot://share/licenses/links/COPYING`. It is a text web browser that
 loads local files and HTTP(S) pages through libc; see the
 [recipe notes](../../ports/links/README.md).
@@ -267,7 +275,7 @@ The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 
 [BusyBox less](../userland/less.md) and [uncompressed tar](../userland/tar.md)
 are selected separately in the existing BusyBox recipe and packaged at
-`boot://less.pxe` and `boot://tar.pxe`, with the shared GPL-2.0-only license.
+`bin://less.pxe` and `bin://tar.pxe`, with the shared GPL-2.0-only license.
 No default BusyBox configuration or native-command replacement is enabled.
 
 ```text
@@ -288,7 +296,7 @@ that Pyxis does not expose. Host archives use `tar --format=ustar`; the
 
 ## TCC and the guest SDK
 
-The normal image includes `boot://tcc.pxe`; the shell resolves `tcc` to it.
+The normal image includes `bin://tcc.pxe`; the shell resolves `tcc` to it.
 The [recipe](../../ports/tcc/README.md) builds TCC with the prebuilt Pyxis Clang and
 exports the guest executable, target libtcc1, compiler-private headers, licenses
 and ordered patch provenance. No compiler-container rebuild is needed.
@@ -303,10 +311,11 @@ and ordered patch provenance. No compiler-container rebuild is needed.
   the toolchain's fork revision and runtime licensing.
 - `manifest.txt`: SDK provenance plus the ports bundle's source and dependency record.
 
-From `tmp://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
+From `home://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
 launch `./hello.pxe`. TCC supports `-E`, ELF object output with `-c`, and static
 P1F linking; the port notes list supported options and limits. The compiler uses
-inherited read-only `boot` and writable `tmp` grants and needs no launch authority.
+inherited root grants, such as read-only `boot` and writable `home`, and needs
+no launch authority.
 The SDK packages target runtime files, not host compilers or a host converter.
 Clang on the host remains the compiler for the OS and maintained applications.
 
@@ -315,7 +324,7 @@ See the [edit/build/run walkthrough](edit-build-run.md) and
 
 ## Fastfetch
 
-The image includes `boot://fastfetch.pxe` and notices under
+The image includes `bin://fastfetch.pxe` and notices under
 `boot://share/licenses/fastfetch`. Run `fastfetch` for native system information
 and the Pyxis ASCII logo, or `fastfetch --json` for structured output. See the
 [usage and limits](../userland/fastfetch.md) and
@@ -323,7 +332,7 @@ and the Pyxis ASCII logo, or `fastfetch --json` for structured output. See the
 
 ## Guest Lua
 
-The image includes `boot://lua.pxe` and the upstream MIT notice at
+The image includes `bin://lua.pxe` and the upstream MIT notice at
 `boot://share/licenses/lua/lua.h`. The first interpreter accepts one expression
 chunk through the shell:
 

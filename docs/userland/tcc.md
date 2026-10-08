@@ -1,13 +1,13 @@
 # TCC in Pyxis
 
-The normal image includes a guest C compiler at `boot://tcc.pxe` and a read-only
-SDK at `boot://sdk`. TCC compiles and links native applications inside Pyxis;
+The normal image includes a guest C compiler, run as `tcc` (`bin://tcc.pxe`), and
+a read-only SDK at `boot://sdk`. TCC compiles and links native applications inside Pyxis;
 Clang on the host remains the compiler for the OS and maintained userland. See the
 [edit/build/run walkthrough](../development/edit-build-run.md) for using it with Kilo.
 
 ## Compilation and linking
 
-From the shell's initial `tmp://` directory:
+From the shell's initial `home://` directory, or any writable directory:
 
 ```text
 tcc hello.c -o hello.pxe
@@ -49,8 +49,9 @@ are unchanged. ELF objects can contain debug information; P1F executables do not
 
 ## Resources and paths
 
-The shell supplies console output, private-memory management, readable `boot://`
-and writable `tmp://` grants, and an inherited working directory. TCC needs no
+The shell supplies console output, private-memory management, its space's root
+grants, such as readable `boot://` and writable `home://` and `tmp://`, and an
+inherited working directory. TCC needs no
 launcher authority. Reading source from stdin additionally requires console
 input. Alternative launchers must provide the corresponding grants; paths do
 not confer access by themselves.
@@ -90,9 +91,10 @@ Clang's private headers. `-print-search-dirs` displays the configured paths.
   need a readable startup clock; the shell supplies it. Timezone selection is
   deferred. The unsigned millisecond benchmark interval must be under 49 days.
 - Output uses create/truncate streams. A failed write can leave a partial file;
-  compilation does not publish output by atomic replacement. `tmp://` contents
-  are lost on reboot. An explicitly configured, qualified writable USB mount
-  can keep source and output across boots; follow the
+  compilation does not publish output by atomic replacement. Installed systems
+  keep `home://` on the npfs pool across reboots; on live boots `home://` and
+  `tmp://` are RAM-backed. A configured, qualified writable USB volume can also
+  keep source and output; follow the
   [USB walkthrough](../development/edit-build-run.md#persistent-usb-development)
   to synchronize and verify them. An optional writable `host://` export is
   another persistence path; see its
@@ -111,8 +113,9 @@ compiler conformance or a promise that arbitrary inputs fit available resources.
 ## Source and maintenance
 
 The ports recipe pins TinyCC `3dc99dbc82f8e07308c5d398136803e62f9676df`
-(`0.9.28rc`) and records six ordered patches: target defaults, helper ownership,
-FP scratch storage, native streams/paths, guest driver and P1F output.
+(`0.9.28rc`) and records seven ordered patches: target defaults, helper ownership,
+FP scratch storage, native streams/paths, guest driver, P1F output and guest
+clocks.
 [Port instructions](../../ports/tcc/README.md) describe rebuilding, host-running
 TCC, patches and licensing; the SDK carries the pin and patch copies.
 
