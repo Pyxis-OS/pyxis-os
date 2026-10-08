@@ -358,7 +358,9 @@ service changes, probes, pairing or native checks.
 ## Decision and investigation handoff
 
 Milestone rounds one and two and the first task 1 round are
-**accepted 2026-10-08**. Task 1 now presents only its second three questions:
+**accepted 2026-10-08**. Task 1 presents only the
+[second round's three decisions](bluetooth-task1-contracts.md#second-task-1-decision-round).
+Remaining decisions and dependency gates include later topics not presented now:
 
 - Exact firmware pin/mirror, compatible warm-version list and qualification criteria.
 - Controller/service lifetime, HID report scope and USB HID sharing (second task 1 round).
