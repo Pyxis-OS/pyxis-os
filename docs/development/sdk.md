@@ -16,8 +16,8 @@ there is no extra link library. See
 
 | SDK path | Contents |
 | --- | --- |
-| `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers |
-| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a` and `pyxis.ld` |
+| `sysroot/usr/include` | libc, libpyxis and libterm headers, public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
+| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
@@ -56,8 +56,7 @@ BUFSIZ as 8192, without enabling stream buffering. Descriptor I/O headers includ
 [the I/O contract](../userland/stdio.md#descriptor-io).
 
 Libc headers can be included from C++: declarations are wrapped in `extern "C"`,
-and parameters use `__restrict`, which C and C++ both accept. No C++ standard
-library is exported yet; see [C++ in userspace](../wip/cxx-userspace.md).
+and parameters use `__restrict`, which C and C++ both accept.
 
 `stddef.h`, `stdarg.h`, `stdbool.h` and `float.h` remain compiler-provided.
 SDK `-I` paths precede compiler `-isystem` paths, so Clang and TCC use the
@@ -152,6 +151,36 @@ read-only segment with `__eh_frame_hdr_start`/`_end` and
 destructor arrays in the data segment. C code is compiled without unwind tables,
 so C executables carry none. TCC links define empty constructor arrays.
 
+## C++
+
+The SDK carries libc++, libc++abi and libunwind as static archives, built from
+the same [`pyxis-llvm`](llvm-toolchain.md) commit as the compiler. The driver
+finds them: `x86_64-unknown-pyxis-clang++ --sysroot=SDK/sysroot app.cpp -o
+app.pxe` searches `usr/include/c++/v1` ahead of libc's headers and links the
+three archives with libc. Make consumers use `CXX`, `PYXIS_CXX_CPPFLAGS`,
+`PYXIS_CXXFLAGS` (GNU C++23, without `-ffreestanding`) and `PYXIS_CXX_LDLIBS`
+from `share/pyxis.mk`. Like the C settings, they keep SDK headers on a normal
+include path so `-MMD` tracks them.
+
+| Supported | Not provided |
+| --- | --- |
+| Exceptions, RTTI, static constructors and destructors, local statics | Threads, `thread_local`, `<thread>`, `<mutex>`, non-lock-free atomics |
+| Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>` | `<iostream>`, `<locale>`, `<regex>` and wide characters |
+| `system_clock` and `steady_clock` | `<filesystem>`, `random_device`, time zones |
+| Aligned `new` up to 4096 bytes | Most of `<cmath>`, which follows libc's [math subset](../kernel/userspace.md#foundational-libc) |
+
+The headers of absent features still include, but their names do not exist, so
+a program using one fails to compile. `thread_local` and `_Thread_local` are
+rejected by the compiler. `-fno-exceptions` and `-fno-rtti` code links against
+the same archives.
+
+An uncaught exception prints `libc++abi: terminating due to uncaught
+exception of type …` with the mangled type name, to keep the demangler out of
+every program, and exits with status 1 through `abort`. C code has no unwind
+tables, so an exception thrown through a C frame, such as a `qsort`
+comparator, also terminates. A C++ program printing a `vector<string>` is about
+108 KB; `echo` in C is 56 KB.
+
 ## Guest SDK
 
 `make image` also packages the [TCC port](ports.md#tcc-and-the-guest-sdk) and a
@@ -161,8 +190,8 @@ The guest payload includes library licenses, exact TCC patches and toolchain
 source provenance. Its manifest adds the ports revision/dirty state to the
 exported SDK record. There is no separate guest ABI version.
 
-The guest receives no compiler or linker executables, Clang private headers or
-SDK linker script. TCC writes P1F directly using the same loader
+The guest receives no compiler or linker executables, Clang private headers,
+SDK linker script or C++ runtime and headers. TCC writes P1F directly using the same loader
 contract. `boot://sdk` is read-only; applications compile source and write output
 in `tmp://` or other explicitly granted directories.
 
@@ -174,6 +203,16 @@ The root build first exports public headers and compiler settings, then invokes
 alongside the target npfs codecs built by `scripts/npfs-sdk.mk`, before invoking
 the separate application build. This avoids a dependency cycle
 between SDK production and applications.
+
+`scripts/cxx-runtime.sh` then builds the C++ runtime against the exported
+headers, with CMake. It reads the fork commit from the installed toolchain's
+`share/pyxis-toolchain/llvm-revision` and fetches only that commit's runtime
+sources, shallow, blobless and sparse (about 40 MiB), from `git.internal`. The
+checkout and build live in `build/cxx-runtime`, keyed by the commit, so repeated
+SDK builds reuse them; a new toolchain commit or `make clean` fetches again, and
+a changed script configures from scratch. CI runs the same fetch in each job.
+The header export keeps libc++'s headers in place, so unchanged builds keep
+their timestamps.
 
 For focused runtime work, run `make sdk-headers`, then:
 

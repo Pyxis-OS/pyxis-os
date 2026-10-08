@@ -239,7 +239,9 @@ active rounding mode. Errors use floating-point exception flags
 (`math_errhandling` is `MATH_ERREXCEPT`) and leave `errno` unchanged. Traps are
 masked at process start. `<fenv.h>` tests, clears and raises the C exception
 flags and sets the rounding mode of both the SSE and x87 units; it keeps raised
-flags of both in MXCSR. Its functions never unmask exceptions themselves. `<math.h>` also supplies `INFINITY`, `NAN`
+flags of both in MXCSR. Only `feholdexcept`, which masks every exception, and
+`fesetenv`/`feupdateenv`, which install the masks of the environment passed in,
+change the masks. `<math.h>` also supplies `INFINITY`, `NAN`
 and the `HUGE_VAL`/`HUGE_VALF`/`HUGE_VALL` constants. The SDK carries musl's license
 and the subset's provenance under `share/licenses`. Signaling NaN support and a
 full math library remain outside this subset.
@@ -332,7 +334,8 @@ Compiler-rt builtins provide compiler arithmetic/conversion helpers. This does n
 provide a full libm. The libc conversion/scaling subset is described
 [above](#foundational-libc); floating-point output uses the
 [shared printf formatter](../userland/stdio.md#standard-streams-formatting-and-exit).
-There is no public floating-point environment API yet.
+`<fenv.h>` reads and changes this state for C code; see
+[above](#foundational-libc).
 
 Run `mandelbrot` from the shell to render a double-precision Mandelbrot set into
 a [mapped pixel buffer](../interfaces/graphics.md). It displays progress below the navigation
