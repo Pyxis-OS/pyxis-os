@@ -370,6 +370,8 @@ enum call_status pointer_surface_warp(struct pointer_object *pointer,
 enum call_status pointer_surface_lock(struct pointer_object *pointer)
 {
   KASSERT(arch_cpu_index() == 0 && pointer->owner);
+  bool activated = pointer->activation_ready;
+  pointer->activation_ready = false;
   if (locked_pointer == pointer) {
     return CALL_OK;
   }
@@ -377,12 +379,11 @@ enum call_status pointer_surface_lock(struct pointer_object *pointer)
     return CALL_BUSY;
   }
   if (!pointer_surface_focused(pointer) ||
-      (pointer->space->pointer_activation_required && !pointer->activation_ready) ||
+      (pointer->space->pointer_activation_required && !activated) ||
       (device_buttons & ~consumed_buttons & ~pointer->accepted) ||
       (drag.space && (drag.space != pointer->space || drag.kind != DESTINATION_GRAPHICS))) {
     return CALL_DENIED;
   }
-  pointer->activation_ready = false;
   drag = (struct pointer_destination){0};
   drag_buttons = 0;
   hover = NULL;

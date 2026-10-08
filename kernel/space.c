@@ -977,7 +977,6 @@ static void handle_space_input(void)
   while (keyboard_read_event(&event)) {
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
-      escape_held = false;
       uint64_t flags = cpu_save_interrupts();
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
@@ -988,17 +987,17 @@ static void handle_space_input(void)
       continue;
     }
     if (event.key == KEY_ESCAPE) {
-      if (escape_held) {
-        if (event.action == KEY_RELEASE) {
-          escape_held = false;
-        }
-        continue;
-      }
       if ((event.modifiers & KEY_MOD_SUPER) && event.action == KEY_PRESS) {
         escape_held = true;
         uint64_t flags = cpu_save_interrupts();
         pointer_escape();
         cpu_restore_interrupts(flags);
+        continue;
+      }
+      if (escape_held) {
+        if (event.action == KEY_RELEASE) {
+          escape_held = false;
+        }
         continue;
       }
     }
