@@ -19,6 +19,8 @@ there is no extra link library. See
 | `sysroot/usr/include` | libc, libpyxis and libterm headers, public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
 | `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
+| `share/pyxis.cmake` | Relocatable [CMake toolchain file](#cmake) |
+| `share/cmake/Platform/Pyxis.cmake` | The CMake platform description `pyxis.cmake` loads |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/pyxis/key_layout.c` | The US key layout shared with the kernel's terminal text, compiled into libpyxis as `key_layout_character` (`pxe/key_layout.h`) |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
@@ -185,6 +187,45 @@ every program, and exits with status 1 through `abort`. C code has no unwind
 tables, so an exception thrown through a C frame, such as a `qsort`
 comparator, also terminates. A C++ program printing a `vector<string>` is about
 108 KB; `echo` in C is 56 KB.
+
+## CMake
+
+CMake projects select the SDK with its toolchain file:
+
+```sh
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/sdk/share/pyxis.cmake
+```
+
+Like `pyxis.mk`, the file resolves paths from its own location. It sets:
+
+- **The platform.** `CMAKE_SYSTEM_NAME` is `Pyxis`, so a project can test
+  `CMAKE_SYSTEM_NAME STREQUAL "Pyxis"`. Neither `UNIX` nor `WIN32` is set.
+  Executables are named `.pxe`, and only static libraries exist.
+- **The compilers.** C, C++ and assembly use the `x86_64-unknown-pyxis-` tools
+  on `PATH`; `-DPYXIS_CROSS_COMPILE=PREFIX` or a `CROSS_COMPILE` environment
+  variable selects another prefix. `CMAKE_SYSROOT` is the SDK's sysroot, and
+  the driver supplies startup, libraries, the linker script and P1F output.
+- **The language modes.** C is freestanding with the SDK's headers ahead of
+  Clang's builtin ones, as in `pyxis.mk`, so `stdint.h` is the SDK's. C++ is
+  hosted with the driver's own header order.
+- **Searching.** Libraries, headers and packages are searched only in the
+  sysroot and in other `CMAKE_FIND_ROOT_PATH` entries, never programs. Each
+  entry is searched at `/usr` and at its top. Development prefixes such as
+  `build/ports-dev/sdl2` can therefore be added, for example
+  `-DCMAKE_FIND_ROOT_PATH=/path/to/pyxis/build/ports-dev/sdl2`.
+
+It leaves the language standard, optimization and warnings to the project and
+`CMAKE_BUILD_TYPE`. Configure checks link real executables against the
+complete SDK, so a check for a missing function fails. Some things to know:
+
+- Flags given on the command line replace the file's C flags: include
+  `-ffreestanding` in your `CMAKE_C_FLAGS`.
+- Stripping after the link does not work, because `llvm-strip` cannot read
+  P1F executables.
+
+The fastfetch, fmt and mbedtls recipes use this file.
+[The C++ runtime build](#runtime-build-phase) configures CMake itself, because
+it runs before the SDK is complete.
 
 ## Guest SDK
 
