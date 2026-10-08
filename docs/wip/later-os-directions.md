@@ -216,9 +216,11 @@ The [playback milestone proposal](hda-playback.md) puts three ownership/session,
 format/mixing and buffering/qualification defaults to the owner. They remain
 pending; no production task or SDL2/Quake adapter is assigned. The ThinkPad's
 analog controller is AMD `1022:15e3`, distinct from its GPU HDMI/DP and dock USB
-audio; its codec is still unknown pending owner data. Native closure is proposed,
-not waived by QEMU success. SDL2 also needs real audio callback execution;
-today its port omits both audio devices and threads.
+audio. The supplied Fedora dump identifies Realtek ALC257 (`0x10ec0257`,
+subsystem `0x17aa5081`); native Pyxis playback remains unqualified. Decision 3
+offers native qualification before closure or explicit QEMU closure followed
+by the owner's native batch; neither is accepted yet. SDL2 also needs real audio
+callback execution; today its port omits both audio devices and threads.
 
 ## Bluetooth
 

@@ -52,10 +52,12 @@ Probe code stays on unmerged branches and is excluded from this documentation PR
    hardware drain contract.
 5. **Native requirements.** The checked-in ThinkPad inventory identifies analog
    controller **AMD `1022:15e3`, `07:00.6`**, separate from Renoir HDMI/DP
-   `1002:1637`, the AMD audio coprocessor `1022:15e2` and dock USB audio. Codec
-   identity and topology remain unknown. Read-only Linux codec dumps and matching
-   `lspci -nnk` were requested from the owner; none was available for this report.
-   The host reserved for Bluetooth was not accessed.
+   `1002:1637`, the AMD audio coprocessor `1022:15e2` and dock USB audio. The codec
+   is now identified by Claude's owner-supplied Fedora dump as **Realtek ALC257**,
+   vendor `0x10ec0257`, subsystem `0x17aa5081`. Its analog output converters
+   advertise 48 kHz/16-bit stereo. The [native handoff](#native-handoff) records
+   pins, connections and controls; this is Fedora inventory/state evidence, not
+   native Pyxis qualification. This agent did not access the Bluetooth host.
 6. **Report and proposal.** This report retires the investigation checklist.
    The proposed production tasks separate controller ownership, codec routing,
    refill/underrun behavior, per-space authority, consumers and native closure.
@@ -116,20 +118,49 @@ changes; the investigation adds no userspace or libc API.
 
 ## Native handoff
 
-When the owner can provide it, retain `lspci -nnk -d 1022:15e3` and
-`/proc/asound/card*/codec#*` with card identity and speaker/headphone state.
-That data selects the codec-specific investigation; it cannot by itself qualify
-Pyxis playback. Inspect actual widget connections, pin defaults/presence,
-converter formats, amplifier offsets, D0 transitions, EAPD/GPIO and any
-Linux/vendor fixups, keeping their licence/provenance explicit if adapted.
+Claude supplied the read-only Fedora codec dump on **2026-10-08**, with its
+association to analog controller `07:00.6`, AMD `1022:15e3`, recorded in the
+[review of #549](https://git.internal/PyxisOS/pyxis-os/pulls/549). The
+[full dump](experiments/audio-investigation/thinkpad-alc257-codec.txt) is retained
+unchanged, SHA-256
+`3c1799d0ec3d75c96a4a3cdf6a032728bb59eae1100b1c2e22c636bff18509d8`.
+Codec address is 0, AFG is `0x01`, revision `0x100001`, vendor `0x10ec0257`
+(**Realtek ALC257**), subsystem `0x17aa5081`. The supplied file does not record
+the Fedora kernel version, card pathname, capture command or jack-presence state;
+these are not inferred. No further codec-dump request is needed.
+
+| Output | Pin / default configuration | Advertised DAC connections | Fedora controls at capture |
+| --- | --- | --- | --- |
+| Internal speaker | `0x14` / `0x90170110`, fixed | `0x02` | OUT, EAPD `0x2`, pin output amp unmuted |
+| Right-side headphone jack | `0x21` / `0x04211020`, jack | `0x02`, `0x03` (selected) | OUT + HP, EAPD `0x2`, pin output amp muted; unsolicited tag 1 enabled |
+
+Both output DACs `0x02` and `0x03` are stereo PCM, advertise 44.1/48 kHz and
+16/20/24-bit samples, and are in D0 at capture. Thus **48 kHz S16 stereo is
+advertised by the actual analog converters**, not just the AFG default (which
+also lists 96/192 kHz). Their amplifier offset and maximum step are `0x57`;
+current gains are `0x55`/`0x34`. The pins have mute-capable output amplifiers,
+and both advertise EAPD. These captured gain/mute values are Fedora state,
+not selected Pyxis defaults or a sufficient cold-init sequence.
+
+The mic jack is pin `0x19`, default `0x04a11030`; recording stays outside scope.
+Three GPIOs advertise unsolicited/wake capabilities but are disabled in the
+captured state. Vendor widget `0x20` advertises 142 processing coefficients;
+the file contains no coefficient initialization sequence. EAPD/power handling
+and possible Lenovo-specific Realtek fixups remain bring-up work; this data does
+not prove a GPIO toggle or particular vendor fixup is needed. Inspect relevant
+source with licence/provenance before adapting any fixup. The QEMU probe's
+line-out/headphone preference does not itself select the native fixed speaker;
+production route and jack policy still need review.
 
 Native Pyxis then needs cold-boot speaker and headphone checks, controller
 address-width/position/interrupt behavior, stop/reset ownership, sustained
 refill and underrun observations under normal load, and measured usable latency.
 Speaker/headphone selection and jack events need policy before implementation.
 Do not bind the GPU, coprocessor or USB dock as an analog fallback. Suspend/resume,
-recording and HDMI/DP remain separate scopes. Native qualification is an open
-production requirement; this report does not close it as technical debt.
+recording and HDMI/DP remain separate scopes. Native qualification remains open.
+Decision 3 proposes either requiring it
+before milestone closure (the default) or explicit QEMU closure with retained
+native technical debt and a later owner batch; neither choice is accepted yet.
 
 All task-owned guests, debugger connections, clients and builds are stopped.
 

@@ -139,3 +139,19 @@ WALCLK and WAV duration are not interchangeable latency/consumption promises.
 Native playback, IRQ delivery, sustained refill/mixing, independent channels,
 ring wrap, command faults and failure recovery remain unmeasured. All task-owned
 processes stopped; no native device was accessed.
+
+
+## Native codec inventory supplied after review
+
+Claude read Fedora's ThinkPad codec through read-only commands and supplied
+[thinkpad-alc257-codec.txt](thinkpad-alc257-codec.txt) on 2026-10-08. It is retained
+unchanged (9,587 bytes), SHA-256
+`3c1799d0ec3d75c96a4a3cdf6a032728bb59eae1100b1c2e22c636bff18509d8`.
+The [review of #549](https://git.internal/PyxisOS/pyxis-os/pulls/549) associates
+it with AMD analog controller `07:00.6`, `1022:15e3`; the file identifies
+ALC257 `0x10ec0257`, subsystem `0x17aa5081`. See the
+[report's native handoff](../../audio-investigation.md#native-handoff) for pin,
+DAC, amplifier and EAPD observations and the limits of captured Fedora state.
+The dump supplies no Fedora kernel version, exact capture command or jack-state
+record. This is native Linux inventory, not native Pyxis playback evidence.
+No physical-host access or new QEMU run occurred for this documentation update.

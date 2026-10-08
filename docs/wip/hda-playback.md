@@ -34,8 +34,9 @@ Each recommendation is a proposed default, not an accepted contract.
    explicitly. Userspace performs source-format conversion, sample-rate
    conversion and application/game mixing; the kernel only combines session
    PCM with a wide accumulator and saturates once per output sample. No kernel
-   resampler. This is small and fits the measured QEMU route; the ThinkPad codec
-   must still advertise it. Alternative: negotiate device formats and add a
+   resampler. This fits the measured QEMU route and the owner-supplied ALC257
+   analog DAC capabilities; native playback still needs qualification. Alternative:
+   negotiate device formats and add a
    native resampler/multi-format mixer after concrete consumers need it.
 3. **Buffering and qualification — recommended:** begin with **four 10 ms DMA
    periods (40 ms)** and an **80 ms copied queue per session**, starting a new
@@ -47,8 +48,13 @@ Each recommendation is a proposed default, not an accepted contract.
    Treat these as tuning defaults, with no hard real-time or audible-latency
    guarantee. Measure QEMU first and require native speaker/headphone playback,
    stop/underrun behavior and usable latency before closing the milestone.
-   Alternative: larger periods/queues for more scheduling margin, or explicit
-   QEMU-only closure with native qualification left open by an owner decision.
+   **QEMU-closure plus native-batch alternative:** close after the production
+   tasks pass QEMU qualification, explicitly retain native AMD/ALC257 playback,
+   speaker/headphone switching, stop/underrun behavior and usable latency as
+   technical debt, then run them in the owner's later native batch when the
+   ThinkPad is available after Bluetooth work. QEMU closure would not claim
+   native sound. The owner chooses this closure policy; it is not accepted by
+   review approval. Larger periods/queues are a separate tuning alternative.
 
 These three decisions are the only current questions. Exact call layouts,
 rights bits, copy extent/deadline horizon, admission errors, route preference,
@@ -140,7 +146,8 @@ controller or all other sessions.
 1. [ ] **Session contract and native evidence.** Record accepted first-round
    decisions. Specify rights, exclusive acquisition, close/exit, wait/readiness,
    queue accounting, byte/frame bounds, deadlines/cancellation and generations.
-   Obtain native codec dumps and propose speaker/headphone route/jack policy.
+   Use the supplied [ALC257 dump](../development/audio-investigation.md#native-handoff)
+   to propose speaker/headphone route/jack policy; do not request it again.
    Review these concrete contracts before writing a public ABI; unsupported
    hardware reports unavailable without exposing DMA.
 2. [ ] **QEMU controller and codec engine.** Implement production PCI claim,
@@ -164,12 +171,16 @@ controller or all other sessions.
    capabilities and the actual codec route. Inspect licensed/pinned fixups where
    needed; require owner speaker/headphone evidence, sustained output under load,
    underrun/recovery, stop/reset and usable latency. No physical-host access
-   while another agent owns it. If blocked by hardware-specific behavior, report
-   it and return scope/closure decisions to the owner.
+   while another agent owns it. Under the native-batch alternative, explicitly
+   defer this task at QEMU closure, record the outstanding checks in technical
+   debt and leave native qualification open for the later owner batch. If blocked
+   by hardware-specific behavior, report it and return scope decisions to the owner.
 6. [ ] **Documentation closure.** Record implemented contracts and measured
    limits, move this milestone to the appropriate subsystem reference and update
-   links. Carry only owner-accepted deferred work into technical debt. Publish
-   no success claim for SDL2, Quake, recording or other devices.
+   links. Apply the accepted closure policy: native results, or explicit retained
+   native checks for the later batch. Carry only owner-accepted deferred work
+   into technical debt. Publish no success claim for SDL2, Quake, recording
+   or other devices.
 
 Tasks are focused PRs, each assigned by the owner after its predecessor is
 reviewed. No probe cherry-pick is implied by accepting this proposal. Production
@@ -187,17 +198,21 @@ actual sound. The owner assigns this in ports after the kernel interface exists.
 writable waits, pause, close and discontinuity. Its audio core normally starts
 a thread even for queued audio. Pyxis currently has one task per process and
 SDL2 thread creation fails, so genuine callback/thread execution requires
-separate owner acceptance and assignment. Backend-owned callback execution would still need real
-safe scheduling, lifetime and synchronization; it cannot be faked by success or
+separate owner acceptance and assignment under the
+[threads direction](scheduling-and-threads.md). Backend-owned callback execution
+would still need real safe scheduling, lifetime and synchronization; it cannot be faked by success or
 pumped only when a game polls events. Until that prerequisite is solved, do not
 claim DevilutionX or SDL audio support.
 
 ## Native and evidence limits
 
-Analog codec identity is unknown pending owner data. QEMU establishes command,
-route and known-PCM feasibility, not the ThinkPad's routing, amplifier/power
-quirks, interrupt/position reliability or physical latency. Native closure remains
-required under the recommended default; the ThinkPad's availability does not
-silently relax it. Recording/HDMI/USB/ACP/suspend remain separate directions.
+The supplied Fedora dump identifies Realtek ALC257 `0x10ec0257`, subsystem
+`0x17aa5081`, on AMD `1022:15e3`, with speaker pin `0x14` and headphone pin
+`0x21`, both advertising EAPD and analog DACs supporting 48 kHz S16 stereo.
+It records advertised topology and Fedora state, not a qualified Pyxis cold-init
+sequence, amplifier/power quirks, interrupt/position reliability or physical
+latency. Native closure remains required under the recommended default; the
+QEMU-closure/native-batch alternative requires an explicit owner decision and
+retained native checks. Recording/HDMI/USB/ACP/suspend remain separate directions.
 See the [full report and evidence](../development/audio-investigation.md) for
 exact measured revisions and source references.

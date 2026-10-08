@@ -14,8 +14,8 @@ Implemented behavior lives in the subsystem references listed in the
 
 - [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
   unmerged QEMU probes established controller/codec commands and known PCM
-  playback; the production milestone remains proposed and native codec/audio
-  qualification remains open.
+  playback; the Fedora dump identifies ALC257, but native Pyxis audio
+  qualification remains open and the production milestone remains proposed.
 - [Kernel random generator](../devices/random-generator.md), 2026-10-08:
   BSP-owned ChaCha20 with the accepted OpenBSD rekey construction, hardware
   seed/reseed policy and unchanged random grant; matched VirtIO/CPU qualification
@@ -66,7 +66,10 @@ Chosen by the owner, each starting with a proposal:
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Documentation handoff complete; three owner defaults pending and no production
-  task assigned. Native analog qualification remains open.
+  task assigned. Native analog qualification remains open, with QEMU closure
+  plus a later native batch offered for owner choice. Quake can produce sound
+  from its main loop; SDL2/DevilutionX audio waits on real userspace
+  [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   documentation only. Two owner rounds accepted stack/security/closure and initial
   firmware/bond policies; later decisions are queued without another round now. The
