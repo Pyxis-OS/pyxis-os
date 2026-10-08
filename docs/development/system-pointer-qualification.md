@@ -293,3 +293,19 @@ The saved functional image with ports `e2482df` has these hashes:
 | Default ISO | `5fc140a575fb9e616fac16797c780b2e7784abec9ecf25c3e7898df95c46a42c` |
 | Local shareware initrd | `f6da0dd8449681f8fc808dcc1f5edd2d7ef3ca06f4416da292e9af4c1ac8931c` |
 | Local shareware ISO | `6e25a2ac5837f614eaef38c17f652df425ec6a8d4b0a6d7c73673ec240d38e65` |
+
+### Input-source coordination follow-up
+
+After coordination with proposed Bluetooth #548, `b77cd1d` separated the PS/2
+adapter's continuity quarantine from the common physical snapshot and loss
+handler. Normalized reports and remaining-mask loss reset are kernel-internal
+and used by the real PS/2 path; no producer grant, epoch/sequence API, registration
+system or second source was added. Availability remains PS/2-only at the adapter
+boundary. Source review confirmed release/fresh-press and pre-report lock/warp
+guard parity. The later proposal remains unaccepted. The final default image build passed.
+A manual headless Q35/KVM, four-CPU, 512 MiB, VirtIO GPU/PS/2 smoke at
+`b77cd1d` confirmed ordinary position changing from `(640, 400)` to `(675, 388)`,
+locked motion leaving that position parked, Super+Esc revocation, fresh-left-click
+relock and global lock cleanup on exit. Source-loss behavior remains reviewed
+without fault injection. Earlier consumer-specific captures retain the revisions
+above.

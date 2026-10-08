@@ -362,6 +362,31 @@ surface state. Land this adapter change after SDL2 milestone
 closure and qualify DevilutionX ordinary motion, warp, software-cursor hiding and
 its program-supplied cursor. Do not preserve the old protocol merely for ports.
 
+## Input-source coordination
+
+Coordination on 2026-10-08 inspected the **proposed**, unaccepted input-source
+contract in [Bluetooth draft #548](https://git.internal/PyxisOS/pyxis-os/pulls/548).
+It is compatible with the accepted global lock/loss rules, without recording
+agreement on its producer authority, epochs, sequences, aggregation or reconnect
+policy. This pointer milestone still implements only PS/2.
+
+The PS/2 adapter now owns continuity quarantine and supplies a concrete internal
+normalized report to the common router. The common loss handler accepts the
+physical mask remaining after the adapter's loss, preserves position, resets
+accepted input/drag/activation and revokes the global lock. PS/2 currently supplies
+zero because it is the only source. Physical state and unconfirmed held-button
+suppression are distinct; current pre-report lock/warp refusal is preserved.
+Availability and quarantine queries remain at the source-adapter boundary.
+
+A later, separately approved producer must aggregate complete physical snapshots
+and continuity suppression before routing; submitting independent source masks
+to this common entry would incorrectly release another source's hold. Loss of one
+source must supply the surviving physical mask and update source availability,
+while retaining the existing conservative consumer reset and lock revocation.
+The future adapter replaces the PS/2-only availability view with its live-source
+view. These are integration constraints, not an implemented producer API or a
+second-source registration system; the consumer ABI is unchanged.
+
 ## Selection and clipboard boundary
 
 **Accepted, 2026-10-08.** A left drag selects a linear range of cells, with release

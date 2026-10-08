@@ -144,8 +144,13 @@ The queue holds 64 events. At capacity, an ordinary event can coalesce with the
 newest ordinary event only when buttons and both identities match: it retains
 the latest position and saturates wheel and locked relative counts at the signed
 32-bit limits. Otherwise the queue and accepted buttons are cleared and
-`POINTER_STATE_RESET` is queued. Device loss resets every space. Notifications
-wake blocked readers while graphics is hidden or its space is inactive; a read
+`POINTER_STATE_RESET` is queued. Reported source loss resets every space's
+accepted input and revokes the global lock, while the source adapter supplies the
+remaining physical button snapshot.
+PS/2 is currently the only source, so its loss supplies zero. Continuity quarantine
+lives in that adapter and blocks held bits until release, preserving lock/warp
+refusal while the first complete post-loss snapshot is still unconfirmed.
+Notifications wake blocked readers while graphics is hidden or its space is inactive; a read
 may otherwise continue waiting. Focus loss preserves execution authority.
 
 ### Relative lock and user escape
