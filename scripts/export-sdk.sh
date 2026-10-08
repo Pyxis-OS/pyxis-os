@@ -18,6 +18,11 @@ case "${1:-}" in
     cp userspace/include/*.h "$staging/"
     cp -R userspace/libc/include/. "$staging/"
     cp -R fs/include/pyxis_fs "$staging/"
+    # scripts/cxx-runtime.sh installs libc++'s headers later; keep them as they
+    # are so that unchanged C headers do not replace the whole tree.
+    if [ -d "$sdk/sysroot/usr/include/c++" ]; then
+      cp -pR "$sdk/sysroot/usr/include/c++" "$staging/c++"
+    fi
     if ! diff -qr "$staging" "$sdk/sysroot/usr/include" >/dev/null 2>&1; then
       rm -rf "$sdk/sysroot/usr/include"
       mv "$staging" "$sdk/sysroot/usr/include"
