@@ -7,6 +7,9 @@ Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 the [investigation results](../development/bluetooth-investigation.md) and
 assigned this proposal. Publishing, reviewing or merging it does not authorize
 implementation. The owner chooses the milestone and explicitly starts its tasks.
+The owner's 2026-10-08 instruction is to finish these documentation rounds and
+then stop, even if every decision is accepted. Implementation needs a new
+assignment; the ThinkPad is reserved for the owner's native-check batch next.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
@@ -348,3 +351,6 @@ With the direction decided, the completed investigation is now the
 report and detailed task reports. This production proposal stays in WIP; no
 implementation task is assigned and cold-firmware debt remains open. No native
 batch, host Bluetooth service change or SMP exchange was performed for this PR.
+Read-only handoff inspection on 2026-10-08 found no QEMU, debugger or Bluetooth
+probe processes and both AX200 interfaces bound to `btusb`. The owner will start
+the native batch by re-enabling Fedora Bluetooth; this PR does not do so.
