@@ -97,9 +97,13 @@ or proof of Secure Connections support. See the [task 5 report](../development/e
 
 ## Follow-up
 
-The [production proposal](../wip/bluetooth-mouse.md) records accepted direction,
-remaining owner rounds, the owner's separate Linux pairing account and an optional
-SMP-field-only observation for the later native batch. That account is not Pyxis
-qualification. No native batch, firmware upload, pairing or host-service change
-was performed by the documentation retirement. Bluetooth addresses remain out
-of repository content, PRs, docs and recorded output.
+The [production proposal](../wip/bluetooth-mouse.md) records accepted direction
+and the authorized documentation-only task 1. The owner's later
+[SMP account](../development/bluetooth-investigation.md#owner-reported-smp-evidence)
+reports Fedora SC Just Works and size-16 encryption, with peer identity-key
+distribution; it answers the mouse capability question and requires LTK/IRK
+bond storage. Pyxis-side checks and report decoding remain future qualification.
+The owner's native batch is completed in #547; it qualifies no Pyxis Bluetooth
+pairing. No firmware upload, pairing or host-service change was performed by
+this documentation. Bluetooth addresses remain out of repository content,
+PRs, docs and recorded output.

@@ -1,0 +1,80 @@
+Remote debugging using 127.0.0.1:1243
+0xffffffff80014606 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = "caelum", '\000' <repeats 25 times>
+Hardware assisted breakpoint 1 at 0xffffffff8000f224: file kernel/space.c, line 849.
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$2 = 72269
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$3 = 73700
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$4 = 86171
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$5 = 85435
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$6 = 132846
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$7 = 68946
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$8 = 85415
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010a9c in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$9 = 99932
+$10 = 17436
+$11 = 11567
+$12 = 11566
+$13 = 11565
+$14 = (void (*)(void *)) 0xffffffff80010280 <space_present_task>
+$15 = true
+$16 = 1280
+$17 = 800
+Detaching from program: <worktree>/build/caelum.elf, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]

@@ -1,0 +1,679 @@
+#include "internal.h"
+
+#include <arch/clock.h>
+#include <arch/cpu.h>
+#include <arch/cpu_local.h>
+#include <arch/dma.h>
+#include <arch/pci.h>
+#include <kernel/log.h>
+#include <kernel/memory.h>
+#include <kernel/panic.h>
+#include <kernel/pci/registers.h>
+#include <kernel/task.h>
+
+#define HDA_QEMU_VENDOR 0x8086
+#define HDA_QEMU_DEVICE 0x2668
+
+#define HDA_GCAP 0x00
+#define HDA_VMIN 0x02
+#define HDA_VMAJ 0x03
+#define HDA_GCTL 0x08
+#define HDA_WAKEEN 0x0c
+#define HDA_STATESTS 0x0e
+#define HDA_INTCTL 0x20
+#define HDA_CORBLBASE 0x40
+#define HDA_CORBUBASE 0x44
+#define HDA_CORBWP 0x48
+#define HDA_CORBRP 0x4a
+#define HDA_CORBCTL 0x4c
+#define HDA_CORBSTS 0x4d
+#define HDA_CORBSIZE 0x4e
+#define HDA_RIRBLBASE 0x50
+#define HDA_RIRBUBASE 0x54
+#define HDA_RIRBWP 0x58
+#define HDA_RINTCNT 0x5a
+#define HDA_RIRBCTL 0x5c
+#define HDA_RIRBSTS 0x5d
+#define HDA_RIRBSIZE 0x5e
+#define HDA_DPLBASE 0x70
+#define HDA_DPUBASE 0x74
+#define HDA_STREAM_BASE 0x80
+#define HDA_STREAM_BYTES 0x20
+#define HDA_SD_CTL 0x00
+#define HDA_SD_STS 0x03
+#define HDA_SD_LPIB 0x04
+#define HDA_SD_CBL 0x08
+#define HDA_SD_LVI 0x0c
+#define HDA_SD_FMT 0x12
+#define HDA_SD_BDPL 0x18
+#define HDA_SD_BDPU 0x1c
+
+#define HDA_GCAP_64OK (1u << 0)
+#define HDA_GCAP_BSS_SHIFT 3
+#define HDA_GCAP_ISS_SHIFT 8
+#define HDA_GCAP_OSS_SHIFT 12
+#define HDA_GCAP_STREAM_COUNT_MASK 0xf
+#define HDA_GCAP_BSS_COUNT_MASK 0x1f
+#define HDA_GCTL_CRST (1u << 0)
+#define HDA_CODEC_MASK 0x7fff
+#define HDA_CODEC_COUNT 15
+#define HDA_NODE_COUNT 128
+#define HDA_COMMAND_CODEC_SHIFT 28
+#define HDA_COMMAND_NODE_SHIFT 20
+#define HDA_VERB_PAYLOAD_MASK 0xfffff
+#define HDA_POINTER_RESET (1u << 15)
+#define HDA_POINTER_MASK 0xff
+#define HDA_RING_DMA (1u << 1)
+#define HDA_CORB_ERROR (1u << 0)
+#define HDA_RIRB_RESPONSE (1u << 0)
+#define HDA_RIRB_RESPONSE_ENABLE (1u << 0)
+#define HDA_RIRB_OVERRUN_ENABLE (1u << 2)
+#define HDA_RIRB_OVERRUN (1u << 2)
+#define HDA_RING_SIZE_MASK 3
+#define HDA_RING_SELECT_2 0
+#define HDA_RING_SELECT_16 1
+#define HDA_RING_SELECT_256 2
+#define HDA_RING_CAP_2 (1u << 4)
+#define HDA_RING_CAP_16 (1u << 5)
+#define HDA_RING_CAP_256 (1u << 6)
+#define HDA_RESPONSE_CODEC_MASK 0xf
+#define HDA_RESPONSE_UNSOLICITED (1u << 4)
+#define HDA_SD_RESET (1u << 0)
+#define HDA_SD_RUN (1u << 1)
+#define HDA_SD_TAG_SHIFT 20
+#define HDA_SD_COMPLETE (1u << 2)
+#define HDA_SD_FIFO_ERROR (1u << 3)
+#define HDA_SD_DESCRIPTOR_ERROR (1u << 4)
+#define HDA_SD_STATUS_MASK (HDA_SD_COMPLETE | HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR)
+#define HDA_BDL_IOC (1u << 0)
+
+#define HDA_OPERATION_TIMEOUT_MS 100
+#define HDA_COMMAND_TIMEOUT_MS 100
+#define HDA_POLL_MS 1
+
+struct hda_response {
+  uint32_t value, extended;
+};
+
+struct hda_buffer_descriptor {
+  uint64_t address;
+  uint32_t bytes, flags;
+};
+
+static uint8_t read8(const struct hda_controller *controller, unsigned offset)
+{
+  return *(volatile uint8_t *)(controller->registers.address + offset);
+}
+
+static uint16_t read16(const struct hda_controller *controller, unsigned offset)
+{
+  return *(volatile uint16_t *)(controller->registers.address + offset);
+}
+
+static uint32_t read32(const struct hda_controller *controller, unsigned offset)
+{
+  return *(volatile uint32_t *)(controller->registers.address + offset);
+}
+
+static void write8(struct hda_controller *controller, unsigned offset, uint8_t value)
+{
+  *(volatile uint8_t *)(controller->registers.address + offset) = value;
+}
+
+static void write16(struct hda_controller *controller, unsigned offset, uint16_t value)
+{
+  *(volatile uint16_t *)(controller->registers.address + offset) = value;
+}
+
+static void write32(struct hda_controller *controller, unsigned offset, uint32_t value)
+{
+  *(volatile uint32_t *)(controller->registers.address + offset) = value;
+}
+
+static bool wait8(struct hda_controller *controller, unsigned offset, uint8_t mask, uint8_t value)
+{
+  uint64_t deadline = task_deadline_after_ms(HDA_OPERATION_TIMEOUT_MS);
+  do {
+    if ((read8(controller, offset) & mask) == value) {
+      return true;
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  } while (!task_deadline_expired(deadline));
+  return false;
+}
+
+static bool wait16(struct hda_controller *controller, unsigned offset, uint16_t mask, uint16_t value)
+{
+  uint64_t deadline = task_deadline_after_ms(HDA_OPERATION_TIMEOUT_MS);
+  do {
+    if ((read16(controller, offset) & mask) == value) {
+      return true;
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  } while (!task_deadline_expired(deadline));
+  return false;
+}
+
+static bool wait32(struct hda_controller *controller, unsigned offset, uint32_t mask, uint32_t value)
+{
+  uint64_t deadline = task_deadline_after_ms(HDA_OPERATION_TIMEOUT_MS);
+  do {
+    if ((read32(controller, offset) & mask) == value) {
+      return true;
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  } while (!task_deadline_expired(deadline));
+  return false;
+}
+
+static bool set_bus_master(struct hda_controller *controller, bool enabled)
+{
+  uint64_t flags = cpu_save_interrupts();
+  uint16_t command = pci_read16(controller->claim.device->address, PCI_COMMAND);
+  command = (command & ~PCI_COMMAND_MASTER) | PCI_COMMAND_INTX_DISABLE;
+  if (enabled) {
+    command |= PCI_COMMAND_MASTER;
+  }
+  pci_write16(&controller->claim, PCI_COMMAND, command);
+  uint16_t observed = pci_read16(controller->claim.device->address, PCI_COMMAND);
+  cpu_restore_interrupts(flags);
+  return !!(observed & PCI_COMMAND_MASTER) == enabled &&
+      (observed & PCI_COMMAND_INTX_DISABLE);
+}
+
+static bool reset_stream(struct hda_controller *controller, uint8_t *status)
+{
+  unsigned offset = controller->stream + HDA_SD_CTL;
+  write8(controller, offset, 0);
+  if (!wait8(controller, offset, HDA_SD_RUN, 0)) {
+    return false;
+  }
+  if (status) {
+    *status = read8(controller, controller->stream + HDA_SD_STS);
+  }
+  write8(controller, controller->stream + HDA_SD_STS, HDA_SD_STATUS_MASK);
+  write8(controller, offset, HDA_SD_RESET);
+  if (!wait8(controller, offset, HDA_SD_RESET, HDA_SD_RESET)) {
+    return false;
+  }
+  write8(controller, offset, 0);
+  return wait8(controller, offset, HDA_SD_RESET, 0);
+}
+
+void hda_shutdown(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->prepared || controller->shutdown) {
+    return;
+  }
+  controller->shutdown = true;
+  write32(controller, HDA_INTCTL, 0);
+  write16(controller, HDA_WAKEEN, 0);
+  bool stream_reset = reset_stream(controller, NULL);
+  write8(controller, HDA_CORBCTL, 0);
+  write8(controller, HDA_RIRBCTL, 0);
+  bool corb_stopped = wait8(controller, HDA_CORBCTL, HDA_RING_DMA, 0);
+  bool rirb_stopped = wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, 0);
+  write32(controller, HDA_GCTL, 0);
+  bool link_reset = wait32(controller, HDA_GCTL, HDA_GCTL_CRST, 0);
+  bool dma_disabled = set_bus_master(controller, false);
+  controller->command_ready = false;
+  controller->stream_running = false;
+  controller->link_ready = false;
+  bool quiescent = stream_reset && corb_stopped && rirb_stopped && link_reset && dma_disabled;
+  if (!quiescent) {
+    controller->failed = true;
+  }
+  if (controller->failed) {
+    klog("hda: shutdown stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing %s until reboot\n",
+        (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
+        (unsigned)link_reset, (unsigned)dma_disabled, quiescent ? "retained" : "quarantined");
+  } else {
+    ktrace("hda: shutdown stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing retained until reboot\n",
+        (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
+        (unsigned)link_reset, (unsigned)dma_disabled);
+  }
+}
+
+void hda_fail(struct hda_controller *controller, const char *reason)
+{
+  audio_require_worker();
+  if (!controller->failed) {
+    klog("hda: %s; engine unavailable until reboot\n", reason);
+  }
+  controller->failed = true;
+  hda_shutdown(controller);
+}
+
+static bool fail_controller(struct hda_controller *controller, const char *reason)
+{
+  hda_fail(controller, reason);
+  return false;
+}
+
+static bool configure_ring_size(struct hda_controller *controller, unsigned offset, unsigned *entries)
+{
+  uint8_t capabilities = read8(controller, offset);
+  unsigned selection;
+  if (capabilities & HDA_RING_CAP_256) {
+    selection = HDA_RING_SELECT_256;
+    *entries = 256;
+  } else if (capabilities & HDA_RING_CAP_16) {
+    selection = HDA_RING_SELECT_16;
+    *entries = 16;
+  } else if (capabilities & HDA_RING_CAP_2) {
+    selection = HDA_RING_SELECT_2;
+    *entries = 2;
+  } else {
+    return false;
+  }
+  write8(controller, offset, (capabilities & ~HDA_RING_SIZE_MASK) | selection);
+  return (read8(controller, offset) & HDA_RING_SIZE_MASK) == selection;
+}
+
+bool hda_link_start(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->prepared || controller->failed || controller->shutdown) {
+    return false;
+  }
+  if (controller->link_ready) {
+    return true;
+  }
+  /* RESET# needs >=100 us asserted; enumeration needs >=521 us after CRST=1. */
+  kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  write32(controller, HDA_GCTL, HDA_GCTL_CRST);
+  if (!wait32(controller, HDA_GCTL, HDA_GCTL_CRST, HDA_GCTL_CRST)) {
+    return fail_controller(controller, "link reset release timeout");
+  }
+  write32(controller, HDA_INTCTL, 0);
+  write16(controller, HDA_WAKEEN, 0);
+  write32(controller, HDA_DPLBASE, 0);
+  write32(controller, HDA_DPUBASE, 0);
+  kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  /* Detection can already be latched while CRST is asserted. Read before W1C. */
+  controller->codec_mask = read16(controller, HDA_STATESTS) & HDA_CODEC_MASK;
+  write16(controller, HDA_STATESTS, controller->codec_mask);
+  if (!controller->codec_mask) {
+    return fail_controller(controller, "no codec reported after link reset");
+  }
+  controller->link_ready = true;
+  ktrace("hda: link ready codec-mask=%x first-output-offset=%x\n",
+      (unsigned)controller->codec_mask, controller->stream);
+  return true;
+}
+
+bool hda_commands_start(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->link_ready || controller->failed || controller->shutdown) {
+    return false;
+  }
+  if (controller->command_ready) {
+    return true;
+  }
+  write8(controller, HDA_CORBCTL, 0);
+  write8(controller, HDA_RIRBCTL, 0);
+  bool corb_stopped = wait8(controller, HDA_CORBCTL, HDA_RING_DMA, 0);
+  bool rirb_stopped = wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, 0);
+  if (!corb_stopped || !rirb_stopped ||
+      !configure_ring_size(controller, HDA_CORBSIZE, &controller->corb_entries) ||
+      !configure_ring_size(controller, HDA_RIRBSIZE, &controller->rirb_entries)) {
+    return fail_controller(controller, "command ring stop/size failed");
+  }
+  memset((void *)controller->corb.address, 0, controller->corb.bytes);
+  memset((void *)controller->rirb.address, 0, controller->rirb.bytes);
+  write32(controller, HDA_CORBLBASE, (uint32_t)controller->corb.physical);
+  write32(controller, HDA_CORBUBASE, controller->corb.physical >> 32);
+  write32(controller, HDA_RIRBLBASE, (uint32_t)controller->rirb.physical);
+  write32(controller, HDA_RIRBUBASE, controller->rirb.physical >> 32);
+  write16(controller, HDA_CORBRP, HDA_POINTER_RESET);
+  if (!wait16(controller, HDA_CORBRP, HDA_POINTER_RESET, HDA_POINTER_RESET)) {
+    return fail_controller(controller, "CORB pointer reset did not assert");
+  }
+  write16(controller, HDA_CORBRP, 0);
+  write16(controller, HDA_CORBWP, 0);
+  write16(controller, HDA_RIRBWP, HDA_POINTER_RESET);
+  if (!wait16(controller, HDA_CORBRP, HDA_POINTER_RESET | HDA_POINTER_MASK, 0) ||
+      !wait16(controller, HDA_RIRBWP, HDA_POINTER_RESET | HDA_POINTER_MASK, 0)) {
+    return fail_controller(controller, "command ring pointer reset did not complete");
+  }
+  controller->corb_write = 0;
+  controller->rirb_read = 0;
+  write16(controller, HDA_RINTCNT, 1);
+  write8(controller, HDA_CORBSTS, HDA_CORB_ERROR);
+  write8(controller, HDA_RIRBSTS, HDA_RIRB_RESPONSE | HDA_RIRB_OVERRUN);
+  dma_full_barrier();
+  if (!set_bus_master(controller, true)) {
+    return fail_controller(controller, "PCI bus mastering did not enable");
+  }
+  /* QEMU 10.2.2 resets its response count on RINTFL W1C. Enable status
+   * generation while INTCTL=0 and PCI INTx delivery remain masked. */
+  write8(controller, HDA_RIRBCTL,
+      HDA_RING_DMA | HDA_RIRB_RESPONSE_ENABLE | HDA_RIRB_OVERRUN_ENABLE);
+  write8(controller, HDA_CORBCTL, HDA_RING_DMA);
+  if (!wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, HDA_RING_DMA) ||
+      !wait8(controller, HDA_CORBCTL, HDA_RING_DMA, HDA_RING_DMA)) {
+    return fail_controller(controller, "command ring DMA did not start");
+  }
+  controller->command_ready = true;
+  ktrace("hda: CORB=%u RIRB=%u, one command in flight; polling with delivery masked\n",
+      controller->corb_entries, controller->rirb_entries);
+  return true;
+}
+
+bool hda_commands_stop(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->link_ready || controller->failed || controller->shutdown) {
+    return false;
+  }
+  write8(controller, HDA_CORBCTL, 0);
+  bool corb_stopped = wait8(controller, HDA_CORBCTL, HDA_RING_DMA, 0);
+  write8(controller, HDA_RIRBCTL, 0);
+  bool rirb_stopped = wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, 0);
+  controller->command_ready = false;
+  bool dma_disabled = controller->stream_running || set_bus_master(controller, false);
+  if (!corb_stopped || !rirb_stopped || !dma_disabled) {
+    return fail_controller(controller, "command ring stop or BME disable failed");
+  }
+  return true;
+}
+
+bool hda_command(struct hda_controller *controller, uint8_t codec, uint8_t node,
+    uint32_t verb_payload, uint32_t *response)
+{
+  audio_require_worker();
+  if (!controller->command_ready || controller->failed || controller->shutdown || !response ||
+      codec >= HDA_CODEC_COUNT || node >= HDA_NODE_COUNT || verb_payload > HDA_VERB_PAYLOAD_MASK ||
+      !(controller->codec_mask & (1u << codec))) {
+    return false;
+  }
+  unsigned read_pointer = read16(controller, HDA_CORBRP) & HDA_POINTER_MASK;
+  unsigned response_pointer = read16(controller, HDA_RIRBWP) & HDA_POINTER_MASK;
+  if (read_pointer != controller->corb_write || response_pointer != controller->rirb_read) {
+    return fail_controller(controller, "unexpected ring progress before command");
+  }
+  uint32_t command = ((uint32_t)codec << HDA_COMMAND_CODEC_SHIFT) |
+      ((uint32_t)node << HDA_COMMAND_NODE_SHIFT) | verb_payload;
+  controller->corb_write = (controller->corb_write + 1) % controller->corb_entries;
+  ((uint32_t *)controller->corb.address)[controller->corb_write] = command;
+  dma_full_barrier();
+  ++controller->commands;
+  write16(controller, HDA_CORBWP, controller->corb_write);
+  uint64_t deadline = task_deadline_after_ms(HDA_COMMAND_TIMEOUT_MS);
+  for (;;) {
+    uint8_t corb_status = read8(controller, HDA_CORBSTS);
+    uint8_t rirb_status = read8(controller, HDA_RIRBSTS);
+    if ((corb_status & HDA_CORB_ERROR) || (rirb_status & HDA_RIRB_OVERRUN)) {
+      return fail_controller(controller, "CORB memory error or RIRB overrun");
+    }
+    unsigned write_pointer = read16(controller, HDA_RIRBWP) & HDA_POINTER_MASK;
+    if (write_pointer >= controller->rirb_entries) {
+      return fail_controller(controller, "RIRB write pointer outside configured ring");
+    }
+    bool received = false;
+    uint32_t result = 0;
+    while (controller->rirb_read != write_pointer) {
+      controller->rirb_read = (controller->rirb_read + 1) % controller->rirb_entries;
+      dma_read_barrier();
+      struct hda_response entry =
+          ((volatile struct hda_response *)controller->rirb.address)[controller->rirb_read];
+      if (entry.extended & HDA_RESPONSE_UNSOLICITED) {
+        ++controller->unsolicited;
+        continue;
+      }
+      if (received || (entry.extended & HDA_RESPONSE_CODEC_MASK) != codec ||
+          (entry.extended & ~(HDA_RESPONSE_CODEC_MASK | HDA_RESPONSE_UNSOLICITED))) {
+        return fail_controller(controller, "solicited response does not match pending codec");
+      }
+      result = entry.value;
+      ++controller->responses;
+      received = true;
+    }
+    /* A response can arrive between the earlier status and pointer reads. */
+    if (read8(controller, HDA_RIRBSTS) & HDA_RIRB_RESPONSE) {
+      write8(controller, HDA_RIRBSTS, HDA_RIRB_RESPONSE);
+    }
+    if (received) {
+      if ((read16(controller, HDA_CORBRP) & HDA_POINTER_MASK) != controller->corb_write) {
+        return fail_controller(controller, "response arrived without CORB consumption");
+      }
+      *response = result;
+      ktrace("hda: verb=%x response=%x CORB=%u RIRB=%u\n", command, result,
+          (unsigned)controller->corb_write, (unsigned)controller->rirb_read);
+      return true;
+    }
+    if (task_deadline_expired(deadline)) {
+      klog("hda: command timeout verb=%x CORBRP=%u CORBWP=%u RIRBWP=%u\n",
+          command, (unsigned)(read16(controller, HDA_CORBRP) & HDA_POINTER_MASK),
+          (unsigned)controller->corb_write, write_pointer);
+      return fail_controller(controller, "command deadline expired");
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  }
+}
+
+bool hda_stream_start(struct hda_controller *controller, const void *pcm, size_t bytes)
+{
+  audio_require_worker();
+  if (!controller->link_ready || controller->failed || controller->shutdown ||
+      controller->stream_running || !pcm || bytes != HDA_BUFFER_BYTES) {
+    return false;
+  }
+  if (!reset_stream(controller, NULL)) {
+    return fail_controller(controller, "output stream reset failed before start");
+  }
+  memcpy((void *)controller->pcm.address, pcm, bytes);
+  struct hda_buffer_descriptor *bdl = (void *)controller->bdl.address;
+  for (unsigned i = 0; i < HDA_PERIOD_COUNT; ++i) {
+    bdl[i] = (struct hda_buffer_descriptor){
+      .address = controller->pcm.physical + i * HDA_PERIOD_BYTES,
+      .bytes = HDA_PERIOD_BYTES, .flags = HDA_BDL_IOC,
+    };
+  }
+  write8(controller, controller->stream + HDA_SD_CTL + 2,
+      HDA_STREAM_TAG << (HDA_SD_TAG_SHIFT - 16));
+  write32(controller, controller->stream + HDA_SD_CBL, HDA_BUFFER_BYTES);
+  write16(controller, controller->stream + HDA_SD_LVI, HDA_PERIOD_COUNT - 1);
+  write16(controller, controller->stream + HDA_SD_FMT, HDA_STREAM_FORMAT);
+  write32(controller, controller->stream + HDA_SD_BDPL, (uint32_t)controller->bdl.physical);
+  write32(controller, controller->stream + HDA_SD_BDPU, controller->bdl.physical >> 32);
+  write8(controller, controller->stream + HDA_SD_STS, HDA_SD_STATUS_MASK);
+  dma_full_barrier();
+  if (!set_bus_master(controller, true)) {
+    return fail_controller(controller, "PCI bus mastering did not enable for output");
+  }
+  write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN);
+  if (!wait8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN, HDA_SD_RUN)) {
+    return fail_controller(controller, "output RUN did not set");
+  }
+  controller->stream_running = true;
+  ktrace("hda: output RUN CBL=%u periods=%u period-bytes=%u format=%x\n",
+      HDA_BUFFER_BYTES, HDA_PERIOD_COUNT, HDA_PERIOD_BYTES, HDA_STREAM_FORMAT);
+  return true;
+}
+
+bool hda_stream_position(struct hda_controller *controller, struct hda_stream_position *position)
+{
+  audio_require_worker();
+  if (!controller->stream_running || controller->failed || controller->shutdown || !position) {
+    return false;
+  }
+  uint8_t status = read8(controller, controller->stream + HDA_SD_STS);
+  uint32_t bytes = read32(controller, controller->stream + HDA_SD_LPIB);
+  write8(controller, controller->stream + HDA_SD_STS, status & HDA_SD_STATUS_MASK);
+  if (status & (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR)) {
+    return fail_controller(controller, "output FIFO/descriptor error");
+  }
+  if (!(read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN)) {
+    return fail_controller(controller, "output RUN cleared unexpectedly");
+  }
+  if (bytes >= HDA_BUFFER_BYTES) {
+    return fail_controller(controller, "LPIB outside cyclic buffer");
+  }
+  *position = (struct hda_stream_position){
+    .bytes = bytes, .completed = !!(status & HDA_SD_COMPLETE),
+  };
+  return true;
+}
+
+bool hda_stream_stop(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->link_ready || controller->failed || controller->shutdown) {
+    return false;
+  }
+  uint8_t status = 0;
+  bool reset = reset_stream(controller, &status);
+  controller->stream_running = false;
+  bool dma_disabled = controller->command_ready || set_bus_master(controller, false);
+  if (!reset || !dma_disabled) {
+    return fail_controller(controller, "output stop/reset or BME disable failed");
+  }
+  if (status & (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR)) {
+    return fail_controller(controller, "output FIFO/descriptor error at stop");
+  }
+  return true;
+}
+
+static bool boot_wait8(struct hda_controller *controller, unsigned offset, uint8_t mask)
+{
+  uint64_t deadline = task_deadline_after_ms(HDA_OPERATION_TIMEOUT_MS);
+  while (read8(controller, offset) & mask) {
+    arch_clock_maintain();
+    if (task_deadline_expired(deadline)) {
+      return false;
+    }
+    __asm__ volatile("pause");
+  }
+  return true;
+}
+
+static bool boot_halt(struct hda_controller *controller)
+{
+  uint16_t capabilities = read16(controller, HDA_GCAP);
+  unsigned input = (capabilities >> HDA_GCAP_ISS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
+  unsigned output = (capabilities >> HDA_GCAP_OSS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
+  unsigned bidirectional = (capabilities >> HDA_GCAP_BSS_SHIFT) & HDA_GCAP_BSS_COUNT_MASK;
+  unsigned streams = input + output + bidirectional;
+  if (HDA_STREAM_BASE + streams * HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES) {
+    return false;
+  }
+  write32(controller, HDA_INTCTL, 0);
+  write16(controller, HDA_WAKEEN, 0);
+  for (unsigned i = 0; i < streams; ++i) {
+    unsigned offset = HDA_STREAM_BASE + i * HDA_STREAM_BYTES + HDA_SD_CTL;
+    write8(controller, offset, 0);
+    if (!boot_wait8(controller, offset, HDA_SD_RUN)) {
+      return false;
+    }
+  }
+  write8(controller, HDA_CORBCTL, 0);
+  write8(controller, HDA_RIRBCTL, 0);
+  bool corb_stopped = boot_wait8(controller, HDA_CORBCTL, HDA_RING_DMA);
+  bool rirb_stopped = boot_wait8(controller, HDA_RIRBCTL, HDA_RING_DMA);
+  if (!corb_stopped || !rirb_stopped) {
+    return false;
+  }
+  write32(controller, HDA_GCTL, 0);
+  uint64_t deadline = task_deadline_after_ms(HDA_OPERATION_TIMEOUT_MS);
+  while (read32(controller, HDA_GCTL) & HDA_GCTL_CRST) {
+    arch_clock_maintain();
+    if (task_deadline_expired(deadline)) {
+      return false;
+    }
+    __asm__ volatile("pause");
+  }
+  return true;
+}
+
+static bool dma_address_fits(const struct dma_buffer *buffer, bool wide)
+{
+  return wide || (buffer->physical <= UINT32_MAX &&
+      buffer->bytes - 1 <= UINT32_MAX - buffer->physical);
+}
+
+void hda_prepare(struct hda_controller *controller, const struct boot_info *boot)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!controller->claim.device && !controller->prepared);
+  struct pci_device *device;
+  enum pci_selection selection = pci_select_device(HDA_QEMU_VENDOR, HDA_QEMU_DEVICE, &device);
+  if (selection != PCI_SELECTION_UNIQUE) {
+    if (selection == PCI_SELECTION_ABSENT) {
+      ktrace("hda: QEMU 8086:2668 absent; inactive\n");
+    } else {
+      klog("hda: QEMU 8086:2668 selection=%u; inactive\n", (unsigned)selection);
+    }
+    return;
+  }
+  if (!pci_reserve_device(device, &controller->claim)) {
+    klog("hda: cannot reserve controller; inactive\n");
+    return;
+  }
+  if (!pci_begin_mmio_probe(&controller->claim, &controller->firmware) ||
+      pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->registers) != MM_OK) {
+    if (pci_restore_mmio_probe(&controller->claim, &controller->firmware)) {
+      pci_cancel_reservation(&controller->claim);
+      klog("hda: BAR0 bootstrap unavailable; inactive\n");
+    } else {
+      controller->failed = true;
+      klog("hda: BAR0 probe restore failed; reservation retained until reboot\n");
+    }
+    return;
+  }
+  /* Halt firmware engines before claim completion changes BME/INTx or sizes BARs.
+   * No driver DMA is published here; link release belongs to the worker. */
+  if (!boot_halt(controller) || !pci_complete_claim(&controller->claim)) {
+    controller->failed = true;
+    klog("hda: boot halt/claim failed; ownership retained until reboot\n");
+    return;
+  }
+  uint16_t command = pci_read16(device->address, PCI_COMMAND);
+  pci_write16(&controller->claim, PCI_COMMAND, command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
+  if (pci_read16(device->address, PCI_COMMAND) &
+      (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) {
+    controller->failed = true;
+    klog("hda: BAR decoding disable failed; ownership retained until reboot\n");
+    return;
+  }
+  bool sized = pci_size_bars(&controller->claim);
+  pci_write16(&controller->claim, PCI_COMMAND, (command & ~PCI_COMMAND_IO) | PCI_COMMAND_MEMORY);
+  uint16_t observed = pci_read16(device->address, PCI_COMMAND);
+  uint16_t command_mask = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER |
+      PCI_COMMAND_INTX_DISABLE;
+  if (!sized || controller->claim.bars[0].bytes < PCI_BOOTSTRAP_BAR_BYTES ||
+      (observed & command_mask) != (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
+    controller->failed = true;
+    klog("hda: BAR0 extent rejected; ownership retained until reboot\n");
+    return;
+  }
+  uint16_t capabilities = read16(controller, HDA_GCAP);
+  unsigned input = (capabilities >> HDA_GCAP_ISS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
+  unsigned output = (capabilities >> HDA_GCAP_OSS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
+  controller->stream = HDA_STREAM_BASE + input * HDA_STREAM_BYTES;
+  ktrace("hda: PCI=%u:%u.%u GCAP=%x ISS=%u OSS=%u version=%u.%u\n",
+      (unsigned)device->address.bus, (unsigned)device->address.device,
+      (unsigned)device->address.function, (unsigned)capabilities, input, output,
+      (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
+  if (!output || controller->stream + HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES ||
+      dma_buffer_allocate(&controller->corb, PAGE_SIZE) != MM_OK ||
+      dma_buffer_allocate(&controller->rirb, PAGE_SIZE) != MM_OK ||
+      dma_buffer_allocate(&controller->bdl, PAGE_SIZE) != MM_OK ||
+      dma_buffer_allocate(&controller->pcm, HDA_BUFFER_BYTES) != MM_OK) {
+    controller->failed = true;
+    klog("hda: output or coherent DMA unavailable; backing retained until reboot\n");
+    return;
+  }
+  bool wide = capabilities & HDA_GCAP_64OK;
+  if (!dma_address_fits(&controller->corb, wide) || !dma_address_fits(&controller->rirb, wide) ||
+      !dma_address_fits(&controller->bdl, wide) || !dma_address_fits(&controller->pcm, wide)) {
+    controller->failed = true;
+    klog("hda: DMA exceeds controller address width; backing retained until reboot\n");
+    return;
+  }
+  controller->prepared = true;
+  ktrace("hda: prepared output descriptor=%u PCM=%u backing=%zu; link reset, BME off\n",
+      input, HDA_BUFFER_BYTES, controller->pcm.bytes);
+}
