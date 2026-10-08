@@ -1,9 +1,9 @@
 # SDL2 with a native backend
 
-Status: **proposal, task 1, 2026-10-08; assigned to Claude.** The probe below
-ran; nothing here is accepted yet. The three decisions under
-[owner decisions](#owner-decisions) need answers before task 2 starts. Their
-defaults are proposals, not agreements.
+Status: **task 1 delivered, 2026-10-08; assigned to Claude.** The owner
+accepted the three [decisions](#accepted-decisions) on 2026-10-08. The planned
+scope and tasks take effect when task 1 merges; later tasks start one at a
+time.
 
 ## Goal and completion
 
@@ -142,7 +142,7 @@ Found while running:
   - its "Limit FPS" setting: 57.8–62.3 FPS. That limiter tracks deadlines
     itself, so the 8.33 ms wake granularity does not show.
 
-## Proposed scope
+## Planned scope
 
 ### SDL2 port
 
@@ -206,11 +206,13 @@ The standard functions the probe stood in for: `fileno`, `fseeko`/`ftello`,
 supports the "C" locale only: it returns `"C"` for queries, `""` and `"C"`, and
 refuses every other name. Where possible these come from the vendored musl.
 
-## Owner decisions
+## Accepted decisions
+
+Accepted by the owner on 2026-10-08, as proposed in task 1.
 
 ### 1. First consumer and its data
 
-**Default: DevilutionX, with the game data as a local build input.**
+**DevilutionX, with the game data as a local build input.**
 
 - The probe found no stated redistribution terms for the shareware
   `spawn.mpq`, unlike Quake's shareware licence. So the data is not committed,
@@ -220,12 +222,9 @@ refuses every other name. Where possible these come from the vendored musl.
 - The ordinary image always carries the program and its 5.7 MB of assets.
   Without data, the program says where the data belongs and exits.
 
-The alternative is a smaller first consumer, such as Chocolate Duke3D or
-GrafX2, with DevilutionX after it.
-
 ### 2. Frame presentation
 
-**Default: SDL draws into its own surface.** The backend copies the updated
+**SDL draws into its own surface.** The backend copies the updated
 rectangles into the display mapping at `SDL_UpdateWindowSurface` and
 `SDL_RenderPresent`.
 
@@ -237,12 +236,10 @@ rectangles into the display mapping at `SDL_UpdateWindowSurface` and
   the size of the window: 3.75 MiB at 1280x768. The probe used this, and its
   726 µs frame included the copy.
 
-The alternative is direct rendering into the mapping, with no copy. A later
-compositor or double-buffering contract would replace either choice.
+Direct rendering into the mapping, with no copy, was not chosen. A later
+compositor or double-buffering contract would replace this.
 
 ### 3. SDL paths
-
-**Default:**
 
 - `SDL_GetPrefPath(org, app)` returns `home://APP/` and creates it. The
   organisation name is ignored. Quake already uses `home://quake`;
@@ -252,12 +249,9 @@ compositor or double-buffering contract would replace either choice.
   sets its read-only paths instead; for DevilutionX that is
   `boot://share/devilutionx/`.
 
-The alternative keeps the organisation: `home://ORG/APP/`, as SDL does on
-Linux.
-
 ## Tasks
 
-1. [ ] Probe and proposal: this document. Documentation only.
+1. [x] Probe and proposal: this document. Documentation only.
 2. [ ] **libc additions** (userland), with the Pyxis gitlink: the functions
    listed above.
 3. [ ] **SDL2 port** (ports), with the Pyxis integration that builds it into
