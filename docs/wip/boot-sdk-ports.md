@@ -77,8 +77,8 @@ Chosen by the owner, each starting with a proposal:
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
   accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
   remain prerequisites. Task 2 runtime HCI transport is assigned; its
-  [baseline preparation](../development/experiments/bluetooth-runtime-hci/README.md)
-  is waiting for AX200 USB-node access before code changes.
+  [attached-controller baseline](../development/experiments/bluetooth-runtime-hci/README.md#attached-controller-baseline)
+  is captured before code changes; runtime implementation and validation remain.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   All three decision rounds are accepted; proposal #530 is merged. Task 1 is
   delivered in #545 with [qualification](../development/system-pointer-qualification.md).

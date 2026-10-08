@@ -1,6 +1,6 @@
 # MX Master 3S on Pyxis
 
-Status: **task 1 complete; task 2 assigned 2026-10-08, baseline preparation.**
+Status: **task 1 complete; task 2 assigned 2026-10-08, baseline captured.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
 remain. Task 2 is assigned; tasks 3–8 still need explicit owner assignment.
@@ -396,6 +396,6 @@ documentation edits. Pointer drafts `304d1d7` and `a2ff720` were read, not
 changed. No QEMU, debugger, passthrough or probe job was started for task 1.
 
 Task 2 now uses branch `bluetooth/runtime-hci`, from fresh main `3bda2c3` after
-#548 merged. The attached-controller baseline must be
-captured before code changes; USB-node access is pending. Baseline preparation,
+#548 merged. The attached-controller baseline was
+captured before code changes after the owner granted USB-node access. Measurements,
 current toolchain inputs and cleanup are recorded in the runtime transport note.
