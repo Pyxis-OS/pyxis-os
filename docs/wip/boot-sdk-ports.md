@@ -155,6 +155,9 @@ prerequisites and result are clear.
   until a package manager exists.
 - [Desktop and graphics](desktop-graphics.md), including where to start on the
   owner's compositor.
+- [Interchangeable providers](interchangeable-providers.md): programs depend on
+  protocols, and launchers choose who serves them, so a compositor can serve the
+  same display, pointer and keyboard interfaces as the kernel.
 - [Users and authority](users-and-authority.md), a cross-cutting design
   checkpoint, and [credentials and biometric unlock](credentials-and-biometrics.md),
   parked after local users.
