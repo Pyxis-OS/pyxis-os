@@ -1,9 +1,9 @@
 # Screenshots
 
-Status: **milestone proposal, 2026-10-08; assigned to Codex 2.** Task 1 has
-produced the proposal below. The owner has accepted the route and PNG format;
-the remaining contracts await review. Tasks 2–7 start only after the owner
-accepts this proposal or explicitly authorizes a bounded part of it.
+Status: **accepted milestone, 2026-10-08; assigned to Codex 2.** The owner
+merged [PR #501](https://git.internal/PyxisOS/pyxis-os/pulls/501), accepted all
+three contract groups below and authorized task 2. Later tasks remain separate
+assignments; acceptance does not start them implicitly.
 
 ## Goal and completion
 
@@ -54,9 +54,10 @@ Source inspection for task 1 used Pyxis `50e18a5`, userland
   demonstrated for the proposed library profiles. Their exact source/build
   requirements still need checking in tasks 2 and 3.
 
-## Proposed contracts
+## Agreed contracts
 
-Everything in this section is proposed, not implemented or owner-approved.
+Accepted by the owner on 2026-10-08. These contracts guide implementation;
+the task checklist and handoff distinguish completed work from planned behavior.
 
 ### Authority and captured content
 
@@ -73,7 +74,7 @@ capture hidden surfaces or each space separately. After the parallel
 by the presenter, without adding screenshot-specific layer selection.
 
 Add an optional per-space boot setting `screenshot = true`, defaulting to false.
-Boot init delegates the resource only for opted-in spaces. Propose enabling it
+Boot init delegates the resource only for opted-in spaces. Enable it
 in the packaged live Development, installed `pyxis` and Remote spaces; leave
 other spaces and the built-in rescue space without it. Remote service/session
 handoff and shell launch preserve the optional grant through existing explicit
@@ -112,7 +113,7 @@ UNAVAILABLE. Do not keep retrying a failed capture automatically.
 
 A completed FILE owns its pixels until its last reference closes, including
 references explicitly copied to another process. Ordinary process cleanup closes
-its handles. There is no additional retained-image quota in this proposal:
+its handles. There is no additional retained-image quota in this milestone:
 one pending request bounds capture work, while callers can retain multiple
 completed files and exhaust available memory. The command closes its snapshot
 promptly on success and every handled failure. Raw backing costs
@@ -133,7 +134,7 @@ exposing FILE internals to the presenter. No new shared user mapping is needed.
 
 ### Libraries and encoding
 
-Propose the upstream releases below, checked against their upstream release
+Use the upstream releases below, checked against their upstream release
 pages on 2026-10-08. These are archive pins, not moving branches or claims of
 successful Pyxis builds.
 
@@ -174,7 +175,7 @@ changes to that choice.
 
 ### Command, output and host workflow
 
-Propose `screenshot PATH`: a required guest output path, resolved through the
+Use `screenshot PATH`: a required guest output path, resolved through the
 caller's existing writable roots. Capture authority grants no additional path
 access. Like ordinary output redirection, an existing regular file is truncated
 and rewritten; a handled write/encode failure reports failure and can leave a
@@ -201,19 +202,20 @@ capture command is included. File transfer's existing 16 MiB limit still applies
 to the encoded PNG; an oversized image can be saved locally but its download
 is refused. Do not enlarge transfer buffers as part of this milestone.
 
-## Owner review gate
+## Accepted review decisions
 
-Before task 2, settle these three groups:
+The owner accepted these three groups on 2026-10-08:
 
 1. **Authority:** whole-screen capture through the separate optional grant,
-   the proposed enabled spaces, and ordinary child inheritance in those spaces.
+   the enabled spaces, and ordinary child inheritance in those spaces.
 2. **Consistency and capacity:** one presenter composition with existing tearing,
    one pending capture, immutable FILE lifetime and no new retained-image quota.
 3. **Ports and workflow:** the pinned library profiles, initial compression
    choice, explicit two-command download and output/failure behavior above.
 
-Changes to these proposals update this document before implementation. Preparing
-this proposal does not count as owner acceptance.
+Changes to these contracts require discussion before implementation. The owner
+authorized task 2 after accepting them. Its zlib source mirror is available;
+libpng mirror availability still needs checking before task 3.
 
 ## Tasks
 
@@ -223,8 +225,9 @@ are part of this milestone.
 
 1. [x] **Investigate and write the proposal.** Inspect display/remote authority,
    presenter ownership and library integration; record concrete proposed
-   contracts and split the work. Owner acceptance remains pending at the gate.
-2. [ ] **Port zlib.** After the source mirror is available, add the pinned
+   contracts and split the work. The owner merged PR #501 and accepted all three
+   review groups before authorizing task 2.
+2. [x] **Port zlib.** After the source mirror is available, add the pinned
    recipe, static core archive, public headers, notices and development export
    in pyxis-ports. Wire its focused ordinary build in Pyxis. Completion: a
    target archive built with the current SDK, documented profile, published
@@ -266,7 +269,21 @@ are part of this milestone.
 
 ## Handoff
 
-Task 1 is documentation and source inspection only. No dependency revisions have
-changed and no implementation/boot/library-build validation has run. The next
-step is owner review of the gate, followed by exact source mirror availability
-for task 2. QEMU and debugger processes were not started.
+The owner accepted all contracts on 2026-10-08 after PR #501 merged. Task 2 is
+complete on Pyxis branch `ports/zlib`, with dependency
+[pyxis-ports PR #55](https://git.internal/PyxisOS/pyxis-ports/pulls/55) at
+`312c4da6958a04e8492c46f91fb0a552d605d623` (`library/zlib`). Merge that dependency
+before the Pyxis integration PR. No userland, filesystem or lwIP pin changed.
+
+The owner's zlib mirror archive matches the accepted SHA-256. The unchanged
+core sources built with LLVM 23.1.3 against the exported SDK; archive inspection
+found only `malloc`, `free`, `memcpy` and `memset` as external references, all
+supplied by libc. Public headers and license match upstream byte for byte.
+`make -j16 image bundle-ports` passed, and the bundle/boot staging separates the
+static library and headers from guest notices/provenance. Existing exact-head
+CI results are recorded in the PR; pyxis-ports reports zero Actions tasks and
+its `fj pr status` response is unparsable, so it provides no CI pass evidence.
+
+Task 3, libpng, is next after owner authorization and source mirror availability.
+No screenshot implementation or PNG runtime qualification has begun. No QEMU,
+debugger or build process remains active.

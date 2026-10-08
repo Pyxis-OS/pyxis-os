@@ -53,8 +53,9 @@ compiler, but still needs the normal host assembly/boot tools and repository
 bootloader/data files.
 
 The ports bundle separates boot contents (`ports-root`) from development files
-(`ports-dev`). Lua, picohttpparser and Mbed TLS provide static libraries and headers under
-`ports-dev/lua`, `ports-dev/picohttpparser` and `ports-dev/mbedtls`; these do not enter the boot archive or the SDK. Standalone
+(`ports-dev`). Lua, picohttpparser, Mbed TLS and zlib provide static libraries and
+headers under `ports-dev/lua`, `ports-dev/picohttpparser`, `ports-dev/mbedtls` and
+`ports-dev/zlib`; these do not enter the boot archive or the SDK. Standalone
 userland builds select them with `LUA_PREFIX`, `PICOHTTPPARSER_PREFIX` and
 `MBEDTLS_PREFIX`. TLS consumers include the export's `share/mbedtls.mk` to use
 the matching configuration defines and ordered libraries. SDK runtime builds

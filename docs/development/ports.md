@@ -88,6 +88,23 @@ development trees. The userland job consumes its libraries/headers; the image
 job consumes only its boot tree. Both can reuse it without compiling ports again. Source checkout uses
 `PYXIS_SOURCE_READ_TOKEN`. Cross-repository dispatch remains future work.
 
+## zlib development library
+
+The [zlib recipe](../../ports/zlib/README.md) builds a static core library from
+the checksum-pinned 1.3.2 release archive, fetched through the owner's mirror.
+It exports `libz.a`, `zlib.h` and `zconf.h` under `build/ports-dev/zlib`, outside
+the base and guest SDK. Consumers include that prefix's headers and link its
+archive before the SDK runtime libraries. Only the upstream license, port
+notice and archive provenance enter the boot payload.
+
+The profile retains compression/decompression streams, checksums, default
+allocators and buffer convenience APIs. It omits `gz*` file helpers, contrib,
+shared libraries and upstream programs/tests. Public headers are unchanged,
+so using an omitted helper fails at link time. The library adds no file,
+network or display authority. The [screenshot milestone](../wip/screenshots.md)
+will qualify it at runtime through the PNG consumer; archive compilation is
+not that qualification.
+
 ## TLS development libraries
 
 The [Mbed TLS recipe](../../ports/mbedtls/README.md) verifies the official 4.1.1
