@@ -18,7 +18,7 @@ Quake, mousetest and the closed SDL2 backend. It is stacked on task 1 and its
 userland dependency. Default-image build and exact-head CI must pass before
 anything leaves draft. Tasks 3–5 remain unstarted until separately authorized. The first task 1 commit
 records decisions only; the [baseline](../development/system-pointer-qualification.md)
-was captured before code changes. Task 1 remains draft until task 2 migrates
+was captured before code changes. Tasks 1 and 2 remain draft until task 2 migrates
 Quake/SDL2 and permits the ABI and all consumers to integrate together.
 
 ## Pre-milestone baseline
