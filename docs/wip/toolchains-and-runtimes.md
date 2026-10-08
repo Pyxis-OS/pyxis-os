@@ -73,7 +73,7 @@ in userspace only: cross-compiled C++ programs with a runtime from the
 `pyxis-llvm` fork. Clang running on Pyxis, and the further OS prerequisites it
 needs, threads first among them, remain a later milestone. The milestone starts
 with a probe and proposal, as the [host toolchain](../development/llvm-toolchain.md)
-milestone did.
+milestone did; see [C++ in userspace](cxx-userspace.md).
 
 Cross-compiled C++ applications can precede a hosted C++ compiler. Start with an
 explicit runtime subset and a small real consumer, then expand toward ports
