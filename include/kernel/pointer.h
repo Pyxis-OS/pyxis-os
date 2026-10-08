@@ -9,7 +9,13 @@
 struct space;
 struct pointer_object;
 struct pointer_image;
-struct mouse_event;
+
+/* Kernel-normalized physical snapshot. Suppression describes source buttons
+ * whose continuity was lost and which have not yet been observed released. */
+struct pointer_input_report {
+  int32_t dx, dy, wheel;
+  uint32_t buttons, suppressed_buttons;
+};
 
 /* Immutable image lease, retained until the matching frame has finished.
  * Static kernel defaults have no image reference. Coordinates are physical. */
@@ -29,7 +35,9 @@ struct pointer_image {
 
 /* BSP/IF=0. No allocation in routing/snapshot. */
 void pointer_init(void);
-void pointer_handle_input(const struct mouse_event *event);
+void pointer_handle_input(const struct pointer_input_report *event);
+/* The source adapter supplies the physical mask remaining after its loss. */
+void pointer_source_lost(uint32_t physical_buttons);
 void pointer_space_changed(struct space *space);
 void pointer_geometry_changed(struct space *space);
 void pointer_surface_ended(struct space *space);

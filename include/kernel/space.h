@@ -75,6 +75,8 @@ void space_display_changed(struct space *space, bool discard_input);
 
 /* BSP/IF=0: pointer uses the actual last-drawn clipped navigation layout. */
 struct space *space_pointer_active(void);
+bool space_pointer_input_available(void);
+uint32_t space_pointer_suppressed_buttons(void);
 size_t space_pointer_content_y(void);
 struct space *space_pointer_tab(int64_t x, int64_t y);
 void space_pointer_select(struct space *space);

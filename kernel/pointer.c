@@ -1,16 +1,11 @@
 #include <arch/smp.h>
 #include <kernel/display.h>
 #include <kernel/mm/heap.h>
-#include <kernel/mouse.h>
 #include <kernel/object/display.h>
 #include <kernel/object/pointer.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
 #include <kernel/space.h>
-
-_Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
-    MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
-    MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "pointer button bits");
 
 enum destination_kind { DESTINATION_NONE, DESTINATION_TERMINAL, DESTINATION_GRAPHICS };
 struct pointer_destination {
@@ -226,7 +221,7 @@ void pointer_frame_snapshot(struct pointer_frame *frame)
   struct pointer_destination target = hit_test();
   *frame = (struct pointer_frame){.x = position_x, .y = position_y,
     .pixels = arrow_pixels, .width = 16, .height = 24,
-    .visible = mouse_available() && display_available() && !locked_pointer};
+    .visible = space_pointer_input_available() && display_available() && !locked_pointer};
   if (target.kind == DESTINATION_TERMINAL && target.space != space_caelum()) {
     frame->pixels = terminal_pixels;
     frame->width = 9;
@@ -256,25 +251,27 @@ void pointer_frame_release(struct pointer_frame *frame)
   *frame = (struct pointer_frame){0};
 }
 
-void pointer_handle_input(const struct mouse_event *event)
+void pointer_source_lost(uint32_t physical_buttons)
 {
   KASSERT(arch_cpu_index() == 0);
-  if (event->reset) {
-    if (locked_pointer) {
-      pointer_surface_unlock(locked_pointer, true);
-    }
-    device_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
-    consumed_buttons = drag_buttons = 0;
-    drag = (struct pointer_destination){0};
-    hover = NULL;
-    for (struct space *space = space_caelum(); space; space = space->next) {
-      space->pointer->activation_ready = false;
-      pointer_reset_input(space->pointer, POINTER_STATE_RESET);
-    }
-    return;
-  }
   if (locked_pointer) {
-    uint32_t pressed = event->buttons & ~device_buttons;
+    pointer_surface_unlock(locked_pointer, true);
+  }
+  device_buttons = physical_buttons;
+  consumed_buttons = drag_buttons = 0;
+  drag = (struct pointer_destination){0};
+  hover = NULL;
+  for (struct space *space = space_caelum(); space; space = space->next) {
+    space->pointer->activation_ready = false;
+    pointer_reset_input(space->pointer, POINTER_STATE_RESET);
+  }
+}
+
+void pointer_handle_input(const struct pointer_input_report *event)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint32_t pressed = event->buttons & ~device_buttons & ~event->suppressed_buttons;
+  if (locked_pointer) {
     device_buttons = event->buttons;
     consumed_buttons &= device_buttons;
     struct pointer_event input = pointer_position_event(locked_pointer, POINTER_INPUT);
@@ -288,7 +285,6 @@ void pointer_handle_input(const struct mouse_event *event)
   const struct framebuffer *layout = display_layout();
   position_x = clamped_move(position_x, event->dx, layout->width);
   position_y = clamped_move(position_y, event->dy, layout->height);
-  uint32_t pressed = event->buttons & ~device_buttons;
   device_buttons = event->buttons;
   consumed_buttons &= device_buttons;
   pressed &= ~consumed_buttons;
@@ -350,7 +346,7 @@ enum call_status pointer_surface_warp(struct pointer_object *pointer,
     return CALL_BUSY;
   }
   if (pointer->relative || !pointer_surface_focused(pointer) || consumed_buttons ||
-      (device_buttons & ~pointer->accepted) ||
+      ((device_buttons | space_pointer_suppressed_buttons()) & ~pointer->accepted) ||
       (drag.space && (drag.space != pointer->space || drag.kind != DESTINATION_GRAPHICS))) {
     return CALL_DENIED;
   }
@@ -373,6 +369,9 @@ enum call_status pointer_surface_lock(struct pointer_object *pointer)
   KASSERT(arch_cpu_index() == 0 && pointer->owner);
   bool activated = pointer->activation_ready;
   pointer->activation_ready = false;
+  if (!space_pointer_input_available()) {
+    return CALL_UNAVAILABLE;
+  }
   if (locked_pointer == pointer) {
     return CALL_OK;
   }
@@ -381,7 +380,8 @@ enum call_status pointer_surface_lock(struct pointer_object *pointer)
   }
   if (!pointer_surface_focused(pointer) ||
       (pointer->space->pointer_activation_required && !activated) ||
-      (device_buttons & ~consumed_buttons & ~pointer->accepted) ||
+      ((device_buttons | space_pointer_suppressed_buttons()) &
+       ~consumed_buttons & ~pointer->accepted) ||
       (drag.space && (drag.space != pointer->space || drag.kind != DESTINATION_GRAPHICS))) {
     return CALL_DENIED;
   }

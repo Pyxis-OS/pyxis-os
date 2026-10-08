@@ -1,6 +1,5 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
-#include <kernel/mouse.h>
 #include <kernel/object/display.h>
 #include <kernel/object/pointer.h>
 #include <kernel/panic.h>
@@ -196,7 +195,7 @@ void pointer_request_execute(struct pointer_request *request)
   if (process->space != pointer->space || pointer->space->display->owner != process) {
     status = CALL_DENIED;
   } else if (request->operation == POINTER_ACQUIRE) {
-    if (!mouse_available()) {
+    if (!space_pointer_input_available()) {
       status = CALL_UNAVAILABLE;
     } else if (pointer->owner) {
       status = CALL_BUSY;

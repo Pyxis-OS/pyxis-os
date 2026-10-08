@@ -52,6 +52,7 @@ static const struct framebuffer *screen;
 #define CAELUM_SPACE_NAME "caelum"
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
+static uint32_t ps2_suppressed_buttons;
 /* Registry index of the leftmost visible tab. Presenter-owned. */
 static size_t viewport_first;
 /* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
@@ -1038,6 +1039,16 @@ struct space *space_pointer_active(void)
   return active_space;
 }
 
+bool space_pointer_input_available(void)
+{
+  return mouse_available();
+}
+
+uint32_t space_pointer_suppressed_buttons(void)
+{
+  return ps2_suppressed_buttons;
+}
+
 size_t space_pointer_content_y(void)
 {
   return SPACES_NAV_HEIGHT;
@@ -1071,10 +1082,24 @@ void space_pointer_select(struct space *space)
 
 static void handle_pointer_input(void)
 {
+  _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
+      MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
+      MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "PS/2 pointer button bits");
   struct mouse_event event;
   while (mouse_read_event(&event)) {
     uint64_t flags = cpu_save_interrupts();
-    pointer_handle_input(&event);
+    if (event.reset) {
+      /* Lost PS/2 bytes cannot establish whether a held button is a new press. */
+      ps2_suppressed_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
+      pointer_source_lost(0);
+    } else {
+      ps2_suppressed_buttons &= event.buttons;
+      struct pointer_input_report report = {
+        .dx = event.dx, .dy = event.dy, .wheel = event.wheel,
+        .buttons = event.buttons, .suppressed_buttons = ps2_suppressed_buttons,
+      };
+      pointer_handle_input(&report);
+    }
     cpu_restore_interrupts(flags);
   }
 }
