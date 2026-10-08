@@ -159,7 +159,7 @@ x86-64 LP64 interface is:
 | `sys/types.h` | ssize_t as signed long; mode_t as unsigned int |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
-| `inttypes.h` | PRId/PRIi/PRIo/PRIu/PRIx/PRIX output macros for fixed-width 8/16/32/64-bit types |
+| `inttypes.h` | PRId/PRIi/PRIo/PRIu/PRIx/PRIX output macros for fixed-width 8/16/32/64-bit, pointer and greatest-width types |
 
 Open accepts read-only access or write-only access with optional create/truncate.
 Unknown flags and read-only mutation combinations fail with EINVAL before

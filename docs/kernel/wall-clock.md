@@ -30,6 +30,8 @@ sleep, including ordinary shell forwarding to children.
 
 `<time.h>` defines signed 64-bit `time_t`, `timespec` and the standard calendar
 fields in `tm`. `timespec_get(TIME_UTC)` and `time` borrow the startup clock;
+`timespec_get(TIME_MONOTONIC)` reads the same grant's monotonic time, counted
+from an epoch set during boot;
 failures set errno rather than inventing a date. `time` returns `-1` on failure,
 which is also a valid pre-epoch timestamp. `timespec_get` avoids that ambiguity
 and leaves its destination unchanged on failure.

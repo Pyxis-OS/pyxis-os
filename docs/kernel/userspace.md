@@ -228,7 +228,7 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
-The `<math.h>` subset provides `floor`, `ceil`, `fmod`, `pow`, `sqrt`, `sin`, `cos`,
+The `<math.h>` subset provides `floor`, `ceil`, `ceilf`, `fmod`, `pow`, `sqrt`, `sin`, `cos`,
 `tan`, `atan`, `atan2`, `frexp`, `ldexp`, `scalbn`, `fabs`, `scalbnl`, `ldexpl`,
 `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources.
 `sqrt` uses SSE2 `sqrtsd`; the trigonometric functions take radians and reduce
@@ -237,7 +237,9 @@ float/double evaluation and x87 80-bit long double. `floor` rounds downward;
 `fmod` and `fmodl` use a quotient truncated toward zero. Scaling follows the
 active rounding mode. Errors use floating-point exception flags
 (`math_errhandling` is `MATH_ERREXCEPT`) and leave `errno` unchanged. Traps are
-masked at process start; there is no public fenv interface yet. `<math.h>` also supplies `INFINITY`, `NAN`
+masked at process start. `<fenv.h>` tests, clears and raises the C exception
+flags and sets the rounding mode of both the SSE and x87 units; it keeps raised
+flags of both in MXCSR. Its functions never unmask exceptions themselves. `<math.h>` also supplies `INFINITY`, `NAN`
 and the `HUGE_VAL`/`HUGE_VALF`/`HUGE_VALL` constants. The SDK carries musl's license
 and the subset's provenance under `share/licenses`. Signaling NaN support and a
 full math library remain outside this subset.
