@@ -1,21 +1,24 @@
 # MX Master 3S on Pyxis
 
-Status: **documentation proposal; rounds one and two accepted 2026-10-08 with
-review adjustments. Documentation handoff complete; later policies pending,
-with no implementation authorized.**
+Status: **task 1 authorized 2026-10-08, documentation and decisions only.**
+Rounds one and two remain accepted; the
+[first task 1 round and input-source proposal](bluetooth-task1-contracts.md) are
+ready for decisions. No code, ABI edit, probe or implementation is authorized.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
 assigned this proposal. Publishing, reviewing or merging it does not authorize
 implementation. The owner chooses the milestone and explicitly starts its tasks.
-The owner's latest 2026-10-08 instruction is to record round two, leave queued
-decisions pending without asking another round, push and stop. Implementation
-needs a new assignment; the ThinkPad is reserved for the owner's native batch.
+The native batch is complete in [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547).
+The owner has now assigned task 1 from fresh main `8c4368e`. Its decisions and
+pointer coordination must finish before later tasks receive new assignments.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
-scan established its name, HID service and appearance; it established no pairing
-capability, GATT layout or input behavior. BR/EDR, SCO/audio, keyboards, arbitrary
+scan established its name, HID service and appearance. The later
+[owner-reported SMP evidence](../development/bluetooth-investigation.md#owner-reported-smp-evidence)
+establishes SC Just Works/16-byte encryption on Fedora; Pyxis GATT layout and
+input behavior remain unmeasured. BR/EDR, SCO/audio, keyboards, arbitrary
 peripherals, vendor gestures, DPI configuration and general Bluetooth APIs stay
 outside this proposed milestone. Extra buttons, horizontal/high-resolution wheel
 and any vendor report needed for basic input require inspection and a scope
@@ -57,8 +60,9 @@ Accepted by the owner through the orchestrator on **2026-10-08**:
    [credentials direction](credentials-and-biometrics.md); this milestone makes
    no disk-encryption claim.
 
-Other recommendations remain proposed. Queued policies are listed under
-[handoff](#decision-and-investigation-handoff), not put to the owner now.
+Other recommendations remain proposed. Task 1 presents only
+[three decisions](bluetooth-task1-contracts.md#first-task-1-decision-round) now;
+later topics remain queued under [handoff](#decision-and-investigation-handoff).
 
 ## Accepted ownership and proposed service lifetime
 
@@ -175,10 +179,11 @@ an owner-decision gate; retry does not bypass either boundary.
 
 Read the actual SMP feature exchange before choosing an association method. The
 [Security Manager specification](https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-54/out/en/host/security-manager-specification.html)
-distinguishes LE Secure Connections from authenticated pairing: a NoInputNoOutput
-peer normally selects unauthenticated Just Works. No such capability was measured
-in the scan. Pairing without a PIN or confirmation, as reported by the owner,
-fits Just Works but establishes neither SC support nor negotiated key size.
+distinguishes LE Secure Connections from authenticated pairing. The owner's
+later Fedora `btmon` account identifies NoInputNoOutput and SC Just Works with
+key size 16; the earlier scan alone established none of those capabilities.
+The legacy-only stop is not indicated for this mouse. Pyxis still checks the
+actual feature exchange and completed encryption in tasks 4/5.
 The accepted policy permits that method only with explicit enrollment
 consent. Missing SC support or a required unsupported association method stops
 for an owner decision before crypto implementation; it does not authorize legacy
@@ -190,12 +195,10 @@ before key generation, then disconnects without completing pairing or storing a
 bond. Record only IO capability, AuthReq (including the SC bit) and maximum key
 size, with addresses excluded before recording. Check SC, key size and association
 prerequisites; advertised features are a gate before task 5's crypto work, not
-successful pairing, encrypted HID or permission to use legacy SMP. As an optional
-earlier input for the owner's native batch, the owner could inspect `btmon` live
-while pairing on Fedora and transcribe just those fields.
-Do not save a raw trace, terminal transcript or packet dump and redact it later.
-This option is offered, not scheduled or assumed; the owner has supplied no such
-capture yet. A Fedora capture may inform the gate but does not qualify Pyxis SMP.
+successful Pyxis pairing, encrypted HID or permission to use legacy SMP. The
+owner has since supplied that capability evidence from Fedora, answering the
+early device question. It does not replace the Pyxis-side checks. No further
+capture or pairing is performed by task 1.
 
 Prefer the existing pinned [Mbed TLS/TF-PSA-Crypto port](../../ports/mbedtls/README.md)
 for P-256 and AES-CMAC primitives, subject to checking its exported configuration
@@ -212,7 +215,8 @@ Accepted bond ownership uses a dedicated writable npfs root granted only
 to trusted startup and the Bluetooth service. Ordinary applications receive
 neither that root nor raw keys; a hidden subdirectory of shared `home://` or
 `tmp://` is not isolation. The service alone writes keys and private peer identity
-(including any address/type or IRK needed for bond lookup/resolution); filenames,
+(including identity/type needed for bond lookup/resolution). The bond must hold
+the SC-derived LTK and peer IRK required by the owner's SMP account; filenames,
 status and diagnostics use an opaque local bond label. These runtime private
 records never enter source, reports, PRs, raw packet dumps or debugger captures.
 
@@ -256,14 +260,15 @@ rather than interpreting them as relative motion. Initially rediscover GATT
 after reconnect; caching/service-change policy can follow only if needed.
 
 The owner has accepted the [system-pointer milestone](pointer.md), with kernel
-positions; Codex alpha is implementing its task 1. This is an accepted dependency,
-not a proposal to move positions into Bluetooth userspace. After its source
-contract lands, coordinate a narrow trusted input-source grant: normalized input
-feeds the same kernel routing, cursor, selection and lock paths as PS/2. Exact
-ABI and multi-source aggregation need review with alpha; this proposal introduces
-none. Clear only the lost source's held buttons, apply the accepted device-loss
-lock behavior and preserve PS/2 operation. Surface-owner warp authority does not
-authorize physical input or clicks that satisfy user activation.
+positions. Codex alpha is integrating tasks 1+2 in draft
+[#545](https://git.internal/PyxisOS/pyxis-os/pulls/545). Task 1 records the
+[proposed producer, aggregation and source-loss contract](bluetooth-task1-contracts.md#proposed-input-source-contract-for-coordination)
+against inspected revision `304d1d7` for owner decisions and orchestration with
+alpha. It uses the same kernel position, routing, cursor and lock path as PS/2;
+consumer APIs do not confer input-injection authority. Physical held state is
+per source, while accepted-input reset/lock revocation follow the kernel's
+device-loss rules. Terminal/mux wheel remains pointer task 3, not implemented by
+this draft or Bluetooth. No alpha agreement or ABI addition is claimed here.
 
 ## Proposed sharing with USB HID
 
@@ -289,12 +294,15 @@ Every task starts only after its necessary decisions and explicit owner
 assignment. Use focused kernel/userspace/ports PRs, publish dependency commits
 first and state merge order. Probe branches remain historical evidence.
 
-- [ ] **1. Contracts and dependencies.** Refine the accepted stack/security/closure
+- [ ] **1. Contracts and dependencies (authorized; in progress).** Refine the accepted stack/security/closure
   direction and resolve the remaining firmware, bond-authority, scan/reconnect,
   HID/sharing and failure-lifetime decisions in rounds of at most three. Agree
   the packet/control and input-source contracts with pointer task 1. Identify
   capability/report questions and their measurement gates in the later tasks;
-  neither scan evidence nor this design task establishes pairing/report support.
+  owner-reported Fedora SMP answers the device security question but does not
+  establish Pyxis pairing/report support. The
+  [first round, dependency assessment and measurement gates](bluetooth-task1-contracts.md)
+  are ready; this task stays unchecked until decisions and alpha coordination finish.
 - [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
   progress and process-exit/loss behavior. Validate warm passthrough framing and
@@ -334,15 +342,15 @@ first and state merge order. Probe branches remain historical evidence.
   the accepted hardware goal. Document remaining limits/debt, retire this WIP
   to subsystem references and update links after the owner accepts completion.
 
-The ThinkPad's already-requested native-check batch, including re-enabling Fedora
-Bluetooth, comes after the investigation and is not run by this documentation
-task. Its results may refine this proposal; that batch does not automatically
-authorize the production milestone or its new native qualification tasks.
+The owner completed the native-check batch in #547 and returned the ThinkPad to
+Fedora with Bluetooth disabled. That batch and the owner's Fedora SMP account
+do not qualify Pyxis Bluetooth input or cold upload. Task 1 performs no host
+service changes, probes, pairing or native checks.
 
 ## Decision and investigation handoff
 
 Rounds one and two are **accepted 2026-10-08**. Remaining topics are pending for
-a later owner round; they are not questions presented now:
+a later owner round. Task 1 now presents only its first three questions:
 
 - Exact firmware pin/mirror, compatible warm-version list and qualification criteria.
 - Discovery/privacy-address profile and bonded reconnect behavior.
@@ -350,14 +358,14 @@ a later owner round; they are not questions presented now:
 - Bond record/durability behavior, HID report scope and pointer input-source lifetime.
 - USB HID sharing scope beyond the implemented private interrupt transport.
 
-Obtain decisions before implementing dependent behavior. The owner requests a
-stop here after publishing this documentation; no next round or task is started.
+Obtain decisions before implementing dependent behavior. Only task 1's
+documentation is assigned; every implementation task needs a later assignment.
 
 With the direction decided, the completed investigation is now the
 [AX200 reference](../devices/ax200-bluetooth.md), linked to the final
 report and detailed task reports. This production proposal stays in WIP; no
-implementation task is assigned and cold-firmware debt remains open. No native
-batch, host Bluetooth service change or SMP exchange was performed for this PR.
-Read-only handoff inspection on 2026-10-08 found no QEMU, debugger or Bluetooth
-probe processes and both AX200 interfaces bound to `btusb`. The owner will start
-the native batch by re-enabling Fedora Bluetooth; this PR does not do so.
+implementation task is assigned and cold-firmware debt remains open. The owner
+reports the native batch completed and Fedora Bluetooth disabled. Task 1's
+branch is `docs/bluetooth-task1-contracts`, based on fresh main `8c4368e`; only
+documentation is edited. Pointer draft `304d1d7` was read, not changed. No QEMU,
+debugger, passthrough or probe job is started for this task.
