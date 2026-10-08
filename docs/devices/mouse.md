@@ -19,8 +19,10 @@ deltas zero, for example when a wheel step ends.
 The presentation task drains these events into one kernel-owned physical pointer
 position and routes ordinary input to the shown surface. Graphics owners use
 [the pointer session](#userspace-pointer-sessions); navigation and local terminals
-retain kernel cursor defaults. This task-1 integration is a draft: Quake and SDL
-consumers still need the task-2 lock and protocol migration before integration.
+retain kernel cursor defaults. Tasks 1 and 2 are a joint draft with ordinary
+input, relative lock and migrated Quake/SDL consumers. QEMU qualification and
+exact-revision CI remain pending in the
+[qualification report](../development/system-pointer-qualification.md).
 
 ## Controller and setup
 
@@ -97,9 +99,9 @@ not transfer or end process ownership.
 Acquisition is exclusive (`CALL_BUSY` for another or repeated acquisition), and
 returns `CALL_UNAVAILABLE` without a working mouse. RELEASE, display RELEASE and
 owner exit end the subscription and remove its image and visibility preference.
-Keyboard ownership remains independent. READ blocks for one 48-byte event, or
+Keyboard ownership remains independent. READ blocks for one 56-byte event, or
 returns `CALL_TIMED_OUT` for an empty `POINTER_READ_POLL` read. Libpyxis exposes
-acquire/read/release, geometry, image, visibility and warp helpers in
+acquire/read/release, geometry, image, visibility, warp and lock/state helpers in
 `<pointer.h>`. There is no cross-session wait; applications reading keyboard
 and pointer input poll or block on one session.
 
@@ -131,18 +133,60 @@ may extend outside it; wheel input follows the currently hovered surface.
 A left press on a displayed tab selects that space and consumes the press and
 release. Buttons held across acquisition, focus change or reset need a release
 and fresh press before being accepted. Resize and REPLACE discard queued spatial
-input, cancel drags, clear accepted buttons and publish
-`POINTER_GEOMETRY_CHANGED`. Clients clear held controls on focus, boundary,
-geometry and reset notifications. A packet with no relevant change produces no
+ordinary input, cancel drags, clear accepted buttons and publish
+`POINTER_GEOMETRY_CHANGED`. In the same locked graphics session, resize and
+REPLACE retain the lock, queued relative input and accepted buttons while
+reporting geometry. Clients retain held controls for that locked notification
+and clear them on ordinary geometry, focus, boundary and reset notifications. A packet with no relevant change produces no
 ordinary event.
 
 The queue holds 64 events. At capacity, an ordinary event can coalesce with the
 newest ordinary event only when buttons and both identities match: it retains
-the latest position and saturates wheel accumulation at the signed 32-bit
-limits. Otherwise the queue and accepted buttons are cleared and
+the latest position and saturates wheel and locked relative counts at the signed
+32-bit limits. Otherwise the queue and accepted buttons are cleared and
 `POINTER_STATE_RESET` is queued. Device loss resets every space. Notifications
 wake blocked readers while graphics is hidden or its space is inactive; a read
 may otherwise continue waiting. Focus loss preserves execution authority.
+
+### Relative lock and user escape
+
+Header-only LOCK and UNLOCK operate on the owned subscription. STATE returns a
+64-bit value containing current `POINTER_EVENT_FOCUSED` and
+`POINTER_EVENT_LOCKED` flags; libpyxis exposes `pointer_lock()`,
+`pointer_unlock()` and `pointer_state()`. STATE observes focus and mode;
+it does not acquire lock or create user activation.
+
+Only one graphics subscription can lock the physical pointer. LOCK requires
+shown, focused graphics and can return `CALL_DENIED` for missing activation,
+unaccepted held buttons or a drag anchored elsewhere; another lock owner returns
+`CALL_BUSY`. Repeating LOCK for its current owner succeeds. Locking selects no
+space or layer and leaves keyboard capture independent. Mode transitions discard
+queued input, clear accepted buttons and publish `POINTER_LOCK_CHANGED`.
+
+While locked, `POINTER_EVENT_LOCKED` accompanies events and INPUT's signed
+`dx`/`dy` are relative device counts. `x`/`y` retain the parked position; ordinary
+INPUT has zero relative counts. Relative motion does not move the physical
+hotspot, hit-test tabs or establish ordinary drags. Wheel and freshly accepted
+buttons go to the lock owner. The system cursor is forcibly hidden without
+changing its saved image/visibility preference. Unlock restores ordinary routing
+at the parked position, clamped to committed physical geometry, and restores that
+preference. WARP is denied while locked.
+
+Either Super key with Escape revokes lock before keyboard capture, including
+with Shift, Control or Alt also held. The Escape press, repeats and matching
+release are consumed even when Super is released first. The game remains
+running on its selected layer with keyboard capture intact. Focus/layer loss,
+device reset, subscription/display release and owner exit also revoke lock.
+
+After such revocation, the space retains a fresh-activation requirement across
+new subscriptions, display sessions and processes. A fresh left press on its
+shown graphics surface consumes that press/release and queues
+`POINTER_ACTIVATED`, permitting the owner to request lock again. Tab clicks,
+warp and polling do not grant activation. Successful relock consumes the
+permission; focus loss and session teardown clear any unused permission.
+Voluntary UNLOCK creates no new activation requirement and does not remove an
+existing one. This gives programs an explicit escape path without polling
+LOCK until it succeeds.
 
 ### Images, visibility and warp
 
@@ -158,7 +202,8 @@ its own preference for its next visit; navigation and margins retain defaults.
 WARP takes surface-local coordinates and both current identities. It requires
 shown, focused graphics and a target inside the mapping/destination intersection.
 Stale identities return `CALL_BUSY`; invalid coordinates return `CALL_BAD_REQUEST`.
-A drag anchored elsewhere or a consumed tab press returns `CALL_DENIED`.
+Locked mode, a drag anchored elsewhere or a consumed tab/activation press returns
+`CALL_DENIED`.
 Success updates the authoritative position and queues ordinary position without
 synthesizing a device press or selecting a surface. Hidden graphics cursors can
 still warp when these eligibility rules hold.
@@ -185,3 +230,21 @@ every 10 ms, clears held controls on state changes and adapts its mapping when
 the destination generation changes. See the
 [system pointer qualification](../development/system-pointer-qualification.md)
 for configuration, measurements and the current runtime coverage.
+
+## Quake and SDL consumers
+
+Quake acquires graphics before pointer input, presents its first frame, then
+requests lock. It reads `dx`/`dy` only from locked input, re-queries STATE to
+notice revocation and requests relock on a fresh surface activation rather than
+polling LOCK. Same-session locked geometry notifications retain held controls.
+Cleanup releases pointer input before graphics; keyboard-only play remains
+available without a mouse.
+
+SDL acquires pointer input only after graphics backing exists and allows relative
+mode only after the first PRESENT. Its adapter maps ordinary surface positions,
+locked relative counts, geometry identities, cursor image/show/hide and bounded
+warp to the native protocol. Refused lock becomes an SDL error; revoked lock
+clears SDL relative mode and accumulated motion without a synthetic warp or an
+automatic relock. Window cleanup releases pointer input before graphics. The
+normal image build includes these consumers; runtime qualification and CI are
+tracked in the [qualification report](../development/system-pointer-qualification.md).

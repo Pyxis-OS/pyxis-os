@@ -20,6 +20,9 @@ capture completion; replacement or owner exit releases only its published
 reference. Static arrow and terminal defaults need no allocated image lease.
 Surface ownership, routing, visibility and warp are described in
 [mouse input](../devices/mouse.md#userspace-pointer-sessions).
+The single global relative lock forces effective visibility off while retaining
+the surface's image and saved show preference. Unlock restores that preference;
+hidden and locked pointers add no software overlay to scanout or capture.
 
 [The compositor](../../kernel/display/pointer.c) overlays the pointer after
 navigation, the chosen surface and the TTY block caret. It subtracts the hotspot
@@ -36,8 +39,9 @@ mouse packets add no frame submission. There is no additional full-screen
 buffer. A 64x64 image bounds blending to 4,096 pixels per frame; measured cost
 and runtime coverage are recorded separately in
 [system pointer qualification](../development/system-pointer-qualification.md).
-This task-1 draft implements ordinary pointer presentation; task-2 game/SDL
-migration and the VirtIO hardware cursor remain pending.
+Tasks 1 and 2 jointly implement ordinary presentation and relative-lock hiding
+in the current draft. Runtime/CI qualification remains pending in that report.
+VirtIO continues to use software composition; its hardware cursor is future work.
 
 ## Screen capture
 

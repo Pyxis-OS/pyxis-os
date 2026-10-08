@@ -6,7 +6,9 @@ no drawing, graphics acquisition, input access, mode setting or device access.
 The result includes navigation, the selected space's shown layer, clipping and
 background margins, the visible software system pointer and the TTY block caret
 when the terminal is shown. Hidden surfaces are omitted. A hidden system pointer
-is omitted without changing input routing.
+is omitted without changing ordinary input routing; relative lock also excludes
+the system pointer while retaining its saved visibility preference. TTY caret
+visibility remains independent.
 Layer selection remains the presenter's ordinary `display_snapshot()` selection.
 
 Boot init receives the named `screen_capture` resource with CAPTURE authority.
@@ -66,8 +68,8 @@ After successful frame begin, the presenter retains one pointer image, hotspot,
 position and visibility snapshot alongside the chosen surface. It blends that
 image into intersecting spans after navigation, surface and TTY caret composition,
 then passes only final pixels into the capture tee. Image replacement, hiding,
-warp or owner exit during composition affects a later frame. The lease remains
-through display and capture completion. See
+warp, lock changes or owner exit during composition affects a later frame. The
+lease remains through display and capture completion. See
 [software pointer presentation](../kernel/display.md#software-pointer) and
 [system pointer qualification](../development/system-pointer-qualification.md).
 

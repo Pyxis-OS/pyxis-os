@@ -128,7 +128,7 @@ keyboard session and ends the pointer subscription and its cursor preference.
 
 The [pointer protocol](../devices/mouse.md#userspace-pointer-sessions) requires
 both pointer INPUT authority and ownership of this space's graphics session.
-Its 48-byte events report signed surface-local positions below navigation,
+Its 56-byte events report signed surface-local positions below navigation,
 buttons, wheel counts, destination generation and mapping identity. Hit-testing
 uses the shown mapping/destination intersection; exposed margins use the kernel
 default cursor and receive no application input. A fresh press anchors motion
@@ -140,14 +140,34 @@ The owner can supply a copied BGRA8 straight-alpha image, each dimension 1 throu
 changing routing. Eligible shown graphics can warp within its intersection
 using both current identities. Physical resize changes destination generation;
 REPLACE changes mapping identity, including at the same size. Both discard old
-spatial input, cancel drags and notify the client to re-query geometry.
+ordinary spatial input, cancel drags and notify the client to re-query geometry.
+The same locked session instead retains relative input and accepted buttons.
+
+The owned subscription can request LOCK for relative input. Only one global
+pointer lock exists; it requires shown, focused graphics and permits refusal.
+Locked INPUT has `POINTER_EVENT_LOCKED` and device-count `dx`/`dy`, while the
+ordinary position stays parked. Lock forces cursor hiding without altering the
+surface's saved preference. UNLOCK restores ordinary routing; STATE reports
+current focus/lock flags. Acquisition and PRESENT do not themselves lock input.
+
+Super+Esc with either Super key and any additional modifiers revokes lock and
+consumes Escape through its release before keyboard capture. Space/layer loss,
+device loss and teardown also revoke it. Such revocation leaves a per-space
+fresh-click requirement that survives new sessions and processes. A consumed
+fresh left press on shown graphics reports `POINTER_ACTIVATED`; tab clicks,
+warp and polling cannot grant relock permission. See the
+[lock contract](../devices/mouse.md#relative-lock-and-user-escape).
 
 Pointer and display backing have separate presenter leases. A snapshotted image
 can finish after image replacement, display release or owner exit without
 accessing retired owner state. The kernel composes it after the chosen surface
 and includes it in [screen capture](screen-capture.md); application pixels remain
-cursor-free. The ordinary protocol is task-1 draft integration; Quake and SDL
-migration to the task-2 lock contract remains pending. Runtime evidence is in
+cursor-free. Quake acquires pointer input after graphics and requests lock after
+PRESENT. SDL likewise acquires after graphics backing and exposes relative mode
+after PRESENT, alongside native position/cursor/warp support. Both release
+pointer input before graphics teardown and react to revocation instead of
+polling for lock. Tasks 1 and 2 are joint draft integration; runtime and CI
+qualification are pending in
 [system pointer qualification](../development/system-pointer-qualification.md).
 
 ## Live destination geometry
