@@ -53,8 +53,8 @@ Accepted 2026-10-08:
   enumeration and USB 2 hubs. A mouse adds the HID boot protocol and interrupt
   transfers, which the bulk-only storage work did not need. A USB keyboard would
   follow almost for free.
-- **Bluetooth** is on the [investigation list](later-os-directions.md#bluetooth),
-  for the owner's Logitech MX Master 3S.
+- **Bluetooth** has an [investigation brief](bluetooth.md), for the owner's
+  Logitech MX Master 3S.
 
 ## Open questions
 
