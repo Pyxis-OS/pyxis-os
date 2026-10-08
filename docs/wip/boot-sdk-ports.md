@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
+  unmerged QEMU probes established controller/codec commands and known PCM
+  playback; the production milestone remains proposed and native codec/audio
+  qualification remains open.
 - [Kernel random generator](../devices/random-generator.md), 2026-10-08:
   BSP-owned ChaCha20 with the accepted OpenBSD rekey construction, hardware
   seed/reseed policy and unchanged random grant; matched VirtIO/CPU qualification
@@ -59,9 +63,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-08): [HD Audio playback investigation](audio-investigation.md),
-  QEMU controller/codec/PCM probes on unmerged branches, ending in a report and
-  milestone proposal. Production ownership/interface policy awaits the owner.
+- **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
+  following the completed [QEMU investigation](../development/audio-investigation.md).
+  Documentation handoff complete; three owner defaults pending and no production
+  task assigned. Native analog qualification remains open.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   documentation only. Two owner rounds accepted stack/security/closure and initial
   firmware/bond policies; later decisions are queued without another round now. The

@@ -206,15 +206,19 @@ Owner ideas, 2026-10-07; none is scheduled.
 
 ## Audio
 
-Owner idea, 2026-10-07: start looking into audio. Intel HD Audio is the
-suggested first driver, playback only: QEMU emulates it (`intel-hda` with a
-codec), and the ThinkPad's analog audio is on an HD Audio controller
-(`1022:15e3`, see the [T14 inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt)).
-Its codec is not yet identified. The userspace interface, mixing and the first
-consumer (Quake's sound, for example) need their own decisions.
-The owner assigned the [playback investigation](audio-investigation.md) on
-2026-10-08: QEMU probes first, then a report and production milestone proposal;
-no audio interface or production implementation is decided yet.
+Owner direction, 2026-10-07: Intel HD Audio, playback only. The assigned
+[investigation](../development/audio-investigation.md) completed 2026-10-08:
+QEMU controller/codec probes on unmerged branches played a known PCM buffer,
+with complete matching WAV samples after a bounded silence tail. This is
+emulated evidence, not native audio or a production interface.
+
+The [playback milestone proposal](hda-playback.md) puts three ownership/session,
+format/mixing and buffering/qualification defaults to the owner. They remain
+pending; no production task or SDL2/Quake adapter is assigned. The ThinkPad's
+analog controller is AMD `1022:15e3`, distinct from its GPU HDMI/DP and dock USB
+audio; its codec is still unknown pending owner data. Native closure is proposed,
+not waived by QEMU success. SDL2 also needs real audio callback execution;
+today its port omits both audio devices and threads.
 
 ## Bluetooth
 

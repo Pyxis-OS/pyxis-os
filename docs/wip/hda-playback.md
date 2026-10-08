@@ -1,0 +1,203 @@
+# HD Audio playback milestone proposal
+
+Status: **proposal, 2026-10-08; owner decisions pending; no implementation
+assigned**. Prepared from main `67e14be` and the completed
+[QEMU investigation](../development/audio-investigation.md). Publishing or
+merging this proposal does not authorize a production interface or driver.
+The investigation probes stay unmerged. The owner chooses the defaults below
+and explicitly assigns the first production task.
+
+The proposed goal is one analog playback engine, bounded per-space PCM sessions
+and native ThinkPad speaker/headphone qualification. QEMU comes first. Recording,
+HDMI/DP, USB/dock audio, Bluetooth audio, arbitrary devices, surround sound,
+exclusive hardware passthrough, suspend/resume and a general sound-server
+framework are outside this milestone. SDL2 and Quake adapters are later,
+separately assigned consumer work; they are not prerequisites for establishing
+an honest native PCM interface. No SDL2 or pointer changes are included here.
+
+## First owner decision round
+
+Each recommendation is a proposed default, not an accepted contract.
+
+1. **Ownership, authority and mixing — recommended:** one BSP HDA worker in
+   `kernel/audio/`, owning controller verbs, DMA, stream state and a bounded
+   integer mixer. One exclusive, process-owned playback session per space,
+   admitted through a named, delegatable `audio` grant from trusted startup;
+   at most **eight active sessions** across the system. Hidden spaces continue
+   playing. A grant carries PCM/session authority, not pin, PCI, DMA, master
+   volume or another space's controls. Kernel mixing avoids a new service and
+   keeps completion ownership in one place, at the cost of mixer CPU time on
+   the BSP. Alternative: a trusted userspace mixer with an exclusive device
+   grant, client IPC and a separately reviewed service lifetime/recovery policy.
+2. **Formats — recommended:** the engine/session format starts at **48 kHz,
+   signed little-endian 16-bit stereo PCM**. Reject unsupported routes/formats
+   explicitly. Userspace performs source-format conversion, sample-rate
+   conversion and application/game mixing; the kernel only combines session
+   PCM with a wide accumulator and saturates once per output sample. No kernel
+   resampler. This is small and fits the measured QEMU route; the ThinkPad codec
+   must still advertise it. Alternative: negotiate device formats and add a
+   native resampler/multi-format mixer after concrete consumers need it.
+3. **Buffering and qualification — recommended:** begin with **four 10 ms DMA
+   periods (40 ms)** and an **80 ms copied queue per session**, starting a new
+   session after 20 ms is queued or the producer explicitly finishes a shorter
+   buffer. A timely refill substitutes zeros for producer starvation and reports
+   underrun/discontinuity. A missed hardware refill can replay old cyclic DMA
+   frames before detection; expose that limit and measure stop/restart recovery.
+   Progress/space availability supports a blocking wait.
+   Treat these as tuning defaults, with no hard real-time or audible-latency
+   guarantee. Measure QEMU first and require native speaker/headphone playback,
+   stop/underrun behavior and usable latency before closing the milestone.
+   Alternative: larger periods/queues for more scheduling margin, or explicit
+   QEMU-only closure with native qualification left open by an owner decision.
+
+These three decisions are the only current questions. Exact call layouts,
+rights bits, copy extent/deadline horizon, admission errors, route preference,
+jack switching and watchdog thresholds need task-specific review. Recommendations
+below explain the intended design; they do not accept those queued choices.
+
+## Proposed ownership and lifetime
+
+Hardware-specific PCI/MMIO/interrupt operations stay behind architecture helpers;
+controller/codec policy and mixer state live in `kernel/audio/`. Follow the
+[PCI claim/reset](../devices/pci.md) and [BSP ownership](../kernel/smp.md) contracts.
+Prepare mappings and coherent physical DMA on the BSP before AP startup. Runtime
+BSP request adapters perform session allocation and teardown; neither an AP
+syscall nor an IRQ handler changes DMA or codec state. An IRQ captures bounded
+status and wakes the owning worker; the worker performs command correlation,
+period accounting and refills. HDA's frame clock drives playback; HPET deadlines
+bound command/refill/watchdog waits. Do not use the 120 Hz preemption tick as
+an audio clock or retain the probe's permanent polling as the production design.
+
+CORB/RIRB has one command in flight initially, checked codec identity, explicit
+unsolicited handling and bounded timeout. A late solicited reply cannot become
+the next command's response. Codec graphs, connection indices, amplifier offsets
+and power transitions are validated before enabling a pin. Choose a supported
+controller explicitly; do not select the GPU or dock by finding the first PCI
+multimedia function. Native AMD `1022:15e3` is a separate qualified match, not
+proof that every HDA-compatible controller works.
+
+One hardware output stream and BDL belongs to the worker for the boot. Sessions
+own copied queue storage, never DMA mappings. The worker alone advances queue
+consumption and hardware period generations. With eight sessions, the proposed
+PCM queues total 122,880 bytes; the 40 ms DMA payload is 7,680 bytes before
+page/alignment rounding. Counters, request staging and descriptor storage are
+additional. Admission must fail explicitly when capacity/allocation is unavailable;
+there is no silently dropped ninth session. Mix cost scales with active sessions
+and must be measured under one- and multiple-CPU load, especially on the BSP.
+
+Acquisition is process-owned, analogous to keyboard/display sessions. Grant
+copies do not transfer an acquired session; process exit releases it. A child
+can acquire only after the previous producer releases ownership. Release or
+exit invalidates the generation, cancels uncommitted writes, discards queued
+PCM and silences that source in subsequent mixed periods. Frames already handed
+to hardware may remain audible until consumed: other spaces must not be reset
+just to flush one producer. Close/stop semantics must expose that limit. No
+worker dereferences a caller buffer after a syscall/request relinquishes it.
+
+A trusted startup may omit the grant. Ordinary producers can affect only their
+own PCM and any explicitly granted per-session volume/pause controls. Session
+acquisition uses identity/authority checks rather than global device access.
+Continuing in a hidden space is proposed independently of keyboard/pointer focus;
+user-visible global mute/volume controls require their own authority and owner
+policy. The first tasks must settle that policy before shipping a control UI.
+
+## Proposed queue, underrun and failure behavior
+
+Copied writes return the amount accepted, with complete-frame alignment and
+explicit full-queue/deadline/closed results. Task 1 must choose whether writes
+are all-or-nothing or partial and state cancellation at the commit point;
+no successful write may later disappear merely because its caller's deadline
+expired. A writable wait reports real queue capacity, avoiding SDL-style 1 ms
+polling. Position/status distinguishes submitted, mixed and hardware-consumed
+frames; hardware DMA progress is not a promise that a sound has reached the
+speaker. The probe's truncated first captures demonstrated why a drain operation
+needs an honest device-specific contract or an explicitly unsupported result.
+
+Initially idle hardware stays stopped; start/reset sequencing belongs to the
+worker. During playback, empty sessions contribute zero frames while the mixer
+continues for other sessions. A producer starvation counter differs from a
+missed hardware refill: record both with a discontinuity generation. On refill
+lateness, derive which periods are still safe from observed hardware position
+and sequence; do not overwrite an owned/current period or replay stale buffers.
+Cyclic DMA can replay previously filled periods if the worker misses a whole
+lap before detection. Already-replayed sound cannot be undone; report a hardware
+discontinuity and stop/reset rather than claiming uninterrupted zero-fill. If
+modulo position cannot establish how many laps elapsed, do not invent an exact
+consumption count. Task 3 must define detection, counters and recovery thresholds
+and measure this scheduling limit. Ten-millisecond interrupts do not guarantee
+a deadline in nested KVM.
+
+A stalled command, lost stream progress or FIFO/descriptor fault stops admission
+and reports unavailable. Mask delivery, request RUN clear/reset, stop rings and
+confirm link reset/bus-master disable before any reuse. If ownership cannot be
+proved, retain/quarantine DMA and preserve unrelated device workers. Start with
+explicit reboot recovery; automatic controller restart and hot removal are
+separate scopes. Do not treat client starvation as a reason to quarantine the
+controller or all other sessions.
+
+## Proposed task sequence and review gates
+
+1. [ ] **Session contract and native evidence.** Record accepted first-round
+   decisions. Specify rights, exclusive acquisition, close/exit, wait/readiness,
+   queue accounting, byte/frame bounds, deadlines/cancellation and generations.
+   Obtain native codec dumps and propose speaker/headphone route/jack policy.
+   Review these concrete contracts before writing a public ABI; unsupported
+   hardware reports unavailable without exposing DMA.
+2. [ ] **QEMU controller and codec engine.** Implement production PCI claim,
+   CORB/RIRB, checked graph traversal and one discovered analog output route.
+   Keep arch/device and BSP boundaries explicit. Qualify known PCM through WAV,
+   independent left/right signals, command wrap and stop ownership with normal
+   builds, interactive boots and debugger inspection. Polling may be a bounded
+   bring-up step, not the completed runtime implementation.
+3. [ ] **Periodic output and refill.** Add owned interrupt delivery, BDL/position
+   accounting, silence on starvation and explicit discontinuity. Review recovery
+   thresholds; exercise sustained playback, ordinary producer pauses, close/reopen
+   and normal concurrent guest activity. Measure position/clock agreement and
+   queue-to-output behavior. Revisit the proposed period before freezing policy.
+4. [ ] **Per-space sessions and bounded mixing.** Implement only the reviewed
+   grant/calls and BSP request bridge, with copied queues and generation-aware
+   cancellation/exit. Qualify two distinct simultaneous signals, silent/active
+   spaces, denied authority, exclusive acquisition and capacity admission.
+   Measure BSP cost and refill margin with one and multiple CPUs. Add only the
+   concrete native PCM producer needed to exercise the accepted interface.
+5. [ ] **Native AMD analog qualification.** Bind `1022:15e3` after verifying
+   capabilities and the actual codec route. Inspect licensed/pinned fixups where
+   needed; require owner speaker/headphone evidence, sustained output under load,
+   underrun/recovery, stop/reset and usable latency. No physical-host access
+   while another agent owns it. If blocked by hardware-specific behavior, report
+   it and return scope/closure decisions to the owner.
+6. [ ] **Documentation closure.** Record implemented contracts and measured
+   limits, move this milestone to the appropriate subsystem reference and update
+   links. Carry only owner-accepted deferred work into technical debt. Publish
+   no success claim for SDL2, Quake, recording or other devices.
+
+Tasks are focused PRs, each assigned by the owner after its predecessor is
+reviewed. No probe cherry-pick is implied by accepting this proposal. Production
+code must be reviewed for lifecycle/interrupt/refill behavior the probes did not
+implement. No new tests, boot automation or CI workflow is proposed.
+
+## Later consumer work
+
+**Quake:** replace `snd_null` with the real upstream sound mixer and a native
+producer/position adapter. Conversion remains in userspace. Resolve its cyclic
+buffer/play-cursor assumptions against the accepted session contract and test
+actual sound. The owner assigns this in ports after the kernel interface exists.
+
+**SDL2:** implement a native backend around the accepted grant, format conversion,
+writable waits, pause, close and discontinuity. Its audio core normally starts
+a thread even for queued audio. Pyxis currently has one task per process and
+SDL2 thread creation fails, so genuine callback/thread execution requires
+separate owner acceptance and assignment. Backend-owned callback execution would still need real
+safe scheduling, lifetime and synchronization; it cannot be faked by success or
+pumped only when a game polls events. Until that prerequisite is solved, do not
+claim DevilutionX or SDL audio support.
+
+## Native and evidence limits
+
+Analog codec identity is unknown pending owner data. QEMU establishes command,
+route and known-PCM feasibility, not the ThinkPad's routing, amplifier/power
+quirks, interrupt/position reliability or physical latency. Native closure remains
+required under the recommended default; the ThinkPad's availability does not
+silently relax it. Recording/HDMI/USB/ACP/suspend remain separate directions.
+See the [full report and evidence](../development/audio-investigation.md) for
+exact measured revisions and source references.
