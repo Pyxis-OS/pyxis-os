@@ -20,7 +20,13 @@ Matching SDK/userland/ports bundles from successful
 [CI run 1232](https://git.internal/PyxisOS/pyxis-os/actions/runs/1232) passed the
 existing verifiers. The separately published
 [probe revision](https://git.internal/PyxisOS/pyxis-os/commit/6c4329e4429b9a43f266dd57f44d544420313996)
-is on `probe/bluetooth-le-scan`; it must not be merged.
+is retained on `probe/bluetooth-le-scan`; that branch must not be merged.
+After measurement, a name-redaction-only
+[follow-up revision](https://git.internal/PyxisOS/pyxis-os/commit/3d413de579086f2a6f3634a3d4615f8737211b7e)
+added variable-width address formats. It received source review and an ordinary
+build, without another radio run; the observed ASCII mouse names follow the
+same rendering path by inspection. The captures below use the measured revision
+and its matching ELF, not that later image.
 
 The probe image was built from that clean revision:
 
@@ -147,7 +153,9 @@ Post-scan [GDB inspection](gdb.txt) used only address-free scalar expressions.
 It independently confirmed those counters and flags, sequence 38, empty copied
 queue, both receives `INTERRUPT_POSTED`, stream `USB_OK` and controller running.
 No target address, raw advertising packet or address-keyed debugger state was
-captured. File review found no address-shaped identifier in the retained output.
+captured. The unrelated VirtIO NIC address in the generic boot log was also
+redacted in the retained serial file. File review then found no address-shaped
+identifier in the retained output.
 
 ## Limits and delivery
 
