@@ -2,8 +2,9 @@
 
 Status: **task 1 authorized 2026-10-08, documentation and decisions only.**
 Rounds one and two remain accepted; the
-[first task 1 round and input-source proposal](bluetooth-task1-contracts.md) are
-ready for decisions. No code, ABI edit, probe or implementation is authorized.
+[first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round) is
+accepted 2026-10-08 with the source-loss adjustment; the second task 1 round is
+ready. No code, ABI edit, probe or implementation is authorized.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -61,7 +62,7 @@ Accepted by the owner through the orchestrator on **2026-10-08**:
    no disk-encryption claim.
 
 Other recommendations remain proposed. Task 1 presents only
-[three decisions](bluetooth-task1-contracts.md#first-task-1-decision-round) now;
+[three decisions](bluetooth-task1-contracts.md#second-task-1-decision-round) now;
 later topics remain queued under [handoff](#decision-and-investigation-handoff).
 
 ## Accepted ownership and proposed service lifetime
@@ -94,11 +95,15 @@ storage's request ownership and failure behavior separate.
 
 Service exit, connection loss, queue discontinuity or terminal transport failure
 stops input and clears that source's held buttons. It also cancels protocol work
-and reports unavailable; no silent dropped-button state or implicit re-pairing.
+and reports that source unavailable; no silent dropped-button state or implicit
+re-pairing. Accepted input reset/drag cancellation occurs only if the lost source
+held buttons; lock revokes only then or when no live source remains. A buttonless
+Bluetooth disconnect leaves the live PS/2 pointer visibly unchanged. These
+input-loss rules are accepted; controller cleanup/re-grant remains decision 12.
 Teardown cannot recycle outstanding DMA. Start with the existing terminal
 transport limits and explicit reboot recovery where ownership remains uncertain.
 Mouse radio disconnect/sleep is distinct from USB controller removal and should
-not quarantine USB storage. Reconnect to the stored bond is proposed with bounded
+not quarantine USB storage. Reconnect to the stored bond is accepted with bounded
 backoff; authentication failure stops for owner action rather than deleting the
 bond or enrolling whoever advertises the same name.
 Tag pending work and input with a connection generation so a reused HCI
@@ -262,12 +267,14 @@ after reconnect; caching/service-change policy can follow only if needed.
 The owner has accepted the [system-pointer milestone](pointer.md), with kernel
 positions. Codex alpha is integrating tasks 1+2 in draft
 [#545](https://git.internal/PyxisOS/pyxis-os/pulls/545). Task 1 records the
-[proposed producer, aggregation and source-loss contract](bluetooth-task1-contracts.md#proposed-input-source-contract-for-coordination)
-against inspected revision `304d1d7` for owner decisions and orchestration with
-alpha. It uses the same kernel position, routing, cursor and lock path as PS/2;
+[owner-accepted producer, aggregation and source-loss contract](bluetooth-task1-contracts.md#input-source-contract-for-coordination)
+against inspected revision `304d1d7`. The orchestrator sent it to alpha for
+per-source device-loss handling; alpha's agreement awaits relay. It uses the same
+kernel position, routing, cursor and lock path as PS/2;
 consumer APIs do not confer input-injection authority. Physical held state is
-per source, while accepted-input reset/lock revocation follow the kernel's
-device-loss rules. Terminal/mux wheel remains pointer task 3, not implemented by
+per source. Reset/cancel only when the lost source held buttons; revoke lock then
+or when no live source remains. Idle loss of an unused mouse is invisible while
+PS/2 is live. Terminal/mux wheel remains pointer task 3, not implemented by
 this draft or Bluetooth. No alpha agreement or ABI addition is claimed here.
 
 ## Proposed sharing with USB HID
@@ -301,8 +308,9 @@ first and state merge order. Probe branches remain historical evidence.
   capability/report questions and their measurement gates in the later tasks;
   owner-reported Fedora SMP answers the device security question but does not
   establish Pyxis pairing/report support. The
-  [first round, dependency assessment and measurement gates](bluetooth-task1-contracts.md)
-  are ready; this task stays unchecked until decisions and alpha coordination finish.
+  [first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round)
+  is accepted 2026-10-08; the second round is ready, with dependency/measurement
+  gates recorded. This task stays unchecked until decisions and alpha coordination finish.
 - [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
   progress and process-exit/loss behavior. Validate warm passthrough framing and
@@ -349,14 +357,16 @@ service changes, probes, pairing or native checks.
 
 ## Decision and investigation handoff
 
-Rounds one and two are **accepted 2026-10-08**. Remaining topics are pending for
-a later owner round. Task 1 now presents only its first three questions:
+Milestone rounds one and two and the first task 1 round are
+**accepted 2026-10-08**. Task 1 now presents only its second three questions:
 
 - Exact firmware pin/mirror, compatible warm-version list and qualification criteria.
-- Discovery/privacy-address profile and bonded reconnect behavior.
-- Controller/service grant lifetime, teardown and recovery policy.
-- Bond record/durability behavior, HID report scope and pointer input-source lifetime.
-- USB HID sharing scope beyond the implemented private interrupt transport.
+- Controller/service lifetime, HID report scope and USB HID sharing (second task 1 round).
+- Bond record/durability behavior and later parameter qualification.
+- Alpha's agreement on the owner-accepted input-source contract (awaiting relay).
+
+Producer authority, OR aggregation, conditional source loss and initial
+scan/reconnect policy are settled by the first task 1 round, not reopened here.
 
 Obtain decisions before implementing dependent behavior. Only task 1's
 documentation is assigned; every implementation task needs a later assignment.

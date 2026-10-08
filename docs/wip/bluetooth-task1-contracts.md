@@ -4,28 +4,26 @@ Status: **task 1 authorized, documentation and decisions only, 2026-10-08.**
 Based on main `8c4368e`, including the owner's native batch
 [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547). The
 [mouse milestone](bluetooth-mouse.md) retains accepted rounds one and two.
-The recommendations here remain proposed. Task 1 cannot close until its pending
+The owner accepted the first task 1 round on 2026-10-08 with the source-loss
+adjustment below. The next round remains pending. Task 1 cannot close until
 decisions and pointer coordination are recorded; it authorizes no implementation.
 
-## First task 1 decision round
+## Accepted first task 1 round
 
-Only these three decisions are presented now, each **pending**:
+Accepted by the owner through the orchestrator on **2026-10-08**, incorporating
+Claude's [review of #548](https://git.internal/PyxisOS/pyxis-os/pulls/548):
 
-7. **Producer authority and submission.** Recommended: a separate trusted
-   startup grant for one process-owned Bluetooth input source, submitting copied
-   relative motion, complete primary-button state and ordinary wheel steps with
-   a kernel source epoch and consecutive sequence. The kernel owns positions and
-   routing. This does not reuse graphics consumers' `POINTER_RIGHT_INPUT`, grant
-   warp/focus/lock authority, or expose USB/HCI to applications. An alternative
-   is keeping HID normalization in the kernel, revisiting the accepted stack split.
-8. **PS/2 coexistence and source loss.** Recommended: keep each source's physical
-   button state, OR those states for the system pointer, and serialize all motion
-   through its existing router. Loss clears only that source's physical state,
-   preserves position and surviving-source state, but cancels drag, resets
-   accepted input and revokes lock. Held buttons need release/fresh press after
-   reset. Exclusive mouse selection would avoid aggregation but make PS/2 and
-   Bluetooth unable to contribute concurrently.
-9. **Scan and reconnect policy.** Recommended: explicit enrollment uses the
+7. **Producer authority and submission:** a dedicated trusted startup grant for
+   one process-owned Bluetooth input source, with kernel-issued epochs and
+   consecutive source sequences. Submit copied normalized reports; the kernel
+   owns positions/routing. Graphics-consumer grants provide no producer authority.
+8. **PS/2 coexistence and source loss:** separate physical snapshots, aggregated
+   by OR. Clear the lost source's snapshot/buttons. Reset accepted input and
+   cancel drag only when that source held buttons; revoke lock only when it held
+   buttons or no live source remains. A buttonless disconnect while another
+   source is live changes nothing visible. On the ThinkPad, PS/2 remains live:
+   Bluetooth sleep does not hide its cursor.
+9. **Scan and reconnect policy:** explicit enrollment uses the
    qualified 30-second legacy active scan, 100 ms interval/window, duplicate
    filtering and bounded candidate selection. Keep the public scanner address
    initially, unrecorded. Permit bounded automatic reconnect only to the saved
@@ -34,8 +32,31 @@ Only these three decisions are presented now, each **pending**:
    owner action. Initial reconnect configuration: three attempts per loss episode,
    delays of 1/2/4 seconds, each with a 30-second overall attempt deadline and a
    separate cleanup deadline. Exhaustion requires explicit user retry. These
-   values need qualification and remain settings, not ABI guarantees. Explicit
-   reconnect only is the alternative; actual LE connection parameters are gated.
+   values need qualification and remain settings, not ABI guarantees. Actual LE
+   connection parameters remain gated.
+
+## Second task 1 decision round
+
+Only these three decisions are presented now, each **pending**:
+
+10. **HID report scope.** Recommended: use the measured Report Map to normalize
+    relative X/Y, left/right/middle buttons and ordinary vertical wheel steps.
+    Other controls remain explicitly unsupported; mandatory vendor setup or
+    incompatible units/layouts return to the owner before input injection.
+    Expanding to extra buttons, horizontal/high-resolution wheel or vendor
+    controls would require additional semantics and qualification.
+11. **USB HID sharing.** Recommended: share private interrupt transport and
+    normalized producer semantics; keep class binding, framing and report policy
+    separate. Preserve current admission limits and defer a general HID parser
+    until a concrete second consumer needs one. This milestone implements no
+    USB HID class, new speeds/hub support or public raw-USB API. A shared general
+    parser now would expand the work beyond the measured mouse requirements.
+12. **Controller/service lifetime.** Recommended: one exclusive process-owned
+    controller grant, explicit service restart and re-grant only after confirmed
+    prior cleanup. Unknown ownership or terminal USB failure stays unavailable
+    with current retention/quarantine limits; no automatic recovery, DMA release
+    or endpoint replacement. Confirmed cleanup is defined below. Automatic
+    service/controller recovery is a separate lifecycle design, not this default.
 
 ## Owner-reported security evidence
 
@@ -84,7 +105,9 @@ integration needs per-source state and availability from any admitted live sourc
 then the same kernel router. These are required extensions to coordinate with
 alpha, not a claim that #545 already implements a producer interface.
 
-## Proposed input-source contract for coordination
+## Input-source contract for coordination
+
+These source semantics are owner-accepted; alpha's agreement is pending.
 
 **Authority/lifetime.** Trusted startup supplies a dedicated producer grant only
 to the Bluetooth service. Acquisition is exclusive and process-owned; handle
@@ -117,7 +140,7 @@ loss, so a late old submission cannot reintroduce a cleared button.
 
 **Continuity.** Starting/reconnecting input uses a fresh kernel epoch. Old-epoch
 submissions are rejected without disturbing a new connection. A current-epoch
-sequence gap ends/reset that epoch; duplicates never apply twice. Source sequence
+sequence gap ends and resets that epoch; duplicates never apply twice. Source sequence
 is distinct from HCI receive sequence and Bluetooth connection generation. A lost
 HID transition requires source reset even if submitted sequence numbers remained
 consecutive. Initial/reconnected held buttons cannot synthesize a fresh press or
@@ -129,24 +152,47 @@ and the same button has a single press until all holders release. Motion/wheel
 from either source follows BSP application order through the common router.
 Disconnect, discontinuity, explicit reset or owner exit clears the affected
 source, invalidates its queued old-epoch work and retains position/other physical
-snapshots. For safety, reset accepted consumer input, cancel drag, clear activation
-and revoke lock according to the accepted device-loss rule; surviving held
-buttons stay suppressed until release/new press. Reset is not a click or permission
-to relock. An idle period without reports is not source loss. If no source remains
-live, input is unavailable and the effective cursor is hidden; saved consumer
-cursor preferences and geometry remain owned by their existing sessions.
+snapshots. Determine whether the lost source held buttons from its physical
+snapshot immediately before clearing, including overlapping holds also present
+on PS/2 and held-but-suppressed buttons; this is not a test for the last aggregate
+holder or consumer-accepted ownership.
 
-This is a proposed semantic contract, not numeric ABI declarations or implemented
-operations. The orchestrator will coordinate it with alpha. No alpha agreement is
-recorded yet, and no alpha branch or ABI file was edited.
+Reset accepted consumer input, cancel drag and clear pending activation only
+when that lost snapshot had held buttons. Revoke lock only when the lost source
+held buttons or no live source remains; revocation clears its activation
+permission under the existing lock rule. Surviving physical snapshots remain
+intact, but after a triggered
+accepted-input reset their held buttons need release/new press. With a zero lost
+snapshot and another live source, preserve accepted input, queued events, drag,
+activation, lock and cursor. An idle period without reports is not source loss.
+Reset is not a click or permission to relock.
+
+No-live-source hiding applies to machines without PS/2. On the ThinkPad, PS/2
+stays live when Bluetooth disconnects; its cursor remains available. If no live
+source exists, input is unavailable and the effective cursor is hidden, while
+consumer cursor preferences and geometry retain their existing session ownership.
+
+This records owner-accepted semantics, not numeric ABI declarations or implemented
+operations. The orchestrator has sent the contract to alpha for per-source
+device-loss handling in pointer task 2. Record alpha's agreement only when relayed;
+none is recorded yet, and no alpha branch or ABI file was edited.
 
 ## Later decisions and gates
 
-HID report scope, USB HID sharing, controller/service cleanup and detailed bond
-durability remain later owner decisions, at most three per round. Recommended
-starting scopes remain primary buttons/relative X-Y/vertical wheel, private
-transport reuse, and explicit terminal failure rather than speculative recovery;
-they are not additional questions in this round.
+The second round presents HID scope, USB HID sharing and controller/service
+lifetime. Detailed bond durability and the firmware asset/qualification gates
+below remain later topics; they are not additional questions in this round.
+
+For decision 12, confirmed cleanup means all outstanding commands, ACL credits
+and pending waits are accounted for, old connection epochs invalidated, and
+that service's input source ended under accepted decision 8 before re-grant.
+Exit or handle closure alone does not prove this. Ordinary service exit does
+not itself mean USB removal or authorize quarantining unrelated storage; if
+cleanup cannot be confirmed, leave the Bluetooth service unavailable rather
+than claim readiness. Existing real USB-failure quarantine remains in force.
+Re-grant cannot imply recycling posted DMA, stream replacement, USB recovery or
+reattachment. Bond authentication failure remains a separate stop for owner
+action, not permission to recover the controller or silently enroll a new peer.
 
 Round two already settles pinned cold assets and qualified warm reuse. Exact
 assets/compatibility criteria remain gated. The
