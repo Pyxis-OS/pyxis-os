@@ -40,8 +40,10 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
  * A submitted process belongs to its task until the BSP reaper receives it
  * after leaving the task stack and private root. Success frees the address
  * space, private allocation records, capability table and process. Owned
- * keyboard and graphics sessions are released first; if VM destruction fails,
+ * keyboard, graphics and audio sessions are released first; if VM destruction fails,
  * the remaining resources stay intact. In-flight presentation may retain only pixel backing.
+ * Audio exit invalidates ownership without allocation; its worker retains queue
+ * storage and an attributed cleanup token, never the retired process.
  * Object references are released for BSP reaping; the owning space survives.
  * Releases any remaining control reference without publishing completion; the task reaper takes that reference first and
  * publishes only after also reclaiming the task stack and metadata. Published

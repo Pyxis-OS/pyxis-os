@@ -2,6 +2,7 @@
 #include <abi/display.h>
 #include <abi/keyboard.h>
 #include <abi/pointer.h>
+#include <abi/audio.h>
 #include <arch/smp.h>
 #include <kernel/format.h>
 #include <kernel/log.h>
@@ -12,6 +13,7 @@
 #include <kernel/object/keyboard.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/audio.h>
 #include <kernel/object/process.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/space.h>
@@ -115,7 +117,7 @@ struct launch_preparation *launcher_batch_create(void)
 }
 
 /* Kernel-added resources for a new space's first process. */
-#define SPACE_DEVICE_RESOURCES 6
+#define SPACE_DEVICE_RESOURCES 7
 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
@@ -123,7 +125,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
     struct process_startup *startup, struct process_binding **owned)
 {
   struct kernel_object *console = &space->console->object;
-  handle_t input, output, keyboard, pointer, display, control;
+  handle_t input, output, keyboard, pointer, display, audio, control;
   handle_t streams[STARTUP_STREAM_COUNT];
   enum capability_result result = capability_install(&child->capabilities, console,
       CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, 0, &input);
@@ -155,6 +157,10 @@ static enum call_status install_space_devices(struct process *child, struct spac
         DISPLAY_RIGHT_DRAW, 0, &display);
   }
   if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, &space->audio->object,
+        AUDIO_RIGHT_PLAYBACK, 0, &audio);
+  }
+  if (result == CAP_OK) {
     struct kernel_object *space_control = space_control_create(space);
     if (!space_control) {
       return CALL_NO_MEMORY;
@@ -181,6 +187,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
   resources[count++] = (struct process_binding){"keyboard", keyboard};
   resources[count++] = (struct process_binding){"pointer", pointer};
   resources[count++] = (struct process_binding){"display", display};
+  resources[count++] = (struct process_binding){"audio", audio};
   resources[count++] = (struct process_binding){"space", control};
   startup->resources = resources;
   startup->resource_count = count;

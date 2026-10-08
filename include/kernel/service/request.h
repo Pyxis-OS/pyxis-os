@@ -9,6 +9,7 @@ enum bsp_service {
   BSP_SERVICE_TERMINAL_CREATE,
   BSP_SERVICE_DISPLAY,
   BSP_SERVICE_POINTER,
+  BSP_SERVICE_AUDIO,
   BSP_SERVICE_CAPABILITY_GROW,
   BSP_SERVICE_NAMESPACE_CREATE,
   BSP_SERVICE_ENDPOINT_CREATE,
@@ -40,7 +41,7 @@ enum bsp_request_state {
  * FREE/PREPARED and completed results after waiting; the BSP owns published
  * requests. DEFERRED belongs to the caller until its scheduler establishes the
  * parked handoff. Queue publication and wait notification synchronize loans.
- * FORWARDED belongs to the HOST, native filesystem, readiness or ACPI worker,
+ * FORWARDED belongs to the HOST, native filesystem, readiness, audio or ACPI worker,
  * or the sole screen presenter until final completion.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {

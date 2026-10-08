@@ -14,6 +14,7 @@ struct console_object;
 struct display_object;
 struct keyboard_object;
 struct pointer_object;
+struct audio_object;
 
 struct space
 {
@@ -24,6 +25,7 @@ struct space
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
   struct pointer_object *pointer; /* Space retains the initial reference. */
+  struct audio_object *audio; /* Space retains the initial reference. */
   bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */

@@ -30,6 +30,7 @@
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/audio.h>
 #include <kernel/pointer.h>
 #include <kernel/pointer_present.h>
 #include <kernel/display_capture.h>
@@ -219,6 +220,10 @@ static struct space *space_alloc(const char *name, const char *title,
   space->pointer = pointer_create(space);
   if (!space->pointer) {
     panic("cannot allocate space pointer");
+  }
+  space->audio = audio_create(space);
+  if (!space->audio) {
+    panic("cannot allocate space audio");
   }
   return space;
 }

@@ -49,6 +49,7 @@ enum object_type {
   OBJECT_POWER = 42,
   OBJECT_LOG = 43,
   OBJECT_SCREEN_CAPTURE = 44,
+  OBJECT_AUDIO = 45,
 };
 
 struct execution_group;

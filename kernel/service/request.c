@@ -13,6 +13,8 @@
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/audio.h>
+#include <kernel/audio.h>
 #include <kernel/object/screen_capture.h>
 #include <kernel/display_capture.h>
 #include <kernel/object/system_info.h>
@@ -31,6 +33,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_AUDIO] = {sizeof(struct audio_request), alignof(struct audio_request),
+      offsetof(struct audio_request, request)},
   [BSP_SERVICE_SCREEN_CAPTURE] = {sizeof(struct screen_capture_request), alignof(struct screen_capture_request),
       offsetof(struct screen_capture_request, request)},
   [BSP_SERVICE_POWER] = {sizeof(struct acpi_power_request), alignof(struct acpi_power_request),
@@ -246,6 +250,10 @@ static void service_request(struct bsp_request *request)
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
     screen_capture_submit((struct screen_capture_request *)request);
+    return;
+  case BSP_SERVICE_AUDIO:
+    object_cleanup_leave(previous);
+    audio_request_forward((struct audio_request *)request);
     return;
   case BSP_SERVICE_READINESS:
     object_cleanup_leave(previous);
