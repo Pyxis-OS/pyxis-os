@@ -57,7 +57,7 @@ Widgets and decorations are a separate fourth job.
    kernel facility for it first, a bounded task an agent can take.
 
 A compositor runs as the graphical program on a space's `+`
-[layer](space-layers.md).
+[layer](../userland/space-layers.md).
 
 ## Rendering and ports
 
