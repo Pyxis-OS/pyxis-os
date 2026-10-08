@@ -4,10 +4,13 @@ Status: **accepted, 2026-10-04.** The owner chose the frame format, the
 confirmation policy and the scope [below](#owner-decisions). Any decision can be
 revised later by the owner. Each task starts only when the owner says so.
 
-**Streaming transfers: accepted, 2026-10-08,** assigned to Claude. See
-[streaming transfers](#streaming-transfers). The owner accepted its three
-defaults; the implementation is in review, with its
-[validation](#streaming-validation-2026-10-08) below.
+**Streaming transfers: implemented, 2026-10-08** (Pyxis #551, userland #165).
+See [streaming transfers](#streaming-transfers) and its
+[validation](#streaming-validation-2026-10-08).
+
+**Transfer throughput: measured, 2026-10-08,** assigned to Claude. The first
+fix is in review; see [transfer throughput](#transfer-throughput). Further
+changes wait for the owner's native re-timing.
 
 ## Goal
 
@@ -453,6 +456,93 @@ is fastfetch's allocator figure.
   code; producing it needs a sender that lies about its data. Writing to an
   npfs pool was not exercised in QEMU; the owner's transfer to the stick is
   that check.
+
+## Transfer throughput
+
+Assigned 2026-10-08, downloads first. Natively a 15 MiB `xfer send` took about
+45 s, about 5.9 ms per 2 KiB chunk, while `xfer receive` took about 6 s, about
+0.8 ms per chunk.
+
+### Throughput decisions
+
+Accepted by the owner 2026-10-08:
+
+1. Fix the reply reads below, with no framing change.
+2. Leave the TCP path alone until the owner re-times 15 MiB natively with that
+   fix.
+3. Keep one chunk in flight for now.
+
+### Measurement (2026-10-08)
+
+QEMU 10.2.2, nested KVM, 4 CPUs, `VIRTIO_NET=1`, forwarded port, sources in
+`tmp://` unless stated. Packets were captured at the guest NIC with QEMU's
+`filter-dump` and on the host loopback with `tcpdump`. Local `xfer` and server
+builds carried temporary timing probes, since removed. Medians per chunk:
+
+| Stage | Time |
+| --- | --- |
+| Host turnaround, guest data out → PROGRESS in, at the guest NIC | 0.39–0.44 ms |
+| `xfer` source read, hash, encode and frame write | 0.05–0.07 ms |
+| `xfer` reading one PROGRESS reply, 65–66 one-byte console reads | 5.1 ms |
+| Guest network path: server TCP calls, segments and wake-ups | about 6.5–7 ms |
+
+The hypotheses came out as follows:
+
+- **A round trip per chunk.** Present in both directions by design; the host's
+  share is under half a millisecond.
+- **Nagle and delayed ACKs.** Not seen: no 40 ms or longer gaps, and each
+  chunk's six segments leave back to back, about 0.22 ms apart.
+- **Console output flushing or yielding per write.** Not significant: writing
+  a 2.8 KB frame takes about 50 µs.
+- **Host work per output chunk.** Not significant: about 0.4 ms including
+  `pyxis-remote`'s per-byte parsing.
+- **Found instead:** `xfer send` read each reply one byte at a time. Receiving
+  already read in blocks. Each console read costs about 77 µs even with the
+  bytes queued; why was not traced. The owner's native gap,
+  (5.86 − 0.78 ms) / 66, works out to the same 77 µs, which suggests this is
+  nearly all of the native stall. That is an inference until re-timed.
+
+### Reply-read fix
+
+`xfer send` now reads PROGRESS replies in blocks during the data phase and
+returns to exact reads before `finish`, as receiving does (userland `{u}`).
+Matched 15 MiB downloads in QEMU on the same day, with other agents loading the
+host (load average about 1.7):
+
+| Build | Times |
+| --- | --- |
+| Before, userland `a5a48b4` | 90.6, 97.8, 91.7 s |
+| After, userland `{u}` | 52.6, 52.2, 56.9 s |
+
+All downloads matched the source's SHA-256. A cancelled download left no
+staging file, a command typed after a download ran normally, and a 1 MiB
+upload still matched.
+
+### Remaining guest network cost
+
+With the fix, a chunk takes about 6.5–7 ms in QEMU. The remote-terminal server
+spends most of it in TCP calls, each handed to the BSP network worker:
+
+| Server step per chunk | Calls | Time |
+| --- | --- | --- |
+| `tcp_try_read` | 4.2 | 2.2 ms |
+| `tcp_try_write` of the 2.8 KB frame | 1.0 | 1.8 ms |
+| Blocked in `wait_many` | 1.45 | 1.9 ms |
+| `xfer`'s turn, reply injected → next frame drained | – | 1.2 ms |
+
+Uploads pay the same costs and take 0.8 ms per chunk natively, so these are
+likely much smaller on the ThinkPad. Candidates if the native re-timing still
+falls short, neither changed yet:
+
+- **Server reads.** Only the header and payload reads per INPUT frame carry
+  data; the others return WOULD_BLOCK after readiness, each costing a worker
+  handoff.
+- **Segment size.** lwIP's `TCP_MSS` is 536 in
+  `kernel/net/lwip/include/lwipopts.h`, so each 2.8 KB frame leaves as six
+  segments. That likely limits TCP throughput generally, not only transfers.
+
+Several chunks in flight would change the framing and, for uploads, the guest's
+4 KiB typeahead allowance; that would come back to the owner as a decision.
 
 ## Out of scope
 
