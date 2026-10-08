@@ -1,9 +1,9 @@
 # SDL2 with a native backend
 
-Status: **task 2 delivered for review, 2026-10-08; assigned to Claude.** Task 1
-merged in [PR #522](https://git.internal/PyxisOS/pyxis-os/pulls/522). The owner
-accepted its three [decisions](#accepted-decisions), then two more after its
-review. Later tasks start one at a time.
+Status: **task 3 delivered for review, 2026-10-08; assigned to Claude.** Tasks
+1 and 2 are merged ([#522](https://git.internal/PyxisOS/pyxis-os/pulls/522),
+[#525](https://git.internal/PyxisOS/pyxis-os/pulls/525)). The owner accepted
+five [decisions](#accepted-decisions). Later tasks start one at a time.
 
 ## Goal and completion
 
@@ -225,6 +225,66 @@ Delivered in task 2: the standard functions the probe stood in for.
 The [libc reference](../kernel/userspace.md#foundational-libc) and
 [stdio](../userland/stdio.md) describe them.
 
+## Task 3: the SDL2 port
+
+The [recipe README](../../ports/sdl2/README.md) describes the port as built.
+Choices made while implementing, beyond the planned scope:
+
+- **Sessions.** The window owns the input sessions. Creating it acquires the
+  keyboard and pointer; destroying it releases them and the display. The
+  display grant, keyboard grant and clock grant are all required.
+- **Event pump.** One `wait_many` poll covers display geometry and keyboard
+  readiness; the pointer, which cannot be waited on, is polled.
+- **Headers.** The staged include tree replaces upstream's platform-dispatching
+  `SDL_config.h` with the port's, so consumers and the library agree.
+- **Build flags.** Upstream sources build with upstream's own `-Wall
+  -fno-strict-aliasing` and the compiler's default C standard; one upstream
+  warning remains (an unused XInput mapping). The backend uses the SDK's C23
+  flags and builds without warnings. SDL's dummy video driver is not built.
+- **One key layout.** The US table moved from `kernel/keyboard_text.c` to
+  `lib/key_layout.c`. The kernel compiles it, and the SDK exports it as
+  `share/pyxis/key_layout.c` for libpyxis, like the shebang parser.
+
+Validation in QEMU 10.2.2 with the AHCI fix, KVM in Claude's Fedora VM (nested),
+4 CPUs. A throwaway check program, not committed, drew a 640x480 streaming
+texture at logical size every frame, with `SDL_Delay(1)` between frames:
+
+| Display | Window | Mean render and present |
+| --- | --- | --- |
+| Standard VGA, 1280x800 | 1280x768 | 959, 984, 1485, 1065 and 982 µs (five runs) |
+| Bochs, `DISPLAY_SIZE=800x600` | 800x568 | 593 µs |
+| VirtIO GPU, resized while running | 1280x768 → 1024x608 → 1440x868 → 800x468 | 741 µs over the run |
+| VirtIO GPU at 800x468 | 800x468 | 384 µs |
+
+The VirtIO resizes came from QEMU's D-Bus display (`SetUIInfo` on a private
+session bus), since this host has no GTK display.
+
+Checked as working:
+
+- **Initialization:**
+  - `SDL_INIT_TIMER` fails with "SDL not built with thread support";
+  - video with joysticks and game controllers starts, with zero joysticks;
+  - `SDL_GetBasePath` is unsupported;
+  - `SDL_GetPrefPath` creates `home://sdlcheck/`, and a file written there
+    reads back.
+- **Windows and resizing:**
+  - a second window is refused;
+  - each resize reaches the program as a size change, and the software
+    renderer letterboxes again.
+- **Input:**
+  - keys and text, including Shift, Caps Lock and Shift+Caps;
+  - Ctrl suppresses text;
+  - the wheel follows SDL's sign;
+  - clicks land at the expected logical coordinates;
+  - relative mode toggles;
+  - Super+Down and Super+Up give focus lost and focus gained.
+- **The real consumer.** The probe's DevilutionX build, relinked against this
+  library, played at 398 FPS at 1280x768. After a resize to 1024x640 it re-laid
+  out for its 1024x608 window and ran at 538 FPS.
+
+Not covered: key repeat, because QEMU's injected PS/2 input has no typematic
+repeat, and native hardware.
+
 ## Accepted decisions
 
 Accepted by the owner on 2026-10-08, as proposed in task 1.
@@ -292,7 +352,9 @@ Accepted by the owner on 2026-10-08, as the separately agreed extension that
 1. [x] Probe and proposal: this document. Documentation only.
 2. [x] **libc additions**: [userland #161](https://git.internal/PyxisOS/pyxis-userland/pulls/161)
    and its Pyxis gitlink PR.
-3. [ ] **SDL2 port** (ports), with the Pyxis integration that builds it into
+3. [x] **SDL2 port**: [ports #60](https://git.internal/PyxisOS/pyxis-ports/pulls/60),
+   [userland #163](https://git.internal/PyxisOS/pyxis-userland/pulls/163) and their
+   Pyxis PR, with the integration that builds it into
    `build/ports-dev/sdl2`:
    - the backend, patches and configuration;
    - the shared US key layout (Pyxis and userland);

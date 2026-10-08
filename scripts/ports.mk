@@ -94,6 +94,13 @@ FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.cmake \
 FMT_OUTPUTS := $(addprefix build/ports/fmt/stage/,dev/lib/libfmt.a \
   dev/include/fmt/format.h dev/share/licenses/fmt/LICENSE dev/share/fmt/source.txt)
 
+SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/SDL_config.h \
+                         ports/sdl2/PORT-NOTICE ports/sdl2/pyxis/* ports/sdl2/patches/*.patch) \
+               ports/ports.lua ports/build.lua
+SDL2_OUTPUTS := $(addprefix build/ports/sdl2/stage/,dev/lib/libSDL2.a \
+  dev/include/SDL2/SDL.h dev/include/SDL2/SDL_config.h dev/share/licenses/sdl2/LICENSE.txt \
+  dev/share/licenses/sdl2/PORT-NOTICE dev/share/sdl2/source.txt)
+
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
                            ports/mbedtls/*.cmake ports/mbedtls/Makefile \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
@@ -106,7 +113,7 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
   share/licenses/mbedtls/PORT-NOTICE)
 
 .PHONY: all
-all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) \
+all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
      $(BUSYBOX_IMAGE) $(BUSYBOX_LICENSE) $(LINKS_IMAGE) $(LINKS_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
@@ -196,6 +203,10 @@ $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/port
 $(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/fmt
 	$(LUA) ports/build.lua fmt --sdk $(abspath build/sdk) --work $(abspath build/ports/fmt)
+
+$(SDL2_OUTPUTS) &: $(SDL2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/sdl2
+	$(LUA) ports/build.lua sdl2 --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl2)
 
 $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mbedtls

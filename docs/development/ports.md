@@ -140,6 +140,26 @@ base and guest SDK. `format.h`, `ranges.h`, `color.h`, `compile.h` and
 `os.h` fail to compile. No program in the image uses fmt yet, so nothing from
 it enters the boot tree.
 
+## SDL2 development library
+
+The [SDL2 recipe](../../ports/sdl2/README.md) builds SDL 2.32.10 from the
+owner's `mirrors/SDL` mirror as a static library with a native backend:
+
+- video: one fullscreen window over the display session, with resize;
+- input: keyboard and pointer;
+- the clock;
+- paths: `SDL_GetPrefPath` gives `home://APP/`.
+
+SDL draws into its own surface and presents by copying updated rectangles into
+the display mapping. Text input uses the SDK's shared US layout. Threads, audio
+devices and the other facilities Pyxis lacks are left out and report
+themselves as unsupported. The [SDL2 milestone](../wip/sdl2.md) has the
+decisions and measurements.
+
+`build/ports-dev/sdl2` contains `libSDL2.a` and the `SDL2` headers with the
+port's `SDL_config.h`, outside the base and guest SDK. No program in the
+image uses SDL2 yet, so nothing from it enters the boot tree.
+
 ## TLS development libraries
 
 The [Mbed TLS recipe](../../ports/mbedtls/README.md) verifies the official 4.1.1
