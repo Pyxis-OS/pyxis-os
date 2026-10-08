@@ -16,7 +16,7 @@ runs have no debugger, packet capture or simultaneous build.
 
 ```sh
 make -j16 PYTHON=build/hpet-config-venv/bin/python3 \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- image
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- image
 QEMU_DISPLAY=none MEMORY=2G CPUS=4 ACCEL=kvm VIRTIO_NET=1 \
   TCP_FORWARD=2323:2323 OVMF_CODE=/usr/share/edk2/ovmf/OVMF_CODE.fd \
   OVMF_VARS=/usr/share/edk2/ovmf/OVMF_VARS.fd scripts/run-qemu.sh run

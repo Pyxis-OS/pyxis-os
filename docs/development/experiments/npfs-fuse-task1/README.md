@@ -28,9 +28,9 @@ The ordinary packaged installed init mounted the selected disk's partition 2
 read-write as `system://`; no new init program or boot harness was introduced:
 
 ```sh
-PATH=/home/chronium/src/pyxis-native-writer-build/host-tools/bin:$PATH \
+PATH=$HOME/src/pyxis-native-writer-build/host-tools/bin:$PATH \
 make -j16 image fs-tools \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3
 # Image assembly selected the existing packaged installed init:
 make -j16 image SPACES=pyxis=boot://init-installed \
@@ -158,7 +158,7 @@ requires an unchanged source and checks local namespace records, not global
 allocation ownership; whole-pool checking remains fsck's job.
 
 Inputs, ISO, digests, copied file and build logs are retained outside Git under
-`/home/chronium/src/pyxis-npfs-fuse-validation/task1/`. All own QEMU/FUSE processes
+`~/src/pyxis-npfs-fuse-validation/task1/`. All own QEMU/FUSE processes
 were stopped and the read-only loop device detached. The owner subsequently
 confirmed physical stick mount/copy on Arch Linux. The rebuilt builder was
 published and its

@@ -21,7 +21,7 @@ fresh SDK/application source build at `7955f59`.
 
 ```sh
 make -j16 image usb-image PREBUILT="sdk userspace ports" \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3 BOOT_MENU_TIMEOUT=5
 ```
 

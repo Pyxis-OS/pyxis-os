@@ -67,7 +67,7 @@ request counts, not latency or physical-device performance measurements.
 
 ## USB installation and target-only boot
 
-The USB-only target was `/home/chronium/tmp/usb-c3/usb-install.raw`, initially a
+The USB-only target was `~/tmp/usb-c3/usb-install.raw`, initially a
 blank sparse 2 GiB file. With live `33a0aee` media, Install / Read the room listed
 it as the sole eligible observed target. The default journal was 12 MiB for
 this chosen capacity. After typed `wipe`, the installer wrote the fresh ESP and

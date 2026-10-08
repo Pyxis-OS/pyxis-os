@@ -39,7 +39,7 @@ configured separately. A ROM override was not needed in the observed boots.
 
 ## Host setup
 
-Run these once. Replace `chronium` if the username differs. The examples assume
+Run these once, as your own user: the commands use `$USER`. The examples assume
 group 15; re-check after BIOS or kernel updates, because IOMMU group numbers can
 change.
 
@@ -66,11 +66,11 @@ world-accessible; the group node `/dev/vfio/15` is root-only by default. A udev
 rule changes its owner:
 
 ```sh
-echo 'SUBSYSTEM=="vfio", KERNEL=="15", OWNER="chronium", MODE="0600"' \
+printf 'SUBSYSTEM=="vfio", KERNEL=="15", OWNER="%s", MODE="0600"\n' "$USER" \
   | sudo tee /etc/udev/rules.d/90-pyxis-vfio.rules
 sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=vfio
-ls -l /dev/vfio/15                             # owner should be chronium
+ls -l /dev/vfio/15                             # owner should be your user
 ```
 
 **Raise the memory-lock limit for your user.** VFIO pins all guest RAM, so the
@@ -79,7 +79,7 @@ read `limits.d`, while terminals started from a graphical KDE or GNOME session
 inherit the limit from the systemd user manager.
 
 ```sh
-printf '%s\n' 'chronium soft memlock unlimited' 'chronium hard memlock unlimited' \
+printf '%s soft memlock unlimited\n%s hard memlock unlimited\n' "$USER" "$USER" \
   | sudo tee /etc/security/limits.d/90-pyxis-vfio.conf
 sudo mkdir -p /etc/systemd/system/user@.service.d
 printf '%s\n' '[Service]' 'LimitMEMLOCK=infinity' \

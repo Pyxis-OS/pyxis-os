@@ -25,9 +25,9 @@ USB raw authority, actual power loss or uncertain I/O failures.
 Ordinary full source builds passed, including the two recovery-reader follow-ups:
 
 ```sh
-PATH=/home/chronium/src/pyxis-native-writer-build/host-tools/bin:$PATH \
+PATH=$HOME/src/pyxis-native-writer-build/host-tools/bin:$PATH \
 make -j16 image fs-tools \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3 BOOT_MENU_TIMEOUT=60
 ```
 
@@ -167,5 +167,5 @@ installer raw-disk authority remains VirtIO-only and needs separate integration.
 
 Raw fixtures, ISO/ELF builds, build logs, byte-comparison inputs and counter notes
 are retained outside Git at
-`/home/chronium/src/pyxis-system-updates-esp-build/system-updates-task2/`.
+`~/src/pyxis-system-updates-esp-build/system-updates-task2/`.
 All qualification QEMU and debugger jobs were stopped.

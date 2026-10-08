@@ -36,11 +36,11 @@ No dependency or compiler-container change was needed.
 Both builds used the existing host CMake environment and these overrides:
 
 ```sh
-PATH=/home/chronium/src/pyxis-native-writer-build/host-tools/bin:$PATH \
+PATH=$HOME/src/pyxis-native-writer-build/host-tools/bin:$PATH \
 make -j16 image PREBUILT="sdk userspace ports" \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3 \
-  INIT=/home/chronium/src/pyxis-npfs-performance-build/npfs-performance/init-native.sh \
+  INIT=$HOME/src/pyxis-npfs-performance-build/npfs-performance/init-native.sh \
   INIT_PRIMARY=app://init-idle INIT_CPUS=3=app://init \
   MOUNT_DISK=12345678-1234-4567-89ab-0123456789ab
 ```
@@ -63,7 +63,7 @@ substituted `baseline` for `metadata`):
   -object rng-random,id=rng0,filename=/dev/urandom \
   -device virtio-rng-pci,rng=rng0,disable-legacy=on \
   -display none \
-  -serial file:/home/chronium/src/pyxis-npfs-performance-build/npfs-performance/metadata-serial.txt \
+  -serial file:$HOME/src/pyxis-npfs-performance-build/npfs-performance/metadata-serial.txt \
   -monitor stdio -gdb tcp:127.0.0.1:12389
 ```
 

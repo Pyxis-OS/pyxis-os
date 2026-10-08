@@ -11,7 +11,7 @@ Git; these are measured and owner-reported results, with their limits.
 
 Baseline `b8a5255` and implementation `630f86a`, both pinning userspace `08e3c4b`,
 were built with GCC 16.2 and `make -j16 image`, using
-`CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-` and
+`CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis-` and
 `PYTHON=build/hpet-config-venv/bin/python3`. Both include the merged installer and
 selector dependency changes. Subsequent validation-note edits do not change code.
 Builds passed; existing vendor port warnings remain. No compiler rebuild,
@@ -85,7 +85,7 @@ at `192.168.0.51`; these results do not measure the port's 1 Gbps ceiling.
 
 ```sh
 make -j16 image PYTHON=build/hpet-config-venv/bin/python3 \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   NETWORK_CONFIG=/tmp/pyxis-thinkpad-network.lua
 ```
 

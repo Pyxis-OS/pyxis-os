@@ -20,7 +20,7 @@ The guest used QEMU 10.2.2 from `/tmp/pyxis-qemu-ahci-fix/build`, q35, KVM,
 `/usr/share/OVMF/OVMF_CODE.fd` and a private copy of `OVMF_VARS.fd`. This is an
 agent-environment KVM measurement, not an owner-host or native ThinkPad result.
 The ISO was the changed build's `build/pyxis.iso`; USB backing files were
-read-only disposable raw files under `/home/chronium/tmp`.
+read-only disposable raw files under `~/tmp`.
 
 Common QEMU arguments:
 
@@ -28,9 +28,9 @@ Common QEMU arguments:
 -machine q35 -accel kvm -cpu max \
 -smp cpus=4,sockets=1,cores=4,threads=1 -m 8G -rtc base=utc \
 -drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
--drive if=pflash,format=raw,unit=1,file=/home/chronium/tmp/usb-bot-final-vars.fd \
+-drive if=pflash,format=raw,unit=1,file=$HOME/tmp/usb-bot-final-vars.fd \
 -cdrom build/pyxis.iso -boot d -display none \
--serial file:/home/chronium/tmp/usb-bot-final-serial.log -monitor stdio \
+-serial file:$HOME/tmp/usb-bot-final-serial.log -monitor stdio \
 -gdb tcp:127.0.0.1:12876 -no-reboot -no-shutdown \
 -netdev user,id=net,hostfwd=tcp:127.0.0.1:24567-10.0.2.15:2323 \
 -device virtio-net-pci,netdev=net,disable-legacy=on \
@@ -46,12 +46,12 @@ The pre-change baseline and final build used identical devices:
 -device qemu-xhci,id=usb,p2=2,p3=2 \
 -device usb-hub,bus=usb.0,port=1,ports=4 \
 -device usb-kbd,bus=usb.0,port=1.3 \
--drive if=none,id=disk_a,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-a.raw \
+-drive if=none,id=disk_a,format=raw,readonly=on,file=$HOME/tmp/usb-bot-disk-a.raw \
 -device usb-storage,bus=usb.0,port=2,drive=disk_a \
--drive if=none,id=disk_b,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-b.raw \
+-drive if=none,id=disk_b,format=raw,readonly=on,file=$HOME/tmp/usb-bot-disk-b.raw \
 -device usb-storage,bus=usb.0,port=1.2,drive=disk_b \
 -device qemu-xhci,id=usb_second,p2=1,p3=1 \
--drive if=none,id=disk_c,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-c.raw \
+-drive if=none,id=disk_c,format=raw,readonly=on,file=$HOME/tmp/usb-bot-disk-c.raw \
 -device usb-storage,bus=usb_second.0,port=1,drive=disk_c
 ```
 
@@ -152,7 +152,7 @@ controller arguments were identical:
 -device usb-kbd,bus=usb.0,port=1.3 \
 -drive if=none,id=usb_disk,format=raw,readonly=on,file=build/pyxis-usb.img \
 -device usb-storage,bus=usb.0,port=1.2,drive=usb_disk \
--drive if=none,id=virtio_disk,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-a.raw \
+-drive if=none,id=virtio_disk,format=raw,readonly=on,file=$HOME/tmp/usb-bot-disk-a.raw \
 -device virtio-blk-pci,drive=virtio_disk,disable-legacy=on \
 -device ich9-usb-ehci1,id=ehci
 ```
@@ -282,7 +282,7 @@ common QEMU arguments above, and these identical attachments:
 -device usb-kbd,bus=usb.0,port=1.3 \
 -drive if=none,id=usb_disk,format=raw,readonly=on,file=build/pyxis-usb.img \
 -device usb-storage,bus=usb.0,port=1.2,drive=usb_disk \
--drive if=none,id=virtio_disk,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-a.raw \
+-drive if=none,id=virtio_disk,format=raw,readonly=on,file=$HOME/tmp/usb-bot-disk-a.raw \
 -device virtio-blk-pci,drive=virtio_disk,disable-legacy=on \
 -device ich9-usb-ehci1,id=ehci
 ```
@@ -329,7 +329,7 @@ session app://session.pxe --configure-network --start-remote-services
 The ISO build selected that script without rebuilding the USB image:
 
 ```sh
-make -j16 image INIT=/home/chronium/tmp/init-usb-readonly.sh INIT_CPUS= \
+make -j16 image INIT=$HOME/tmp/init-usb-readonly.sh INIT_CPUS= \
   MOUNT_DISK=254ca48f-2cf8-4e45-a844-ca22c685d8ab
 ```
 
@@ -432,7 +432,7 @@ All runs used the preceding QEMU 10.2.2 q35/KVM configuration: `-cpu max`, four
 vCPUs, 8 GiB RAM, matching OVMF code and fresh private vars, ISO boot, virtio-net
 with the existing remote client and virtio-rng. These are nested/agent-environment
 results, not native ThinkPad measurements. Serial logs, remote command results
-and GDB observations were captured manually under `/home/chronium/tmp`.
+and GDB observations were captured manually under `~/tmp`.
 No tests, self-tests, fault injection or boot/output automation were added.
 
 ### Matched read-only baseline
@@ -595,7 +595,7 @@ full source build, with no kernel warnings. The existing cross compiler was
 used; no compiler container, public ABI, dependency pin or build workflow changed.
 
 The initial disk was a sparse private copy of the original sample image,
-`/home/chronium/tmp/usb-c2-development.raw`. Its observed GUID was
+`~/tmp/usb-c2-development.raw`. Its observed GUID was
 `254ca48f-2cf8-4e45-a844-ca22c685d8ab`, capacity 1048576 blocks of 512 bytes.
 Entry 2 began at 264192 with 782336 blocks and contained volume `usb-test`.
 This is a chosen fixture, not an image-size or topology contract. Trusted init
@@ -619,7 +619,7 @@ The fresh processes used `qemu-xhci,p2=1,p3=1` and direct root attachment at bus
 port 1, with EHCI retained. Writable disk attachments used `cache=writeback`;
 the final media-protected process used `readonly=on` instead. Serial logs,
 remote terminal events and debugger observations were captured manually under
-`/home/chronium/tmp`; no tests, fault injection or boot/output automation were added.
+`~/tmp`; no tests, fault injection or boot/output automation were added.
 
 ### Editor, compiler and checkpoint
 

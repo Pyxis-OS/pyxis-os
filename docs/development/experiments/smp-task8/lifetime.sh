@@ -16,8 +16,8 @@ python3 ctrlc.py "cat app://share/iobench.bin | allocbench heap --rounds 1000000
 python3 ctrlc.py "allocbench heap --rounds 1000000" 0.5 2>&1 | head -1
 echo "### session exit with background jobs"
 python3 - <<'PY'
-import json, subprocess, time
-c = ["/home/chronium/src/pyxis-smp/build/tools/pyxis-remote", "--machine", "--no-shell-echo", "127.0.0.1", "23411"]
+import json, os, subprocess, time
+c = [os.path.expanduser("~/src/pyxis-smp/build/tools/pyxis-remote"), "--machine", "--no-shell-echo", "127.0.0.1", "23411"]
 p = subprocess.Popen(c, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 assert json.loads(p.stdout.readline())["type"] == "ready"
 for i in range(4):
