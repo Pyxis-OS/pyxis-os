@@ -123,7 +123,7 @@ static struct {
   struct usb_host_device *device;
   uint8_t interface_number;
   unsigned attachments;
-  bool sealed, complete, terminal, dirty, cleanup;
+  bool sealed, complete, terminal, dirty, cleanup, progress_active;
   enum call_status failure;
   enum hci_initialization initialization;
   struct process *owner;
@@ -138,6 +138,7 @@ static struct {
   uint8_t seen_handles[(HCI_HANDLE_MAX + 1 + 7) / 8];
   struct hci_record received[HCI_RECEIVE_CAPACITY];
   size_t receive_head, receive_count;
+  size_t request_count;
   struct hci_stream event_stream, acl_stream;
   uint8_t chunk[BLUETOOTH_HCI_ACL_MAX];
   struct bluetooth_hci_request *head, *tail, *reader;
@@ -182,6 +183,8 @@ static void fail_adapter(enum call_status result)
     struct bluetooth_hci_request *request = adapter.head;
     adapter.head = (void *)request->request.next;
     request->request.next = NULL;
+    KASSERT(adapter.request_count);
+    --adapter.request_count;
     if (!adapter.head) {
       adapter.tail = NULL;
     }
@@ -197,6 +200,12 @@ static struct hci_connection *find_connection(uint16_t handle)
     }
   }
   return NULL;
+}
+
+static bool handle_seen(uint16_t handle)
+{
+  return handle <= HCI_HANDLE_MAX &&
+      (adapter.seen_handles[handle / 8] & (1u << (handle % 8)));
 }
 
 static bool work_accounted(void)
@@ -480,6 +489,10 @@ void bluetooth_hci_request_forward(struct bluetooth_hci_request *request)
     complete_request(request, adapter.terminal ? adapter.failure : CALL_UNAVAILABLE);
     return;
   }
+  if (adapter.request_count == HCI_REQUEST_CAPACITY) {
+    complete_request(request, CALL_QUEUE_FULL);
+    return;
+  }
   KASSERT(!request->request.next);
   if (adapter.tail) {
     adapter.tail->request.next = &request->request;
@@ -487,6 +500,7 @@ void bluetooth_hci_request_forward(struct bluetooth_hci_request *request)
     adapter.head = request;
   }
   adapter.tail = request;
+  ++adapter.request_count;
   usb_host_notify(adapter.host);
 }
 
@@ -504,6 +518,24 @@ void bluetooth_hci_process_exit(struct process *process)
       usb_host_notify(adapter.host);
     }
   }
+}
+
+static size_t service_requests(size_t budget)
+{
+  size_t serviced = 0;
+  while (serviced < budget && adapter.head) {
+    struct bluetooth_hci_request *request = adapter.head;
+    adapter.head = (void *)request->request.next;
+    request->request.next = NULL;
+    KASSERT(adapter.request_count);
+    --adapter.request_count;
+    if (!adapter.head) {
+      adapter.tail = NULL;
+    }
+    ++serviced;
+    execute_request(request);
+  }
+  return serviced;
 }
 
 static bool initialization_reply(const uint8_t *reply, size_t length)
@@ -725,9 +757,9 @@ static bool connection_event(const uint8_t *wire, size_t length, uint64_t *gener
       adapter.generation_counter == UINT64_MAX) {
     return false;
   }
-  /* Independent event and ACL endpoints cannot establish a reuse drain
-   * boundary. Keep the pending task-2 fail-closed proposal explicit here. */
-  if (adapter.seen_handles[handle / 8] & (1u << (handle % 8))) {
+  /* Independent endpoints have no qualified reuse drain boundary. Task 2
+   * fails closed on handle reuse; connection/reconnect must establish it. */
+  if (handle_seen(handle)) {
     return false;
   }
   for (size_t i = 0; i < HCI_CONNECTION_CAPACITY; ++i) {
@@ -872,9 +904,19 @@ static void receive_acl(const uint8_t *wire, size_t length, uint64_t generation)
 {
   uint16_t flags = read16(wire);
   unsigned boundary = (flags >> HCI_ACL_PB_SHIFT) & 3;
-  struct hci_connection *connection = find_connection(flags & HCI_HANDLE_MASK);
-  if (!connection || connection->generation != generation || (flags & HCI_ACL_BC_MASK) ||
+  uint16_t handle = flags & HCI_HANDLE_MASK;
+  if ((flags & HCI_ACL_BC_MASK) ||
       (boundary != HCI_ACL_START_RX && boundary != HCI_ACL_CONTINUE)) {
+    fail_adapter(CALL_INPUT_LOST);
+    return;
+  }
+  struct hci_connection *connection = find_connection(handle);
+  if (!connection && handle_seen(handle)) {
+    /* Interrupt and bulk endpoints have independent completion order. A
+     * valid old-link packet can arrive after its Disconnect notification. */
+    return;
+  }
+  if (!connection || connection->generation != generation) {
     fail_adapter(CALL_INPUT_LOST);
     return;
   }
@@ -910,12 +952,13 @@ static void consume_chunk(struct hci_stream *stream, bool acl,
         return;
       }
       if (acl) {
-        struct hci_connection *connection = find_connection(read16(stream->wire) & HCI_HANDLE_MASK);
-        if (!connection) {
+        uint16_t handle = read16(stream->wire) & HCI_HANDLE_MASK;
+        struct hci_connection *connection = find_connection(handle);
+        if (!connection && !handle_seen(handle)) {
           fail_adapter(CALL_INPUT_LOST);
           return;
         }
-        stream->generation = connection->generation;
+        stream->generation = connection ? connection->generation : 0;
       }
     }
     if (stream->expected && stream->used == stream->expected) {
@@ -1031,17 +1074,8 @@ static void collect_usb_acl(void)
   }
 }
 
-void bluetooth_hci_receive_progress(struct usb_host_controller *host)
+static void collect_receives(void)
 {
-  KASSERT(arch_cpu_index() == 0);
-  uint64_t flags = cpu_save_interrupts();
-  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  if (host != adapter.host || !adapter.device) {
-    cpu_restore_interrupts(flags);
-    return;
-  }
-  check_deadlines();
-  cpu_restore_interrupts(flags);
   collect_usb_commands();
   collect_usb_acl();
   for (unsigned stream_index = 0; stream_index < 2; ++stream_index) {
@@ -1053,7 +1087,7 @@ void bluetooth_hci_receive_progress(struct usb_host_controller *host)
       if (result == USB_BUSY) {
         break;
       }
-      flags = cpu_save_interrupts();
+      uint64_t flags = cpu_save_interrupts();
       if (result != USB_OK || completion.bytes > sizeof(adapter.chunk)) {
         fail_adapter(usb_failure(result, false));
         cpu_restore_interrupts(flags);
@@ -1064,10 +1098,6 @@ void bluetooth_hci_receive_progress(struct usb_host_controller *host)
       cpu_restore_interrupts(flags);
     }
   }
-  flags = cpu_save_interrupts();
-  check_deadlines();
-  check_receive_deadline();
-  cpu_restore_interrupts(flags);
 }
 
 static void prepare_initialization(void)
@@ -1169,7 +1199,7 @@ static void prepare_initialization(void)
 static void publish_command(void)
 {
   uint64_t flags = cpu_save_interrupts();
-  if (adapter.terminal || !adapter.command_credits) {
+  if (adapter.terminal || adapter.cleanup || !adapter.command_credits) {
     cpu_restore_interrupts(flags);
     return;
   }
@@ -1213,7 +1243,7 @@ static void publish_command(void)
 static void publish_acl(void)
 {
   uint64_t flags = cpu_save_interrupts();
-  if (adapter.terminal || !adapter.acl_credits) {
+  if (adapter.terminal || adapter.cleanup || !adapter.acl_credits) {
     cpu_restore_interrupts(flags);
     return;
   }
@@ -1256,36 +1286,51 @@ static void publish_acl(void)
   cpu_restore_interrupts(flags);
 }
 
-void bluetooth_hci_progress(struct usb_host_controller *host)
+static void work_tick(struct usb_host_controller *host)
 {
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  if (host != adapter.host || !adapter.device) {
+  if (host != adapter.host || !adapter.device || adapter.progress_active) {
     cpu_restore_interrupts(flags);
     return;
   }
+  adapter.progress_active = true;
+  if (adapter.cleanup) {
+    adapter.cleanup = false;
+    end_session();
+  }
+  check_deadlines();
+  size_t serviced = service_requests(HCI_REQUEST_CAPACITY);
   cpu_restore_interrupts(flags);
-  bluetooth_hci_receive_progress(host);
+  collect_receives();
   flags = cpu_save_interrupts();
   if (adapter.cleanup) {
     adapter.cleanup = false;
     end_session();
   }
-  for (unsigned i = 0; i < HCI_RECEIVE_PROGRESS_BUDGET && adapter.head; ++i) {
-    struct bluetooth_hci_request *request = adapter.head;
-    adapter.head = (void *)request->request.next;
-    request->request.next = NULL;
-    if (!adapter.head) {
-      adapter.tail = NULL;
-    }
-    execute_request(request);
-  }
+  /* A resumed AP can publish its next copied call while collection runs.
+   * Consume it within the same fixed request budget before ending this tick. */
+  service_requests(HCI_REQUEST_CAPACITY - serviced);
   check_deadlines();
+  check_receive_deadline();
   prepare_initialization();
   cpu_restore_interrupts(flags);
   publish_command();
   publish_acl();
+  flags = cpu_save_interrupts();
+  adapter.progress_active = false;
+  cpu_restore_interrupts(flags);
+}
+
+void bluetooth_hci_progress(struct usb_host_controller *host)
+{
+  work_tick(host);
+}
+
+void bluetooth_hci_drain_progress(struct usb_host_controller *host)
+{
+  work_tick(host);
 }
 
 void bluetooth_hci_attach(struct usb_host_controller *host,
