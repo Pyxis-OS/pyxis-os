@@ -20,16 +20,20 @@ struct keyboard_object {
   struct task_wait *reader; /* Task metadata, never a private-stack pointer. */
   struct keyboard_event events[KEYBOARD_EVENT_CAPACITY];
   size_t head, count;
-  bool focused;
+  bool selected;
+  bool terminal_layer; /* Under lock: hidden graphics overrides capture. */
   bool down[KEY_COUNT]; /* Only presses accepted since the last routing reset. */
 };
 
 /* BSP, IF=0. Space retains the initial reference. */
-struct keyboard_object *keyboard_create(struct space *space, bool focused);
+struct keyboard_object *keyboard_create(struct space *space, bool selected);
 void keyboard_process_exit(struct process *process);
 /* BSP routing, IF=0. Lock order: keyboard -> console input -> task queues. */
 void keyboard_route_event(struct keyboard_object *keyboard, const struct key_event *event);
-void keyboard_focus(struct keyboard_object *keyboard, bool focused);
+void keyboard_focus(struct keyboard_object *keyboard, bool selected);
+/* BSP, IF=0. Keep capture ownership; optionally discard unread console text. */
+void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
+                        bool discard_input);
 void keyboard_reset_input(struct keyboard_object *keyboard);
 /* Any CPU, preserves IF. INPUT and same-space authority are checked by caller;
  * ownership validation and event observation use the keyboard lock. */

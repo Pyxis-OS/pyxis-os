@@ -468,6 +468,13 @@ is clipped with a three-dot marker. A chevron is light when spaces are hidden
 beyond that edge and muted when that end of the list is visible. Chevrons do not
 navigate.
 
+After a graphics session's first PRESENT, its tab's existing right margin cell
+shows `+` when graphics is chosen and `−` when its terminal is chosen. Acquisition
+without PRESENT and spaces without a session have no marker. The cell stays
+reserved, preserving tab widths, title centering, clipping and underlining. Even
+when the title cannot fit, the marker is drawn if its whole cell fits; otherwise
+it is omitted. An inactive tab records its saved layer choice.
+
 On a machine with a battery, a fixed box just inside the `>` slot shows the
 charge, and the tabs share the remaining width. It always holds three
 characters: `100` when full, `10%` to `99%`, and `00%` to `09%`. Its background
@@ -481,6 +488,13 @@ symmetric. At the end of the list, the selection may sit in the edge slot. The
 selection stays visible when only one tab fits, and when a title change alters
 how many tabs fit. Layout follows the current titles on every frame, so renaming
 a space can change every tab's width.
+
+Super+Down shows the selected space's terminal; Super+Up restores its graphics.
+The shortcuts follow [space navigation's modifier and held-arrow rules](../devices/keyboard.md).
+They are consumed without changing state before a session's first PRESENT.
+Further PRESENT calls, REPLACE, resize and space switches preserve the choice.
+Hidden and unselected programs keep running; only the chosen surface of the
+selected space is copied. See [graphics layers](../interfaces/graphics.md#choosing-the-visible-layer).
 
 ## Startup grants and lifetime
 

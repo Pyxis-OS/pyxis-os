@@ -27,8 +27,10 @@ struct keyboard_read_request {
  * events, so rapid switches may coalesce to the most recent focus state.
  * Queue/driver loss discards unreliable events and queues STATE_RESET.
  * Held keys across acquisition/focus changes require release and a fresh press.
- * Acquired input does not also enter the terminal's text queue. Super+Left/Right
- * remains kernel navigation; its arrow press/repeat/release is consumed. */
+ * Captured input does not also enter the terminal's text queue. A hidden graphics
+ * layer retains capture but loses focus; text goes to the console instead.
+ * Super+Left/Right and Super+Up/Down remain kernel navigation; their arrow
+ * press/repeat/release is consumed. */
 struct keyboard_event {
   uint32_t key;
   uint32_t action;

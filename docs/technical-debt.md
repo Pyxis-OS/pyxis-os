@@ -499,9 +499,10 @@ must not block early boot or panic output.
 ## Unselected graphical applications
 
 The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without
-input focus. An unattended game in an unselected space can use a CPU indefinitely
-and continues writing its mapped pixels even though the presenter copies only
-the selected space. Programs may still pause themselves explicitly; completing
+input focus. An unattended game in an unselected space or a hidden graphics layer
+can use a CPU indefinitely and continues writing its mapped pixels even though
+the presenter copies only the chosen surface of the selected space. Programs
+may still pause themselves explicitly; completing
 a Mandelbrot render returns it to its ordinary input/resize wait.
 
 Revisit resource budgets or application-specific idle behavior when concurrent

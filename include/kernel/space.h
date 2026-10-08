@@ -69,6 +69,9 @@ void space_report_unstarted(struct space *space, const char *reason);
 /* Copies a validated title without allocation. Preserves IF. */
 bool space_set_title(struct space *space, const char *title, size_t length);
 
+/* BSP, IF=0, after display state changes. Update input without releasing capture. */
+void space_display_changed(struct space *space, bool discard_input);
+
 void space_present();
 /* BSP kernel-task entry; argument is unused. */
 void space_present_task(void *argument);

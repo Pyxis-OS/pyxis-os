@@ -46,7 +46,8 @@ struct display_object {
   struct process *owner; /* BSP-only, cleared before process destruction. */
   struct display_frame *frame;
   uintptr_t user_address;
-  bool visible;
+  bool presented; /* First PRESENT makes the session available as a layer. */
+  bool visible; /* User's per-session choice, independent of space selection. */
 };
 
 /* BSP, IF=0. The space retains the initial object reference. */
@@ -60,5 +61,7 @@ void display_process_exit(struct process *process);
 /* BSP, IF=0: snapshot retains backing across a preemptible copy. NULL means TTY. */
 struct display_frame *display_snapshot(struct display_object *display);
 void display_frame_release(struct display_frame *frame);
+/* BSP, IF=0. No-op before PRESENT or when the layer is already selected. */
+void display_select_layer(struct display_object *display, bool graphics);
 
 #endif

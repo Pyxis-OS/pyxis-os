@@ -440,8 +440,38 @@ static void draw_chevron(size_t x, char glyph, bool more)
       color, aardvark_scheme.palette[0]);
 }
 
+static void draw_layer_marker(struct space *space, size_t x, size_t width)
+{
+  if (width < bizcat.width) {
+    return;
+  }
+
+  uint64_t flags = cpu_save_interrupts();
+  bool presented = space->display->presented;
+  bool visible = space->display->visible;
+  cpu_restore_interrupts(flags);
+  if (!presented) {
+    return;
+  }
+
+  size_t padding = (SPACES_NAV_HEIGHT - bizcat.height) / 2;
+  size_t marker_x = x + width - bizcat.width;
+  if (visible) {
+    tty_plot_char_raw(spaces_nav_fb, &bizcat, '+', marker_x, padding,
+        aardvark_scheme.foreground, aardvark_scheme.palette[0]);
+  } else {
+    /* Match the plus stroke's width, thickness and vertical position. */
+    size_t stroke_width = 3 * bizcat.width / 4;
+    size_t stroke_height = MAX(bizcat.height / 8, 1);
+    fb_fill_rect(spaces_nav_fb, marker_x + (bizcat.width - stroke_width) / 2,
+        padding + bizcat.height / 2, stroke_width, stroke_height,
+        aardvark_scheme.foreground);
+  }
+}
+
 static void draw_tab(struct space *space, size_t x, size_t width)
 {
+  draw_layer_marker(space, x, width);
   fb_rect(spaces_nav_fb, x, 0, width, SPACES_NAV_HEIGHT, aardvark_scheme.palette[8]);
 
   char title[SPACE_TITLE_MAX + 1];
@@ -858,7 +888,15 @@ void space_present()
   }
 }
 
-/* BSP only, preserves IF. Moves keyboard and pointer focus with the selection. */
+void space_display_changed(struct space *space, bool discard_input)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  bool terminal_layer = space->display->presented && !space->display->visible;
+  keyboard_set_layer(space->keyboard, terminal_layer, discard_input);
+  pointer_focus(space->pointer, space == active_space && !terminal_layer);
+}
+
+/* BSP only, preserves IF. Restores the selected space's chosen input layer. */
 static void switch_space(struct space *next)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -868,7 +906,8 @@ static void switch_space(struct space *next)
     pointer_focus(active_space->pointer, false);
     active_space = next;
     keyboard_focus(next->keyboard, true);
-    pointer_focus(next->pointer, true);
+    bool terminal_layer = next->display->presented && !next->display->visible;
+    pointer_focus(next->pointer, !terminal_layer);
   }
   cpu_restore_interrupts(flags);
 }
@@ -896,13 +935,13 @@ static void switch_adjacent_space(bool next)
 static void handle_space_input(void)
 {
   struct key_event event;
-  static bool navigation_held[2];
+  static bool navigation_held[KEY_COUNT];
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
 
   while (keyboard_read_event(&event)) {
     if (event.action == KEY_STATE_RESET) {
-      navigation_held[0] = navigation_held[1] = false;
+      memset(navigation_held, 0, sizeof(navigation_held));
       uint64_t flags = cpu_save_interrupts();
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
@@ -912,18 +951,24 @@ static void handle_space_input(void)
       cpu_restore_interrupts(flags);
       continue;
     }
-    if (event.key == KEY_LEFT || event.key == KEY_RIGHT) {
-      size_t arrow = event.key == KEY_RIGHT;
-      if (navigation_held[arrow]) {
+    if (event.key == KEY_LEFT || event.key == KEY_RIGHT ||
+        event.key == KEY_UP || event.key == KEY_DOWN) {
+      if (navigation_held[event.key]) {
         if (event.action == KEY_RELEASE) {
-          navigation_held[arrow] = false;
+          navigation_held[event.key] = false;
         }
         continue;
       }
       if ((event.modifiers & shortcut_modifiers) == KEY_MOD_SUPER &&
           event.action == KEY_PRESS) {
-        navigation_held[arrow] = true;
-        switch_adjacent_space(arrow);
+        navigation_held[event.key] = true;
+        if (event.key == KEY_LEFT || event.key == KEY_RIGHT) {
+          switch_adjacent_space(event.key == KEY_RIGHT);
+        } else {
+          uint64_t flags = cpu_save_interrupts();
+          display_select_layer(active_space->display, event.key == KEY_UP);
+          cpu_restore_interrupts(flags);
+        }
         continue;
       }
     }
