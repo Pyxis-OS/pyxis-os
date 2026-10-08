@@ -11,6 +11,14 @@ void *memset(void *dest, int value, size_t count)
   return dest;
 }
 
+void memzero_explicit(void *dest, size_t count)
+{
+  volatile unsigned char *bytes = dest;
+  for (size_t i = 0; i < count; ++i) {
+    bytes[i] = 0;
+  }
+}
+
 /* Presentation copies whole frames, megabytes per tick, into the framebuffer;
  * string moves issue an eighth of the stores of a byte loop. */
 void *memcpy(void *restrict dest, const void *restrict src, size_t count)
