@@ -381,10 +381,12 @@ remain intact. Availability and quarantine queries stay at the adapter boundary.
 
 A later producer aggregates complete physical snapshots and continuity
 suppression before routing; submitting independent source masks here would
-incorrectly release another source's hold. Its adapter decides whether source
-loss meets the accepted reset/revocation condition before invoking the common
-hook and supplies the surviving mask. It replaces the PS/2-only availability
-view with its live-source view. Producer authority, epochs, sequences and
+incorrectly release another source's hold. Its adapter decides the two accepted loss conditions separately: accepted-input
+reset/drag cancellation needs a lost held button, while lock revocation also
+applies when no live source remains. The existing combined hook is used for
+PS/2 stream discontinuity; it is not a completed implementation of those future
+conditional branches. That integration must preserve surviving physical masks
+and replace the PS/2-only availability view with its live-source view. Producer authority, epochs, sequences and
 reconnect implementation belong to that separately assigned Bluetooth track;
 this task adds none of them and changes no consumer ABI for a second source.
 

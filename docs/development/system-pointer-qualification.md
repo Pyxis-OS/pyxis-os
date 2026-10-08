@@ -302,7 +302,10 @@ handler. Normalized reports and remaining-mask loss reset are kernel-internal
 and used by the real PS/2 path; no producer grant, epoch/sequence API, registration
 system or second source was added. Availability remains PS/2-only at the adapter
 boundary. Source review confirmed release/fresh-press and pre-report lock/warp
-guard parity. The later proposal remains unaccepted. The final default image build passed.
+guard parity. At that validation revision the producer contract was proposed;
+the later accepted conditional source-loss adjustment is recorded in
+[pointer coordination](../wip/pointer.md#input-source-coordination). The final
+default image build passed.
 A manual headless Q35/KVM, four-CPU, 512 MiB, VirtIO GPU/PS/2 smoke at
 `b77cd1d` confirmed ordinary position changing from `(640, 400)` to `(675, 388)`,
 locked motion leaving that position parked, Super+Esc revocation, fresh-left-click
