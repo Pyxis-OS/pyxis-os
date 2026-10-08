@@ -11,6 +11,7 @@
 #define USB_CONTROL_BYTES 4096
 #define USB_BULK_BYTES 65536
 #define USB_STORAGE_DEVICE_BUDGET 4
+/* Maximum HCI event: two header bytes plus 255 parameter bytes. */
 #define USB_INTERRUPT_BYTES 257
 #define USB_INTERRUPT_RECEIVES 2
 #define USB_INTERRUPT_COMPLETIONS 8

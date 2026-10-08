@@ -1,11 +1,13 @@
 # Bluetooth investigation
 
-Status: **tasks 1, 2 and 3a complete, 2026-10-08; HCI/firmware/scan probes unassigned.**
+Status: **tasks 1, 2 and 3a complete, 2026-10-08; task 3b authorized and in progress.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Shared kernel interrupt-IN support is now an
 authorized task to merge before the HCI probe. HCI, firmware and scan probe code
-stays on unmerged branches; those probes remain unassigned.
+stays on unmerged branches. The owner authorized task 3b after merging
+[PR #524](https://git.internal/PyxisOS/pyxis-os/pulls/524); firmware and scan probes
+remain unassigned.
 
 ## Hardware
 
@@ -79,8 +81,12 @@ works, recorded beside the NIC reference.
    interrupt endpoint. Issue HCI Reset and Intel's Read Version, and record whether
    the controller is in its
    bootloader or operational firmware.
-- [ ] **4. Firmware load.** Derive the firmware name from the version reply, load the
-   `.sfi` and `.ddc` through Intel's vendor commands, reset into operational
+- [ ] **4. Firmware load.** Detect controller state from a checked version reply
+   first. Task 3a observed legacy firmware variant `0x23` after prepared-host QEMU
+   attachment and HCI Reset: operational firmware may already be present. Skip an
+   unnecessary load in that state; leave unknown states explicit. For a bootloader
+   state, derive the firmware name from the required version/boot parameters, load
+   the `.sfi` and `.ddc` through Intel's vendor commands, reset into operational
    firmware and confirm with Read Version. Linux's `drivers/bluetooth/btintel.c`
    documents the protocol; read it for the sequence, not to copy code. The owner
    mirrors the exact linux-firmware files before any committed build uses them.
