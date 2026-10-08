@@ -4,7 +4,8 @@ The native screen-capture object observes the whole currently shown local screen
 It is independent of the per-space [DRAW capability](graphics.md): CAPTURE permits
 no drawing, graphics acquisition, input access, mode setting or device access.
 The result includes navigation, the selected space's shown layer, clipping and
-background margins, the visible software system pointer and the TTY block caret
+background margins, visible terminal selection highlighting, the software
+system pointer and the TTY block caret
 when the terminal is shown. Hidden surfaces are omitted. A hidden system pointer
 is omitted without changing ordinary input routing; relative lock also excludes
 the system pointer while retaining its saved visibility preference. TTY caret

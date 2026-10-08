@@ -63,6 +63,7 @@ static struct framebuffer *spaces_nav_fb;
 /* One text row of the space area. The cursor's row is composed here, cursor
  * included, so the screen never shows that row without the cursor. */
 static struct framebuffer *cursor_row_fb;
+static uint8_t *selection_row_glyphs;
 
 static struct framebuffer *fb_try_alloc(const struct framebuffer *layout,
     size_t width, size_t height)
@@ -109,6 +110,16 @@ static void fb_free(struct framebuffer *fb)
   }
 }
 
+static uint8_t *tty_cells_try_alloc(const struct framebuffer *fb)
+{
+  size_t bytes;
+  if (__builtin_mul_overflow(fb->width / bizcat.width, fb->height / bizcat.height, &bytes) ||
+      !bytes) {
+    return NULL;
+  }
+  return kmalloc(bytes);
+}
+
 static struct tty *tty_alloc(const struct framebuffer *fb) {
   struct tty *tty;
   tty = (struct tty *)kmalloc(sizeof(struct tty));
@@ -133,6 +144,11 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   tty->scheme = &aardvark_scheme;
   tty->fb = fb;
 
+  tty->cells = tty_cells_try_alloc(fb);
+  if (!tty->cells) {
+    panic("cannot allocate space TTY cells");
+  }
+  memset(tty->cells, ' ', (size_t)tty->width * tty->height);
   tty_clear(tty);
 
   tty->initialized = true;
@@ -217,6 +233,10 @@ static struct space *space_alloc(const char *name, const char *title,
     panic("cannot allocate space keyboard");
   }
 
+  space->terminal_pointer = terminal_pointer_create(space);
+  if (!space->terminal_pointer) {
+    panic("cannot allocate terminal pointer");
+  }
   space->pointer = pointer_create(space);
   if (!space->pointer) {
     panic("cannot allocate space pointer");
@@ -258,6 +278,10 @@ void space_init(void)
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(screen, screen->width, SPACES_NAV_HEIGHT);
   cursor_row_fb = fb_alloc(screen, screen->width, bizcat.height);
+  selection_row_glyphs = kmalloc(screen->width / bizcat.width);
+  if (!selection_row_glyphs) {
+    panic("cannot allocate selection row");
+  }
   pointer_init();
 }
 
@@ -617,15 +641,16 @@ static struct nav_layout draw_spaces_nav(void)
 /* Block cursor: the cell's background becomes the cursor color and its glyph
  * the cursor text color. Fonts are two-color bitmaps with blank padding, so
  * the top-left pixel is the cell's background. */
-static void draw_block_cursor(struct framebuffer *row, size_t x, const struct tty *tty)
+static void draw_block_cursor(struct framebuffer *row, size_t x,
+    const struct font *font, const struct color_scheme *scheme)
 {
-  uint32_t block = framebuffer_color(row, tty->scheme->cursor);
-  uint32_t text = framebuffer_color(row, tty->scheme->cursor_text);
+  uint32_t block = framebuffer_color(row, scheme->cursor);
+  uint32_t text = framebuffer_color(row, scheme->cursor_text);
   uint32_t *origin = (uint32_t *)row->address + x;
   uint32_t background = origin[0];
-  for (size_t line = 0; line < tty->font->height; ++line) {
+  for (size_t line = 0; line < font->height; ++line) {
     uint32_t *pixel = (uint32_t *)(row->address + line * row->pitch) + x;
-    for (size_t i = 0; i < tty->font->width; ++i) {
+    for (size_t i = 0; i < font->width; ++i) {
       pixel[i] = pixel[i] == background ? block : text;
     }
   }
@@ -653,6 +678,7 @@ static bool begin_presenting(void)
 struct resize_space {
   struct space *space;
   struct framebuffer *fb;
+  uint8_t *cells;
   struct resize_space *next;
 };
 
@@ -660,6 +686,7 @@ struct resize_buffers {
   struct resize_space *spaces;
   struct framebuffer *navigation;
   struct framebuffer *cursor;
+  uint8_t *glyphs;
 };
 
 /* A missing remote flush acknowledgement keeps one old batch mapped for the
@@ -672,10 +699,12 @@ static void resize_buffers_free(struct resize_buffers *buffers)
     struct resize_space *entry = buffers->spaces;
     buffers->spaces = entry->next;
     fb_free(entry->fb);
+    kfree(entry->cells);
     kfree(entry);
   }
   fb_free(buffers->navigation);
   fb_free(buffers->cursor);
+  kfree(buffers->glyphs);
   *buffers = (struct resize_buffers){0};
 }
 
@@ -700,10 +729,15 @@ static bool resize_buffers_prepare(struct resize_buffers *buffers,
     if (!entry->fb) {
       return false;
     }
+    entry->cells = tty_cells_try_alloc(entry->fb);
+    if (!entry->cells) {
+      return false;
+    }
   }
   buffers->navigation = fb_try_alloc(layout, layout->width, SPACES_NAV_HEIGHT);
   buffers->cursor = fb_try_alloc(layout, layout->width, bizcat.height);
-  return buffers->navigation && buffers->cursor;
+  buffers->glyphs = kmalloc(layout->width / bizcat.width);
+  return buffers->navigation && buffers->cursor && buffers->glyphs;
 }
 
 /* Sole presenter, between frame leases. Device waits retain the published
@@ -776,7 +810,9 @@ static void resize_display(void)
   size_t count = 0;
   for (struct resize_space *entry = buffers.spaces; entry; entry = entry->next) {
     struct framebuffer *old = entry->space->fb;
-    tty_resize(entry->space->tty, entry->fb);
+    uint8_t *old_cells = entry->space->tty->cells;
+    tty_resize(entry->space->tty, entry->fb, entry->cells);
+    entry->cells = old_cells;
     entry->space->fb = entry->fb;
     entry->fb = old;
     ++count;
@@ -787,6 +823,9 @@ static void resize_display(void)
   old = cursor_row_fb;
   cursor_row_fb = buffers.cursor;
   buffers.cursor = old;
+  uint8_t *old_glyphs = selection_row_glyphs;
+  selection_row_glyphs = buffers.glyphs;
+  buffers.glyphs = old_glyphs;
   display_resize_commit();
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
@@ -794,6 +833,7 @@ static void resize_display(void)
   drawn_nav_valid = false;
   for (struct space *space = caelum_space; space; space = space->next) {
     pointer_geometry_changed(space);
+    pointer_terminal_geometry_changed(space);
   }
   readiness_notify();
   cpu_restore_interrupts(flags);
@@ -877,38 +917,75 @@ void space_present()
       (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
   const struct framebuffer *source = frame ? &frame->fb : space->fb;
 
-  /* Snapshot the cursor under the output lock; never keep it held while
-   * copying a frame. The TTY pixels themselves stay cursor-free. */
-  flags = cpu_save_interrupts();
-  bool locked = log_begin();
-  const struct tty *tty = space->tty;
-  bool visible = !frame && locked && tty->cursor_visible &&
-      tty->x < tty->width && tty->y < tty->height;
-  size_t x = tty->x, y = tty->y;
-  uint32_t background = tty->bg;
-  log_end(locked);
-  cpu_restore_interrupts(flags);
+  uint64_t output_flags = cpu_save_interrupts();
+  bool composed = true;
+  bool output_locked = log_begin();
+  if (!output_locked) {
+    cpu_restore_interrupts(output_flags);
+    composed = false;
+    goto frame_done;
+  }
+  uint32_t background = space->tty->bg;
+  const struct font *font = space->tty->font;
+  const struct color_scheme *scheme = space->tty->scheme;
+  size_t rows = space->tty->height;
+  log_end(output_locked);
+  cpu_restore_interrupts(output_flags);
 
-  const uint8_t *pixels = (const uint8_t *)source->address;
   if (frame) {
     present_graphics(source, background, pointer);
-  } else if (!visible) {
-    pointer_present_copy(screen, pointer, dst_offset, pixels, source->size);
   } else {
-    /* Every screen write carries final pixels: rows above and below the
-     * cursor go straight across, and the cursor row goes via cursor_row_fb. */
-    size_t row_start = y * tty->font->height * source->pitch;
-    size_t row_bytes = tty->font->height * source->pitch;
-    pointer_present_copy(screen, pointer, dst_offset, pixels, row_start);
-    memcpy((void *)cursor_row_fb->address, pixels + row_start, row_bytes);
-    draw_block_cursor(cursor_row_fb, x * tty->font->width, tty);
-    pointer_present_copy(screen, pointer, dst_offset + row_start,
-        (const void *)cursor_row_fb->address, row_bytes);
-    pointer_present_copy(screen, pointer, dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
-        source->size - row_start - row_bytes);
+    const struct tty *tty = space->tty;
+    const uint8_t *pixels = (const uint8_t *)source->address;
+    size_t copied = 0;
+    size_t row_bytes = font->height * source->pitch;
+    for (size_t row = 0; row < rows; ++row) {
+      flags = cpu_save_interrupts();
+      bool locked = log_begin();
+      if (!locked) {
+        cpu_restore_interrupts(flags);
+        composed = false;
+        goto frame_done;
+      }
+      size_t first = 0, last = 0;
+      bool selected = locked && !space->terminal_pointer->owner &&
+          tty_selection_row(tty, row, &first, &last);
+      bool caret = locked && tty->cursor_visible && tty->y == row && tty->x < tty->width;
+      size_t x = tty->x;
+      if (selected || caret) {
+        memcpy((void *)cursor_row_fb->address, pixels + row * row_bytes, row_bytes);
+        if (selected) {
+          memcpy(selection_row_glyphs + first, tty->cells + row * tty->width + first,
+              last - first + 1);
+        }
+      }
+      log_end(locked);
+      cpu_restore_interrupts(flags);
+      if (!selected && !caret) {
+        continue;
+      }
+      size_t row_start = row * row_bytes;
+      pointer_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
+          row_start - copied);
+      if (selected) {
+        for (size_t column = first; column <= last; ++column) {
+          tty_plot_char_raw(cursor_row_fb, font, selection_row_glyphs[column],
+              column * font->width, 0, scheme->selection, scheme->selection_background);
+        }
+      }
+      if (caret) {
+        draw_block_cursor(cursor_row_fb, x * font->width, font, scheme);
+      }
+      pointer_present_copy(screen, pointer, dst_offset + row_start,
+          (const void *)cursor_row_fb->address, row_bytes);
+      copied = row_start + row_bytes;
+    }
+    pointer_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
+        source->size - copied);
   }
 
-  bool presented = display_end_frame();
+frame_done:
+  bool presented = display_end_frame() && composed;
   flags = cpu_save_interrupts();
   if (presented) {
     drawn_nav_layout = nav;
@@ -1085,7 +1162,7 @@ void space_pointer_select(struct space *space)
   switch_space(space);
 }
 
-static void handle_pointer_input(void)
+void space_pointer_sync_input(void)
 {
   _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
       MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
@@ -1117,7 +1194,7 @@ void space_present_task(void *argument)
 
   for (;;) {
     handle_space_input();
-    handle_pointer_input();
+    space_pointer_sync_input();
     if (available) {
       if (presenting || begin_presenting()) {
         resize_display();

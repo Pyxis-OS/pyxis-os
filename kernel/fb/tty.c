@@ -16,22 +16,23 @@ const struct color_scheme aardvark_scheme = {
     .background = 0x0f141f,
     .cursor = 0xb4bcca,
     .cursor_text = 0x0f141f,
-    .selection = 0xb4bcca,
-    .selection_background = 0x0f141f
+    .selection = 0x0f141f,
+    .selection_background = 0xb4bcca
 };
 
 struct tty global_tty = {.geometry_generation = 1};
 
+static uint8_t glyph_index(const struct font *font, char c)
+{
+  uint8_t index = (unsigned char)c;
+  return index <= font->max_glyph ? index : '?';
+}
+
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
     char c, size_t x, size_t y, uint32_t fg, uint32_t bg)
 {
-  unsigned char glyph_index = (unsigned char)c;
-  if (glyph_index > font->max_glyph) {
-    glyph_index = '?';
-  }
-
   const uint8_t *glyph =
-      font->data + (size_t)glyph_index * font->stride;
+      font->data + (size_t)glyph_index(font, c) * font->stride;
   uint32_t foreground = framebuffer_color(fb, fg);
   uint32_t background = framebuffer_color(fb, bg);
 
@@ -56,11 +57,24 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
                uint32_t fg, uint32_t bg)
 {
   const struct font *font = tty->font;
+  uint8_t glyph = glyph_index(font, c);
+  if (tty->cells) {
+    KASSERT(x < tty->width && y < tty->height);
+    size_t index = (size_t)y * tty->width + x;
+    if (tty->selection_valid && tty->cells[index] != glyph) {
+      size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
+      size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
+      if (index >= first && index <= last) {
+        tty_selection_clear(tty);
+      }
+    }
+    tty->cells[index] = glyph;
+  }
 
   size_t x_dst = (size_t)x * font->width;
   size_t y_dst = (size_t)y * font->height;
 
-  tty_plot_char_raw(tty->fb, font, c, x_dst, y_dst, fg, bg);
+  tty_plot_char_raw(tty->fb, font, (char)glyph, x_dst, y_dst, fg, bg);
 }
 
 static void tty_newline(struct tty *tty)
@@ -73,6 +87,11 @@ static void tty_newline(struct tty *tty)
     size_t row_bytes = tty->fb->pitch * tty->font->height;
     void *pixels = (void *)tty->fb->address;
 
+    tty_selection_clear(tty);
+    if (tty->cells) {
+      memmove(tty->cells, tty->cells + tty->width,
+          (size_t)tty->width * (tty->height - 1));
+    }
     memmove(pixels, (uint8_t *)pixels + row_bytes,
             row_bytes * (tty->height - 1));
     tty->y = tty->height - 1;
@@ -293,12 +312,14 @@ void tty_fresh_line(struct tty *tty)
   }
 }
 
-void tty_resize(struct tty *tty, const struct framebuffer *fb)
+void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *cells)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   size_t width = fb->width / tty->font->width;
   size_t height = fb->height / tty->font->height;
   KASSERT(width && width <= UINT16_MAX && height && height <= UINT16_MAX);
+  KASSERT(width <= SIZE_MAX / height);
+  KASSERT(cells && tty->cells && cells != tty->cells);
   KASSERT(tty->geometry_generation && tty->geometry_generation < UINT64_MAX);
 
   size_t first_row = tty->y >= height ? tty->y - height + 1 : 0;
@@ -318,12 +339,92 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb)
     memcpy((void *)(fb->address + y * fb->pitch),
         (const void *)(tty->fb->address + (source_y + y) * tty->fb->pitch), row_bytes);
   }
+  memset(cells, ' ', width * height);
+  for (size_t y = 0; y < rows; ++y) {
+    memcpy(cells + y * width, tty->cells + (first_row + y) * tty->width, columns);
+  }
 
+  tty_selection_clear(tty);
   tty->fb = fb;
+  tty->cells = cells;
   tty->width = width;
   tty->height = height;
   tty->x = MIN((size_t)tty->x, width - 1);
   tty->y = MIN((size_t)tty->y - first_row, height - 1);
   tty->wrap_pending = false;
   ++tty->geometry_generation;
+}
+
+void tty_selection_clear(struct tty *tty)
+{
+  tty->selection_anchor = 0;
+  tty->selection_endpoint = 0;
+  tty->selection_valid = false;
+  tty->selection_dragging = false;
+}
+
+void tty_selection_cancel_drag(struct tty *tty)
+{
+  if (tty->selection_dragging) {
+    tty_selection_clear(tty);
+  }
+}
+
+static size_t selection_coordinate(int64_t coordinate, size_t pixels, size_t cells)
+{
+  if (coordinate < 0) {
+    return 0;
+  }
+  return MIN((uint64_t)coordinate / pixels, cells - 1);
+}
+
+void tty_selection_input(struct tty *tty, int64_t x, int64_t y, bool pressed, bool held)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!tty->cells) {
+    return;
+  }
+  KASSERT(tty->width && tty->height && tty->font->width && tty->font->height);
+  KASSERT(tty->width <= SIZE_MAX / tty->font->width &&
+      tty->height <= SIZE_MAX / tty->font->height);
+  if (pressed) {
+    size_t pixel_width = (size_t)tty->width * tty->font->width;
+    size_t pixel_height = (size_t)tty->height * tty->font->height;
+    if (x < 0 || y < 0 || (uint64_t)x >= pixel_width || (uint64_t)y >= pixel_height) {
+      return;
+    }
+    size_t column = (uint64_t)x / tty->font->width;
+    size_t row = (uint64_t)y / tty->font->height;
+    tty->selection_anchor = row * tty->width + column;
+    tty->selection_endpoint = tty->selection_anchor;
+    tty->selection_valid = true;
+    tty->selection_dragging = true;
+  }
+  if (!tty->selection_dragging) {
+    return;
+  }
+  size_t column = selection_coordinate(x, tty->font->width, tty->width);
+  size_t row = selection_coordinate(y, tty->font->height, tty->height);
+  tty->selection_endpoint = row * tty->width + column;
+  if (!held) {
+    tty->selection_dragging = false;
+  }
+}
+
+bool tty_selection_row(const struct tty *tty, size_t row, size_t *first, size_t *last)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!tty->cells || !tty->selection_valid || row >= tty->height) {
+    return false;
+  }
+  size_t begin = MIN(tty->selection_anchor, tty->selection_endpoint);
+  size_t end = MAX(tty->selection_anchor, tty->selection_endpoint);
+  size_t row_begin = row * tty->width;
+  size_t row_end = row_begin + tty->width - 1;
+  if (begin > row_end || end < row_begin) {
+    return false;
+  }
+  *first = MAX(begin, row_begin) - row_begin;
+  *last = MIN(end, row_end) - row_begin;
+  return true;
 }

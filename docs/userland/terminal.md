@@ -239,3 +239,20 @@ READABLE and RESIZED on ordinary console/terminal grants. It reports the latch l
 and does not consume it; there is no acknowledgement operation. A terminal
 hangup also reports `WAIT_ERROR`. The latch is set on the BSP under the input
 lock and published through the ordinary readiness notification.
+
+## Local visible-cell selection
+
+Local framebuffer terminals retain their visible 8-bit glyphs alongside the
+raster. A left drag selects a linear inclusive range; release finalizes it.
+Selected glyph mutation, scroll or committed resize clears selection. Unrelated
+output and same-glyph colour changes preserve it. Focus/layer/stream reset
+cancels active dragging, while unchanged completed selection can survive hiding.
+The presenter highlights retained glyphs without writing into text or raster
+backing, then composes the block caret and system pointer for display/capture.
+
+This applies to Caelum's kernel-log terminal too. An acquired mux controller
+instead owns its spatial queue and selects from its own pane cells/history.
+Ordinary local TTY wheel input does not scroll: there is no kernel scrollback.
+No selection publishes clipboard data or provides a Copy/Paste command. The
+later clipboard contract must define an owned-text snapshot and its encoding;
+arbitrary 8-bit glyphs are not advertised as UTF-8 text.

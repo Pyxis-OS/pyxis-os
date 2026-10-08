@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/display.h>
@@ -7,6 +8,7 @@
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
 static void lock_pointer(struct pointer_object *pointer)
@@ -21,6 +23,31 @@ static void unlock_pointer(struct pointer_object *pointer)
   atomic_store_explicit(&pointer->locked, false, memory_order_release);
 }
 
+bool pointer_owned(struct pointer_object *pointer, struct process *process)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_pointer(pointer);
+  bool owned = pointer->owner == process;
+  unlock_pointer(pointer);
+  cpu_restore_interrupts(flags);
+  return owned;
+}
+
+uint64_t pointer_ready(struct pointer_object *pointer, struct process *process)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_pointer(pointer);
+  uint64_t ready = 0;
+  if (pointer->owner != process) {
+    ready = WAIT_ERROR;
+  } else if (pointer->count) {
+    ready = WAIT_READABLE;
+  }
+  unlock_pointer(pointer);
+  cpu_restore_interrupts(flags);
+  return ready;
+}
+
 static void destroy_pointer(struct kernel_object *object)
 {
   struct pointer_object *pointer = (struct pointer_object *)object;
@@ -28,7 +55,7 @@ static void destroy_pointer(struct kernel_object *object)
   kfree(pointer);
 }
 
-struct pointer_object *pointer_create(struct space *space)
+static struct pointer_object *create_pointer(struct space *space, enum object_type type)
 {
   KASSERT(arch_cpu_index() == 0);
   struct pointer_object *pointer = kmalloc(sizeof(*pointer));
@@ -37,8 +64,18 @@ struct pointer_object *pointer_create(struct space *space)
   }
   *pointer = (struct pointer_object){.space = space};
   atomic_init(&pointer->locked, false);
-  object_init(&pointer->object, OBJECT_POINTER, destroy_pointer);
+  object_init(&pointer->object, type, destroy_pointer);
   return pointer;
+}
+
+struct pointer_object *pointer_create(struct space *space)
+{
+  return create_pointer(space, OBJECT_POINTER);
+}
+
+struct pointer_object *terminal_pointer_create(struct space *space)
+{
+  return create_pointer(space, OBJECT_TERMINAL_POINTER);
 }
 
 /* Lock held. Detach before waking a task that can immediately resume on an AP. */
@@ -73,6 +110,7 @@ void pointer_set_lock(struct pointer_object *pointer, bool relative)
     queue_event(pointer, pointer_position_event(pointer, POINTER_LOCK_CHANGED));
   }
   unlock_pointer(pointer);
+  readiness_notify();
 }
 
 void pointer_reset_input(struct pointer_object *pointer, uint32_t type)
@@ -84,13 +122,15 @@ void pointer_reset_input(struct pointer_object *pointer, uint32_t type)
     queue_event(pointer, pointer_position_event(pointer, type));
   }
   unlock_pointer(pointer);
+  readiness_notify();
 }
 
 void pointer_focus(struct pointer_object *pointer, bool focused)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  if (pointer->focused != focused) {
+  bool changed = pointer->focused != focused;
+  if (changed) {
     pointer->focused = focused;
     reset_buttons(pointer);
     if (pointer->owner) {
@@ -99,13 +139,17 @@ void pointer_focus(struct pointer_object *pointer, bool focused)
     }
   }
   unlock_pointer(pointer);
+  if (changed) {
+    readiness_notify();
+  }
 }
 
 void pointer_queue_state(struct pointer_object *pointer, uint32_t type)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  if (pointer->owner) {
+  bool owned = pointer->owner != NULL;
+  if (owned) {
     if (type == POINTER_LEAVE) {
       pointer->accepted = 0;
     }
@@ -116,6 +160,9 @@ void pointer_queue_state(struct pointer_object *pointer, uint32_t type)
     queue_event(pointer, pointer_position_event(pointer, type));
   }
   unlock_pointer(pointer);
+  if (owned) {
+    readiness_notify();
+  }
 }
 
 static int32_t saturating_add(int32_t total, int32_t delta)
@@ -160,6 +207,7 @@ void pointer_queue_input(struct pointer_object *pointer, struct pointer_event ev
     }
   }
   unlock_pointer(pointer);
+  readiness_notify();
 }
 
 void pointer_end_session(struct pointer_object *pointer)
@@ -175,12 +223,17 @@ void pointer_end_session(struct pointer_object *pointer)
   pointer_image_release(pointer->image);
   pointer->image = NULL;
   pointer->hidden = false;
+  readiness_notify();
 }
 
 void pointer_process_exit(struct process *process)
 {
   KASSERT(arch_cpu_index() == 0);
   struct pointer_object *pointer = process->space->pointer;
+  if (pointer->owner == process) {
+    pointer_end_session(pointer);
+  }
+  pointer = process->space->terminal_pointer;
   if (pointer->owner == process) {
     pointer_end_session(pointer);
   }
@@ -192,21 +245,29 @@ void pointer_request_execute(struct pointer_request *request)
   struct pointer_object *pointer = request->pointer;
   struct process *process = request->process;
   enum call_status status = CALL_OK;
-  if (process->space != pointer->space || pointer->space->display->owner != process) {
+  bool terminal = pointer_is_terminal(pointer);
+  if (process->space != pointer->space ||
+      (!terminal && pointer->space->display->owner != process)) {
     status = CALL_DENIED;
   } else if (request->operation == POINTER_ACQUIRE) {
-    if (!space_pointer_input_available()) {
+    if (!terminal && !space_pointer_input_available()) {
       status = CALL_UNAVAILABLE;
     } else if (pointer->owner) {
       status = CALL_BUSY;
+    } else if (terminal && pointer->view_identity == UINT64_MAX) {
+      status = CALL_LIMIT;
     } else {
       lock_pointer(pointer);
       pointer->owner = process;
+      if (terminal) {
+        ++pointer->view_identity;
+      }
       pointer->focused = pointer_surface_focused(pointer);
       reset_buttons(pointer);
       queue_event(pointer, pointer_position_event(pointer,
           pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
       unlock_pointer(pointer);
+      readiness_notify();
       pointer_subscription_started(pointer);
     }
   } else if (pointer->owner != process) {
@@ -214,7 +275,35 @@ void pointer_request_execute(struct pointer_request *request)
   } else if (request->operation == POINTER_RELEASE) {
     pointer_end_session(pointer);
   } else if (request->operation == POINTER_GEOMETRY) {
-    request->data.geometry = pointer_surface_geometry(pointer);
+    if (terminal) {
+      struct tty *tty = pointer->space->tty;
+      request->data.terminal_geometry = (struct terminal_pointer_geometry){
+        .surface = pointer_surface_geometry(pointer),
+        .columns = tty->width, .rows = tty->height,
+        .cell_width = tty->font->width, .cell_height = tty->font->height,
+      };
+    } else {
+      request->data.geometry = pointer_surface_geometry(pointer);
+    }
+  } else if (request->operation == TERMINAL_POINTER_VIEW_CHANGED) {
+    /* Driver records still preceding this boundary belong to the old view. */
+    space_pointer_sync_input();
+    struct pointer_geometry geometry = pointer_surface_geometry(pointer);
+    if (request->data.view.generation != geometry.generation ||
+        request->data.view.mapping_identity != geometry.mapping_identity) {
+      status = CALL_BUSY;
+    } else if (pointer->view_identity == UINT64_MAX) {
+      status = CALL_LIMIT;
+    } else {
+      ++pointer->view_identity;
+      pointer_terminal_view_changed(pointer);
+      struct tty *tty = pointer->space->tty;
+      request->data.terminal_geometry = (struct terminal_pointer_geometry){
+        .surface = pointer_surface_geometry(pointer),
+        .columns = tty->width, .rows = tty->height,
+        .cell_width = tty->font->width, .cell_height = tty->font->height,
+      };
+    }
   } else if (request->operation == POINTER_STATE) {
     request->data.flags = (pointer->focused ? POINTER_EVENT_FOCUSED : 0) |
         (pointer->relative ? POINTER_EVENT_LOCKED : 0);
@@ -324,6 +413,7 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
   pointer->head = (pointer->head + 1) % POINTER_EVENT_CAPACITY;
   --pointer->count;
   unlock_pointer(pointer);
+  readiness_notify();
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
@@ -332,10 +422,15 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation < POINTER_ACQUIRE || operation > POINTER_STATE) {
+  bool terminal = pointer_is_terminal(pointer);
+  if (operation < POINTER_ACQUIRE ||
+      operation > (terminal ? TERMINAL_POINTER_VIEW_CHANGED : POINTER_STATE) ||
+      (terminal && (operation == POINTER_WARP || operation == POINTER_LOCK ||
+                    operation == POINTER_UNLOCK))) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & POINTER_RIGHT_INPUT) || process_current()->space != pointer->space) {
+  uint64_t required = terminal ? TERMINAL_POINTER_RIGHT_CONTROL : POINTER_RIGHT_INPUT;
+  if (!(rights & required) || process_current()->space != pointer->space) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   if (operation == POINTER_READ) {
@@ -354,7 +449,13 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     payload = sizeof(struct pointer_warp_request) - sizeof(struct message_header);
     destination = &command.data.warp.x;
   }
-  size_t reply_size = operation == POINTER_GEOMETRY ? sizeof(struct pointer_geometry) :
+  if (operation == TERMINAL_POINTER_VIEW_CHANGED) {
+    payload = sizeof(struct terminal_pointer_view_request) - sizeof(struct message_header);
+    destination = &command.data.view.generation;
+  }
+  size_t reply_size = operation == TERMINAL_POINTER_VIEW_CHANGED ? sizeof(struct terminal_pointer_geometry) :
+      operation == POINTER_GEOMETRY ? (terminal ? sizeof(struct terminal_pointer_geometry) :
+          sizeof(struct pointer_geometry)) :
       operation == POINTER_STATE ? sizeof(uint64_t) : 0;
   if (request_size != payload || reply_capacity < reply_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -387,9 +488,12 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     command.stage = POINTER_REQUEST_IMAGE_COMMIT;
   }
   enum call_status status = command_pointer(&command);
-  if (status == CALL_OK && operation == POINTER_GEOMETRY) {
-    KASSERT(copy_to_user(reply_address, &command.data.geometry, sizeof(command.data.geometry)));
-    return (struct syscall_result){CALL_OK, sizeof(command.data.geometry)};
+  if (status == CALL_OK && (operation == POINTER_GEOMETRY ||
+      operation == TERMINAL_POINTER_VIEW_CHANGED)) {
+    const void *geometry = terminal ? (const void *)&command.data.terminal_geometry :
+        (const void *)&command.data.geometry;
+    KASSERT(copy_to_user(reply_address, geometry, reply_size));
+    return (struct syscall_result){CALL_OK, reply_size};
   }
   if (status == CALL_OK && operation == POINTER_STATE) {
     KASSERT(copy_to_user(reply_address, &command.data.flags, sizeof(command.data.flags)));

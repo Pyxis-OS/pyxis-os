@@ -26,6 +26,8 @@ struct space
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
   struct pointer_object *pointer; /* Space retains the initial reference. */
   struct audio_object *audio; /* Space retains the initial reference. */
+  struct pointer_object *terminal_pointer; /* Separate outer-terminal control. */
+  bool terminal_control_enabled; /* Trusted first-process startup opt-in. */
   bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
@@ -79,6 +81,8 @@ void space_display_changed(struct space *space, bool discard_input);
 struct space *space_pointer_active(void);
 bool space_pointer_input_available(void);
 uint32_t space_pointer_suppressed_buttons(void);
+/* BSP, preserves IF: apply physical reports before a terminal view boundary. */
+void space_pointer_sync_input(void);
 size_t space_pointer_content_y(void);
 struct space *space_pointer_tab(int64_t x, int64_t y);
 void space_pointer_select(struct space *space);

@@ -16,6 +16,7 @@
 #include <abi/keyboard.h>
 #include <abi/pointer.h>
 #include <abi/audio.h>
+#include <abi/terminal_pointer.h>
 #include <abi/clock.h>
 #include <abi/system_info.h>
 #include <abi/log.h>
@@ -83,6 +84,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_POINTER;
   case OBJECT_AUDIO:
     return PROTOCOL_AUDIO;
+  case OBJECT_TERMINAL_POINTER:
+    return PROTOCOL_TERMINAL_POINTER;
   case OBJECT_MOUNT:
     return PROTOCOL_MOUNT;
   case OBJECT_DISKS:
@@ -224,6 +227,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~POINTER_RIGHT_INPUT);
   case OBJECT_AUDIO:
     return !(rights & ~AUDIO_RIGHT_PLAYBACK);
+  case OBJECT_TERMINAL_POINTER:
+    return !(rights & ~TERMINAL_POINTER_RIGHT_CONTROL);
   case OBJECT_MOUNT:
     return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE));
   case OBJECT_DISKS:

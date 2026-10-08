@@ -157,6 +157,7 @@ static bool reserved_resource(const char *name)
 {
   static const char *const reserved[] = {
     "input", "output", "keyboard", "pointer", "display", "audio", "space",
+    "terminal_pointer",
   };
   size_t length = strlen(name);
   for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); ++i) {
@@ -228,13 +229,18 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
   }
   struct {
     uint64_t name, name_length, title, title_length;
-    uint64_t cpus, cpu_count, reason, reason_length, launch;
+    uint64_t cpus, cpu_count, reason, reason_length, launch, flags;
   } request;
   if (request_size != sizeof(request)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  if ((request.flags & ~SPACE_CREATE_TERMINAL_CONTROL) ||
+      (request.flags && !request.launch)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
   char name[SPACE_NAME_MAX + 1], title[SPACE_TITLE_MAX + 1], reason[SPACE_REASON_MAX + 1];
@@ -279,6 +285,7 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
       return (struct syscall_result){status, 0};
     }
   }
+  capture->space.terminal_control = request.flags & SPACE_CREATE_TERMINAL_CONTROL;
   memcpy(capture->space.name, name, request.name_length + 1);
   memcpy(capture->space.title, title, request.title_length + 1);
 

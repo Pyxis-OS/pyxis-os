@@ -8,6 +8,7 @@
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/audio.h>
+#include <kernel/object/pointer.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
@@ -122,6 +123,11 @@ bool readiness_service(struct bsp_request **active_list)
         break;
       case OBJECT_AUDIO:
         interest->ready = audio_ready((struct audio_object *)interest->object,
+            request->caller);
+        break;
+      case OBJECT_POINTER:
+      case OBJECT_TERMINAL_POINTER:
+        interest->ready = pointer_ready((struct pointer_object *)interest->object,
             request->caller);
         break;
       case OBJECT_DISPLAY:

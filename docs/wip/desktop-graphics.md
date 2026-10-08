@@ -59,6 +59,10 @@ Widgets and decorations are a separate fourth job.
 A compositor runs as the graphical program on a space's `+`
 [layer](../userland/space-layers.md).
 
+A compositor can also hand its clients a display, pointer and keyboard that
+behave exactly like the kernel's, so programs run unchanged inside it; see
+[interchangeable providers](interchangeable-providers.md).
+
 ## Rendering and ports
 
 Software rendering is a candidate for the first implementation; measure it

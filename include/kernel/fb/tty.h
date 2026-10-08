@@ -49,6 +49,14 @@ struct tty
   const struct font *font;
   const struct color_scheme *scheme;
   const struct framebuffer *fb;
+  /* Packed visible glyphs, width * height bytes. Local TTYs attach checked,
+   * BSP-allocated storage before initialization; raw/early drawing needs none.
+   * The output lock protects cells, selection and raster changes together. */
+  uint8_t *cells;
+  size_t selection_anchor;
+  size_t selection_endpoint;
+  bool selection_valid;
+  bool selection_dragging;
 };
 
 /* Scheme and drawing colors use 0xRRGGBB. */
@@ -77,9 +85,22 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
 void tty_put_char(struct tty *tty, char c);
 void tty_clear(struct tty *tty);
 void tty_fresh_line(struct tty *tty);
-/* Output lock, IF=0. Copies whole cells without reflow into disjoint backing,
- * keeps the cursor visible, and replaces geometry without replacing the TTY. */
-void tty_resize(struct tty *tty, const struct framebuffer *fb);
+/* Output lock, IF=0. FB and CELLS are disjoint preallocated backing; CELLS has
+ * (fb->width / font->width) * (fb->height / font->height) bytes. Copies whole
+ * cells without reflow, keeps the cursor visible and publishes raster/text
+ * geometry together. Clears selection; caller retires the old backing. */
+void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *cells);
+
+/* Output lock, IF=0. Coordinates are content-local pixels. Only a fresh left
+ * press in the whole-cell grid starts selection; an anchored held drag clamps
+ * to its edges. Release finalizes. No allocation or clipboard publication. */
+void tty_selection_input(struct tty *tty, int64_t x, int64_t y, bool pressed, bool held);
+/* Cancel an unfinished selection, preserving a completed one. */
+void tty_selection_cancel_drag(struct tty *tty);
+void tty_selection_clear(struct tty *tty);
+/* Output lock, IF=0. Returns inclusive selected columns for one visible row.
+ * The caller stages tty->cells while holding that lock, then composes outside. */
+bool tty_selection_row(const struct tty *tty, size_t row, size_t *first, size_t *last);
 
 
 #endif // KERNEL_FB_TTY_H

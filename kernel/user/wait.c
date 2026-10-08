@@ -2,6 +2,7 @@
 #include <abi/console.h>
 #include <abi/display.h>
 #include <abi/keyboard.h>
+#include <abi/pointer.h>
 #include <abi/tcp.h>
 #include <abi/execution_group.h>
 #include <abi/process.h>
@@ -11,6 +12,7 @@
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/audio.h>
+#include <kernel/object/pointer.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/panic.h>
@@ -98,6 +100,16 @@ static enum call_status interest_authority(const struct kernel_object *object,
       return CALL_DENIED;
     }
     required = AUDIO_RIGHT_PLAYBACK;
+  } else if (object->type == OBJECT_POINTER || object->type == OBJECT_TERMINAL_POINTER) {
+    if (events != WAIT_READABLE) {
+      return CALL_BAD_REQUEST;
+    }
+    struct pointer_object *pointer = (struct pointer_object *)object;
+    if (pointer->space != caller->space || !pointer_owned(pointer, caller)) {
+      return CALL_DENIED;
+    }
+    required = object->type == OBJECT_POINTER ? POINTER_RIGHT_INPUT :
+        TERMINAL_POINTER_RIGHT_CONTROL;
   } else if (object->type == OBJECT_PROCESS_CONTROL) {
     if (events != WAIT_COMPLETE) {
       return CALL_BAD_REQUEST;
