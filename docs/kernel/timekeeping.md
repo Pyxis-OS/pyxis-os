@@ -25,8 +25,9 @@ of at most 100,000,000 fs and a usable sampling interval when extension is neede
 it fails explicitly otherwise.
 
 HPET supplies elapsed time only. Its comparator interrupts and legacy replacement
-mode are disabled. The local APIC still provides 120 Hz preemption, with its
-existing PIT calibration. No PCI or VirtIO device support is involved.
+mode are disabled. Each local APIC uses its existing PIT channel 2 calibration
+to target both sleep deadlines and nominal 120 Hz preemption. No PCI or VirtIO
+device support is involved.
 
 ## Software-extension sampling and support limit
 
@@ -37,7 +38,8 @@ ThinkPad's recorded 14.318180 MHz counter. A missing full wrap cannot be detecte
 or recovered from the low counter word.
 
 The BSP LAPIC timer handler maintains the accumulator before scheduler handling,
-after `CONFIG_HPET_MAINTENANCE_TICKS` delivered interrupts. The
+after `CONFIG_HPET_MAINTENANCE_TICKS` serviced nominal preemption occasions.
+Additional deadline interrupts do not advance this countdown. The
 [menuconfig option](../development/configuration.md#select-options) defaults to
 120, nominally one second. This countdown is owned only by BSP timer dispatch;
 AP timer interrupts do not decrement it. Ordinary clock reads incorporate
@@ -91,7 +93,7 @@ both rights. `clock_wall_now` and the libc calendar subset are documented in
 ## Scheduler timing
 
 Console timeout deadlines and kernel-task sleeps use the same monotonic clock.
-Deadline expiry is checked by BSP scheduling and timer preemption. Existing
+Deadline expiry is checked by the sleeping CPU's scheduler and local timer. Existing
 resource-wakeup ordering remains in place: notification before a task finishes
 parking cannot make its still-running context available on another CPU.
 
@@ -100,6 +102,27 @@ past. The presentation task targets approximately 60 Hz and drops missed frames
 rather than repeatedly rendering to catch up. This is not display refresh
 synchronization. Timed console operations retain one deadline across their waits.
 
+After scheduler startup each CPU alone programs its LAPIC countdown with IF=0
+for the earlier of its first local deadline and next nominal preemption occasion.
+Boot timers remain periodic until then because AP startup polls the BSP countdown.
+Preemption keeps its absolute 120 Hz phase even when idle; extra wake interrupts
+do not postpone it, and delayed service skips missed occasions without a catch-up
+burst. This is not a tickless scheduler.
+
+Timed records are task-owned and sorted under the existing scheduler queue lock,
+with no allocation or new timer limit. BSP kernel sleepers use a sorted BSP-owned
+list. Earliest lookup is constant time, insertion/cancellation linear, and expiry
+visits the due prefix. The handler expires all due records and rearms before EOI
+or a context switch, even while idle or in non-preemptible execution. Ordinary
+ready queues decide when eligible tasks run.
+
+Insertion is local because blocked syscall continuations cannot migrate. A remote
+resource wake or stop removes membership under the queue lock and uses the
+existing runnable IPI; it never programs another CPU's timer. Removing a minimum
+can leave one harmless earlier interrupt armed. Count conversion rounds upward,
+with a positive minimum; HPET confirms expiry before waking a sleeper, so an
+early or stale interrupt only recalculates the next arm.
+
 Nanoseconds are the representation, not a wakeup-precision guarantee. Delayed
 interrupts and scheduling still delay execution, but missing interrupts no
 longer extends a deadline by losing counted ticks. There is no busy-wait sleep.
@@ -107,5 +130,7 @@ longer extends a deadline by losing counted ticks. There is no busy-wait sleep.
 The clock need not include time while QEMU is paused. The extension support limit
 above additionally excludes full-wrap gaps during which the counter advances.
 There is no clock-setting operation, cancellation, HPET alarm, or userspace
-direct counter mapping. Wall-clock precision and HPET read cost
+direct counter mapping. Native deadline-timer qualification remains in
+[sleep wake debt](../technical-debt.md#sleep-wake-granularity).
+Wall-clock precision and HPET read cost
 are tracked in [technical debt](../technical-debt.md#wall-clock-time-and-clock-source-performance).

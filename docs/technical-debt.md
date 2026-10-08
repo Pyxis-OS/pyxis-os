@@ -1015,28 +1015,32 @@ not infer the location from `argv[0]` or add path normalization for one port.
 
 ## Sleep wake granularity
 
-Deadline sleeps are checked by BSP scheduling and the 120 Hz local APIC tick.
-Expiry can wait another tick, about 8.33 ms; an expired AP waiter is enqueued
-without a reschedule IPI and can wait for its assigned CPU's next tick as well.
-Interrupt delays and runnable load can delay execution further; see
-[timekeeping](kernel/timekeeping.md).
-The [SDL2 probe](development/sdl2.md#measurements) measured a `SDL_Delay(16)` loop at
-24.8 ms per frame instead of about 17. DevilutionX's own limiter tracks
-deadlines and held 57.8–62.3 FPS. Quake's 72 Hz cap and other fixed-rate
-sleepers can be delayed the same way; that is not measured.
+Per-CPU one-shot LAPIC timers now target local deadlines while retaining nominal
+120 Hz preemption and HPET timekeeping. The owner accepted this scope on
+2026-10-08. The [matched qualification](development/experiments/sleep-wake-granularity/timer.md)
+records SDL mean-frame medians of 25.565 ms before, 24.243 ms with expiry IPIs
+alone and 17.415 ms with local deadlines; Quake capped-loop medians were
+49.223, 59.595 and 70.291 FPS. These are nested-KVM observations, not native
+or maximum-latency guarantees. See [timekeeping](kernel/timekeeping.md).
 
-Nanosecond units remain a representation, not a precision promise. Revisit
-with a one-shot deadline timer or tickless sleeping, as a kernel task, when a
-consumer needs finer pacing than its own deadline tracking provides. The owner
-assigned this work on 2026-10-08; the [bounded proposal](wip/sleep-wake-granularity.md)
-and its current-main baseline record the three defaults accepted by the owner
-on 2026-10-08. Implementation is authorized but not yet qualified.
+ThinkPad LAPIC calibration/power-state behavior, actual sleep/cap latency and
+sustained 32-bit HPET extension with this timer remain unqualified. Revisit when
+owner hardware is available: repeat the recorded SDL and normal Quake workloads,
+record image revision/configuration, and confirm clock continuity and interrupt
+delivery. The [task](wip/sleep-wake-granularity.md) remains open for native evidence
+or an explicitly owner-accepted qualification limit.
+
+Nanosecond units remain a representation, not a precision promise. Interrupt-
+disabled intervals, runnable load, firmware/host stalls and large due batches
+still delay execution. Sorted-list insertion/cancellation remains linear, with
+no separate timer quota. Revisit stronger bounds or another data structure only
+with a measured consumer need; tickless scheduling is outside this task.
 
 ## Wall-clock time and clock-source performance
 
 [Monotonic time and deadline sleep](kernel/timekeeping.md) now use the shared HPET
-counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
-interrupts still bound wakeup latency; nanosecond units do not promise precise
+counter. Console timeouts no longer count delivered BSP interrupts. Local timer
+dispatch and scheduling still delay execution; nanosecond units do not promise precise
 wakeup, and time spent with the VM paused need not count.
 
 [UTC wall time](kernel/wall-clock.md) uses a whole-second Limine RTC seed plus elapsed

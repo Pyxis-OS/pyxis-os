@@ -232,11 +232,12 @@ borrowed record until final completion. The executor forwards it to the existing
 transport worker, which completes it through the common wakeup path. BSP callers
 use the same executor path and send no self-IPI.
 
-The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks and exit
-cleanup retain their existing scheduler/timer service paths. Resource wakeups on
+Nominal preemption remains 120 Hz; each local timer also targets its sleeping
+tasks' deadlines. Exit cleanup retains its scheduler service path. Resource wakeups on
 the same CPU do not send a self-IPI; interrupt return, the current task's
 yield/block/return or timer preemption reaches the scheduler. This change adds no
-migration, priorities or tickless timers.
+migration or priorities; preemption remains active when idle. See
+[deadline timer ownership](timekeeping.md#scheduler-timing).
 
 Blocking userspace syscalls and BSP kernel tasks use a wait record embedded in
 task metadata. The resource publishes it under its own lock and removes it before
@@ -356,12 +357,12 @@ only remembers notifications for this wait and is not a persistent event counter
 
 Kernel waits save only the kernel context and resume in the shared kernel root;
 they do not save or restore user FP/segment state. Timed event waits use the
-existing BSP expiry path, including timer preemption of a busy task. The private
+local deadline expiry path, including timer interrupts of a busy task. The private
 memory, capability-growth and other process-service helpers remain user-only.
 
 `kernel_task_sleep_until(deadline)` suspends the current kernel task until an
 absolute monotonic nanosecond deadline. A past deadline yields to ready tasks.
-Sleeping tasks are checked both by the BSP scheduler and by timer preemption,
+Sleeping tasks are checked both by the BSP scheduler and by local deadline interrupts,
 so a busy task cannot prevent a sleeper from becoming runnable. Sleep requires
 interrupts enabled and no held locks. The [task header](../../include/kernel/task.h)
 defines the calling contracts.
@@ -370,8 +371,8 @@ defines the calling contracts.
 It checks the BSP ready queue under the scheduler lock, then yields if another
 task is runnable; otherwise it returns. It does not make sleeping tasks runnable
 or replace timer handling of deadlines and task retirement. Empty timed-wait and
-kernel-sleeper lists skip clock reads; nonempty lists keep their existing checks
-and wake ordering.
+kernel-sleeper lists skip expiry clock reads; local timer programming still reads
+the clock to preserve the nominal preemption phase.
 
 The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.

@@ -1,7 +1,8 @@
 # Sleep wake granularity
 
-Status: **all three defaults accepted by the owner, 2026-10-08**. The owner
-authorized implementation through the orchestrator on the same date. Baseline
+Status: **implementation delivered for review, 2026-10-08**. The owner accepted
+all three defaults and authorized implementation on the same date. Native
+qualification remains open. Baseline
 base: `9acf597fec897119256a0c0044785771b19f9132`.
 
 ## Goal and evidence
@@ -78,14 +79,14 @@ See [Intel SDM 3A, section 11.5.4](https://cdrdv2-public.intel.com/812386/253668
 
 - [x] Investigate and record a fresh baseline/proposal.
 - [x] Owner settles the three decisions and authorizes implementation.
-- [ ] Fix the missing expiry reschedule IPI as a
+- [x] Fix the missing expiry reschedule IPI as a
   separate measured step. Collect destination CPU indices under the queue lock
   and notify after unlocking, without retaining published task/wait pointers.
   Repeat the baseline before timer changes to distinguish AP wake delay from
   BSP tick quantization before implementing the accepted one-shot design.
-- [ ] Implement deadline ownership/dispatch and timer multiplexing together;
+- [x] Implement deadline ownership/dispatch and timer multiplexing together;
   update clock/scheduler contracts in the implementation PR.
-- [ ] Repeat identical baseline workload/library bytes with only the kernel
+- [x] Repeat identical baseline workload/library bytes with only the kernel
   changed. Check ordinary one-/four-CPU boots, earlier insertion, simultaneous
   sleepers, resource wake/stop, idle wake, stack ordering and ongoing preemption.
   Include a roughly 1 ms sleep loop to inspect deadline interrupt rate and
@@ -102,8 +103,16 @@ execution. ThinkPad checks should repeat SDL delay/Quake cap and verify LAPIC
 operation, sustained 32-bit HPET extension and power-state behavior. Hardware
 availability and results are not assumed from screenshot qualification.
 
-Branch: `kernel/sleep-deadline-proposal`. No dependency changes or compiler
-rebuild. Baseline consumer is a measurement artifact, not a normal application.
-Baseline guest/debugger/client/build jobs stopped. The path-normalization review
-fix preserves all numerical readings. Implementation is now authorized; the
-three defaults above are accepted decisions rather than reviewer approval alone.
+Proposal branch: `kernel/sleep-deadline-proposal`. No compiler rebuild is needed;
+only the ports documentation pin changes. The baseline consumer is a measurement
+artifact, not a normal application.
+The [IPI measurements](../development/experiments/sleep-wake-granularity/ipi.md)
+and [one-shot qualification](../development/experiments/sleep-wake-granularity/timer.md)
+record the separate steps. The implementation branch is
+`kernel/sleep-deadline-timer`, following `kernel/sleep-expiry-ipi`;
+the ports documentation dependency is
+[ports #62](https://git.internal/PyxisOS/pyxis-ports/pulls/62), `c4f41376`.
+The measured kernel and submitted-head CI are identified separately in the PR.
+Task-owned guests/debuggers/clients stopped; the final ordinary image/checks
+are completed before submission. Native evidence or an owner-accepted limit
+is the remaining closure condition.
