@@ -4,8 +4,8 @@ Status: **task 1 authorized, documentation and decisions only, 2026-10-08.**
 Based on main `8c4368e`, including the owner's native batch
 [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547). The
 [mouse milestone](bluetooth-mouse.md) retains accepted rounds one and two.
-The owner accepted the first task 1 round on 2026-10-08 with the source-loss
-adjustment below. The next round remains pending. Task 1 cannot close until
+The owner accepted both task 1 rounds below on 2026-10-08, including the
+source-loss adjustment. The third round remains pending. Task 1 cannot close until
 decisions and pointer coordination are recorded; it authorizes no implementation.
 
 ## Accepted first task 1 round
@@ -35,28 +35,44 @@ Claude's [review of #548](https://git.internal/PyxisOS/pyxis-os/pulls/548):
    values need qualification and remain settings, not ABI guarantees. Actual LE
    connection parameters remain gated.
 
-## Second task 1 decision round
+## Accepted second task 1 round
 
-Only these three decisions are presented now, each **pending**:
+Accepted by the owner through the orchestrator on **2026-10-08**:
 
-10. **HID report scope.** Recommended: use the measured Report Map to normalize
-    relative X/Y, left/right/middle buttons and ordinary vertical wheel steps.
-    Other controls remain explicitly unsupported; mandatory vendor setup or
-    incompatible units/layouts return to the owner before input injection.
-    Expanding to extra buttons, horizontal/high-resolution wheel or vendor
-    controls would require additional semantics and qualification.
-11. **USB HID sharing.** Recommended: share private interrupt transport and
-    normalized producer semantics; keep class binding, framing and report policy
-    separate. Preserve current admission limits and defer a general HID parser
-    until a concrete second consumer needs one. This milestone implements no
-    USB HID class, new speeds/hub support or public raw-USB API. A shared general
-    parser now would expand the work beyond the measured mouse requirements.
-12. **Controller/service lifetime.** Recommended: one exclusive process-owned
-    controller grant, explicit service restart and re-grant only after confirmed
-    prior cleanup. Unknown ownership or terminal USB failure stays unavailable
-    with current retention/quarantine limits; no automatic recovery, DMA release
-    or endpoint replacement. Confirmed cleanup is defined below. Automatic
-    service/controller recovery is a separate lifecycle design, not this default.
+10. **HID report scope:** measured relative X/Y, left/right/middle and ordinary
+    vertical wheel. Mandatory vendor setup or layout/unit changes return to the
+    owner before input injection. Back/forward buttons and the thumb wheel are
+    possible later additions, not assigned here; other controls are unsupported.
+11. **USB HID sharing:** private transport and normalized producer semantics,
+    with class/report policies separate. Preserve existing endpoint admission;
+    defer a general HID parser until a concrete second consumer needs one. This
+    assigns no USB HID implementation, new speeds/hubs or public raw-USB API.
+12. **Controller/service lifetime:** exclusive process ownership, explicit
+    restart and re-grant only after confirmed cleanup, defined below. Retain
+    existing terminal-failure/DMA limits; no automatic recovery, DMA release or
+    endpoint replacement is authorized.
+
+## Third task 1 decision round
+
+Only these **two** decisions are presented now, each pending:
+
+13. **Durable bond success and failure.** Recommended: report successful usable
+    enrollment and activate input only after SC encryption and durable local
+    storage of the LTK/IRK/private identity. Report durable forgetting only after
+    local removal and synchronization. On persistence failure, stop input and
+    reconnect, disconnect and report durability/peer-bond uncertainty; never
+    claim rollback, peer-key deletion or old-block erasure. A missing private
+    persistent root makes bonding unavailable. Temporary usable RAM-only bonds
+    would be an explicit alternative and would not meet accepted closure.
+14. **Warm-version qualification evidence.** Recommended: a recorded profile/build
+    enters the production compatibility list only after HCI features/credits and
+    transport, SC enrollment/encryption, durable reconnect/RPA resolution and
+    measured HID/pointer input pass on that profile, with revision/configuration
+    and owner native evidence recorded. Explicitly assigned staged development
+    may use a recorded provisional profile/build to produce this evidence; it
+    does not imply production readiness, pin equivalence or closure. Unknown or
+    mismatched builds outside that assignment still return to the owner. A
+    version-reply/scan-only qualification would provide weaker evidence.
 
 ## Owner-reported security evidence
 
@@ -179,11 +195,11 @@ none is recorded yet, and no alpha branch or ABI file was edited.
 
 ## Later decisions and gates
 
-The second round presents HID scope, USB HID sharing and controller/service
-lifetime. Detailed bond durability and the firmware asset/qualification gates
-below remain later topics; they are not additional questions in this round.
+The third round presents durable bond success/failure and production warm-version
+qualification. Exact firmware assets, mirror and later runtime parameters remain
+measurement/implementation prerequisites, not additional policy questions now.
 
-For decision 12, confirmed cleanup means all outstanding commands, ACL credits
+Under accepted decision 12, confirmed cleanup means all outstanding commands, ACL credits
 and pending waits are accounted for, old connection epochs invalidated, and
 that service's input source ended under accepted decision 8 before re-grant.
 Exit or handle closure alone does not prove this. Ordinary service exit does
@@ -194,8 +210,8 @@ Re-grant cannot imply recycling posted DMA, stream replacement, USB recovery or
 reattachment. Bond authentication failure remains a separate stop for owner
 action, not permission to recover the controller or silently enroll a new peer.
 
-Round two already settles pinned cold assets and qualified warm reuse. Exact
-assets/compatibility criteria remain gated. The
+Milestone round two already settles pinned cold assets and qualified warm reuse.
+Decision 14 proposes the qualification evidence; exact assets remain gated. The
 [task 4 provenance](../development/experiments/bluetooth-task4/README.md#deferred-cold-upload-and-asset-provenance)
 provides candidates `intel/ibt-20-1-3.sfi` and `.ddc`, their alias targets and
 decompressed hashes, not a selected Pyxis pin. Before task 3 relies on firmware,

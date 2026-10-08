@@ -3,8 +3,10 @@
 Status: **task 1 authorized 2026-10-08, documentation and decisions only.**
 Rounds one and two remain accepted; the
 [first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round) is
-accepted 2026-10-08 with the source-loss adjustment; the second task 1 round is
-ready. No code, ABI edit, probe or implementation is authorized.
+accepted 2026-10-08 with the source-loss adjustment, as is
+[task 1 round two](bluetooth-task1-contracts.md#accepted-second-task-1-round).
+The third round has two pending policy decisions. No code, ABI edit, probe or
+implementation is authorized.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -62,7 +64,7 @@ Accepted by the owner through the orchestrator on **2026-10-08**:
    no disk-encryption claim.
 
 Other recommendations remain proposed. Task 1 presents only
-[three decisions](bluetooth-task1-contracts.md#second-task-1-decision-round) now;
+[two decisions](bluetooth-task1-contracts.md#third-task-1-decision-round) now;
 later topics remain queued under [handoff](#decision-and-investigation-handoff).
 
 ## Accepted ownership and proposed service lifetime
@@ -78,7 +80,7 @@ below remain proposed until reviewed and accepted.
 | Trusted userspace Bluetooth service | Enrollment/reconnect policy, connection procedures, L2CAP fragmentation/reassembly and LE signaling, SMP, ATT/GATT discovery, bond storage and HID report interpretation. It consumes HCI results rather than maintaining a second credit authority. |
 | Kernel system pointer | Physical position, button state, surface routing, cursor, activation and pointer lock. The Bluetooth service submits normalized input as an authorized source. |
 
-The controller grant would be exclusive and process-owned, with copied HCI
+The controller grant is accepted as exclusive and process-owned, with copied HCI
 packets/results and explicit capacity, deadline, sequence/loss and terminal-state
 semantics. It grants controller control to the trusted service, not raw USB,
 physical addresses or DMA mappings. Kernel initialization finishes before handoff;
@@ -99,7 +101,9 @@ and reports that source unavailable; no silent dropped-button state or implicit
 re-pairing. Accepted input reset/drag cancellation occurs only if the lost source
 held buttons; lock revokes only then or when no live source remains. A buttonless
 Bluetooth disconnect leaves the live PS/2 pointer visibly unchanged. These
-input-loss rules are accepted; controller cleanup/re-grant remains decision 12.
+input-loss rules and controller cleanup/re-grant policy are accepted; the
+[confirmed-cleanup requirements](bluetooth-task1-contracts.md#later-decisions-and-gates)
+remain explicit.
 Teardown cannot recycle outstanding DMA. Start with the existing terminal
 transport limits and explicit reboot recovery where ownership remains uncertain.
 Mouse radio disconnect/sleep is distinct from USB controller removal and should
@@ -258,8 +262,10 @@ are not a substitute for the mouse's actual map. First record an address-free
 map/layout assessment; unsupported layouts or required vendor initialization
 return for a scope decision before pointer injection.
 
-Normalize checked relative X/Y, primary buttons and vertical wheel from the
-actual report map. Preserve releases and wheel units, with bounded arithmetic
+Accepted scope is measured relative X/Y, left/right/middle and ordinary vertical
+wheel from the actual report map. Back/forward buttons and the thumb wheel are
+possible later additions, not assigned. Mandatory vendor/layout/unit changes
+return to the owner. Preserve releases and wheel units, with bounded arithmetic
 and explicit sequence/loss handling. Reject absolute or unsupported reports
 rather than interpreting them as relative motion. Initially rediscover GATT
 after reconnect; caching/service-change policy can follow only if needed.
@@ -292,8 +298,9 @@ endpoint recovery or cancellation speculatively; retained DMA and controller-wid
 quarantine remain visible limits unless explicitly replaced. Sharing transport
 now does not assign USB HID implementation to this milestone. A common bounded
 HID report decoder may be extracted when both consumers have demonstrated needs;
-sharing report normalization and the pointer input contract is useful regardless
-of parser placement. The sharing scope needs a later owner decision.
+sharing report normalization and the pointer input contract is accepted alongside
+private transport reuse, with class/report policies separate. This assigns no
+USB HID implementation; a general parser still waits for a concrete second need.
 
 ## Proposed tasks and completion evidence
 
@@ -309,8 +316,9 @@ first and state merge order. Probe branches remain historical evidence.
   owner-reported Fedora SMP answers the device security question but does not
   establish Pyxis pairing/report support. The
   [first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round)
-  is accepted 2026-10-08; the second round is ready, with dependency/measurement
-  gates recorded. This task stays unchecked until decisions and alpha coordination finish.
+  and second round are accepted 2026-10-08. The third round presents two policies,
+  with dependency/measurement gates recorded. This task stays unchecked until
+  decisions and alpha coordination finish.
 - [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
   progress and process-exit/loss behavior. Validate warm passthrough framing and
@@ -357,18 +365,20 @@ service changes, probes, pairing or native checks.
 
 ## Decision and investigation handoff
 
-Milestone rounds one and two and the first task 1 round are
+Milestone rounds one and two and both completed task 1 rounds are
 **accepted 2026-10-08**. Task 1 presents only the
-[second round's three decisions](bluetooth-task1-contracts.md#second-task-1-decision-round).
+[third round's two decisions](bluetooth-task1-contracts.md#third-task-1-decision-round).
 Remaining decisions and dependency gates include later topics not presented now:
 
-- Exact firmware pin/mirror, compatible warm-version list and qualification criteria.
-- Controller/service lifetime, HID report scope and USB HID sharing (second task 1 round).
-- Bond record/durability behavior and later parameter qualification.
+- Durable bond success/failure and production warm-version evidence (third task 1 round).
+- Exact firmware pin/mirror and actual compatibility list, selected after measurement.
+- Later parameter qualification and ordinary implementation choices such as record encoding.
 - Alpha's agreement on the owner-accepted input-source contract (awaiting relay).
 
 Producer authority, OR aggregation, conditional source loss and initial
-scan/reconnect policy are settled by the first task 1 round, not reopened here.
+scan/reconnect policy are settled, as are HID scope, USB sharing and controller
+lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
+prerequisite under the accepted policy, not a blind choice before cold evidence.
 
 Obtain decisions before implementing dependent behavior. Only task 1's
 documentation is assigned; every implementation task needs a later assignment.
