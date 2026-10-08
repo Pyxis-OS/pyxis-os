@@ -86,8 +86,8 @@ Chosen by the owner, each starting with a proposal:
   `b43a573` on `pointer/virtio-cursor` in
   [draft #560](https://git.internal/PyxisOS/pyxis-os/pulls/560). Its
   [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
-  is recorded; [capture completion and QEMU frontend proposals](pointer.md#task-4-planning)
-  await the owner before code. The later SDL blocking-event adapter fix remains
+  is recorded; [capture completion and QEMU frontend defaults](pointer.md#task-4-planning)
+  are accepted 2026-10-08; task 4 implementation is authorized. The later SDL blocking-event adapter fix remains
   beta's work. Task 5 needs separate authorization. Matched QEMU checks suffice
   for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;

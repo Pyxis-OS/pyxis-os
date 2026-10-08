@@ -601,5 +601,5 @@ QEMU/GDB jobs are stopped. These initial samples make no hardware or isolated
 cursor-cost claim. Before changing pointer code, finish the remaining software
 motion, unlocked Quake, capture and resize workloads with this baseline artifact;
 repeat the matching workloads after hardware implementation. The task's capture
-completion and host frontend proposals remain unanswered in
+completion and host frontend defaults are accepted 2026-10-08 in
 [task 4 planning](../wip/pointer.md#task-4-planning).

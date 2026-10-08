@@ -679,11 +679,11 @@ Proposed implementation breakdown:
    the ordinary image and inspect exact submitted-head CI. No tests or new
    benchmark/boot automation are added.
 
-**Proposed task 4 decisions, 2026-10-08 — neither is accepted:**
+**Task 4 decisions accepted by the owner, 2026-10-08:**
 
 15. **Response-less cursor completion and capture.** VirtIO specifies a cursor
     response, but QEMU 10.2.2 returns the used descriptor with zero bytes and no
-    response/fence, including some refused commands. Recommended default:
+    response/fence, including some refused commands. Accepted:
     validate scanout/resource/shape locally, require successful fenced image
     preparation and frame submission, and wait for the matching bounded cursor
     used completion before publishing capture. Document that this confirms
@@ -691,9 +691,9 @@ Proposed implementation breakdown:
     or visible scanout timing. Timeout, malformed completion, status change or
     failed prerequisites prevent capture publication and invoke existing terminal
     driver failure/retention. This explicitly clarifies the earlier stronger
-    "successful completion" wording; it is not yet an implementation guarantee.
+    "successful completion" wording.
 16. **QEMU frontend qualification.** QEMU installs the hardware shape through
-    its host GUI. Recommended default: qualify GTK on X11, relative PS/2 and
+    its host GUI. Accepted: qualify GTK on X11, relative PS/2 and
     unscaled 1:1 geometry. GTK's Wayland position warp is a no-op; its scaled or
     centered placement differs from its input transform. SDL consumes cursor
     colors differently. Document these frontend limitations without adding
@@ -706,4 +706,4 @@ Evidence: [VirtIO 1.4 GPU definition](https://github.com/oasis-tcs/virtio-spec/b
 [SDL image masks](https://github.com/qemu/qemu/blob/v10.2.2/ui/sdl2.c#L748) and
 [GDK Wayland warp](https://github.com/GNOME/gtk/blob/3.24.49/gdk/wayland/gdkdevice-wayland.c#L642).
 These are inspected host implementations, not runtime hardware qualification.
-No task 4 code has been changed; implementation waits for these owner decisions.
+Both defaults were accepted on 2026-10-08; task 4 implementation is authorized.
