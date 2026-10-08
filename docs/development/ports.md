@@ -135,11 +135,12 @@ prerequisite. Two patches make fmt follow libc++'s feature macros: no locale
 support, since the SDK's libc++ has no localization, and no `std::wstring`
 helper, since it has no wide characters. `FMT_OS` is off.
 
-`build/ports-dev/fmt` contains `libfmt.a` and the `fmt` headers, outside the
-base and guest SDK. `format.h`, `ranges.h`, `color.h`, `compile.h` and
-`args.h` are usable; `chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h` and
-`os.h` fail to compile. No program in the image uses fmt yet, so nothing from
-it enters the boot tree.
+`build/ports-dev/fmt` contains `libfmt.a`, the `fmt` headers and fmt's own
+CMake package (`fmt::fmt`), outside the base and guest SDK. `format.h`,
+`ranges.h`, `color.h`, `compile.h` and `args.h` are usable; `chrono.h`,
+`ostream.h`, `std.h`, `xchar.h`, `printf.h` and `os.h` fail to compile. Its
+only consumer, [DevilutionX](../userland/devilutionx.md), is an opt-in build
+that stages fmt's license itself, so ordinary images contain nothing of fmt.
 
 ## SDL2 development library
 
@@ -157,9 +158,10 @@ devices and the other facilities Pyxis lacks are left out and report
 themselves as unsupported. The [SDL2 milestone](../wip/sdl2.md) has the
 decisions and measurements.
 
-`build/ports-dev/sdl2` contains `libSDL2.a` and the `SDL2` headers with the
-port's `SDL_config.h`, outside the base and guest SDK. No program in the
-image uses SDL2 yet, so nothing from it enters the boot tree.
+`build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
+port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
+base and guest SDK. Its only consumer, [DevilutionX](../userland/devilutionx.md),
+is an opt-in build, so ordinary images contain nothing of SDL2.
 
 ## TLS development libraries
 

@@ -45,7 +45,10 @@ endif
 DOOM_WAD ?=
 DOOM_DEMOS ?=
 QUAKE_DATA ?=
-export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA
+# Opt-in: a directory with the Diablo shareware spawn.mpq builds DevilutionX
+# into this image, for personal use only; see ports/devilutionx/PORT-NOTICE.
+DIABLO_DATA ?=
+export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA
 
 LOG_LEVEL ?= info
 ifeq ($(LOG_LEVEL),trace)

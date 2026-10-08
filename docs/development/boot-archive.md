@@ -56,6 +56,10 @@ override, the default comes from userland's install tree, including when using
 its prebuilt bundle. `DOOM_WAD` selects a local retail/custom WAD, and
 `DOOM_DEMOS` selects the directory containing the two supported demo files.
 Without the WAD override, package the vendored shareware WAD and its notices.
+`DIABLO_DATA` selects a directory holding the Diablo shareware `spawn.mpq`.
+That builds [DevilutionX](../userland/devilutionx.md) and stages it, which
+makes the image personal-use only; without it, nothing of DevilutionX is
+staged.
 Removing overrides removes their old payloads on the next assembly.
 
 [Independent component bundles](build-bundles.md) allow CI or local assembly to

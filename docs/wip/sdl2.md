@@ -1,10 +1,12 @@
 # SDL2 with a native backend
 
-Status: **task 4 delivered for review, 2026-10-08; assigned to Claude.** Tasks
-1–3 are merged ([#522](https://git.internal/PyxisOS/pyxis-os/pulls/522),
+Status: **task 5 delivered for review, 2026-10-08; assigned to Claude.** Tasks
+1–4 are merged ([#522](https://git.internal/PyxisOS/pyxis-os/pulls/522),
 [#525](https://git.internal/PyxisOS/pyxis-os/pulls/525),
-[#529](https://git.internal/PyxisOS/pyxis-os/pulls/529)). The owner accepted
-eight [decisions](#accepted-decisions). Later tasks start one at a time.
+[#529](https://git.internal/PyxisOS/pyxis-os/pulls/529),
+[#531](https://git.internal/PyxisOS/pyxis-os/pulls/531)). The owner accepted
+eleven [decisions](#accepted-decisions). Task 6, the owner's native check,
+remains.
 
 ## Goal and completion
 
@@ -207,7 +209,7 @@ They are not separate ports. Patches as listed above, plus:
 - hardware cursor off and its option hidden;
 - default paths, so a bare `devilutionx` starts without arguments.
 
-Two findings for task 5:
+Two findings for task 5, both handled there:
 
 - **Save path.** DevilutionX saves next to a writable `diablo.ini` in the
   working directory. In task 3's run that sent saves to `host://` instead of
@@ -332,6 +334,56 @@ on main `9acf597`:
   Configure checks found `strdup` and `fileno` and did not find `fork`; CMake
   printed no unknown-system warning. The rebuilt fastfetch ran normally.
 
+## Task 5: DevilutionX
+
+The [userland reference](../userland/devilutionx.md) describes the result, and
+the [recipe README](../../ports/devilutionx/README.md) its build and patches.
+Choices made while implementing:
+
+- **Packages.** The fmt recipe now runs fmt's own install, which adds its
+  CMake package; `libfmt.a` is unchanged. The SDL2 port gains a relocatable
+  `SDL2Config.cmake`. DevilutionX finds both, and zlib and libpng, through
+  `CMAKE_FIND_ROOT_PATH`.
+- **The runner.** Its extra sources (decision 11) are a separate ports commit,
+  documented in the ports README. A second commit adds DevilutionX's
+  `--zlib`, `--libpng`, `--fmt` and `--sdl2` prefixes.
+- **The four patches:**
+  - the Pyxis platform file;
+  - `stat` for file checks, because the upstream fallback opened files for
+    writing and so missed read-only `boot://` data;
+  - libc++ and fmt 12 build fixes, and no `thread_local`;
+  - Pyxis paths and defaults.
+- **Paths.**
+  - Data comes from `boot://share/diablo/`, and assets from
+    `boot://share/devilutionx/assets/` regardless of `--data-dir`.
+  - Saves and `diablo.ini` always go to `home://devilution/`; this answers
+    task 4's save-path finding.
+  - The post-link strip is off through `DEVILUTIONX_DISABLE_STRIP`, task 4's
+    other finding.
+- **Frame rate.** The default is "Limit FPS". The default "Vertical Sync"
+  rendered uncapped at 419–427 FPS, because Pyxis has no vertical sync; with
+  the limiter the game holds 56.4–60.8 FPS.
+- **Line endings.** DevilutionX's sources are CRLF, and the patches add LF
+  lines so `git apply --whitespace=error-all` accepts them.
+
+Validation in QEMU 10.2.2 with nested KVM, 4 CPUs and standard VGA at 1280x800:
+
+- **The opt-in.** A build without `DIABLO_DATA` gives the ordinary 39.3 MB boot
+  archive with nothing of DevilutionX. With the shareware directory it is
+  74.0 MB.
+- **Shareware**, launched by the bare name `devilutionx` with no arguments:
+  - the intro, menus and hero creation;
+  - walking in Tristram, and the inventory, character panel and game menu;
+  - Save Game wrote `home://devilution/spawn_0.sv` and `diablo.ini`, and a
+    restart offered "Save File Exists" and loaded it.
+- **The owner's GOG data**, exported read-only through virtio-fs and run
+  with `--data-dir host://`:
+  - retail Diablo played into Tristram;
+  - started from `host://hellfire`, Hellfire's selector, intros, Monk class
+    and town worked with no extra work.
+
+  Nothing from that data was copied.
+
 ## Accepted decisions
 
 Accepted by the owner on 2026-10-08, as proposed in task 1.
@@ -420,6 +472,32 @@ Accepted by the owner on 2026-10-08, with task 4.
 - `scripts/cxx-runtime.sh` keeps its own configuration, because it builds
   libc++ before the SDK is complete.
 
+### 9. Game data in images
+
+Accepted by the owner on 2026-10-08, with task 5.
+
+- `DIABLO_DATA` stages the shareware `spawn.mpq` only.
+- Retail data is played at run time with `--data-dir`, because the boot
+  archive stays in RAM and must fit the ESP.
+
+### 10. Personal use only
+
+Accepted by the owner on 2026-10-08, with task 5.
+
+- DevilutionX's non-commercial licence and libmpq's GPL cannot both be met by
+  someone who distributes the program.
+- So the build is opt-in and local. Its notice and reference say an image
+  containing it is for the person who built it and must not be shared.
+- CI and ordinary images never contain it.
+
+### 11. Extra pinned sources
+
+Accepted by the owner on 2026-10-08, with task 5.
+
+- The ports runner fetches a recipe's extra sources: a mirror commit or an
+  archive with its SHA-256, each verified like the main source.
+- FetchContent runs fully disconnected.
+
 ## Tasks
 
 1. [x] Probe and proposal: this document. Documentation only.
@@ -435,7 +513,8 @@ Accepted by the owner on 2026-10-08, with task 4.
      VGA, Bochs, and VirtIO with a resize.
 4. [x] **SDK CMake toolchain file**: [ports #61](https://git.internal/PyxisOS/pyxis-ports/pulls/61)
    and its Pyxis PR. `share/pyxis.cmake` is documented in the SDK reference.
-5. [ ] **DevilutionX** (ports and Pyxis):
+5. [x] **DevilutionX**: [ports #63](https://git.internal/PyxisOS/pyxis-ports/pulls/63)
+   and its Pyxis PR:
    - the recipe, dependencies and patches;
    - licence notices for it and each dependency;
    - the opt-in `DIABLO_DATA` build and image staging;

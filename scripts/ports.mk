@@ -92,13 +92,16 @@ LIBPNG_OUTPUTS := $(addprefix build/ports/libpng/stage/,dev/lib/libpng.a \
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.cmake \
                         ports/fmt/patches/*.patch) ports/ports.lua ports/build.lua
 FMT_OUTPUTS := $(addprefix build/ports/fmt/stage/,dev/lib/libfmt.a \
-  dev/include/fmt/format.h dev/share/licenses/fmt/LICENSE dev/share/fmt/source.txt)
+  dev/include/fmt/format.h dev/lib/cmake/fmt/fmt-config.cmake \
+  dev/share/licenses/fmt/LICENSE dev/share/fmt/source.txt)
 
 SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/SDL_config.h \
-                         ports/sdl2/PORT-NOTICE ports/sdl2/pyxis/* ports/sdl2/patches/*.patch) \
+                         ports/sdl2/PORT-NOTICE ports/sdl2/pyxis/* ports/sdl2/cmake/* \
+                         ports/sdl2/patches/*.patch) \
                ports/ports.lua ports/build.lua
 SDL2_OUTPUTS := $(addprefix build/ports/sdl2/stage/,dev/lib/libSDL2.a \
-  dev/include/SDL2/SDL.h dev/include/SDL2/SDL_config.h dev/share/licenses/sdl2/LICENSE.txt \
+  dev/include/SDL2/SDL.h dev/include/SDL2/SDL_config.h dev/lib/cmake/SDL2/SDL2Config.cmake \
+  dev/share/licenses/sdl2/LICENSE.txt \
   dev/share/licenses/sdl2/PORT-NOTICE dev/share/sdl2/source.txt)
 
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
@@ -112,12 +115,23 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
   share/licenses/mbedtls/LICENSE share/licenses/tf-psa-crypto/LICENSE \
   share/licenses/mbedtls/PORT-NOTICE)
 
+# DevilutionX is built only when DIABLO_DATA asks for it; see its PORT-NOTICE.
+DEVILUTIONX_INPUTS := $(wildcard ports/devilutionx/*.lua ports/devilutionx/Makefile \
+                                ports/devilutionx/PORT-NOTICE ports/devilutionx/patches/*.patch) \
+                      ports/ports.lua ports/build.lua
+DEVILUTIONX_OUTPUTS := $(addprefix build/ports/devilutionx/stage/,bin/devilutionx.pxe \
+  share/devilutionx/assets/ui_art/diablo.pal share/devilutionx/source.txt \
+  share/licenses/devilutionx/LICENSE.md share/licenses/devilutionx/PORT-NOTICE)
+
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
      $(BUSYBOX_IMAGE) $(BUSYBOX_LICENSE) $(LINKS_IMAGE) $(LINKS_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
      $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
+ifneq ($(DIABLO_DATA),)
+all: $(DEVILUTIONX_OUTPUTS)
+endif
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -207,6 +221,13 @@ $(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(SDL2_OUTPUTS) &: $(SDL2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/sdl2
 	$(LUA) ports/build.lua sdl2 --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl2)
+
+$(DEVILUTIONX_OUTPUTS) &: $(DEVILUTIONX_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) \
+                          $(FMT_OUTPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/devilutionx
+	$(LUA) ports/build.lua devilutionx --sdk $(abspath build/sdk) --work $(abspath build/ports/devilutionx) \
+	  --zlib $(abspath build/ports/zlib/stage/dev) --libpng $(abspath build/ports/libpng/stage/dev) \
+	  --fmt $(abspath build/ports/fmt/stage/dev) --sdl2 $(abspath build/ports/sdl2/stage/dev)
 
 $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mbedtls
