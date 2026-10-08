@@ -74,3 +74,99 @@ cost or native performance. Repeated samples show variation; no speedup claim or
 performance threshold follows from these small sets. Mouse routing happens before
 `space_present`, so this interval measures presentation, not input latency.
 Baseline QEMU/debugger jobs were stopped before code work started.
+
+## Task 1 results
+
+The measured task 1 kernel contains changes through `d74cfa9`, with published
+userland `6b45dd1` (userland PR #164). It uses the same main runtime base and
+unchanged ports/fs/lwIP pins as the baseline. Later documentation and parent
+gitlink commits do not change these binaries. Main subsequently gained deadline
+timer changes; these samples do not measure that newer scheduler.
+
+`make -j16 kernel sdk` and the complete userland build passed with the existing
+builder. The default `make -j16 image` fails because Quake and SDL2 still consume
+the removed `pointer_event.dx/dy`. Their migration belongs to separately
+authorized task 2. Tasks 1 and 2 must integrate the ABI and all consumers together;
+this draft is not a working default-image intermediate revision. No compiler
+container rebuild, compatibility fields, placeholder lock API or stale consumer
+binary was used to hide this dependency.
+
+For the focused interactive image, temporary copies of the existing ports install
+and development Lua manifests omitted the Quake executable and SDL2 development
+library. The unchanged `scripts/stage-tree.lua` staged that subset; the existing
+ports bundle recorder recorded its inputs, the userland Makefile installed all
+userland against the fresh SDK and remaining development exports, and the ordinary
+`assemble-initrd.sh` and `make-image.sh` assembled it. The Bochs image regenerated
+`build/limine.conf` with `make build/limine.conf DISPLAY_SIZE=1280x800`. This is
+manual qualification staging, not a new supported build profile or CI change.
+The subset initrd is 38,881,792 bytes, versus the baseline's 39,330,304 bytes.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Kernel ELF | `ea30f496fbb52cfd91654c78002ca4fba0031d025e2a6711f4325a4ec52c7604` |
+| Initrd | `79291b05aafdb4478ced0bda9c8449c8a27de35beb3b6d9998b53f33a452f6de` |
+| Default ISO | `313419131252529d44f93e4e905457c4ca7d17c0b43fdc0d4498502c6e2a4ee0` |
+| Bochs ISO (`DISPLAY_SIZE=1280x800`) | `2d42a4a1f0367f8dc4511ce6cbfa9b144dfc9eec4f54f9da77109ac892a2d20e` |
+
+### Presentation observations
+
+The four after samples use the same headless QEMU arguments, HPET/GDB method,
+selected static terminal, resolution and confirmed backend as the baseline.
+The system pointer is now visible at screen center; the terminal text cursor
+remains visible. No program pointer subscription is acquired.
+
+| Backend | Four task 1 samples, ms | Median, ms | Range, ms |
+| --- | --- | ---: | --- |
+| Boot framebuffer | 0.863570, 1.104950, 0.697540, 1.045450 | 0.954510 | 0.697540–1.104950 |
+| Bochs | 1.297140, 1.251430, 0.863760, 0.799590 | 1.057595 | 0.799590–1.297140 |
+| VirtIO | 2.236020, 2.494740, 1.888450, 1.875630 | 2.062235 | 1.875630–2.494740 |
+
+VirtIO's observed median rises by 0.503305 ms, approximately 32%; its ranges
+overlap. Boot's lower range does not overlap its baseline. These small elapsed
+sample sets, shared-host variation and changed initrd prevent attributing either
+result solely to cursor composition or claiming a stable speedup/regression.
+Keep the measurements for comparison with task 4's hardware cursor and task 5's
+final matched qualification. The implementation uses at most a 256-byte pixel
+scratch row and forwards existing composition spans through the capture tee; it
+does not allocate or write an additional full frame.
+
+### Interactive coverage
+
+Boot-framebuffer and Bochs boots showed the kernel pointer and selected
+Development by tab input. Bochs exercised `mousetest` custom image (16x20 BGRA8,
+hotspot 1,1), surface-local coordinates, drawing, H hide/show, D default, C custom
+and W bounded center warp. A custom/hidden monitor-image comparison changed only
+114 pixels inside the cursor bounds. Debugger inspection confirmed physical
+position versus the 32-pixel navigation offset, image ownership, retained image
+while hidden, focus/button reset on Super+Down, restoration on Super+Up, and
+image/subscription cleanup on Escape exit. Boot also exercised custom image and
+hiding; it was confirmed as `DISPLAY_BOOT`, rather than assuming the VGA device
+selected the boot backend.
+
+VirtIO additionally ran with the existing GTK display on Xwayland and a modern
+VirtIO NIC with only loopback host forwarding to the existing remote terminal.
+This separate configuration was used for resize/capture, not the timing samples.
+The GUI initially advertised 640x480. Resizing the QEMU window to 1000x700 yielded
+a 1000x673 destination after GTK's controls; geometry generation and mapping
+identity both changed from 1 to 2 as `mousetest` replaced its mapping. A second
+resize to an 800x600 window yielded 800x573, generation/identity 3. During that
+resize a held physical left button remained set while the subscription's accepted
+buttons became zero. The program continued, kept its custom image, and warped to
+the new surface center. No debugger geometry mutation was used.
+
+The remote shell used existing `screenshot tmp://NAME.png` and `xfer send` with
+explicit host confirmation into the task's build directory. Decoded RGB pixels
+of both the visible-cursor and hidden-cursor 1000x673 PNGs matched independently
+requested QEMU monitor dumps exactly. The first visible capture was requested
+before the GUI resize debounce committed and correctly returned the previous
+640x480 geometry; it was not compared as though it had the new size. After exit,
+debugger inspection showed both display/pointer owners and the saved image null.
+All task-owned QEMU, GDB and remote-client processes were stopped.
+
+Same-size REPLACE identity changes, partial-alpha and maximum-size images,
+malformed/denied requests, queue overflow and allocation failures were reviewed
+in source, not separately exercised with synthetic probes or fault injection.
+Physical PS/2 behavior remains deferred under the accepted
+[native ThinkPad qualification debt](../technical-debt.md#native-system-pointer-qualification).
+This task does not qualify lock/escape, terminal selection/controller queues,
+Quake/SDL2 migration or the VirtIO hardware cursor.

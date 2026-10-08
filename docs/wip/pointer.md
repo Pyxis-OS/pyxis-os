@@ -1,6 +1,6 @@
 # A system pointer
 
-Status: **task 1 authorized; assigned to Codex, 2026-10-08.** The proposal
+Status: **task 1 delivered for review; assigned to Codex, 2026-10-08.** The proposal
 merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530);
 round three is recorded in the first commit of task 1's PR.
 The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
@@ -9,8 +9,10 @@ The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
 The original directions and all three decision rounds are
 [accepted](#owner-decisions), all on 2026-10-08. No queued owner decisions remain.
 The owner explicitly authorized task 1 on 2026-10-08, after proposal merge.
-Later tasks remain unstarted until separately authorized. Capture the baseline
-before task 1 code changes; this decision-record commit contains documentation only.
+Later tasks remain unstarted until separately authorized. The first task 1 commit
+records decisions only; the [baseline](../development/system-pointer-qualification.md)
+was captured before code changes. Task 1 remains draft until task 2 migrates
+Quake/SDL2 and permits the ABI and all consumers to integrate together.
 
 ## Today
 
@@ -483,12 +485,16 @@ Proposal review/merge does not authorize later tasks.
   recommendations, boundaries and a task sequence without code or placeholder APIs.
 - [x] **Owner review.** All three rounds are accepted, including the native
   validation deferral and five-task order. Task 1 was authorized afterward.
-- [ ] **1. Ordinary surface input and software cursor.** Kernel owns position,
+- [x] **1. Ordinary surface input and software cursor (delivered for review).** Kernel owns position,
   routing, tab hit testing and ordinary subscription/geometry lifetimes. Include
   program cursor images from the start, explicit hidden state, the accepted warp
   policy, and bounded software composition on all current backends
   with capture. Add libpyxis support and ordinary-position use in `mousetest`.
-  Qualify motion, tab clicks, image/hotspot/show/hide, resize/REPLACE and capture.
+  Motion, tab clicks, image/hotspot/show/hide, live resize/REPLACE and capture
+  were checked interactively; source-only cases and presentation measurements
+  are listed in the [qualification report](../development/system-pointer-qualification.md).
+  Full default-image integration waits for task 2; this checkbox records the
+  delivered task, not a merge or milestone closure.
 - [ ] **2. Lock, escape and consumer migration.** Add relative lock, Super+Esc,
   durable activation gating and authoritative lock/reset notifications. Migrate
   Quake and the current SDL2 backend; complete `mousetest` migration and replace

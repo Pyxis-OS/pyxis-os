@@ -51,7 +51,11 @@ Chosen by the owner, each starting with a proposal:
   Matched QEMU checks
   suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after the Bluetooth investigation finishes.
-  Capture task 1's baseline before code changes; later tasks remain unstarted.
+  Task 1's baseline was captured before code changes; ordinary input and the
+  software cursor are delivered for review, with
+  [qualification and draft integration limits](../development/system-pointer-qualification.md#task-1-results).
+  Task 2 requires separate authorization before Quake/SDL2 migration and joint
+  ABI/consumer integration; later tasks remain unstarted.
   SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
