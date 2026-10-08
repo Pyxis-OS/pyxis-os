@@ -801,6 +801,18 @@ Archive builds, symbol inspection and staging checks do not establish runtime
 compression correctness on Pyxis. The screenshot PNG consumer provides the
 planned runtime qualification; until then the port has build evidence only.
 
+## libpng profile and runtime qualification
+
+The [libpng development library](development/ports.md#libpng-development-library)
+keeps conventional read/write APIs and generates its matching public
+configuration, while omitting the simplified API and architecture acceleration.
+Those omissions are accepted for the screenshot milestone. Revisit them with a
+concrete consumer or measured cost that needs the omitted API or acceleration.
+
+Archive/configuration/symbol inspection and image staging provide build
+evidence only. The screenshot consumer supplies the planned PNG runtime
+qualification; no target PNG decode/encode result is qualified yet.
+
 ## Unexpected native close failures
 
 Libc invalidates a descriptor and its FILE association before one native CLOSE
