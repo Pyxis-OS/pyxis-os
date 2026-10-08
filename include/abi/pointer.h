@@ -12,8 +12,12 @@
 #define POINTER_VISIBILITY UINT64_C(6)
 #define POINTER_WARP UINT64_C(7)
 #define POINTER_DEFAULT_IMAGE UINT64_C(8)
+#define POINTER_LOCK UINT64_C(9)
+#define POINTER_UNLOCK UINT64_C(10)
+#define POINTER_STATE UINT64_C(11)
 #define POINTER_READ_POLL (UINT64_C(1) << 0)
 #define POINTER_EVENT_FOCUSED (UINT32_C(1) << 0)
+#define POINTER_EVENT_LOCKED (UINT32_C(1) << 1)
 #define POINTER_BUTTON_LEFT (UINT32_C(1) << 0)
 #define POINTER_BUTTON_RIGHT (UINT32_C(1) << 1)
 #define POINTER_BUTTON_MIDDLE (UINT32_C(1) << 2)
@@ -27,6 +31,8 @@ enum pointer_event_type {
   POINTER_ENTER,
   POINTER_LEAVE,
   POINTER_GEOMETRY_CHANGED,
+  POINTER_LOCK_CHANGED,
+  POINTER_ACTIVATED,
 };
 
 /* INPUT authority plus ownership of this space's graphics session is required.
@@ -41,16 +47,26 @@ struct pointer_read_request {
 
 /* Signed surface-local pixels, below navigation. During an anchored drag they
  * may be outside the surface. Wheel is positive toward the user. State events
- * clear held buttons; geometry changes discard queued spatial events. INPUT
+ * clear held buttons except locked geometry changes, which retain them. Ordinary
+ * geometry changes discard queued spatial events. INPUT
  * coalesces only within identical geometry/button state, keeping the latest
- * position and saturating wheel counts. Lost transitions instead cause RESET.
+ * position and saturating wheel/relative counts. Lost transitions cause RESET.
  * A held device button is accepted only after release and a fresh press. */
 struct pointer_event {
   int64_t x, y;
   uint64_t generation, mapping_identity;
   int32_t wheel;
+  int32_t dx, dy; /* Relative device counts only for INPUT with LOCKED set. */
   uint32_t buttons, type, flags;
 };
+
+/* Header-only LOCK/UNLOCK require the owning ordinary subscription. LOCK may
+ * be refused; it never selects a space/layer. STATE replies with current FOCUSED
+ * and LOCKED flags in a uint64_t. Lock changes discard queued input and clear
+ * accepted buttons. LOCKED INPUT carries dx/dy; x/y remains the parked position.
+ * Super+Esc and focus/device loss revoke lock. A consumed fresh surface click
+ * queues ACTIVATED when it permits one subsequent request; polling does not
+ * recreate permission across session or process lifetimes. */
 
 /* Destination and fixed mapping extents are distinct. Spatial requests use both
  * identities; same-size REPLACE still changes mapping_identity. */
@@ -84,7 +100,7 @@ struct pointer_warp_request {
 };
 
 _Static_assert(sizeof(struct pointer_read_request) == 24, "pointer read layout");
-_Static_assert(sizeof(struct pointer_event) == 48, "pointer event layout");
+_Static_assert(sizeof(struct pointer_event) == 56, "pointer event layout");
 _Static_assert(sizeof(struct pointer_geometry) == 48, "pointer geometry layout");
 _Static_assert(sizeof(struct pointer_image_request) == 40, "pointer image layout");
 _Static_assert(sizeof(struct pointer_visibility_request) == 24, "pointer visibility layout");

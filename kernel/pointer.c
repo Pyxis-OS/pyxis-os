@@ -22,6 +22,7 @@ static int64_t position_x, position_y;
 static uint32_t device_buttons, consumed_buttons, drag_buttons;
 static struct pointer_destination drag;
 static struct pointer_object *hover;
+static struct pointer_object *locked_pointer;
 static uint8_t arrow_pixels[16 * 24 * 4], terminal_pixels[9 * 20 * 4];
 
 static void default_pixel(uint8_t *pixels, size_t index, bool white)
@@ -126,7 +127,7 @@ struct pointer_event pointer_position_event(struct pointer_object *pointer, uint
   return (struct pointer_event){.x = position_x,
     .y = position_y - (int64_t)space_pointer_content_y(),
     .generation = geometry.generation, .mapping_identity = geometry.mapping_identity,
-    .type = type};
+    .buttons = pointer->accepted, .type = type};
 }
 
 static void update_hover(struct pointer_destination target)
@@ -135,7 +136,7 @@ static void update_hover(struct pointer_destination target)
   if (next && (!next->owner || !next->focused)) {
     next = NULL;
   }
-  if (drag.space || next == hover) {
+  if (locked_pointer || drag.space || next == hover) {
     return;
   }
   if (hover) {
@@ -155,6 +156,8 @@ void pointer_subscription_started(struct pointer_object *pointer)
 
 void pointer_subscription_ended(struct pointer_object *pointer)
 {
+  pointer_surface_unlock(pointer, true);
+  pointer->activation_ready = false;
   if (drag.space == pointer->space && drag.kind == DESTINATION_GRAPHICS) {
     drag = (struct pointer_destination){0};
     drag_buttons = 0;
@@ -168,6 +171,10 @@ void pointer_space_changed(struct space *space)
 {
   KASSERT(arch_cpu_index() == 0);
   bool focused = pointer_surface_focused(space->pointer);
+  if (!focused) {
+    pointer_surface_unlock(space->pointer, true);
+    space->pointer->activation_ready = false;
+  }
   if (drag.space == space &&
       (space != space_pointer_active() ||
        (drag.kind == DESTINATION_GRAPHICS) != space->display->visible)) {
@@ -182,6 +189,10 @@ void pointer_geometry_changed(struct space *space)
 {
   KASSERT(arch_cpu_index() == 0);
   clamp_position();
+  if (space->pointer->relative) {
+    pointer_queue_state(space->pointer, POINTER_GEOMETRY_CHANGED);
+    return;
+  }
   if (drag.space == space) {
     drag = (struct pointer_destination){0};
     drag_buttons = 0;
@@ -215,7 +226,7 @@ void pointer_frame_snapshot(struct pointer_frame *frame)
   struct pointer_destination target = hit_test();
   *frame = (struct pointer_frame){.x = position_x, .y = position_y,
     .pixels = arrow_pixels, .width = 16, .height = 24,
-    .visible = mouse_available() && display_available()};
+    .visible = mouse_available() && display_available() && !locked_pointer};
   if (target.kind == DESTINATION_TERMINAL && target.space != space_caelum()) {
     frame->pixels = terminal_pixels;
     frame->width = 9;
@@ -249,13 +260,29 @@ void pointer_handle_input(const struct mouse_event *event)
 {
   KASSERT(arch_cpu_index() == 0);
   if (event->reset) {
+    if (locked_pointer) {
+      pointer_surface_unlock(locked_pointer, true);
+    }
     device_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
     consumed_buttons = drag_buttons = 0;
     drag = (struct pointer_destination){0};
     hover = NULL;
     for (struct space *space = space_caelum(); space; space = space->next) {
+      space->pointer->activation_ready = false;
       pointer_reset_input(space->pointer, POINTER_STATE_RESET);
     }
+    return;
+  }
+  if (locked_pointer) {
+    uint32_t pressed = event->buttons & ~device_buttons;
+    device_buttons = event->buttons;
+    consumed_buttons &= device_buttons;
+    struct pointer_event input = pointer_position_event(locked_pointer, POINTER_INPUT);
+    input.dx = event->dx;
+    input.dy = event->dy;
+    input.wheel = event->wheel;
+    input.buttons = device_buttons & ~consumed_buttons;
+    pointer_queue_input(locked_pointer, input, pressed & ~consumed_buttons, true);
     return;
   }
   const struct framebuffer *layout = display_layout();
@@ -271,6 +298,13 @@ void pointer_handle_input(const struct mouse_event *event)
     if (tab) {
       consumed_buttons |= POINTER_BUTTON_LEFT;
       space_pointer_select(tab);
+      return;
+    }
+    if (target.kind == DESTINATION_GRAPHICS && target.space->pointer_activation_required &&
+        target.space->pointer->owner && target.space->pointer->focused) {
+      consumed_buttons |= POINTER_BUTTON_LEFT;
+      target.space->pointer->activation_ready = true;
+      pointer_queue_state(target.space->pointer, POINTER_ACTIVATED);
       return;
     }
   }
@@ -314,7 +348,7 @@ enum call_status pointer_surface_warp(struct pointer_object *pointer,
       request->mapping_identity != geometry.mapping_identity) {
     return CALL_BUSY;
   }
-  if (!pointer_surface_focused(pointer) || consumed_buttons ||
+  if (pointer->relative || !pointer_surface_focused(pointer) || consumed_buttons ||
       (device_buttons & ~pointer->accepted) ||
       (drag.space && (drag.space != pointer->space || drag.kind != DESTINATION_GRAPHICS))) {
     return CALL_DENIED;
@@ -325,9 +359,63 @@ enum call_status pointer_surface_warp(struct pointer_object *pointer,
       (uint64_t)request->y >= height) {
     return CALL_BAD_REQUEST;
   }
+  /* Graphics mappings are anchored at physical x=0, below navigation. */
   position_x = request->x;
   position_y = request->y + (int64_t)space_pointer_content_y();
   update_hover(hit_test());
   pointer_queue_input(pointer, pointer_position_event(pointer, POINTER_INPUT), 0, false);
   return CALL_OK;
+}
+
+enum call_status pointer_surface_lock(struct pointer_object *pointer)
+{
+  KASSERT(arch_cpu_index() == 0 && pointer->owner);
+  if (locked_pointer == pointer) {
+    return CALL_OK;
+  }
+  if (locked_pointer) {
+    return CALL_BUSY;
+  }
+  if (!pointer_surface_focused(pointer) ||
+      (pointer->space->pointer_activation_required && !pointer->activation_ready) ||
+      (device_buttons & ~consumed_buttons & ~pointer->accepted) ||
+      (drag.space && (drag.space != pointer->space || drag.kind != DESTINATION_GRAPHICS))) {
+    return CALL_DENIED;
+  }
+  pointer->activation_ready = false;
+  drag = (struct pointer_destination){0};
+  drag_buttons = 0;
+  hover = NULL;
+  locked_pointer = pointer;
+  pointer_set_lock(pointer, true);
+  return CALL_OK;
+}
+
+void pointer_surface_unlock(struct pointer_object *pointer, bool require_activation)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (locked_pointer != pointer) {
+    return;
+  }
+  if (require_activation) {
+    pointer->space->pointer_activation_required = true;
+    pointer->activation_ready = false;
+  }
+  locked_pointer = NULL;
+  pointer_set_lock(pointer, false);
+  clamp_position();
+  hover = NULL;
+  struct pointer_destination target = hit_test();
+  if (target.kind != DESTINATION_GRAPHICS || target.space != pointer->space) {
+    pointer_queue_state(pointer, POINTER_LEAVE);
+  }
+  update_hover(target);
+}
+
+void pointer_escape(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (locked_pointer) {
+    pointer_surface_unlock(locked_pointer, true);
+  }
 }

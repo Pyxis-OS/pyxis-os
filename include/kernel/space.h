@@ -24,6 +24,7 @@ struct space
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
   struct pointer_object *pointer; /* Space retains the initial reference. */
+  bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
   /* Bitmaps over boot CPU indices, space_cpu_words() words each. The ceiling

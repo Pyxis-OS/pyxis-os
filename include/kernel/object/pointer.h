@@ -22,6 +22,8 @@ struct pointer_object {
   struct pointer_event events[POINTER_EVENT_CAPACITY];
   size_t head, count;
   bool focused;
+  bool relative; /* Authoritative lock state, independent of the queue lock. */
+  bool activation_ready; /* One request, bound to this acquired surface. */
   uint32_t accepted;
   struct pointer_image *image; /* BSP-owned immutable image, one reference. */
   bool hidden;
@@ -46,6 +48,7 @@ struct pointer_request {
     struct pointer_image_request image;
     struct pointer_warp_request warp;
     uint64_t visible;
+    uint64_t flags;
   } data;
   struct pointer_image *candidate;
 };
@@ -60,6 +63,7 @@ void pointer_reset_input(struct pointer_object *pointer, uint32_t type);
 void pointer_queue_input(struct pointer_object *pointer, struct pointer_event event,
     uint32_t pressed, bool buttons);
 void pointer_queue_state(struct pointer_object *pointer, uint32_t type);
+void pointer_set_lock(struct pointer_object *pointer, bool relative);
 /* Current user task/IF=0. READ may block; mutations use BSP requests. */
 struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,

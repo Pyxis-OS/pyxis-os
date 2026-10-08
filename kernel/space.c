@@ -970,12 +970,14 @@ static void handle_space_input(void)
 {
   struct key_event event;
   static bool navigation_held[KEY_COUNT];
+  static bool escape_held;
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
 
   while (keyboard_read_event(&event)) {
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
+      escape_held = false;
       uint64_t flags = cpu_save_interrupts();
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
@@ -984,6 +986,21 @@ static void handle_space_input(void)
       }
       cpu_restore_interrupts(flags);
       continue;
+    }
+    if (event.key == KEY_ESCAPE) {
+      if (escape_held) {
+        if (event.action == KEY_RELEASE) {
+          escape_held = false;
+        }
+        continue;
+      }
+      if ((event.modifiers & KEY_MOD_SUPER) && event.action == KEY_PRESS) {
+        escape_held = true;
+        uint64_t flags = cpu_save_interrupts();
+        pointer_escape();
+        cpu_restore_interrupts(flags);
+        continue;
+      }
     }
     if (event.key == KEY_LEFT || event.key == KEY_RIGHT ||
         event.key == KEY_UP || event.key == KEY_DOWN) {

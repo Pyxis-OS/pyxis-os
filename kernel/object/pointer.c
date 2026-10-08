@@ -47,7 +47,8 @@ static void queue_event(struct pointer_object *pointer, struct pointer_event eve
 {
   KASSERT(pointer->count < POINTER_EVENT_CAPACITY);
   size_t tail = (pointer->head + pointer->count) % POINTER_EVENT_CAPACITY;
-  event.flags = pointer->focused ? POINTER_EVENT_FOCUSED : 0;
+  event.flags = (pointer->focused ? POINTER_EVENT_FOCUSED : 0) |
+      (pointer->relative ? POINTER_EVENT_LOCKED : 0);
   pointer->events[tail] = event;
   ++pointer->count;
   struct task_wait *reader = pointer->reader;
@@ -61,6 +62,18 @@ static void reset_buttons(struct pointer_object *pointer)
 {
   pointer->head = pointer->count = 0;
   pointer->accepted = 0;
+}
+
+void pointer_set_lock(struct pointer_object *pointer, bool relative)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_pointer(pointer);
+  pointer->relative = relative;
+  reset_buttons(pointer);
+  if (pointer->owner) {
+    queue_event(pointer, pointer_position_event(pointer, POINTER_LOCK_CHANGED));
+  }
+  unlock_pointer(pointer);
 }
 
 void pointer_reset_input(struct pointer_object *pointer, uint32_t type)
@@ -140,6 +153,8 @@ void pointer_queue_input(struct pointer_object *pointer, struct pointer_event ev
       last->x = event.x;
       last->y = event.y;
       last->wheel = saturating_add(last->wheel, event.wheel);
+      last->dx = saturating_add(last->dx, event.dx);
+      last->dy = saturating_add(last->dy, event.dy);
     } else {
       reset_buttons(pointer);
       queue_event(pointer, pointer_position_event(pointer, POINTER_STATE_RESET));
@@ -201,6 +216,13 @@ void pointer_request_execute(struct pointer_request *request)
     pointer_end_session(pointer);
   } else if (request->operation == POINTER_GEOMETRY) {
     request->data.geometry = pointer_surface_geometry(pointer);
+  } else if (request->operation == POINTER_STATE) {
+    request->data.flags = (pointer->focused ? POINTER_EVENT_FOCUSED : 0) |
+        (pointer->relative ? POINTER_EVENT_LOCKED : 0);
+  } else if (request->operation == POINTER_LOCK) {
+    status = pointer_surface_lock(pointer);
+  } else if (request->operation == POINTER_UNLOCK) {
+    pointer_surface_unlock(pointer, false);
   } else if (request->operation == POINTER_VISIBILITY) {
     pointer->hidden = !request->data.visible;
   } else if (request->operation == POINTER_DEFAULT_IMAGE) {
@@ -311,7 +333,7 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation < POINTER_ACQUIRE || operation > POINTER_DEFAULT_IMAGE) {
+  if (operation < POINTER_ACQUIRE || operation > POINTER_STATE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & POINTER_RIGHT_INPUT) || process_current()->space != pointer->space) {
@@ -333,13 +355,13 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     payload = sizeof(struct pointer_warp_request) - sizeof(struct message_header);
     destination = &command.data.warp.x;
   }
-  if (request_size != payload ||
-      (operation == POINTER_GEOMETRY && reply_capacity < sizeof(struct pointer_geometry))) {
+  size_t reply_size = operation == POINTER_GEOMETRY ? sizeof(struct pointer_geometry) :
+      operation == POINTER_STATE ? sizeof(uint64_t) : 0;
+  if (request_size != payload || reply_capacity < reply_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if ((payload && !copy_from_user(destination, request_address, payload)) ||
-      (operation == POINTER_GEOMETRY &&
-       !user_buffer_check(reply_address, sizeof(struct pointer_geometry), USER_BUFFER_WRITE))) {
+      (reply_size && !user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   if (operation == POINTER_VISIBILITY && command.data.visible > 1) {
@@ -369,6 +391,10 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
   if (status == CALL_OK && operation == POINTER_GEOMETRY) {
     KASSERT(copy_to_user(reply_address, &command.data.geometry, sizeof(command.data.geometry)));
     return (struct syscall_result){CALL_OK, sizeof(command.data.geometry)};
+  }
+  if (status == CALL_OK && operation == POINTER_STATE) {
+    KASSERT(copy_to_user(reply_address, &command.data.flags, sizeof(command.data.flags)));
+    return (struct syscall_result){CALL_OK, sizeof(command.data.flags)};
   }
   return (struct syscall_result){status, 0};
 }
