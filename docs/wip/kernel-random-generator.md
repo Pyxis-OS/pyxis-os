@@ -5,7 +5,8 @@ assigned the [accepted ChaCha20 follow-up](../technical-debt.md#cpu-entropy-with
 Base: `92762b107e813be5b6c5f4600e205049630dd3c6`. The
 [baseline](../development/experiments/random-generator/README.md) measures the
 unchanged grant on VirtIO and CPU entropy. TLS already uses it; the accepted
-Bluetooth mouse direction needs private keys and pairing material from it.
+[Bluetooth mouse direction](bluetooth-mouse.md) needs private keys and pairing
+material from it.
 P-256/SMP implementation stays with that consumer.
 
 ## Three owner decisions
