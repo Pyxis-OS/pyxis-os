@@ -12,6 +12,8 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
+  libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
   Super+Up/Down; [native ThinkPad qualification remains open](../technical-debt.md#space-layer-qualification).
 - [Runtime SMP](../kernel/smp.md), 2026-10-06, with
@@ -36,9 +38,6 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner on 2026-10-07, each starting with a proposal:
 
-- **Claude:** [C++ in userspace](cxx-userspace.md), cross-compiled C++
-  programs with a runtime from the `pyxis-llvm` fork; the SDK runtime is merged
-  and task 4 (the fmt port) is in review. Clang running on Pyxis is a later milestone.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
   PNG through new zlib and libpng ports, with the file fetched through
   pyxis-remote.
@@ -71,7 +70,7 @@ None is selected.
   across spaces.
 - [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
 - Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
-  after C++ in userspace.
+  now that [C++ in userspace](../development/cxx-userspace.md) is complete.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
