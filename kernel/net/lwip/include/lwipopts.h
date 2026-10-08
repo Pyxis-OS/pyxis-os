@@ -38,7 +38,7 @@
 
 /* Advertised and on-link send ceiling for the 1500-byte interface MTU. Without
  * path-MTU discovery, connections to routed peers are clamped to
- * TCP_ROUTED_MSS once established; see tcp_connection_limit_mss(). */
+ * TCP_ROUTED_MSS once established; see tcp_connection_established(). */
 #define TCP_MSS 1460
 #define TCP_CALCULATE_EFF_SEND_MSS 1
 #define TCP_WND NET_TCP_RECEIVE_BYTES

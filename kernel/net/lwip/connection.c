@@ -147,8 +147,12 @@ void tcp_connection_abort(struct tcp_connection *connection, enum call_status st
  * when the connection is established, just before the connect or accept
  * callback, so the clamp runs there rather than at PCB allocation. Nothing
  * has been sent yet. The initial window lwIP computed for TCP_MSS stays: its
- * 4380 bytes are within RFC 6928's initial window for TCP_ROUTED_MSS. */
-void tcp_connection_limit_mss(struct tcp_pcb *pcb)
+ * 4380 bytes are within RFC 6928's initial window for TCP_ROUTED_MSS.
+ *
+ * Nagle is off: native writes already hand lwIP up to 4 KiB at once, and a
+ * request/response frame of one full segment plus a tail would otherwise wait
+ * for the peer's delayed ACK of that lone segment. */
+void tcp_connection_established(struct tcp_pcb *pcb)
 {
   net_worker_assert_context();
   uint32_t local = lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&pcb->local_ip)));
@@ -159,13 +163,14 @@ void tcp_connection_limit_mss(struct tcp_pcb *pcb)
   if (!on_link && pcb->mss > TCP_ROUTED_MSS) {
     pcb->mss = TCP_ROUTED_MSS;
   }
+  tcp_nagle_disable(pcb);
 }
 
 static err_t connected(void *argument, struct tcp_pcb *pcb, err_t error)
 {
   KASSERT(error == ERR_OK);
   struct tcp_connection *connection = argument;
-  tcp_connection_limit_mss(pcb);
+  tcp_connection_established(pcb);
   connection->connected = true;
   /* Publication still checks the original deadline outside the callback. */
   return ERR_OK;

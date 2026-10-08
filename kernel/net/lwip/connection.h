@@ -31,7 +31,7 @@ struct tcp_connection {
 #define TCP_ROUTED_MSS 536
 
 void tcp_connections_init(void);
-void tcp_connection_limit_mss(struct tcp_pcb *pcb);
+void tcp_connection_established(struct tcp_pcb *pcb);
 void tcp_connections_service(void);
 bool tcp_connections_next_deadline(uint64_t *deadline);
 uint64_t tcp_connection_generation(const struct tcp_pcb *pcb);
