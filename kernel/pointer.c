@@ -301,7 +301,8 @@ void pointer_handle_input(const struct mouse_event *event)
       return;
     }
     if (target.kind == DESTINATION_GRAPHICS && target.space->pointer_activation_required &&
-        target.space->pointer->owner && target.space->pointer->focused) {
+        !target.space->pointer->activation_ready && target.space->pointer->owner &&
+        target.space->pointer->focused) {
       consumed_buttons |= POINTER_BUTTON_LEFT;
       target.space->pointer->activation_ready = true;
       pointer_queue_state(target.space->pointer, POINTER_ACTIVATED);
