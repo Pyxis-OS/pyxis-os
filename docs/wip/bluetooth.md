@@ -1,6 +1,6 @@
 # Bluetooth investigation
 
-Status: **tasks 1–4 complete for the accepted warm-host scope, 2026-10-08; scan probe unassigned.**
+Status: **tasks 1–5 complete for the accepted warm-host scope, 2026-10-08; scan results awaiting owner review before final deliverables.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Shared kernel interrupt-IN support is implemented
@@ -8,7 +8,11 @@ and merged. HCI, firmware and scan probe code
 stays on unmerged branches. After merging
 [PR #526](https://git.internal/PyxisOS/pyxis-os/pulls/526), the owner authorized
 task 4 and accepted warm-firmware verification with cold upload deferred.
-The scan probe remains unassigned.
+After merging [PR #528](https://git.internal/PyxisOS/pyxis-os/pulls/528), the owner
+assigned task 5 through the orchestrator. Scan code remains on an unmerged probe
+branch; the owner must see the scan results before the investigation report and
+milestone proposal begin. Bluetooth device addresses must stay out of the
+repository, PRs, docs and recorded output.
 
 ## Hardware
 
@@ -100,9 +104,12 @@ works, recorded beside the NIC reference.
    The [task 4 report](../development/experiments/bluetooth-task4/README.md) records
    identical checked version replies after the skip decision, host initialization
    evidence and the unmerged probe revision. No upload was performed or qualified.
-- [ ] **5. First LE scan.** Configure and enable LE scanning, and receive advertising
+- [x] **5. First LE scan.** Configure and enable LE scanning, and receive advertising
    reports. With the MX Master 3S in pairing mode, identify its reports: the HID
    service (`0x1812`) or mouse appearance (`0x03C2`) and its name.
+   The [task 5 report](../development/experiments/bluetooth-task5/README.md) records
+   a successful scan, correlated complete name plus both HID service and mouse
+   appearance, confirmed scan disable, and address-free captures.
 
 Stop there. Connections, pairing, bond-key storage, GATT and HID over GATT need
 their own decisions.
@@ -162,3 +169,29 @@ are recorded in [technical debt](../technical-debt.md#xhci-hardware-profile-and-
   - how much of interrupt-transfer support to share with USB HID.
 
 The [Bluetooth direction](later-os-directions.md#bluetooth) records the goal.
+
+## Accepted task 5 scan profile
+
+On 2026-10-08 the owner accepted the
+following profile through the orchestrator and authorized its implementation:
+
+- Legacy 1M active scanning for 30 seconds after confirmed enable, with a 100 ms
+  interval/window, controller duplicate filtering enabled and no accept-list filter.
+  Active scan requests use the controller's existing public address over the air;
+  no scanner address is logged and no random/privacy address is configured.
+- Correlate advertisements and scan responses by address/type only in RAM, in a
+  bounded table of 64 advertisers. Table exhaustion aborts identification explicitly.
+  Log parsed names, HID service/appearance and RSSI for candidates, with addresses
+  redacted before output. No raw HCI advertising packet or address-keyed debugger
+  state dump may enter a capture. Identification needs the name plus HID service
+  `0x1812` or mouse appearance `0x03C2`; name-only reports remain candidates.
+- Configure the private endpoint during enumeration and run the scan afterward
+  with its own deadline. Consume reports during command waits. Attempt disable on
+  every exit after a potentially submitted enable, using a fresh cleanup deadline;
+  terminal stream failure may leave disable unconfirmed, which must be reported.
+
+The linked task 5 report records implementation, revision, configuration and
+measurement limits. The probe stays unmerged; the report branch contains only
+documentation. The final investigation report and milestone proposal remain
+unassigned until the owner has seen the scan results. No connections, pairing,
+bond keys, GATT or pointer delivery are authorized by this completed scan.
