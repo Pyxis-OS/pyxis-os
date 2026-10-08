@@ -1,0 +1,47 @@
++target remote 127.0.0.1:1234
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
++p hci_probe.finished
+$1 = true
++p hci_probe.result
+$2 = USB_OK
++p hci_probe.scan_result
+$3 = USB_OK
++p hci_probe.enable_submitted
+$4 = true
++p hci_probe.enable_accounted
+$5 = true
++p hci_probe.enable_confirmed
+$6 = true
++p hci_probe.disable_confirmed
+$7 = true
++p hci_probe.disable_result
+$8 = USB_OK
++p hci_probe.firmware_verified
+$9 = true
++p hci_probe.sequence
+$10 = 38
++p hci_probe.reports
+$11 = 30
++p hci_probe.advertiser_count
+$12 = 19
++p hci_probe.scan_responses
+$13 = 11
++p hci_probe.largest_event
+$14 = 45
++p hci_probe.identified
+$15 = 1
++p hci_probe.device->interrupt->sequence
+$16 = 38
++p hci_probe.device->interrupt->queue_count
+$17 = 0
++p hci_probe.device->interrupt->receive[0].state
+$18 = INTERRUPT_POSTED
++p hci_probe.device->interrupt->receive[1].state
+$19 = INTERRUPT_POSTED
++p hci_probe.device->interrupt->result
+$20 = USB_OK
++p hci_probe.device->controller->running
+$21 = true
++detach
+[Inferior 1 (process 1) detached]

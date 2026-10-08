@@ -1,6 +1,6 @@
 # Bluetooth investigation
 
-Status: **tasks 1–4 complete for the accepted warm-host scope, 2026-10-08; task 5 scan probe in progress.**
+Status: **tasks 1–5 complete for the accepted warm-host scope, 2026-10-08; scan results awaiting owner review before final deliverables.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Shared kernel interrupt-IN support is implemented
@@ -104,9 +104,12 @@ works, recorded beside the NIC reference.
    The [task 4 report](../development/experiments/bluetooth-task4/README.md) records
    identical checked version replies after the skip decision, host initialization
    evidence and the unmerged probe revision. No upload was performed or qualified.
-- [ ] **5. First LE scan.** Configure and enable LE scanning, and receive advertising
+- [x] **5. First LE scan.** Configure and enable LE scanning, and receive advertising
    reports. With the MX Master 3S in pairing mode, identify its reports: the HID
    service (`0x1812`) or mouse appearance (`0x03C2`) and its name.
+   The [task 5 report](../development/experiments/bluetooth-task5/README.md) records
+   a successful scan, correlated complete name plus both HID service and mouse
+   appearance, confirmed scan disable, and address-free captures.
 
 Stop there. Connections, pairing, bond-key storage, GATT and HID over GATT need
 their own decisions.
@@ -167,10 +170,9 @@ are recorded in [technical debt](../technical-debt.md#xhci-hardware-profile-and-
 
 The [Bluetooth direction](later-os-directions.md#bluetooth) records the goal.
 
-## Accepted task 5 scan profile and handoff
+## Accepted task 5 scan profile
 
-Task branch: `docs/bluetooth-task5`, based on freshly fetched main
-`9acf597fec897119256a0c0044785771b19f9132`. On 2026-10-08 the owner accepted the
+On 2026-10-08 the owner accepted the
 following profile through the orchestrator and authorized its implementation:
 
 - Legacy 1M active scanning for 30 seconds after confirmed enable, with a 100 ms
@@ -188,29 +190,8 @@ following profile through the orchestrator and authorized its implementation:
   every exit after a potentially submitted enable, using a fresh cleanup deadline;
   terminal stream failure may leave disable unconfirmed, which must be reported.
 
-Main CI run 1232 succeeded. Its current SDK/userland/ports bundles were downloaded
-and passed the existing verifiers. Pins match main; existing local Clang is
-`41ab604`, while current CI uses `49e2c1a`. This probe is C-only. Ordinary baseline
-boot used physical ThinkPad Fedora/KVM, QEMU 10.2.2, four CPUs, 2 GiB RAM and AX200
-passthrough. `lsusb -n` exited 0 with complete inventory and remote final drain;
-one baseline shell workload measured 0.05 seconds. Artifacts and captures are in
-`/tmp/pyxis-bluetooth-task5`; QEMU exited. No performance comparison is established.
-
-Initial SSH fetch failed with `Permission denied (publickey)`; public HTTPS
-fetched main and exact pinned submodules without changing remotes. The owner
-reloaded the keys; SSH fetch through `/run/user/1000/ssh-agent.socket` now succeeds.
-The implemented unmerged probe is published on `probe/bluetooth-le-scan` at
-`6c4329e4429b9a43f266dd57f44d544420313996`, based on the selected main. Normal
-Clang image build passed without warnings. Independent review found and fixed
-same-opcode enable/disable completion ambiguity and dotted-address name redaction;
-targeted re-review found no remaining findings. Address-free debugger expressions
-are prepared in `/tmp/pyxis-bluetooth-task5/scan-gdb-commands.txt`.
-
-No scan has run: the mouse's physical pairing-mode readiness is still pending.
-The paused QEMU instance was closed; the ordinary image rebuilt without warnings
-and has no scan-probe symbols. Host `btusb` rebound on both interfaces; Bluetooth
-remains inactive/disabled. Next: obtain the owner's "ready" while the
-mouse LED blinks rapidly, boot `/tmp/pyxis-bluetooth-task5/probe.iso` with the
-accepted configuration, run the 30-second scan, collect only redacted evidence,
-restore the ordinary image and deliver the scan-result PR. Do not begin the final
-investigation report or milestone proposal before the owner has seen those results.
+The linked task 5 report records implementation, revision, configuration and
+measurement limits. The probe stays unmerged; the report branch contains only
+documentation. The final investigation report and milestone proposal remain
+unassigned until the owner has seen the scan results. No connections, pairing,
+bond keys, GATT or pointer delivery are authorized by this completed scan.
