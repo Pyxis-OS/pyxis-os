@@ -1,7 +1,7 @@
 # Sleep wake baseline
 
 Measured on 2026-10-08 before implementing the
-[deadline wake proposal](../../../wip/sleep-wake-granularity.md).
+[deadline wake proposal](../../../kernel/timekeeping.md).
 Both workloads used Pyxis `9acf597fec897119256a0c0044785771b19f9132` with
 unchanged kernel source and pinned dependencies:
 

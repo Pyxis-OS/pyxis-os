@@ -3,8 +3,9 @@
 Pyxis carries upstream SDL 2.32.10 with a native backend, as a development
 library for graphical ports. Its first consumer is
 [DevilutionX](../userland/devilutionx.md), an opt-in build. The milestone
-completed on 2026-10-08. Its
-[native ThinkPad check is deferred](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+completed on 2026-10-08, and its
+[native ThinkPad check](../technical-debt.md#sdl2-and-devilutionx-native-qualification)
+passed the same day.
 
 The [recipe README](../../ports/sdl2/README.md) documents the backend file by
 file; this page is the overview.
