@@ -12,9 +12,11 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Screenshots](../userland/screenshot.md), 2026-10-08: reusable zlib/libpng
+  ports, native CAPTURE and staged PNG output with explicit remote download;
+  [native ThinkPad qualification is deferred](../technical-debt.md#native-screenshot-qualification).
 - [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
   first slice, with up to eight equal/BSP panes and colored scrollback.
-
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
   libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
@@ -46,9 +48,6 @@ Chosen by the owner, each starting with a proposal:
   keyboard, pointer and clock sessions; audio waits for an audio driver.
   DevilutionX on local shareware data is the first consumer; the owner
   accepted the three task 1 decisions on 2026-10-08.
-- **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
-  PNG through new zlib and libpng ports, with the file fetched through
-  pyxis-remote.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 

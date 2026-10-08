@@ -89,20 +89,17 @@ retry BUSY, allocation refusal or backend failure automatically.
 
 ## Qualification
 
-On 2026-10-08, the ordinary image built with LLVM 23.1.3 / 49e2c1a booted
-in q35 QEMU with standard VGA, a 1280x800 boot framebuffer, four CPUs, 2 GiB
-and nested KVM. Remote commands produced host-decoded RGB PNGs of the Caelum
-and Development TTY screens (64,208 and 18,563 bytes). The existing `xfer send`
-confirmation, SHA-256 verification and host publication completed; a repeated
-host filename was refused without changing its earlier hash.
+The [qualification report](../development/screenshot-qualification.md) records
+host-decoded PNGs, pixel comparisons with QEMU monitor output, shown-layer and
+resize checks, snapshot retention, and presenter/encoder measurements. The
+explicit download path includes host confirmation, SHA-256 verification and
+refusal to overwrite an existing host name.
 
-A second capture replaced the guest destination. Read-only's missing-CAPTURE
-refusal preserved an existing file, verified by its hash; a boot-archive output
-failed parent authority before staging. Publishing over an existing directory
-failed and reported both possible names, leaving the directory and temporary
-intact. A later capture skipped that colliding temporary without truncating it.
-Debugger inspection found no pending/active capture or private backing after
-success. Allocation, partial-I/O and uncertain-write cleanup were source-reviewed,
-without fault injection. Target PNG decoding, driver/layer/resize comparisons,
-matched presenter/encoder cost and native ThinkPad capture remain milestone
-qualification work.
+Manual output checks established guest replacement, missing-CAPTURE refusal
+preserving an existing destination, parent-authority refusal before staging,
+and uncertain publication over an existing directory preserving both possible
+names. A later capture skipped the leftover temporary without changing it.
+Allocation, partial-I/O and uncertain-write cleanup remain source-reviewed
+without fault injection. Target PNG decoding and other libpng write profiles
+remain unqualified. The owner accepted milestone closure with
+[native ThinkPad qualification deferred](../technical-debt.md#native-screenshot-qualification).
