@@ -123,7 +123,8 @@ Asterism is today's spaces plus:
   a program again.
 - **Configurable startup and recovery policies:** what a space starts, and what
   happens when something in it fails: restart, give up after repeated failures,
-  or keep the tab for inspection.
+  or keep the tab for inspection. Asking a program to stop or reload follows
+  [control, events and faults](control-events-faults.md).
 - **Runtime configuration:** creating and destroying spaces while the system
   runs, through the new-space flow. Destroying a space releases everything it
   owns: its processes, terminal, display and tab.
