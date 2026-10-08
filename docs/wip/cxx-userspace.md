@@ -266,7 +266,8 @@ Accepted by the owner on 2026-10-08, as proposed after the probe:
 3. **The first consumer: [{fmt}](https://github.com/fmtlib/fmt).** It is a C++
    library that DevilutionX requires, and it uses templates, exceptions and
    floating-point formatting heavily.
-   - Its source needs a mirror on `git.internal`, which the owner creates.
+   - The owner mirrored it as `mirrors/fmt` on 2026-10-08. Task 4 pins release
+     `12.2.0` (commit `1be298e1bd68`) unless the owner chooses another.
    - It is checked in QEMU with a small program that is not committed, so no
      C++ program ships in the image yet.
    - fmt's locale support has to be disabled at build time; the probe did not
@@ -291,7 +292,7 @@ Each task starts when the owner says so.
    - the SDK runtime build and `pyxis.mk`'s C++ settings.
 
    The owner builds the image before CI can pass.
-4. **The {fmt} port**, with its libc additions, once the owner has mirrored fmt.
+4. **The {fmt} port**, from `mirrors/fmt`, with its libc additions.
 5. **Close.** Turn this document into a reference under `docs/development`,
    listing the supported subset and its gaps.
 
