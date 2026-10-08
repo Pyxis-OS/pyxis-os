@@ -37,8 +37,8 @@ Implemented behavior lives in the subsystem references listed in the
 Chosen by the owner on 2026-10-07, each starting with a proposal:
 
 - **Claude:** [C++ in userspace](cxx-userspace.md), cross-compiled C++
-  programs with a runtime from the `pyxis-llvm` fork; task 3 (fork, toolchain
-  and SDK runtime build) in review. Clang running on Pyxis is a later milestone.
+  programs with a runtime from the `pyxis-llvm` fork; the SDK runtime is merged
+  and task 4 (the fmt port) is in review. Clang running on Pyxis is a later milestone.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
   PNG through new zlib and libpng ports, with the file fetched through
   pyxis-remote.
