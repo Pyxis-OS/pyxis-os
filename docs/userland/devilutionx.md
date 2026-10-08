@@ -62,7 +62,8 @@ program.
 
 To play retail data, point `--data-dir` at the directory holding
 `DIABDAT.MPQ`, for example from [`host://`](../devices/virtio-fs.md) in QEMU or
-from a directory on an installed system's pool:
+from a directory on an installed system's pool. An installed system with an
+ordinary image can run a [standalone bundle](#standalone-bundle) instead.
 
 ```text
 devilutionx --data-dir host://
@@ -80,6 +81,53 @@ devilutionx --data-dir host://
 Retail Diablo and Hellfire both played into Tristram this way with the GOG
 release, exported read-only. Hellfire's menus, intro videos and Monk class
 worked.
+
+## Standalone bundle
+
+An ordinary image can also run DevilutionX from a directory of its own, for
+example on an installed system. Such a bundle is personal-use only, like an
+image containing the game, and must not be shared.
+
+Build the port once with `DIABLO_DATA` as above. Then copy these files from
+`build/ports/devilutionx/stage` into one directory, here `diablo/`:
+
+| From the stage | Into the bundle |
+| --- | --- |
+| `bin/devilutionx.pxe` | `diablo/devilutionx.pxe` |
+| `share/devilutionx/assets/` | `diablo/assets/` |
+| `share/licenses/devilutionx/` | `diablo/licenses/`, which must travel with the program |
+| `share/devilutionx/source.txt` | `diablo/source.txt` |
+
+Add the game data, such as `DIABDAT.MPQ` or `spawn.mpq`, to the same
+directory, then run it with that directory as the data directory:
+
+```text
+home://diablo/devilutionx.pxe --data-dir home://diablo
+```
+
+Pyxis programs cannot find their own directory, so the game looks for its
+assets in `boot://share/devilutionx/assets/` first. When the image has none,
+it uses `assets/` inside the data directory. An image that already includes
+DevilutionX therefore uses its own assets. Saves and `diablo.ini` still go
+to `home://devilution/`.
+
+A bundle can be packed on the host with `tar --format=ustar -cf
+devilutionx.tar diablo` and extracted in Pyxis with `tar xf` from `home://`.
+`tar` holds the whole archive in memory.
+
+Getting the data there is the hard part.
+[Remote transfers](remote-terminal.md#explicit-file-transfer) and HTTP(S)
+bodies are limited to 16 MiB per file. The bundle without data, about 9 MB,
+fits in one transfer. The MPQ files do not: `spawn.mpq` is 25 MB and
+`DIABDAT.MPQ` about 500 MB. They can be split on the host into pieces of at
+most 15 MiB, sent one by one, and joined in Pyxis with `cat`:
+
+```text
+cat home://DIABDAT.MPQ.00 home://DIABDAT.MPQ.01 > home://diablo/DIABDAT.MPQ
+```
+
+The join was checked with `spawn.mpq` in QEMU. For `DIABDAT.MPQ` it means
+about 35 transfers.
 
 ## Settings and display
 
