@@ -125,7 +125,7 @@ is retained for reproduction; it is not applied to the implementation.
 | --- | --- |
 | Current measured ELF | `fcb0f4f46eeec7b9e5d1765674f081180497592f494327fc47e74f8c8bfa2e2c` |
 | Control ELF | `e9995a02cde267b2f970e3e8095c93402cc00455b25a3d5348554d0c577d1820` |
-| Control patch | `905581ef4c18929734865df7434616acf3aca777b61a460c27c8755e96c84461` |
+| Recorded control patch | `d5316989269cb6c8639d0eb96eade503a4a44d23409666e4ba5177ee366409e2` |
 | Common initrd, userland `28f8c16` | `b348e7f4d75725d0c1b87c2184295354523668945b88addc346212587dbf2410` |
 | Effective kernel configuration | `ac12acc93c3fcbbdff1ace10d95b8f3cdf883e1c09d21ce413ba09df8324a98b` |
 

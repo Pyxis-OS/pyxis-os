@@ -32,17 +32,17 @@ index e5337be..2554bcf 100644
 @@ -837,14 +837,12 @@ void space_present()
    }
    const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
- 
+
 -  screen_capture_begin(screen, caelum_space->tty->geometry_generation);
    draw_spaces_nav();
- 
+
    if (!display_begin_frame()) {
 -    screen_capture_finish(false);
      return;
    }
 -  screen_capture_copy(0, (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
 +  display_copy(0, (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
- 
+
    struct space *space = active_space;
    uint64_t flags = cpu_save_interrupts();
 @@ -868,28 +866,27 @@ void space_present()
@@ -67,7 +67,7 @@ index e5337be..2554bcf 100644
 +    display_copy(dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
          source->size - row_start - row_bytes);
    }
- 
+
 -  bool presented = display_end_frame();
 +  display_end_frame();
    if (frame) {
@@ -77,7 +77,7 @@ index e5337be..2554bcf 100644
    }
 -  screen_capture_finish(presented);
  }
- 
+
  void space_display_changed(struct space *space, bool discard_input)
 @@ -1028,8 +1025,6 @@ void space_present_task(void *argument)
          resize_display();
