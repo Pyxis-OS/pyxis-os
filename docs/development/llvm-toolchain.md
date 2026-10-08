@@ -4,8 +4,8 @@ Pyxis builds with Clang, LLD and the LLVM archive and object tools, running on
 the host and targeting `x86_64-unknown-pyxis`. GCC and binutils are retired.
 The milestone completed on 2026-10-07 with QEMU checks and the owner's ThinkPad
 check. It is the first of the three
-[LLVM milestones](../wip/toolchains-and-runtimes.md#llvmclang-transition-and-hosting); a native
-C++ runtime and Clang hosted on Pyxis come next.
+[LLVM milestones](../wip/toolchains-and-runtimes.md#llvmclang-transition-and-hosting).
+[C++ in userspace](cxx-userspace.md) followed; Clang hosted on Pyxis comes next.
 
 The [toolchain README](../../toolchain/README.md) is the reference for building
 the toolchain, its target contract and its licenses. The [SDK](sdk.md) describes

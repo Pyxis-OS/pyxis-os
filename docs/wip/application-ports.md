@@ -82,7 +82,7 @@ proposal for media-type aliases such as `json+http://` remains future work.
 - **Quake:** [implemented](../userland/quake.md); audio and multiplayer remain
   separate slices.
 - **DevilutionX:** Diablo I, not Diablo II. A later candidate needing both the
-  [C++ userspace runtime](toolchains-and-runtimes.md#c-in-userspace) and SDL2,
+  [C++ userspace runtime](../development/cxx-userspace.md) and SDL2,
   plus supporting libraries. Upstream offers a network-off configuration; assess
   a bounded first port with networking/audio deferred.
 - **Chocolate Duke3D:** a candidate once SDL2 exists.
