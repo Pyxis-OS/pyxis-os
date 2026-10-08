@@ -1,0 +1,87 @@
+Pyxis OS / Caelum
+early console: 1280x800 framebuffer
+Limine: base revision 6, 34 memory regions, kernel phys=0x79df3000 virt=0xffffffff80000000
+x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled
+x86_64: physical address width=48, NX and supervisor write protection enabled
+PCI: ECAM physical=0xe0000000 bytes=0x10000000 segment=0 buses=0..255
+paging: switching CR3 from 0x7bedf000 to owned root 0x22000
+paging: owned CR3=0x22000; 4 KiB leaves, recursive slot 510, no HHDM
+clock: HPET 64-bit counter, direct, period=10000000 fs
+x86_64: local APIC timer calibrated, 521841 counts per ~8.33 ms
+keyboard: IRQ 1 -> GSI 1, I/O APIC input 1 -> BSP APIC 0
+mouse: IRQ 12 -> GSI 12, I/O APIC input 12 -> BSP APIC 0
+ACPI: SCI IRQ 9 -> GSI 9, I/O APIC input 9 -> BSP APIC 0, level active-high
+mouse: PS/2 device ID 0x3, wheel, 4-byte packets
+keyboard: PS/2 scan set 2 ready
+mouse: PS/2 reporting enabled
+clock: UTC seed=1791449745 Unix seconds; boot precision is approximate
+mm: kernel VM and heap ready
+initrd: newc archive=39229952 bytes, mapped read-only
+boot files: original kernel=3555760 bytes, mapped read-only
+PCI: discovery starting
+PCI: 8 functions on 1 buses; read-only inventory complete
+PCI: discovery complete
+virtio-net PCI: reset confirmed before BAR probing
+virtio-net PCI: common BAR4 offset=0x0 bytes=0x38 address=0xffff800002a15000
+virtio-net PCI: notify BAR4 offset=0x3000 bytes=0x1000 address=0xffff800002a16000
+virtio-net PCI: ISR BAR4 offset=0x1000 bytes=0x1 address=0xffff800002a17000
+virtio-net PCI: device BAR4 offset=0x2000 bytes=0x1000 address=0xffff800002a18000
+virtio-net PCI: register resources owned; 4 MSI-X entries, DMA and interrupts disabled
+virtio-net PCI: offered features[63:0]=0x10130bf8024
+virtio-net PCI: accepted VERSION_1, MAC, STATUS; FEATURES_OK confirmed
+virtio-net PCI: MAC=52:54:0:12:34:56 link=up
+virtio-net PCI: queue 0 maximum=256 notify=0xffff800002a16000, disabled
+virtio-net PCI: queue 1 maximum=256 notify=0xffff800002a16004, disabled
+virtio-net PCI: MSI-X entry 0 -> BSP APIC 0 vector 35; route masked
+virtio-net PCI: queue 0 size=16 descriptors=0x32a000 available=0x32a100 used=0x32a128
+virtio-net PCI: queue 1 size=16 descriptors=0x333000 available=0x333100 used=0x333128
+virtio-net PCI: queues prepared; DMA and DRIVER_OK clear, awaiting network worker
+virtio-rng PCI: reset confirmed before BAR probing
+virtio-rng PCI: common BAR4 offset=0x0 bytes=0x38 address=0xffff800002a2d000
+virtio-rng PCI: notify BAR4 offset=0x3000 bytes=0x1000 address=0xffff800002a2e000
+virtio-rng PCI: ISR BAR4 offset=0x1000 bytes=0x1 address=0xffff800002a2f000
+virtio-rng PCI: register resources owned; 2 MSI-X entries, DMA and interrupts disabled
+virtio-rng PCI: queue 0 maximum=8 notify=0xffff800002a2e000, disabled
+virtio-rng PCI: MSI-X entry 0 -> BSP APIC 0 vector 36; route masked
+virtio-rng PCI: queue 0 size=8 descriptors=0x33c000 available=0x33c080 used=0x33c098
+virtio-rng PCI: queue prepared; DMA and delivery disabled until worker start
+virtio-blk: no candidate device; block I/O unavailable
+SMP: 4 CPU(s) online; APs waiting for scheduler startup
+tasks: scheduler and BSP request queues ready
+devices: starting virtio, block and native filesystem workers
+devices: workers started
+net: lo 127.0.0.1/8 MTU=1500, IPv4/ICMP/UDP worker ready
+PMM: total=501702 free=499486 allocated=2216 frames, metadata=32 pages
+VM: total=16777216 reserved=28273 backed=1084 pages, records=79/256
+heap: TLSF pools=5 bytes=2539520, alignment=16, live allocations=62; arena used=2539520 retired=0 bytes
+userspace: boot init boot://boot-init.pxe entry=0x400000
+Caelum ready: starting preemptive userspace
+ACPI: uACPI 6.1.1 namespace ready in 2552 us; heap 109013 bytes in 3539 blocks, firmware window 14 pages
+net: lwIP TCP packet bridge and connection service ready
+display: presentation started; early console retired
+boot-init: reading boot://config/live.lua
+virtio-rng: host random source ready, demand-driven reads
+boot-init: volume host unavailable (status 6)
+net: TCP transport identity ready
+userspace: space development started
+boot-init: space development started: boot://init (network owner)
+userspace: space readonly started
+boot-init: space readonly started: boot://init-readonly
+userspace: space remote started
+hci-probe: configure=0 interface=0 endpoint=81 packet=64 interval=1
+boot-init: space remote started: boot://init-remote
+hci-probe: command opcode=c03 EP0 result=0
+virtio-net: RX/TX active, 16 buffers per queue, BSP worker owns completions
+hci-probe: event sequence=1 bytes=6 data: e 4 2 3 c 0
+hci-probe: command complete opcode=c03 status=0 credits=2
+hci-probe: command opcode=fc05 EP0 result=0
+hci-probe: event sequence=2 bytes=15 data: e d 1 5 fc 0 37 14 1 23 3 c1 21 18 0
+hci-probe: command complete opcode=fc05 status=0 credits=1
+hci-probe: Intel version hw=37/14 revision=1 firmware=23 revision=3 build=193 week=33 year=24 patch=0
+hci-probe: observed controller state=operational firmware; no firmware load attempted
+hci-probe: accepting existing warm firmware for investigation; skip upload and pinned-version comparison
+hci-probe: command opcode=fc05 EP0 result=0
+hci-probe: event sequence=3 bytes=15 data: e d 1 5 fc 0 37 14 1 23 3 c1 21 18 0
+hci-probe: command complete opcode=fc05 status=0 credits=1
+hci-probe: warm firmware confirmation=1 result=0
+hci-probe: finished result=0 events=3

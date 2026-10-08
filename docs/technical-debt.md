@@ -2106,6 +2106,29 @@ reboot, even after confirmed halt. This follows current shared-VM ownership and
 prevents reuse while device ownership is uncertain. Runtime reclamation belongs
 with the VM/device lifetime work, not a local allocator-lock workaround.
 
+### Bluetooth cold firmware upload and running-version policy
+
+For the [Bluetooth investigation](wip/bluetooth.md), the owner accepted using
+already operational AX200 firmware and deferred cold bootloader upload on
+2026-10-08. Warm boot or passthrough may retain another OS's chosen build; the
+probe verifies that build stays unchanged, without comparing it to a Pyxis pin.
+The consequence is that investigation results depend on prior host initialization:
+a cold bootloader device cannot become ready through this probe.
+
+Revisit before claiming native Bluetooth startup or designing the persistent
+stack. Intel secure upload needs bulk OUT and an owned event strategy for bulk
+IN as well as interrupt IN. The existing synchronous bulk timeout/quarantine is
+unsuitable for polling an idle bootloader event channel. Firmware boot also needs
+its real vendor notification, rather than a fabricated Command Complete. Any
+reset that re-enumerates USB must account for the existing controller quarantine
+and retained DMA policy.
+
+The owner must mirror exact `.sfi`/`.ddc` files, alias targets, provenance and
+license before a committed build uses them. Capture cold version/boot parameters,
+qualify secure download and boot, apply DDC after boot, and re-read the version.
+Comparing another OS's running build with a future Pyxis pin needs an explicit
+policy decision; the investigation's warm acceptance does not settle it.
+
 ### USB interrupt-IN initial profile and failure retention
 
 The implemented private [interrupt-IN path](devices/usb-interrupt-in.md) follows
