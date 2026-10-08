@@ -1,10 +1,11 @@
 # Network throughput
 
-Status: **accepted, 2026-10-08,** assigned to Claude. The owner accepted the
-three [decisions](#accepted-decisions), with the review's adjustment to the
-segment-size mechanism. Decisions 1 and 2 are implemented; two
-[questions](#open-questions) came out of implementation and await the owner.
-The native baseline waits for the owner's next ThinkPad batch.
+Status: **accepted and implemented in QEMU, 2026-10-08,** assigned to Claude.
+The owner accepted the three [decisions](#accepted-decisions), with the
+review's adjustment to the segment-size mechanism, and two more that came up
+during implementation. The changes are held unmerged until the owner's native
+baseline on main; the before and after native runs follow the
+[plan](#native-measurement-plan).
 
 ## Goal
 
@@ -149,6 +150,14 @@ sha256sum tmp://rx.bin
 rm tmp://rx.bin
 ```
 
+After the changes, `ttcp -r` also exists. Repeat the receive runs with it, which
+avoids the RAM file, and keep one `tcp | sha256sum` run for integrity:
+
+```text
+ttcp -r -p 5002 DESKTOP
+tcp DESKTOP 5002 | sha256sum
+```
+
 Finally stop `tcpdump` and the sink, copy `/tmp/pyxis-net.pcap` to
 `/shared/net-throughput/`, and remove the rule with
 `sudo ufw delete allow from 192.168.0.50 to any port 5001:5002 proto tcp`.
@@ -173,8 +182,14 @@ Accepted by the owner 2026-10-08.
    second lwIP interface.
 2. **Windows:** TCP send and receive buffers at 65,535 bytes, without window
    scaling.
-3. **Receive benchmark:** `ttcp -r`, discarding what it receives. Its
-   connection direction is an [open question](#open-questions).
+3. **Receive benchmark:** `ttcp -r`, discarding what it receives.
+4. **Nagle off** on every connection, set in the same established callbacks.
+   This came up during implementation; see
+   [Nagle and request/response framing](#nagle-and-requestresponse-framing).
+5. **`ttcp -r` connects out:** `ttcp -r [-p PORT] HOST` connects to a host
+   serving data, because ordinary sessions hold connect-only TCP authority.
+
+Decisions 4 and 5 were accepted on 2026-10-08 after the first three.
 
 Worker per-packet costs, such as the clock reads and timer re-arming per wake,
 the 4 KiB call extent and batching, wait for the native results. TSC timekeeping
@@ -183,10 +198,10 @@ separate from this work.
 
 ## Implementation
 
-- **Segment size.** `TCP_MSS` is 1460. A per-connection clamp,
-  `tcp_connection_limit_mss`, runs in the connect and accept callbacks: when
-  `net_ipv4_route` reaches the peer through a gateway, or fails, it caps
-  `pcb->mss` at `TCP_ROUTED_MSS`, 536. No second lwIP interface was needed.
+- **Segment size.** `TCP_MSS` is 1460. `tcp_connection_established` runs in
+  the connect and accept callbacks. When `net_ipv4_route` reaches the peer
+  through a gateway, or fails, it caps `pcb->mss` at `TCP_ROUTED_MSS`, 536.
+  No second lwIP interface was needed.
   - **Why not the PCB-allocation hook:** for passive opens lwIP allocates the
     PCB before parsing the SYN's options. `tcp_parseopt` then resets `mss`
     from the peer's option and `tcp_eff_send_mss` recomputes it, and active
@@ -198,62 +213,49 @@ separate from this work.
     is within RFC 6928's initial window for 536, so the clamp leaves it.
   - **What peers see:** 1460 is advertised either way; the peer's own path
     handling covers what it sends.
+- **Nagle.** The same function calls `tcp_nagle_disable`.
 - **Windows.** `NET_TCP_RECEIVE_BYTES` and `NET_TCP_SEND_BYTES` are 65,535.
   lwIP's `TCP_SND_QUEUELEN` formula now gives 180 pbufs, and the out-of-order
   cap follows the receive window.
+- **`ttcp -r`.** It connects, reads until EOF, discards the data and reports
+  bytes and MiB/s from the established connection to EOF. `-n` and `-l` are
+  rejected with it.
+
+### Nagle and request/response framing
+
+With a 1460-byte MSS, each 2.8 KB `xfer` frame became one full segment plus a
+1322-byte tail. QEMU held its ACK of the lone full segment for about 2.1 ms,
+and Nagle held the tail until that ACK arrived. Under the old 536-byte MSS a
+frame was five full segments and a tail, and the receiver ACKed promptly.
+Linux can delay such an ACK by up to about 40 ms, so natively the stall could
+be much worse; that is an inference. Native writes already hand lwIP up to
+4 KiB at once, so turning Nagle off costs extra small segments only for small
+writes, such as terminal echo.
 
 ### QEMU validation (2026-10-08)
 
-Same configuration as the baseline, kernel from this branch:
+Same configuration as the baseline, kernel and userland from this work:
 
 | Check | Result |
 | --- | --- |
-| On-link send, 16 MiB | 3.256, 3.220, 3.252 MiB/s (baseline 1.649–1.659); 1460-byte segments; both SYNs show MSS 1460, window 65,535 |
-| Routed send, 4 MiB to this VM's Tailscale address through the gateway | 536-byte segments although both sides advertised 1460 |
-| On-link receive, 16 MiB | 4.30, 4.54, 4.36 MiB/s; SHA-256 matched; the guest window opens to 65,535 |
+| On-link send, 16 MiB | 3.179, 3.162, 3.156 MiB/s (baseline 1.649–1.659); 1460-byte segments; both SYNs show MSS 1460, window 65,535 |
+| Routed send, through the gateway to this VM's Tailscale address | 536-byte segments although both sides advertised 1460 |
+| On-link receive, `ttcp -r`, 16 MiB | 4.340, 4.370, 4.436 MiB/s; the NIC capture gives 4.35, 4.38, 4.45; the guest window opens to 65,535 |
+| On-link receive into `tmp://`, before Nagle was disabled | 4.30, 4.54, 4.36 MiB/s; SHA-256 matched |
 | Passive on-link, the remote-terminal server's own connection | its frames leave as 1460 + 1322 bytes |
+| `ttcp -r -n 5 HOST`, `ttcp -t -r HOST` | usage, exit status 1 |
+
+15 MiB `xfer` downloads from `tmp://`, each matching the source's SHA-256:
+
+| Kernel | Seconds |
+| --- | --- |
+| Main before this work (#554) | 52.2–56.9 |
+| MSS 1460, Nagle on | 59.7, 66.3, 64.6 |
+| MSS 1460, Nagle off | 39.7, 39.5, 40.2 |
 
 A routed passive open cannot be produced with QEMU user networking, because
 forwarded connections all arrive from the on-link `10.0.2.2`. That path was
 checked in code only.
-
-## Open questions
-
-Each has a default and needs an owner decision.
-
-1. **Nagle with request and response framing.**
-   - **The problem:** each 2.8 KB `xfer` frame is now one full segment plus a
-     1322-byte tail. QEMU holds its ACK of the lone full segment for about
-     2.1 ms, and lwIP's Nagle holds the tail until that ACK. Under the old
-     536-byte MSS a frame was five full segments and a tail, and the receiver
-     ACKed promptly.
-   - **QEMU, 15 MiB `xfer` download:**
-
-     | Kernel | Seconds |
-     | --- | --- |
-     | Before, #554 | 52.2–56.9 |
-     | This branch | 59.7, 66.3, 64.6 |
-     | This branch with Nagle off (local experiment) | 41.7, 49.9, 41.4 |
-
-   - **Natively it may be worse:** Linux can delay the ACK for a lone segment
-     by up to about 40 ms, and the host cannot reply until the frame is
-     complete. That is an inference, not a measurement.
-   - **Default:** disable Nagle on every connection in the same established
-     callbacks. Caelum's calls already hand lwIP up to 4 KiB at once, so the
-     cost is extra small segments for small writes, such as terminal echo.
-     `ttcp` sends were unchanged with Nagle off (3.17, 3.19 MiB/s).
-   - **Alternative:** a per-stream no-delay option, which is new ABI.
-   - **Alternative:** keep Nagle and accept the stall.
-2. **Which way `ttcp -r` connects.**
-   - **The problem:** the proposal said `ttcp -r` would accept one connection,
-     like classic `ttcp`. Ordinary Pyxis sessions have connect-only TCP
-     authority; listening needs the `session` handoff the echo server uses.
-   - **Default:** `ttcp -r [-p PORT] HOST` connects to a host that serves data,
-     for example `socat -u OPEN:FILE TCP4-LISTEN:5002`, reads until EOF,
-     discards it and reports bytes and MiB/s. This works from any ordinary
-     shell.
-   - **Alternative:** listen as classic `ttcp` does, launched through the
-     `session` handoff with LISTEN authority.
 
 ## Out of scope
 

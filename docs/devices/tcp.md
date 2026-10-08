@@ -8,7 +8,7 @@ protocols remain in userspace. There is no POSIX socket layer.
 Init delegates the `tcp` service through session and shell launch. Applications
 use `include/abi/tcp.h` through the SDK and libpyxis's `tcp.h`; helpers borrow
 explicit handles. The boot archive includes the `tcp` request/response utility
-and the transmit-only `ttcp` tool.
+and the `ttcp` send and receive benchmark.
 
 ## Listening and admission
 
@@ -168,8 +168,10 @@ sequence numbers and ephemeral ports. Missing entropy disables new TCP
 connections explicitly while ordinary boot, UDP and numeric ping still work.
 The transport owns this authority, independent of caller DNS/random grants.
 
-lwIP handles congestion control, ACK validation, retransmission, RTT/RTO, Nagle
-coalescing, zero windows and FIN ordering. Connections advertise an MSS of 1460
+lwIP handles congestion control, ACK validation, retransmission, RTT/RTO, zero
+windows and FIN ordering. Nagle coalescing is disabled on every connection:
+native writes already hand lwIP up to 4 KiB at once, and request and response
+framing would otherwise wait for the peer's delayed ACK. Connections advertise an MSS of 1460
 bytes for the 1500-byte interface MTU and send at most that to on-link peers,
 further reduced by the peer's MSS. Without path-MTU discovery, a connection
 whose peer is reached through a gateway sends at most 536 bytes per segment,
@@ -240,10 +242,11 @@ it receives no LISTEN service, launcher or filesystem roots. The ordinary
 interactive session cannot invoke this handoff successfully because its TCP
 authority is CONNECT-only. No remote command execution is introduced here.
 
-## Transmit-only ttcp
+## ttcp
 
 ```text
 ttcp -t [-p PORT] [-n BUFFERS] [-l BYTES] HOST
+ttcp -r [-p PORT] HOST
 ```
 
 Defaults are port 5001, 2048 buffers and 8192 bytes per buffer: 16 MiB total.
@@ -267,7 +270,7 @@ ttcp -t 10.0.2.2
 ttcp -t -p 5001 -n 128 -l 8192 10.0.2.2
 ```
 
-Restart a one-shot host receiver before each run. There is no guest receive or
+Restart a one-shot host receiver before each run. There is no listening or
 UDP mode, stdin source, socket tuning or CPU-use accounting. This first-party
 implementation records its classic public-domain command/pattern reference in
 `userspace/ttcp/README.md`; it does not introduce a socket compatibility layer.
@@ -290,6 +293,24 @@ link measurement. Compare the configured byte count with the host receiver's
 count. Orderly TCP closure proves transport acknowledgment, not application
 consumption. Under QEMU user networking, the guest's TCP peer is also mediated
 by the host backend, making the host receiver's count especially important.
+
+`ttcp -r` connects to a peer that serves data, reads until EOF and discards it,
+reporting bytes and MiB/s from the established connection to EOF. Classic
+`ttcp -r` listens instead; ordinary sessions hold connect-only TCP authority, so
+this one connects out. `-n` and `-l` are rejected with `-r`; each 4 KiB read has
+a fresh ten-second deadline. Serve the data from the host, then receive:
+
+```sh
+# Host
+socat -u OPEN:FILE TCP4-LISTEN:5002,reuseaddr
+```
+
+```text
+# Pyxis shell
+ttcp -r -p 5002 10.0.2.2
+```
+
+Content is not checked; use `tcp HOST PORT | sha256sum` when integrity matters.
 
 ## Remaining work
 

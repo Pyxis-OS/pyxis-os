@@ -328,11 +328,12 @@ or a second networking task.
 `TCP_MSS` is 1460 bytes for the 1500-byte interface MTU; lwIP advertises it and
 reduces the send size to the peer's MSS at establishment. lwIP sets that send
 MSS only when the connection is established, after `LWIP_HOOK_TCP_PCB_ALLOCATED`
-has run, so `tcp_connection_limit_mss` clamps it in the connect and accept
+has run, so `tcp_connection_established` clamps it in the connect and accept
 callbacks instead. When `net_ipv4_route` reaches the peer through a gateway,
 or fails, the connection sends at most `TCP_ROUTED_MSS`, 536 bytes. The initial
 congestion window lwIP computed for 1460, 4380 bytes, is left as is; it is
 within RFC 6928's initial window for 536. No second lwIP interface is involved.
+The same function disables Nagle on every connection.
 This is not path-MTU discovery. No window scaling, timestamps, SACK,
 fragmentation or new ICMP error/PMTU handling is added.
 
