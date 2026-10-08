@@ -28,6 +28,7 @@ case "${1:-}" in
       mv "$staging" "$sdk/sysroot/usr/include"
     fi
     install -C -m 644 lib/shebang.c "$sdk/share/pyxis/shebang.c"
+    install -C -m 644 lib/key_layout.c "$sdk/share/pyxis/key_layout.c"
     install -C -m 644 userspace/target.mk "$sdk/share/pyxis.mk"
     ;;
   complete)

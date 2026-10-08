@@ -70,6 +70,10 @@ repeat. Enter yields newline, Backspace `\b`, Tab `\t`, and Escape `0x1b`.
 Ctrl+letters yield control bytes without signal or EOF meaning. Alt/Super chords,
 modified navigation, function keys and the numeric keypad (except Enter) have no
 text binding yet. Physical key events remain separate from this text mapping.
+The character table is the shared US layout in
+[`lib/key_layout.c`](../../lib/key_layout.c), which the SDK also exports to
+libpyxis as `key_layout_character`; the SDL2 port's text input uses it, so a
+layout change applies to both.
 
 Unmodified navigation keys produce terminal sequences:
 

@@ -20,6 +20,7 @@ there is no extra link library. See
 | `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
+| `share/pyxis/key_layout.c` | The US key layout shared with the kernel's terminal text, compiled into libpyxis as `key_layout_character` (`pxe/key_layout.h`) |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
 | `share/toolchain` | Installed toolchain provenance: the LLVM fork revision, the toolchain README and the LLVM license |
 | `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, runtime hash and host identity |
@@ -228,6 +229,6 @@ make -C userspace -f runtime.mk SDK=../build/sdk BUILD=../build/runtime libc
 complete SDK. Standalone runtime builds default to `build/runtime` within the
 userland checkout. They take their own libc/libpyxis/libterm headers from that
 checkout and ABI/format headers from the selected SDK. TLSF is vendored in
-userland. The shared shebang implementation stays in Pyxis and is exported to
-`share/pyxis/shebang.c` during the header stage, so runtime builds never reach
-into parent source directories.
+userland. The shared shebang parser and US key layout stay in Pyxis and are
+exported to `share/pyxis/shebang.c` and `share/pyxis/key_layout.c` during the
+header stage, so runtime builds never reach into parent source directories.
