@@ -1,6 +1,6 @@
 # C++ in userspace
 
-Status: **decisions accepted; tasks 1–2 done, task 3 in review, 2026-10-08.**
+Status: **decisions accepted; tasks 1–3 done, task 4 in review, 2026-10-08.**
 The owner selected this milestone for Claude on 2026-10-07 and accepted the three
 [decisions](#decisions) on 2026-10-08. The rest of the [proposal](#proposal)
 guides the tasks; each task starts when the owner says so. It is the second of
@@ -288,14 +288,15 @@ Each task starts when the owner says so.
    - the linker-script sections.
 
    See [task 2 results](#task-2-results).
-3. **Fork, toolchain and runtime build.** In review, 2026-10-08:
+3. **Fork, toolchain and runtime build** (pyxis-llvm #3, userland #156,
+   Pyxis #510). Done 2026-10-08:
    - the driver and libc++ commits in `pyxis-llvm`;
    - the toolchain pin, the `clang++` name and the new image tag;
    - the SDK runtime build and `pyxis.mk`'s C++ settings.
 
-   The owner builds the image before CI can pass. See
-   [task 3 results](#task-3-results).
-4. **The {fmt} port**, from `mirrors/fmt`, with its libc additions.
+   CI passed on the owner-built image. See [task 3 results](#task-3-results).
+4. **The {fmt} port**, from `mirrors/fmt`. In review, 2026-10-08; it needed no
+   libc additions. See [task 4 results](#task-4-results).
 5. **Close.** Turn this document into a reference under `docs/development`,
    listing the supported subset and its gaps.
 
@@ -369,6 +370,34 @@ toolchain built from fork commit `49e2c1a1518b` (19 minutes on 8 vCPUs).
 
   `thread_local` and `_Thread_local` fail when compiling. The guest SDK has no
   `c++` headers, and TCC in the guest still compiles and runs C programs.
+
+## Task 4 results
+
+Measured on 2026-10-08 in the same VM, against main `cffc733`.
+
+- **The port.** fmt 12.2.0 (`1be298e1bd68`) builds with the SDK's C++ settings
+  and no warnings in about 3 s. It needed no libc additions. It did need two
+  patches, both keyed to libc++'s feature macros:
+  - locale support off, because libc++ has no localization;
+  - one Windows helper returning `std::wstring` left out, because libc++ has
+    no wide characters.
+
+  `FMT_OS` is off.
+- **Headers.** Of fmt's headers, `chrono.h`, `ostream.h`, `std.h` and `xchar.h`
+  need `std::locale`, `printf.h` needs `std::wstring`, and `os.h` needs `FMT_OS`;
+  each fails to compile. The rest are usable. With locales off, upstream's `L`
+  specifier groups floating-point values with `,` but not integers.
+- **In QEMU** (4 CPUs, KVM), a throwaway consumer ran correctly, both to the
+  terminal and through a pipe. It used:
+  - alignment, width, precision, hexadecimal and scientific formats;
+  - shortest float output;
+  - vectors, maps and `join` from `ranges.h`;
+  - a custom formatter;
+  - `color.h` escapes;
+  - `fmt::format_error` from a runtime format string;
+  - `memory_buffer`, and `print` to stderr.
+
+  It is 258,899 bytes.
 
 ## Not in this milestone
 
