@@ -2573,3 +2573,29 @@ writer changing its temporary file/name, and cleanup policy when persistent
 operational use needs recovery from interrupted copies. Provider sources,
 native disk copies, durability and owner-run ThinkPad usage remain unqualified;
 current measured evidence covers archive/RAM/HOST copying in nested QEMU.
+
+## Bluetooth HCI connection handle reuse boundary
+
+Accepted 2026-10-08 for [runtime HCI task 2](devices/bluetooth-hci.md): fail closed
+if the controller reuses a previously disconnected connection handle. Independent
+event and ACL endpoint ordering cannot establish which link delayed bytes belong
+to; a new generation alone is insufficient. Known retired-link ACL is discarded
+without hiding the disconnect event or independently disabling storage.
+
+This restricts repeated connections during one controller lifetime. Establish
+and measure a safe retirement/reuse boundary in the connection/reconnect tasks
+before durable bonded reconnect can qualify. It does not relax native closure.
+
+## Bluetooth runtime re-grant after radio work
+
+The current [HCI adapter](devices/bluetooth-hci.md#progress-and-failure) sets a
+sticky dirty flag on non-read-only command publication, connection admission or
+ACL publication. Release/exit then leaves Bluetooth unavailable until reboot,
+even when links and credits later settle. Only fully accounted read-only
+sessions have a confirmed clean re-grant path. This implements conservative
+cleanup under the accepted exclusive controller lifetime; it is not measured
+radio cleanup or automatic service recovery.
+
+Revisit with the service/connection tasks when they can establish and qualify
+explicit radio-procedure termination, receive continuity and independent USB
+accounting. The accepted handle-reuse boundary is also required for reconnect.

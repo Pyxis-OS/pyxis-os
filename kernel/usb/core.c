@@ -1,5 +1,6 @@
 #include <arch/cpu.h>
 #include <kernel/log.h>
+#include <kernel/bluetooth.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/pci.h>
@@ -9,6 +10,7 @@
 #include "core.h"
 #include "bot.h"
 #include "block.h"
+#include "bluetooth.h"
 #include "../storage/block_registry.h"
 #include "host.h"
 #include "settings.h"
@@ -145,6 +147,7 @@ struct usb_device_record {
   struct usb_discovery *owner;
   struct usb_host_device *host;
   struct usb_bot storage;
+  struct usb_bluetooth_binding bluetooth;
   struct system_info_usb_device info;
   enum usb_speed speed;
   const char *detail;
@@ -659,6 +662,10 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       select_hub_configuration(device, total);
       device->storage.host = device->host;
       usb_bot_select(&device->storage, device->owner->descriptors, total, device->speed);
+      if (usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id) &&
+          device->info.configuration_count == 1) {
+        usb_bluetooth_select(&device->bluetooth, device->owner->descriptors, total);
+      }
     }
   }
 }
@@ -705,6 +712,7 @@ static void publish_inventory(void)
     .interface_count = interface_index,
   };
   atomic_store_explicit(&inventory.state, inventory.info.state, memory_order_release);
+  bluetooth_hci_inventory_sealed(inventory.info.state == SYSTEM_INFO_USB_COMPLETE);
 }
 
 static bool is_usb_controller(const struct pci_device *device)
@@ -1565,6 +1573,16 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
   }
   for (size_t index = 0; index < discovery->device_count; ++index) {
     struct usb_device_record *device = &discovery->devices[index];
+    if (device->present && !device->incomplete &&
+        usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id)) {
+      enum usb_result result = usb_bluetooth_bind(&device->bluetooth,
+          discovery->host, device->host, deadline);
+      if (result == USB_OK) {
+        ktrace("bluetooth: AX200 USB transport configured (result %u)\n", (unsigned)result);
+      } else {
+        klog("bluetooth: AX200 USB transport unavailable (result %u)\n", (unsigned)result);
+      }
+    }
     struct usb_bot *storage = &device->storage;
     if (storage->configuration) {
       if (device->incomplete || discovery->hardware_failed || task_deadline_expired(deadline)) {

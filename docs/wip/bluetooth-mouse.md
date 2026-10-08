@@ -1,9 +1,9 @@
 # MX Master 3S on Pyxis
 
-Status: **task 1 complete 2026-10-08, documentation and decisions only.**
+Status: **tasks 1–2 complete; runtime warm validation recorded 2026-10-08.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
-remain; task 2 and every later implementation task need explicit owner assignment.
+remain. Task 2 is complete; tasks 3–8 still need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -11,7 +11,10 @@ assigned this proposal. Publishing, reviewing or merging it does not authorize
 implementation. The owner chooses the milestone and explicitly starts its tasks.
 The native batch is complete in [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547).
 Task 1 started from fresh main `8c4368e` and is now rebased onto main `abbeded`.
-Its contracts/dependencies are complete. Task 2 is not assigned or started.
+Its contracts/dependencies are complete. The owner explicitly assigned task 2
+after approving #548. The [runtime transport record](../development/experiments/bluetooth-runtime-hci/README.md)
+records the baseline, runtime implementation, warm passthrough and matched
+measurements. Cold support and service/connection qualification remain later tasks.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
@@ -322,10 +325,10 @@ first and state merge order. Probe branches remain historical evidence.
   against `a2ff720` (now merged in #545). No policy questions remain. Firmware
   assets/compatibility data and report/runtime qualification are later gates;
   no implementation task is assigned by this completion.
-- [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
+- [x] **2. Runtime HCI transport.** Complete 2026-10-08: checked AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
-  progress and process-exit/loss behavior. Validate warm passthrough framing and
-  idle reception; qualify real ACL traffic and storage coexistence with task 4's
+  progress and process-exit/loss behavior. Warm passthrough framing, posted idle
+  reception and matched storage/CPU checks are recorded; qualify real ACL traffic and storage coexistence with task 4's
   connection consumer. Do not block the xHCI worker for a 30-second userspace
   scan as the investigation probe did.
 - [ ] **3. Firmware readiness.** Choose/mirror/license the exact assets, implement
@@ -381,13 +384,34 @@ lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
 prerequisite under the accepted policy, not a blind choice before cold evidence.
 
 New evidence that requires a policy change returns to the owner. Every
-implementation task, starting with task 2, needs a later explicit assignment.
+implementation task needs an explicit assignment. Task 2 is complete; tasks 3–8
+remain unassigned.
 
 With the direction decided, the completed investigation is now the
 [AX200 reference](../devices/ax200-bluetooth.md), linked to the final
 report and detailed task reports. This production proposal stays in WIP; no
-implementation task is assigned and cold-firmware debt remains open. The owner
-reports the native batch completed and Fedora Bluetooth disabled. Task 1's
-branch is `docs/bluetooth-task1-contracts`, rebased onto main `abbeded`; only
-documentation is edited. Pointer drafts `304d1d7` and `a2ff720` were read, not
-changed. No QEMU, debugger, passthrough or probe job is started for this task.
+later implementation task is assigned and cold-firmware debt remains open. The owner
+reports the native batch completed and Fedora Bluetooth disabled. Task 1 used
+branch `docs/bluetooth-task1-contracts`, rebased onto main `abbeded`, with only
+documentation edits. Pointer drafts `304d1d7` and `a2ff720` were read, not
+changed. No QEMU, debugger, passthrough or probe job was started for task 1.
+
+Task 2 now uses branch `bluetooth/runtime-hci`, from fresh main `3bda2c3` after
+#548 merged. The attached-controller baseline was
+captured before code changes after the owner granted USB-node access. Measurements,
+current toolchain inputs and cleanup are recorded in the runtime transport note.
+
+### Task 2 continuity decision
+
+Accepted by the owner on **2026-10-08**: task 2 fails closed with explicit
+input-loss/unavailability if the controller reuses a previously disconnected
+connection handle. Independent event and ACL reception cannot yet establish a
+retirement boundary that proves delayed old bytes belong to the old connection;
+a new generation alone is insufficient. Valid old-link ACL data for a known
+retired handle is discarded without erasing the disconnect notification or
+disabling storage. This is distinct from attaching that data to a reused handle.
+
+The connection/reconnect tasks must establish and qualify a safe reuse boundary
+before bonded reconnect is ready. This limit does not relax required durable
+reconnect or native closure. See the
+[revisit condition](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).

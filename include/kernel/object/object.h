@@ -50,6 +50,7 @@ enum object_type {
   OBJECT_LOG = 43,
   OBJECT_SCREEN_CAPTURE = 44,
   OBJECT_TERMINAL_POINTER = 45,
+  OBJECT_BLUETOOTH_HCI = 46,
 };
 
 struct execution_group;

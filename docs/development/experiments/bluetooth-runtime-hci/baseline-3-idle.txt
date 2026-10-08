@@ -1,0 +1,22 @@
+Unprofiled 30-second idle interval; debugger detached during timing.
+before:
+xhci=876,6,876 running=1 failed=0
+timers=13605,6124,6123,6122
+after:
+xhci=876,6,876 running=1 failed=0
+timers=21700,9736,9735,9734
+{
+  "pid": 27232,
+  "interval_ns": 30000104830,
+  "clock_ticks_per_second": 100,
+  "before": {
+    "utime": 874,
+    "stime": 893
+  },
+  "after": {
+    "utime": 1208,
+    "stime": 1306
+  },
+  "cpu_seconds": 7.47,
+  "one_cpu_percent": 24.899912991404037
+}
