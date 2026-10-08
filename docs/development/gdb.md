@@ -37,6 +37,14 @@ normal execution. The pre-scheduling breakpoint above avoids those lock owners.
 
 ## Call functions and keep results
 
+Function injection depends on the debugger's return trampoline. During the
+screen-capture investigation with GDB/QEMU and the LLVM 23.1.3 kernel, an
+injected `object_retain()` completed its side effect but then faulted fetching
+the return trampoline on the non-executable kernel stack. Restart that guest;
+do not retry the mutation or make the stack executable. Use
+`set may-call-functions off` for inspection that must only read memory. The
+examples below require a debugger setup whose injected return works.
+
 ```gdb
 p pmm_get_stats()
 p heap_get_stats()

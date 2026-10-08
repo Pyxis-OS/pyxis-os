@@ -42,6 +42,12 @@ struct file_object *file_create_initrd(const struct initrd_file *view);
 /* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
 struct file_object *file_create_ram(void);
 
+/* BSP, IF=0. data must be a nonNULL owned kmalloc buffer covering nonzero size.
+ * Success adopts the buffer and returns one owned reference; NULL leaves it
+ * owned by the caller. Publish only READ grants and never mutate the bytes
+ * after publication. Final FILE_RAM destruction frees the buffer. */
+struct file_object *file_create_snapshot(void *data, size_t size);
+
 /* BSP, IF=0. Worker supplies stable host state; no in-memory file data. */
 struct file_object *file_create_host(struct hostfs_node *host);
 

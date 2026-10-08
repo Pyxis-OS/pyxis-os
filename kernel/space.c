@@ -30,6 +30,7 @@
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
+#include <kernel/display_capture.h>
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
 
@@ -804,7 +805,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
   size_t height = screen->height - SPACES_NAV_HEIGHT;
   if (source->width == screen->width && source->height == height &&
       source->pitch == screen->pitch) {
-    display_copy(SPACES_NAV_HEIGHT * screen->pitch,
+    screen_capture_copy(SPACES_NAV_HEIGHT * screen->pitch,
         (const void *)source->address, source->size);
     return;
   }
@@ -814,7 +815,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
   for (size_t y = 0; y < height; ++y) {
     if (y < source->height && columns == screen->width &&
         source->pitch >= screen->pitch) {
-      display_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
+      screen_capture_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
           (const void *)(source->address + y * source->pitch), screen->pitch);
       continue;
     }
@@ -824,7 +825,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
     } else if (y == source->height) {
       fb_fill_rect(cursor_row_fb, 0, 0, cursor_row_fb->width, 1, background);
     }
-    display_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
+    screen_capture_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
         (const void *)cursor_row_fb->address, screen->pitch);
   }
 }
@@ -836,12 +837,14 @@ void space_present()
   }
   const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
 
+  screen_capture_begin(screen, caelum_space->tty->geometry_generation);
   draw_spaces_nav();
 
   if (!display_begin_frame()) {
+    screen_capture_finish(false);
     return;
   }
-  display_copy(0, (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
+  screen_capture_copy(0, (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
 
   struct space *space = active_space;
   uint64_t flags = cpu_save_interrupts();
@@ -865,27 +868,28 @@ void space_present()
   if (frame) {
     present_graphics(source, background);
   } else if (!visible) {
-    display_copy(dst_offset, pixels, source->size);
+    screen_capture_copy(dst_offset, pixels, source->size);
   } else {
     /* Every screen write carries final pixels: rows above and below the
      * cursor go straight across, and the cursor row goes via cursor_row_fb. */
     size_t row_start = y * tty->font->height * source->pitch;
     size_t row_bytes = tty->font->height * source->pitch;
-    display_copy(dst_offset, pixels, row_start);
+    screen_capture_copy(dst_offset, pixels, row_start);
     memcpy((void *)cursor_row_fb->address, pixels + row_start, row_bytes);
     draw_block_cursor(cursor_row_fb, x * tty->font->width, tty);
-    display_copy(dst_offset + row_start,
+    screen_capture_copy(dst_offset + row_start,
         (const void *)cursor_row_fb->address, row_bytes);
-    display_copy(dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
+    screen_capture_copy(dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
         source->size - row_start - row_bytes);
   }
 
-  display_end_frame();
+  bool presented = display_end_frame();
   if (frame) {
     flags = cpu_save_interrupts();
     display_frame_release(frame);
     cpu_restore_interrupts(flags);
   }
+  screen_capture_finish(presented);
 }
 
 void space_display_changed(struct space *space, bool discard_input)
@@ -1024,6 +1028,8 @@ void space_present_task(void *argument)
         resize_display();
       }
       space_present();
+    } else {
+      screen_capture_finish(false);
     }
     deadline += PRESENT_INTERVAL_NS;
     uint64_t now = arch_monotonic_ns();

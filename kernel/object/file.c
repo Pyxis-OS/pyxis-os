@@ -60,6 +60,18 @@ struct file_object *file_create_ram(void)
   return create_file(FILE_RAM);
 }
 
+struct file_object *file_create_snapshot(void *data, size_t size)
+{
+  KASSERT(data && size);
+  struct file_object *file = create_file(FILE_RAM);
+  if (file) {
+    file->data = data;
+    file->size = size;
+    file->capacity = size;
+  }
+  return file;
+}
+
 struct file_object *file_create_host(struct hostfs_node *host)
 {
   struct file_object *file = create_file(FILE_HOST);

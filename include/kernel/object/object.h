@@ -48,6 +48,7 @@ enum object_type {
   OBJECT_SPACE_FACTORY = 41,
   OBJECT_POWER = 42,
   OBJECT_LOG = 43,
+  OBJECT_SCREEN_CAPTURE = 44,
 };
 
 struct execution_group;

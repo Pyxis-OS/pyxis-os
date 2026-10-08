@@ -21,6 +21,7 @@ enum bsp_service {
   BSP_SERVICE_SYSTEM_INFO_MEMORY,
   BSP_SERVICE_SYSTEM_INFO_POWER,
   BSP_SERVICE_POWER,
+  BSP_SERVICE_SCREEN_CAPTURE,
   BSP_SERVICE_COUNT,
 };
 
@@ -38,8 +39,8 @@ enum bsp_request_state {
  * FREE/PREPARED and completed results after waiting; the BSP owns published
  * requests. DEFERRED belongs to the caller until its scheduler establishes the
  * parked handoff. Queue publication and wait notification synchronize loans.
- * FORWARDED belongs to the HOST, native filesystem, readiness or ACPI worker
- * until final completion.
+ * FORWARDED belongs to the HOST, native filesystem, readiness or ACPI worker,
+ * or the sole screen presenter until final completion.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;
@@ -60,7 +61,7 @@ void bsp_request_storage_destroy(struct bsp_request *storage);
  * prepare, fill the typed record, submit/wait, consume results, release.
  * Preparation uses reserved shared storage and cannot fail allocation. */
 struct bsp_request *bsp_request_prepare(enum bsp_service service);
-/* Memory and every display operation require post-switch publication, chosen
+/* Memory, display and screen capture require post-switch publication, chosen
  * by the closed service catalog. Other requests publish before sleeping. */
 void bsp_request_submit_and_wait(struct bsp_request *request);
 void bsp_request_release(struct bsp_request *request);

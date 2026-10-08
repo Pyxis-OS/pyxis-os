@@ -84,6 +84,15 @@ accessing the saved task stack. The same ordering applies to BSP userspace. See
 [SMP handoffs](smp.md). Private memory used the same deferred path until SMP task
 7a; it now runs in the caller's syscall ([memory](memory.md#execution)).
 
+Screen capture also uses DEFERRED publication, lending the parked caller's
+capability table exclusively until FILE installation and completion. After
+SERVICING, the executor transfers the request in FORWARDED state to the sole
+presenter without waiting for a frame. Admission and pending/active transitions,
+allocation, capability installation and completion use BSP/IF=0; composition and
+device waits use the presenter's existing IF=1 frame lease. Refusal or a finished
+frame clears all presenter references and the table loan before common completion.
+See [screen capture](../interfaces/screen-capture.md#frame-boundary-and-lifetime).
+
 HOST adds FORWARDED after SERVICING. The executor transfers it to the existing
 transport worker without waiting and makes no further request access. The HOST
 completion paths clear worker links, input loans and the transport profile pointer
@@ -121,6 +130,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | RAM FILE replacement | Ordinary; caller retains logical busy ownership and performs user copies |
 | Group creation / launch preparation and publication | Ordinary; atomic supervision/launcher installation, independent capture/batch ownership, sealed admission and unpublished-child rollback |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
+| Screen capture | Deferred admission, then forwarded; exclusive caller table loan, one pending/in-flight presenter request, owned READ-only FILE installation or unpublished-backing rollback |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
 | Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
 | Readiness wait | Ordinary admission; selected worker owns observations, transient object references and final completion |

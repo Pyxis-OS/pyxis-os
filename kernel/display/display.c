@@ -214,7 +214,7 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
   }
 }
 
-void display_end_frame(void)
+bool display_end_frame(void)
 {
   bool ready = available;
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
@@ -225,6 +225,7 @@ void display_end_frame(void)
   if (ready != available) {
     set_availability(ready);
   }
+  return ready && !display_is_panicking();
 }
 
 const struct framebuffer *display_panic_target(void)

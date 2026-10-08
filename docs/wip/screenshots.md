@@ -2,7 +2,7 @@
 
 Status: **accepted milestone, 2026-10-08; assigned to Codex 2.** The owner
 merged [PR #501](https://git.internal/PyxisOS/pyxis-os/pulls/501), accepted all
-three contract groups below. Tasks 2 and 3 are delivered, including the owner's
+three contract groups below. Tasks 2–5 are delivered for review, including the owner's
 staged-output follow-up from PR #504. Later tasks remain separate assignments;
 acceptance does not start them implicitly.
 
@@ -255,14 +255,14 @@ are part of this milestone.
    Completion: the static target archive builds against exported zlib/SDK,
    unresolved symbols/configuration are inspected, and dependency/integration
    PRs are published. A successful build alone is not PNG runtime qualification.
-4. [ ] **Implement native screen capture.** In Pyxis, add the separate resource,
+4. [x] **Implement native screen capture.** In Pyxis, add the separate resource,
    public request/result and asynchronous presenter handoff, owned FILE result,
    cancellation/failure cleanup and libpyxis helper in userland. This can use
    the current presenter without depending on the space-layer changes.
    Completion: ordinary kernel/runtime builds and interactive QEMU/debugger
    inspection establish authority refusal, bytes/layout, BUSY, snapshot lifetime
    and request/FILE cleanup; publish the ABI/helper dependency PRs in merge order.
-5. [ ] **Delegate capture explicitly.** Depends on task 4. Add the boot setting
+5. [x] **Delegate capture explicitly.** Depends on task 4. Add the boot setting
    and chosen packaged policy; preserve the optional resource through init,
    session, remote service and shell handoffs. Completion: interactive local and
    remote launches distinguish granted and ungranted callers while DRAW-only
@@ -287,30 +287,48 @@ are part of this milestone.
 
 ## Handoff
 
-The owner accepted all contracts on 2026-10-08 after PR #501 merged. Tasks 2
-and 3 are complete. Task 3 uses Pyxis branch `ports/libpng` and these published
-dependencies, which must merge before its parent integration:
+Tasks 1–5 are delivered for review. On resumption, userland #157 was merged;
+Pyxis #513 was still open with a userspace-pin conflict against the merged C++
+SDK work. Neither PR had review comments. #513 now incorporates current main,
+pins the merged helper (`35910c1`) and is mergeable. Its updated exact-head CI
+is reported in that PR. The space-layer reference move from merged #514 is
+included, so screenshot links follow the implemented reference.
 
-- [userland PR #155](https://git.internal/PyxisOS/pyxis-userland/pulls/155),
-  `47308da28c04c2e71a460bacec5767471479a3dd` (`libc/libpng-modf`): the unmodified
-  musl `modf` prerequisite, public declaration and runtime inclusion.
-- [ports PR #57](https://git.internal/PyxisOS/pyxis-ports/pulls/57),
-  `1064c452a0236040c7d673ab51dbea3a5b81ff80` (`library/libpng`): the pinned
-  library, generated configuration, explicit zlib input and staging exports.
+Task 5 is Pyxis branch `display/capture-delegation`, stacked on #513, and
+[userland PR #158](https://git.internal/PyxisOS/pyxis-userland/pulls/158),
+`e8ad03985519132cda6044e2b46b23680d8cf562` (`init/capture-delegation`).
+Merge native capture #513 and the published userland #158 dependency before the
+parent task-5 integration. Ports stays at
+`1064c452a0236040c7d673ab51dbea3a5b81ff80`. The currently published
+LLVM 23.1.3 / 49e2c1a builder includes the C++ support required by merged main;
+no owner container rebuild is needed for capture delegation.
 
-The owner's shared `raw-sourceforge` mirror supplies the accepted libpng
-archive/hash. Current LLVM 23.1.3 SDK, zlib and libpng builds passed; generated
-configuration and symbol inspection preserve conventional read/write, stdio,
-setjmp and floating-point support while omitting the simplified API and
-architecture acceleration. Every libpng external reference is supplied by
-zlib/libc. Public source headers and licenses remain unchanged, and the exported
-configuration matches the archive build. Ordinary image/bundle staging and
-exact-head existing CI results are recorded in the parent PR. Dependency
-repositories report zero Actions tasks, so they provide no CI pass evidence.
+The [native reference](../interfaces/screen-capture.md) records task-4 capture
+and lifetime evidence and task-5 policy qualification. The ordinary kernel,
+SDK/runtime, ports and image build passed with the current builder. Manual
+four-CPU, 2 GiB nested-KVM q35 QEMU/GDB inspection observed Development's final
+shell retaining CAPTURE, Read-only's shell retaining DRAW without CAPTURE, and
+a connected Remote shell holding CAPTURE without DRAW. A remote foreground
+command used its inherited grant in a real substituted capture CALL and closed
+the result before replaying its original syscall. Both pipeline stages and a
+background command inherited CAPTURE. Doom visibly rendered in Read-only with
+DRAW and no CAPTURE. Installed/rescue policy, parser errors and missing-seed
+refusal are source-reviewed, not booted/injected. Exact-head existing CI is
+reported in the parent PR; userland reports zero Actions tasks and supplies no
+dependency CI pass evidence. No new tests, probe programs or workflows were added.
 
-The owner comment on merged PR #504 is incorporated into task 6's agreed
-contract: exclusive sibling staging and rename, following cp's held-directory
-and failure-ownership rules, with no direct-write fallback. Task 4, native
-capture, is next after owner authorization. No screenshot implementation or
-PNG runtime qualification has begun. No QEMU, debugger or build process remains
-active.
+The owner comment on #504 remains in task 6's accepted staged-replacement
+contract. Task 6, the PNG command, is next after owner authorization. Capture
+consistency, quota and stuck-system limits remain accepted. PNG/download,
+layer/resize comparison, Bochs and native ThinkPad qualification are pending.
+
+A pre-change presenter control used the task-3 image (ELF SHA-256
+`a1eaf85a13dfd6f46621ec237fb20efa46d53162d7bf1f28b22669f6df073beb`), whose
+kernel matched `078c975`. Manual HPET timing around `space_present()` in warmed
+q35 standard-VGA boot-framebuffer 1280x800, pitch 5120, four-CPU/2 GiB nested KVM
+returned 786680, 984690, 1077830, 782660 and 626040 ns (median 786680 ns).
+These include preemption/debugger/host effects. There is no matched after-change
+cost result yet; task 7 must compare like configurations and account for the
+intervening space-layer change rather than attributing that difference to capture.
+
+No task-owned QEMU, debugger, remote-client or build process remains active.
