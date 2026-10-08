@@ -1,0 +1,8 @@
+component=userspace
+userspace_revision=a5a48b4b1e1cbff8131915244dbfb6018729789f
+userspace_state=clean
+userspace_changes_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+builder_image=git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a
+sdk_sha256=3bd29f64029afabde101d8343f21a0e2452ad73a358cf3d483cec6ab7cea5b8d
+clang version 23.1.3 (/tmp/cross-build/llvm-project/clang 49e2c1a1518b3e4687b52ceb6001069c1b6d261e)
+ports_dev_sha256=50b4c0ae9d1a2a92cc1eb128ec05e4a6a3b2c5cc9d4e1181817e2d9ebbc75239

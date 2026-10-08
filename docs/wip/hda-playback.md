@@ -1,18 +1,18 @@
 # HD Audio playback milestone proposal
 
-Status: **three defaults accepted 2026-10-08; first controller/codec bring-up
-stage delivered for review; task-specific defaults accepted**. Prepared from
-main `67e14be` and the completed
-[QEMU investigation](../development/audio-investigation.md). Publishing or
-merging this document does not start implementation; public call details
-still need task-specific review.
-The investigation probes stay unmerged. The owner has accepted the defaults
-below. The owner assigned the first controller/codec bring-up task on
-2026-10-08. Its [baseline and decision handoff](../development/experiments/audio-task1/README.md)
-records the accepted call-layout/write/admission choices, private engine
-qualification and matched no-audio/engine-idle observations. Task 1 branches
-from main after #549 merged. Later tasks still
-require their own assignments.
+Status: **three defaults accepted 2026-10-08; first controller/codec task
+merged in [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553); sessions,
+mixing and IRQ refill assigned as task 2**. Prepared from main `67e14be` and
+the completed [QEMU investigation](../development/audio-investigation.md).
+The investigation probes stay unmerged. The owner assigned task 2 on
+2026-10-08, combining periodic refill and per-space session/mixing steps below,
+with the accepted call/write/admission semantics. Its
+[baseline and pending policy round](../development/experiments/audio-task2/README.md)
+record fresh main `780f5d2`, no-playback observations and the remaining
+hidden-space/start-stop/failure decisions. Implementation awaits that round.
+The [task 1 report](../development/experiments/audio-task1/README.md) retains
+private engine qualification and matched no-audio/engine-idle observations.
+Native and consumer tasks still require their own assignments.
 
 The proposed goal is one analog playback engine, bounded per-space PCM sessions
 and native ThinkPad speaker/headphone qualification. QEMU comes first. Recording,
@@ -44,11 +44,11 @@ Accepted by the owner through the orchestrator on **2026-10-08**, after the
    DMA frames before detection. Measure and report underrun, discontinuity and
    recovery limits before freezing tuning.
 
-Acceptance settles these defaults, not a public call layout or an implementation
-assignment. Session priming (previously proposed at 20 ms), hidden-space playback,
-rights bits, copy extent/deadline horizon, admission errors, route preference,
-jack switching and watchdog/recovery thresholds remain task-specific review
-items. Proposed details below are distinct from the accepted decisions.
+The accepted task-specific call contract below and current task assignment
+settle public call behavior and scope. Session priming, hidden-space playback
+and refill failure/stop policy remain pending for task 2. Numeric ABI encoding
+and rights bits are implementation choices; native route preference and jack
+switching remain later task-specific review items. Proposed details below are distinct from the accepted decisions.
 
 ## Closure alternative and owner confirmation
 
@@ -150,10 +150,9 @@ policy. The first tasks must settle that policy before shipping a control UI.
 ## Proposed queue, underrun and failure behavior
 
 Copied writes return the amount accepted, with complete-frame alignment and
-explicit full-queue/deadline/closed results. Task 1 must choose whether writes
-are all-or-nothing or partial and state cancellation at the commit point;
-no successful write may later disappear merely because its caller's deadline
-expired. A writable wait reports real queue capacity, avoiding SDL-style 1 ms
+explicit full-queue and terminal results. The accepted contract makes writes
+atomic and copied, with cancellation before their commit point. WRITE has no
+separate deadline; wait deadlines do not revoke committed frames. A writable wait reports real queue capacity, avoiding SDL-style 1 ms
 polling. Position/status distinguishes submitted, mixed and hardware-consumed
 frames; hardware DMA progress is not a promise that a sound has reached the
 speaker. The probe's truncated first captures demonstrated why a drain operation
@@ -169,7 +168,7 @@ Cyclic DMA can replay previously filled periods if the worker misses a whole
 lap before detection. Already-replayed sound cannot be undone; report a hardware
 discontinuity and stop/reset rather than claiming uninterrupted zero-fill. If
 modulo position cannot establish how many laps elapsed, do not invent an exact
-consumption count. Task 3 must define detection, counters and recovery thresholds
+consumption count. The assigned refill/session task must define detection, counters and recovery thresholds
 and measure this scheduling limit. Ten-millisecond interrupts do not guarantee
 a deadline in nested KVM.
 
@@ -229,7 +228,8 @@ controller or all other sessions.
 The owner's first implementation assignment combined the contract review and
 private controller/codec engine steps above. The [engine reference](../devices/hda.md)
 records the implemented boundary; the unmerged consumer qualifies it without
-shipping a tone, ABI or sessions. No later task starts from this completion.
+shipping a tone, ABI or sessions. The owner has now assigned periodic refill
+and session/mixing together as task 2; native and consumer work remain later assignments.
 
 Tasks are focused PRs, each assigned by the owner after its predecessor is
 reviewed. No probe cherry-pick is implied by accepting this proposal. Production
