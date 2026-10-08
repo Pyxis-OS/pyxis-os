@@ -114,7 +114,7 @@ return {
   authority or add terminal input rights.
 - **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
   It supplies a distinct trusted `mux_terminal` grant. After configuration and
-  service setup, the session launcher selects `boot://mux.pxe`, giving it
+  service setup, the session launcher selects `bin://mux.pxe`, giving it
   terminal CREATE and launcher CREATE_GROUP. It does not grant either resource
   to ordinary shell commands. See the [multiplexer guide](multiplexer.md).
 - **Power.** A space that sets `power = true` receives the kernel's `power`

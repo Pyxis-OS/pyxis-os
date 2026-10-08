@@ -1,6 +1,6 @@
 # Terminal multiplexer
 
-`boot://mux.pxe` presents independent native terminal sessions in one window.
+`bin://mux.pxe` presents independent native terminal sessions in one window.
 Each pane starts an ordinary shell with its own execution group, terminal
 state, cursor, dimensions and colored scrollback. This is userspace terminal
 emulation over the [native TTY subset](terminal.md#tty-output-controls).
@@ -25,7 +25,9 @@ administrative grants mux requires. Missing resources or failed startup produce
 a diagnostic, with no automatic restart or fallback shell.
 
 The configured terminal tab width reaches mux through `--tab-width 1..32` and
-is applied to every newly created pane. Each shell inherits the initial selected
+is applied to every newly created pane. Mux loads from the running `bin://`
+revision on installed systems; live images bind `bin://` to the archive. It
+stays outside the minimal rescue set. Rescue startup keeps the ordinary shell. Each shell inherits the initial selected
 roots, working-directory chain, descriptive path and environment; changing one
 shell's directory does not change the starting directory of future panes.
 Filesystem grants are shared explicitly, so panes are not filesystem sandboxes.
@@ -93,9 +95,11 @@ ordinary staged bytes. Explicit closure discards pending input for that pane.
 
 Root-shell exit or fault requests termination of remaining descendants. Final
 output drains while cleanup proceeds, then the pane retains its text and status
-until dismissed. Confirmed closure removes the pane after output EOF and group
+until dismissed. A shell `session` successor therefore cannot survive the
+original pane root's exit. Confirmed closure removes the pane after output EOF and group
 cleanup; siblings reclaim its layout region. Closing the last pane ends mux.
-Mux exit/fault also drops the final controlling grants and requests termination
+Output grants intentionally delegated outside a pane group can delay output
+EOF independently of group completion. Mux exit/fault also drops the final controlling grants and requests termination
 of every remaining group. Group cleanup has no fixed deadline: published HOST
 work can delay it. See [execution groups](../interfaces/execution-groups.md).
 
@@ -113,10 +117,13 @@ screen as their shell; no alternate-screen protocol is introduced.
 Ordinary `make -j16 image` builds passed with the existing
 `pyxis-llvm23.1.3-49e2c1a` builder. No compiler-container rebuild or new
 upstream source was needed. Userland dependency is
-[b0368f0](https://git.internal/PyxisOS/pyxis-userland/commit/b0368f091237733f81a89e382cf35b012cfd1433),
+[fe07036](https://git.internal/PyxisOS/pyxis-userland/commit/fe0703699289b002caccf045d94f20f35c84d2b1),
 [PR #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160). Manual images
 used only a temporary `multiplexer = true` addition to Development; packaged
-profiles keep the default opt-out.
+profiles keep the default opt-out. The final dependency
+`fe07036` also passed live startup through the `bin://` alias; installed
+program placement was inspected in the installer/rescue selection, rather
+than claimed as a new installed-machine boot qualification.
 
 Interactive QEMU 10.2.2 with the documented AHCI fix used nested KVM, four CPUs,
 512 MiB, standard VGA at 1280x800, VirtIO RNG, no NIC/storage/HOST export, and

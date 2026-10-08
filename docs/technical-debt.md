@@ -735,7 +735,9 @@ double this for one pane. There is no per-group CPU/memory quota.
 A full pane input queue can hold a prefix behind already staged ordinary input;
 bounded, lossless storage cannot bypass an arbitrary pending paste. Confirmed
 closure waits for group cleanup and output EOF, and published HOST work can
-delay cleanup indefinitely. Mux exit/fault requests termination through final
+delay cleanup indefinitely. Output producer grants explicitly delegated outside
+a pane group can delay EOF even after its cleanup completes. Mux exit/fault
+requests termination through final
 controlling-grant closure without waiting for all cleanup. Local keyboard and
 graphics grants remain shared space facilities, so graphical launches share
 the existing one-session ownership rather than acquiring pane-local devices.

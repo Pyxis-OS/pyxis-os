@@ -2,7 +2,7 @@
 
 `boot://session.pxe` is a native userspace launcher that evaluates
 `boot://config/session.lua` and optional `boot://config/network.lua`, applies
-terminal tab spacing, and hands off to `boot://shell.pxe`, or `boot://mux.pxe` when the local space
+terminal tab spacing, and hands off to `boot://shell.pxe`, or `bin://mux.pxe` when the local space
 opts into the [multiplexer](multiplexer.md). The optional
 `--configure-network` argument also applies shared NIC settings.
 `--start-services` selects the trusted `boot://init-services` script after
