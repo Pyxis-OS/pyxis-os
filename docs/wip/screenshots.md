@@ -291,9 +291,9 @@ Tasks 1–4 are delivered. The reviews on merged Pyxis #509, ports #57 and
 userland #155 approved the library integration without requested corrections.
 The earlier owner comment on #504 remains in task 6's accepted staged-replacement
 contract. Task 4 is on Pyxis branch `display/screen-capture`, based on merged
-space-layer switching (`e4d7836`), and pins
+space-layer switching (`e4d7836`), and pins the merged
 [userland PR #157](https://git.internal/PyxisOS/pyxis-userland/pulls/157),
-`1084a22252849ead1c7fc840a0e3821be678f81c` (`libpyxis/screen-capture`).
+`35910c17f67aeccbdbdf53ee82bb3fbd9aeb69e1` (`main`; helper commit `1084a22`).
 Merge the published helper dependency before the parent integration. Ports stays
 at `1064c452a0236040c7d673ab51dbea3a5b81ff80`; no compiler-container rebuild is
 needed.
