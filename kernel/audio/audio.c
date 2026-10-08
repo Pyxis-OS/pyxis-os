@@ -32,6 +32,8 @@ static uint64_t starts, stops, interrupts, refills, max_commit_ns;
 static const char *refill_fault;
 
 static void audio_worker(void *argument);
+static bool observe_progress(const struct hda_stream_position *position,
+    const struct hda_irq_event *event, uint64_t now);
 
 void audio_require_worker(void)
 {
@@ -145,11 +147,11 @@ static bool start_output(void)
   bool running = hda_stream_run_locked(&controller);
   struct hda_stream_position position;
   struct hda_irq_event event;
-  running = running && hda_stream_position_locked(&controller, &position, &event) &&
-      !event.errors && !position.bytes;
   observed_position = 0;
-  observed_wallclock = running ? position.wallclock : 0;
-  observed_time = progress_time = arch_monotonic_ns();
+  observed_wallclock = controller.run_wallclock;
+  observed_time = progress_time = controller.run_time;
+  running = running && hda_stream_position_locked(&controller, &position, &event) &&
+      observe_progress(&position, &event, arch_monotonic_ns());
   cpu_restore_interrupts(flags);
   if (running) {
     ++starts;

@@ -532,6 +532,8 @@ bool hda_stream_run_locked(struct hda_controller *controller)
     write32(controller, HDA_INTCTL, interrupt_mask);
     interrupt_enabled = read32(controller, HDA_INTCTL) == interrupt_mask;
     if (interrupt_enabled) {
+      controller->run_wallclock = read32(controller, HDA_WALCLK);
+      controller->run_time = arch_monotonic_ns();
       write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
       interrupt_enabled = (read8(controller, controller->stream + HDA_SD_CTL) &
           (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) == (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);

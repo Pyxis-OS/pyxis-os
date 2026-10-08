@@ -34,6 +34,8 @@ struct hda_controller {
   unsigned stream, corb_entries, rirb_entries;
   uint16_t corb_write, rirb_read, codec_mask;
   uint64_t commands, responses, unsolicited;
+  uint64_t run_time;
+  uint32_t run_wallclock;
   struct hda_irq_event irq;
   bool prepared, link_ready, command_ready, stream_prepared, stream_running, failed, shutdown;
 };
