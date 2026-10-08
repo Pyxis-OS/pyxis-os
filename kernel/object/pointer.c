@@ -1,17 +1,13 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
-#include <kernel/mouse.h>
+#include <kernel/object/display.h>
 #include <kernel/object/pointer.h>
 #include <kernel/panic.h>
+#include <kernel/pointer.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
-
-_Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
-               MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
-               MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE,
-               "device and session button bits match");
 
 static void lock_pointer(struct pointer_object *pointer)
 {
@@ -28,30 +24,30 @@ static void unlock_pointer(struct pointer_object *pointer)
 static void destroy_pointer(struct kernel_object *object)
 {
   struct pointer_object *pointer = (struct pointer_object *)object;
-  KASSERT(!pointer->owner && !pointer->reader);
+  KASSERT(!pointer->owner && !pointer->reader && !pointer->image);
   kfree(pointer);
 }
 
-struct pointer_object *pointer_create(struct space *space, bool focused)
+struct pointer_object *pointer_create(struct space *space)
 {
   KASSERT(arch_cpu_index() == 0);
   struct pointer_object *pointer = kmalloc(sizeof(*pointer));
   if (!pointer) {
     return NULL;
   }
-  *pointer = (struct pointer_object){.space = space, .focused = focused};
+  *pointer = (struct pointer_object){.space = space};
   atomic_init(&pointer->locked, false);
   object_init(&pointer->object, OBJECT_POINTER, destroy_pointer);
   return pointer;
 }
 
-/* Under the pointer lock. Detach before wake; the task can resume on an AP
- * immediately. Neither queue publication nor notification touches user memory. */
+/* Lock held. Detach before waking a task that can immediately resume on an AP. */
 static void queue_event(struct pointer_object *pointer, struct pointer_event event)
 {
   KASSERT(pointer->count < POINTER_EVENT_CAPACITY);
   size_t tail = (pointer->head + pointer->count) % POINTER_EVENT_CAPACITY;
-  event.flags = pointer->focused ? POINTER_EVENT_FOCUSED : 0;
+  event.flags = (pointer->focused ? POINTER_EVENT_FOCUSED : 0) |
+      (pointer->relative ? POINTER_EVENT_LOCKED : 0);
   pointer->events[tail] = event;
   ++pointer->count;
   struct task_wait *reader = pointer->reader;
@@ -67,6 +63,29 @@ static void reset_buttons(struct pointer_object *pointer)
   pointer->accepted = 0;
 }
 
+void pointer_set_lock(struct pointer_object *pointer, bool relative)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_pointer(pointer);
+  pointer->relative = relative;
+  reset_buttons(pointer);
+  if (pointer->owner) {
+    queue_event(pointer, pointer_position_event(pointer, POINTER_LOCK_CHANGED));
+  }
+  unlock_pointer(pointer);
+}
+
+void pointer_reset_input(struct pointer_object *pointer, uint32_t type)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_pointer(pointer);
+  reset_buttons(pointer);
+  if (pointer->owner) {
+    queue_event(pointer, pointer_position_event(pointer, type));
+  }
+  unlock_pointer(pointer);
+}
+
 void pointer_focus(struct pointer_object *pointer, bool focused)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -75,21 +94,26 @@ void pointer_focus(struct pointer_object *pointer, bool focused)
     pointer->focused = focused;
     reset_buttons(pointer);
     if (pointer->owner) {
-      queue_event(pointer, (struct pointer_event){
-        .type = focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST,
-      });
+      queue_event(pointer, pointer_position_event(pointer,
+          focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
     }
   }
   unlock_pointer(pointer);
 }
 
-void pointer_reset_input(struct pointer_object *pointer)
+void pointer_queue_state(struct pointer_object *pointer, uint32_t type)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  reset_buttons(pointer);
   if (pointer->owner) {
-    queue_event(pointer, (struct pointer_event){.type = POINTER_STATE_RESET});
+    if (type == POINTER_LEAVE) {
+      pointer->accepted = 0;
+    }
+    if (pointer->count == POINTER_EVENT_CAPACITY) {
+      reset_buttons(pointer);
+      queue_event(pointer, pointer_position_event(pointer, POINTER_STATE_RESET));
+    }
+    queue_event(pointer, pointer_position_event(pointer, type));
   }
   unlock_pointer(pointer);
 }
@@ -105,121 +129,173 @@ static int32_t saturating_add(int32_t total, int32_t delta)
   return total + delta;
 }
 
-void pointer_route_event(struct pointer_object *pointer, const struct mouse_event *event,
-                         uint32_t pressed)
+void pointer_queue_input(struct pointer_object *pointer, struct pointer_event event,
+    uint32_t pressed, bool buttons)
 {
-  KASSERT(arch_cpu_index() == 0 && !event->reset);
+  KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  if (!pointer->focused) {
+  if (!pointer->owner || !pointer->focused) {
     unlock_pointer(pointer);
     return;
   }
-  /* Releases end acceptance; only presses seen here start it. */
-  uint32_t previous = pointer->accepted;
-  pointer->accepted = (pointer->accepted & event->buttons) | (pressed & event->buttons);
-  bool moved = event->dx || event->dy || event->wheel;
-  if (!pointer->owner || (!moved && pointer->accepted == previous)) {
-    unlock_pointer(pointer);
-    return;
+  if (buttons) {
+    pointer->accepted = (pointer->accepted & event.buttons) | (pressed & event.buttons);
   }
-
+  event.buttons = pointer->accepted;
   if (pointer->count < POINTER_EVENT_CAPACITY) {
-    queue_event(pointer, (struct pointer_event){
-      .dx = event->dx, .dy = event->dy, .wheel = event->wheel,
-      .buttons = pointer->accepted, .type = POINTER_INPUT,
-    });
-    unlock_pointer(pointer);
-    return;
-  }
-
-  size_t tail = (pointer->head + pointer->count - 1) % POINTER_EVENT_CAPACITY;
-  struct pointer_event *last = &pointer->events[tail];
-  if (last->type == POINTER_INPUT && last->buttons == pointer->accepted) {
-    last->dx = saturating_add(last->dx, event->dx);
-    last->dy = saturating_add(last->dy, event->dy);
-    last->wheel = saturating_add(last->wheel, event->wheel);
+    queue_event(pointer, event);
   } else {
-    /* A lost button transition invalidates every held button. */
-    reset_buttons(pointer);
-    queue_event(pointer, (struct pointer_event){.type = POINTER_STATE_RESET});
+    size_t tail = (pointer->head + pointer->count - 1) % POINTER_EVENT_CAPACITY;
+    struct pointer_event *last = &pointer->events[tail];
+    if (last->type == POINTER_INPUT && last->buttons == event.buttons &&
+        last->generation == event.generation && last->mapping_identity == event.mapping_identity) {
+      last->x = event.x;
+      last->y = event.y;
+      last->wheel = saturating_add(last->wheel, event.wheel);
+      last->dx = saturating_add(last->dx, event.dx);
+      last->dy = saturating_add(last->dy, event.dy);
+    } else {
+      reset_buttons(pointer);
+      queue_event(pointer, pointer_position_event(pointer, POINTER_STATE_RESET));
+    }
   }
   unlock_pointer(pointer);
 }
 
-static void release_pointer(struct pointer_object *pointer)
+void pointer_end_session(struct pointer_object *pointer)
 {
-  /* One task per process: the owner cannot release/exit while its READ sleeps. */
+  KASSERT(arch_cpu_index() == 0);
+  lock_pointer(pointer);
+  /* One task per process; the owner cannot release/exit while READ sleeps. */
   KASSERT(!pointer->reader);
   pointer->owner = NULL;
   reset_buttons(pointer);
+  unlock_pointer(pointer);
+  pointer_subscription_ended(pointer);
+  pointer_image_release(pointer->image);
+  pointer->image = NULL;
+  pointer->hidden = false;
 }
 
 void pointer_process_exit(struct process *process)
 {
   KASSERT(arch_cpu_index() == 0);
   struct pointer_object *pointer = process->space->pointer;
-  lock_pointer(pointer);
   if (pointer->owner == process) {
-    release_pointer(pointer);
+    pointer_end_session(pointer);
   }
-  unlock_pointer(pointer);
 }
 
-struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t rights,
-    uint64_t operation, uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+void pointer_request_execute(struct pointer_request *request)
 {
-  if (operation != POINTER_ACQUIRE && operation != POINTER_READ && operation != POINTER_RELEASE) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
-  }
-  struct process *process = process_current();
-  if (!(rights & POINTER_RIGHT_INPUT) || process->space != pointer->space) {
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
-  uint64_t flags = 0;
-  struct pointer_event reply;
-  if (operation == POINTER_READ) {
-    if (request_size != sizeof(flags) || reply_capacity < sizeof(reply)) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
-    }
-    if (!copy_from_user(&flags, request_address, sizeof(flags)) ||
-        !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
-      return (struct syscall_result){CALL_BAD_BUFFER, 0};
-    }
-    if (flags & ~POINTER_READ_POLL) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
-    }
-  } else if (request_size) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
-  }
-
-  lock_pointer(pointer);
-  if (operation == POINTER_ACQUIRE) {
-    enum call_status status = CALL_OK;
-    if (!mouse_available()) {
+  KASSERT(arch_cpu_index() == 0 && request->process && request->pointer);
+  struct pointer_object *pointer = request->pointer;
+  struct process *process = request->process;
+  enum call_status status = CALL_OK;
+  if (process->space != pointer->space || pointer->space->display->owner != process) {
+    status = CALL_DENIED;
+  } else if (request->operation == POINTER_ACQUIRE) {
+    if (!space_pointer_input_available()) {
       status = CALL_UNAVAILABLE;
     } else if (pointer->owner) {
       status = CALL_BUSY;
     } else {
+      lock_pointer(pointer);
       pointer->owner = process;
+      pointer->focused = pointer_surface_focused(pointer);
       reset_buttons(pointer);
-      queue_event(pointer, (struct pointer_event){
-        .type = pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST,
-      });
+      queue_event(pointer, pointer_position_event(pointer,
+          pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
+      unlock_pointer(pointer);
+      pointer_subscription_started(pointer);
     }
-    unlock_pointer(pointer);
-    return (struct syscall_result){status, 0};
+  } else if (pointer->owner != process) {
+    status = CALL_DENIED;
+  } else if (request->operation == POINTER_RELEASE) {
+    pointer_end_session(pointer);
+  } else if (request->operation == POINTER_GEOMETRY) {
+    request->data.geometry = pointer_surface_geometry(pointer);
+  } else if (request->operation == POINTER_STATE) {
+    request->data.flags = (pointer->focused ? POINTER_EVENT_FOCUSED : 0) |
+        (pointer->relative ? POINTER_EVENT_LOCKED : 0);
+  } else if (request->operation == POINTER_LOCK) {
+    status = pointer_surface_lock(pointer);
+  } else if (request->operation == POINTER_UNLOCK) {
+    pointer_surface_unlock(pointer, false);
+  } else if (request->operation == POINTER_VISIBILITY) {
+    pointer->hidden = !request->data.visible;
+  } else if (request->operation == POINTER_DEFAULT_IMAGE) {
+    pointer_image_release(pointer->image);
+    pointer->image = NULL;
+  } else if (request->operation == POINTER_WARP) {
+    status = pointer_surface_warp(pointer, &request->data.warp);
+  } else if (request->stage == POINTER_REQUEST_IMAGE_PREPARE) {
+    const struct pointer_image_request *image = &request->data.image;
+    size_t bytes = (size_t)image->width * image->height * 4;
+    struct pointer_image *candidate = kmalloc(sizeof(*candidate) + bytes);
+    if (!candidate) {
+      status = CALL_NO_MEMORY;
+    } else {
+      *candidate = (struct pointer_image){.references = 1,
+        .width = image->width, .height = image->height,
+        .hotspot_x = image->hotspot_x, .hotspot_y = image->hotspot_y};
+      request->candidate = candidate;
+    }
+  } else {
+    KASSERT(request->stage == POINTER_REQUEST_IMAGE_COMMIT && request->candidate);
+    pointer_image_release(pointer->image);
+    pointer->image = request->candidate;
+    request->candidate = NULL;
   }
+  if (request->stage == POINTER_REQUEST_IMAGE_COMMIT && request->candidate) {
+    pointer_image_release(request->candidate);
+    request->candidate = NULL;
+  }
+  request->result = status;
+  request->process = NULL;
+  request->pointer = NULL;
+}
+
+static enum call_status command_pointer(struct pointer_request *command)
+{
+  struct pointer_request *request =
+      (struct pointer_request *)bsp_request_prepare(BSP_SERVICE_POINTER);
+  request->process = process_current();
+  request->pointer = command->pointer;
+  request->operation = command->operation;
+  request->stage = command->stage;
+  request->data = command->data;
+  request->candidate = command->candidate;
+  bsp_request_submit_and_wait(&request->request);
+  command->data = request->data;
+  command->candidate = request->candidate;
+  enum call_status status = request->result;
+  bsp_request_release(&request->request);
+  return status;
+}
+
+static struct syscall_result read_pointer(struct pointer_object *pointer,
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  uint64_t flags;
+  struct pointer_event reply;
+  if (request_size != sizeof(flags) || reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&flags, request_address, sizeof(flags)) ||
+      !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (flags & ~POINTER_READ_POLL) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct process *process = process_current();
+  lock_pointer(pointer);
   if (pointer->owner != process) {
     unlock_pointer(pointer);
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if (operation == POINTER_RELEASE) {
-    release_pointer(pointer);
-    unlock_pointer(pointer);
-    return (struct syscall_result){CALL_OK, 0};
-  }
-
   while (!pointer->count) {
     if (task_stop_requested()) {
       unlock_pointer(pointer);
@@ -248,7 +324,76 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
   pointer->head = (pointer->head + 1) % POINTER_EVENT_CAPACITY;
   --pointer->count;
   unlock_pointer(pointer);
-
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (operation < POINTER_ACQUIRE || operation > POINTER_STATE) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & POINTER_RIGHT_INPUT) || process_current()->space != pointer->space) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == POINTER_READ) {
+    return read_pointer(pointer, request_address, request_size, reply_address, reply_capacity);
+  }
+  struct pointer_request command = {.pointer = pointer, .operation = operation};
+  size_t payload = 0;
+  void *destination = NULL;
+  if (operation == POINTER_SET_IMAGE) {
+    payload = sizeof(struct pointer_image_request) - sizeof(struct message_header);
+    destination = &command.data.image.address;
+  } else if (operation == POINTER_VISIBILITY) {
+    payload = sizeof(uint64_t);
+    destination = &command.data.visible;
+  } else if (operation == POINTER_WARP) {
+    payload = sizeof(struct pointer_warp_request) - sizeof(struct message_header);
+    destination = &command.data.warp.x;
+  }
+  size_t reply_size = operation == POINTER_GEOMETRY ? sizeof(struct pointer_geometry) :
+      operation == POINTER_STATE ? sizeof(uint64_t) : 0;
+  if (request_size != payload || reply_capacity < reply_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if ((payload && !copy_from_user(destination, request_address, payload)) ||
+      (reply_size && !user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == POINTER_VISIBILITY && command.data.visible > 1) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (operation == POINTER_SET_IMAGE) {
+    struct pointer_image_request image = command.data.image;
+    if (!image.width || !image.height || image.width > POINTER_IMAGE_MAX ||
+        image.height > POINTER_IMAGE_MAX || image.hotspot_x >= image.width ||
+        image.hotspot_y >= image.height) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    size_t bytes = (size_t)image.width * image.height * 4;
+    if (!user_buffer_check(image.address, bytes, USER_BUFFER_READ)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    command.stage = POINTER_REQUEST_IMAGE_PREPARE;
+    enum call_status status = command_pointer(&command);
+    if (status != CALL_OK) {
+      return (struct syscall_result){status, 0};
+    }
+    KASSERT(command.candidate);
+    KASSERT(copy_from_user(command.candidate->pixels, image.address, bytes));
+    command.stage = POINTER_REQUEST_IMAGE_COMMIT;
+  }
+  enum call_status status = command_pointer(&command);
+  if (status == CALL_OK && operation == POINTER_GEOMETRY) {
+    KASSERT(copy_to_user(reply_address, &command.data.geometry, sizeof(command.data.geometry)));
+    return (struct syscall_result){CALL_OK, sizeof(command.data.geometry)};
+  }
+  if (status == CALL_OK && operation == POINTER_STATE) {
+    KASSERT(copy_to_user(reply_address, &command.data.flags, sizeof(command.data.flags)));
+    return (struct syscall_result){CALL_OK, sizeof(command.data.flags)};
+  }
+  return (struct syscall_result){status, 0};
 }

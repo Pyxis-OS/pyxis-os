@@ -136,22 +136,35 @@ about 35 transfers.
   here, and "None" renders as fast as the CPU allows.
 - **Resolution.** The game fills the display at its native resolution and
   follows a [VirtIO display resize](../kernel/display.md).
-- **Cursor.** The hardware cursor option is unavailable, so the game draws its
-  own cursor.
+- **Cursor.** The "Hardware Cursor" option selects the game's supplied SDL
+  cursor as the native Pyxis surface image. The kernel currently composes that
+  image in software; a VirtIO hardware cursor is still future work. Disabling
+  the option keeps the game's own software cursor and hides the system cursor.
 
-### Mouse paths that wait for the system pointer
+### Mouse position and cursor images
 
-The [system pointer proposal](../wip/pointer.md) adds kernel-owned pointer
-positions, warping and a hidden-cursor state. The SDL2 backend adopts them
-after this milestone. Until then:
+The [SDL2 backend](../development/sdl2.md#the-backend) uses kernel-owned pointer
+positions and a graphics-owner subscription. Ordinary motion is surface-local;
+buttons and wheel continue while the game hides the system cursor. SDL acquires
+the pointer after graphics backing exists and releases it before graphics
+teardown.
 
 - **`SetCursorPos`.** DevilutionX's version calls `SDL_WarpMouseInWindow`, for
-  example when keyboard or controller navigation moves the cursor. That moves
-  only SDL's copy of the position, which the backend keeps from relative
-  counts.
-- **`SDL_ShowCursor`.** There is no system cursor to show or hide; the game
-  draws its own.
-- **Hardware cursor.** Reported unsupported. It needs custom system cursors.
+  example during keyboard inventory navigation. The backend requests native
+  warp within the shown mapping/destination intersection using current geometry
+  identities. A successful request changes the authoritative position; a
+  refusal reports an SDL error and leaves it unchanged.
+- **`SDL_ShowCursor`.** Changes saved native visibility. The game's software
+  cursor therefore draws without a second system cursor above it.
+- **Program images.** SDL accepts straight-alpha BGRA images 1 through 64 pixels
+  per dimension after game scaling. An oversized color cursor is refused;
+  upstream logs the refusal and draws its own software fallback.
+
+The [joint pointer qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration)
+checked the game's supplied 33x28 cursor with 86 intermediate alpha levels,
+ordinary motion/clicks with its software cursor selected, and native inventory
+warp. The game's option name describes its SDL cursor path; genuine VirtIO
+hardware-cursor submission belongs to the later pointer task.
 
 ## Measurements
 

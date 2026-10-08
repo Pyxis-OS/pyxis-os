@@ -33,8 +33,9 @@ optional: without it, or without a mouse, the program runs from the keyboard.
 
 - **Video.** One window, always the size of the display content area and
   marked fullscreen; a second window is refused.
-  - **Sessions.** Creating the window acquires the keyboard and pointer;
-    destroying it releases them and the display.
+  - **Sessions.** Creating the window acquires the keyboard. Creating its
+    framebuffer acquires graphics, then the optional pointer subscription.
+    Destroying the window releases pointer and keyboard input before graphics.
   - **Drawing.** SDL draws into its own surface. `SDL_UpdateWindowSurface` and
     `SDL_RenderPresent` copy the updated rectangles into the display mapping,
     so the presenter never shows a cleared or half-drawn frame, though rows can
@@ -47,10 +48,25 @@ optional: without it, or without a mouse, the program runs from the keyboard.
 - **Keyboard.** Pyxis key positions map to SDL scancodes. Text input comes from
   the US layout shared with the kernel's terminal (`pxe/key_layout.h`). Control,
   Alt and Super suppress text.
-- **Pointer.** Relative counts become SDL motion in one function, and SDL keeps
-  the position, clamped to the window. Warping moves SDL's copy, and relative
-  mode works from the same counts. The [system pointer](../wip/pointer.md)
-  replaces that function after this milestone.
+- **Pointer.** The [native protocol](../devices/mouse.md#userspace-pointer-sessions)
+  provides 56-byte events with surface-local positions and geometry/mapping
+  identities. Ordinary SDL motion follows those positions; native locked input
+  supplies relative `dx`/`dy`. `SDL_WarpMouseInWindow` requests bounded owner
+  warp using current identities. Refusal sets an SDL error; success arrives
+  through native input, without a synthetic SDL position update.
+- **Relative mode.** `SDL_SetRelativeMouseMode` requires pointer ownership and
+  a first PRESENT before requesting native LOCK. A refused lock reports an
+  error and leaves relative mode disabled. Super+Esc and focus/device loss can
+  revoke lock; the event pump clears SDL relative mode, pending motion and held
+  buttons without warping or automatically relocking. Fresh surface activation
+  permits a new explicit request. Locked same-session resize/REPLACE preserves
+  accepted buttons; ordinary geometry changes reset them.
+- **Cursor.** SDL bitmap and color cursors become copied native surface images,
+  1 through 64 pixels per dimension, with straight-alpha BGRA and an in-image
+  hotspot. The default is the kernel arrow; `SDL_ShowCursor` changes native saved
+  visibility, allowing a program to draw its own cursor. Lock forces hiding and
+  restores the saved preference on unlock. The kernel currently composes these
+  images in software on every display backend.
 - **Focus.** Focus changes and input resets release every held key and button.
 - **Timer.** Ticks and the performance counter come from `clock_now` in
   nanoseconds, and `SDL_Delay` from `clock_sleep_for`.
@@ -68,9 +84,11 @@ Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 - Haptics, sensors, HIDAPI, shared objects, power, OpenGL and Vulkan are not
   built.
 
-Upstream needs three patches: the dynamic API off, the driver registered, and
-the Steam virtual gamepad file skipped because Pyxis `stat` has no
-modification time.
+Upstream needs four patches: the dynamic API off, the driver registered, the
+Steam virtual gamepad file skipped because Pyxis `stat` has no modification
+time, and native pointer position/lock authority in SDL mouse core. The last
+patch prevents synthetic warp updates and relative-mode fallback after native
+refusal; it retains other video drivers' behavior.
 
 ## What the milestone added elsewhere
 
@@ -136,6 +154,14 @@ stays at 120 Hz. Native qualification remains in
 DevilutionX's frame rates in town, at 1280x768 on standard VGA, are in its
 [reference](../userland/devilutionx.md#measurements): 56.4–60.8 FPS with the
 Pyxis default "Limit FPS", and 419–427 FPS uncapped.
+
+The later [pointer tasks 1 and 2 qualification](system-pointer-qualification.md#task-2-and-joint-integration)
+records native ordinary motion, warp, lock refusal/revocation, game relock and
+cursor choices. DevilutionX's supplied 33x28 cursor included 86 intermediate
+alpha levels; its own software-cursor option hid the system cursor while
+ordinary motion and clicks continued. Inventory navigation issued a successful
+native bounded warp. These are separate interactive checks from the original
+SDL milestone and frame-time samples above.
 
 ## Limits
 

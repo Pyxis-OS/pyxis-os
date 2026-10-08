@@ -46,6 +46,7 @@ struct display_object {
   struct process *owner; /* BSP-only, cleared before process destruction. */
   struct display_frame *frame;
   uintptr_t user_address;
+  uint64_t mapping_identity; /* Advances on each acquisition/REPLACE, never reused. */
   bool presented; /* First PRESENT makes the session available as a layer. */
   bool visible; /* User's per-session choice, independent of space selection. */
 };

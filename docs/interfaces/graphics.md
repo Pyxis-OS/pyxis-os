@@ -58,7 +58,8 @@ behavior.
 
 Hiding graphics keeps its mapping, ownership and independent input sessions.
 The program remains runnable, and terminal output stays live. Captured keyboard
-and pointer input lose focus; terminal typing uses the normal console queue.
+input and ordinary pointer input lose focus; terminal typing uses the normal
+console queue.
 Super+Up clears unread terminal bytes before restoring capture routing. A
 foreground graphical job still occupies the shell, so hiding it opens no second
 prompt. [Ctrl+C](../userland/shell.md#interrupting-foreground-commands) can reach
@@ -76,8 +77,9 @@ REPLACE carry only a message header:
 - PRESENT records that the session has presented. Its first successful call
   selects graphics; later calls preserve the user's layer choice. It returns
   before scanout or a complete frame copy.
-- RELEASE removes the user mapping and selects the TTY again. It returns no
-  reply payload; the old pointer must no longer be used.
+- RELEASE removes the user mapping, ends the owner's pointer subscription and
+  selects the TTY again. It returns no reply payload; the old pixel pointer must
+  no longer be used.
 - SIZE returns the current destination width, height, pitch, channel shifts and
   generation atomically in a 48-byte `display_size_reply`. DRAW permits this
   query without acquiring graphics or owning the current session; it grants no
@@ -119,8 +121,54 @@ is selected. Its cursor is not composited over graphics. Releasing graphics or
 exiting restores the TTY on the next presentation. Graphics ownership is
 independent of [keyboard capture](../devices/keyboard.md): Mandelbrot acquires both
 sessions. A presented session's terminal layer overrides capture routing, without
-releasing capture. Releasing graphics does not release independently owned
-keyboard or pointer sessions; they resume their normal routing.
+releasing keyboard capture. Releasing graphics retains an independently owned
+keyboard session and ends the pointer subscription and its cursor preference.
+
+## Ordinary pointer input
+
+The [pointer protocol](../devices/mouse.md#userspace-pointer-sessions) requires
+both pointer INPUT authority and ownership of this space's graphics session.
+Its 56-byte events report signed surface-local positions below navigation,
+buttons, wheel counts, destination generation and mapping identity. Hit-testing
+uses the shown mapping/destination intersection; exposed margins use the kernel
+default cursor and receive no application input. A fresh press anchors motion
+and releases to that surface until its accepted buttons are released. Wheel
+input follows the currently hovered surface. Tab clicks select spaces.
+
+The owner can supply a copied BGRA8 straight-alpha image, each dimension 1 through
+64, with an in-image hotspot, select the default image, or hide and show it without
+changing routing. Eligible shown graphics can warp within its intersection
+using both current identities. Physical resize changes destination generation;
+REPLACE changes mapping identity, including at the same size. Both discard old
+ordinary spatial input, cancel drags and notify the client to re-query geometry.
+The same locked session instead retains relative input and accepted buttons.
+
+The owned subscription can request LOCK for relative input. Only one global
+pointer lock exists; it requires shown, focused graphics and permits refusal.
+Locked INPUT has `POINTER_EVENT_LOCKED` and device-count `dx`/`dy`, while the
+ordinary position stays parked. Lock forces cursor hiding without altering the
+surface's saved preference. UNLOCK restores ordinary routing; STATE reports
+current focus/lock flags. Acquisition and PRESENT do not themselves lock input.
+
+Super+Esc with either Super key and any additional modifiers revokes lock and
+consumes Escape through its release before keyboard capture. Space/layer loss,
+device loss and teardown also revoke it. Such revocation leaves a per-space
+fresh-click requirement that survives new sessions and processes. A consumed
+fresh left press on shown graphics reports `POINTER_ACTIVATED`; tab clicks,
+warp and polling cannot grant relock permission. See the
+[lock contract](../devices/mouse.md#relative-lock-and-user-escape).
+
+Pointer and display backing have separate presenter leases. A snapshotted image
+can finish after image replacement, display release or owner exit without
+accessing retired owner state. The kernel composes it after the chosen surface
+and includes it in [screen capture](screen-capture.md); application pixels remain
+cursor-free. Quake acquires pointer input after graphics and requests lock after
+PRESENT. SDL likewise acquires after graphics backing and exposes relative mode
+after PRESENT, alongside native position/cursor/warp support. Both release
+pointer input before graphics teardown and react to revocation instead of
+polling for lock. Their joint integration and QEMU evidence are recorded in
+[system pointer qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration),
+along with source-only limits and the submitted-revision CI location.
 
 ## Live destination geometry
 
@@ -145,7 +193,8 @@ its original layout. Presentation copies the top-left intersection using each
 source row's pitch and fills exposed destination margins with the TTY background.
 Generation starts at one and advances on each committed local resize. Physical
 resizing preserves the chosen layer and does not change space focus or
-keyboard/pointer capture eligibility.
+keyboard capture eligibility. Pointer position is clamped to the new physical
+screen and spatial input receives a geometry notification.
 
 Old TTY pixel mappings remain intact until writers and the presenter have
 relinquished them and the [shared-range retirement protocol](../kernel/smp.md#memory-and-output-boundaries)

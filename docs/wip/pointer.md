@@ -1,16 +1,34 @@
 # A system pointer
 
-Status: **assigned to Codex; documentation proposal, 2026-10-08.** Based on
-Pyxis `9acf597`, after the multiplexer merged in
+Status: **tasks 1 and 2 delivered for joint review; assigned to Codex, 2026-10-08.**
+Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
+`pointer/ordinary-surface`, with published
+[userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164). Merge order is userland #164, [Quake ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65),
+[SDL2 ports #66](https://git.internal/PyxisOS/pyxis-ports/pulls/66), then #545.
+Published pins are userland `b83ff67` and ports `a642f07`. The proposal
+merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530);
+round three is recorded in the first commit of task 1's PR.
+The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
 [Pyxis #523](https://git.internal/PyxisOS/pyxis-os/pulls/523) and
 [userland #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160).
-The original directions and both decision rounds are
-[accepted](#owner-decisions), all on 2026-10-08. Three scope/delivery decisions
-remain open in the [third round](#decisions-to-put-to-the-owner). This is
-documentation only, with no code or placeholder APIs. Task 1 requires explicit
-owner authorization; reviewing or merging this proposal does not start it.
+The original directions and all three decision rounds are
+[accepted](#owner-decisions), all on 2026-10-08. No queued owner decisions remain.
+The owner explicitly authorized task 1 on 2026-10-08, after proposal merge.
+The owner authorized task 2 on 2026-10-08: lock, Super+Esc and migration of
+Quake, mousetest and the closed SDL2 backend. It is stacked on task 1 and its
+userland dependency. Default-image build and exact-head CI must pass before
+anything leaves draft; the exact submitted checks are tracked on #545.
+Tasks 3–5 remain unstarted until separately authorized. The first task 1 commit
+records decisions only; the [baseline](../development/system-pointer-qualification.md)
+was captured before code changes. Tasks 1 and 2 now integrate the ABI and all
+consumers; the default and local shareware images build.
+[Joint qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration)
+records interactive results and source-only limits.
 
-## Today
+## Pre-milestone baseline
+
+This describes main before task 1; implemented ordinary behavior is now in the
+[mouse reference](../devices/mouse.md), with the draft integration limits above.
 
 The [PS/2 mouse driver](../devices/mouse.md) supplies relative counts, button
 state and wheel counts. A per-space pointer session is exclusively acquired
@@ -75,7 +93,23 @@ Second-round defaults accepted by the owner on 2026-10-08:
    or owner exit restores kernel handling. Handle copies/closure neither
    transfer nor release ownership.
 
-## Proposed scope
+Third-round choices accepted by the owner on 2026-10-08:
+
+9. **Selection and export boundary.** Visible-cell linear selection in local
+   terminals and mux, with mux wheel/history browsing. Clipboard publication
+   and paste are deferred to the clipboard milestone.
+10. **Presentation and capture.** Software cursor first, then VirtIO's hardware
+    cursor. Screenshots include visible system cursors; hidden/locked cursors
+    are omitted. Keep full-frame cadence and defer general damage tracking.
+11. **Task order and closure, with the owner's change.** Keep the five-task order
+    and SDL2 migration after its milestone closes. Matched QEMU checks suffice
+    to close the milestone. Native PS/2 ThinkPad validation is deferred while
+    the machine is used for the Bluetooth investigation; the owner will run a
+    batch of native checks once that investigation finishes. The consequence
+    and revisit point are recorded in
+    [technical debt](../technical-debt.md#native-system-pointer-qualification).
+
+## Accepted scope
 
 One system pointer on the existing local display, PS/2 only. Include program
 cursor images, tab clicks, ordinary surface positions, game lock, local TTY
@@ -87,8 +121,8 @@ Include a VirtIO cursor backend after a common software path works; boot and
 Bochs keep software composition. Coordinate changes with the separately assigned
 [SDL2 backend](../development/sdl2.md), replacing its private integration of relative counts.
 Its pointer adapter change lands **after the SDL2 milestone closes**, including
-its DevilutionX consumer and owner qualification. Do not change that milestone's
-tasks 4–5 or build a second SDL2 port.
+its DevilutionX consumer and that milestone's accepted qualification. Do not
+change that milestone's tasks 4–5 or build a second SDL2 port.
 
 Selection produces a text source for the later [clipboard](clipboard.md)
 proposal. Clipboard publication, paste, converters and sharing are not built
@@ -99,6 +133,14 @@ USB HID mice, Synaptics absolute-mode scrolling, Bluetooth, multiple displays,
 window composition, acceleration settings, remote pointer transport and general
 presentation damage tracking are outside this milestone. Local mux gets pointer
 input; remote mux still has its existing keyboard controls.
+
+## Devices
+
+This milestone uses the existing [PS/2 mouse](../devices/mouse.md), including
+the ThinkPad's relative-mode touchpad and TrackPoint. Their firmware stream has
+no wheel or multi-finger scrolling. USB HID mice remain a separate track after
+the [interrupt-IN foundation](../devices/usb-interrupt-in.md); neither USB HID
+nor the [Bluetooth investigation](../development/bluetooth-investigation.md) is part of task 1.
 
 ## Cursor images and authority
 
@@ -320,10 +362,35 @@ surface state. Land this adapter change after SDL2 milestone
 closure and qualify DevilutionX ordinary motion, warp, software-cursor hiding and
 its program-supplied cursor. Do not preserve the old protocol merely for ports.
 
-## Proposed selection and clipboard boundary
+## Input-source coordination
 
-Recommend a left drag selecting a linear range of cells, with release finalizing
-it. No word/line multi-click modes or rectangular selection in this slice. A new
+Coordination on 2026-10-08 inspected the **proposed**, unaccepted input-source
+contract in [Bluetooth draft #548](https://git.internal/PyxisOS/pyxis-os/pulls/548).
+It is compatible with the accepted global lock/loss rules, without recording
+agreement on its producer authority, epochs, sequences, aggregation or reconnect
+policy. This pointer milestone still implements only PS/2.
+
+The PS/2 adapter now owns continuity quarantine and supplies a concrete internal
+normalized report to the common router. The common loss handler accepts the
+physical mask remaining after the adapter's loss, preserves position, resets
+accepted input/drag/activation and revokes the global lock. PS/2 currently supplies
+zero because it is the only source. Physical state and unconfirmed held-button
+suppression are distinct; current pre-report lock/warp refusal is preserved.
+Availability and quarantine queries remain at the source-adapter boundary.
+
+A later, separately approved producer must aggregate complete physical snapshots
+and continuity suppression before routing; submitting independent source masks
+to this common entry would incorrectly release another source's hold. Loss of one
+source must supply the surviving physical mask and update source availability,
+while retaining the existing conservative consumer reset and lock revocation.
+The future adapter replaces the PS/2-only availability view with its live-source
+view. These are integration constraints, not an implemented producer API or a
+second-source registration system; the consumer ABI is unchanged.
+
+## Selection and clipboard boundary
+
+**Accepted, 2026-10-08.** A left drag selects a linear range of cells, with release
+finalizing it. No word/line multi-click modes or rectangular selection in this slice. A new
 selection replaces the old one. Cancel a drag on reset/geometry change; invalidate
 selection when selected content is changed or evicted, rather than silently copy
 replacement text. Output keeps running. Layer hiding suspends selection input;
@@ -370,10 +437,11 @@ settled there. Do not add an ad hoc global text buffer or successful fake Copy
 operation here. Kernel-local selection must eventually hand off an owned text
 snapshot just as mux does; the two sources must converge on that later contract.
 
-## Proposed presentation cost and capture
+## Presentation cost and capture
 
-Keep today's full repaint and approximately 60 Hz cadence for the first software
-cursor. Snapshot its position/image once per frame, compose after navigation,
+**Accepted software-first policy, 2026-10-08.** Keep today's full repaint and
+approximately 60 Hz cadence for the first software cursor. Snapshot its
+position/image once per frame, compose after navigation,
 chosen surface, selection highlighting and TTY caret, and send only final pixels
 to the existing capture tee and driver. Stage only intersecting spans; do not
 write cursor pixels into application, TTY or navigation backing and do not add
@@ -397,7 +465,7 @@ milestone does not remove the existing full-frame stream. Keep resource ownershi
 confirmed cleanup and failure retention consistent with the driver's current
 contract; cursor resources cannot be freed while device ownership is uncertain.
 
-Recommend screenshots include the system cursor, on hardware and software paths,
+Screenshots include the visible system cursor on hardware and software paths,
 using the same frame snapshot and alpha composition. With a hardware cursor,
 blend it into capture backing only, while the normal scanout gets the cursor
 layer, avoiding a doubled pointer. This needs an explicit capture-only path:
@@ -417,12 +485,15 @@ motion, terminal selection, Quake timedemo with/without lock, capture and live
 VirtIO resize. Boot framebuffer and Bochs must both be checked, plus VirtIO.
 Separate nested-QEMU results from owner-run native ThinkPad results; no cost claim
 is measured by this documentation PR and no new benchmark infrastructure is implied.
+Matched QEMU checks are the accepted closure gate. Native PS/2 qualification is
+[deferred](../technical-debt.md#native-system-pointer-qualification) to the owner's
+batch of ThinkPad checks after the Bluetooth investigation; QEMU results must not
+be reported as native qualification.
 
-## Decisions to put to the owner
+## Decision status
 
-Present at most three decisions per round. Recommendations below remain **open**;
-no response, PR creation or review counts as acceptance. Record an explicit owner
-answer here before treating a recommendation as agreed.
+All three rounds are explicitly accepted on 2026-10-08 and recorded under
+[owner decisions](#owner-decisions). No queued scope/delivery decisions remain.
 
 **First round accepted, 2026-10-08:** image contract, separate ownership with
 surface-local coordinates/geometry identity, and lock lifetime as proposed.
@@ -434,47 +505,36 @@ terminal-controller grant through trusted local startup. These are recorded unde
 [owner decisions](#owner-decisions). A repeat terminal-controller acquisition,
 including by its owner, returns busy; it grants no graphics ownership, lock or warp.
 
-**Third round, awaiting the owner; three questions:**
+**Third round accepted, 2026-10-08:** selection/export boundary and software-first
+presentation with cursor-inclusive capture. The five-task order is accepted with
+the owner's closure change: matched QEMU checks alone may close the milestone;
+native PS/2 validation waits for the ThinkPad batch after Bluetooth investigation.
+The deferral is recorded in [technical debt](../technical-debt.md#native-system-pointer-qualification).
 
-1. **Selection and export boundary:** accept visible-cell linear drag selection
-   in kernel terminals and mux, with pane-local live/history selection and wheel
-   browsing in mux? **Recommended: yes**, with the invalidation, clipping and
-   cell-retention behavior above. This prepares selected text; clipboard
-   publication, Copy/Paste gestures and encoding remain in the clipboard
-   milestone. No kernel scrollback, drag autoscroll or fake Copy command.
-2. **Presentation and capture:** use software composition first on every backend,
-   then VirtIO's hardware cursor, and include the visible system cursor in
-   screenshots on both paths? **Recommended: yes**, omitting hidden/locked
-   cursors, retaining current full-frame cadence, and deferring general damage
-   tracking. Hardware capture uses the matching successfully submitted cursor
-   snapshot; this adds no atomic scanout guarantee.
-3. **Task order and closure:** accept the five-task order below, with SDL2 adapter
-   migration after its milestone closes, matched QEMU cost checks on boot,
-   Bochs and VirtIO, and owner-run PS/2 ThinkPad validation before closure?
-   **Recommended: yes.** Any native-validation deferral needs a separate explicit
-   owner decision recording its consequence and revisit point. Round acceptance
-   and plan merge do not authorize task 1; the owner starts it explicitly.
+The proposal is complete. Task 1 has explicit owner authorization on 2026-10-08.
+Any newly discovered policy question returns to the owner in groups
+of at most three, with defaults, rather than silently becoming a requirement.
 
-These are the remaining queued scope/delivery decisions. Any newly discovered
-policy question returns to the owner rather than silently becoming a requirement.
+## Task breakdown
 
-## Proposed task breakdown
-
-No implementation task is started or authorized by this proposal, its review or
-its merge. Task 1 waits for explicit owner authorization.
+Tasks 1 and 2 have explicit owner authorization on 2026-10-08.
+Proposal review/merge does not authorize later tasks.
 
 - [x] **Documentation proposal.** Inspect current main and describe contracts,
   recommendations, boundaries and a task sequence without code or placeholder APIs.
-- [ ] **Owner review.** Settle the decision rounds, record accepted limits, and
-  agree the implementation sequence before code. Proposal delivery does not
-  complete this review.
-- [ ] **1. Ordinary surface input and software cursor.** Kernel owns position,
+- [x] **Owner review.** All three rounds are accepted, including the native
+  validation deferral and five-task order. Task 1 was authorized afterward.
+- [x] **1. Ordinary surface input and software cursor (delivered for review).** Kernel owns position,
   routing, tab hit testing and ordinary subscription/geometry lifetimes. Include
   program cursor images from the start, explicit hidden state, the accepted warp
   policy, and bounded software composition on all current backends
   with capture. Add libpyxis support and ordinary-position use in `mousetest`.
-  Qualify motion, tab clicks, image/hotspot/show/hide, resize/REPLACE and capture.
-- [ ] **2. Lock, escape and consumer migration.** Add relative lock, Super+Esc,
+  Motion, tab clicks, image/hotspot/show/hide, live resize/REPLACE and capture
+  were checked interactively; source-only cases and presentation measurements
+  are listed in the [qualification report](../development/system-pointer-qualification.md).
+  Default-image integration now includes task 2; this checkbox records the
+  delivered task, not a merge or milestone closure.
+- [x] **2. Lock, escape and consumer migration (delivered for review).** Add relative lock, Super+Esc,
   durable activation gating and authoritative lock/reset notifications. Migrate
   Quake and the current SDL2 backend; complete `mousetest` migration and replace
   the old relative-only protocol with its in-tree consumers. Qualify lock/escape,
@@ -483,7 +543,10 @@ its merge. Task 1 waits for explicit owner authorization.
   explicit hiding for its software cursor and its program-supplied color cursor.
   Review tasks 1 and 2 as focused dependent changes and integrate the ABI and
   consumer pins together, without publishing a broken intermediate consumer or
-  retaining a legacy compatibility interface.
+  retaining a legacy compatibility interface. The default image builds with
+  published userland and Quake/SDL2 changes; the
+  [qualification report](../development/system-pointer-qualification.md#task-2-and-joint-integration)
+  records QEMU input/cursor/warp/capture checks and source-only limits.
 - [ ] **3. Terminal selection and mux wheel.** Add local TTY text retention and
   selection overlay. Give trusted mux startup the accepted
   terminal-controller grant and implement its typed spatial queue and wait
@@ -497,10 +560,11 @@ its merge. Task 1 waits for explicit owner authorization.
   Qualify ordinary/captured pointer appearance, resize, focus and teardown;
   qualify DevilutionX's hardware-cursor option and compare matched software and
   hardware cost samples. Boot/Bochs retain the common software path.
-- [ ] **5. Close the milestone.** Review cost and owner-run PS/2 ThinkPad checks,
-  obtain a separate explicit owner decision for any deferred native qualification,
-  rewrite implemented contracts
-  into device/interface/userland references and move remaining work to WIP/debt.
+- [ ] **5. Close the milestone.** Review matched QEMU behavior/cost checks on
+  boot, Bochs and VirtIO; these suffice for closure. Keep the accepted native
+  PS/2 deferral in technical debt for the owner's later ThinkPad batch. Rewrite
+  implemented contracts into device/interface/userland references and move
+  remaining work to WIP/debt.
   Keep clipboard and USB HID milestones separate.
 
 Kernel/ABI and SDK export changes belong to Pyxis; helpers, mux and `mousetest`

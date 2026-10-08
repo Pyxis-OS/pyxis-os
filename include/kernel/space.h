@@ -24,6 +24,7 @@ struct space
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
   struct pointer_object *pointer; /* Space retains the initial reference. */
+  bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
   /* Bitmaps over boot CPU indices, space_cpu_words() words each. The ceiling
@@ -71,6 +72,14 @@ bool space_set_title(struct space *space, const char *title, size_t length);
 
 /* BSP, IF=0, after display state changes. Update input without releasing capture. */
 void space_display_changed(struct space *space, bool discard_input);
+
+/* BSP/IF=0: pointer uses the actual last-drawn clipped navigation layout. */
+struct space *space_pointer_active(void);
+bool space_pointer_input_available(void);
+uint32_t space_pointer_suppressed_buttons(void);
+size_t space_pointer_content_y(void);
+struct space *space_pointer_tab(int64_t x, int64_t y);
+void space_pointer_select(struct space *space);
 
 void space_present();
 /* BSP kernel-task entry; argument is unused. */

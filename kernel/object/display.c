@@ -3,6 +3,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/display.h>
+#include <kernel/pointer.h>
 #include <kernel/display.h>
 #include <kernel/log.h>
 #include <kernel/object/execution_group.h>
@@ -125,12 +126,16 @@ static enum call_status acquire_display(struct display_object *display,
   if (display->owner) {
     return CALL_BUSY;
   }
+  if (display->mapping_identity == UINT64_MAX) {
+    return CALL_LIMIT;
+  }
   struct display_frame *frame;
   enum call_status status = prepare_frame(display, process, &frame, reply);
   if (status != CALL_OK) {
     return status;
   }
   display->frame = frame;
+  ++display->mapping_identity;
   display->owner = process;
   display->user_address = reply->address;
   return CALL_OK;
@@ -159,6 +164,7 @@ static void retire_frame(struct process *process, struct display_frame *frame,
 
 static void release_display(struct display_object *display)
 {
+  pointer_surface_ended(display->space);
   retire_frame(display->owner, display->frame, display->user_address);
   display->presented = false;
   display->visible = false;
@@ -182,6 +188,9 @@ static enum call_status replace_display(struct display_object *display,
     struct process *process, uint64_t generation, uintptr_t reply_address,
     struct display_buffer *reply)
 {
+  if (display->mapping_identity == UINT64_MAX) {
+    return CALL_LIMIT;
+  }
   if (generation != display->space->tty->geometry_generation) {
     return CALL_BUSY;
   }
@@ -199,6 +208,8 @@ static enum call_status replace_display(struct display_object *display,
   retire_frame(process, display->frame, display->user_address);
   display->frame = frame;
   display->user_address = reply->address;
+  ++display->mapping_identity;
+  pointer_geometry_changed(display->space);
   return CALL_OK;
 }
 

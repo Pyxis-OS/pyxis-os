@@ -64,11 +64,17 @@ Chosen by the owner, each starting with a proposal:
   firmware/bond policies; later decisions are queued without another round now. The
   documentation handoff is complete and investigation is referenced above.
   No production task is assigned; the owner requested a stop before native checks.
-- **Codex alpha** (owner update, 2026-10-08): accepted
-  [system-pointer milestone](pointer.md), with task 1 in progress and kernel-owned
-  positions, cursor and surface routing. The owner's latest assignment supersedes
-  the older awaiting-authorization status in the proposal. SDL2 adapter changes
-  land after its milestone closes. This milestone's devices stay PS/2;
+- **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
+  All three decision rounds are accepted; proposal #530 is merged. Task 1 is
+  delivered in #545 with [qualification](../development/system-pointer-qualification.md).
+  The owner authorized task 2 on 2026-10-08: lock, Super+Esc and Quake/mousetest/SDL2
+  migration. Both tasks are delivered together in #545 with userland #164 and
+  ports #65/#66; default and local shareware images build, with
+  [joint qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration).
+  Exact-head CI is tracked on the integration PR before draft removal. SDL2's milestone
+  is closed. Matched QEMU checks suffice for pointer milestone closure;
+  [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
+  to the owner's ThinkPad batch after the Bluetooth investigation. Devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
   replacing the 16 MiB buffered `xfer` limit so large files such as retail
