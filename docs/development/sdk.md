@@ -48,12 +48,16 @@ constant suffixes preserve the Pyxis choices first made with GCC. `MB_LEN_MAX` i
 for the current single-byte libc; these headers add no character conversion,
 signal or wide-character runtime facilities.
 
-`inttypes.h` includes stdint.h and supplies fixed-width PRId/PRIi/PRIo/PRIu/PRIx/
-PRIX output macros for 8/16/32/64-bit types. Other integer-type families,
-scanning macros and conversion functions are not supplied. `stdio.h` defines
+`inttypes.h` includes stdint.h and supplies PRId/PRIi/PRIo/PRIu/PRIx/PRIX
+output macros for the 8/16/32/64-bit, pointer and greatest-width types. Other
+integer-type families, scanning macros and conversion functions are not supplied. `stdio.h` defines
 BUFSIZ as 8192, without enabling stream buffering. Descriptor I/O headers include
 `fcntl.h`, `unistd.h` and the exported `sys/types.h` subdirectory; see
 [the I/O contract](../userland/stdio.md#descriptor-io).
+
+Libc headers can be included from C++: declarations are wrapped in `extern "C"`,
+and parameters use `__restrict`, which C and C++ both accept. No C++ standard
+library is exported yet; see [C++ in userspace](../wip/cxx-userspace.md).
 
 `stddef.h`, `stdarg.h`, `stdbool.h` and `float.h` remain compiler-provided.
 SDK `-I` paths precede compiler `-isystem` paths, so Clang and TCC use the
@@ -131,6 +135,22 @@ explicit startup/archive paths so Make can track them as dependencies.
 Hardware `float`, `double` and x87 `long double` arithmetic and compiler-rt
 helpers are available. Libc provides floating-point parsing/formatting and a
 small math subset; a full libm remains deferred. See the [userspace FP contract](../kernel/userspace.md#floating-point).
+
+## Startup, exit and layout
+
+`crt0.o` calls libc, which binds startup resources, initializes stdio and the
+heap, runs `.init_array` (C constructors and C++ static initializers), then
+calls `main`. Returning from `main` calls `exit`, which runs `atexit` and
+`__cxa_atexit` handlers in reverse order of registration, then `.fini_array`
+in reverse, then closes stdio. `_Exit`, `abort` and faults skip all three.
+The first 32 handlers use static storage; later ones are allocated from the
+heap, and registration reports failure if allocation fails.
+
+`pyxis.ld` places `.eh_frame_hdr`, `.eh_frame` and `.gcc_except_table` in the
+read-only segment with `__eh_frame_hdr_start`/`_end` and
+`__eh_frame_start`/`_end` bounds for a static unwinder, and the constructor and
+destructor arrays in the data segment. C code is compiled without unwind tables,
+so C executables carry none. TCC links define empty constructor arrays.
 
 ## Guest SDK
 
