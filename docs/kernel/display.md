@@ -26,8 +26,9 @@ Admission, allocation and FILE publication are BSP/IF=0 work outside the output
 lock; copying and device waits remain on the sole IF=1 presenter. Deferred caller
 publication and forwarded completion keep the capability-table loan alive while
 releasing the FIFO executor. Failed frames and stopped callers release
-unpublished backing. Per-space delegation and the PNG command remain separate
-[screenshots tasks](../wip/screenshots.md).
+unpublished backing. [Boot policy](../userland/init.md#boot-configuration)
+delegates CAPTURE to opted-in spaces; the PNG command remains a separate
+[screenshots task](../wip/screenshots.md).
 
 ## Selection and early output
 

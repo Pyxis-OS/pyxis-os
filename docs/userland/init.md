@@ -72,7 +72,7 @@ return {
   },
   spaces = {
     { name = "development", title = "Development", init = "boot://init",
-      network = true, launch = true, cpus = { 1, 2, 3 },
+      network = true, launch = true, screenshot = true, cpus = { 1, 2, 3 },
       roots = { host = { access = "read-write", optional = true },
                 system = "read-only", home = "read-write" } },
     { name = "scratch", title = "Scratch", init = "boot://init-readonly",
@@ -118,6 +118,18 @@ return {
   may set it. The live Development space and the installed `pyxis` space do, and
   boot init's built-in rescue space always has it. Other spaces, such as Remote
   and Read-only, cannot power off or restart.
+- **Screen capture.** `screenshot` is an optional boolean, defaulting to `false`.
+  With `screenshot = true`, boot init delegates the separate `screen_capture`
+  resource with CAPTURE authority. It observes the whole shown local screen,
+  independently of per-space DRAW and filesystem authority. Trusted init,
+  session, remote-daemon and shell handoffs preserve it explicitly; ordinary
+  foreground commands, every pipeline stage and background commands inherit it
+  from a shell that holds it. This is a space policy, not an executable-name
+  restriction. Live Development and Remote and installed `pyxis` opt in;
+  Read-only and the built-in rescue space do not. If an opted-in space's boot
+  init lacks the resource, that space does not start and reports the reason.
+  See [screen capture](../interfaces/screen-capture.md). The PNG command is a
+  later milestone task.
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).

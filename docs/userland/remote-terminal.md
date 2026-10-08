@@ -42,6 +42,12 @@ input/output, distinct standard streams, memory, clock, system-information READ,
 [kernel-log READ](../interfaces/kernel-log.md),
 pipe creation, the selected
 roots and optional ordinary networking, entropy, endpoint and profiling grants.
+When the space opts into [screen capture](../interfaces/screen-capture.md), the
+session and daemon explicitly preserve `screen_capture` with CAPTURE alone and
+no transport rights. Remote shells and their ordinary commands can then observe
+the whole local screen, even though remote shells have no DRAW grant. The
+packaged Remote space opts in. A daemon without that resource passes none to
+its shells; connecting remotely does not create capture authority.
 Only the root shell receives the separate `terminal_events` EMIT capability;
 ordinary children, scripts and session successors do not inherit it.
 The service namespace permits LOOKUP only. Shells receive no listener, mount,

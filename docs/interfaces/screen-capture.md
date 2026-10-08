@@ -8,9 +8,15 @@ background margins, and the visible software cursor. Hidden surfaces are omitted
 Layer selection remains the presenter's ordinary `display_snapshot()` selection.
 
 Boot init receives the named `screen_capture` resource with CAPTURE authority.
-Per-space boot policy and delegation through init, shell and remote-session
-resource lists are a separate pending task. There is no packaged PNG command yet;
-see the [screenshots milestone](../wip/screenshots.md).
+It delegates it only to spaces with the optional
+[`screenshot = true` boot setting](../userland/init.md#boot-configuration).
+Live Development and Remote and installed `pyxis` opt in; other packaged spaces
+and the built-in rescue space do not. Init, session, remote-daemon and shell
+handoffs preserve the optional grant through explicit resource lists. Ordinary
+commands launched by a granted shell inherit it, including background commands
+and every pipeline stage. Remote access, DRAW and path-write rights imply no
+capture authority. There is no packaged PNG command yet; see the
+[screenshots milestone](../wip/screenshots.md).
 
 ## Request and owned result
 
@@ -98,9 +104,23 @@ with one real caller pending, another returned BUSY with zero reply bytes and it
 table loan cleared. The admitted caller subsequently received its FILE, leaving
 pending/active state and private backing clear. The child received its diagnostic
 CAPTURE grant through an ordinary kernel grant at its unsubmitted-process
-checkpoint; this does not establish the pending per-space boot policy.
+checkpoint; these task-4 checks did not establish the subsequent boot policy.
 
 Allocation/backend failure and stop cleanup are source-reviewed, without injected
 failures. Bochs, native hardware, PNG encoding and host download remain unqualified.
 The separately versioned helper compiled and is included in the image's SDK;
-runtime helper use awaits the command consumer. Per-space delegation is pending.
+runtime helper use awaits the command consumer.
+
+Task-5 manual inspection used the ordinary image built with the current LLVM
+23.1.3 / 49e2c1a builder, q35 standard VGA, 1280x800 boot framebuffer, four CPUs,
+2 GiB and nested KVM. Development's final shell retained CAPTURE through its
+init/session chain; Read-only's shell had DRAW and no capture resource. A
+connected Remote shell had CAPTURE without DRAW. Its foreground `echo` child
+held CAPTURE alone with transport zero; a real debugger-substituted CALL returned
+the successful 64-byte reply and a 4,096,000-byte FILE, which was closed before
+replaying the original syscall. Both `echo pipe | cat` stages and
+`echo background &` inherited CAPTURE. Doom launched and visibly rendered in
+Read-only with DRAW and no CAPTURE. Installed/rescue configuration, strict
+boolean parsing and missing-seed refusal are source-reviewed, without injected
+errors or an installed boot in this task. The PNG consumer and native capture
+qualification remain pending.
