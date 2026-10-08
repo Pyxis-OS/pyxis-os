@@ -204,8 +204,9 @@ service. Do not hand-roll cryptography or change TLS configuration silently.
 Any recipe change belongs in a focused ports PR before updating the parent pin,
 following [repository ownership](../development/sdk-and-repositories.md).
 Use the explicit [random grant](../devices/randomness.md) through a checked
-crypto entropy adapter; there is currently no kernel CSPRNG. Entropy failure
-aborts pairing; timestamps and predictable fallback keys are not acceptable.
+crypto entropy adapter to the [kernel ChaCha20 generator](../devices/random-generator.md).
+Initial/required seed failure aborts pairing; timestamps and predictable fallback
+keys are not acceptable.
 
 Accepted bond ownership uses a dedicated writable npfs root granted only
 to trusted startup and the Bluetooth service. Ordinary applications receive

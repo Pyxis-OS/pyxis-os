@@ -7,6 +7,7 @@ return function(inputs)
     { tree = inputs.sdk .. "/share/licenses", at = "sdk/share/licenses" },
     { tree = inputs.sdk .. "/share/toolchain", at = "sdk/share/toolchain" },
     { file = inputs.provenance, at = "sdk/manifest.txt" },
+    { file = "build/kernel-random-NOTICE", at = "share/licenses/kernel-random/NOTICE" },
     { file = "third_party/limine/BOOTX64.EFI", at = "share/installer/BOOTX64.EFI" },
     { file = "boot/limine/limine.conf", at = "share/installer/limine.conf.template" },
     { file = "boot/rescue.list", at = "share/installer/rescue.list" },

@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Kernel random generator](../devices/random-generator.md), 2026-10-08:
+  BSP-owned ChaCha20 with the accepted OpenBSD rekey construction, hardware
+  seed/reseed policy and unchanged random grant; matched VirtIO/CPU qualification
+  recorded, with [trust and availability limits](../technical-debt.md#random-generator-trust-and-availability).
 - [AX200 Bluetooth investigation](../devices/ax200-bluetooth.md),
   2026-10-08: warm-host QEMU passthrough through identification of the MX Master
   3S; [final report](../development/bluetooth-investigation.md). Native Pyxis
@@ -51,10 +55,6 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-08): [kernel random generator](kernel-random-generator.md),
-  the accepted ChaCha20 follow-up for the existing hardware-backed random grant;
-  baseline and a documentation-only proposal first. The owner accepted all three
-  defaults and authorized implementation on 2026-10-08.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   documentation only. Two owner rounds accepted stack/security/closure and initial
   firmware/bond policies; later decisions are queued without another round now. The

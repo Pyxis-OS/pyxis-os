@@ -2,7 +2,7 @@
 
 Measured 2026-10-08 on unchanged Pyxis
 `92762b107e813be5b6c5f4600e205049630dd3c6`, before the
-[generator proposal](../../../wip/kernel-random-generator.md). The kernel bundle
+[generator implementation](../../../devices/random-generator.md). The kernel bundle
 records clean source and the ELF embeds `92762b107e81`. Source selection and
 health behavior remain [the current hardware contract](../../../devices/randomness.md).
 

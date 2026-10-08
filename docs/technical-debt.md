@@ -1888,11 +1888,13 @@ matching. Scheme authority and optional custom roots do not confine destinations
 Revisit destination policy separately when a consumer requires isolation.
 
 Entropy comes from the [hardware-backed random capability](devices/randomness.md):
-VirtIO when present, otherwise checked CPU RDSEED/RDRAND. The selected hardware
-is trusted directly, with no kernel generator or source mixing. Missing or failed
-entropy leaves HTTPS unpublished and disables new kernel TCP connections for that
-boot. The owner must confirm this startup path on native hardware; successful
-QEMU CPU reads are guest evidence. UTC remains subject to the
+the kernel ChaCha20 generator seeds from VirtIO when present, otherwise checked
+CPU RDSEED/RDRAND. Hardware trust remains; there is no independent source mixing.
+Initial/required seed failure stops random reads and TLS operations needing new
+material until a later full attempt succeeds. Provider startup failure can leave
+HTTPS unpublished; initial TCP identity failure separately disables new kernel
+TCP connections for that boot. The owner must confirm the generator/startup path
+on native hardware; successful QEMU CPU reads are guest evidence. UTC remains subject to the
 [wall-clock limits](#wall-clock-time-and-clock-source-performance) above.
 
 TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject
@@ -2422,26 +2424,32 @@ Revisit when a target device or workflow needs another controller type, UAS or
 a USB input class; add each through the existing [layer
 boundaries](devices/usb-installation.md#layers-and-ownership).
 
-## CPU entropy without a kernel generator
+## Random generator trust and availability
 
-The native entropy path trusts RDSEED/RDRAND directly, with bounded instruction
-retries and checks for zero, all-ones and repeated words. VirtIO remains preferred
-when present; neither source provides independence from the hardware/hypervisor.
-The CPU boot self-test and runtime checks reject obvious failures, not arbitrary
-bias, malicious hardware or firmware defects. Availability depends on the
-instruction supply; carry-clear exhaustion fails the current read. A health
-failure disables its instruction until reboot and discards/refills the whole
-request from any healthy survivor. An ambiguous cross-instruction repeat disables
-both. The source is unavailable once no healthy instruction remains. See
-[randomness](devices/randomness.md).
+The [BSP-owned ChaCha20 generator](devices/random-generator.md) now seeds and
+reseeds from the selected VirtIO or CPU source. The owner accepted the global
+construction, demand-driven 40-byte seed/reseed policy and unchanged grant on
+2026-10-08. The [matched qualification](development/experiments/random-generator/generator.md)
+records the RFC vector, erasure observations, both natural reseed triggers,
+TLS/cancellation and nested-KVM latency/throughput; native generator performance
+and CPU seed supply under heavy load remain unmeasured.
 
-The accepted follow-up is a kernel ChaCha20 generator seeded from these sources.
-Revisit source mixing, reseeding and generator ownership in that task; do not add
-predictable fallback bytes or treat the current checks as entropy certification.
-The owner assigned it on 2026-10-08. The
-[generator proposal](wip/kernel-random-generator.md) records the raw-source
-baseline and three defaults accepted by the owner on 2026-10-08. Implementation
-is authorized; generator qualification remains pending.
+Hardware/hypervisor trust remains. CPU boot/runtime checks detect specific
+obvious failures, not arbitrary bias or malicious hardware; mixing one selected
+source creates no independence or entropy certification. A required reseed that
+cannot complete stops random reads and TLS operations needing new material until
+a later full attempt succeeds. Permanent source failure disables them until
+reboot. This accepted availability trade-off includes carry-clear exhaustion
+under load; no stale-seed or predictable fallback is provided.
+
+Request service still pays BSP scheduling and shares eight slots, including
+unconsumed completions. State compromise exposes buffered/future output until a
+successful independent reseed; completed slots and caller memory may retain
+delivered bytes. Whole-VM snapshots/clones can duplicate initialized state.
+Revisit independent source mixing, snapshot recovery, persistent seed or per-CPU
+state only with a concrete threat model or measured consumer need. Revisit native
+seed/performance qualification when owner hardware is available; keep trust
+claims separate from the observed health and RFC checks.
 
 ## PS/2 mouse synchronization and routing
 

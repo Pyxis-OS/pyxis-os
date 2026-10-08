@@ -30,7 +30,8 @@ applied: MPL's standard secondary-license provisions remain available.
 - `kernel/random/generator.c`: adapts OpenBSD's ISC-licensed `arc4random.c`;
   `kernel/random/chacha.c` adapts D. J. Bernstein's public-domain ChaCha core.
   Their pinned source provenance, local changes and complete retained notices
-  are in [kernel/random/NOTICE](kernel/random/NOTICE).
+  are in [kernel/random/NOTICE](kernel/random/NOTICE). The kernel bundle includes
+  that notice, and images stage it at `boot://share/licenses/kernel-random/NOTICE`.
 - `tools/remote/vendor/sha256.c` and `tools/remote/sha256.h`: the imported
   SHA-256 implementation/interface is public domain; see its retained notice
   and [source provenance](tools/remote/vendor/UPSTREAM.md).

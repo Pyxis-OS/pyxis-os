@@ -90,9 +90,16 @@ menuconfig:
 ifneq ($(filter kernel,$(PREBUILT)),)
 kernel:
 	./scripts/bundle.sh verify kernel
+
+build/kernel-random-NOTICE: | kernel
+	@test -f $@
 else
-kernel: build/caelum.elf
+kernel: build/caelum.elf build/kernel-random-NOTICE
 	CC="$(CC)" LOG_LEVEL="$(LOG_LEVEL)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" ./scripts/bundle.sh record kernel
+
+build/kernel-random-NOTICE: kernel/random/NOTICE
+	@mkdir -p build
+	cp $< $@
 endif
 
 tools:
@@ -158,7 +165,7 @@ initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh \
+build/initrd.cpio: userspace ports Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
 	./scripts/assemble-initrd.sh
 

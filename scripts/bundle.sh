@@ -6,7 +6,7 @@ export LC_ALL=C
 action=${1:?Usage: scripts/bundle.sh record|pack|verify COMPONENT}
 component=${2:?Missing component}
 case "$component" in
-  kernel) payload=(build/caelum.elf build/kernel.config); repository=. ;;
+  kernel) payload=(build/caelum.elf build/kernel.config build/kernel-random-NOTICE); repository=. ;;
   sdk) payload=(build/sdk); repository=. ;;
   userspace) payload=(build/userspace-root); repository=userspace ;;
   ports) payload=(build/ports-root build/ports-dev); repository=ports ;;
