@@ -276,7 +276,6 @@ bool hda_link_start(struct hda_controller *controller)
   }
   /* RESET# needs >=100 us asserted; enumeration needs >=521 us after CRST=1. */
   kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
-  write16(controller, HDA_STATESTS, HDA_CODEC_MASK);
   write32(controller, HDA_GCTL, HDA_GCTL_CRST);
   if (!wait32(controller, HDA_GCTL, HDA_GCTL_CRST, HDA_GCTL_CRST)) {
     return fail_controller(controller, "link reset release timeout");
@@ -286,6 +285,7 @@ bool hda_link_start(struct hda_controller *controller)
   write32(controller, HDA_DPLBASE, 0);
   write32(controller, HDA_DPUBASE, 0);
   kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  /* Detection can already be latched while CRST is asserted. Read before W1C. */
   controller->codec_mask = read16(controller, HDA_STATESTS) & HDA_CODEC_MASK;
   write16(controller, HDA_STATESTS, controller->codec_mask);
   if (!controller->codec_mask) {
