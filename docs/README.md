@@ -21,6 +21,8 @@ notes, remain authoritative in their separately versioned repositories.
 
 The [display reference](kernel/display.md) covers driver selection, transactional
 local resizing, panic ownership and application adaptation.
+[Screen capture](interfaces/screen-capture.md) describes whole-screen CAPTURE
+authority, the immutable FILE result and presenter handoff.
 
 The [RTL8111 driver](devices/rtl8111.md) supports the ThinkPad's built-in port.
 Its [hardware profile](devices/rtl8111-hardware.md) records ownership and register

@@ -375,9 +375,9 @@ and wake ordering.
 
 The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
-It currently services pipe creation, private memory, display, capability growth,
-namespace creation, endpoint creation/export, RAMFS entry/name allocation and
-discard, RAM FILE backing replacement, launch preparation/publication and HOST
+It currently services pipe creation, private memory, display, screen capture,
+capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
+allocation and discard, RAM FILE backing replacement, launch preparation/publication and HOST
 forwarding. Preparation zeroes the selected typed record in the caller's reusable
 request area. One reservation spans preparation, publication, completion and
 result consumption; it does not allocate. Task adapters expose reservation,
@@ -416,6 +416,13 @@ space on a roughly 60 Hz monotonic deadline schedule, skipping missed frames.
 Rendering stays out of interrupt entry; APIC interrupts still bound wakeup
 latency. The scheduler does not know about display timing. See
 [timekeeping](timekeeping.md) for the clock and deadline contracts.
+
+[Screen capture](../interfaces/screen-capture.md) uses deferred publication after
+the caller leaves its stack and private root, lending its capability table until
+completion. The executor forwards admission to the presenter without waiting for
+a frame. The presenter copies with IF=1, while pending/active ownership changes,
+allocation and READ-only FILE installation remain BSP/IF=0 work outside the output
+lock. It clears all presenter references and the loan before waking the caller.
 
 ## Memory and output boundaries
 

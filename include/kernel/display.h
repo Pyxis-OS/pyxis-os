@@ -39,7 +39,8 @@ void display_resize_disable(void);
  * bounded chunks; end submits/drains the frame before relinquishing the target. */
 bool display_begin_frame(void);
 void display_copy(size_t offset, const void *pixels, size_t bytes);
-void display_end_frame(void);
+/* True only after successful ordinary submission/drain and no panic takeover. */
+bool display_end_frame(void);
 
 /* First panic claimant, any CPU, IF=0, without GS/locks/allocation. Permanently
  * stop normal writes, fence an interrupted local writer or boundedly wait for

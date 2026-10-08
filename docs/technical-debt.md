@@ -549,6 +549,24 @@ console and kernel-log writes wait on the global output lock during the copy;
 four-TTY nested-KVM measurements ranged from 0.45 to 4.39 ms. Revisit with
 measured copy durations and concrete output-latency needs.
 
+## Screen capture memory and consistency limits
+
+[Screen capture](interfaces/screen-capture.md) admits one pending/in-flight
+request, but completed immutable FILEs have ordinary reference lifetimes and no
+separate quota. Each retained snapshot costs `4 * width * height` bytes, and
+callers can exhaust available memory by retaining several. Revisit admission and
+retained-image policy with concrete pressure workloads and an explicit authority
+and lifetime contract; the one in-flight slot does not bound retained storage.
+
+The captured bytes freeze one presenter composition and preserve tearing from
+concurrent single-buffer application or TTY writes. No atomic application frame,
+vblank or physical scanout timing is promised. A stuck presenter/scheduler or
+panic cannot complete a capture. Revisit stronger consistency or bounded recovery
+only with a separate presenter/backing ownership contract. Current runtime
+evidence covers QEMU boot-framebuffer and VirtIO captures, including BUSY admission.
+Failure cleanup remains source-reviewed; Bochs, native hardware and PNG/download qualification are pending
+in the [screenshots milestone](wip/screenshots.md).
+
 ## Bochs boot-mode scope and aperture retention
 
 The [Bochs driver](kernel/display.md#bochs)

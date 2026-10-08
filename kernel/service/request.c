@@ -12,6 +12,8 @@
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
+#include <kernel/object/screen_capture.h>
+#include <kernel/display_capture.h>
 #include <kernel/object/system_info.h>
 #include <kernel/panic.h>
 #include <kernel/memory.h>
@@ -28,6 +30,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_SCREEN_CAPTURE] = {sizeof(struct screen_capture_request), alignof(struct screen_capture_request),
+      offsetof(struct screen_capture_request, request)},
   [BSP_SERVICE_POWER] = {sizeof(struct acpi_power_request), alignof(struct acpi_power_request),
       offsetof(struct acpi_power_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_MEMORY] = {sizeof(struct system_info_memory_request), alignof(struct system_info_memory_request),
@@ -142,6 +146,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_POWER:
     return false;
   case BSP_SERVICE_DISPLAY:
+  case BSP_SERVICE_SCREEN_CAPTURE:
     return true;
   default:
     panic("unknown BSP service %u", (unsigned)service);
@@ -216,7 +221,8 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
-        request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER) &&
+        request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
+        request->service == BSP_SERVICE_SCREEN_CAPTURE) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;
@@ -232,6 +238,11 @@ static void service_request(struct bsp_request *request)
 {
   struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
+  case BSP_SERVICE_SCREEN_CAPTURE:
+    object_cleanup_leave(previous);
+    request->state = BSP_REQUEST_FORWARDED;
+    screen_capture_submit((struct screen_capture_request *)request);
+    return;
   case BSP_SERVICE_READINESS:
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;

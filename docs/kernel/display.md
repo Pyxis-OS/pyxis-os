@@ -11,6 +11,24 @@ drivers in [kernel/display](../../kernel/display/) and hardware access under
 arch. [Mapped graphics](../interfaces/graphics.md) describes the independent
 per-space DRAW capability; it grants no hardware or mode-setting authority.
 
+## Screen capture
+
+The independent [screen-capture protocol](../interfaces/screen-capture.md)
+observes the presenter's shown layer, navigation, margins and visible software
+cursor. A single admitted request selects layout/generation at the next frame
+boundary. The presenter tees visible spans into tightly packed native 32-bit
+backing, then copies those same staged bytes to the driver, preserving physical
+row-padding handling. It publishes an immutable READ-only FILE only after normal
+frame submission succeeds. This preserves the existing single-buffer tearing
+semantics; it adds no atomic application frame or vblank guarantee.
+
+Admission, allocation and FILE publication are BSP/IF=0 work outside the output
+lock; copying and device waits remain on the sole IF=1 presenter. Deferred caller
+publication and forwarded completion keep the capability-table loan alive while
+releasing the FIFO executor. Failed frames and stopped callers release
+unpublished backing. Per-space delegation and the PNG command remain separate
+[screenshots tasks](../wip/screenshots.md).
+
 ## Selection and early output
 
 Before AP startup, the BSP selects the first supported PCI display in discovery
