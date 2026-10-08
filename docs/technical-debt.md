@@ -15,11 +15,14 @@ twice because the digest is announced before data. The framing keeps one 2 KiB
 chunk in flight. On the ThinkPad over wired LAN, 15 MiB took about 6 s up
 (about 2.5 MiB/s) and 45 s down (about 0.33 MiB/s), owner stopwatch timings on
 2026-10-08; nested QEMU is slower in both directions. Uploading 692 MB natively
-takes about 4½ minutes, which the owner accepts, but downloads are about eight
-times slower. Revisit with the planned throughput task, downloads first:
-profile the per-chunk cost and keep several chunks in flight, which for uploads
-includes the guest's 4 KiB typeahead allowance. Guest names are limited to 200 UTF-8 bytes and host
-query/resolved paths to 1024 bytes.
+takes about 4½ minutes, which the owner accepts. Downloads were about eight
+times slower because `xfer send` read each reply one byte at a time; reading
+in blocks cut a QEMU download by about 40%, and the native rate awaits the
+owner's re-timing. The remaining per-chunk cost is the guest TCP path; see
+[transfer throughput](wip/remote-file-transfer.md#transfer-throughput). Revisit
+there, and keep several chunks in flight only by owner decision, since it
+changes the framing and the guest's 4 KiB typeahead allowance. Guest names are
+limited to 200 UTF-8 bytes and host query/resolved paths to 1024 bytes.
 
 The mandatory negotiated SHA-256 extension intentionally excludes stock kitty
 peers. Reconsider interoperability only if a peer can supply the same verification

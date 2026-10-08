@@ -92,11 +92,10 @@ Chosen by the owner, each starting with a proposal:
   [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after the Bluetooth investigation. Devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
-- **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
-  replacing the 16 MiB buffered `xfer` limit so large files such as retail
-  game data can be sent. Its baseline and publication contract were accepted
-  2026-10-08; the implementation is in review. Transfer throughput, downloads
-  first, follows as Claude's next task.
+- **Claude** (2026-10-08): [remote file transfer](remote-file-transfer.md)
+  throughput, downloads first. Streaming replaced the 16 MiB `xfer` limit
+  (#551). The measured reply-read fix is in review; TCP-path changes wait for
+  the owner's native re-timing.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
