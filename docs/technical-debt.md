@@ -2001,14 +2001,17 @@ reboot, even after confirmed halt. This follows current shared-VM ownership and
 prevents reuse while device ownership is uncertain. Runtime reclamation belongs
 with the VM/device lifetime work, not a local allocator-lock workaround.
 
-The owner accepted a narrower initial interrupt-IN profile for
+### USB interrupt-IN initial profile and failure retention
+
+The implemented private [interrupt-IN path](devices/usb-interrupt-in.md) follows
+the owner's narrower initial profile for
 [Bluetooth task 3a](wip/bluetooth.md#accepted-interrupt-in-decisions): boot-present,
 root-connected full-speed endpoints, with other profiles explicitly unsupported.
 This leaves behind-hub periodic endpoints and other speeds unavailable to the
 initial shared receive path, including HID consumers on those paths. Revisit
 admission and periodic/TT handling when a selected device needs another profile,
-with its descriptors and hardware evidence; task 3a remains pending implementation
-and validation.
+with its descriptors and hardware evidence. Qualification currently covers
+AX200 passthrough behind emulated xHCI, not native periodic transfers.
 
 For the internal AX200 investigation, active removal may quarantine the whole
 controller and stop unrelated storage, retaining backing until reboot. A STALL

@@ -1,0 +1,34 @@
+Remote debugging using 127.0.0.1:1234
+0x000000000000fff0 in ?? ()
+Hardware assisted breakpoint 1 at 0xffffffff8005a42a: file kernel/usb/xhci.c, line 2021.
+Continuing.
+
+Thread 1 hit Breakpoint 1, usb_host_control_wait (device=0xffff801000001778, ticket=..., deadline=deadline@entry=30138494510) at kernel/usb/xhci.c:2021
+2021	  struct usb_host_controller *controller = device->controller;
+Hardware assisted breakpoint 2 at 0xffffffff8005a6ee: file kernel/usb/xhci.c, line 1207.
+Continuing.
+
+Thread 1 hit Breakpoint 2, drain_events (controller=controller@entry=0xffff801000000330) at kernel/usb/xhci.c:1207
+1207	  volatile struct xhci_trb *ring = (volatile struct xhci_trb *)controller->event_ring.address;
+#0  drain_events (controller=controller@entry=0xffff801000000330) at kernel/usb/xhci.c:1207
+#1  0xffffffff8005a5f3 in usb_host_control_wait (device=0xffff801000001778, ticket=..., deadline=deadline@entry=30138494510) at kernel/usb/xhci.c:2035
+#2  0xffffffff80057ba3 in probe_hci_command (device=device@entry=0xffff801000004a18, interface=interface@entry=0 '\000', opcode=opcode@entry=64517, deadline=deadline@entry=30138494510) at kernel/usb/core.c:596
+#3  0xffffffff80057a72 in probe_interrupt (device=device@entry=0xffff801000004a18, total=total@entry=200, deadline=deadline@entry=30138494510) at kernel/usb/core.c:672
+#4  0xffffffff80056a80 in inspect_device (device=0xffff801000004a18, deadline=30138494510) at kernel/usb/core.c:762
+#5  inspect_record (device=device@entry=0xffff801000004a18, deadline=deadline@entry=30138494510) at kernel/usb/core.c:1289
+#6  0xffffffff80054b71 in usb_enumerate (discovery=0xffff8010000047c0, deadline=deadline@entry=30138494510) at kernel/usb/core.c:1649
+#7  0xffffffff8005d26a in controller_worker (argument=0xffff801000000330) at kernel/usb/xhci.c:2660
+#8  0xffffffff80012834 in enter_task () at kernel/task.c:666
+#9  0x0000000000000000 in ?? ()
+$1 = 271
+$2 = 18
+Run till exit from #0  drain_events (controller=controller@entry=0xffff801000000330) at kernel/usb/xhci.c:1207
+usb_host_control_wait (device=0xffff801000001778, ticket=..., deadline=deadline@entry=30138494510) at kernel/usb/xhci.c:2035
+2035	    if (!controller_healthy(controller) || !drain_events(controller) || !control_deadlines(controller)) {
+Value returned is $3 = true
+$4 = 272
+$5 = 19
+$6 = 1
+Detaching from program: /tmp/pyxis-interrupt-validation/probe-coexist.elf, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]
