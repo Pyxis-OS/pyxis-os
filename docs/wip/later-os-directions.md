@@ -198,7 +198,7 @@ Owner ideas, 2026-10-07; none is scheduled.
   program's capabilities is powerful, so the authority would itself be a grant,
   enabled for debugging through menuconfig. The kernel cannot start a program on
   a key press; a trusted helper in each space could receive the combination and
-  show the view, possibly on its own [layer](space-layers.md).
+  show the view, possibly on its own [layer](../userland/space-layers.md).
 - **top.** Live CPU use per CPU and per process, which would show the
   [SMP work](../kernel/smp.md) directly. It needs a new read-only kernel query
   for per-CPU busy and idle time and per-process CPU time, and a decision on

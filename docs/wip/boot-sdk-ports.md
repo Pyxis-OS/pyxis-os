@@ -12,6 +12,8 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
+  Super+Up/Down; [native ThinkPad qualification remains open](../technical-debt.md#space-layer-qualification).
 - [Runtime SMP](../kernel/smp.md), 2026-10-06, with
   [topology-aware placement](../kernel/smp.md#placement-and-migration).
 - [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md), 2026-10-06.
@@ -37,8 +39,6 @@ Chosen by the owner on 2026-10-07, each starting with a proposal:
 - **Claude:** [C++ in userspace](cxx-userspace.md), cross-compiled C++
   programs with a runtime from the `pyxis-llvm` fork; task 3 (fork, toolchain
   and SDK runtime build) in review. Clang running on Pyxis is a later milestone.
-- **Codex 1:** [graphics and terminal layers in a space](space-layers.md),
-  switched with Super+Up/Down.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
   PNG through new zlib and libpng ports, with the file fetched through
   pyxis-remote.

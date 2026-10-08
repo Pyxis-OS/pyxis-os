@@ -51,7 +51,7 @@ applications alongside navigators.
 The owner moved the multiplexer ahead of the navigator on 2026-10-07: its
 consumers already exist and it is useful at once, and the navigator can then be
 designed to live in a pane. Graphical programs do not run in panes; with
-[space layers](space-layers.md) they sit on the layer above the multiplexer.
+[space layers](../userland/space-layers.md) they sit on the layer above the multiplexer.
 
 ## Multiplexer decisions
 

@@ -61,7 +61,7 @@ Accepted 2026-10-08:
 - Cursor images: format, size limits, hotspot, and who may set the cursor for
   which surface.
 - The coordinates programs receive: surface pixels, and what happens on resize.
-- How the pointer interacts with [space layers](space-layers.md): which layer
+- How the pointer interacts with [space layers](../userland/space-layers.md): which layer
   receives it, and selection on the terminal layer while graphics is hidden.
 - Software cursor cost in the presenter on the boot framebuffer and Bochs.
 - How Quake's existing pointer session becomes a lock request.
