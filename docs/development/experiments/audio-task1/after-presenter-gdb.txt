@@ -1,0 +1,80 @@
+Remote debugging using 127.0.0.1:1243
+0xffffffff80014616 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = "caelum", '\000' <repeats 25 times>
+$2 = {claim = {device = 0xffff8010000001d0, saved_command = 7, capabilities = "`", '\000' <repeats 46 times>, capability_count = 1, bars = {{physical = 2164523008, bytes = 16384}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}}, mappings = 0xffffffff8011c050 <controller+176>, reserved = false, dma_started = true}, registers = {address = 18446603336264376320, base = 18446603336264376320, bytes = 4096, next = 0x0}, firmware = {command = 7, pmcsr = 0, power_capability = 0, command_changed = false, power_changed = false}, corb = {address = 18446603336264380416, physical = 2088960, bytes = 4096}, rirb = {address = 18446603336264384512, physical = 2093056, bytes = 4096}, bdl = {address = 18446603336264388608, physical = 2097152, bytes = 4096}, pcm = {address = 18446603336264392704, physical = 2101248, bytes = 8192}, stream = 256, corb_entries = 256, rirb_entries = 256, corb_write = 22, rirb_read = 22, codec_mask = 1, commands = 22, responses = 22, unsolicited = 0, prepared = true, link_ready = true, command_ready = false, stream_running = false, failed = false, shutdown = false}
+$3 = {vendor = 452198418, revision = 1048833, codec = 0 '\000', group = 1 '\001', pin = 3 '\003', converter = 2 '\002', length = 2}
+$4 = (struct task_wait *) 0xffff801000004448
+There is no member named configuration.
+Hardware assisted breakpoint 1 at 0xffffffff8000f234: file kernel/space.c, line 849.
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+$5 = 0x402
+$6 = 0x0
+$7 = 0x0
+$8 = 0x0
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$9 = 75363
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$10 = 107523
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$11 = 90055
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$12 = 68410
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$13 = 116706
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$14 = 120965
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$15 = 77017
+Continuing.
+
+Thread 1 hit Breakpoint 1, space_present () at kernel/space.c:849
+849	  if (!presenting && !begin_presenting()) {
+Run till exit from #0  space_present () at kernel/space.c:849
+0xffffffff80010aac in space_present_task (argument=<optimized out>) at kernel/space.c:1121
+1121	    } else {
+$16 = 115768
+Detaching from program: <worktree>/build/caelum.elf, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]

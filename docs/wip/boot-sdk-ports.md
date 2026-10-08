@@ -67,7 +67,10 @@ Chosen by the owner, each starting with a proposal:
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
   exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
-  queues as starting tuning. No implementation task assigned. QEMU closure with
+  queues as starting tuning. First controller/codec bring-up task assigned
+  2026-10-08; [private engine and matched qualification delivered for review](../development/experiments/audio-task1/README.md).
+  Public sessions/mixing and IRQ/refill remain later tasks.
+  QEMU closure with
   a later ThinkPad native batch is carried forward for confirmation at closure;
   native playback remains unqualified. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
@@ -81,21 +84,26 @@ Chosen by the owner, each starting with a proposal:
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
-  All three decision rounds are accepted; proposal #530 is merged. Task 1 is
-  delivered in #545 with [qualification](../development/system-pointer-qualification.md).
-  The owner authorized task 2 on 2026-10-08: lock, Super+Esc and Quake/mousetest/SDL2
-  migration. Both tasks are delivered together in #545 with userland #164 and
-  ports #65/#66; default and local shareware images build, with
-  [joint qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration).
-  Exact-head CI is tracked on the integration PR before draft removal. SDL2's milestone
-  is closed. Matched QEMU checks suffice for pointer milestone closure;
-  [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
-  to the owner's ThinkPad batch after the Bluetooth investigation. Devices stay PS/2;
-  clipboard implementation and USB HID mice are separate milestones.
-- **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
-  replacing the 16 MiB buffered `xfer` limit so large files such as retail
-  game data can be sent. It starts with a baseline measurement and a
-  documentation-only proposal for the publication contract.
+  Proposal #530 and tasks 1+2 are merged: Pyxis #545, userland #164, ports #65/#66.
+  The owner authorizes task 3: local TTY selection, trusted mux terminal control,
+  terminal spatial queue/readiness and mux selection/wheel history. The owner's
+  addition makes graphics pointer subscriptions waitable through `wait_many`;
+  the later SDL blocking-event fix remains beta's work. Fresh main `abbeded`
+  has a pre-code [baseline](../development/system-pointer-qualification.md#task-3-baseline)
+  recorded in [#550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
+  [Three task 3 defaults](pointer.md#task-3-planning) are accepted on 2026-10-08;
+  task 3 is delivered in #550 with published userland #166 (`63d4324`),
+  which merges before the parent. [Qualification](../development/system-pointer-qualification.md#task-3-qualification)
+  records runtime/source limits and matched samples. Tasks 4 and 5 need separate authorization.
+  Matched QEMU checks suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
+  to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
+  clipboard and USB HID implementation remain separate. Bluetooth's accepted
+  conditional source-loss rule is recorded for future integration, without a
+  second input source.
+- **Claude** (2026-10-08): [remote file transfer](remote-file-transfer.md)
+  throughput, downloads first. Streaming replaced the 16 MiB `xfer` limit
+  (#551). The measured reply-read fix is in review; TCP-path changes wait for
+  the owner's native re-timing.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
@@ -154,6 +162,9 @@ prerequisites and result are clear.
   until a package manager exists.
 - [Desktop and graphics](desktop-graphics.md), including where to start on the
   owner's compositor.
+- [Interchangeable providers](interchangeable-providers.md): programs depend on
+  protocols, and launchers choose who serves them, so a compositor can serve the
+  same display, pointer and keyboard interfaces as the kernel.
 - [Users and authority](users-and-authority.md), a cross-cutting design
   checkpoint, and [credentials and biometric unlock](credentials-and-biometrics.md),
   parked after local users.

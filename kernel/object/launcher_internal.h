@@ -16,6 +16,7 @@ struct launch_space {
   char reason[SPACE_REASON_MAX + 1]; /* Empty when a child is launched. */
   const uint64_t *cpus;
   size_t cpu_count;
+  bool terminal_control;
 };
 
 /* Heap storage shared with BSP, never a remote task stack. Bindings/directory

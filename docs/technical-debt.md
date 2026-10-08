@@ -8,11 +8,21 @@ when the underlying tradeoff changes.
 ## Remote transfer memory and staging limits
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer)
-buffer the complete source and received file, bounded at 16 MiB per peer, to
-verify SHA-256 before writing. Guest names are limited to 200 UTF-8 bytes and
-host query/resolved paths to 1024 bytes. This bounds memory and OSC metadata but
-precludes larger transfers; reconsider streaming verification into private
-storage only with an agreed replacement publication contract.
+stream with constant memory and no fixed size limit (owner decision,
+2026-10-08). Unverified bytes reach the disk, but only under the private staging
+name, and are published after the size and SHA-256 match. Senders read the source
+twice because the digest is announced before data. The framing keeps one 2 KiB
+chunk in flight. On the ThinkPad over wired LAN, 15 MiB took about 6 s up
+(about 2.5 MiB/s) and 45 s down (about 0.33 MiB/s), owner stopwatch timings on
+2026-10-08; nested QEMU is slower in both directions. Uploading 692 MB natively
+takes about 4½ minutes, which the owner accepts. Downloads were about eight
+times slower because `xfer send` read each reply one byte at a time; reading
+in blocks cut a QEMU download by about 40%, and the native rate awaits the
+owner's re-timing. The remaining per-chunk cost is the guest TCP path; see
+[transfer throughput](wip/remote-file-transfer.md#transfer-throughput). Revisit
+there, and keep several chunks in flight only by owner decision, since it
+changes the framing and the guest's 4 KiB typeahead allowance. Guest names are
+limited to 200 UTF-8 bytes and host query/resolved paths to 1024 bytes.
 
 The mandatory negotiated SHA-256 extension intentionally excludes stock kitty
 peers. Reconsider interoperability only if a peer can supply the same verification
@@ -20,9 +30,10 @@ and publication guarantees. Transfers are single regular files without resume,
 compression or deltas.
 
 Exclusive `.NAME.xfer-partial-ID` siblings can survive abrupt process/session
-death. Handled cancellation/errors attempt cleanup and report failures, but stale
-files are never automatically deleted or overwritten: manual review owns their
-removal. Rename commits the complete target; late cancellation cannot roll it
+death, and with streaming they can hold a partial file of any size, which
+matters on a USB stick. Handled cancellation/errors attempt cleanup and report
+failures, but stale files are never automatically deleted or overwritten:
+manual review owns their removal. Rename commits the complete target; late cancellation cannot roll it
 back. Linux host atomic publication is validated; the macOS exclusive-rename path
 still needs an owner run. Revisit staging recovery if interruptions make manual
 cleanup burdensome, with explicit ownership rules rather than age-based deletion.
@@ -93,6 +104,12 @@ Shrinking to a nonzero size retains capacity for reuse. Truncated bytes cannot
 be observed after regrowth, but a small file may keep a much larger allocation.
 Resize to zero or final object destruction returns the buffer to the heap;
 the heap's existing pools remain mapped.
+
+Streaming [remote transfers](userland/remote-terminal.md#explicit-file-transfer)
+make such files ordinary: on 2026-10-08 a 1.1 GiB upload into `tmp://`, written
+in 64 KiB pieces, left the allocator reporting 4.32 GiB in use, against 112 MiB
+before, because the replaced buffers' heap pools stay mapped. Large transfers
+belong on a pool-backed directory such as an installed `home://`.
 
 Reconsider this when larger files or memory pressure make those costs material.
 Chunked backing and a policy for releasing excess capacity are possible changes,
@@ -520,7 +537,8 @@ Bochs and VirtIO displays may close the milestone without a native run. This
 records an accepted qualification limit, not a completed native check.
 
 The consequence is that PS/2 touchpad/TrackPoint routing, held-button behavior,
-lock escape/relock, and cursor composition/cost on the ThinkPad boot framebuffer
+lock escape/relock, local selection/mux wheel behavior, and cursor composition/cost
+on the ThinkPad boot framebuffer
 remain unqualified on physical hardware even after successful QEMU checks.
 Nested-VM results do not establish native input latency or display performance.
 

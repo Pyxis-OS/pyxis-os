@@ -1,0 +1,46 @@
+{
+  "monotonic_ns": 15651366196095,
+  "clk_tck": 100,
+  "pid": 355619,
+  "process": {
+    "utime": 1488,
+    "stime": 641
+  },
+  "threads": {
+    "355619": {
+      "name": "qemu-system-x86",
+      "utime": 4,
+      "stime": 4
+    },
+    "355642": {
+      "name": "qemu-system-x86",
+      "utime": 0,
+      "stime": 1
+    },
+    "355643": {
+      "name": "qemu-system-x86",
+      "utime": 796,
+      "stime": 321
+    },
+    "355644": {
+      "name": "qemu-system-x86",
+      "utime": 295,
+      "stime": 128
+    },
+    "355645": {
+      "name": "qemu-system-x86",
+      "utime": 221,
+      "stime": 80
+    },
+    "355646": {
+      "name": "qemu-system-x86",
+      "utime": 175,
+      "stime": 96
+    },
+    "355650": {
+      "name": "kvm-nx-lpage-re",
+      "utime": 0,
+      "stime": 0
+    }
+  }
+}

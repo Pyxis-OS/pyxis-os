@@ -96,6 +96,13 @@ laptop. They depend on the actual sensor, its firmware and its configuration.
   existing rule that restricted applications cannot recover full user authority.
 - Locking, logout and revocation are capability operations with the explicit
   semantics the users checkpoint still has to define.
+- **SSH keys** are a first consumer (owner, 2026-10-08). The store holds private
+  keys and serves signing as an operation, as an SSH agent does, for SSH client
+  authentication and Git commit signing. A program receives a capability for one
+  key or a set of keys, never the key itself, so a key can be granted to one
+  space or agent session and withheld from others.
+- Other consumers already point here: [Bluetooth bond keys](bluetooth-mouse.md)
+  defer at-rest wrapping to this direction.
 
 ### Later
 

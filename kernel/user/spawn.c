@@ -115,7 +115,7 @@ struct launch_preparation *launcher_batch_create(void)
 }
 
 /* Kernel-added resources for a new space's first process. */
-#define SPACE_DEVICE_RESOURCES 6
+#define SPACE_DEVICE_RESOURCES 7
 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
@@ -123,7 +123,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
     struct process_startup *startup, struct process_binding **owned)
 {
   struct kernel_object *console = &space->console->object;
-  handle_t input, output, keyboard, pointer, display, control;
+  handle_t input, output, keyboard, pointer, display, control, terminal_pointer = HANDLE_INVALID;
   handle_t streams[STARTUP_STREAM_COUNT];
   enum capability_result result = capability_install(&child->capabilities, console,
       CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, 0, &input);
@@ -163,6 +163,10 @@ static enum call_status install_space_devices(struct process *child, struct spac
         SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY, 0, &control);
     object_release(space_control);
   }
+  if (result == CAP_OK && space->terminal_control_enabled) {
+    result = capability_install(&child->capabilities, &space->terminal_pointer->object,
+        TERMINAL_POINTER_RIGHT_CONTROL, 0, &terminal_pointer);
+  }
   if (result != CAP_OK) {
     return capability_status(result);
   }
@@ -182,6 +186,9 @@ static enum call_status install_space_devices(struct process *child, struct spac
   resources[count++] = (struct process_binding){"pointer", pointer};
   resources[count++] = (struct process_binding){"display", display};
   resources[count++] = (struct process_binding){"space", control};
+  if (terminal_pointer != HANDLE_INVALID) {
+    resources[count++] = (struct process_binding){"terminal_pointer", terminal_pointer};
+  }
   startup->resources = resources;
   startup->resource_count = count;
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
@@ -354,6 +361,7 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
     ceiling[cpu / 64] |= request->cpus[cpu / 64] & (UINT64_C(1) << (cpu % 64));
   }
   struct space *space = space_create(request->name, request->title, ceiling);
+  space->terminal_control_enabled = request->terminal_control;
   if (!capture->image) {
     space_report_unstarted(space, request->reason);
     return CALL_OK;

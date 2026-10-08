@@ -271,7 +271,9 @@ static struct syscall_result call_object(handle_t handle,
     return keyboard_call((struct keyboard_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   case OBJECT_POINTER:
-    if (header.protocol != PROTOCOL_POINTER) {
+  case OBJECT_TERMINAL_POINTER:
+    if (header.protocol != (object->type == OBJECT_POINTER ?
+        PROTOCOL_POINTER : PROTOCOL_TERMINAL_POINTER)) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return pointer_call((struct pointer_object *)object, rights, header.operation,

@@ -1,6 +1,7 @@
 #include <arch/smp.h>
 #include <kernel/display.h>
 #include <kernel/mm/heap.h>
+#include <kernel/log.h>
 #include <kernel/object/display.h>
 #include <kernel/object/pointer.h>
 #include <kernel/panic.h>
@@ -100,19 +101,22 @@ static struct pointer_destination hit_test(void)
 
 bool pointer_surface_focused(struct pointer_object *pointer)
 {
-  return pointer->space == space_pointer_active() && pointer->space->display->visible;
+  return pointer->space == space_pointer_active() &&
+      (pointer_is_terminal(pointer) ? !pointer->space->display->visible :
+          pointer->space->display->visible);
 }
 
 struct pointer_geometry pointer_surface_geometry(struct pointer_object *pointer)
 {
   struct space *space = pointer->space;
   const struct display_object *display = space->display;
+  bool terminal = pointer_is_terminal(pointer);
   return (struct pointer_geometry){
     .width = space->fb->width, .height = space->fb->height,
     .generation = space->tty->geometry_generation,
-    .mapping_identity = display->mapping_identity,
-    .mapping_width = display->frame ? display->frame->fb.width : 0,
-    .mapping_height = display->frame ? display->frame->fb.height : 0,
+    .mapping_identity = terminal ? pointer->view_identity : display->mapping_identity,
+    .mapping_width = terminal ? space->fb->width : display->frame ? display->frame->fb.width : 0,
+    .mapping_height = terminal ? space->fb->height : display->frame ? display->frame->fb.height : 0,
   };
 }
 
@@ -125,9 +129,38 @@ struct pointer_event pointer_position_event(struct pointer_object *pointer, uint
     .buttons = pointer->accepted, .type = type};
 }
 
+static struct pointer_object *destination_pointer(struct pointer_destination target)
+{
+  if (target.kind == DESTINATION_GRAPHICS) {
+    return target.space->pointer;
+  }
+  if (target.kind == DESTINATION_TERMINAL) {
+    return target.space->terminal_pointer;
+  }
+  return NULL;
+}
+
+static void cancel_local_drag(struct space *space)
+{
+  bool locked = log_begin();
+  if (locked) {
+    tty_selection_cancel_drag(space->tty);
+  }
+  log_end(locked);
+}
+
+static void clear_local_selection(struct space *space)
+{
+  bool locked = log_begin();
+  if (locked) {
+    tty_selection_clear(space->tty);
+  }
+  log_end(locked);
+}
+
 static void update_hover(struct pointer_destination target)
 {
-  struct pointer_object *next = target.kind == DESTINATION_GRAPHICS ? target.space->pointer : NULL;
+  struct pointer_object *next = destination_pointer(target);
   if (next && (!next->owner || !next->focused)) {
     next = NULL;
   }
@@ -146,14 +179,26 @@ static void update_hover(struct pointer_destination target)
 void pointer_subscription_started(struct pointer_object *pointer)
 {
   KASSERT(arch_cpu_index() == 0 && pointer->owner);
+  if (pointer_is_terminal(pointer)) {
+    clear_local_selection(pointer->space);
+    if (drag.space == pointer->space && drag.kind == DESTINATION_TERMINAL) {
+      drag = (struct pointer_destination){0};
+      drag_buttons = 0;
+    }
+  }
   update_hover(hit_test());
 }
 
 void pointer_subscription_ended(struct pointer_object *pointer)
 {
-  pointer_surface_unlock(pointer, true);
+  if (!pointer_is_terminal(pointer)) {
+    pointer_surface_unlock(pointer, true);
+  } else {
+    clear_local_selection(pointer->space);
+  }
   pointer->activation_ready = false;
-  if (drag.space == pointer->space && drag.kind == DESTINATION_GRAPHICS) {
+  enum destination_kind kind = pointer_is_terminal(pointer) ? DESTINATION_TERMINAL : DESTINATION_GRAPHICS;
+  if (drag.space == pointer->space && drag.kind == kind) {
     drag = (struct pointer_destination){0};
     drag_buttons = 0;
   }
@@ -173,10 +218,12 @@ void pointer_space_changed(struct space *space)
   if (drag.space == space &&
       (space != space_pointer_active() ||
        (drag.kind == DESTINATION_GRAPHICS) != space->display->visible)) {
+    cancel_local_drag(space);
     drag = (struct pointer_destination){0};
     drag_buttons = 0;
   }
   pointer_focus(space->pointer, focused);
+  pointer_focus(space->terminal_pointer, pointer_surface_focused(space->terminal_pointer));
   update_hover(hit_test());
 }
 
@@ -188,7 +235,7 @@ void pointer_geometry_changed(struct space *space)
     pointer_queue_state(space->pointer, POINTER_GEOMETRY_CHANGED);
     return;
   }
-  if (drag.space == space) {
+  if (drag.space == space && drag.kind == DESTINATION_GRAPHICS) {
     drag = (struct pointer_destination){0};
     drag_buttons = 0;
   }
@@ -197,6 +244,29 @@ void pointer_geometry_changed(struct space *space)
     hover = NULL;
   }
   update_hover(hit_test());
+}
+
+void pointer_terminal_view_changed(struct pointer_object *pointer)
+{
+  KASSERT(arch_cpu_index() == 0 && pointer_is_terminal(pointer));
+  if (drag.space == pointer->space && drag.kind == DESTINATION_TERMINAL) {
+    drag = (struct pointer_destination){0};
+    drag_buttons = 0;
+  }
+  pointer_reset_input(pointer, POINTER_GEOMETRY_CHANGED);
+  if (hover == pointer) {
+    hover = NULL;
+  }
+  update_hover(hit_test());
+}
+
+void pointer_terminal_geometry_changed(struct space *space)
+{
+  struct pointer_object *pointer = space->terminal_pointer;
+  if (pointer->view_identity != UINT64_MAX) {
+    ++pointer->view_identity;
+  }
+  pointer_terminal_view_changed(pointer);
 }
 
 void pointer_surface_ended(struct space *space)
@@ -222,14 +292,15 @@ void pointer_frame_snapshot(struct pointer_frame *frame)
   *frame = (struct pointer_frame){.x = position_x, .y = position_y,
     .pixels = arrow_pixels, .width = 16, .height = 24,
     .visible = space_pointer_input_available() && display_available() && !locked_pointer};
-  if (target.kind == DESTINATION_TERMINAL && target.space != space_caelum()) {
+  if (target.kind == DESTINATION_TERMINAL) {
     frame->pixels = terminal_pixels;
     frame->width = 9;
     frame->height = 20;
     frame->hotspot_x = 4;
     frame->hotspot_y = 10;
-  } else if (target.kind == DESTINATION_GRAPHICS) {
-    struct pointer_object *pointer = target.space->pointer;
+  }
+  struct pointer_object *pointer = destination_pointer(target);
+  if (pointer && pointer->owner) {
     frame->visible = frame->visible && !pointer->hidden;
     struct pointer_image *image = pointer->image;
     if (image) {
@@ -263,7 +334,9 @@ void pointer_source_lost(uint32_t physical_buttons)
   hover = NULL;
   for (struct space *space = space_caelum(); space; space = space->next) {
     space->pointer->activation_ready = false;
+    cancel_local_drag(space);
     pointer_reset_input(space->pointer, POINTER_STATE_RESET);
+    pointer_reset_input(space->terminal_pointer, POINTER_STATE_RESET);
   }
 }
 
@@ -312,20 +385,33 @@ void pointer_handle_input(const struct pointer_input_report *event)
     drag_buttons = pressed & buttons;
   }
   struct pointer_destination recipient = drag.space ? drag : target;
-  if (recipient.kind == DESTINATION_GRAPHICS &&
+  struct pointer_object *recipient_pointer = destination_pointer(recipient);
+  if (recipient_pointer && recipient_pointer->owner &&
       (event->dx || event->dy || pressed || drag_buttons != (drag_buttons & buttons))) {
-    struct pointer_object *pointer = recipient.space->pointer;
+    struct pointer_object *pointer = recipient_pointer;
     struct pointer_event input = pointer_position_event(pointer, POINTER_INPUT);
     input.buttons = buttons;
     pointer_queue_input(pointer, input, pressed, true);
     if (drag.space) {
       drag_buttons = pointer->accepted;
     }
+  } else if (recipient.kind == DESTINATION_TERMINAL && !recipient_pointer->owner) {
+    bool locked = log_begin();
+    if (locked) {
+      tty_selection_input(recipient.space->tty, position_x,
+          position_y - (int64_t)space_pointer_content_y(),
+          pressed & POINTER_BUTTON_LEFT, buttons & POINTER_BUTTON_LEFT);
+    }
+    log_end(locked);
+    if (drag.space) {
+      drag_buttons = (drag_buttons & buttons) | (pressed & buttons);
+    }
   } else if (drag.space) {
     drag_buttons = (drag_buttons & buttons) | (pressed & buttons);
   }
-  if (event->wheel && target.kind == DESTINATION_GRAPHICS) {
-    struct pointer_object *pointer = target.space->pointer;
+  struct pointer_object *wheel_pointer = destination_pointer(target);
+  if (event->wheel && wheel_pointer && wheel_pointer->owner) {
+    struct pointer_object *pointer = wheel_pointer;
     struct pointer_event input = pointer_position_event(pointer, POINTER_INPUT);
     input.wheel = event->wheel;
     pointer_queue_input(pointer, input, 0, false);

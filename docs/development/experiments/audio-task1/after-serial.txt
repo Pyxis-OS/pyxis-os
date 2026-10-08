@@ -1,0 +1,7 @@
+hda: PCI=0:5.0 GCAP=4401 ISS=4 OSS=4 version=1.0
+hda: prepared output descriptor=4 PCM=7680 backing=8192; link reset, BME off
+hda: link ready codec-mask=1 first-output-offset=100
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+hda-codec: cad=0 vendor=1af40012 revision=100101
+hda-codec: selected cad=0 afg=1 pin=3 dac=2 nodes=2 PCM=48000/S16/stereo
+audio: ready codec=1af40012 cad=0 pin=3 DAC=2 rate=48000 format=11; output idle
