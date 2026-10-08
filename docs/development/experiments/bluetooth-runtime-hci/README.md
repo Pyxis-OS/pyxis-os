@@ -194,7 +194,7 @@ check. Framing/credits/lifetime error paths are source-reviewed; task 4 adds the
 actual service/connection consumer and its qualification. No fault injection,
 new tests or benchmark infrastructure were added.
 
-## Matched final-code validation
+## Matched runtime-code validation
 
 Three fresh interactive guests used matching bundles from successful
 [CI run 1326](https://git.internal/PyxisOS/pyxis-os/actions/runs/1326), signed code
@@ -267,7 +267,7 @@ private `usb-storage` copy at port 2. Remote workload commands above are unchang
 Scalar inspection uses the matching ELF, the baseline counter expressions and
 named HCI stage/features/credit/stream fields, with no inferior calls.
 
-| Final artifact | SHA-256 |
+| Matched runtime artifact | SHA-256 |
 | --- | --- |
 | ELF | `82c78d64c7c256a17363a947acf33312a1f9af229c965a3b26ce81909bfeeb6c` |
 | ISO | `e822994efed741f32bc42ea39972beeef0501681bb8dd582114fdea457c354c8` |
@@ -278,6 +278,45 @@ real ACL payload/credit recycling, first-link deferral and handle reuse/error
 paths remain source-reviewed; task 4 supplies the actual service and connection
 qualification. No native Pyxis Bluetooth readiness is claimed. Cold upload,
 SMP, durable bonds, HID and pointer are still unassigned tasks.
+
+## Main integration
+
+Signed merge `ca4d0f602019ec9b254d6cb73452b2216ff5383f` integrates published main
+`0179163`. Main had added terminal-pointer protocol 43/object 45; Bluetooth now
+uses protocol 44/object 46, preserving both typed dispatch paths and both audio/
+Bluetooth source discovery. This renumbers an unmerged ABI, without a compatibility
+shim. Bluetooth transport/framing code is unchanged from the matched revision.
+Main's published userspace pin is `63d4324d05762992a09ed8768f6e9ba4586355e2`;
+no dependency repository was edited and other pins remain unchanged.
+
+The integrated ordinary kernel build passed. All jobs in
+[CI run 1332](https://git.internal/PyxisOS/pyxis-os/actions/runs/1332) passed;
+its matching bundles passed the existing verifier during image assembly. One
+fresh interactive warm guest repeated the same configuration, remote read
+workload and 30-second idle procedure. [Storage output](integration-storage.txt)
+verified its warmup and all three samples: payload median/range
+120.977 / 115.190–121.294 ms, complete consumption
+123.359 / 117.086–124.565 ms. The private disk retained its original hash.
+The [idle snapshot](integration-idle.txt) found development-ready stage 11,
+complete inventory, the same checked features/credits, no partial frames or
+terminal failure, and both receives posted on both endpoints. Whole-QEMU CPU
+was 24.70% of one CPU over 30.000749 seconds; IRQ/command/event deltas were zero.
+This single integration check is separate from the matched comparison: main's
+other kernel/userspace changes cannot be attributed to Bluetooth.
+
+The integrated [kernel](integration-kernel-provenance.txt),
+[SDK](integration-sdk-provenance.txt), [userspace](integration-userspace-provenance.txt)
+and [ports](integration-ports-provenance.txt) manifests retain their exact inputs.
+
+| Integrated artifact | SHA-256 |
+| --- | --- |
+| ELF | `92eb075e57ac24691347c20b17b4bb0b2521b688125cc1963b5fb824ab8d68d0` |
+| ISO | `4a69f758bd3b2f2acd653c7f8e83b0754f2497c9e3ad42970bfc741ec6f1c3b1` |
+
+No runtime acquisition/connection/ACL payload or native qualification is added
+by this integration check. Its guest exited, with Fedora Bluetooth still
+inactive/disabled and the AX200 node unchanged. Integrated artifacts are retained
+in `/tmp/pyxis-bluetooth-runtime-validation/ca4d0f6`.
 
 ## Recoverable handoff
 
