@@ -121,6 +121,7 @@ bool readiness_service(struct bsp_request **active_list)
             request->caller);
         break;
       case OBJECT_POINTER:
+      case OBJECT_TERMINAL_POINTER:
         interest->ready = pointer_ready((struct pointer_object *)interest->object,
             request->caller);
         break;

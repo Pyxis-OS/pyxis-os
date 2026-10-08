@@ -90,7 +90,7 @@ static enum call_status interest_authority(const struct kernel_object *object,
       return CALL_DENIED;
     }
     required = KEYBOARD_RIGHT_INPUT;
-  } else if (object->type == OBJECT_POINTER) {
+  } else if (object->type == OBJECT_POINTER || object->type == OBJECT_TERMINAL_POINTER) {
     if (events != WAIT_READABLE) {
       return CALL_BAD_REQUEST;
     }
@@ -98,7 +98,8 @@ static enum call_status interest_authority(const struct kernel_object *object,
     if (pointer->space != caller->space || !pointer_owned(pointer, caller)) {
       return CALL_DENIED;
     }
-    required = POINTER_RIGHT_INPUT;
+    required = object->type == OBJECT_POINTER ? POINTER_RIGHT_INPUT :
+        TERMINAL_POINTER_RIGHT_CONTROL;
   } else if (object->type == OBJECT_PROCESS_CONTROL) {
     if (events != WAIT_COMPLETE) {
       return CALL_BAD_REQUEST;

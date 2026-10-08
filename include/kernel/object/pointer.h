@@ -2,6 +2,7 @@
 #define KERNEL_OBJECT_POINTER_H
 
 #include <abi/pointer.h>
+#include <abi/terminal_pointer.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 #include <kernel/service/request.h>
@@ -27,6 +28,7 @@ struct pointer_object {
   uint32_t accepted;
   struct pointer_image *image; /* BSP-owned immutable image, one reference. */
   bool hidden;
+  uint64_t view_identity; /* Terminal only; BSP-owned, advanced before view changes. */
 };
 
 /* Internal image staging never passes a caller's private pointer to BSP. */
@@ -45,6 +47,8 @@ struct pointer_request {
   enum call_status result;
   union {
     struct pointer_geometry geometry;
+    struct terminal_pointer_geometry terminal_geometry;
+    struct terminal_pointer_view_request view;
     struct pointer_image_request image;
     struct pointer_warp_request warp;
     uint64_t visible;
@@ -55,6 +59,11 @@ struct pointer_request {
 
 /* BSP/IF=0. Space owns initial reference. Queue lock precedes task queue lock. */
 struct pointer_object *pointer_create(struct space *space);
+struct pointer_object *terminal_pointer_create(struct space *space);
+static inline bool pointer_is_terminal(const struct pointer_object *pointer)
+{
+  return pointer->object.type == OBJECT_TERMINAL_POINTER;
+}
 void pointer_process_exit(struct process *process);
 void pointer_request_execute(struct pointer_request *request);
 void pointer_end_session(struct pointer_object *pointer);
