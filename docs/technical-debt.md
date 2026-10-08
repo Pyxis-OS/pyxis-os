@@ -520,7 +520,8 @@ Bochs and VirtIO displays may close the milestone without a native run. This
 records an accepted qualification limit, not a completed native check.
 
 The consequence is that PS/2 touchpad/TrackPoint routing, held-button behavior,
-lock escape/relock, and cursor composition/cost on the ThinkPad boot framebuffer
+lock escape/relock, local selection/mux wheel behavior, and cursor composition/cost
+on the ThinkPad boot framebuffer
 remain unqualified on physical hardware even after successful QEMU checks.
 Nested-VM results do not establish native input latency or display performance.
 

@@ -1,6 +1,6 @@
 # A system pointer
 
-Status: **tasks 1 and 2 merged; task 3 authorized to Codex alpha, 2026-10-08.**
+Status: **tasks 1 and 2 merged; task 3 delivered for review by Codex alpha, 2026-10-08.**
 [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545),
 [userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164) and
 [ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)/
@@ -12,6 +12,10 @@ It includes local TTY retention/selection, trusted mux terminal control,
 terminal spatial readiness, mux hit-testing/selection/wheel history and the
 owner's addition of graphics pointer subscription readiness through `wait_many`.
 The SDL blocking-event adapter fix remains separately assigned to beta.
+Task 3 is delivered in #550 with published [userland #166](https://git.internal/PyxisOS/pyxis-userland/pulls/166)
+`91cc6c7`; merge that dependency before the parent.
+[Task 3 qualification](../development/system-pointer-qualification.md#task-3-qualification)
+records baseline, input/overlay/capture/wait checks and source-only limits.
 Tasks 4 and 5 still require separate authorization.
 
 The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
@@ -280,9 +284,8 @@ a surface returns. Cursor images remain saved with their owning surfaces.
 Provide a typed terminal spatial queue separate from stdin and from the graphics
 pointer subscription. Mux must wait on its readability together with its existing
 outer-input/pane-output/lifecycle interests, rather than poll. Its current maximum
-is 17 of the native 32 interests, so one additional interest fits. The existing
-pointer object has no wait readiness support; adding the appropriate native
-wake path is real work, not an assumed feature. Preserve bounded queue/reset
+is 17 of the native 32 interests, so one additional interest fits. Both graphics subscriptions and terminal spatial queues now have native
+READABLE readiness, implemented in task 3 through the existing worker. Preserve bounded queue/reset
 semantics: coalesce positions only within the same surface/geometry/button state,
 retain the latest position, accumulate wheel counts, and reset on lost transitions.
 
@@ -550,7 +553,7 @@ Proposal review/merge does not authorize tasks 4 or 5.
   published userland and Quake/SDL2 changes; the
   [qualification report](../development/system-pointer-qualification.md#task-2-and-joint-integration)
   records QEMU input/cursor/warp/capture checks and source-only limits.
-- [ ] **3. Terminal selection and mux wheel.** Add local TTY text retention and
+- [x] **3. Terminal selection and mux wheel (delivered for review).** Add local TTY text retention and
   selection overlay. Give trusted mux startup the accepted
   terminal-controller grant and implement its typed spatial queue and native wait
   readiness here, where mux consumes them; make the graphics pointer subscription
@@ -559,6 +562,10 @@ Proposal review/merge does not authorize tasks 4 or 5.
   browsing without interfering with pane games. Qualify equal/BSP, focused-only
   clipping, changing output, history eviction, hidden graphics and controller exit.
   Record the owned-text handoff direction; do not build or fake the clipboard.
+  Delivered with native graphics/terminal readiness in #550 and userland #166;
+  [qualification](../development/system-pointer-qualification.md#task-3-qualification)
+  distinguishes interactive checks from source review. This is task delivery,
+  not a merge or milestone closure.
 - [ ] **4. VirtIO hardware cursor.** Add cursor resource/queue ownership and uploads,
   image/hotspot changes, lock hiding and capture-only software composition.
   Qualify ordinary/captured pointer appearance, resize, focus and teardown;

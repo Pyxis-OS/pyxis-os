@@ -19,10 +19,11 @@ deltas zero, for example when a wheel step ends.
 The presentation task drains these events into one kernel-owned physical pointer
 position and routes ordinary input to the shown surface. Graphics owners use
 [the pointer session](#userspace-pointer-sessions); navigation and local terminals
-retain kernel cursor defaults. Tasks 1 and 2 integrate ordinary input, relative
-lock and migrated Quake/SDL consumers. Interactive QEMU evidence, source-only
+use the kernel handler or an independently acquired terminal controller. Tasks
+1–3 integrate ordinary/relative graphics input, local/mux selection and native
+spatial readiness. Interactive QEMU evidence, source-only
 limits and the exact-revision CI location are in the
-[qualification report](../development/system-pointer-qualification.md#task-2-and-joint-integration).
+[qualification report](../development/system-pointer-qualification.md#task-3-qualification).
 
 ## Controller and setup
 
@@ -83,7 +84,7 @@ From QEMU's monitor (Ctrl-a c on the serial terminal), `mouse_move 10 -5`
 moves right and up, `mouse_move 0 0 1` is one wheel step away from the user,
 and `mouse_button 1`, `2` and `4` press left, right and middle (`0` releases).
 Under KVM, a hardware breakpoint on the instruction after `mouse_read_event()`
-returns in `handle_pointer_input()`, conditioned on a true result, can print
+returns in `space_pointer_sync_input()`, conditioned on a true result, can print
 each event. A hardware breakpoint set before boot can stop inside setup.
 
 ## Userspace pointer sessions
@@ -102,8 +103,14 @@ owner exit end the subscription and remove its image and visibility preference.
 Keyboard ownership remains independent. READ blocks for one 56-byte event, or
 returns `CALL_TIMED_OUT` for an empty `POINTER_READ_POLL` read. Libpyxis exposes
 acquire/read/release, geometry, image, visibility, warp and lock/state helpers in
-`<pointer.h>`. There is no cross-session wait; applications reading keyboard
-and pointer input poll or block on one session.
+`<pointer.h>`. An acquired subscription supports `wait_many` READABLE with INPUT
+authority in its own space, together with keyboard, display, terminal and other
+native interests. Queued state/reset events remain readable while unfocused.
+Ownership loss reports ERROR; waiting retains storage without owning a session.
+Readiness is advisory and consumes nothing. `mousetest` uses pointer/keyboard
+READABLE and display RESIZED while retaining its existing UI deadline. The SDL
+and Quake adapters still have their existing polling/event-loop ordering; SDL
+blocking-event integration is separately assigned.
 
 ### Position, focus and dragging
 
@@ -120,7 +127,9 @@ Focus means that this space's graphics layer is selected, independently of
 keyboard capture and execution. Only the top-left intersection of its mapping
 and current destination receives ordinary input. Exposed margins and navigation
 receive no program input and use the kernel arrow; local terminal content uses
-the kernel terminal cursor, except the log space, which uses the arrow. Selecting
+the kernel terminal cursor, including Caelum's selectable log. An acquired
+terminal controller supplies its own cursor image/visibility for that terminal;
+its preference never changes a shown graphics cursor. Selecting
 the terminal retains the graphics subscription while publishing focus loss.
 Switching spaces or layers clears queued input and accepted buttons and reports
 `POINTER_FOCUS_LOST` or `POINTER_FOCUS_GAINED`. Each event records focus in
@@ -253,3 +262,51 @@ clears SDL relative mode and accumulated motion without a synthetic warp or an
 automatic relock. Window cleanup releases pointer input before graphics. The
 normal image build includes these consumers; runtime qualification and CI are
 tracked in the [qualification report](../development/system-pointer-qualification.md).
+
+## Terminal control and selection
+
+The separate [terminal pointer protocol](../../include/abi/terminal_pointer.h)
+controls one space's local outer terminal. SPACE_FACTORY CREATE's explicit
+`SPACE_CREATE_TERMINAL_CONTROL` opt-in mints a CONTROL grant for the trusted
+first init, named `terminal_pointer`. Boot init sets it only for configured mux
+startup; trusted shell/session successors carry it to mux. Ordinary shells,
+pane children and remote clients do not receive it. Console READ/WRITE and
+terminal-session creation rights confer no control. The native protocol is
+separate from graphics INPUT; both owners can coexist in a space.
+
+ACQUIRE is process-owned and exclusive, with repeated acquisition returning
+BUSY. It owns the terminal view even without a live mouse, allowing keyboard
+mux startup; cursor visibility still follows source availability. Handle closure
+or copies do not release/transfer ownership. RELEASE or owner exit clears its
+queue, drag and cursor preference and restores kernel terminal handling. It
+confers no graphics lock/warp/acquisition. The common BGRA8 image/default/show
+operations retain the graphics image bounds and copy/lifetime guarantees.
+
+READ returns one shared 56-byte spatial record, blocking or with POLL. The
+separate bounded 64-record queue has the same coalescing/reset rules and native
+READABLE readiness as graphics. Terminal GEOMETRY also supplies grid columns,
+rows and pixel cell dimensions. Its mapping identity names the outer view,
+independent of a graphics mapping. Physical resize advances it and discards old
+coordinates. VIEW_CHANGED validates generation/view identity, applies pending
+PS/2 reports to the old view, then advances identity and clears queued input,
+accepted buttons and anchored drag. A held button needs release/fresh press.
+Stale identity returns BUSY without advancing the view. Mux uses this boundary
+before replacing layouts or history views; the kernel never infers pane bounds
+from escape output.
+
+Without a controller, including on Caelum, the kernel retains visible 8-bit
+glyph cells alongside each local TTY raster and handles a linear inclusive-cell
+left selection. Complete-cell margins cannot start one; an anchored endpoint
+clamps at grid edges. Release finalizes selection. Selected-character mutation
+invalidates it; unrelated output and same-glyph/color changes preserve it.
+Scroll and committed resize clear it. Focus/layer/stream reset cancels active
+drag; unchanged completed selection survives hiding. Plain local wheel has no
+scrollback effect. Controller-owned terminals bypass this kernel selection.
+
+Selected glyphs are redrawn in contrasting colours into the presenter's existing
+row staging buffer, followed by the block caret and system pointer. Backing text
+and pixels remain unmodified by highlighting; capture receives final displayed
+spans. Glyph allocation and transactional cropped/no-reflow resize are BSP-owned,
+with publication under the output lock. This is visible storage, not kernel
+scrollback, Unicode decoding or a clipboard. Selection has no Copy/publication
+operation; a later clipboard task must freeze owned text and settle encoding.

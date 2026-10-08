@@ -375,3 +375,161 @@ GDB processes were stopped before the baseline was recorded.
 | Mux opt-in initrd | `635d60070eeeb29fbc9a5f8eef9e1db8fa50f32c4fe4a005dea547a932227e95` |
 | Mux opt-in ISO, boot framebuffer | `12eed52a9438779b77c7a6283a1a782d564530f04d9bab43cfd6c238c415674a` |
 | Mux opt-in ISO, 1280x800 modeset | `b2a8784bb7c1a4d66539524f1cb111e1052159f7ab8ba0fed75650ac0e741622` |
+
+## Task 3 qualification
+
+Task 3's three defaults were accepted on 2026-10-08 before implementation. The
+pre-code baseline above is main `abbeded`. Core changes are `75f7afd` (graphics
+readiness), `b013005` (local retained glyphs/selection) and `f0e52d7` (terminal
+controller/routing/overlay). The parent consumes published userland
+[PR #166](https://git.internal/PyxisOS/pyxis-userland/pulls/166), final pin
+`91cc6c7bd6066800d7fd28d03b7cfbe1f872313c`; merge userland #166 before
+[Pyxis #550](https://git.internal/PyxisOS/pyxis-os/pulls/550). Ports remain
+`a642f07`; SDL/Quake event-loop changes and the hardware cursor are later work.
+
+The complete ordinary `make -j16 image` passed with the existing LLVM builder,
+including SDK, all userland and existing Quake/SDL ports. The later userland
+follow-ups were rebuilt through the same ordinary image path. No compiler
+rebuild, upstream import, tests, self-tests, fault injection or new CI/benchmark
+infrastructure was added. Final submitted-head build/filesystem checks are
+tracked on #550; userland has no existing action tasks, so no independent CI
+success is inferred from its unparseable empty status response.
+
+### Interactive configuration and local selection
+
+The main functional run used QEMU 10.2.2, Q35, nested KVM, CPU max, four CPUs,
+512 MiB, modern VirtIO GPU/RNG/SCSI CD-ROM, matching OVMF with fresh variables,
+GTK/X11 and PS/2 input. A VirtIO NIC forwarded host 127.0.0.1:24568 to guest
+2323 only for the existing remote screenshot/download path. Local key/mouse
+reports were entered through HMP; GDB used the matching saved ELF and read-only
+observations, never synthetic calls or guest-memory writes. The final matrix
+runs removed the NIC and used headless 1280x800, as in the baseline.
+
+Caelum and the ordinary Development TTY showed linear selection. Read-only GDB
+observed a completed Caelum selection at indices 81–91 on its 80x28 grid.
+Presented selected pixels used the selection background while the corresponding
+TTY backing pixel retained its ordinary background. The glyph array is 7,680
+bytes per TTY at the 1280x800 profile, not scrollback or another framebuffer.
+
+An ordinary `echo ok` preserved selection on older untouched text. A native Lua
+write moved to a selected cell, repainted the same glyph with a different SGR
+colour, then returned the cursor to an unselected row: selection remained valid.
+Replacing the selected glyph with Y invalidated it. Forty lines of ordinary Lua
+output scrolled the TTY and cleared a newly completed selection. An actual host
+window resize committed 800x573, TTY generation two and 100x33 cells, clearing
+Caelum selection. A fresh press in the unused bottom pixel margin at y=568 did
+not start selection. A later 1280x800 resize committed generation three.
+Boot-framebuffer and Bochs runs also confirmed local Caelum overlay selection;
+Bochs additionally exercised mux selection. No native ThinkPad claim is made.
+
+### Native graphics readiness
+
+`mousetest` ran with a sleeping three-interest native wait: POINTER READABLE,
+KEYBOARD READABLE and DISPLAY RESIZED, whose caller was the acquired pointer
+owner. A conditional read-only breakpoint observed `readiness_complete()` with
+CALL_OK, pointer ready mask 1 and the same caller/owner after ordinary input.
+Showing its terminal layer left the graphics subscription alive and unfocused;
+Ctrl+C completed cleanup, leaving graphics and pointer owners null. Its existing
+10 ms UI deadline remains; the new readiness does not claim an SDL blocking
+wait fix or migrate Quake's loop.
+
+### Mux routing, history and lifecycle
+
+The optional mux image changed only the staged archive's existing
+`multiplexer = true` configuration, as in the baseline. Trusted init/script
+SHELL_SESSION/session/mux handoff succeeded: GDB observed terminal control owned
+by mux with graphics pointer ownership null and a sleeping four-interest wait
+for one pane. Eight panes in equal layout used 18 interests, including the
+separate OBJECT_TERMINAL_POINTER queue, within 32.
+
+Manual Lua output of 1,100 numbered lines filled history to 1,024 rows. A content
+drag highlighted retained cells. One away detent showed `Scrollback 3/1024` and
+moved the top visible line back by three; the opposite detent returned to live,
+and a subsequent `echo ok` reached the shell. Wheel over the left pane browsed
+it while the right pane retained the focused heading. Heading/content clicks
+focused panes; an anchored drag crossed another pane and navigation without
+switching spaces or selecting those regions. Controller-owned output never
+activated kernel local-TTY selection.
+
+BSP/equal layout changes and actual physical resizes reset the view identity.
+An eight-pane layout shrank to 400x212, generation four, showing only its focused
+pane. Selection clamped within that visible content; hidden pane rectangles,
+headings/dividers/footer remained outside its selected range. Closing all eight
+panes ended mux and left controller owner, queue and image null/zero.
+
+Quake launched from a pane acquired graphics pointer ownership and initial lock
+while mux kept its separate terminal owner, unfocused. Super+Down revoked lock
+and focused the terminal controller while Quake's graphics/pointer owners
+remained alive. Terminal motion/wheel and later graphics return worked. After
+Ctrl+C, graphics ownership ended while the mux controller stayed acquired.
+
+The detailed GTK consumer/capture checks used userland `27f8b58`. Final dependency
+`da7aaa0` corrected cancellation of unfinished selection on output-driven view
+changes; this was exercised in the final headless VirtIO image. A native Lua
+program delayed then printed three lines while a mid-view drag remained held.
+The selected rows would still fit after scrolling: highlighted content pixels
+fell from 324 to zero, controller accepted buttons cleared to zero while the
+physical left snapshot stayed one, and release was required before a new press.
+Completed selections are preserved through unrelated unchanged visible output.
+
+A separate native delayed-output run selected the oldest visible history row at
+`1024/1024`, then printed another 1,100 lines. The old row was evicted; highlighting
+vanished even though repeated digit text appeared in replacement rows. After the
+final pane closed, GDB observed controller owner null and a new local kernel
+selection valid at indices 2084–2086, confirming fallback handling.
+
+The last `91cc6c7` correction refuses fresh selection in blank padding beyond a
+retained history row's original width while keeping anchored-edge clamping.
+The complete default image build passed. In a fresh GTK VirtIO boot, a pane
+with old narrow history grew from the 640x480 to the 800x573 physical view.
+A fresh click at x=360,y=50, inside the grown pane but beyond that historical
+row's retained width, produced zero selection-colour pixels in the first content
+row. The pane still focused; no retained edge cell was selected instead.
+This correction does not change earlier full-width selection/capture paths.
+
+### Capture and matched presentation samples
+
+The existing Remote CAPTURE grant saved native PNGs through `screenshot`, then
+`xfer send` and explicit host download confirmation. Both mux selection and local
+Caelum overlay captures decoded to 1280x800 RGB and matched separate stable HMP
+PPM dumps exactly (no differing pixels), including their visible cursors/caret.
+The screenshot, game and raw image artifacts stay in the local build directory.
+
+Four idle single-pane mux samples per backend repeated the baseline's no-NIC
+1280x800 configuration and direct HPET entry/finish method. These final matrix
+images use userland `da7aaa0`; the later padding-only hit-test follow-up does not
+change idle presentation.
+
+| Backend | Samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Boot framebuffer | 0.730090, 0.944420, 0.663710, 0.631010 | 0.696900 | 0.631010–0.944420 |
+| Bochs | 0.862700, 1.541550, 0.986740, 0.719170 | 0.924720 | 0.719170–1.541550 |
+| VirtIO GPU | 1.593140, 1.716030, 2.060900, 1.068220 | 1.654585 | 1.068220–2.060900 |
+
+All ranges overlap their baselines. These small shared-host nested-QEMU samples
+establish neither isolated selection overhead nor native performance. Hardware
+cursor cost remains task 4, and milestone closure remains task 5.
+
+Saved final-matrix artifacts with userland `da7aaa0`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Kernel ELF | `8bafcee0d26c6f4a1677a92924f772273d666dadaa88437452c5d80b215a5129` |
+| Default initrd | `90c850fb923809701e51809c31f4cf032bc079e88cdcef267a5f5db49224e2ad` |
+| Default ISO | `849d049a1262356d3d2c9a563886ccb8a02d21a0b18a0b643c3f23d6c3f7d0ba` |
+| Mux opt-in initrd | `47f5e11c8b59fce4c986682215b76a71630ac8632617addbdeff5b27cce2e390` |
+| Mux boot-framebuffer ISO | `5cf6ba1ae92427e29227ab1104fa851b076b8826104433392fab677e550954c0` |
+| Mux 1280x800 modeset ISO | `cf19d6077d4b0219c9278694b5050377821bac44177e664ae04920967fe132ca` |
+
+### Limits
+
+Stale-view refusal, repeated/foreign acquisition, copied/closed grant lifetime,
+controller fault cleanup, queue overflow, physical stream loss, panic/output-lock
+refusal and resize allocation failure are source-reviewed without fault
+injection. Terminal program image/hide calls share the qualified graphics image
+lease/copy path but have no separate interactive image-client check. Remote mux
+keeps its keyboard path; no remote pointer transport was built. Native PS/2
+selection/wheel/input timing remains in the accepted ThinkPad debt. No clipboard
+publication/paste, USB HID or second input source is implemented. Bluetooth's
+accepted conditional reset/revoke predicates remain documented future integration.
+All task-owned QEMU, GDB and remote-client processes are stopped after validation.
