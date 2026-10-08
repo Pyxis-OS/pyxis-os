@@ -2,7 +2,7 @@
 
 `screenshot PATH` saves the currently shown local screen as a non-interlaced
 8-bit RGB PNG. Success is quiet. The image includes navigation, the selected
-space's shown layer, clipping/background margins and the visible software
+space's shown layer, clipping/background margins and the visible system
 cursor. It uses the independent [CAPTURE resource](../interfaces/screen-capture.md),
 which grants no additional path access. Missing CAPTURE fails before opening
 the output path; DRAW alone is insufficient.
@@ -87,6 +87,14 @@ atomic application frame, vblank or exact scanout timing is promised. A panic or
 stuck presenter/scheduler cannot complete capture. Capture requests do not
 retry BUSY, allocation refusal or backend failure automatically.
 
+Boot and Bochs capture the software pointer. VirtIO scanout omits the pointer;
+capture blends the same leased hardware-pointer image into already-teed
+background bytes and publishes only after successful normal presentation and
+matching confirmed cursor state. Hidden and locked pointers are omitted.
+QEMU's response-less cursor completion confirms consumption, without an
+independent acknowledgment of application or host GUI placement. See
+[frontend limits](../development/qemu.md#hardware-pointer-frontend).
+
 ## Qualification
 
 The [qualification report](../development/screenshot-qualification.md) records
@@ -94,6 +102,12 @@ host-decoded PNGs, pixel comparisons with QEMU monitor output, shown-layer and
 resize checks, snapshot retention, and presenter/encoder measurements. The
 explicit download path includes host confirmation, SHA-256 verification and
 refusal to overwrite an existing host name.
+
+[Task 4 hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+checks cursor-inclusive capture against cursor-free QEMU scanout plus exactly
+one RGBA cursor image, including a program cursor with fractional alpha. QEMU
+monitor screendumps omit the host hardware cursor and alone are not the expected
+cursor-inclusive PNG.
 
 Manual output checks established guest replacement, missing-CAPTURE refusal
 preserving an existing destination, parent-authority refusal before staging,

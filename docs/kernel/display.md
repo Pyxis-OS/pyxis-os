@@ -24,10 +24,11 @@ The single global relative lock forces effective visibility off while retaining
 the surface's image and saved show preference. Unlock restores that preference;
 hidden and locked pointers add no software overlay to scanout or capture.
 
-[The compositor](../../kernel/display/pointer.c) overlays the pointer after
-navigation, the chosen surface, local selection highlighting and the TTY block
-caret. Selected glyphs use the existing row scratch buffer; text/pixel backing
-stays unmodified by that kernel overlay. Mux highlights its own rendered cells. It subtracts the hotspot
+[The compositor](../../kernel/display/pointer.c) overlays the pointer for boot
+and Bochs after navigation, the chosen surface, local selection highlighting and
+the TTY block caret. Selected glyphs use the existing row scratch buffer;
+text/pixel backing stays unmodified by that kernel overlay. Mux highlights its
+own rendered cells. The compositor subtracts the hotspot
 using signed coordinates and clips against physical geometry. Only intersecting
 native spans are staged, at most 64 pixels in 256 bytes of scratch. Straight
 BGRA alpha is blended into native RGB channel shifts, preserving transparent
@@ -35,15 +36,14 @@ background and unused pixel bits. Device row padding passes through unchanged.
 Final spans enter the existing capture tee once; application, TTY and navigation
 backing remain cursor-free.
 
-Boot, Bochs and VirtIO use this software path with the existing full repaint and
+Boot and Bochs use this software path with the existing full repaint and
 approximately 60 Hz cadence. The next repaint restores the old pointer location;
 mouse packets add no frame submission. There is no additional full-screen
 buffer. A 64x64 image bounds blending to 4,096 pixels per frame; measured cost
 and runtime coverage are recorded separately in
 [system pointer qualification](../development/system-pointer-qualification.md).
-Tasks 1 and 2 jointly implement ordinary presentation and relative-lock hiding
-in the current draft. Runtime/CI qualification remains pending in that report.
-VirtIO continues to use software composition; its hardware cursor is future work.
+VirtIO uses the hardware pointer described below and this software blend only
+for an active capture.
 
 ## Screen capture
 
@@ -52,9 +52,19 @@ observes the presenter's shown layer, navigation, margins, visible system pointe
 and TTY block caret. A single admitted request selects layout/generation at the
 next frame boundary. The presenter tees visible spans into tightly packed native 32-bit
 backing, then copies those same staged bytes to the driver, preserving physical
-row-padding handling. It publishes an immutable READ-only FILE only after normal
-frame submission succeeds. This preserves the existing single-buffer tearing
-semantics; it adds no atomic application frame or vblank guarantee.
+row-padding handling. Boot and Bochs tee already blended pointer spans. VirtIO
+tees cursor-free underlying spans once, then reads those already-teed background
+bytes and blends the same leased pointer snapshot into capture storage only.
+The overlay never returns to scanout and uses the same bounded row scratch;
+without active capture, VirtIO performs no software pointer blend.
+
+An immutable READ-only FILE is published only after normal frame submission
+succeeds. VirtIO also requires confirmed cursor state matching the snapshot:
+successful fenced image preparation when needed and a matching bounded cursor
+used completion. An unchanged state reuses its last confirmed completion rather
+than submitting a redundant request. Failure publishes no FILE. This preserves
+the existing single-buffer tearing semantics; it adds no atomic application
+frame, independently acknowledged cursor application or vblank guarantee.
 
 Admission, allocation and FILE publication are BSP/IF=0 work outside the output
 lock; copying and device waits remain on the sole IF=1 presenter. Deferred caller
@@ -94,8 +104,8 @@ The sole BSP presenter owns runtime queue use with IF=1. It creates a 2D
 resource, attaches page-list backing, selects one enabled scanout, then
 transfers and flushes full frames through fenced commands. Interrupt entry
 records activity and wakes the presenter; it performs no queue or allocation
-work. Command and reset waits are bounded. There is no hardware cursor, vblank,
-3D acceleration or recovery after terminal driver failure.
+work. Command and reset waits are bounded. There is no vblank, 3D acceleration or
+recovery after terminal driver failure.
 
 DISPLAY events are acknowledged before querying geometry and rechecked after
 the transaction. Changes coalesce to the latest enabled dimensions of the
@@ -104,11 +114,58 @@ valid geometry. Failed preparation retries on a fresh host event; a space
 registry change during preparation instead defers a fresh attempt.
 
 Only confirmed fenced detach and resource unreference permit GPU backing
-reclamation. Unknown device ownership retains backing, control queues and PCI
+reclamation. Unknown device ownership retains backing, both queues and PCI
 resources until reboot and stops presentation. Even successful reset does not
 establish the required teardown contract. Failure never tries a separate
 firmware VGA target. Graphics acquisition, presentation, replacement and size
 queries become unavailable; release still works.
+
+### Hardware pointer
+
+The driver prepares a separate cursor queue and command DMA storage before AP
+startup, alongside two fixed 64x64 RGBA8 resources with 16 KiB backing each.
+A 16 KiB CPU cache retains source image bytes rather than an image address that
+could expire with the pointer lease. Runtime use of both queues remains sole
+BSP presenter work with IF=1, one command outstanding at a time; interrupt entry
+only records activity and wakes that presenter. No runtime allocation is added
+for cursor moves or image changes.
+
+After successful ordinary frame submission, image, hotspot, visibility or
+edge-clipping changes repack accepted straight BGRA bytes into the inactive RGBA
+resource, transparently pad unused pixels and transfer it with a fenced control
+command. UPDATE_CURSOR then selects that resource and hotspot. Position-only
+changes use MOVE_CURSOR without another upload; unchanged confirmed state adds
+no cursor request. Both wait for the matching used descriptor with a bounded
+deadline before the cache advances or capture can succeed. The wire position
+is the physical hotspot; signed clipping masks image pixels outside committed
+guest geometry without subtracting the hotspot from that position. Cursor IDs
+2 and 3 remain fixed while resize scanout IDs start at 4.
+
+QEMU 10.2.2 returns cursor descriptors with zero written bytes and no response
+or fence, even for some refused commands. The driver checks local prerequisites,
+successful fenced uploads and normal frame submission, then validates matching
+zero-length used completion. This confirms buffer consumption without an
+independent acknowledgment of cursor application or visible scanout timing.
+Timeout, malformed completion, failed prerequisite or device-status change stops
+presentation and prevents matching capture publication.
+
+Hidden and locked states install a transparent resource because GTK ignores
+QEMU's separate cursor-visibility signal. The two cursor resources and DMA
+storage remain until reboot; owner exit releases its immutable image reference,
+not those resources. Terminal failure retains device storage and adds no software
+fallback. Panic remains serial-only without cursor, control, reset or allocation
+work.
+
+Normal VirtIO scanout remains cursor-free. Full-frame copies, transfers and
+approximately 60 Hz cadence remain unchanged; mouse reports add no independent
+frame submission. This does not reduce the full-frame pixel budget. Matched
+nested-KVM warm MOVE frames measured 5.263–6.614 ms against the software
+baseline's 3.659–4.388 ms; one cursor wait measured 1.69 ms. Warm moves added no
+allocation or control upload. These elapsed presenter measurements include
+device waits and debugger/host variation, not native performance. See
+[task 4 hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+for configuration, samples, program cursors, clipping, capture and resize checks,
+and [QEMU frontend limits](../development/qemu.md#hardware-pointer-frontend).
 
 ## Bochs
 
