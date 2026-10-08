@@ -207,8 +207,9 @@ targeted re-review found no remaining findings. Address-free debugger expression
 are prepared in `/tmp/pyxis-bluetooth-task5/scan-gdb-commands.txt`.
 
 No scan has run: the mouse's physical pairing-mode readiness is still pending.
-The paused QEMU instance was closed, and the ordinary image is being rebuilt
-after returning to the report branch. Next: obtain the owner's "ready" while the
+The paused QEMU instance was closed; the ordinary image rebuilt without warnings
+and has no scan-probe symbols. Host `btusb` rebound on both interfaces; Bluetooth
+remains inactive/disabled. Next: obtain the owner's "ready" while the
 mouse LED blinks rapidly, boot `/tmp/pyxis-bluetooth-task5/probe.iso` with the
 accepted configuration, run the 30-second scan, collect only redacted evidence,
 restore the ordinary image and deliver the scan-result PR. Do not begin the final
