@@ -192,10 +192,8 @@ void pointer_request_execute(struct pointer_request *request)
       reset_buttons(pointer);
       queue_event(pointer, pointer_position_event(pointer,
           pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
-      if (pointer_surface_hovered(pointer)) {
-        queue_event(pointer, pointer_position_event(pointer, POINTER_ENTER));
-      }
       unlock_pointer(pointer);
+      pointer_subscription_started(pointer);
     }
   } else if (pointer->owner != process) {
     status = CALL_DENIED;

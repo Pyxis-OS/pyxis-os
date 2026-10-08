@@ -118,6 +118,14 @@ window composition, acceleration settings, remote pointer transport and general
 presentation damage tracking are outside this milestone. Local mux gets pointer
 input; remote mux still has its existing keyboard controls.
 
+## Devices
+
+This milestone uses the existing [PS/2 mouse](../devices/mouse.md), including
+the ThinkPad's relative-mode touchpad and TrackPoint. Their firmware stream has
+no wheel or multi-finger scrolling. USB HID mice remain a separate track after
+the [interrupt-IN foundation](../devices/usb-interrupt-in.md); neither USB HID
+nor the [Bluetooth investigation](bluetooth.md) is part of task 1.
+
 ## Cursor images and authority
 
 **Accepted image contract, 2026-10-08:** tightly packed **BGRA8 bytes with

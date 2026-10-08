@@ -575,7 +575,7 @@ static void draw_battery(size_t x, uint8_t percent)
   }
 }
 
-static void draw_spaces_nav()
+static struct nav_layout draw_spaces_nav(void)
 {
   uint64_t flags = cpu_save_interrupts();
   struct acpi_battery_status battery = acpi_battery_status();
@@ -585,10 +585,6 @@ static void draw_spaces_nav()
   struct nav_layout layout = nav_layout();
   /* A title change can shrink the visible count; keep the selection in view. */
   keep_selection_visible(&layout, space_index(active_space));
-  drawn_nav_layout = layout;
-  drawn_viewport_first = viewport_first;
-  drawn_nav_width = spaces_nav_fb->width;
-  drawn_nav_valid = true;
 
   fb_fill_rect(spaces_nav_fb, 0, 0, spaces_nav_fb->width, SPACES_NAV_HEIGHT,
       aardvark_scheme.palette[0]);
@@ -609,6 +605,7 @@ static void draw_spaces_nav()
     draw_tab(space, chevron_width + i * layout.tab_width, layout.tab_width);
     space = space->next;
   }
+  return layout;
 }
 
 /* Block cursor: the cell's background becomes the cursor color and its glyph
@@ -854,9 +851,12 @@ void space_present()
   const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
 
   screen_capture_begin(screen, caelum_space->tty->geometry_generation);
-  draw_spaces_nav();
+  struct nav_layout nav = draw_spaces_nav();
+  size_t nav_first = viewport_first;
+  size_t nav_width = spaces_nav_fb->width;
 
   if (!display_begin_frame()) {
+    drawn_nav_valid = false;
     screen_capture_finish(false);
     return;
   }
@@ -903,6 +903,14 @@ void space_present()
   }
 
   bool presented = display_end_frame();
+  flags = cpu_save_interrupts();
+  if (presented) {
+    drawn_nav_layout = nav;
+    drawn_viewport_first = nav_first;
+    drawn_nav_width = nav_width;
+  }
+  drawn_nav_valid = presented;
+  cpu_restore_interrupts(flags);
   if (frame) {
     flags = cpu_save_interrupts();
     display_frame_release(frame);

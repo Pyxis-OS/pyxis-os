@@ -1,4 +1,5 @@
 #include <kernel/display_capture.h>
+#include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
 #include <kernel/pointer_present.h>

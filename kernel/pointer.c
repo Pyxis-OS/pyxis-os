@@ -107,12 +107,6 @@ bool pointer_surface_focused(struct pointer_object *pointer)
   return pointer->space == space_pointer_active() && pointer->space->display->visible;
 }
 
-bool pointer_surface_hovered(struct pointer_object *pointer)
-{
-  struct pointer_destination target = hit_test();
-  return target.kind == DESTINATION_GRAPHICS && target.space == pointer->space;
-}
-
 struct pointer_geometry pointer_surface_geometry(struct pointer_object *pointer)
 {
   struct space *space = pointer->space;
@@ -138,6 +132,9 @@ struct pointer_event pointer_position_event(struct pointer_object *pointer, uint
 static void update_hover(struct pointer_destination target)
 {
   struct pointer_object *next = target.kind == DESTINATION_GRAPHICS ? target.space->pointer : NULL;
+  if (next && (!next->owner || !next->focused)) {
+    next = NULL;
+  }
   if (drag.space || next == hover) {
     return;
   }
@@ -148,6 +145,12 @@ static void update_hover(struct pointer_destination target)
   if (hover) {
     pointer_queue_state(hover, POINTER_ENTER);
   }
+}
+
+void pointer_subscription_started(struct pointer_object *pointer)
+{
+  KASSERT(arch_cpu_index() == 0 && pointer->owner);
+  update_hover(hit_test());
 }
 
 void pointer_subscription_ended(struct pointer_object *pointer)
@@ -311,7 +314,8 @@ enum call_status pointer_surface_warp(struct pointer_object *pointer,
       request->mapping_identity != geometry.mapping_identity) {
     return CALL_BUSY;
   }
-  if (!pointer_surface_focused(pointer) ||
+  if (!pointer_surface_focused(pointer) || consumed_buttons ||
+      (device_buttons & ~pointer->accepted) ||
       (drag.space && (drag.space != pointer->space || drag.kind != DESTINATION_GRAPHICS))) {
     return CALL_DENIED;
   }
