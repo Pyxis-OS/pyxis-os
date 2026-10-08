@@ -30,6 +30,8 @@
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
+#include <kernel/pointer.h>
+#include <kernel/pointer_present.h>
 #include <kernel/display_capture.h>
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
@@ -213,7 +215,7 @@ static struct space *space_alloc(const char *name, const char *title,
     panic("cannot allocate space keyboard");
   }
 
-  space->pointer = pointer_create(space, focused);
+  space->pointer = pointer_create(space);
   if (!space->pointer) {
     panic("cannot allocate space pointer");
   }
@@ -250,6 +252,7 @@ void space_init(void)
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(screen, screen->width, SPACES_NAV_HEIGHT);
   cursor_row_fb = fb_alloc(screen, screen->width, bizcat.height);
+  pointer_init();
 }
 
 bool space_name_valid(const char *name, size_t length)
@@ -364,6 +367,10 @@ struct nav_layout {
   size_t visible;
   size_t tab_width;
 };
+
+static struct nav_layout drawn_nav_layout;
+static size_t drawn_viewport_first, drawn_nav_width;
+static bool drawn_nav_valid;
 
 static struct nav_layout nav_layout(void)
 {
@@ -578,6 +585,10 @@ static void draw_spaces_nav()
   struct nav_layout layout = nav_layout();
   /* A title change can shrink the visible count; keep the selection in view. */
   keep_selection_visible(&layout, space_index(active_space));
+  drawn_nav_layout = layout;
+  drawn_viewport_first = viewport_first;
+  drawn_nav_width = spaces_nav_fb->width;
+  drawn_nav_valid = true;
 
   fb_fill_rect(spaces_nav_fb, 0, 0, spaces_nav_fb->width, SPACES_NAV_HEIGHT,
       aardvark_scheme.palette[0]);
@@ -777,6 +788,10 @@ static void resize_display(void)
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
   log_end(locked);
+  drawn_nav_valid = false;
+  for (struct space *space = caelum_space; space; space = space->next) {
+    pointer_geometry_changed(space);
+  }
   readiness_notify();
   cpu_restore_interrupts(flags);
 
@@ -800,12 +815,13 @@ static void resize_display(void)
 
 /* A session keeps its original extent and pitch. The destination alone changes;
  * fill exposed margins and copy the top-left intersection by each source row. */
-static void present_graphics(const struct framebuffer *source, uint32_t background)
+static void present_graphics(const struct framebuffer *source, uint32_t background,
+    const struct pointer_frame *pointer)
 {
   size_t height = screen->height - SPACES_NAV_HEIGHT;
   if (source->width == screen->width && source->height == height &&
       source->pitch == screen->pitch) {
-    screen_capture_copy(SPACES_NAV_HEIGHT * screen->pitch,
+    pointer_present_copy(screen, pointer, SPACES_NAV_HEIGHT * screen->pitch,
         (const void *)source->address, source->size);
     return;
   }
@@ -815,7 +831,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
   for (size_t y = 0; y < height; ++y) {
     if (y < source->height && columns == screen->width &&
         source->pitch >= screen->pitch) {
-      screen_capture_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
+      pointer_present_copy(screen, pointer, (SPACES_NAV_HEIGHT + y) * screen->pitch,
           (const void *)(source->address + y * source->pitch), screen->pitch);
       continue;
     }
@@ -825,7 +841,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
     } else if (y == source->height) {
       fb_fill_rect(cursor_row_fb, 0, 0, cursor_row_fb->width, 1, background);
     }
-    screen_capture_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
+    pointer_present_copy(screen, pointer, (SPACES_NAV_HEIGHT + y) * screen->pitch,
         (const void *)cursor_row_fb->address, screen->pitch);
   }
 }
@@ -844,12 +860,15 @@ void space_present()
     screen_capture_finish(false);
     return;
   }
-  screen_capture_copy(0, (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
-
-  struct space *space = active_space;
   uint64_t flags = cpu_save_interrupts();
+  struct space *space = active_space;
   struct display_frame *frame = display_snapshot(space->display);
+  struct pointer_frame pointer_snapshot;
+  pointer_frame_snapshot(&pointer_snapshot);
+  const struct pointer_frame *pointer = &pointer_snapshot;
   cpu_restore_interrupts(flags);
+  pointer_present_copy(screen, pointer, 0,
+      (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
   const struct framebuffer *source = frame ? &frame->fb : space->fb;
 
   /* Snapshot the cursor under the output lock; never keep it held while
@@ -866,20 +885,20 @@ void space_present()
 
   const uint8_t *pixels = (const uint8_t *)source->address;
   if (frame) {
-    present_graphics(source, background);
+    present_graphics(source, background, pointer);
   } else if (!visible) {
-    screen_capture_copy(dst_offset, pixels, source->size);
+    pointer_present_copy(screen, pointer, dst_offset, pixels, source->size);
   } else {
     /* Every screen write carries final pixels: rows above and below the
      * cursor go straight across, and the cursor row goes via cursor_row_fb. */
     size_t row_start = y * tty->font->height * source->pitch;
     size_t row_bytes = tty->font->height * source->pitch;
-    screen_capture_copy(dst_offset, pixels, row_start);
+    pointer_present_copy(screen, pointer, dst_offset, pixels, row_start);
     memcpy((void *)cursor_row_fb->address, pixels + row_start, row_bytes);
     draw_block_cursor(cursor_row_fb, x * tty->font->width, tty);
-    screen_capture_copy(dst_offset + row_start,
+    pointer_present_copy(screen, pointer, dst_offset + row_start,
         (const void *)cursor_row_fb->address, row_bytes);
-    screen_capture_copy(dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
+    pointer_present_copy(screen, pointer, dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
         source->size - row_start - row_bytes);
   }
 
@@ -890,6 +909,9 @@ void space_present()
     cpu_restore_interrupts(flags);
   }
   screen_capture_finish(presented);
+  flags = cpu_save_interrupts();
+  pointer_frame_release(&pointer_snapshot);
+  cpu_restore_interrupts(flags);
 }
 
 void space_display_changed(struct space *space, bool discard_input)
@@ -897,7 +919,7 @@ void space_display_changed(struct space *space, bool discard_input)
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   bool terminal_layer = space->display->presented && !space->display->visible;
   keyboard_set_layer(space->keyboard, terminal_layer, discard_input);
-  pointer_focus(space->pointer, space == active_space && !terminal_layer);
+  pointer_space_changed(space);
 }
 
 /* BSP only, preserves IF. Restores the selected space's chosen input layer. */
@@ -907,11 +929,11 @@ static void switch_space(struct space *next)
   uint64_t flags = cpu_save_interrupts();
   if (next != active_space) {
     keyboard_focus(active_space->keyboard, false);
-    pointer_focus(active_space->pointer, false);
+    struct space *previous = active_space;
     active_space = next;
     keyboard_focus(next->keyboard, true);
-    bool terminal_layer = next->display->presented && !next->display->visible;
-    pointer_focus(next->pointer, !terminal_layer);
+    pointer_space_changed(previous);
+    pointer_space_changed(next);
   }
   cpu_restore_interrupts(flags);
 }
@@ -987,29 +1009,48 @@ static void handle_space_input(void)
   }
 }
 
+struct space *space_pointer_active(void)
+{
+  return active_space;
+}
+
+size_t space_pointer_content_y(void)
+{
+  return SPACES_NAV_HEIGHT;
+}
+
+struct space *space_pointer_tab(int64_t x, int64_t y)
+{
+  if (!drawn_nav_valid || x < 0 || y < 0 || y >= SPACES_NAV_HEIGHT ||
+      (uint64_t)x >= drawn_nav_width || !drawn_nav_layout.tab_width) {
+    return NULL;
+  }
+  size_t first_x = SPACES_NAV_CHEVRON_CELLS * bizcat.width;
+  if ((uint64_t)x < first_x) {
+    return NULL;
+  }
+  size_t index = ((uint64_t)x - first_x) / drawn_nav_layout.tab_width;
+  if (index >= drawn_nav_layout.visible) {
+    return NULL;
+  }
+  struct space *space = caelum_space;
+  for (size_t i = 0; i < drawn_viewport_first + index; ++i) {
+    space = space->next;
+  }
+  return space;
+}
+
+void space_pointer_select(struct space *space)
+{
+  switch_space(space);
+}
+
 static void handle_pointer_input(void)
 {
-  static uint32_t device_buttons;
   struct mouse_event event;
-
   while (mouse_read_event(&event)) {
     uint64_t flags = cpu_save_interrupts();
-    if (event.reset) {
-      /* The device was not reset, so a button may still be held. Treat all as
-       * held: each must be released and pressed again before it counts. */
-      device_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
-      for (struct space *space = caelum_space->next; space; space = space->next) {
-        pointer_reset_input(space->pointer);
-      }
-    } else {
-      /* Presses are judged against the device, not a space, so a button held
-       * across a space switch is not new to the space that gains focus. */
-      uint32_t pressed = event.buttons & ~device_buttons;
-      device_buttons = event.buttons;
-      if (active_space != caelum_space) {
-        pointer_route_event(active_space->pointer, &event, pressed);
-      }
-    }
+    pointer_handle_input(&event);
     cpu_restore_interrupts(flags);
   }
 }

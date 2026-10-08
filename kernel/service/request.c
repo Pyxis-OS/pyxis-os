@@ -12,6 +12,7 @@
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
+#include <kernel/object/pointer.h>
 #include <kernel/object/screen_capture.h>
 #include <kernel/display_capture.h>
 #include <kernel/object/system_info.h>
@@ -42,6 +43,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct terminal_create_service_request, request)},
   [BSP_SERVICE_PIPE_CREATE] = {sizeof(struct pipe_create_request), alignof(struct pipe_create_request),
       offsetof(struct pipe_create_request, request)},
+  [BSP_SERVICE_POINTER] = {sizeof(struct pointer_request), alignof(struct pointer_request),
+      offsetof(struct pointer_request, request)},
   [BSP_SERVICE_DISPLAY] = {sizeof(struct display_request), alignof(struct display_request),
       offsetof(struct display_request, request)},
   [BSP_SERVICE_CAPABILITY_GROW] = {sizeof(struct capability_growth_request), alignof(struct capability_growth_request),
@@ -145,6 +148,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_POWER:
     return false;
+  case BSP_SERVICE_POINTER:
   case BSP_SERVICE_DISPLAY:
   case BSP_SERVICE_SCREEN_CAPTURE:
     return true;
@@ -297,6 +301,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_SYSTEM_INFO_POWER:
     system_info_power_execute((struct system_info_power_request *)request);
+    break;
+  case BSP_SERVICE_POINTER:
+    pointer_request_execute((struct pointer_request *)request);
     break;
   case BSP_SERVICE_DISPLAY:
     display_request_execute((struct display_request *)request);

@@ -72,6 +72,12 @@ bool space_set_title(struct space *space, const char *title, size_t length);
 /* BSP, IF=0, after display state changes. Update input without releasing capture. */
 void space_display_changed(struct space *space, bool discard_input);
 
+/* BSP/IF=0: pointer uses the actual last-drawn clipped navigation layout. */
+struct space *space_pointer_active(void);
+size_t space_pointer_content_y(void);
+struct space *space_pointer_tab(int64_t x, int64_t y);
+void space_pointer_select(struct space *space);
+
 void space_present();
 /* BSP kernel-task entry; argument is unused. */
 void space_present_task(void *argument);
