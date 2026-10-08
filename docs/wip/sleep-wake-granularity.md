@@ -28,10 +28,12 @@ Recommendations below remain unaccepted.
 
 1. **Ownership/timer — recommend per-CPU deadlines and calibrated LAPIC
    one-shot countdowns.** Only the executing CPU programs its LAPIC, with IF=0;
-   HPET stays authoritative. Arm the earlier of the local deadline and next
-   nominal preemption occasion. A centralized BSP alternative requires remote
-   earlier-deadline notifications plus AP wake IPIs. Defer TSC-deadline, which
-   requires feature detection and qualified HPET-to-TSC conversion.
+   reuse the existing PIT channel 2 calibration in `arch/x86_64/apic.c`, with
+   no new calibration path. HPET stays authoritative. Arm the earlier of the
+   local deadline and next nominal preemption occasion. A centralized BSP
+   alternative requires remote earlier-deadline notifications plus AP wake IPIs.
+   Defer TSC-deadline, which requires feature detection and qualified HPET-to-TSC
+   conversion.
 2. **Many sleepers — recommend sorted embedded lists, no allocation or new
    capacity limit.** Earliest lookup O(1), insertion/cancellation O(n), expiry
    O(k) for k due records. Wake all due records together; ordinary ready queues
@@ -76,11 +78,21 @@ See [Intel SDM 3A, section 11.5.4](https://cdrdv2-public.intel.com/812386/253668
 
 - [x] Investigate and record a fresh baseline/proposal.
 - [ ] Owner settles the three decisions and authorizes implementation.
+- [ ] Proposed review follow-up: fix the missing expiry reschedule IPI as a
+  separate measured step. Collect destination CPU indices under the queue lock
+  and notify after unlocking, without retaining published task/wait pointers.
+  Repeat the baseline before timer changes to distinguish AP wake delay from
+  BSP tick quantization. This sequencing suggestion is not implementation
+  authority.
 - [ ] Implement deadline ownership/dispatch and timer multiplexing together;
   update clock/scheduler contracts in the implementation PR.
 - [ ] Repeat identical baseline workload/library bytes with only the kernel
   changed. Check ordinary one-/four-CPU boots, earlier insertion, simultaneous
   sleepers, resource wake/stop, idle wake, stack ordering and ongoing preemption.
+  Include a roughly 1 ms sleep loop to inspect deadline interrupt rate and
+  positive-minimum rearming, plus an idle CPU with no sleepers to verify it
+  receives no more than the nominal preemption interrupts. Use the existing
+  workload and debugger; these are qualification checks, not latency guarantees.
   Publish exact-head existing CI; no new workflow or benchmark framework.
 - [ ] Record owner native evidence or an explicitly accepted qualification limit
   before closing this WIP.

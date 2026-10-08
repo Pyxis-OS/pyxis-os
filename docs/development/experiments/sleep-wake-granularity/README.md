@@ -37,7 +37,7 @@ standalone executable `sleep-baseline.pxe`. It was rebuilt with the existing
 sorted GNU cpio/newc assembly flags, then assembled with the ordinary ISO flags.
 Keep this initrd and the same executable/library bytes for the after run;
 replace only the kernel. Local artifacts live in
-`/home/chronium/src/pyxis-sleep-deadlines/build/`.
+`<worktree>/build/`.
 
 ## Guest configuration
 
@@ -128,6 +128,8 @@ enable it and continue to the next real Quake frame entry. Read both values
 again and calculate completed frames per elapsed guest time. The breakpoint
 was active only at sampling boundaries. The
 [raw transcript](quake-baseline-gdb.txt) records the actual reads and checks.
+Worktree paths in the transcript use `<worktree>` placeholders; numerical
+readings are unchanged.
 
 | Window | Completed frames | HPET ticks, 10 ns | Elapsed s | Frames/s |
 | --- | ---: | ---: | ---: | ---: |
