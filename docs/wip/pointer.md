@@ -1,6 +1,7 @@
 # A system pointer
 
-Status: **task 1 delivered for review; assigned to Codex, 2026-10-08.** Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
+Status: **task 1 delivered for review; assigned to Codex, 2026-10-08.**
+Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
 `pointer/ordinary-surface`, with published
 [userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164), revision
 `6b45dd1`. Both remain draft for joint task 2 integration. The proposal
@@ -17,7 +18,10 @@ records decisions only; the [baseline](../development/system-pointer-qualificati
 was captured before code changes. Task 1 remains draft until task 2 migrates
 Quake/SDL2 and permits the ABI and all consumers to integrate together.
 
-## Today
+## Pre-milestone baseline
+
+This describes main before task 1; implemented ordinary behavior is now in the
+[mouse reference](../devices/mouse.md), with the draft integration limits above.
 
 The [PS/2 mouse driver](../devices/mouse.md) supplies relative counts, button
 state and wheel counts. A per-space pointer session is exclusively acquired
