@@ -519,6 +519,29 @@ Revisit those checks when changing the corresponding session, input or teardown
 paths, or when a concrete failure appears. Milestone closure does not convert
 source inspection into measured coverage.
 
+## Native system pointer qualification
+
+For the [system pointer milestone](wip/pointer.md), the owner accepted native
+PS/2 validation deferral on 2026-10-08 because the ThinkPad is occupied by the
+[Bluetooth investigation](wip/bluetooth.md). Matched QEMU checks on boot,
+Bochs and VirtIO displays may close the milestone without a native run. This
+records an accepted qualification limit, not a completed native check.
+
+The consequence is that PS/2 touchpad/TrackPoint routing, held-button behavior,
+lock escape/relock, and cursor composition/cost on the ThinkPad boot framebuffer
+remain unqualified on physical hardware even after successful QEMU checks.
+Nested-VM results do not establish native input latency or display performance.
+
+Revisit when the Bluetooth investigation finishes: the owner will run a batch
+of native ThinkPad checks, including this deferred PS/2 check.
+
+- [ ] Owner native ThinkPad pointer check: ordinary motion/buttons, tab clicks,
+  program cursor image/hotspot/show/hide and bounded warp, local-terminal/mux
+  selection, Quake lock/Super+Esc/click-to-relock, space/layer changes and capture.
+  Record kernel, userland and ports revisions, boot/display/device configuration,
+  behavior and matched cursor cost samples when the batch runs. Update this
+  entry with the results; QEMU milestone closure does not mark it complete.
+
 ## Unselected graphical applications
 
 The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without

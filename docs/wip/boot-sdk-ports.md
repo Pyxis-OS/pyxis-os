@@ -46,9 +46,12 @@ Chosen by the owner, each starting with a proposal:
 - **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
   documentation-only proposal for program cursor images, surface routing,
   tab clicks, terminal/mux selection and pointer lock with Super+Esc.
-  The original directions and both decision rounds are accepted on 2026-10-08;
-  selection/export, presentation/capture and delivery/closure await round three.
-  Task 1 requires explicit owner authorization, including after plan merge.
+  The original directions and all three decision rounds are accepted on
+  2026-10-08; the proposal merged in #530 and task 1 is explicitly authorized.
+  Matched QEMU checks
+  suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
+  to the owner's ThinkPad batch after the Bluetooth investigation finishes.
+  Capture task 1's baseline before code changes; later tasks remain unstarted.
   SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
