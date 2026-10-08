@@ -1,6 +1,6 @@
 # Bluetooth investigation
 
-Status: **tasks 1, 2, 3a and 3b complete, 2026-10-08; task 4 warm-firmware verification in progress.**
+Status: **tasks 1–4 complete for the accepted warm-host scope, 2026-10-08; scan probe unassigned.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Shared kernel interrupt-IN support is implemented
@@ -85,7 +85,7 @@ works, recorded beside the NIC reference.
    [task 3b report](../development/experiments/bluetooth-task3b/README.md) records
    checked Reset/Read Version replies, command credits and operational firmware
    after Reset on prepared-host QEMU passthrough. Cold native state remains unknown.
-- [ ] **4. Warm firmware verification.** Detect controller state from a checked
+- [x] **4. Warm firmware verification.** Detect controller state from a checked
    version reply. Accept existing operational firmware for this investigation,
    skip loading and confirm its version remains unchanged. Warm reboot from
    another OS or passthrough can retain that OS's chosen firmware build; USB port
@@ -97,6 +97,9 @@ works, recorded beside the NIC reference.
    boot-event handling and mirrored `.sfi`/`.ddc` files before it can be qualified.
    The [cold-upload debt](../technical-debt.md#bluetooth-cold-firmware-upload-and-running-version-policy)
    records the consequence and revisit point.
+   The [task 4 report](../development/experiments/bluetooth-task4/README.md) records
+   identical checked version replies after the skip decision, host initialization
+   evidence and the unmerged probe revision. No upload was performed or qualified.
 - [ ] **5. First LE scan.** Configure and enable LE scanning, and receive advertising
    reports. With the MX Master 3S in pairing mode, identify its reports: the HID
    service (`0x1812`) or mouse appearance (`0x03C2`) and its name.
