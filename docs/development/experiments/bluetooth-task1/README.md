@@ -21,9 +21,9 @@ bus 4 address 3, full speed (12 Mb/s).
 The owner's initial stop had not left `bluetooth.service` inactive. After the
 owner used `sudo systemctl disable --now bluetooth`, inspection reported
 `ActiveState=inactive`, `SubState=dead`, `UnitFileState=disabled`. Bluetooth was
-neither soft nor hard blocked. `/dev/bus/usb/004/003` belonged to `chronium:root`
-and was readable and writable by the invoking user. Both interfaces initially
-remained bound to `btusb`.
+neither soft nor hard blocked. `/dev/bus/usb/004/003` belonged to the invoking
+user (group `root`) and was readable and writable by that user. Both interfaces
+initially remained bound to `btusb`.
 
 The initial attachment check used:
 
