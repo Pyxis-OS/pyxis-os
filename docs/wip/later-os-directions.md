@@ -220,7 +220,8 @@ Investigation candidate (owner, 2026-10-08): pair the owner's Logitech MX Master
 AX200's USB function (`8087:0029`), so it builds on the planned USB HID work in
 the [system pointer](pointer.md#devices). The stack is deep: Intel firmware
 loading, HCI, L2CAP, LE pairing with Secure Connections and persistent bond keys,
-then HID over GATT. Investigate the minimum path before any milestone.
+then HID over GATT. The [investigation brief](bluetooth.md) covers the path to a
+first LE scan, starting from QEMU passthrough on the ThinkPad.
 
 ## Clock source
 

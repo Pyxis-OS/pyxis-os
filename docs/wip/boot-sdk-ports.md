@@ -104,6 +104,8 @@ prerequisites and result are clear.
 - [Control, events and faults](control-events-faults.md), Pyxis's answer to
   signals, tied to Continuum.
 - [Userspace scheme providers](userspace-scheme-providers.md).
+- [Bluetooth investigation](bluetooth.md): QEMU passthrough of the AX200's
+  Bluetooth, firmware load and a first LE scan, toward the MX Master 3S.
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).
 
