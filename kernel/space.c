@@ -980,7 +980,7 @@ void space_present()
   }
 
 frame_done:
-  bool presented = display_end_frame() && composed;
+  bool presented = display_end_frame(pointer) && composed;
   flags = cpu_save_interrupts();
   if (presented) {
     drawn_nav_layout = nav;

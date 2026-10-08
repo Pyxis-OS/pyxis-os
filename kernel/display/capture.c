@@ -95,6 +95,45 @@ void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
   cpu_restore_interrupts(flags);
 }
 
+bool screen_capture_active(void)
+{
+  return frame_pixels != NULL;
+}
+
+void screen_capture_read(size_t offset, void *pixels, size_t bytes)
+{
+  KASSERT(active && frame_pixels);
+  KASSERT(offset <= frame_layout.size && bytes <= frame_layout.size - offset);
+  KASSERT(!(offset % sizeof(uint32_t)) && !(bytes % sizeof(uint32_t)));
+  size_t row = offset / frame_layout.pitch;
+  size_t column = offset % frame_layout.pitch;
+  size_t pitch = active->reply.pitch;
+  KASSERT(row < frame_layout.height && column < pitch && bytes <= pitch - column);
+  const uint8_t *staged = (const uint8_t *)frame_pixels + row * pitch + column;
+  memcpy(pixels, staged, bytes);
+}
+
+void screen_capture_copy_only(size_t offset, const void *pixels, size_t bytes)
+{
+  KASSERT(active && frame_pixels);
+  KASSERT(offset <= frame_layout.size && bytes <= frame_layout.size - offset);
+  const uint8_t *source = pixels;
+  size_t pitch = active->reply.pitch;
+  while (bytes) {
+    size_t row = offset / frame_layout.pitch;
+    size_t column = offset % frame_layout.pitch;
+    size_t count = MIN(bytes, frame_layout.pitch - column);
+    if (row < frame_layout.height && column < pitch) {
+      count = MIN(count, pitch - column);
+      uint8_t *staged = (uint8_t *)frame_pixels + row * pitch + column;
+      memcpy(staged, source, count);
+    }
+    offset += count;
+    source += count;
+    bytes -= count;
+  }
+}
+
 void screen_capture_copy(size_t offset, const void *pixels, size_t bytes)
 {
   if (!frame_pixels) {
