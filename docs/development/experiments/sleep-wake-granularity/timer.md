@@ -129,6 +129,16 @@ service omitted from ordinary command grants; the first ordinary-command attempt
 correctly refused missing grants. This exercises resource completion/removal of
 timed endpoint waits without changing authority. It is no new performance claim.
 
+## Limits
+
+SDL2 retains upstream's `SDL_WaitEvent` polling loop with a 1 ms delay.
+Deadline sleeps make this about 1 ms instead of the old 8.33 ms tick, so an
+idle program waiting for an event wakes about 1000 times a second instead of
+about 120, increasing its CPU wake cost. This is the expected polling rate,
+not a measured `SDL_WaitEvent` run. Revisit a blocking wait on the input and
+display handles when a consumer waits for events; see
+[SDL2 port limits](../../../technical-debt.md#sdl2-port-limits).
+
 Sorted-list insertion/removal, all-due-prefix expiry, pre-parking notification,
 startup periodic-to-one-shot transition, arithmetic bounds and nominal-only HPET
 maintenance were also source-reviewed. Large simultaneous expiry batches,

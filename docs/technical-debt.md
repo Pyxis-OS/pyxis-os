@@ -1164,9 +1164,13 @@ and preference paths. Missing pieces:
 - **Audio:** absent until there is an audio driver.
 - **Threads:** without them, `SDL_INIT_TIMER` callback timers and
   `SDL_CreateThread` fail. Revisit with userspace threads.
-- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop, a 1 ms delay that
-  becomes the 8.33 ms tick, so waiting programs wake about 120 times a second.
-  A blocking wait on the input and display handles is the fix when a consumer
+- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.
+  Deadline sleeps now make that about 1 ms rather than the old 8.33 ms tick,
+  so an idle waiting program wakes about 1000 times a second instead of about
+  120, increasing its CPU wake cost. This is the expected polling rate, not a
+  measured `SDL_WaitEvent` run; see the
+  [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
+  Revisit a blocking wait on the input and display handles when a consumer
   waits for events.
 - **Windows and cursor:** one fullscreen window; no system cursor,
   `SDL_ShowCursor` or hardware cursor. The pointer position is SDL's, built

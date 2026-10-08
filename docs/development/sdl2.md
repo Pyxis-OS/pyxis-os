@@ -110,8 +110,8 @@ The owner accepted these on 2026-10-08:
 
 ## Measurements
 
-All are from QEMU 10.2.2 with KVM in Claude's Fedora VM (nested), 4 CPUs, on
-2026-10-08. None are native.
+The original port measurements are from QEMU 10.2.2 with KVM in Claude's
+Fedora VM (nested), 4 CPUs, on 2026-10-08. None are native.
 
 A test program drew a 640x480 streaming texture at logical size every frame,
 with `SDL_Delay(1)` between frames:
@@ -123,8 +123,13 @@ with `SDL_Delay(1)` between frames:
 | VirtIO GPU, resized while running | 1280x768 → 1024x608 → 1440x868 → 800x468 | 741 µs over the run |
 | VirtIO GPU at 800x468 | 800x468 | 384 µs |
 
-A loop that called `SDL_Delay(16)` ran at 24.8 ms per frame. Sleeps wake on
-the 120 Hz preemption tick; see
+The original `SDL_Delay(16)` probe ran at 24.8 ms per frame with tick-bound
+sleep wakeups. Later [matched kernel qualification](experiments/sleep-wake-granularity/timer.md)
+measured median mean frame times of 25.565 ms before, 24.243 ms with expiry
+IPIs alone and 17.415 ms with per-CPU one-shot deadlines. Quake's ordinary
+72 Hz cap improved from 49.223 to 59.595 to 70.291 FPS. These nested-KVM runs
+changed only the kernel; HPET remains authoritative and nominal preemption
+stays at 120 Hz. Native qualification remains in
 [sleep wake granularity](../technical-debt.md#sleep-wake-granularity).
 
 DevilutionX's frame rates in town, at 1280x768 on standard VGA, are in its
