@@ -46,9 +46,10 @@ Chosen by the owner, each starting with a proposal:
 - **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
   documentation-only proposal for program cursor images, surface routing,
   tab clicks, terminal/mux selection and pointer lock with Super+Esc.
-  The three owner decisions are accepted; remaining recommendations await
-  explicit review. Devices stay PS/2; clipboard implementation and USB HID
-  mice are separate milestones.
+  The three original directions and three first-round defaults are accepted
+  on 2026-10-08; warp and terminal-controller authority await round two.
+  SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
+  clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
   upstream SDL2 with video, input and timer support over the display,
   keyboard, pointer and clock sessions; audio waits for an audio driver.

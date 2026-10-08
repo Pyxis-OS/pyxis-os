@@ -4,9 +4,11 @@ Status: **assigned to Codex; documentation proposal, 2026-10-08.** Based on
 Pyxis `9acf597`, after the multiplexer merged in
 [Pyxis #523](https://git.internal/PyxisOS/pyxis-os/pulls/523) and
 [userland #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160).
-Only the three [owner decisions](#owner-decisions) below are accepted.
-Everything under **Proposed** is a recommendation awaiting the owner; neither
-this document nor opening its PR authorizes code or placeholder APIs.
+The three original directions and the three first-round defaults are
+[accepted](#owner-decisions), all on 2026-10-08. Further recommendations remain
+open, including warp and terminal-controller authority in the
+[second round](#decisions-to-put-to-the-owner). Nothing here authorizes code
+or placeholder APIs.
 
 ## Today
 
@@ -47,6 +49,21 @@ Accepted 2026-10-08:
    for. After that, the program cannot lock the pointer again on its own; only
    the user's click on its surface allows a new lock, as browsers do.
 
+First-round defaults accepted by the owner on 2026-10-08:
+
+4. **Image contract.** Tightly packed BGRA8 with straight alpha, dimensions
+   1–64 pixels per axis, an in-image hotspot and a kernel default until the
+   surface owner supplies an image.
+5. **Routing and geometry.** Separate terminal and graphics surface ownership;
+   surface-local pixel coordinates with destination geometry generation and
+   mapping/view identity. The concrete terminal-controller grant remains a
+   separate open authority decision.
+6. **Lock lifetime as proposed.** Initial lock is allowed on focused presented
+   graphics. Space/layer or device loss revokes it and requires a fresh surface
+   click, as does Super+Esc. Resize/REPLACE of the same graphics session retains
+   lock. The space's user-activation prohibition survives session reacquisition
+   and process changes; a program cannot reset it by restarting itself.
+
 ## Proposed scope
 
 One system pointer on the existing local display, PS/2 only. Include program
@@ -58,7 +75,9 @@ routing. An unlocked pointer does not release keyboard capture or pause a game.
 Include a VirtIO cursor backend after a common software path works; boot and
 Bochs keep software composition. Coordinate changes with the separately assigned
 [SDL2 backend](sdl2.md), replacing its private integration of relative counts.
-Do not turn this proposal into a second SDL2 port milestone.
+Its pointer adapter change lands **after the SDL2 milestone closes**, including
+its DevilutionX consumer and owner qualification. Do not change that milestone's
+tasks 4–5 or build a second SDL2 port.
 
 Selection produces a text source for the later [clipboard](clipboard.md)
 proposal. Clipboard publication, paste, converters and sharing are not built
@@ -70,17 +89,18 @@ window composition, acceleration settings, remote pointer transport and general
 presentation damage tracking are outside this milestone. Local mux gets pointer
 input; remote mux still has its existing keyboard controls.
 
-## Proposed cursor images and authority
+## Cursor images and authority
 
-Recommend tightly packed **BGRA8 bytes with straight alpha**, independent of
-native scanout channel shifts. Each dimension is 1 through 64 pixels; the
+**Accepted image contract, 2026-10-08:** tightly packed **BGRA8 bytes with
+straight alpha**, independent of native scanout channel shifts. Each dimension
+is 1 through 64 pixels; the
 hotspot is an integer pixel inside the image. The hotspot sits at the pointer
 position, and the image is clipped at physical screen edges. Do not scale images
 on resize. Fully transparent pixels preserve the background; software blending
 uses the image's alpha, with alpha representation converted if a backend needs
 it. No animation, image handles or unbounded stride are needed in the first slice.
 
-The payload is at most 16 KiB. This is a proposed architectural capacity bound
+The payload is at most 16 KiB. This accepted architectural capacity bound was
 chosen to fit the VirtIO cursor resource, whose size is 64x64 in the
 [OASIS specification, section 5.7.6.6](https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.pdf).
 Smaller images are padded transparently for that backend. It does not make
@@ -93,21 +113,39 @@ source bytes. The presenter retains a bounded image snapshot for each frame;
 replacement or owner exit cannot free pixels it is reading. Allocation and
 publication follow the existing BSP ownership rules, outside the output lock.
 
-Recommend tying cursor setting to the actual surface owner, not any holder of
-the shared pointer grant:
+Separate surface ownership is accepted. The detailed grant mechanism below
+remains proposed, particularly the terminal-controller authority in round two:
 
 - The process owning the graphics session may subscribe to its ordinary pointer
   stream and set that session's cursor, with explicit pointer-input authority in
   the same space. Copying a grant does not transfer ownership. A hidden owner
   may update its own image for the next visit, but cannot change the shown cursor.
-- Mux receives an exclusive terminal-presentation control grant from trusted
-  startup, tied to its outer local terminal. It controls that terminal surface's
-  cursor and spatial events. Ordinary pane children receive no such grant.
+- **Proposed:** boot grants terminal control to a local space's trusted init
+  when mux startup is configured; the trusted init/session handoff passes it
+  to mux, tied to its outer terminal. It controls that surface's cursor and
+  spatial events. It is separate from terminal-session creation authority;
+  ordinary console READ/WRITE does not confer it. Pane children receive no
+  such grant.
 - Without a terminal controller, the kernel handles the local TTY. Navigation,
   unused margins and the kernel log space use a kernel default. Kernel defaults
   include an arrow and a terminal selection cursor; programs can supply their
   images from the first implementation task. There is no global cursor-setting
-  grant or pointer-warp operation in this proposal.
+  grant. Surface-owner warp is a separate open decision below.
+
+**Explicit hidden state:** distinguish the default cursor, a supplied image and
+a hidden cursor for each owned surface. Hiding needs no transparent 1x1 image and
+does not change the accepted 1–64 image dimensions. It retains the image so showing
+again restores it, or the default if none was supplied. The surface owner may set its
+own visibility, including while unlocked; this changes drawing, not input routing,
+position, focus or lock permission. Lock forces effective visibility off, and
+unlock restores the surface's saved visibility preference. Navigation and margins
+retain the kernel default regardless of a program's preference. Release/exit
+removes the surface preference with its image. Software composition, VirtIO cursor
+state and capture all omit a hidden pointer.
+
+This supports programs drawing their own cursor: the SDL adapter maps
+`SDL_ShowCursor(SDL_DISABLE)` to the owning surface's hidden state. It must not
+draw a second system cursor over DevilutionX's software cursor.
 
 Selection of the shown image follows hit testing, not the last program to set
 an image. Session release or exit removes its image and input ownership; terminal
@@ -117,14 +155,18 @@ and copied handles surviving owner exit do not keep it acquired. Closing/copying
 handles does not transfer a process-owned subscription. Process cleanup must
 invalidate subscriptions before reclaiming their referenced surfaces.
 
-## Proposed coordinates, routing and resize
+## Coordinates, routing and resize
+
+Surface-local coordinates and both geometry identities are accepted on
+2026-10-08. The detailed movement and queue rules below remain recommendations.
 
 Recommend one kernel-owned physical position, initialized at screen center,
 with one pixel per PS/2 count and no acceleration. Clamp the hotspot to the
 physical screen. Use checked geometry conversions and saturating delta/wheel
 accumulation; an overflowing addition cannot be repaired by clamping afterward.
 In lock mode, hide the cursor, leave its position parked and route relative counts
-only. Restoring ordinary mode shows it at the parked position, clamped if resized.
+only. Restoring ordinary mode uses the parked position, clamped if resized,
+and the surface's saved visibility preference.
 
 Ordinary motion, button and wheel events carry **surface-local pixel positions**:
 origin at the content's top-left, below navigation. Hit-test the visible layer of
@@ -146,9 +188,9 @@ placeholder functions.
 At resize/REPLACE, discard queued ordinary spatial input, publish a geometry/reset
 notification and cancel active drags. For ordinary streams, clear accepted held
 buttons and require a release/fresh press, as on today's focus/reset boundaries.
-The next ordinary
-position uses committed geometry. Recommend keeping a lock across resize or
-REPLACE of the same graphics session, preserving its accepted button state:
+The next ordinary position uses committed geometry. The accepted lock rule keeps
+a lock across resize or REPLACE of the same graphics session, preserving its
+accepted button state:
 relative counts have no surface coordinate to reinterpret. Failure preserves
 the last valid geometry and mapping.
 
@@ -192,10 +234,39 @@ wake path is real work, not an assumed feature. Preserve bounded queue/reset
 semantics: coalesce positions only within the same surface/geometry/button state,
 retain the latest position, accumulate wheel counts, and reset on lost transitions.
 
-## Proposed pointer lock and Quake migration
+## Proposed surface-owner warp
 
-Recommend allowing an initial lock request when the requesting process owns the
-focused, presented graphics surface and its ordinary pointer subscription.
+**Open, second round:** DevilutionX's `SetCursorPos` calls
+`SDL_WarpMouseInWindow` during keyboard/mouse interaction. Today SDL owns its
+position; retaining only that private warp once the kernel owns position would
+make motion and the drawn cursor disagree. The adapter must not report a
+successful local-only warp.
+
+Recommend allowing the owner of the **shown, focused, unlocked graphics surface**
+to move the pointer within that surface's visible mapping/destination intersection.
+The request uses surface-local pixels and the current destination and mapping
+identities. Reject stale geometry, out-of-bounds destinations, hidden/inactive
+surfaces, a locked pointer or a press held for another destination; do not clamp
+a bad request into navigation or another surface. No global or terminal-controller
+warp is proposed.
+
+A successful warp updates the authoritative kernel position and queues an
+ordinary position event for that surface, with unchanged accepted buttons and
+no wheel movement. It creates no device counts, button transition or user
+activation, so it cannot authorize relock. Failure preserves the old position.
+SDL uses the resulting native position/event rather than maintaining a second
+authoritative position. Warping a hidden cursor within an otherwise eligible
+surface remains possible; visibility alone is not focus or lock.
+
+The alternative is to refuse warp in the backend and document the degraded
+DevilutionX interactions before choosing that policy. Do not implement a
+successful fake operation or silently accept divergence.
+
+## Pointer lock and Quake migration
+
+**Lock lifetime accepted, 2026-10-08.** Allow an initial lock request when the
+requesting process owns the focused, presented graphics surface and its ordinary
+pointer subscription.
 Acquiring input alone must not lock it. Deny lock while hidden or inactive and
 never change space/layer selection to satisfy a request. There is one global lock.
 
@@ -215,7 +286,7 @@ it cannot be saved for another surface or transferred to another process.
 Consume that activation click's press/release rather than injecting an accidental
 shot. No synthetic call or already-held button counts as user activation.
 
-Recommend revoking a lock on space/layer loss, owner exit/release or device loss.
+Revoke a lock on space/layer loss, owner exit/release or device loss.
 After a focus/device-loss revocation, require a fresh surface click before relock
 as well, so switching back does not unexpectedly hide the cursor. Voluntary
 unlock can be followed by another request while still focused, unless the space
@@ -237,7 +308,10 @@ from counts, removes its independently drawn pointer marker, and supplies its
 cursor image. Migrate other in-tree pointer consumers, including the current SDL2
 adapter, together with replacement of the old exclusive relative-only contract.
 SDL ordinary motion uses kernel positions; SDL relative mode requests lock and
-observes refusal/revocation. Do not preserve the old protocol merely for ports.
+observes refusal/revocation. Cursor creation/show/hide and the eventual warp
+decision use native surface state. Land this adapter change after SDL2 milestone
+closure and qualify DevilutionX ordinary motion, warp, software-cursor hiding and
+its program-supplied cursor. Do not preserve the old protocol merely for ports.
 
 ## Proposed selection and clipboard boundary
 
@@ -343,23 +417,32 @@ Present at most three decisions per round. Recommendations below remain **open**
 no response, PR creation or review counts as acceptance. Record an explicit owner
 answer here before treating a recommendation as agreed.
 
-**First round, awaiting the owner:**
+**First round accepted, 2026-10-08:** image contract, separate ownership with
+surface-local coordinates/geometry identity, and lock lifetime as proposed.
+They are recorded under [owner decisions](#owner-decisions); review findings
+do not reopen them.
 
-1. Image contract: recommend BGRA8 straight alpha, 1–64 pixels per axis,
-   in-image hotspot and kernel default until the surface owner supplies an image.
-2. Routing/geometry contract: recommend separate terminal and graphics ownership,
-   surface-local pixels, and destination plus mapping/view identity on events.
-3. Lock lifetime: recommend initial lock on focused presented graphics,
-   revocation on space/layer loss, retention on resize, and fresh click after
-   Super+Esc or focus/device-loss revocation. Every-lock click consent is the
-   alternative; it would require clicking Quake before initial mouse play.
+**Second round, awaiting the owner; two questions:**
+
+1. **Pointer warp:** allow the owner of shown, focused, unlocked graphics to
+   warp within its visible surface, with geometry validation and an ordinary
+   position notification? **Recommended: yes**, as described above, never
+   granting user activation. Alternative: unsupported, with DevilutionX's
+   affected interactions documented before acceptance.
+2. **Terminal-controller grant:** should trusted local startup explicitly give
+   mux separate control of the outer terminal's cursor and spatial queue?
+   **Recommended: yes**, tied to that terminal, withheld from pane children,
+   exclusive process ownership; a second acquisition, including a repeat by
+   the owner, returns busy. Copy/close neither transfers nor releases it;
+   explicit release or owner exit restores kernel handling even if copied
+   handles survive. This grants no graphics ownership, lock or warp authority.
 
 **Queued for a later round, not additional questions in this round:** selection
 interaction/export boundary; software-first then VirtIO hardware presentation and
 cursor-inclusive capture; task ordering and qualification/closure limits. Their
 recommended defaults are described above. Review those in groups of at most three
-only after the first answers; any newly discovered policy question returns to the
-owner rather than silently becoming a requirement.
+only after the second-round answers; any newly discovered policy question returns
+to the owner rather than silently becoming a requirement.
 
 ## Proposed task breakdown
 
@@ -370,25 +453,36 @@ No implementation task is started or authorized by this proposal.
 - [ ] **Owner review.** Settle the decision rounds, record accepted limits, and
   agree the implementation sequence before code. Proposal delivery does not
   complete this review.
-- [ ] **Surface input, lock and software cursor.** Kernel owns position, routing,
-  tab hit testing, subscription/geometry lifetimes, images and lock escape.
-  Add the terminal-controller queue/readiness foundation without mux pane policy.
-  Implement bounded software composition on all current backends, including
-  capture. Update libpyxis and migrate Quake, `mousetest` and the current SDL2
-  consumer in focused dependent PRs. Qualify cursor/lock/focus/resize and capture
-  with ordinary builds, interactive QEMU and read-only debugger inspection.
-- [ ] **Terminal selection and mux wheel.** Add local TTY text retention and
-  selection overlay; give trusted mux startup terminal-controller authority.
+- [ ] **1. Ordinary surface input and software cursor.** Kernel owns position,
+  routing, tab hit testing and ordinary subscription/geometry lifetimes. Include
+  program cursor images from the start, explicit hidden state, the accepted warp
+  policy once decided, and bounded software composition on all current backends
+  with capture. Add libpyxis support and ordinary-position use in `mousetest`.
+  Qualify motion, tab clicks, image/hotspot/show/hide, resize/REPLACE and capture.
+- [ ] **2. Lock, escape and consumer migration.** Add relative lock, Super+Esc,
+  durable activation gating and authoritative lock/reset notifications. Migrate
+  Quake and the current SDL2 backend; complete `mousetest` migration and replace
+  the old relative-only protocol with its in-tree consumers. Qualify lock/escape,
+  hidden layers, process/session teardown and mouse loss. SDL2 changes land after
+  its milestone closes; qualify DevilutionX ordinary motion, the warp decision,
+  explicit hiding for its software cursor and its program-supplied color cursor.
+  Review tasks 1 and 2 as focused dependent changes and integrate the ABI and
+  consumer pins together, without publishing a broken intermediate consumer or
+  retaining a legacy compatibility interface.
+- [ ] **3. Terminal selection and mux wheel.** Add local TTY text retention and
+  selection overlay. If round two accepts it, give trusted mux startup the
+  terminal-controller grant and implement its typed spatial queue and wait
+  readiness here, where mux consumes them; these are not tasks 1 or 2.
   Mux maps events to panes, selects visible live/history text and handles wheel
   browsing without interfering with pane games. Qualify equal/BSP, focused-only
   clipping, changing output, history eviction, hidden graphics and controller exit.
   Record the owned-text handoff direction; do not build or fake the clipboard.
-- [ ] **VirtIO hardware cursor.** Add cursor resource/queue ownership and uploads,
+- [ ] **4. VirtIO hardware cursor.** Add cursor resource/queue ownership and uploads,
   image/hotspot changes, lock hiding and capture-only software composition.
   Qualify ordinary/captured pointer appearance, resize, focus and teardown;
-  compare matched software and hardware cost samples. Boot/Bochs retain the
-  common software path.
-- [ ] **Close the milestone.** Review cost and owner-run PS/2 ThinkPad checks,
+  qualify DevilutionX's hardware-cursor option and compare matched software and
+  hardware cost samples. Boot/Bochs retain the common software path.
+- [ ] **5. Close the milestone.** Review cost and owner-run PS/2 ThinkPad checks,
   explicitly accept any deferred qualification, rewrite implemented contracts
   into device/interface/userland references and move remaining work to WIP/debt.
   Keep clipboard and USB HID milestones separate.
