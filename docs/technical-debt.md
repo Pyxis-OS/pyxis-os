@@ -989,6 +989,30 @@ scope, lifetime and behavior across mounts and file replacement before exposing
 it; do not substitute normalized path strings or add `realpath` just for TCC.
 See [the TCC contract](userland/tcc.md#remaining-limits).
 
+## Program location
+
+A process cannot find where its own executable came from. `argv[0]` is whatever
+the launcher passes, and the shell passes the command word as typed, so a
+program started as `devilutionx` sees only that name. Even a full URI would be
+descriptive: a path is not authority, and the process holds no lookup right to
+the directory its executable came from. The [startup record](interfaces/processes.md#startup-record)
+carries no program location, and libpyxis has no equivalent of `/proc/self/exe`
+or `GetModuleFileName`. The [SDL2 port](development/ports.md#sdl2-development-library)
+therefore reports `SDL_GetBasePath` as unsupported.
+
+Ports that keep files beside their executable need a fixed location instead.
+DevilutionX's recipe hard-codes its assets to `boot://share/devilutionx/`, so
+running it as a self-contained bundle from another directory needs its own
+fallback patch. Every such port carries a similar per-port path patch, and a
+program cannot simply be copied with its files into another directory and run.
+
+Revisit when another port needs files beside its executable, or when
+self-contained bundles become a supported way to add programs. Options to weigh
+then, none decided: a read-only directory grant for the program's own directory
+at launch, given like the other startup resources; or a descriptive location in
+the startup record, which confers no access and has `argv[0]`'s weaknesses. Do
+not infer the location from `argv[0]` or add path normalization for one port.
+
 ## Sleep wake granularity
 
 Deadline sleeps wake on the 120 Hz local APIC preemption tick, so a sleep can
