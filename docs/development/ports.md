@@ -125,6 +125,21 @@ outside the base/guest SDK. Only licenses, notices and provenance enter the
 boot tree. Archive/configuration/symbol inspection is build evidence; the
 screenshot command will provide runtime qualification.
 
+## fmt development library
+
+The [fmt recipe](../../ports/fmt/README.md) builds {fmt} 12.2.0 from the owner's
+`mirrors/fmt` mirror as a static C++ library, with the SDK's
+[C++ settings](sdk.md#c). It is the first C++ port and a DevilutionX
+prerequisite. Two patches make fmt follow libc++'s feature macros: no locale
+support, since the SDK's libc++ has no localization, and no `std::wstring`
+helper, since it has no wide characters. `FMT_OS` is off.
+
+`build/ports-dev/fmt` contains `libfmt.a` and the `fmt` headers, outside the
+base and guest SDK. `format.h`, `ranges.h`, `color.h`, `compile.h` and
+`args.h` are usable; `chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h` and
+`os.h` fail to compile. No program in the image uses fmt yet, so nothing from
+it enters the boot tree.
+
 ## TLS development libraries
 
 The [Mbed TLS recipe](../../ports/mbedtls/README.md) verifies the official 4.1.1

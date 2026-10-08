@@ -89,6 +89,11 @@ LIBPNG_OUTPUTS := $(addprefix build/ports/libpng/stage/,dev/lib/libpng.a \
   share/licenses/libpng/LICENSE share/licenses/libpng/PORT-NOTICE \
   share/libpng/source.txt)
 
+FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.cmake \
+                        ports/fmt/patches/*.patch) ports/ports.lua ports/build.lua
+FMT_OUTPUTS := $(addprefix build/ports/fmt/stage/,dev/lib/libfmt.a \
+  dev/include/fmt/format.h dev/share/licenses/fmt/LICENSE dev/share/fmt/source.txt)
+
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
                            ports/mbedtls/*.cmake ports/mbedtls/Makefile \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
@@ -101,7 +106,7 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
   share/licenses/mbedtls/PORT-NOTICE)
 
 .PHONY: all
-all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) \
+all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) \
      $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
      $(BUSYBOX_IMAGE) $(BUSYBOX_LICENSE) $(LINKS_IMAGE) $(LINKS_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
@@ -187,6 +192,10 @@ $(ZLIB_OUTPUTS) &: $(ZLIB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng
 	$(LUA) ports/build.lua libpng --sdk $(abspath build/sdk) --work $(abspath build/ports/libpng) --zlib $(abspath build/ports/zlib/stage/dev)
+
+$(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/fmt
+	$(LUA) ports/build.lua fmt --sdk $(abspath build/sdk) --work $(abspath build/ports/fmt)
 
 $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mbedtls
