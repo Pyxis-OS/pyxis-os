@@ -1,35 +1,31 @@
 # Audio task 1: contracts and controller/codec bring-up
 
-In progress, owner assignment **2026-10-08**. The accepted-decision update is
-pushed to [#549](https://git.internal/PyxisOS/pyxis-os/pulls/549), head
-`a318270feb`, with existing workflow #1295 successful (build 1m1s, filesystem
-12s). Three defaults are accepted; no deferred task-specific choice is accepted
-by this assignment. The owner assigns controller/codec bring-up with a BSP
-worker owning DMA, QEMU first; native checks belong to the later ThinkPad batch.
+In progress, owner assignment **2026-10-08**. [#549](https://git.internal/PyxisOS/pyxis-os/pulls/549)
+merged into fresh main `ad0db38`; task branch `audio/controller-codec` is rebased
+onto it. The earlier baseline from `abbeded` has the same kernel, ABI and pinned
+consumer inputs; #549 added documentation only. Controller/codec bring-up with
+BSP-owned DMA is assigned, QEMU first, with native checks in the later batch.
+Public grants/sessions/mixing, IRQ refill and consumers remain later tasks.
 
-Task branch: `audio/controller-codec`, based on main `abbeded` and stacked on
-#549 while it is open. **Merge order: #549 first, task 1 second.** Rebase onto
-merged main before submitting the implementation. The proposal's contract review
-and controller/codec engine steps form this assigned bring-up scope; per-space
-session/mixer implementation, IRQ/refill work and consumer changes stay in later
-tasks. No implementation code has changed yet.
+## Accepted task-specific decisions
 
-## Pending task-specific decisions
-
-The owner has been asked these three questions before code changes, each with a
-recommended default. They remain pending; elapsed time is not acceptance.
+Accepted by the owner through the orchestrator on **2026-10-08**, before code:
 
 1. Document ACQUIRE/WRITE/STATUS/RELEASE using native message headers; WRITE
    carries a caller address/byte count and STATUS reports queue capacity and
    discontinuities. Implement only the private engine now, public calls/sessions
-   in their later task. Alternative: implement public calls in this task.
+   in their later task.
 2. Copied nonblocking all-or-nothing WRITE, at most 4096 bytes aligned to four-byte
-   stereo frames; full queue returns WOULD_BLOCK with no acceptance. WRITABLE
-   guarantees space for a maximum write. No drain promise or retained caller
-   buffer. Alternatives: partial writes, or blocking writes with deadlines.
-3. Existing errors: UNAVAILABLE for absent/unsupported/failed hardware, BUSY for
-   an acquired session, LIMIT for eight active sessions, NO_MEMORY on allocation,
-   DENIED for missing authority/wrong owner. Alternative: BUSY for the global cap.
+   stereo frames; full queue returns CALL_WOULD_BLOCK with no acceptance.
+   WAIT_WRITABLE guarantees space for a maximum write. No drain promise or
+   retained caller buffer.
+3. Existing errors: CALL_UNAVAILABLE for absent/unsupported/failed hardware,
+   CALL_BUSY for an acquired session, CALL_LIMIT for the ninth active session,
+   CALL_NO_MEMORY on allocation, CALL_DENIED for missing authority/wrong owner.
+
+The [accepted contract](../../../wip/hda-playback.md#accepted-session-call-contract)
+documents the intended layouts and behavior without exporting placeholder ABI.
+No new owner decision is needed to begin the assigned private engine.
 
 ## No-audio baseline
 
@@ -100,9 +96,8 @@ matched reuse. No native host was accessed and the ALC257 dump is unchanged.
 
 ## Remaining work / handoff
 
-Wait for the three contract decisions before changing code. Check #549 merge
-state, then rebase the stack as appropriate. Implement the assigned private
-controller/codec engine, qualify QEMU command/routing/known PCM/stop ownership,
-and repeat the matched idle-cost observations. Publish a focused implementation
-PR with exact revisions and existing CI; update only completed checklist steps.
-Do not begin later session/mixing/consumer tasks implicitly.
+Implement the assigned private controller/codec engine, qualify QEMU command/
+routing/known PCM/stop ownership on an unmerged consumer branch, and repeat the
+matched idle-cost observations on the production image. Publish a focused
+implementation PR with exact revisions and existing CI; update only completed
+checklist steps. Do not begin later session/mixing/consumer tasks implicitly.

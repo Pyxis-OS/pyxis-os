@@ -68,7 +68,7 @@ Chosen by the owner, each starting with a proposal:
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
   exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
   queues as starting tuning. First controller/codec bring-up task assigned
-  2026-10-08; [baseline captured, contract choices pending before code](../development/experiments/audio-task1/README.md).
+  2026-10-08; [baseline captured and task defaults accepted](../development/experiments/audio-task1/README.md).
   QEMU closure with
   a later ThinkPad native batch is carried forward for confirmation at closure;
   native playback remains unqualified. Quake can produce sound

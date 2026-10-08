@@ -1,7 +1,7 @@
 # HD Audio playback milestone proposal
 
 Status: **three defaults accepted 2026-10-08; first controller/codec bring-up
-task assigned, task-specific decisions pending before code**. Prepared from
+task assigned; task-specific defaults accepted**. Prepared from
 main `67e14be` and the completed
 [QEMU investigation](../development/audio-investigation.md). Publishing or
 merging this document does not start implementation; public call details
@@ -9,8 +9,8 @@ still need task-specific review.
 The investigation probes stay unmerged. The owner has accepted the defaults
 below. The owner assigned the first controller/codec bring-up task on
 2026-10-08. Its [baseline and decision handoff](../development/experiments/audio-task1/README.md)
-records the pending call-layout/write/admission choices, fresh no-audio baseline
-and stack order. No code has changed before those decisions. Later tasks still
+records the accepted call-layout/write/admission choices and fresh no-audio
+baseline. Task 1 branches from main after #549 merged. Later tasks still
 require their own assignments.
 
 The proposed goal is one analog playback engine, bounded per-space PCM sessions
@@ -64,6 +64,41 @@ the QEMU evidence and remaining native checks; the owner confirms QEMU closure
 with retained debt or requires native qualification before closure. QEMU closure
 must not claim native sound, and the supplied Fedora codec dump is inventory
 and state evidence, not native Pyxis playback qualification.
+
+## Accepted session call contract
+
+Accepted task 1 defaults, **2026-10-08**. This is documentation for the later
+session task, not an implemented protocol or exported SDK header. Follow native
+message headers; allocate the protocol tag and rights/operation constants when
+that task implements the ABI, rather than reserving placeholder APIs now.
+
+| Call | Request after the standard message header | Result / behavior |
+| --- | --- | --- |
+| ACQUIRE | No additional fields | Exclusive process-owned session in the grant's space; return fixed format, queue capacity and session generation. |
+| WRITE | `uint64_t buffer`, `uint64_t length` (caller address, bytes) | Copy and commit all requested frames or none; success returns the accepted byte count. |
+| STATUS | No additional fields | Return queue capacity/free frames, session generation, starvation and hardware-discontinuity counters and terminal state. |
+| RELEASE | No additional fields | Discard queued PCM, cancel uncommitted writes and release ownership; no reply payload. |
+
+The named audio grant authorizes calls only within its own space. WRITE, STATUS
+and RELEASE require the acquiring process; copying/closing a handle does not
+transfer/release its session. Process exit releases ownership. ACQUIRE fails
+with CALL_BUSY for an already acquired session, including repeat acquisition
+by its owner; CALL_LIMIT for admission beyond eight active sessions;
+CALL_NO_MEMORY for allocation failure; CALL_UNAVAILABLE for absent, unsupported
+or failed audio. Missing authority, a wrong space or a wrong session owner is
+CALL_DENIED. Exact validation precedence is documented with the implementation.
+
+WRITE is nonblocking, at most **4096 bytes**, with four-byte stereo-frame
+alignment. Oversize is CALL_LIMIT; malformed alignment/request is CALL_BAD_REQUEST
+and inaccessible memory is CALL_BAD_BUFFER. A full queue is CALL_WOULD_BLOCK,
+accepting no data and preserving reply storage. No caller buffer survives return.
+Zero length is a no-op after request, authority, ownership and buffer validation.
+WAIT_WRITABLE is level-triggered and guarantees room for a maximum-size write;
+it reserves nothing, and terminal failure reports WAIT_ERROR. STATUS allows a
+producer to choose a smaller write from the available complete-frame capacity.
+The accepted calls have no separate write deadline; WAIT_MANY supplies existing
+wait deadlines. No audio drain guarantee, DMA mapping or audible frame position
+is exported. Already mixed hardware frames may outlive release until consumed.
 
 ## Proposed ownership and lifetime
 
