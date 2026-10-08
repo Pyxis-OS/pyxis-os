@@ -1,6 +1,6 @@
 # Bluetooth investigation
 
-Status: **tasks 1–5 complete for the accepted warm-host scope, 2026-10-08; scan results awaiting owner review before final deliverables.**
+Status: **tasks 1–5 complete for the accepted warm-host scope, 2026-10-08; owner has seen the scan results and assigned final deliverables. Proposal decisions pending.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Shared kernel interrupt-IN support is implemented
@@ -10,8 +10,11 @@ stays on unmerged branches. After merging
 task 4 and accepted warm-firmware verification with cold upload deferred.
 After merging [PR #528](https://git.internal/PyxisOS/pyxis-os/pulls/528), the owner
 assigned task 5 through the orchestrator. Scan code remains on an unmerged probe
-branch; the owner must see the scan results before the investigation report and
-milestone proposal begin. Bluetooth device addresses must stay out of the
+branch. After [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536), the
+owner confirmed seeing the scan results and assigned the
+[final report](../development/bluetooth-investigation.md) and
+[mouse milestone proposal](bluetooth-mouse.md). No production task is authorized
+by those deliverables. Bluetooth device addresses must stay out of the
 repository, PRs, docs and recorded output.
 
 ## Hardware
@@ -55,9 +58,8 @@ to consider. The owner sets it up:
 
 Attachment must not be assumed to leave the controller in its bootloader:
 the prepared-host validation received an operational version. Pyxis's own
-firmware load remains part of the investigation for native startup and reset
-states that require it. A `USB_HOST=` launcher option can follow once the setup
-works, recorded beside the NIC reference.
+firmware load is deferred to the proposed production milestone for native startup
+and reset states that require it. The investigation added no launcher option.
 
 ## Steps
 
@@ -68,7 +70,7 @@ works, recorded beside the NIC reference.
    records successful QEMU attachment, guest descriptors and native evidence limits.
 - [x] **2. Interrupt IN assessment.** Record the endpoint context, ring ownership,
    buffering and loss requirements shared by HCI events and the planned
-   [USB HID mice](pointer.md#devices).
+   [USB HID mice](bluetooth-mouse.md#proposed-sharing-with-usb-hid).
    The [task 2 assessment](../development/experiments/bluetooth-task2/README.md)
    records the code gaps, required hardware fields and proposed ownership/loss
    policies, with an addendum linking the later accepted decisions below.
@@ -156,9 +158,11 @@ are recorded in [technical debt](../technical-debt.md#xhci-hardware-profile-and-
 
 ## Deliverables
 
-- **A report** with measured results for each step, in QEMU passthrough and,
-  where possible, natively. Distinguish observation from inference.
-- **A milestone proposal** covering at least:
+- [x] **[Final report](../development/bluetooth-investigation.md)** with measured
+  results for each step, in QEMU passthrough and natively where available,
+  distinguishing observation from inference and linking the detailed reports.
+- [x] **[Milestone proposal](bluetooth-mouse.md)** presented for owner decisions,
+  with a task breakdown, covering:
   - where the stack lives: the kernel owning the USB transport and HCI packets,
     with L2CAP, ATT/GATT and pairing in userspace, is the starting lean to
     examine, not a decision;
@@ -169,6 +173,10 @@ are recorded in [technical debt](../technical-debt.md#xhci-hardware-profile-and-
   - how much of interrupt-transfer support to share with USB HID.
 
 The [Bluetooth direction](later-os-directions.md#bluetooth) records the goal.
+The proposal's decisions remain open. Retire this investigation WIP into a
+reference only after the owner decides on that proposal. The ThinkPad's native
+check batch, including re-enabling Fedora Bluetooth, follows this investigation;
+it has not been run as part of these documentation deliverables.
 
 ## Accepted task 5 scan profile
 
@@ -192,6 +200,6 @@ following profile through the orchestrator and authorized its implementation:
 
 The linked task 5 report records implementation, revision, configuration and
 measurement limits. The probe stays unmerged; the report branch contains only
-documentation. The final investigation report and milestone proposal remain
-unassigned until the owner has seen the scan results. No connections, pairing,
-bond keys, GATT or pointer delivery are authorized by this completed scan.
+documentation. The owner has since seen the scan results and assigned the two
+linked documentation deliverables. No connections, pairing, bond keys, GATT or
+pointer delivery are authorized by this completed scan or the pending proposal.

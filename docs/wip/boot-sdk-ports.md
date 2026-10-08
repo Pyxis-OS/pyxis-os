@@ -43,6 +43,11 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-08): final documentation deliverables for the
+  [Bluetooth investigation](bluetooth.md), after the owner saw the merged task 5
+  scan results. The [report](../development/bluetooth-investigation.md) records
+  measured evidence; the [MX Master 3S milestone proposal](bluetooth-mouse.md)
+  awaits decisions, at most three per round. No production task is assigned.
 - **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
   documentation-only proposal for program cursor images, surface routing,
   tab clicks, terminal/mux selection and pointer lock with Super+Esc.
