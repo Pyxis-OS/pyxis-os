@@ -184,7 +184,9 @@ search/copy/duplication, numeric conversion/formatting, environment lookup and
 [unbuffered file/terminal stdio](../userland/stdio.md).
 `snprintf`/`vsnprintf` report the full required length and terminate a nonempty
 destination even when truncated. Their header lists supported formats, including
-floating point. Wide characters and locale support are not implemented.
+floating point. Wide characters are limited to `wcslen`. `setlocale` knows
+only the "C" locale: queries, `""` and `"C"` return `"C"`, and other names
+return NULL. There is no `localeconv` or other locale state.
 `errno` is process-local today because there is only one thread per process.
 Native libpyxis calls continue to return native statuses without setting it.
 
@@ -228,10 +230,12 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
-The `<math.h>` subset provides `floor`, `ceil`, `ceilf`, `fmod`, `pow`, `sqrt`, `sin`, `cos`,
-`tan`, `atan`, `atan2`, `frexp`, `ldexp`, `scalbn`, `fabs`, `scalbnl`, `ldexpl`,
-`fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources.
-`sqrt` uses SSE2 `sqrtsd`; the trigonometric functions take radians and reduce
+The `<math.h>` subset provides `floor`, `ceil`, `ceilf`, `round`, `roundf`,
+`modf`, `fmod`, `pow`, `sqrt`, `sqrtf`, `sin`, `cos`, `tan`, `atan`, `atan2`,
+`frexp`, `ldexp`, `scalbn`, `fabs`, `scalbnl`, `ldexpl`, `fmodl`, `fabsl`,
+`copysignl` and `frexpl`, built from pinned musl sources. `round` and `roundf`
+round halfway cases away from zero. `sqrt` and `sqrtf` use SSE2 `sqrtsd` and
+`sqrtss`; the trigonometric functions take radians and reduce
 arguments of any magnitude exactly modulo pi/2. They are in libc and need no `-lm`. The SDK uses SSE2
 float/double evaluation and x87 80-bit long double. `floor` rounds downward;
 `fmod` and `fmodl` use a quotient truncated toward zero. Scaling follows the

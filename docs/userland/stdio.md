@@ -44,8 +44,12 @@ a FILE releases its live descriptor and wrapper metadata, not the directory entr
 Descriptors use the lowest free number, including absent or closed standard
 slots. The first three entries use static storage; later growth uses the heap.
 Storage exhaustion reports ENOMEM, and descriptor-number exhaustion reports
-EMFILE. Public open/read/write/close use this same ownership/cursor model;
-fdopen, fileno and duplication are not exposed.
+EMFILE. Public open/read/write/close use this same ownership/cursor model.
+`fileno` returns a stream's current descriptor, or -1 with EBADF once the
+stream or its descriptor is closed; the stream still owns it, so close it with
+`fclose`. Reading or seeking through that descriptor bypasses the stream's
+pushback and read-ahead; `fstat` is unaffected. fdopen and duplication are not
+exposed.
 
 Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
@@ -367,8 +371,9 @@ requested exit status. Exit handlers and `.fini_array` run before this cleanup,
 so they can still write to the streams; see
 [startup and exit](../development/sdk.md#startup-exit-and-layout). `_Exit` and
 fatal faults bypass libc cleanup; the kernel still reclaims process resources.
-There are no buffering controls, wide I/O or fdopen/fileno. Scanning and
-one-byte pushback are described above.
+There are no buffering controls, wide I/O or fdopen. `fseeko` and `ftello`
+behave exactly like `fseek` and `ftell`, because `off_t` is `long`. Scanning
+and one-byte pushback are described above.
 
 `fclose` invalidates the association and makes one native close attempt. Success
 returns zero without changing errno. Failure returns EOF with the translated

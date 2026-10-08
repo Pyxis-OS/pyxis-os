@@ -123,7 +123,7 @@ screen as their shell; no alternate-screen protocol is introduced.
 Ordinary `make -j16 image` builds passed with the existing
 `pyxis-llvm23.1.3-49e2c1a` builder. No compiler-container rebuild or new
 upstream source was needed. Userland dependency is
-[52c5167](https://git.internal/PyxisOS/pyxis-userland/commit/52c51674e192fc3c18dcffb69553529a317bef06),
+[312fe7a](https://git.internal/PyxisOS/pyxis-userland/commit/312fe7a3c41c76817d237cab21ca93e9da11efca),
 [PR #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160). Manual images
 used only a temporary `multiplexer = true` addition to Development; packaged
 profiles keep the default opt-out. The final dependency

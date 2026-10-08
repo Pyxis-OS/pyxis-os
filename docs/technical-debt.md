@@ -810,9 +810,11 @@ separate work.
 
 The completed [descriptor portability slice](userland/libc-portability.md) supplies
 open/read/write/close for cksum and restricted tee, and `lseek` for files.
-Public O_RDWR, fdopen/fileno and duplication remain absent even though fopen
+Public O_RDWR, fdopen and duplication remain absent even though fopen
 supports update modes internally. Consumers requiring those interfaces need
-a separately agreed extension. Revisit them against a pinned consumer's actual
+a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
+[SDL2 port](wip/sdl2.md); it exposes the stream's existing descriptor and adds
+no new aliasing. Revisit them against a pinned consumer's actual
 needs; duplication must settle shared open-state/cursor ownership before adding
 new descriptor aliases. Descriptor inheritance and cross-process shared offsets
 are not supplied by the existing dedicated startup-stream grants.
@@ -969,6 +971,19 @@ scope, lifetime and behavior across mounts and file replacement before exposing
 it; do not substitute normalized path strings or add `realpath` just for TCC.
 See [the TCC contract](userland/tcc.md#remaining-limits).
 
+## Sleep wake granularity
+
+Deadline sleeps wake on the 120 Hz local APIC preemption tick, so a sleep can
+end up to 8.33 ms after its deadline; see [timekeeping](kernel/timekeeping.md).
+The [SDL2 probe](wip/sdl2.md#a-test-program) measured a `SDL_Delay(16)` loop at
+24.8 ms per frame instead of about 17. DevilutionX's own limiter tracks
+deadlines and held 57.8–62.3 FPS. Quake's 72 Hz cap and other fixed-rate
+sleepers can be delayed the same way; that is not measured.
+
+Nanosecond units remain a representation, not a precision promise. Revisit
+with a one-shot deadline timer or tickless sleeping, as a kernel task, when a
+consumer needs finer pacing than its own deadline tracking provides.
+
 ## Wall-clock time and clock-source performance
 
 [Monotonic time and deadline sleep](kernel/timekeeping.md) now use the shared HPET
@@ -1069,9 +1084,10 @@ deliberate subset, accepted by the owner on 2026-10-08:
   guards. Programs that start threads cannot be ported yet.
 - **No localization or wide characters.** `<iostream>`, `<locale>`, `<regex>`
   and wide strings are absent; so are the fmt headers that need them
-  (`chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h`). Ports that print
-  through `std::cout` need a "C"-locale libc first: `locale.h` and the missing
-  wide-character functions, 59 names in `<cwchar>` alone.
+  (`chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h`). libc now has a
+  "C"-only `setlocale` (no `localeconv`) and `wcslen`, but ports that print
+  through `std::cout` still need the other wide-character functions: 58 of
+  the 59 names in `<cwchar>`.
 - **Most of `<cmath>` is missing.** libc's math subset leaves 161 of the 186
   names `<cmath>` imports undefined, so their first use fails to compile.
 - **Exceptions cannot cross C frames.** C code has no unwind tables, so an
