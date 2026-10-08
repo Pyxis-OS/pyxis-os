@@ -57,7 +57,10 @@
 #define PIT_CHANNEL2_OUTPUT (1u << 5)
 #define PIT_FREQUENCY 1193182u
 #define TIMER_FREQUENCY 120u
+#define NANOSECONDS_PER_SECOND UINT64_C(1000000000)
+#define TIMER_PERIOD_NS ((NANOSECONDS_PER_SECOND + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
 #define PIT_CALIBRATION_COUNT ((PIT_FREQUENCY + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
+#define PIT_CALIBRATION_DENOMINATOR ((uint64_t)PIT_CALIBRATION_COUNT * NANOSECONDS_PER_SECOND)
 #define PIT_POLL_LIMIT 10000000u
 #define PIT_CLOCK_POLL_INTERVAL 1024u
 
@@ -176,6 +179,75 @@ void apic_timer_start(void)
   KASSERT(timer_count);
   apic_write(APIC_LVT_TIMER, APIC_TIMER_PERIODIC | APIC_TIMER_VECTOR);
   apic_write(APIC_TIMER_INITIAL, timer_count);
+}
+
+void arch_timer_deadline_start(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct cpu_local *cpu = cpu_current();
+  KASSERT(cpu->timer_count && !cpu->timer_deadline_started);
+  uint64_t now = arch_monotonic_ns();
+  cpu->timer_preempt_deadline = TIMER_PERIOD_NS > UINT64_MAX - now ? UINT64_MAX :
+                                now + TIMER_PERIOD_NS;
+  cpu->timer_deadline_started = true;
+  apic_write(APIC_LVT_TIMER, APIC_TIMER_VECTOR);
+  arch_timer_arm(UINT64_MAX);
+}
+
+void arch_timer_arm(uint64_t deadline)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct cpu_local *cpu = cpu_current();
+  if (!cpu->timer_deadline_started) {
+    return;
+  }
+
+  uint64_t next = deadline < cpu->timer_preempt_deadline ? deadline :
+                  cpu->timer_preempt_deadline;
+  uint64_t now = arch_monotonic_ns();
+  uint64_t remaining = next > now ? next - now : 1;
+  if (remaining > TIMER_PERIOD_NS || now == UINT64_MAX) {
+    remaining = TIMER_PERIOD_NS;
+  }
+  /* The nominal occasion bounds this product. Splitting before multiplying by
+   * PIT_FREQUENCY keeps both products in uint64_t, including the rounding add.
+   * Use the PIT interval itself, rather than treating it as exactly 1/120 s. */
+  uint64_t product = (uint64_t)cpu->timer_count * remaining;
+  uint64_t count = (product / PIT_CALIBRATION_DENOMINATOR) * PIT_FREQUENCY;
+  uint64_t fraction = (product % PIT_CALIBRATION_DENOMINATOR) * PIT_FREQUENCY;
+  count += (fraction + PIT_CALIBRATION_DENOMINATOR - 1) / PIT_CALIBRATION_DENOMINATOR;
+  if (!count) {
+    count = 1;
+  } else if (count > UINT32_MAX) {
+    count = UINT32_MAX;
+  }
+  apic_write(APIC_TIMER_INITIAL, (uint32_t)count);
+}
+
+void arch_timer_interrupt(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct cpu_local *cpu = cpu_current();
+  if (!cpu->timer_deadline_started) {
+    if (cpu == cpu_bsp()) {
+      arch_clock_tick();
+    }
+    return;
+  }
+
+  uint64_t now = arch_monotonic_ns();
+  if (now < cpu->timer_preempt_deadline) {
+    return;
+  }
+  uint64_t periods = (now - cpu->timer_preempt_deadline) / TIMER_PERIOD_NS + 1;
+  if (periods > (UINT64_MAX - cpu->timer_preempt_deadline) / TIMER_PERIOD_NS) {
+    cpu->timer_preempt_deadline = UINT64_MAX;
+  } else {
+    cpu->timer_preempt_deadline += periods * TIMER_PERIOD_NS;
+  }
+  if (cpu == cpu_bsp()) {
+    arch_clock_tick();
+  }
 }
 
 uint32_t apic_timer_remaining(void)

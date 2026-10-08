@@ -22,8 +22,20 @@
 #define EFER_SCE (UINT64_C(1) << 0)
 #define EFER_NXE (UINT64_C(1) << 11)
 
-/* Nominal frequency of the periodic scheduler timer. */
+/* Nominal preemption frequency, retained with deadline-driven timer arms. */
 uint32_t arch_timer_frequency(void);
+
+/* Local CPU, IF=0, after scheduler startup. Boot keeps its periodic timer
+ * until this transition; in particular, AP startup polls the BSP countdown. */
+void arch_timer_deadline_start(void);
+/* Local CPU, IF=0. Arm the earlier of this absolute HPET deadline and the next
+ * nominal preemption occasion. UINT64_MAX means no task deadline. Before the
+ * transition this leaves the bootstrap periodic timer unchanged. */
+void arch_timer_arm(uint64_t deadline);
+/* Local timer entry, IF=0. Advance the nominal preemption phase when due and
+ * service BSP HPET maintenance. The scheduler must then expire and rearm before
+ * interrupt acknowledgement or any context switch. */
+void arch_timer_interrupt(void);
 
 static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
                          uint32_t *ecx, uint32_t *edx)
