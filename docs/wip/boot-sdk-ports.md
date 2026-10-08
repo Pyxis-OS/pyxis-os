@@ -38,13 +38,11 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
-- **Claude** (2026-10-08): **SDL2 with a native Pyxis backend**, upstream SDL2
-  with video, input and timer support over the display, keyboard, pointer and
-  clock sessions; audio waits for an audio driver. Task 1 is a probe and
-  proposal that also selects the first consumer, with DevilutionX on its
-  shareware data as the leading candidate (it also needs the completed
-  [C++ runtime](../development/cxx-userspace.md)). See the SDL2 entries in
-  [application ports](application-ports.md#libraries-and-terminal-tools).
+- **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
+  upstream SDL2 with video, input and timer support over the display,
+  keyboard, pointer and clock sessions; audio waits for an audio driver.
+  DevilutionX on local shareware data is the first consumer; the owner
+  accepted the three task 1 decisions on 2026-10-08.
 - **Codex 1** (2026-10-08): the [terminal multiplexer](terminal-applications.md),
   with its three accepted decisions, starting with a proposal for the prefix
   key and commands, pane layout, scrollback, pane exit and how it is started.
