@@ -10,7 +10,7 @@ were not attempted.
 The owner has seen the scan results and accepted the stack, security and closure
 direction in the [mouse milestone proposal](../wip/bluetooth-mouse.md) on
 2026-10-08. Its later policy decisions remain pending. The completed WIP is now
-the [AX200 reference](../devices/bluetooth-investigation.md); retiring it merges
+the [AX200 reference](../devices/ax200-bluetooth.md); retiring it merges
 no probe code and authorizes no implementation.
 
 ## Evidence by task

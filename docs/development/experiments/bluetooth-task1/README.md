@@ -4,7 +4,7 @@ On 2026-10-08, QEMU attached the ThinkPad's Intel AX200 Bluetooth USB function
 `8087:0029` as the ordinary Fedora user. Pyxis main `078c9759b2803e57368201f4ecd3b44b59bb3af9`
 then enumerated it with complete inventory, both interfaces and all alternate
 settings. Guest configuration bytes establish the endpoint addresses below.
-This completes [investigation task 1](../../../devices/bluetooth-investigation.md#qualified-scope).
+This completes [investigation task 1](../../../devices/ax200-bluetooth.md#qualified-scope).
 
 No kernel, ABI, launcher or target-userland code changed. Interrupt transfers,
 HCI commands, controller firmware state, firmware loading and LE scanning remain

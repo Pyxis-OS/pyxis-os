@@ -217,7 +217,7 @@ consumer (Quake's sound, for example) need their own decisions.
 
 Accepted direction (owner, 2026-10-08): use the MX Master 3S on Pyxis through the
 ThinkPad AX200 USB function (`8087:0029`). The
-[completed investigation](../devices/bluetooth-investigation.md) reached a first
+[completed investigation](../devices/ax200-bluetooth.md) reached a first
 LE scan on warm-host passthrough. The [mouse proposal](bluetooth-mouse.md) records
 kernel USB/Intel/HCI ownership and a trusted userspace upper stack, Secure
 Connections enrollment, and cold initialization/durable bonds/native pointer

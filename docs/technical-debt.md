@@ -2205,7 +2205,7 @@ with the VM/device lifetime work, not a local allocator-lock workaround.
 
 ### Bluetooth cold firmware upload and running-version policy
 
-For the [Bluetooth investigation](devices/bluetooth-investigation.md), the owner accepted using
+For the [Bluetooth investigation](devices/ax200-bluetooth.md), the owner accepted using
 already operational AX200 firmware and deferred cold bootloader upload on
 2026-10-08. Warm boot or passthrough may retain another OS's chosen build; the
 probe verifies that build stays unchanged, without comparing it to a Pyxis pin.
@@ -2230,7 +2230,7 @@ policy decision; the investigation's warm acceptance does not settle it.
 
 The implemented private [interrupt-IN path](devices/usb-interrupt-in.md) follows
 the owner's narrower initial profile for
-[Bluetooth task 3a](devices/bluetooth-investigation.md#accepted-interrupt-in-decisions): boot-present,
+[Bluetooth task 3a](devices/ax200-bluetooth.md#accepted-interrupt-in-decisions): boot-present,
 root-connected full-speed endpoints, with other profiles explicitly unsupported.
 This leaves behind-hub periodic endpoints and other speeds unavailable to the
 initial shared receive path, including HID consumers on those paths. Revisit

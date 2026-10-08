@@ -1,15 +1,16 @@
 # MX Master 3S on Pyxis
 
-Status: **documentation proposal; first round accepted 2026-10-08 with review
-adjustments. Second round pending; no implementation authorized.**
+Status: **documentation proposal; rounds one and two accepted 2026-10-08 with
+review adjustments. Documentation handoff complete; later policies pending,
+with no implementation authorized.**
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
 assigned this proposal. Publishing, reviewing or merging it does not authorize
 implementation. The owner chooses the milestone and explicitly starts its tasks.
-The owner's 2026-10-08 instruction is to finish these documentation rounds and
-then stop, even if every decision is accepted. Implementation needs a new
-assignment; the ThinkPad is reserved for the owner's native-check batch next.
+The owner's latest 2026-10-08 instruction is to record round two, leave queued
+decisions pending without asking another round, push and stop. Implementation
+needs a new assignment; the ThinkPad is reserved for the owner's native batch.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
@@ -39,28 +40,25 @@ the [review of #542](https://git.internal/PyxisOS/pyxis-os/pulls/542):
    alternative would avoid that work but depend on another OS having initialized
    the controller.
 
-## Second owner decision round
+## Accepted second round
 
-Only these three decisions are put to the owner now; all remain **open**.
-Recommendations elsewhere are tentative unless recorded as accepted above.
+Accepted by the owner through the orchestrator on **2026-10-08**:
 
-4. **Running firmware policy.** Recommended: package pinned, mirrored SFI/DDC
-   and license/provenance in the boot archive; reuse an operational warm build
-   only after it is explicitly qualified as compatible, without resetting solely
-   to enforce the packaged pin. Unknown builds stop for an owner decision.
-   The exact pin/mirror follows cold identification, not today's host file names.
-   An alternative is requiring the packaged build on every startup, which may
-   force upload/re-enumeration even on a working warm controller.
-5. **Bond and control authority.** Recommended: one system-wide private npfs
-   root granted only to trusted startup and the Bluetooth service; separate
-   enrollment/forget authority supplied to a trusted local control tool, withheld
-   from ordinary applications. Bond reuse is system-wide, not per-space. A
-   per-user store would depend on the later users/authority design.
-6. **Protection at rest.** Recommended: capability isolation for this milestone,
-   with no disk encryption claim; raw disk/mount/backup authority can expose keys.
-   Defer wrapping to the [credentials and biometric-unlock direction](credentials-and-biometrics.md).
-   Requiring that protection now would add its master-key/unlock prerequisites
-   to the Bluetooth milestone's closure path.
+4. **Running firmware policy:** pinned, mirrored cold SFI/DDC assets and full
+   license/provenance in the boot archive; reuse only explicitly qualified
+   compatible warm builds, without resetting solely to enforce the packaged pin.
+   Unknown builds return to the owner. Exact assets follow cold identification;
+   the host file names do not select a Pyxis pin.
+5. **Bond and control authority:** one private system-wide npfs root for trusted
+   startup and the sole Bluetooth service, with separate trusted-local enrollment
+   and forget grants withheld from ordinary applications. Bonds are system-wide.
+6. **Protection at rest:** capability isolation initially, acknowledging that
+   disk/mount/backup access exposes keys. Wrapping is deferred to the
+   [credentials direction](credentials-and-biometrics.md); this milestone makes
+   no disk-encryption claim.
+
+Other recommendations remain proposed. Queued policies are listed under
+[handoff](#decision-and-investigation-handoff), not put to the owner now.
 
 ## Accepted ownership and proposed service lifetime
 
@@ -140,12 +138,12 @@ or replace that review. Firmware is separate from kernel source licensing.
 Proposed initialization happens once under exclusive kernel ownership before
 exporting a ready controller: read state, upload only a recognized bootloader,
 observe the real operational boot event, apply DDC as required, and check the
-resulting version/capabilities. A known compatible operational warm build would
-skip SFI upload, avoiding a reset solely to enforce a byte-for-byte pin; unknown
-builds remain unavailable pending an explicit compatibility decision. Record
-accepted running-version compatibility separately from the packaged file pin.
-That warm-version policy remains a later owner decision, not the investigation's
-accept-any-operational-build policy extended by assumption.
+resulting version/capabilities. Under the accepted policy, an explicitly qualified
+compatible operational warm build skips SFI upload, avoiding a reset solely to
+enforce the packaged pin; unknown builds return to the owner. Record qualified
+versions separately from the packaged file pin. The actual compatibility list
+and its qualification criteria remain pending; the investigation's acceptance
+of existing operational firmware does not qualify it for production.
 
 Cold support needs secure-send bulk OUT, independently owned bootloader bulk IN
 and interrupt events, and bounded progress while commands wait. Use actual vendor
@@ -209,7 +207,7 @@ Use the explicit [random grant](../devices/randomness.md) through a checked
 crypto entropy adapter; there is currently no kernel CSPRNG. Entropy failure
 aborts pairing; timestamps and predictable fallback keys are not acceptable.
 
-Proposed bonds persist in a dedicated writable npfs volume/root granted only
+Accepted bond ownership uses a dedicated writable npfs root granted only
 to trusted startup and the Bluetooth service. Ordinary applications receive
 neither that root nor raw keys; a hidden subdirectory of shared `home://` or
 `tmp://` is not isolation. The service alone writes keys and private peer identity
@@ -218,11 +216,11 @@ status and diagnostics use an opaque local bond label. These runtime private
 records never enter source, reports, PRs, raw packet dumps or debugger captures.
 
 The storage authority is capability isolation, not an invented UID or permission
-bit. Initial proposal has no encryption at rest: possession of the disk or raw
-mount/backup authority can expose keys. If that is unacceptable, stop to design
-key wrapping and its separate unlock authority; a key beside the encrypted bond
-is not protection. Keep that design aligned with
-[credentials and biometric unlock](credentials-and-biometrics.md). Live boots
+bit. The accepted initial protection has no encryption at rest: possession of
+the disk or raw mount/backup authority can expose keys. Wrapping and separate
+unlock authority are deferred to
+[credentials and biometric unlock](credentials-and-biometrics.md); a key beside
+the encrypted bond is not protection. Live boots
 without a private persistent root should report
 bonding unavailable, rather than claim RAM storage is persistent.
 
@@ -233,8 +231,9 @@ disconnect and report it, preserving uncertainty about the peer's stored bond.
 Reboot must load the saved security properties and authenticate possession of
 the bond without falling back to new pairing. Authorized forgetting stops
 reconnect, disconnects, removes/syncs the record and reports durability; it cannot
-promise erasure of old disk blocks, backups or the mouse's retained key. Bond
-scope, at-rest policy and enrollment/forget authority need a later owner round.
+promise erasure of old disk blocks, backups or the mouse's retained key. These
+record, durability and failure details remain proposed; storage/control authority
+and the initial at-rest policy are accepted above.
 
 ## Proposed HID and pointer path
 
@@ -341,13 +340,20 @@ authorize the production milestone or its new native qualification tasks.
 
 ## Decision and investigation handoff
 
-Round one is **accepted 2026-10-08**; round two is pending. The exact firmware
-pin/mirror, discovery/reconnect behavior, report scope, input-source lifetime and
-USB HID sharing remain later topics; they are not additional questions in this
-round. Obtain answers before implementing dependent behavior.
+Rounds one and two are **accepted 2026-10-08**. Remaining topics are pending for
+a later owner round; they are not questions presented now:
+
+- Exact firmware pin/mirror, compatible warm-version list and qualification criteria.
+- Discovery/privacy-address profile and bonded reconnect behavior.
+- Controller/service grant lifetime, teardown and recovery policy.
+- Bond record/durability behavior, HID report scope and pointer input-source lifetime.
+- USB HID sharing scope beyond the implemented private interrupt transport.
+
+Obtain decisions before implementing dependent behavior. The owner requests a
+stop here after publishing this documentation; no next round or task is started.
 
 With the direction decided, the completed investigation is now the
-[AX200 reference](../devices/bluetooth-investigation.md), linked to the final
+[AX200 reference](../devices/ax200-bluetooth.md), linked to the final
 report and detailed task reports. This production proposal stays in WIP; no
 implementation task is assigned and cold-firmware debt remains open. No native
 batch, host Bluetooth service change or SMP exchange was performed for this PR.

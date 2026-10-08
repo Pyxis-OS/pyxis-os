@@ -12,7 +12,7 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
-- [AX200 Bluetooth investigation](../devices/bluetooth-investigation.md),
+- [AX200 Bluetooth investigation](../devices/ax200-bluetooth.md),
   2026-10-08: warm-host QEMU passthrough through identification of the MX Master
   3S; [final report](../development/bluetooth-investigation.md). Native Pyxis
   evidence is inventory only; production mouse work remains proposed below.
@@ -52,9 +52,10 @@ Implemented behavior lives in the subsystem references listed in the
 Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
-  documentation only. The owner accepted stack/security/closure direction in
-  round one; round two awaits decisions, at most three per round. The completed
-  investigation is referenced above. No production task is assigned.
+  documentation only. Two owner rounds accepted stack/security/closure and initial
+  firmware/bond policies; later decisions are queued without another round now. The
+  documentation handoff is complete and investigation is referenced above.
+  No production task is assigned; the owner requested a stop before native checks.
 - **Codex alpha** (owner update, 2026-10-08): accepted
   [system-pointer milestone](pointer.md), with task 1 in progress and kernel-owned
   positions, cursor and surface routing. The owner's latest assignment supersedes
