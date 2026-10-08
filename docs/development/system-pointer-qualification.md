@@ -521,6 +521,17 @@ Saved final-matrix artifacts with userland `da7aaa0`:
 | Mux boot-framebuffer ISO | `5cf6ba1ae92427e29227ab1104fa851b076b8826104433392fab677e550954c0` |
 | Mux 1280x800 modeset ISO | `cf19d6077d4b0219c9278694b5050377821bac44177e664ae04920967fe132ca` |
 
+### Main integration follow-up
+
+Main advanced to `77fc0ed` with merged Bluetooth contracts and the private audio
+engine. Merge `f00bb4f` incorporated it without changing unrelated submodule pins.
+The complete default image build passed again. A fresh headless Q35/KVM,
+four-CPU, 512 MiB VirtIO/PS/2 smoke confirmed Caelum selection, mux controller
+acquisition, simultaneous `mousetest` graphics ownership, its three-interest
+pointer/keyboard/display wait and normal cleanup of both owners. No audio device
+was added to this pointer qualification. The detailed checks and cost/artifact
+tables above precede that integration; no integrated-head cost claim is made.
+
 ### Limits
 
 Stale-view refusal, repeated/foreign acquisition, copied/closed grant lifetime,
