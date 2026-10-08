@@ -7,9 +7,11 @@
 struct usb_host_controller;
 struct usb_host_device;
 
-/* Owning USB worker, BSP/IF=1. Bind after both retained receives start.
- * Inventory must be sealed before initialization. A second attachment or
- * incomplete inventory makes the singleton unavailable. */
+/* Owning USB worker, BSP/IF=1. Count each checked candidate before resource
+ * admission. A second candidate or incomplete inventory makes the singleton
+ * unavailable, including when the second transport cannot be configured. */
+void bluetooth_hci_candidate(void);
+/* Bind after both retained receives start. Seal inventory before initialization. */
 void bluetooth_hci_attach(struct usb_host_controller *host,
     struct usb_host_device *device, uint8_t interface_number);
 /* BSP/IF=0. Publish the completed controller inventory. */

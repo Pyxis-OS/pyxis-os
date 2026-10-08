@@ -1333,14 +1333,25 @@ void bluetooth_hci_drain_progress(struct usb_host_controller *host)
   work_tick(host);
 }
 
+void bluetooth_hci_candidate(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  ++adapter.attachments;
+  if (adapter.attachments != 1 || adapter.sealed) {
+    fail_adapter(CALL_UNAVAILABLE);
+  }
+  cpu_restore_interrupts(flags);
+}
+
 void bluetooth_hci_attach(struct usb_host_controller *host,
     struct usb_host_device *device, uint8_t interface_number)
 {
   KASSERT(arch_cpu_index() == 0 && host && device);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  ++adapter.attachments;
-  if (adapter.attachments != 1 || adapter.sealed) {
+  if (adapter.attachments != 1 || adapter.host || adapter.sealed) {
     fail_adapter(CALL_UNAVAILABLE);
   } else {
     adapter.host = host;
