@@ -1,0 +1,122 @@
+{
+  "revision": "0e3c266efd9ed9421c1a26ace90b2a486cb457e8",
+  "wav_sha256": "5deafb9a4abe45b3b4a2f5f64f310bb724494cf4750d3dbdd9ead2ab8c675861",
+  "channels": 2,
+  "sample_bytes": 2,
+  "rate": 48000,
+  "frames": 412787,
+  "nonzero_frames": 386962,
+  "regions": [
+    {
+      "start_frame": 0,
+      "end_frame_exclusive": 1024,
+      "frames": 1024,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 0,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 3840,
+      "end_frame_exclusive": 242816,
+      "frames": 238976,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 64,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 245871,
+      "end_frame_exclusive": 246895,
+      "frames": 1024,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 0,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 249711,
+      "end_frame_exclusive": 296687,
+      "frames": 46976,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 64,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 299388,
+      "end_frame_exclusive": 300412,
+      "frames": 1024,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 0,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 303228,
+      "end_frame_exclusive": 350204,
+      "frames": 46976,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 64,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 353360,
+      "end_frame_exclusive": 354384,
+      "frames": 1024,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 0,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 357200,
+      "end_frame_exclusive": 404176,
+      "frames": 46976,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 64,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 407009,
+      "end_frame_exclusive": 408033,
+      "frames": 1024,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 0,
+          "mismatched_frames": 0
+        }
+      ]
+    },
+    {
+      "start_frame": 410849,
+      "end_frame_exclusive": 412787,
+      "frames": 1938,
+      "candidate_checks": [
+        {
+          "phase_modulo_96": 64,
+          "mismatched_frames": 0
+        }
+      ]
+    }
+  ],
+  "method": "Offline stdlib wave/array inspection. Every nonzero stereo frame compared with the producer independent 1000 Hz +/-8192 left and 500 Hz +/-4096 right integer triangle functions; zero gaps split regions. No timing or audible drain inference."
+}

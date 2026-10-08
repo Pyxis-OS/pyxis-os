@@ -1,0 +1,63 @@
+2026-10-08 manual audio capacity qualification; no source code edits.
+Scene branch probe/audio-task2-scenes 672fe6e0, frozen kernel matches audio/sessions-mixer0070d33f except build identity.
+Userland052ac5ea0c1b045924aee439470f66e7f3382c1c plus modified ordinary userspace/config/live.lua only: Development/Remote/Audio1..Audio7; no autoplay.
+ELF0e31dca8f10ba531727d66a761f70a1c9f104b0c6757ed9c0adffc19baf95f88
+ISO73c03fc63969fa1e1496bbc08c3a0870b07cbe3b89120cbd862cd797b30bd5a1
+initrdfd14530524c33936ed46c5bb6ce36f4122fb2a5991d6daf01e7df61c4c05f692
+WAV4971a0ab5f7dcc2b4dc4d6f70a0a41f2eeb88757d71b2099c95f902046bc5f04; 19,266,144bytes; 4,816,525frames/100.344270833seconds,48kHz,S16LE,stereo.
+
+QEMU10.2.2; q35 nestedKVM; hostCPU; 4vCPUs/socket1/core4/thread1; 8GiB; fresh /usr/share/edk2/ovmf/OVMF_VARS.fd and matching OVMF_CODE.fd; standardVGA1280x800; virtio-scsi read-only CD; VirtIO-RNG and net; intel-hda+hda-output; WAV48kS16stereo; loopback2351->10.0.2.15:2323; gdb1243. Full invocation preserved in original tool record; HMP commands preserved capacity-v2-monitor.txt.
+
+Remote first: pcm 1000 500 600 entered through machine client --no-shell-echo with raw stdin. Local Development then Audio1..Audio6: same command entered manually through HMP sendkey. Audio7 ninth: pcm 1000 500 1. No boot/output automation, autoplay, fault injection, or inferior calls. No screenshot/GDB pause while playing.
+All eight admitted generation1/free3840/3840/state0/discontinuity0. Acquisition starvation0 Remote/Dev/Audio1/Audio4; starvation1 Audio2/Audio3/Audio5/Audio6. Ninth acquisition status11 (ABI CALL_LIMIT) shown in capacity-v2-audio7-limit.png. This confirms simultaneous eight-session admission and bounded ninth refusal.
+
+First source startupgap is exactly2816frames afterframe1023; original left phase shifts16/right64. Initial source/transition regions independently match expected patterns. Eight-source exact signed32 sum plus finalS16 clipping matches EVERY sample in frames1359360..1951231 (endexclusive1951232),591872frames,12.330666667seconds. Formula L=clip(triangle8192(p+16)+7*triangle8192(p)),period48; R=clip(triangle4096(p+64)+7*triangle4096(p)),period96. Full96frame expected pattern preserved in wave-analysisJSON. Later steady regions remain period96 but do not match this original phase pattern; source starvation can change phase. Do not claim final steady-eight original-pattern proof or failure-free sustained output from this record.
+
+CPU window hostUTC19:36:12Z..19:37:05Z,actual53.523698770s; /proc/stat and per-threadstat/schedstat snapshots,CLK_TCK100. Process132.688887% ofonehostCPU; BSP67301199.114974%; AP1/2/3 TIDs673012/13/14=10.313189/13.694868/6.576526%; main6730083.026697%. No root build duringwindow. Unrelated pointer-task4QEMU PID673020 ran concurrently; measurements are nested-VM host consumption, not physicalThinkPad/native performance. CPUstart/end hostelapsed sinceQEMUstart58.040017..111.563716s. Guest stopped after output observation exceeded service horizon; lastpendingIRQ timestamp110.586189630s; RUNepoch10.284245970s and WAVduration100.344270833s. Guest/host clockorigins are not synchronized. Failure likely nearwindowend, but exact host placement withinCPUwindow versus briefend-to-stopgap is unproven; label CPU as from eight-admitted run that subsequentlyfailed, not failure-free.
+
+Failure was before all captures/GDB and before localCtrlC: retained consoles show produce(status6) followed by literal^C and responsive shell prompts. Remote producedstatus6, completed exit1; fresh ordinary one-second acquisition afterfailure returnedstatus6 (CALL_UNAVAILABLE). Serial shutdown: IRQ-mask1/stream-reset1/CORB-stop1/RIRB-stop1/link-reset1/BME-off1; backingretained. Afterfailure all8sessionsNULL; FIFOhead/tailNULL; workerwaitnonnull. GDBreadonly controllerfailed/shutdowntrue, runningfalse, availablefalse; starts1/stops0 (failure shutdown not normalstop),IRQ9726/refills10032/max_commit_ns803090/notifications52744; DMAbuffersretained. No complete successful reacquisition/normalrelease claim: reboot needed afterguard.
+
+All task-owned QEMU/client/debugger processes stopped. WAV finalized by QEMUquit. Original audio-task2-scenes records untouched. Local rawrecords capacity-v2-* retained under build; no largeWAV commit, docs edit, PRcomment, or nativeThinkPad qualification.
+
+Launch command (relative to qualification worktree; copied fresh variables first):
+qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4,sockets=1,cores=4,threads=1 -m 8G -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/ovmf/OVMF_CODE.fd -drive if=pflash,format=raw,file=build/capacity-v2-vars.fd -device virtio-scsi-pci,id=scsi,disable-legacy=on -drive if=none,id=cd,format=raw,readonly=on,file=build/pyxis.iso -device scsi-cd,drive=cd,bootindex=1 -boot d -vga none -device VGA,xres=1280,yres=800 -display none -object rng-random,id=rng,filename=/dev/urandom -device virtio-rng-pci,rng=rng,disable-legacy=on -netdev user,id=net,hostfwd=tcp:127.0.0.1:2351-10.0.2.15:2323 -device virtio-net-pci,netdev=net,disable-legacy=on -audiodev wav,id=audio,path=build/capacity-v2.wav,out.frequency=48000,out.channels=2,out.format=s16 -device intel-hda -device hda-output,audiodev=audio -serial file:build/capacity-v2-serial.txt -monitor stdio -gdb tcp:127.0.0.1:1243 -no-reboot 2>&1 | tee build/capacity-v2-monitor.txt
+Remote command:
+stty -icanon -echo -isig
+../pyxis-audio-investigation/build/tools/pyxis-remote --machine --no-shell-echo 127.0.0.1 2351 | tee build/capacity-v2-remote.txt
+
+POST-FAILURE GDB
+0xffffffff80014fb6 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = {claim = {device = 0xffff8010000001d0, saved_command = 7, capabilities = "`", '\000' <repeats 46 times>, capability_count = 1, bars = {{physical = 2164523008, bytes = 16384}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}}, mappings = 0xffffffff80121058 <controller+176>, reserved = false, dma_started = true}, registers = {address = 18446603336264556544, base = 18446603336264556544, bytes = 4096, next = 0x0}, firmware = {command = 7, pmcsr = 0, power_capability = 0, command_changed = false, power_changed = false}, msi = {claim = 0xffffffff80120fa8 <controller>, capability = 96}, corb = {address = 18446603336264560640, physical = 2088960, bytes = 4096}, rirb = {address = 18446603336264564736, physical = 2093056, bytes = 4096}, bdl = {address = 18446603336264568832, physical = 2097152, bytes = 4096}, pcm = {address = 18446603336264572928, physical = 2101248, bytes = 16384}, stream = 256, corb_entries = 256, rirb_entries = 256, corb_write = 10, rirb_read = 10, codec_mask = 1, commands = 32, responses = 32, unsolicited = 0, run_time = 10284245970, run_wallclock = 243946864, irq = {first_time = 110586189630, errors = 0 '\000', completed = true}, prepared = true, link_ready = false, command_ready = false, stream_prepared = false, stream_running = false, failed = true, shutdown = true}
+$2 = false
+$3 = 1
+$4 = 0
+$5 = 9726
+$6 = 10032
+$7 = 803090
+$8 = 0xffffffff800b682a "output observation exceeded service horizon"
+$9 = (struct task_wait *) 0xffff801000007268
+$10 = (struct bsp_request *) 0x0
+$11 = (struct bsp_request *) 0x0
+$12 = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+$13 = 52744
+[Inferior 1 (process 1) detached]
+
+SERIAL FAILURE
+hda: output observation exceeded service horizon; engine unavailable until reboot
+hda: shutdown IRQ-mask=1 stream-reset=1 CORB-stop=1 RIRB-stop=1 link-reset=1 BME-off=1; backing retained until reboot
+
+REMOTE PRODUCER
+{"type": "ready"}
+{"type": "tab_width", "columns": 8}
+pcm: 28800000 frames/run, 1 runs, tail wait 200 ms (elapsed time does not guarantee audible drain)
+pcm: acquired generation=1 free=3840/3840 starvation=0 discontinuity=0 state=0
+pcm: produce (status 6)
+{"type": "fresh_line"}
+shell: pcm: Exited with status 1
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 1}
+pcm: 48000 frames/run, 1 runs, tail wait 200 ms (elapsed time does not guarantee audible drain)
+pcm: acquire (status 6)
+{"type": "fresh_line"}
+shell: pcm: Exited with status 1
+{"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 1}

@@ -85,12 +85,18 @@ do not replace physical-stream stop.
 
 ## Progress and refill limits
 
-An IRQ completion is a coalesced hint, not a period count. The worker observes
-LPIB and wrapping WALCLK within a RUN epoch, using monotonic HPET time to bound
+An IRQ completion is a coalesced hint, not a period count. The worker brackets
+status capture with LPIB reads and retries a moving sample at most three times.
+Within the same IF=0 phase it consumes the completion hint with that position;
+a completion without the expected boundary advance is refused. The RUN epoch
+begins with HPET and WALCLK captured immediately before RUN, allowing legitimate
+progress before the first observation. Monotonic HPET and wrapping WALCLK bound
 observation and progress gaps. While running, a **5 ms watchdog** supplements
 IRQ wakeups; it is absent while parked. A gap reaching **20 ms**, lack of observed
 progress for that interval, stale completion notification, alignment error or
-FIFO/descriptor fault fails the engine rather than guessing missing laps.
+FIFO/descriptor fault fails the engine rather than guessing missing laps. The
+notification age begins when the CPU first observes status, not at hardware
+completion. A bounded retry can conservatively refuse healthy moving progress.
 
 Before a reclaimed period is mixed directly into DMA, the worker takes a fresh
 position/time observation with IF=0 and requires more than **8,192 bytes plus
@@ -102,7 +108,9 @@ they are not hard real-time guarantees or an absolute hardware consumption
 counter.
 
 QEMU's codec can request an 8,192-byte burst, coalesce completions and adjust its
-timer origin. Multiple catch-up callbacks can obscure whole laps even when new
+timer origin. The 8,192-byte per-callback bound applies to QEMU's default timer-driven codec;
+its callback-driven compatibility mode is not qualified. Multiple catch-up
+callbacks can obscure whole laps even when new
 observation gaps are short. The controller's modulo LPIB and codec WALCLK do not
 prove absolute progress. A post-copy check also cannot undo data already consumed
 during a host stall or racing DMA. The larger ring and conservative headroom
@@ -134,6 +142,11 @@ sessions, refill, mixing and matched measurements. The initial four-CPU QEMU
 waveform matched all 240,000 requested PCM frames exactly. Its unprimed start
 also produced **58.667 ms of silence after the first 21.33 ms of PCM**; no zero-gap
 startup or audible-latency guarantee follows from the waveform match.
+
+Eight admitted producers also produced an exact saturated mix segment, but the
+nested-QEMU run subsequently exceeded the 20 ms observation horizon and failed
+closed. Its measured BSP cost was about one full host CPU. Admission capacity
+therefore does not promise sustained playback under arbitrary host load.
 
 Native AMD `1022:15e3` remains unbound. The supplied ALC257 dump establishes
 advertised topology, format and EAPD state, not native Pyxis cold-init, speaker or

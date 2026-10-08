@@ -1,0 +1,190 @@
+{
+  "control_start": {
+    "monotonic_ns": 24261638905435,
+    "clk_tck": 100,
+    "pid": 577401,
+    "process": {
+      "name": "qemu-system-x86",
+      "utime": 1168,
+      "stime": 544
+    },
+    "threads": {
+      "577401": {
+        "name": "qemu-system-x86",
+        "utime": 4,
+        "stime": 4
+      },
+      "577423": {
+        "name": "qemu-system-x86",
+        "utime": 1,
+        "stime": 1
+      },
+      "577424": {
+        "name": "qemu-system-x86",
+        "utime": 590,
+        "stime": 242
+      },
+      "577426": {
+        "name": "qemu-system-x86",
+        "utime": 174,
+        "stime": 83
+      },
+      "577427": {
+        "name": "qemu-system-x86",
+        "utime": 228,
+        "stime": 116
+      },
+      "577428": {
+        "name": "qemu-system-x86",
+        "utime": 173,
+        "stime": 87
+      },
+      "577431": {
+        "name": "kvm-nx-lpage-re",
+        "utime": 0,
+        "stime": 0
+      }
+    }
+  },
+  "control_end": {
+    "monotonic_ns": 24338561250714,
+    "clk_tck": 100,
+    "pid": 577401,
+    "process": {
+      "name": "qemu-system-x86",
+      "utime": 2182,
+      "stime": 1035
+    },
+    "threads": {
+      "577401": {
+        "name": "qemu-system-x86",
+        "utime": 4,
+        "stime": 4
+      },
+      "577423": {
+        "name": "qemu-system-x86",
+        "utime": 1,
+        "stime": 1
+      },
+      "577424": {
+        "name": "qemu-system-x86",
+        "utime": 1104,
+        "stime": 451
+      },
+      "577426": {
+        "name": "qemu-system-x86",
+        "utime": 319,
+        "stime": 165
+      },
+      "577427": {
+        "name": "qemu-system-x86",
+        "utime": 427,
+        "stime": 234
+      },
+      "577428": {
+        "name": "qemu-system-x86",
+        "utime": 333,
+        "stime": 164
+      },
+      "577431": {
+        "name": "kvm-nx-lpage-re",
+        "utime": 0,
+        "stime": 0
+      }
+    }
+  },
+  "after_start": {
+    "monotonic_ns": 24709371873466,
+    "clk_tck": 100,
+    "pid": 593861,
+    "process": {
+      "name": "qemu-system-x86",
+      "utime": 900,
+      "stime": 423
+    },
+    "threads": {
+      "593861": {
+        "name": "qemu-system-x86",
+        "utime": 5,
+        "stime": 6
+      },
+      "593884": {
+        "name": "qemu-system-x86",
+        "utime": 1,
+        "stime": 2
+      },
+      "593885": {
+        "name": "qemu-system-x86",
+        "utime": 503,
+        "stime": 204
+      },
+      "593886": {
+        "name": "qemu-system-x86",
+        "utime": 117,
+        "stime": 62
+      },
+      "593887": {
+        "name": "qemu-system-x86",
+        "utime": 151,
+        "stime": 86
+      },
+      "593888": {
+        "name": "qemu-system-x86",
+        "utime": 124,
+        "stime": 47
+      },
+      "593892": {
+        "name": "kvm-nx-lpage-re",
+        "utime": 0,
+        "stime": 0
+      }
+    }
+  },
+  "after_end": {
+    "monotonic_ns": 24842093049813,
+    "clk_tck": 100,
+    "pid": 593861,
+    "process": {
+      "name": "qemu-system-x86",
+      "utime": 2574,
+      "stime": 1275
+    },
+    "threads": {
+      "593861": {
+        "name": "qemu-system-x86",
+        "utime": 6,
+        "stime": 7
+      },
+      "593884": {
+        "name": "qemu-system-x86",
+        "utime": 1,
+        "stime": 2
+      },
+      "593885": {
+        "name": "qemu-system-x86",
+        "utime": 1364,
+        "stime": 570
+      },
+      "593886": {
+        "name": "qemu-system-x86",
+        "utime": 355,
+        "stime": 204
+      },
+      "593887": {
+        "name": "qemu-system-x86",
+        "utime": 480,
+        "stime": 291
+      },
+      "593888": {
+        "name": "qemu-system-x86",
+        "utime": 381,
+        "stime": 176
+      },
+      "593892": {
+        "name": "kvm-nx-lpage-re",
+        "utime": 0,
+        "stime": 0
+      }
+    }
+  }
+}

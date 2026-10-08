@@ -1,0 +1,57 @@
+First public producer qualification, code subsequently committed as e004fc9539f96f3ac1e31d2253fcf1bea9408869. Retained build provenance below records earlier HEAD plus modified-tree digest; it is not a clean e004 build identity.
+WAV sha256=4f5d1326de6992c08970c726016f832c7c2f0828e6b9fab6a402af5e209d1ddf
+Requested and exact nonzero PCM frames=240000. Initial tone 1024 frames, then 2816 zero frames (58.666667 ms).
+
+KERNEL PROVENANCE
+component=kernel
+kernel_revision=3345de8c1f3d59f378204c86c358368d6d929dfb
+kernel_state=modified
+kernel_changes_sha256=2242d6dca6cd69cdf13c117e80ffc6aab1541f06b7dda10c4aea20d9a6369088
+builder_image=git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a
+lwip_revision=a1aadb91a50360ff5b52864f7cec810b8162ee85
+lwip_state=clean
+lwip_changes_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+fs_revision=b427df29f865bc361b8da92bcd74e114581e9a32
+fs_state=clean
+fs_changes_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+abi_sha256=5f15fc147f1f020594972a487724a039714a7d6de00ba1bc3ef7015099c22969
+log_level=info
+config_sha256=ac12acc93c3fcbbdff1ace10d95b8f3cdf883e1c09d21ce413ba09df8324a98b
+cppflags=-Ibuild -Iinclude -Iarch/x86_64/include -Ithird_party/limine -Ithird_party/tlsf
+cflags=-std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector -fno-pic -fno-pie -mno-red-zone -mgeneral-regs-only -mcmodel=kernel -fno-omit-frame-pointer -Wall -Wextra -Wshadow -Wstrict-prototypes -Wmissing-prototypes -MMD -MP
+ldflags=-nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld -Wl,--build-id=none -Wl,-z,max-page-size=0x1000 -Wl,-Map,build/caelum.map -Wl,--oformat=elf
+clang version 23.1.3 (/tmp/cross-build/llvm-project/clang 49e2c1a1518b3e4687b52ceb6001069c1b6d261e)
+
+PRODUCER
+{"type": "ready"}
+{"type": "tab_width", "columns": 8}
+pcm: 240000 frames/run, 1 runs, tail wait 200 ms (elapsed time does not guarantee audible drain)
+
+pcm: acquired generation=1 free=3840/3840 starvation=0 discontinuity=0 state=0
+
+pcm: run=1 producer_ns=4883863070 writes=235 full=229 waits=229
+
+pcm: before release generation=1 free=3840/3840 starvation=2 discontinuity=0 state=0
+
+{"type": "fresh_line"}
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+
+POST-PLAYBACK GDB
+Remote debugging using 127.0.0.1:1243
+0xffffffff80014686 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = {claim = {device = 0xffff8010000001d0, saved_command = 7, capabilities = "`", '\000' <repeats 46 times>, capability_count = 1, bars = {{physical = 2164523008, bytes = 16384}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}}, mappings = 0xffffffff8011f050 <controller+176>, reserved = false, dma_started = true}, registers = {address = 18446603336264503296, base = 18446603336264503296, bytes = 4096, next = 0x0}, firmware = {command = 7, pmcsr = 0, power_capability = 0, command_changed = false, power_changed = false}, msi = {claim = 0xffffffff8011efa0 <controller>, capability = 96}, corb = {address = 18446603336264507392, physical = 2088960, bytes = 4096}, rirb = {address = 18446603336264511488, physical = 2093056, bytes = 4096}, bdl = {address = 18446603336264515584, physical = 2097152, bytes = 4096}, pcm = {address = 18446603336264519680, physical = 2101248, bytes = 16384}, stream = 256, corb_entries = 256, rirb_entries = 256, corb_write = 7, rirb_read = 7, codec_mask = 1, commands = 39, responses = 39, unsolicited = 0, irq = {first_time = 0, errors = 0 '\000', completed = false}, prepared = true, link_ready = true, command_ready = false, stream_prepared = false, stream_running = false, failed = false, shutdown = false}
+$2 = true
+$3 = 1
+$4 = 1
+$5 = 512
+$6 = 514
+$7 = 340040
+$8 = (struct task_wait *) 0xffff801000004508
+$9 = (struct bsp_request *) 0x0
+$10 = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+$11 = 986996
+$12 = 971264
+Detaching from program: <worktree>, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]

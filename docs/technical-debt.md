@@ -1172,12 +1172,26 @@ localization, wide characters and `<cmath>` when a selected port, such as
 DevilutionX, needs them. Each addition belongs in libc or the runtime
 configuration, never in a port-local stub.
 
+## HD Audio scheduling and startup tuning
+
+The [HDA engine](devices/hda.md#progress-and-refill-limits) uses the accepted
+80 ms hardware ring and fails closed until reboot when its conservative refill
+guards cannot establish safe progress. Nested-QEMU qualification captured exact
+PCM and saturated mixing, but longer runs hit those guards; eight-session
+admission does not guarantee sustained playback under host load. Immediate,
+unprimed start also produced a 58.667 ms initial silence gap. Revisit ring depth,
+startup latency and service margins during native qualification and separately
+assigned audio-consumer work. The [task 2 report](development/experiments/audio-task2/README.md)
+records the evidence and limits; native and milestone closure checks remain open.
+
 ## SDL2 port limits
 
 The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
 and preference paths. Missing pieces:
 
-- **Audio:** absent until there is an audio driver.
+- **Audio:** the [native PCM grant](interfaces/audio.md) and
+  [QEMU HDA engine](devices/hda.md) are available, but SDL2 has no audio backend
+  yet. Revisit with a separately assigned playback consumer task.
 - **Threads:** without them, `SDL_INIT_TIMER` callback timers and
   `SDL_CreateThread` fail. Revisit with userspace threads.
 - **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.

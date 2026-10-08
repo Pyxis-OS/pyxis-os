@@ -2,14 +2,19 @@
 
 Status: **three defaults accepted 2026-10-08; first controller/codec task
 merged in [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553); sessions,
-mixing and IRQ refill assigned as task 2**. Prepared from main `67e14be` and
+mixing and IRQ refill implemented in
+[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), awaiting owner review/merge**.
+Prepared from main `67e14be` and
 the completed [QEMU investigation](../development/audio-investigation.md).
 The investigation probes stay unmerged. The owner assigned task 2 on
 2026-10-08, combining periodic refill and per-space session/mixing steps below,
 with the accepted call/write/admission semantics. Its
-[baseline and accepted policies](../development/experiments/audio-task2/README.md)
+[baseline, accepted policies and qualification](../development/experiments/audio-task2/README.md)
 record fresh main `780f5d2`, no-playback observations and the remaining
-hidden-space/start-stop/failure defaults, accepted 2026-10-08.
+hidden-space/start-stop/failure defaults, accepted 2026-10-08. Exact PCM and
+saturated mixing were observed, but an eight-admitted nested-QEMU run exceeded
+the service horizon and failed closed; sustained eight-session playback is not
+guaranteed.
 The [task 1 report](../development/experiments/audio-task1/README.md) retains
 private engine qualification and matched no-audio/engine-idle observations.
 Native and consumer tasks still require their own assignments.
@@ -70,10 +75,10 @@ and state evidence, not native Pyxis playback qualification.
 
 ## Accepted session call contract
 
-Accepted task 1 defaults, **2026-10-08**. This is documentation for the later
-session task, not an implemented protocol or exported SDK header. Follow native
-message headers; allocate the protocol tag and rights/operation constants when
-that task implements the ABI, rather than reserving placeholder APIs now.
+Accepted task 1 defaults, **2026-10-08**. The task 2 implementation now exports the
+[PCM session interface](../interfaces/audio.md), including native message layouts,
+protocol/right constants and exact validation precedence. The table below retains
+the accepted call behavior; the interface reference describes its implementation.
 
 | Call | Request after the standard message header | Result / behavior |
 | --- | --- | --- |
@@ -196,12 +201,12 @@ controller or all other sessions.
    independent left/right signals, command wrap and stop ownership with normal
    builds, interactive boots and debugger inspection. Polling may be a bounded
    bring-up step, not the completed runtime implementation.
-3. [ ] **Periodic output and refill.** Add owned interrupt delivery, BDL/position
+3. [x] **Periodic output and refill.** Add owned interrupt delivery, BDL/position
    accounting, silence on starvation and explicit discontinuity. Review recovery
    thresholds; exercise sustained playback, ordinary producer pauses, close/reopen
    and normal concurrent guest activity. Measure position/clock agreement and
    queue-to-output behavior. Revisit the proposed period before freezing policy.
-4. [ ] **Per-space sessions and bounded mixing.** Review exact reply packing,
+4. [x] **Per-space sessions and bounded mixing.** Review exact reply packing,
    protocol/right constants, validation precedence, priming and hidden-space
    policy before implementing the public calls. Implement only the reviewed
    grant/calls and BSP request bridge, with copied queues and generation-aware
@@ -209,6 +214,14 @@ controller or all other sessions.
    spaces, denied authority, exclusive acquisition and capacity admission.
    Measure BSP cost and refill margin with one and multiple CPUs. Add only the
    concrete native PCM producer needed to exercise the accepted interface.
+   Task 2 implements steps 3–4 together. The [qualification report](../development/experiments/audio-task2/README.md)
+   records exact single-producer and eight-source saturated PCM, pause/exit and
+   reacquisition, eight admissions/ninth refusal, and matched idle/BSP costs.
+   Eight admitted producers later exceeded the service horizon and failed closed;
+   admission is not a sustained-playback guarantee. Strict absolute DMA progress,
+   zero-gap startup and native playback are unqualified. The current integration image built and
+   passed basic PCM/absent checks; a later paused repetition failed closed before
+   debugger attachment. Publication and exact-head CI remain delivery gates.
 5. [ ] **Native AMD analog qualification.** Propose speaker/headphone route
    and jack policy from the supplied ALC257 graph before native binding.
    Bind `1022:15e3` after verifying
@@ -230,8 +243,9 @@ controller or all other sessions.
 The owner's first implementation assignment combined the contract review and
 private controller/codec engine steps above. The [engine reference](../devices/hda.md)
 records the implemented boundary; the unmerged consumer qualifies it without
-shipping a tone, ABI or sessions. The owner has now assigned periodic refill
-and session/mixing together as task 2; native and consumer work remain later assignments.
+shipping a tone, ABI or sessions. Task 2 now implements periodic refill
+and session/mixing together with the measured limits above; native and consumer
+work remain later assignments.
 
 Tasks are focused PRs, each assigned by the owner after its predecessor is
 reviewed. No probe cherry-pick is implied by accepting this proposal. Production

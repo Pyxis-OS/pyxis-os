@@ -7,7 +7,8 @@ merged. Task branch **`audio/sessions-mixer`** starts from fresh main
 of the accepted milestone. The private engine is already merged; this task adds
 its public per-space grant, at most eight process-owned sessions, copied queues,
 kernel mixing and owned interrupt delivery. SDL2, Quake and native AMD binding
-remain separately assigned work.
+remain separately assigned work. Public sessions, mixing and IRQ refill are now
+implemented; qualification and remaining delivery checks are recorded below.
 
 ## Accepted task-specific policies
 
@@ -121,84 +122,235 @@ active playback and eight-session cost separately. Check ABI/bundle inputs
 before reuse when this task introduces public headers; do not bypass bundle
 validation to force a kernel-only comparison.
 
-## Source assessment and remaining work
+## Implemented behavior
 
-QEMU's controller offers single-message MSI; the existing kernel helper covers
-MSI-X, so a checked MSI helper and one owned interrupt vector are needed. The
-ISR must capture bounded status and wake the worker; it must not mix, allocate
-or change stream/codec ownership. QEMU may coalesce descriptor completions,
-so IRQ count alone does not establish consumed periods. Its codec also buffers
-PCM after DMA; BCIS is not audible completion. Refill safety needs position,
-timing and immutable BDL ownership, with explicit ambiguity detection and
-measured scheduling limits. These are source observations, not dynamic-refill
-qualification.
+The [public session reference](../../../interfaces/audio.md) records exact reply
+layouts, validation order, authority, lifetime and readiness. The
+[engine reference](../../../devices/hda.md) records BSP ownership, single-message
+MSI, immutable BDL, observation/headroom guards and retained failure ownership.
+The worker mixes signed 32-bit sums and clips once to S16. A session owns copied
+PCM, not DMA; release/exit invalidates its generation and discards pending PCM.
+Hidden spaces continue playing. Hardware starts with the first queued frames,
+then stops and parks after source depletion and its internal zero-tail handling.
+Producer starvation is separate from terminal hardware failure.
 
-Session mutation/allocation stays on the BSP audio worker. Readiness uses
-published immutable snapshots because other workers can inspect mixed waits.
-Exit cleanup cannot sleep or retain a destroyed process pointer: use an
-allocation-free notice and generation-safe ownership invalidation. Closing a
-handle does not release the acquired session. The worker must continue serving
-cleanup/status after terminal hardware failure.
-
-Next: finish the worker/refill integration,
-then qualify the public interface, concurrent signals, ordinary producer pauses,
-exit/release, admission and sustained refill with manual QEMU/debugger checks.
-Publish any concrete libpyxis/grant-forwarding/PCM-producer dependency before
-updating the parent pin. No tests, self-tests, fault injection, boot/output
-automation or new CI is introduced. Native binding remains later work; confirm
-the owner's QEMU-closure/native-batch choice at milestone closure.
-
-All task-owned baseline builds, guests and debuggers are stopped. Local baseline
-SDK/userland/ports bundles are packaged for verified reuse. This report records
-a baseline and accepted design round, not completed implementation or task 2 CI.
-
-## Accepted DMA tuning and implementation checkpoint
-
-The owner accepted the DMA tuning change on **2026-10-08**, after source review,
-in addition to the three accepted policies above. Stock QEMU 10.2.2's codec output timer can request
-**8192 bytes**, exceeding the original **7680-byte / 40 ms** ring. Controller
-transfer walks at most the configured descriptor count; a whole lap can leave
-LPIB unchanged with only coalesced BCIS. The codec adjusts or resets its timer
-origin, so WALCLK since RUN is not an absolute byte counter. Small new observation
-gaps alone cannot exclude catch-up from an earlier lag. Counting IRQs or guessing
-missed laps from nominal rate is insufficient.
-
-Primary source: [QEMU codec output timer and adaptive clock](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/hda-codec.c),
-[controller DMA transfer](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/intel-hda.c).
-This is source evidence, not an injected stall or measured production refill.
-
-The accepted starting tuning is **eight 10 ms DMA periods (80 ms)**,
-keeping 80 ms session queues, the fixed format and 4096-byte atomic writes.
-That adds up to 40 ms of hardware buffering and needs position/time guards and
-qualification; it is not a hard real-time or audible-drain guarantee. Revisit DMA depth and latency during native qualification. The 8192-byte burst
-and initial 7680-byte ring are established from QEMU source, not an injected
-stall or a measured native result.
-
-Local implementation on `audio/sessions-mixer` includes the object/session,
-space/grant, wait/readiness and typed BSP request changes, saturating mixer,
-checked single-message MSI, interrupt vector and stream observation/prepare/RUN
-helpers. Component commits are retained on `audio/task2-objects` (`e40f9c6`)
-and `audio/task2-irq` (`168e337`); integration review additionally corrected
-starvation to count empty episodes and avoid notifications from unchanged empty
-queues. Kernel object compilation passed for all changed C sources, with no
-warnings. The final owning worker/FIFO, refill and drain integration remains
-unfinished; no complete kernel/image or runtime playback pass is claimed.
-Those code commits remain local while this checkpoint is published.
-
-The separately published userspace dependency is draft
+The independently published userspace dependency is
 [#168](https://git.internal/PyxisOS/pyxis-userland/pulls/168), branch
-`audio/session-producer`, head **`97770cd`**. It adds libpyxis wrappers, optional
-audio forwarding independent of input focus and the native PCM producer. An
-ordinary new source-built SDK plus ports and all userspace applications passed
-at that head; focused PCM/shell/session/mux/remote-terminal builds passed too.
-WRITE returns an eight-byte accepted-count payload; CALL_WOULD_BLOCK is distinct
-from CALL_QUEUE_FULL and the producer uses the accepted former status. The new
-SDK must be used for these headers/libraries; no baseline bundle identity is
-substituted. Parent gitlink publication follows dependency publication. Merge
-order is userland before the parent implementation, once runtime qualification
-is complete; neither draft is ready for task completion.
+`audio/session-producer`, head **`052ac5ea0c1b045924aee439470f66e7f3382c1c`**.
+It provides libpyxis helpers, optional grant forwarding independent of input
+focus and the ordinary native `pcm` producer. It is published before the parent
+pin; merge userland before the parent implementation. Existing build/CI evidence
+must be checked for the submitted dependency revision, rather than inferred from
+an earlier successful build.
 
-All owned build/debugger/guest processes are stopped at this checkpoint. The
-remaining work is worker/refill/drain integration with the accepted tuning,
-manual QEMU interface and PCM/mixing qualification, matched after measurements,
-final review and exact submitted-head CI. Native and consumer tasks do not start.
+## Accepted DMA tuning and progress limits
+
+The owner accepted **eight 10 ms hardware periods (80 ms)** on **2026-10-08**,
+keeping the **80 ms session queue** and **4096-byte atomic WRITE** unchanged.
+The payload grows from 7680 to 15,360 bytes. This is starting native tuning to
+revisit during latency/refill qualification.
+
+Stock QEMU 10.2.2's timer-driven codec can request **8192 bytes**, exceeding the
+original **7680-byte / 40 ms** ring. Controller transfer walks at most the
+configured descriptor count; a whole lap can leave LPIB unchanged with coalesced
+BCIS. The codec adjusts or resets its timer origin, so WALCLK since RUN is not
+an absolute byte counter. A small new observation gap cannot exclude catch-up
+from an earlier lag. The 8192-byte bound is a **source assessment**, not a dynamic
+burst measurement or a native hardware result. See QEMU's
+[codec timer](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/hda-codec.c)
+and [controller transfer](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/intel-hda.c).
+Callback-driven compatibility mode is not qualified.
+
+The implementation refuses stale or ambiguous observations, checks fresh position
+and more than 8192 bytes plus one frame of headroom before committing a reclaimed
+period, and rejects a commit of 1 ms or more. IRQ hints plus a running-only 5 ms
+watchdog supply observations; a 20 ms observation/progress horizon fails closed.
+These checks and the larger ring reduce exposure; modulo LPIB and adaptive WALCLK
+still do not prove absolute progress. Multiple catch-up callbacks can hide whole
+laps, and a post-copy check cannot undo PCM consumed during a host stall or racing
+DMA. No hard real-time, uninterrupted cyclic-output or audible-drain guarantee
+follows from this qualification.
+
+## Manual QEMU qualification
+
+These are ordinary interactive boots, terminal commands, read-only debugger
+inspection and offline captured-WAV inspection. No tests, self-tests, fault
+injection, boot/output automation, new benchmark script or CI workflow was added.
+Large WAVs and screenshots stay as local evidence; compact records below retain
+hashes, output measurements, process accounting and debugger state.
+
+### First output and one-CPU duplex
+
+The first public producer run used the working tree subsequently committed as
+**`e004fc9539f96f3ac1e31d2253fcf1bea9408869`** and userspace **`97770cd`**.
+Its [retained provenance and runtime record](first-playback.txt) records an earlier
+HEAD plus a modified-tree digest; this is not presented as a clean e004 build.
+QEMU `hda-output`, four CPUs, Q35, nested KVM and 8 GiB captured all **240,000**
+requested independent left/right PCM frames exactly. One normal start/stop left
+all session slots empty, the FIFO empty, worker parked and stream stopped.
+The observed maximum IF=0 mix/commit interval was **340,040 ns**.
+
+Unprimed startup produced **1024 frames / 21.333 ms of tone, then 2816 zero
+frames / 58.667 ms**, then the remaining tone. Exact total PCM does not mean
+zero-gap startup. Later startup preparation ordering was corrected before the
+capacity run; that record independently retains the same measured initial gap.
+
+The clean e004 [one-CPU `hda-duplex` run](duplex-qualification.txt), with the
+same format and 8 GiB, exercised ordinary 250 ms producer pauses, two repetitions
+with a 150 ms gap, Ctrl+C process exit and fresh acquisition. Six starts and six
+normal stops captured **389,824 nonzero frames**, each matching its channel's
+triangle function exactly. This includes complete repeated and reacquired runs
+and a partial Ctrl+C run; exit discarded its queued PCM. All reported hardware
+discontinuities were zero. Maximum commit was **483,350 ns**; final command DMA,
+RUN, interrupt delivery and PCI BME were off, all slots/FIFO empty and the worker
+parked. `hda-duplex` qualifies playback only; its unavailable ADC backend warning
+is expected and establishes no recording support.
+
+### Later producer and fail-closed observation
+
+At clean **`8fa7e8d9ca6077ef7b7fa04ba600b9f879c7fc3d`**, with userspace
+**`052ac5e`**, an ordinary two-minute producer completed without a reported
+hardware discontinuity. The [terminal record](single-producer.txt) also records
+**BUSY (9)** for simultaneous acquisition of an already owned space, Ctrl+C
+cleanup and later **UNAVAILABLE (6)** after failure. A generic refill fault was
+observed in association with an actual monitor capture during a later run; the
+causal relation is unknown. It failed closed, retained DMA and left the shell
+responsive. This is an observed guard outcome, not an injected failure test.
+
+A separate [steady single-producer accounting window](single-producer-cpu.json)
+lasted **56.487179845 s**, with process CPU **72.9369% of one host CPU**.
+This was one producer in the four-vCPU guest, not a one-vCPU configuration.
+Sequential `/proc` snapshots are jiffy-rounded nested-host CPU consumption,
+including QEMU/KVM overhead; they are not native playback measurements.
+
+### Eight-session admission and saturated mix
+
+The [capacity record](capacity-qualification.txt) used frozen scene revision
+**`672fe6e0`**, whose kernel matches task branch **`0070d33f`** except build
+identity, and userspace **`052ac5e`** with only an ordinary local space layout
+change. Stock QEMU 10.2.2, Q35, nested KVM, four CPUs and 8 GiB ran eight manually
+started producers. All eight acquired generation 1; a ninth space received
+**CALL_LIMIT (11)**. This establishes bounded admission and playback from hidden
+spaces while other spaces were selected.
+
+The [captured sample analysis](capacity-wave-analysis.json) matches **every
+sample** of the signed 32-bit sum followed by final S16 clipping over frames
+**1,359,360 through 1,951,231 inclusive: 591,872 frames / 12.330667 s**.
+The eight-source formula accounts for the first producer's measured startup
+phase offset. Left output reaches **−32768/32767**, with 123,305 negative and
+123,310 positive clipped samples; right output reaches **±27306**, without
+clipping. Later producer starvation changes phase, so later periodic output is
+not claimed to match that original eight-source pattern.
+
+The [CPU window](capacity-cpu.json) lasted **53.523698770 s**: QEMU process
+**132.6889% of one host CPU**, BSP **99.1150%**, APs **10.3132%, 13.6949%,
+6.5765%**. An unrelated pointer-task VM ran concurrently. This is a costly
+nested-host workload observation, not a physical-host latency or capacity
+promise. Guest and host clock origins were not synchronized; the exact failure
+placement within this accounting window versus the brief end-to-stop gap is
+unproven. The window belongs to an eight-admitted run that subsequently failed;
+it is not certified failure-free.
+
+The engine exceeded its **20 ms service horizon before screenshots, debugger
+inspection or local Ctrl+C**. All eight producers had returned UNAVAILABLE; fresh
+acquisition also returned UNAVAILABLE. Shutdown confirmed IRQ masking, stream
+reset, CORB/RIRB stop, link reset and BME off, with DMA retained. The post-failure
+worker remained parked/serviceable, all eight slots and request FIFO were empty.
+Maximum recorded commit was **803,090 ns**. This run does **not** establish
+failure-free sustained eight-session refill, successful normal release or
+post-failure reacquisition. Recovery requires reboot.
+
+## Matched no-playback observations
+
+The original `780f5d2` / `a5a48b4` baseline above remains historical. It is not
+used as the direct comparison for later images with a changed SDK/userland.
+A new control **`dac5e2e9`** on main **`01791631`** adds matching audio SDK
+declarations and the same **`052ac5e`** userspace pin, while retaining the parked
+task 1 engine. The after image is **`8fa7e8d9`**. Both used identical initrd
+SHA-256 **`28039e4d3283eb5702274c973709b575c54b5c11e0aef00a19f085e11c20138a`**.
+
+Both runs used stock QEMU 10.2.2, Q35, nested KVM, `-cpu max`, four CPUs,
+8 GiB, fresh OVMF variables, static Caelum at **1280×768**, `hda-output` and
+48 kHz S16 stereo WAV. The [GDB records](matched-idle-gdb.txt) confirm parked
+workers, stopped stream/command transport and matching scene; CPU windows were
+separate from debugger observations and had no remote client. The unrelated
+pointer VM and nested-host scheduling remain uncontrolled noise sources.
+
+| Observation | Matched control | After |
+| --- | ---: | ---: |
+| Idle accounting window | 76.922345279 s | 132.721176347 s |
+| QEMU CPU, percent of one host CPU | 19.565186% | 19.032381% |
+| Presenter median, eight observations | 0.742190 ms | 0.703230 ms |
+| Presenter range | 0.658790–0.893530 ms | 0.613040–0.793690 ms |
+
+[CPU snapshots](matched-idle-cpu.json) use monotonic host time and `CLK_TCK=100`.
+Presenter observations use the same manually entered hardware-breakpoint/finish
+method and 10 ns HPET ticks as the original baseline. These are single windows
+and debugger-qualified elapsed observations; they establish neither a stable
+improvement nor a regression threshold. An IRQ-driven parked engine's low idle
+cost does not predict the eight-session BSP cost.
+
+## Current integration and delivery status
+
+Main Bluetooth changes through **`114f2acb`** were integrated at
+**`0e3c266efd9ed9421c1a26ace90b2a486cb457e8`**. Audio now uses protocol tag
+**45** and object type **47**, with in-tree consumers updated. Measurements above
+belong to their named older revisions and are not exact-head evidence for this
+compatibility integration.
+
+A full source-built ordinary image passed at that compatibility integration,
+with userspace **`052ac5e`** and matching SDK. Artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| ELF | `01f3455065a0f5f354187abdd0fee06a99ba7125c79bbef1b92dd8d0d3b2a365` |
+| ISO | `2e06028c6a36d5719d96c9808658e5df8cc31b8bcc891e8e85c5a1db78a01ad5` |
+| Initrd | `e32737615ecea925bb6bf460261cb7ec352b7ca1c49f2c8d3de113959de8473e` |
+
+The [current four-CPU `hda-output` record](current-qualification.txt) completes
+`pcm 1000 500 5`: 240,000 frames, 235 writes, 229 full/writable waits,
+4.885213970 s producer time, starvation 2 and discontinuity 0. A subsequent
+`pcm --pause-ms 250 --repeat 2 --gap-ms 150 1000 500 2` completed its first
+96,000-frame run (2.051498010 s, 94 writes, 86 full/waits, starvation 4,
+discontinuity 0). The second run acquired generation 5 and resumed after its
+pause, then failed closed on an **expired completion notification at the 20 ms
+guard**. No debugger or screenshot ran during playback. This is an ordinary
+nested-QEMU failure; the current image did not complete both repetitions.
+Historical duplex repetitions above remain evidence for their named revision.
+
+The [independent current WAV inspection](current-wave-analysis.json) matches
+**every nonzero captured stereo frame** to the producer functions: **386,962**
+PCM frames across ten regions, comprising 240,000 first-command frames, 96,000
+complete repeated-run-1 frames and 50,962 partial repeated-run-2 frames. Five RUN
+epochs each retain the 1024-tone/2816-zero-frame startup gap. The WAV has 412,787
+total frames and hash `5deafb9a4abe45b3b4a2f5f64f310bb724494cf4750d3dbdd9ead2ab8c675861`.
+Waveform agreement does not undo the terminal failure or prove absolute progress.
+
+After failure: starts 5, normal stops 4, IRQ 863, refills 868 and maximum commit
+815,270 ns. File-qualified audio availability was false; the session slots and
+FIFO were empty, worker parked and BME off. Fresh acquisition returned
+UNAVAILABLE and a shell echo completed. The retained unqualified GDB expression
+`available` resolves another static symbol; it is not audio availability evidence.
+
+The [absent-controller check](absent-qualification.txt) used the same ELF/ISO,
+one CPU and no HDA device. Serial had no audio/HDA line; a one-second producer
+returned ACQUIRE UNAVAILABLE and shell echo succeeded. Read-only debugger
+inspection confirmed audio unavailable, a live parked worker, empty slots, no
+controller claim/DMA allocation and `prepared=false`. Absence stays quiet.
+
+Delivery: parent [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) pins the
+published userspace [#168](https://git.internal/PyxisOS/pyxis-userland/pulls/168)
+revision above. Merge userland first, then the parent. The parent ordinary source
+build compiles that dependency against its matching SDK; userspace has no
+standalone Actions tasks, and its empty/unparsable status is not a CI pass.
+The parent PR records existing CI for its exact submitted revision. No compiler
+container rebuild is needed. Source review of request/exit/readiness/grant and
+Bluetooth integration found no blocking issue; manual refused-authority or
+malformed-call qualification was not added.
+
+All task-owned qualification guests, clients and debuggers were stopped.
+Native AMD binding, physical speaker/headphone/jack behavior, latency and refill
+qualification remain open. Eight periods remain starting tuning. SDL2, Quake and
+later native tasks do not start from this task; milestone closure still requires
+the owner's confirmation of QEMU closure with a later ThinkPad batch or native
+qualification first.

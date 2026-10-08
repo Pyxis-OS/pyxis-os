@@ -68,8 +68,12 @@ Chosen by the owner, each starting with a proposal:
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
   exclusive per-space sessions, 48 kHz S16LE stereo, and 8 × 10 ms DMA/80 ms
   queues as starting tuning. Controller/codec bring-up merged in #553.
-  Sessions/mixing and IRQ refill assigned as task 2 on 2026-10-08;
-  [fresh baseline and accepted task-specific policies](../development/experiments/audio-task2/README.md).
+  Sessions/mixing and IRQ refill implemented as task 2 on 2026-10-08;
+  [baseline, accepted policies and qualification](../development/experiments/audio-task2/README.md)
+  record exact PCM/saturated mixing, eight admissions/ninth refusal and measured
+  BSP cost. An eight-admitted nested-QEMU run failed closed at its service horizon;
+  the current integration image also passed basic/absent checks, then failed closed
+  in a later paused repetition. Publication and exact-head CI remain pending.
   QEMU closure with
   a later ThinkPad native batch is carried forward for confirmation at closure;
   native playback remains unqualified. Quake can produce sound

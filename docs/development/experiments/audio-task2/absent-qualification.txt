@@ -1,0 +1,126 @@
+Current compatibility integration 0e3c266efd9ed9421c1a26ace90b2a486cb457e8; userspace052ac5ea0c1b045924aee439470f66e7f3382c1c; manual qualification2026-10-08.
+
+SERIAL
+[2J[001;001H[=3h[2J[001;001H[2J[001;001H[8;042;160t[2J[001;001H[2J[001;001H[8;056;240t[2J[001;001HBdsDxe: loading Boot0002 "UEFI QEMU QEMU CD-ROM " from PciRoot(0x0)/Pci(0x2,0x0)/Scsi(0x0,0x0)
+BdsDxe: starting Boot0002 "UEFI QEMU QEMU CD-ROM " from PciRoot(0x0)/Pci(0x2,0x0)/Scsi(0x0,0x0)
+[001;001H[001;001H[001;001Hl[001;002Hi[001;003Hm[001;004Hi[001;005Hn[001;006He[001;007H:[001;008H [001;009HL[001;010Ho[001;011Ha[001;012Hd[001;013Hi[001;014Hn[001;015Hg[001;016H [001;017He[001;018Hx[001;019He[001;020Hc[001;021Hu[001;022Ht[001;023Ha[001;024Hb[001;025Hl[001;026He[001;027H [001;028H`[001;029Hb[001;030Ho[001;031Ho[001;032Ht[001;033H([001;034H)[001;035H:[001;036H/[001;037Hb[001;038Ho[001;039Ho[001;040Ht[001;041H/[001;042Hc[001;043Ha[001;044He[001;045Hl[001;046Hu[001;047Hm[001;048H.[001;049He[001;050Hl[001;051Hf[001;052H`[001;053H.[001;054H.[001;055H.[001;056H[001;001H[002;001Hl[002;002Hi[002;003Hm[002;004Hi[002;005Hn[002;006He[002;007H:[002;008H [002;009HL[002;010Ho[002;011Ha[002;012Hd[002;013Hi[002;014Hn[002;015Hg[002;016H [002;017Hm[002;018Ho[002;019Hd[002;020Hu[002;021Hl[002;022He[002;023H [002;024H`[002;025Hb[002;026Ho[002;027Ho[002;028Ht[002;029H([002;030H)[002;031H:[002;032H/[002;033Hb[002;034Ho[002;035Ho[002;036Ht[002;037H/[002;038Hi[002;039Hn[002;040Hi[002;041Ht[002;042Hr[002;043Hd[002;044H.[002;045Hc[002;046Hp[002;047Hi[002;048Ho[002;049H`[002;050H.[002;051H.[002;052H.[002;053H[002;001H[003;001H
+Pyxis OS / Caelum
+early console: 1280x800 framebuffer
+Limine: base revision 6, 35 memory regions, kernel phys=0x7a02e000 virt=0xffffffff80000000
+x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled
+x86_64: physical address width=46, NX and supervisor write protection enabled
+PCI: ECAM physical=0xe0000000 bytes=0x10000000 segment=0 buses=0..255
+paging: switching CR3 from 0x77a06000 to owned root 0x1000
+paging: owned CR3=0x1000; 4 KiB leaves, recursive slot 510, no HHDM
+clock: HPET 64-bit counter, direct, period=10000000 fs
+x86_64: local APIC timer calibrated, 522041 counts per ~8.33 ms
+keyboard: IRQ 1 -> GSI 1, I/O APIC input 1 -> BSP APIC 0
+mouse: IRQ 12 -> GSI 12, I/O APIC input 12 -> BSP APIC 0
+ACPI: SCI IRQ 9 -> GSI 9, I/O APIC input 9 -> BSP APIC 0, level active-high
+mouse: PS/2 device ID 0x3, wheel, 4-byte packets
+keyboard: PS/2 scan set 2 ready
+mouse: PS/2 reporting enabled
+clock: UTC seed=1791488509 Unix seconds; boot precision is approximate
+mm: kernel VM and heap ready
+initrd: newc archive=39455232 bytes, mapped read-only
+boot files: original kernel=3854096 bytes, mapped read-only
+PCI: discovery starting
+PCI: 8 functions on 1 buses; read-only inventory complete
+PCI: discovery complete
+virtio-net PCI: reset confirmed before BAR probing
+virtio-net PCI: common BAR4 offset=0x0 bytes=0x38 address=0xffff80000294e000
+virtio-net PCI: notify BAR4 offset=0x3000 bytes=0x1000 address=0xffff80000294f000
+virtio-net PCI: ISR BAR4 offset=0x1000 bytes=0x1 address=0xffff800002950000
+virtio-net PCI: device BAR4 offset=0x2000 bytes=0x1000 address=0xffff800002951000
+virtio-net PCI: register resources owned; 4 MSI-X entries, DMA and interrupts disabled
+virtio-net PCI: offered features[63:0]=0x10130bf8024
+virtio-net PCI: accepted VERSION_1, MAC, STATUS; FEATURES_OK confirmed
+virtio-net PCI: MAC=52:54:0:12:34:56 link=up
+virtio-net PCI: queue 0 maximum=256 notify=0xffff80000294f000, disabled
+virtio-net PCI: queue 1 maximum=256 notify=0xffff80000294f004, disabled
+virtio-net PCI: MSI-X entry 0 -> BSP APIC 0 vector 35; route masked
+virtio-net PCI: queue 0 size=16 descriptors=0x1e8000 available=0x1e8100 used=0x1e8128
+virtio-net PCI: queue 1 size=16 descriptors=0x1f1000 available=0x1f1100 used=0x1f1128
+virtio-net PCI: queues prepared; DMA and DRIVER_OK clear, awaiting network worker
+virtio-rng PCI: reset confirmed before BAR probing
+virtio-rng PCI: common BAR4 offset=0x0 bytes=0x38 address=0xffff800002966000
+virtio-rng PCI: notify BAR4 offset=0x3000 bytes=0x1000 address=0xffff800002967000
+virtio-rng PCI: ISR BAR4 offset=0x1000 bytes=0x1 address=0xffff800002968000
+virtio-rng PCI: register resources owned; 2 MSI-X entries, DMA and interrupts disabled
+virtio-rng PCI: queue 0 maximum=8 notify=0xffff800002967000, disabled
+virtio-rng PCI: MSI-X entry 0 -> BSP APIC 0 vector 36; route masked
+virtio-rng PCI: queue 0 size=8 descriptors=0x1fa000 available=0x1fa080 used=0x1fa098
+virtio-rng PCI: queue prepared; DMA and delivery disabled until worker start
+virtio-blk: no candidate device; block I/O unavailable
+SMP: 1 CPU(s) online; APs waiting for scheduler startup
+tasks: scheduler and BSP request queues ready
+devices: starting virtio, block and native filesystem workers
+devices: workers started
+net: lo 127.0.0.1/8 MTU=1500, IPv4/ICMP/UDP worker ready
+PMM: total=2074725 free=2073415 allocated=1310 frames, metadata=160 pages
+VM: total=16777216 reserved=28046 backed=1056 pages, records=31/256
+heap: TLSF pools=1 bytes=262144, alignment=16, live allocations=38; arena used=262144 retired=0 bytes
+userspace: boot init boot://boot-init.pxe entry=0x400000
+Caelum ready: starting preemptive userspace
+virtio-rng: host seed source ready, demand-driven reseeding
+ACPI: uACPI 6.1.1 namespace ready in 1726 us; heap 106631 bytes in 3461 blocks, firmware window 14 pages
+net: lwIP TCP packet bridge and connection service ready
+display: presentation started; early console retired
+boot-init: reading boot://config/live.lua
+net: TCP transport identity ready
+boot-init: volume host unavailable (status 6)
+userspace: space development started
+boot-init: space development started: boot://init (network owner)
+userspace: space readonly started
+boot-init: space readonly started: boot://init-readonly
+userspace: space remote started
+boot-init: space remote started: boot://init-remote
+virtio-net: RX/TX active, 16 buffers per queue, BSP worker owns completions
+
+TERMINAL
+{"type": "ready"}
+{"type": "tab_width", "columns": 8}
+pcm: 48000 frames/run, 1 runs, tail wait 200 ms (elapsed time does not guarantee audible drain)
+
+pcm: acquire (status 6)
+
+{"type": "fresh_line"}
+shell: pcm: Exited with status 1
+
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 1}
+absent-audio-shell-responsive
+
+
+{"type": "fresh_line"}
+{"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+
+READONLY GDB
+Reading symbols from build/caelum.elf...
+Remote debugging using :1243
+0xffffffff80014fd6 in cpu_wait_interrupt ()
+    at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = false
+$2 = {claim = {device = 0x0, saved_command = 0, 
+    capabilities = '\000' <repeats 47 times>, capability_count = 0, bars = {{
+        physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, 
+        bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {
+        physical = 0, bytes = 0}}, mappings = 0x0, reserved = false, 
+    dma_started = false}, registers = {address = 0, base = 0, bytes = 0, 
+    next = 0x0}, firmware = {command = 0, pmcsr = 0, power_capability = 0, 
+    command_changed = false, power_changed = false}, msi = {claim = 0x0, 
+    capability = 0}, corb = {address = 0, physical = 0, bytes = 0}, rirb = {
+    address = 0, physical = 0, bytes = 0}, bdl = {address = 0, physical = 0, 
+    bytes = 0}, pcm = {address = 0, physical = 0, bytes = 0}, stream = 0, 
+  corb_entries = 0, rirb_entries = 0, corb_write = 0, rirb_read = 0, 
+  codec_mask = 0, commands = 0, responses = 0, unsolicited = 0, run_time = 0, 
+  run_wallclock = 0, irq = {first_time = 0, errors = 0 '\000', 
+    completed = false}, prepared = false, link_ready = false, 
+  command_ready = false, stream_prepared = false, stream_running = false, 
+  failed = false, shutdown = false}
+$3 = true
+$4 = (struct task_wait *) 0xffff801000006d98
+$5 = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+Detaching from program: <worktree>, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]
