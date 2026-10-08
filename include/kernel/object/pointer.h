@@ -64,6 +64,10 @@ void pointer_queue_input(struct pointer_object *pointer, struct pointer_event ev
     uint32_t pressed, bool buttons);
 void pointer_queue_state(struct pointer_object *pointer, uint32_t type);
 void pointer_set_lock(struct pointer_object *pointer, bool relative);
+/* Any CPU; ownership/readiness snapshots disable interrupts and take the
+ * queue lock. */
+bool pointer_owned(struct pointer_object *pointer, struct process *process);
+uint64_t pointer_ready(struct pointer_object *pointer, struct process *process);
 /* Current user task/IF=0. READ may block; mutations use BSP requests. */
 struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,

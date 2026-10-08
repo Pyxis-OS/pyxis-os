@@ -58,8 +58,10 @@ struct wait_interest {
  * Console RESIZED requires READ or WRITE;
  * terminal input/output RESIZED requires READ/WRITE respectively. Explicit
  * terminal resize advances its geometry generation. Display RESIZED requires DRAW and
- * the caller's own space, without acquiring graphics. Keyboard accepts only
- * READABLE with INPUT in the caller's own space and an acquired session.
+ * the caller's own space, without acquiring graphics. Keyboard and pointer accept
+ * only READABLE with INPUT in the caller's own space and an acquired session.
+ * Pointer state/reset events remain readable while unfocused; lost ownership
+ * reports ERROR. Readiness never acquires input or reserves an event.
  * RESIZED reports observed_generation != current generation, level-triggered
  * and coalesced; re-query geometry to obtain its generation before waiting again.
  * Backend unavailability reports ERROR for display interests.
@@ -67,8 +69,8 @@ struct wait_interest {
  * WAIT right. Completion is immutable and reports finished cleanup, not program
  * success. PROCESS_WAIT retrieves the observer's immutable result; group
  * completion additionally observes attributed deferred cleanup.
- * Process/group/terminal/console/display/keyboard/TCP interests may be mixed;
- * waits without TCP need no network device.
+ * Process/group/terminal/console/display/keyboard/pointer/TCP interests may be
+ * mixed; waits without TCP need no network device.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
  * readiness. */
 

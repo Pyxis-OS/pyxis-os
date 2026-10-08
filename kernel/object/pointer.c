@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/display.h>
@@ -7,6 +8,7 @@
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
 static void lock_pointer(struct pointer_object *pointer)
@@ -19,6 +21,31 @@ static void lock_pointer(struct pointer_object *pointer)
 static void unlock_pointer(struct pointer_object *pointer)
 {
   atomic_store_explicit(&pointer->locked, false, memory_order_release);
+}
+
+bool pointer_owned(struct pointer_object *pointer, struct process *process)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_pointer(pointer);
+  bool owned = pointer->owner == process;
+  unlock_pointer(pointer);
+  cpu_restore_interrupts(flags);
+  return owned;
+}
+
+uint64_t pointer_ready(struct pointer_object *pointer, struct process *process)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_pointer(pointer);
+  uint64_t ready = 0;
+  if (pointer->owner != process) {
+    ready = WAIT_ERROR;
+  } else if (pointer->count) {
+    ready = WAIT_READABLE;
+  }
+  unlock_pointer(pointer);
+  cpu_restore_interrupts(flags);
+  return ready;
 }
 
 static void destroy_pointer(struct kernel_object *object)
@@ -73,6 +100,7 @@ void pointer_set_lock(struct pointer_object *pointer, bool relative)
     queue_event(pointer, pointer_position_event(pointer, POINTER_LOCK_CHANGED));
   }
   unlock_pointer(pointer);
+  readiness_notify();
 }
 
 void pointer_reset_input(struct pointer_object *pointer, uint32_t type)
@@ -84,13 +112,15 @@ void pointer_reset_input(struct pointer_object *pointer, uint32_t type)
     queue_event(pointer, pointer_position_event(pointer, type));
   }
   unlock_pointer(pointer);
+  readiness_notify();
 }
 
 void pointer_focus(struct pointer_object *pointer, bool focused)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  if (pointer->focused != focused) {
+  bool changed = pointer->focused != focused;
+  if (changed) {
     pointer->focused = focused;
     reset_buttons(pointer);
     if (pointer->owner) {
@@ -99,13 +129,17 @@ void pointer_focus(struct pointer_object *pointer, bool focused)
     }
   }
   unlock_pointer(pointer);
+  if (changed) {
+    readiness_notify();
+  }
 }
 
 void pointer_queue_state(struct pointer_object *pointer, uint32_t type)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  if (pointer->owner) {
+  bool owned = pointer->owner != NULL;
+  if (owned) {
     if (type == POINTER_LEAVE) {
       pointer->accepted = 0;
     }
@@ -116,6 +150,9 @@ void pointer_queue_state(struct pointer_object *pointer, uint32_t type)
     queue_event(pointer, pointer_position_event(pointer, type));
   }
   unlock_pointer(pointer);
+  if (owned) {
+    readiness_notify();
+  }
 }
 
 static int32_t saturating_add(int32_t total, int32_t delta)
@@ -160,6 +197,7 @@ void pointer_queue_input(struct pointer_object *pointer, struct pointer_event ev
     }
   }
   unlock_pointer(pointer);
+  readiness_notify();
 }
 
 void pointer_end_session(struct pointer_object *pointer)
@@ -175,6 +213,7 @@ void pointer_end_session(struct pointer_object *pointer)
   pointer_image_release(pointer->image);
   pointer->image = NULL;
   pointer->hidden = false;
+  readiness_notify();
 }
 
 void pointer_process_exit(struct process *process)
@@ -207,6 +246,7 @@ void pointer_request_execute(struct pointer_request *request)
       queue_event(pointer, pointer_position_event(pointer,
           pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
       unlock_pointer(pointer);
+      readiness_notify();
       pointer_subscription_started(pointer);
     }
   } else if (pointer->owner != process) {
@@ -324,6 +364,7 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
   pointer->head = (pointer->head + 1) % POINTER_EVENT_CAPACITY;
   --pointer->count;
   unlock_pointer(pointer);
+  readiness_notify();
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
