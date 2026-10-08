@@ -1,6 +1,6 @@
 # Bluetooth investigation
 
-Status: **investigation brief, 2026-10-08; not yet assigned.** The owner wants
+Status: **task 1 qualified, 2026-10-08; tasks 2–5 not yet assigned.** The owner wants
 to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Probe code stays on a branch and is not merged;
@@ -50,23 +50,25 @@ option can follow once the setup works, recorded beside the NIC reference.
 
 ## Steps
 
-1. **Passthrough and inventory.** With the setup above, `lsusb` in the guest
+- [x] **1. Passthrough and inventory.** With the setup above, `lsusb` in the guest
    lists `8087:0029` and both interfaces. Record the descriptors and endpoint
    addresses. Natively, confirm the same from the existing inventory.
-2. **Interrupt IN transfers.** Pyxis's xHCI configures only bulk endpoints for
+   The [task 1 report](../development/experiments/bluetooth-task1/README.md)
+   records successful QEMU attachment, guest descriptors and native evidence limits.
+- [ ] **2. Interrupt IN transfers.** Pyxis's xHCI configures only bulk endpoints for
    USB storage today. HCI events need an interrupt IN endpoint. This gap is shared
    with the planned [USB HID mice](pointer.md#devices), so record what a real
    implementation needs: endpoint context, ring ownership, buffering and loss.
-3. **HCI transport and controller state.** Send HCI commands as class requests
+- [ ] **3. HCI transport and controller state.** Send HCI commands as class requests
    to interface 0 and read events from the interrupt endpoint. Issue HCI Reset
    and Intel's Read Version, and record whether the controller is in its
    bootloader or operational firmware.
-4. **Firmware load.** Derive the firmware name from the version reply, load the
+- [ ] **4. Firmware load.** Derive the firmware name from the version reply, load the
    `.sfi` and `.ddc` through Intel's vendor commands, reset into operational
    firmware and confirm with Read Version. Linux's `drivers/bluetooth/btintel.c`
    documents the protocol; read it for the sequence, not to copy code. The owner
    mirrors the exact linux-firmware files before any committed build uses them.
-5. **First LE scan.** Configure and enable LE scanning, and receive advertising
+- [ ] **5. First LE scan.** Configure and enable LE scanning, and receive advertising
    reports. With the MX Master 3S in pairing mode, identify its reports: the HID
    service (`0x1812`) or mouse appearance (`0x03C2`) and its name.
 
