@@ -8,7 +8,7 @@ knowing their backing. The shell-streams milestone is complete.
 ```text
 cat boot://share/hello.txt > home://copy.txt
 cat < home://copy.txt | head -n 2
-cat boot://tcc.pxe | head -c 16 > home://prefix
+cat bin://tcc.pxe | head -c 16 > home://prefix
 cat missing 2> home://errors | cat > home://empty
 ```
 

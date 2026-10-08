@@ -1,6 +1,6 @@
 # Uniq
 
-The normal image includes upstream sbase `uniq` at `boot://uniq.pxe`; the shell
+The normal image includes upstream sbase `uniq` at `bin://uniq.pxe`; the shell
 resolves the bare command `uniq`. It is built from sbase
 `c546c3a5724c81cee9a11d816a38ccdf17472129` by the
 [sbase recipe](../../ports/sbase/README.md), which also packages cksum and tee.

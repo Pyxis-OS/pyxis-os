@@ -1,7 +1,7 @@
 # Links
 
 The image includes [Links](http://links.twibright.com/) 2.30 in text mode at
-`boot://links.pxe`. Its GPL licence is at `boot://share/licenses/links/COPYING`,
+`bin://links.pxe`. Its GPL licence is at `boot://share/licenses/links/COPYING`,
 and the shell resolves `links` to it. It reads HTML documentation such as the
 Java SE 8 Virtual Machine Specification without leaving Pyxis. The
 [recipe notes](../../ports/links/README.md) record the source pin, patches and

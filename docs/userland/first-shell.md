@@ -2,17 +2,20 @@
 
 The shell runs foreground programs with arguments, named resources and an
 explicit working directory. It waits for completion, reports a nonzero exit or
-user fault, and returns to the prompt. The default [init script](init.md) hands
-off to an interactive shell at `tmp://` in the Development space. See [the shell reference](shell.md) for commands, quoting, scripts and
-a short walkthrough.
+user fault, and returns to the prompt. [Boot init](init.md) starts each
+configured space, whose init hands off to an interactive shell, normally at
+`home://`. See [the shell reference](shell.md) for commands, quoting, scripts,
+pipelines, redirection, background commands and a short walkthrough.
 
 ## Filesystem and authority
 
 The kernel exposes directory and file objects through tagged synchronous calls
-and process-local capabilities. `boot://` selects the read-only initrd tree;
-`tmp://` selects a shared writable RAM tree. Its contents survive process
-exit but disappear on reboot. These names select explicitly granted startup
-roots, not a global namespace available to every process.
+and process-local capabilities. `boot://` selects the read-only boot archive,
+`bin://` the programs, `home://` the writable home and `tmp://` a shared writable
+RAM tree; installed systems keep `bin://`, `home://` and `system://` on their npfs
+pool. The [system layout](system-layout.md) describes each root. These names
+select explicitly granted startup roots, not a global namespace available to
+every process.
 
 Directory lookup returns an owned child handle with equal or reduced authority.
 Enumeration lists names without granting handles. File reads and writes carry
@@ -30,12 +33,14 @@ strings describe context; they do not grant authority.
 
 ## Launch, startup and completion
 
-A launcher capability authorizes creation in the caller's space, on its assigned
-CPU. The caller supplies a readable program file, arguments, environment, named
+A launcher capability authorizes creation in the caller's space; the scheduler
+places the process on the CPUs that space allows. The caller supplies a readable program file, arguments, environment, named
 resources, roots and directory context. There is no implicit capability-table
 inheritance. Ordinary shell children receive the shell's explicit foreground
-grants, including terminal access and filesystem roots, but not its launcher.
-The `session` builtin explicitly delegates launch authority to its successor.
+grants, including terminal access and filesystem roots, but not its trusted
+launcher. In a space configured with `launch = true`, foreground children also
+receive a [child launcher](init.md#boot-configuration) with LAUNCH alone. The
+`session` builtin explicitly delegates launch authority to its successor.
 
 Launch prepares the image, private memory, startup record and grants before
 making the child runnable. Failure unwinds unpublished resources without
@@ -67,7 +72,7 @@ kernel heap. Kernel allocation and page-table mutation remain BSP-owned.
 [Stdio](stdio.md) wraps file and console capabilities. Each file stream owns its
 handle and offset; standard streams own copies of the named terminal grants.
 Normal C exit closes streams, and kernel process cleanup reclaims remaining
-handles and private memory. The separate `cat`, `ls` and `mkdir` utilities use
+handles and private memory. Utilities such as `cat`, `ls`, `mkdir` and `cp` use
 libc, with native directory operations where ISO C has no equivalent.
 
 The kernel delivers terminal bytes without echo or line editing. [Libterm's
@@ -78,15 +83,16 @@ separate interfaces; global space navigation belongs to the session.
 
 ## Remaining boundaries
 
-There are no background jobs, pipes, redirection, expansion, job control or
-process cancellation. Foreground terminal handoff relies on cooperating
+[Pipelines and redirection](shell-streams.md), background commands and
+[Ctrl+C interruption](foreground-interruption.md) are implemented. There is no
+expansion or job control. Foreground terminal handoff relies on cooperating
 applications, without general reader/output ownership arbitration. History and
 long-line viewports remain deferred. On a single CPU, Caelum logs share the TTY
 and can disrupt editing. Runtime tradeoffs, including non-atomic stdio append,
 are tracked in [technical debt](../technical-debt.md).
 
 Shell exit leaves its space, tab, terminal contents and shared roots alive;
-there is no automatic restart. Persistent storage, mounts, overlays and
-publication remain separate from the current filesystem. The [VFS draft](../wip/vfs.md)
-and [space draft](../wip/spaces.md) describe future direction, not additional behavior
-of the shell or runtime.
+there is no automatic restart. Persistent storage uses
+[npfs mounts](../devices/native-readonly-filesystem.md); overlays remain future
+work. The [VFS draft](../wip/vfs.md) and [space draft](../wip/spaces.md) describe
+future direction, not additional behavior of the shell or runtime.

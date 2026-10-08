@@ -177,7 +177,7 @@ Init scripts can create and populate an explicit [service namespace](../interfac
 
 ```text
 namespace create
-service start counter boot://counter.pxe --provide
+service start counter bin://counter.pxe --provide
 counter --lookup counter
 namespace remove counter
 ```
@@ -292,7 +292,7 @@ For example:
 
 ```text
 cat boot://share/hello.txt | head -n 2
-cat boot://tcc.pxe | head -c 16 > home://prefix
+cat bin://tcc.pxe | head -c 16 > home://prefix
 head -c 0 home://copy.txt
 ```
 

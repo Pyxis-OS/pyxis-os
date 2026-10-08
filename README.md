@@ -57,7 +57,8 @@ do not fit. Every CPU count gets the same spaces. Boot init creates them from
 the [boot configuration](docs/userland/init.md#boot-configuration), and the init
 scripts hand off to sessions.
 
-The shell starts at `tmp://`, which is RAM-backed and lost on reboot. `boot://`
+The shell starts at `home://`: RAM-backed on live boots and kept on the npfs pool
+on installed systems. `tmp://` is always RAM-backed. `boot://`
 contains the read-only boot archive; installed systems run ordinary programs from
 `bin://`, which live boots bind to the archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
@@ -79,14 +80,16 @@ See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot fail
 The [shell guide](docs/userland/shell.md) and [edit/build/run walkthrough](docs/development/edit-build-run.md)
 cover ordinary guest use.
 
-The scheduler places and balances processes across the CPUs their space allows,
-excluding the BSP on multicore boots. The BSP owns kernel allocation, VM mutation
+The scheduler places, balances and migrates processes across the CPUs their space
+allows, including the BSP. The BSP owns kernel allocation, VM mutation
 and cleanup, and runs preemptible kernel tasks; user syscall paths remain
 non-preemptible. See [SMP ownership](docs/kernel/smp.md), [userspace](docs/kernel/userspace.md)
 and [memory](docs/kernel/memory.md). Low-level allocation contracts live in
 [PMM](include/kernel/mm/pmm.h), [VM](include/kernel/mm/vm.h) and
-[heap](include/kernel/mm/heap.h) headers. Task migration, concurrent shared mapping mutation,
-AVX and physical-hardware support remain outside the current implementation.
+[heap](include/kernel/mm/heap.h) headers. Concurrent shared mapping mutation and AVX
+remain outside the current implementation. Pyxis runs natively on its first
+hardware target, the [ThinkPad T14 Gen 1 AMD](docs/targets/t14-gen1-amd/notes.md#native-status),
+including networking and USB installation.
 
 Find subsystem references in the [documentation guide](docs/README.md).
 For development, follow [AGENTS.md](AGENTS.md) and the

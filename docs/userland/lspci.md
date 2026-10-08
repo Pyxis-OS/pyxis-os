@@ -1,6 +1,6 @@
 # lspci
 
-The normal image includes native `lspci` at `boot://lspci.pxe`. It lists the
+The normal image includes native `lspci` at `bin://lspci.pxe`. It lists the
 kernel's boot PCI inventory through the
 [system-information PCI queries](../interfaces/system-information.md#pci-inventory)
 and resolves names from the packaged
