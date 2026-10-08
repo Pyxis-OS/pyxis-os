@@ -81,6 +81,14 @@ ZLIB_OUTPUTS := $(addprefix build/ports/zlib/stage/,dev/lib/libz.a \
   dev/include/zlib.h dev/include/zconf.h share/licenses/zlib/LICENSE \
   share/licenses/zlib/PORT-NOTICE share/zlib/source.txt)
 
+LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile \
+                          ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
+                 ports/ports.lua ports/build.lua
+LIBPNG_OUTPUTS := $(addprefix build/ports/libpng/stage/,dev/lib/libpng.a \
+  dev/include/png.h dev/include/pngconf.h dev/include/pnglibconf.h \
+  share/licenses/libpng/LICENSE share/licenses/libpng/PORT-NOTICE \
+  share/libpng/source.txt)
+
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
                            ports/mbedtls/*.cmake ports/mbedtls/Makefile \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
@@ -93,7 +101,8 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
   share/licenses/mbedtls/PORT-NOTICE)
 
 .PHONY: all
-all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
+all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) \
+     $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
      $(BUSYBOX_IMAGE) $(BUSYBOX_LICENSE) $(LINKS_IMAGE) $(LINKS_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
      $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
@@ -174,6 +183,10 @@ $(PICOHTTPPARSER_OUTPUTS) &: $(PICOHTTPPARSER_INPUTS) $(SDK_INPUTS) scripts/port
 $(ZLIB_OUTPUTS) &: $(ZLIB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/zlib
 	$(LUA) ports/build.lua zlib --sdk $(abspath build/sdk) --work $(abspath build/ports/zlib)
+
+$(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/libpng
+	$(LUA) ports/build.lua libpng --sdk $(abspath build/sdk) --work $(abspath build/ports/libpng) --zlib $(abspath build/ports/zlib/stage/dev)
 
 $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mbedtls

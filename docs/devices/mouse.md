@@ -17,7 +17,8 @@ buttons after the packet. QEMU and some devices also send a packet with all
 deltas zero, for example when a wheel step ends.
 
 The presentation task drains these events and routes them to the active space's
-[pointer session](#userspace-pointer-sessions).
+eligible [pointer session](#userspace-pointer-sessions). A hidden graphics layer
+withholds captured pointer input; the terminal layer has no pointer input.
 
 ## Controller and setup
 
@@ -107,9 +108,12 @@ such as QEMU's zero wheel-release packet, produces no event.
 ### Focus, held buttons and loss
 
 Only the active space receives input; the log space on multicore boots receives
-none. Switching spaces discards the old session's queued events and publishes
-`POINTER_FOCUS_LOST`; the new session receives `POINTER_FOCUS_GAINED`. Each
-event's `POINTER_EVENT_FOCUSED` flag records focus when it was queued.
+none. A presented but hidden [graphics session](../interfaces/graphics.md#choosing-the-visible-layer)
+also removes pointer input eligibility, retaining the independent pointer
+session. Focus means input eligibility, not permission to run or render.
+Switching spaces or graphics/terminal layers discards queued session events and
+publishes `POINTER_FOCUS_LOST` or `POINTER_FOCUS_GAINED` when eligibility changes.
+Each event's `POINTER_EVENT_FOCUSED` flag records focus when it was queued.
 Control events carry no motion or buttons. Applications release all held
 buttons on any focus or `POINTER_STATE_RESET` event.
 
@@ -124,7 +128,8 @@ as the newest `POINTER_INPUT` event adds its motion and wheel into that event,
 saturating at the 32-bit limits. Any other event discards the queue, clears held
 buttons and queues `POINTER_STATE_RESET`. Device loss resets every application
 space's session the same way. These notifications wake a blocked reader even
-while its space is inactive.
+while graphics is hidden or its space is inactive. A blocking read can keep
+waiting without a notification; the kernel does not suspend its owner.
 
 Routing, ownership and the queue share a per-object lock. All callers hold
 IF=0; lock order is pointer, then scheduler queues. No allocation, user copy or

@@ -3,9 +3,10 @@
 Run `mandelbrot` from the shell in an application space. It draws a
 pixel-resolution Mandelbrot set progressively. Hold the arrow keys to pan,
 `=`/`+` to zoom in around the centre, and `-` to zoom out. Escape releases the
-keyboard and display sessions and returns to the shell. Super+Left/Right still
-switches spaces. Losing focus clears held controls without pausing rendering;
-held keys need a fresh press after switching back.
+keyboard and display sessions and returns to the shell. Super+Left/Right switches
+spaces; Super+Down shows the terminal and Super+Up restores graphics. Losing focus
+clears held controls without pausing rendering; held keys need a fresh press
+after returning to graphics.
 
 The application needs named `display` (DRAW), `keyboard` (INPUT), and `clock`
 (READ and SLEEP) grants. Movement uses monotonic elapsed time, with at most
@@ -17,11 +18,12 @@ need to wait for a complete frame. Zoom is bounded to widths of 1e-12 through 16
 in the complex plane. The normal image and SDK contain the application and the
 native display, keyboard and clock helpers.
 
-Quake, Doom and `mousetest` also keep updating in an unselected space. Quake
-and Doom game time advances without input focus; their explicit game pause
-still works. The presenter copies only the selected space, but an unattended
-game continues using CPU and memory bandwidth. Focus loss removes input, not
-execution or rendering permission.
+Quake, Doom and `mousetest` also keep updating while graphics is hidden or their
+space is unselected. Quake and Doom game time advances without input focus;
+their explicit game pause still works. The presenter copies only the chosen
+surface of the selected space, but an unattended game continues using CPU and
+memory bandwidth. Focus loss removes input eligibility, not execution or
+rendering permission.
 
 ## Authority and ownership
 
@@ -38,6 +40,30 @@ ability to acquire a future session; it does not transfer the current session
 or map its pixels into the recipient. Closing a handle does not end the session.
 The owner can use another DRAW handle to the same display to release it, or exit.
 
+## Choosing the visible layer
+
+The first successful PRESENT of each session shows graphics. Acquisition alone
+leaves the terminal visible, without a layer marker. After that first PRESENT,
+Super+Down shows the terminal and Super+Up restores graphics. The tab ends with
+`+` for graphics or `−` for the terminal. With no presented session either
+shortcut is consumed without changing state. Repeating the current choice does
+not reset input or clear terminal bytes.
+
+The choice lasts for the session: further PRESENT calls, REPLACE, physical
+resize and switching away from and back to the space preserve it. A session
+started in another space never selects that space; its first PRESENT records
+graphics as the layer for the next visit. RELEASE or owner exit ends the
+session and removes its marker. A later session gets its own first-PRESENT
+behavior.
+
+Hiding graphics keeps its mapping, ownership and independent input sessions.
+The program remains runnable, and terminal output stays live. Captured keyboard
+and pointer input lose focus; terminal typing uses the normal console queue.
+Super+Up clears unread terminal bytes before restoring capture routing. A
+foreground graphical job still occupies the shell, so hiding it opens no second
+prompt. [Ctrl+C](../userland/shell.md#interrupting-foreground-commands) can reach
+the shell's existing armed foreground interrupt while the terminal is shown.
+
 ## Mapping and presentation
 
 [The ABI](../../include/abi/display.h) has five synchronous requests. All but
@@ -47,8 +73,9 @@ REPLACE carry only a message header:
   caller. Its reply contains the address, mapped size, width, height, pitch and
   red/green/blue shifts and geometry generation in a 64-byte `display_buffer`.
   Acquisition leaves the TTY selected until PRESENT.
-- PRESENT selects that buffer for the existing periodic presentation task.
-  It returns after selection, not after scanout or a complete frame copy.
+- PRESENT records that the session has presented. Its first successful call
+  selects graphics; later calls preserve the user's layer choice. It returns
+  before scanout or a complete frame copy.
 - RELEASE removes the user mapping and selects the TTY again. It returns no
   reply payload; the old pointer must no longer be used.
 - SIZE returns the current destination width, height, pitch, channel shifts and
@@ -60,8 +87,9 @@ REPLACE carry only a message header:
   descriptor. A generation mismatch returns BUSY; allocation/mapping failure
   preserves the old mapping and session. Success removes the old user mapping
   within the call, so its pointer is invalid after return. The acquiring process
-  remains owner, and a visible session selects the blank new buffer until it
-  redraws. Reply storage must not overlap the mapping being retired.
+  remains owner, and the layer choice is preserved. If graphics is shown, the
+  blank new buffer is selected until it redraws. Reply storage must not overlap
+  the mapping being retired.
 
 Pixels are 32-bit words with three 8-bit channels at the returned shifts. Pitch
 is bytes between row starts. The layout matches the current display; dimensions
@@ -73,9 +101,12 @@ within width/height and use pitch rather than assuming tightly packed rows.
 The mapping is distinct from private-memory allocations and cannot be released
 through the memory service.
 
-After PRESENT, the kernel reads the same backing pages that the application
-writes. Further changes may appear without another request. This single-buffer
-contract permits tearing; PRESENT neither freezes pixels nor promises vblank,
+After PRESENT, when graphics is chosen in the active space, the kernel reads the
+same backing pages that the application writes. Further changes may appear
+without another request. Hidden or unselected graphics takes no new presenter
+reference and adds no pixel copy; an already-snapshotted frame may finish after
+a transition. This single-buffer contract permits tearing; PRESENT neither
+freezes pixels nor promises vblank,
 atomic frames or completion notification. The kernel copies pixels into the
 physical driver's target: directly to the boot/Bochs framebuffer, or into kernel RAM
 followed by a fenced VirtIO transfer and flush. Application backing is never
@@ -86,8 +117,10 @@ remain separate work.
 The TTY keeps its own framebuffer and continues accepting output while graphics
 is selected. Its cursor is not composited over graphics. Releasing graphics or
 exiting restores the TTY on the next presentation. Graphics ownership is
-independent of [keyboard capture](../devices/keyboard.md): Mandelbrot acquires both sessions,
-and captured input is withheld from the console stream.
+independent of [keyboard capture](../devices/keyboard.md): Mandelbrot acquires both
+sessions. A presented session's terminal layer overrides capture routing, without
+releasing capture. Releasing graphics does not release independently owned
+keyboard or pointer sessions; they resume their normal routing.
 
 ## Live destination geometry
 
@@ -111,7 +144,8 @@ SIZE observes the new destination, while an existing application mapping keeps
 its original layout. Presentation copies the top-left intersection using each
 source row's pitch and fills exposed destination margins with the TTY background.
 Generation starts at one and advances on each committed local resize. Physical
-resizing does not change space focus or keyboard/pointer capture.
+resizing preserves the chosen layer and does not change space focus or
+keyboard/pointer capture eligibility.
 
 Old TTY pixel mappings remain intact until writers and the presenter have
 relinquished them and the [shared-range retirement protocol](../kernel/smp.md#memory-and-output-boundaries)

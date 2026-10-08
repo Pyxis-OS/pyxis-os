@@ -1,17 +1,17 @@
 # Graphics and terminal layers in a space
 
-Status: **proposal accepted, 2026-10-08; consumer task implemented.**
-The owner accepted the contract and task sequence after review of PR #502 and
-selected the consumer update as the first implementation task. Kernel layer
-switching remains the next separate task.
+Status: **kernel layer switching implemented, 2026-10-08; native qualification pending.**
+The owner accepted the contract in PR #502. The consumer update merged in
+PR #507; kernel switching now implements the agreed behavior. Remaining work
+is qualification and reference closure, not another design proposal.
 
 ## Today
 
 Each space owns a local TTY and at most one
-[graphics session](../interfaces/graphics.md). The program decides which one is
-on screen: PRESENT selects its buffer, and RELEASE or exit selects the TTY again.
-The TTY keeps receiving and rasterizing output while the graphics buffer is shown,
-so both surfaces already exist side by side.
+[graphics session](../interfaces/graphics.md). First PRESENT selects graphics;
+Super+Up/Down then chooses the layer until RELEASE or exit ends the session.
+The TTY keeps receiving and rasterizing output while graphics is shown.
+Input capture stays acquired while hidden, but text is routed to the console.
 
 ## Idea
 
@@ -120,8 +120,8 @@ clearing held keys, buttons and motion. No separate space-selection event is
 needed because programs keep running in both hidden and unselected states.
 
 Quake and Doom clear held controls on focus/reset events, continue polling those
-events, and advance game time without focus-based pauses. Remove their initial
-focus waits too, so starting in another space does not block startup. Mandelbrot
+events, and advance game time without focus-based pauses. Their initial focus
+waits are removed too, so starting in another space does not block startup. Mandelbrot
 finishes pending rendering without focus and idles normally once complete;
 `mousetest` continues its ordinary update loop. Input controls remain disabled
 without focus. Pointer notifications must not change Quake's run/time policy.
@@ -179,7 +179,7 @@ existing presenter-reference and execution-group cleanup contracts.
    dependency PRs before a Pyxis integration PR updates their pins; merge the
    dependencies first. Build against the existing SDK and check focus loss,
    fresh presses and inactive startup interactively in QEMU.
-3. [ ] Implement session layer state, Super+Up/Down, capture/text routing,
+3. [x] Implement session layer state, Super+Up/Down, capture/text routing,
    queue/loss handling, marker drawing and chosen-surface presentation in Pyxis.
    Include the published consumer pins. Update the
    [graphics](../interfaces/graphics.md), [keyboard](../devices/keyboard.md),
@@ -198,29 +198,79 @@ existing presenter-reference and execution-group cleanup contracts.
    the interface references, remove this completed worklist and update inbound
    links. Record any accepted remaining limits in technical debt.
 
-## Consumer task handoff
+## Kernel task qualification
 
-Branch: `space/consumer-focus`, based on Pyxis `cec21e4` after proposal PR #502
-merged. Proposal acceptance is folded into task 2. Dependencies, both on
-`graphics/continuous-focus`:
+The ordinary `make -j16 image QUAKE_DATA=/quake-data` build passed using the
+existing LLVM builder. Dependencies stayed at the merged pins: ports `8449065`
+and userland `d86f9b7`; the zlib and C++ startup changes were preserved.
+
+Interactive QEMU 10.2.2 used KVM, four CPUs, 512 MiB and a writable HOST export
+restricted to the task's qualification directory. No network device was attached.
+Standard VGA/Bochs checked layer/input behavior. GTK with VirtIO GPU checked
+live geometry and narrow tabs. These were nested-VM checks:
+
+- Hidden Quake retained its mapping, continued frames with both capture focus
+  flags clear, and had only its session backing reference. Three console bytes
+  survived repeated Super+Down and were cleared by Super+Up. Switching away and
+  back preserved the hidden choice. A fresh session selected graphics again.
+- Hidden-layer Ctrl+C ended Quake through the shell's existing armed interrupt.
+  An `echo` queued after that interrupt executed after cleanup and wrote
+  `survived` to HOST. Display, keyboard and pointer owners were then null and
+  the marker state ended. This exercised keyboard-before-display teardown.
+- Hidden Doom replaced its mapping on a real VirtIO resize to an 800x573
+  destination, keeping the terminal layer selected. Its new buffer was 800x541.
+  Hidden Mandelbrot similarly adapted to 640x453, retaining a 640x421 buffer
+  with no presenter lease. Neither resize changed the input layer.
+- At 320x213, a 36-character title was clipped beside both markers; widths and
+  the title underline stayed intact. Ctrl+Super+Down was suppressed, while
+  either Super key selected the terminal normally.
+- `mousetest` accepted a button press, cleared it when hidden, withheld that
+  still-held button after Super+Up and motion, and accepted a release/fresh
+  press. Escape returned `mousetest` and Mandelbrot to their shells. Layer
+  shortcuts without a session left the console queue empty.
+
+Acquired-but-never-presented state, explicit repeated PRESENT while hidden,
+independent surviving capture on DISPLAY_RELEASE, shortcut releases after Super
+and device/queue-loss propagation were source-inspected. Those cases are not
+claimed as additional runtime coverage. The native ThinkPad Quake check remains
+task 4. All task-owned QEMU, GDB and virtiofsd processes are closed.
+
+### Performance samples
+
+The existing `quake +timedemo demo1` workload rendered 969 frames per sample.
+Both images used the same standard VGA/Bochs, 1280x800 destination, KVM/four-CPU/
+512-MiB configuration and HOST export, without profiling. Baseline source was
+Pyxis `38684a9` with the pins above; after samples used this branch's uncommitted
+implementation before the documentation/commit handoff. Kernel ELF identities:
+
+- Baseline: `8d2490dff4707d3bd618403875afae5afb3e8667aa76f3833387f493d947643d`.
+- After: `3c5439c71c231e4fcbeac4c4550a28110e6bee2ee8db2ad322f04da7589ae830`.
+
+| Series | FPS samples | Context |
+| --- | --- | --- |
+| Baseline | 1022.7, 1036.2, 1049.5 | First startup timedemo, then two console repeats |
+| After initial | 1179.5, 1162.4 | Startup timedemo and console repeat |
+| After during input qualification | 700.0 | Followed intervening menu/layer/debugger checks |
+| After fresh starts | 1560.6, 1525.7, 1562.9 | Three fresh launches after the variable initial series |
+
+The short samples, different launch history and shared-host variation do
+not establish a stable speedup or regression. No performance improvement is
+claimed, and these figures are not native qualification. Hiding adds no graphics
+copy or allocation; it does not remove application rendering work.
+
+## Kernel task handoff
+
+Branch: `space/layer-switching`, based on merged Pyxis `38684a9`.
+Proposal acceptance was folded into task 2. The merged consumer PRs are:
 
 - [Ports PR #56](https://git.internal/PyxisOS/pyxis-ports/pulls/56),
   `64e0067c6de7e1557e6669b381d96563563ca5ea`.
 - [Userland PR #154](https://git.internal/PyxisOS/pyxis-userland/pulls/154),
   `30bfe0df2c0f1d32edacc8d297b07f097b13c723`.
 
-Merge both dependencies before the Pyxis pin update. The ordinary combined image
-build passed with the existing LLVM builder. Interactive QEMU 10.2.2 used KVM,
-four CPUs, 512 MiB, standard VGA/Bochs and no network; this was a nested VM check.
-Quake and Doom started unselected and advanced frame/game counters without
-focus. Doom cleared held movement, withheld an inherited press after returning
-and accepted a fresh press. Mandelbrot completed its unselected render and
-released its sessions through Escape after returning. Debugger inspection
-confirmed repeated `mousetest` sleep/update calls without focus and cleared
-pointer acceptance. Source review covered explicit game pause and unchanged
-resize paths; no new resize or native qualification is claimed. QEMU and GDB
-processes from this task are closed.
-
-Task 3's kernel layer switching has not started. PR #502's review follow-ups are
-recorded above: the continuing CPU cost, hidden-layer Ctrl+C documentation and
-narrow-tab marker readability.
+Their merged dependency mains, including zlib and C++ startup, are already
+pinned in this branch. No gitlinks were changed for the kernel task. PR #507's
+stale Quake/Doom inactive-pause descriptions are corrected in their user guides;
+PR #502's CPU-cost, hidden Ctrl+C and narrow-marker notes are covered by the
+references and qualification above. Tasks 4 and 5 remain: owner native check,
+any remaining edge qualification, then concise reference closure.

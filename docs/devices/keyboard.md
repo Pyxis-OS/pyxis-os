@@ -57,8 +57,12 @@ it visible.
 Each arrow press switches once; releases and repeats do not switch. Either Super
 key works, lock modifiers do not affect the shortcut, and adding Shift, Control
 or Alt suppresses it. A shortcut's arrow repeats/releases remain consumed even
-if Super is released first. Remaining input is routed to the selected space's
-keyboard session, or its console when there is no session.
+if Super is released first. Super+Up/Down follows the same modifier and held-arrow
+rules and chooses the [graphics or terminal layer](../interfaces/graphics.md#choosing-the-visible-layer)
+within the selected space. Without a presented graphics session these shortcuts
+are consumed without changing state. Space switches preserve each layer choice.
+Remaining input is routed to the selected space's keyboard session, or its
+console when there is no session or a presented graphics session is hidden.
 Caelum discards application input on every CPU count.
 
 The session maps US ASCII key positions, with Shift, Caps Lock and typematic
@@ -85,9 +89,10 @@ userspace work for the shell.
 
 Overflow clears the queue and latches `CALL_INPUT_LOST`. Further input is
 discarded until a nonempty read acknowledges the loss by returning that status.
-A device `KEY_STATE_RESET` applies this policy to every application console
-without a captured keyboard session; captured sessions receive a physical-input
-reset instead. Lost scan bytes may include a space switch, so the intended
+A device `KEY_STATE_RESET` applies this policy to every application console whose
+input destination is terminal text, including a hidden graphics layer with an
+acquired keyboard session. Captured sessions also receive a physical-input
+reset. Lost scan bytes may include a space switch, so the intended
 destination is unknown. No kernel echo or line editing is performed.
 
 For manual inspection, QEMU's monitor accepts `sendkey left`, `sendkey shift-a`
@@ -126,19 +131,32 @@ does not transfer an acquired session; closing its last handle does not release
 it. Another handle to the same object can release the session, and process
 exit/fault releases it even if all handles have been closed. There is one task
 per process, so the owner cannot release or exit concurrently with its blocked
-READ. Future external termination will need to detach that waiter explicitly.
+READ. External termination wakes an interruptible READ, which detaches its
+waiter and returns ENDPOINT_CLOSED before process cleanup releases the session.
 
-While acquired, physical input does not also enter the console queue. Acquisition
-and release discard queued console bytes; a terminal reader already waiting
-continues to wait for future text. Session release restores text routing without
-replaying captured keys. Held-key repeats/releases from before the routing
-change are ignored until a fresh press.
+While capture is the input destination, physical input does not also enter the
+console queue. A presented but hidden graphics session overrides capture and
+routes text to the existing 4 KiB console queue. Captured ownership stays
+exclusive, but terminal typing never enters its event queue. The shell waits for
+its foreground job rather than reading ordinary text, so unread bytes wait for
+a later reader.
+
+Super+Up discards unread console bytes. Entering capture routing also discards
+them, including on first PRESENT. Acquisition, release or process cleanup
+preserves queued text when the destination remains terminal text. Acquiring or
+releasing capture while graphics is hidden cannot steal text routing or clear
+the queue. Releasing hidden graphics preserves text unless an independent
+surviving capture becomes the destination. A terminal reader already waiting
+continues to wait for future text. Captured keys are never replayed as text.
+Each routing change resets accepted held keys, requiring fresh presses.
 
 ### Focus and loss
 
-Only the active space receives key presses, releases and repeats. Switching
-spaces discards the old session's queued events and publishes `KEY_FOCUS_LOST`;
-the new session receives `KEY_FOCUS_GAINED`. Both reset held-key state. The
+Only a session in the active space whose input destination is capture receives
+key presses, releases and repeats. Focus means this eligibility, independent of
+ownership and program execution. Switching spaces or graphics/terminal layers
+discards queued session events and publishes `KEY_FOCUS_LOST` or
+`KEY_FOCUS_GAINED` when eligibility changes. Both reset held-key state. The
 kernel's accepted-press state is also cleared, so a key held across a switch
 must be released and pressed again. Session modifier bits reflect accepted
 modifier presses; lock-toggle bits reflect the keyboard's current lock state.
@@ -155,7 +173,9 @@ The session queue holds 64 events. Overflow drops the queued events and the
 event that overflowed it, clears accepted presses, and queues `KEY_STATE_RESET`.
 Subsequent fresh presses may follow that reset; orphan repeats/releases are
 ignored. Device scan loss similarly resets all application destinations. These
-notifications wake a blocked reader even while its space is inactive.
+notifications wake a blocked reader even while graphics is hidden or its space
+is inactive. Without focus or a notification, a blocking READ can keep waiting;
+focus loss does not suspend the process.
 
 Routing, ownership and queues share a per-object lock. All callers hold IF=0;
 lock order is keyboard, then console input, then scheduler queues. No allocation,

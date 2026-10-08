@@ -53,12 +53,14 @@ compiler, but still needs the normal host assembly/boot tools and repository
 bootloader/data files.
 
 The ports bundle separates boot contents (`ports-root`) from development files
-(`ports-dev`). Lua, picohttpparser, Mbed TLS and zlib provide static libraries and
-headers under `ports-dev/lua`, `ports-dev/picohttpparser`, `ports-dev/mbedtls` and
-`ports-dev/zlib`; these do not enter the boot archive or the SDK. Standalone
-userland builds select them with `LUA_PREFIX`, `PICOHTTPPARSER_PREFIX` and
-`MBEDTLS_PREFIX`. TLS consumers include the export's `share/mbedtls.mk` to use
-the matching configuration defines and ordered libraries. SDK runtime builds
+(`ports-dev`). Lua, picohttpparser, Mbed TLS, zlib and libpng provide static
+libraries and headers under `ports-dev/lua`, `ports-dev/picohttpparser`,
+`ports-dev/mbedtls`, `ports-dev/zlib` and `ports-dev/libpng`; these do not enter
+the boot archive or the SDK. Standalone userland builds select the current
+dependencies with `LUA_PREFIX`, `PICOHTTPPARSER_PREFIX` and `MBEDTLS_PREFIX`;
+the image build also supplies `ZLIB_PREFIX` and `LIBPNG_PREFIX` for the planned
+screenshot consumer. TLS consumers include the export's `share/mbedtls.mk` to
+use the matching configuration defines and ordered libraries. SDK runtime builds
 remain independent of ports, so there is no dependency cycle.
 
 Recorded payload checksums do not depend on timestamps. Application and ports

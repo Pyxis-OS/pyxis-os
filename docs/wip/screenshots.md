@@ -2,8 +2,9 @@
 
 Status: **accepted milestone, 2026-10-08; assigned to Codex 2.** The owner
 merged [PR #501](https://git.internal/PyxisOS/pyxis-os/pulls/501), accepted all
-three contract groups below and authorized task 2. Later tasks remain separate
-assignments; acceptance does not start them implicitly.
+three contract groups below. Tasks 2 and 3 are delivered, including the owner's
+staged-output follow-up from PR #504. Later tasks remain separate assignments;
+acceptance does not start them implicitly.
 
 ## Goal and completion
 
@@ -31,9 +32,10 @@ Accepted by the owner on 2026-10-07:
 
 ## Inspected starting point
 
-Source inspection for task 1 used Pyxis `50e18a5`, userland
+Initial source inspection for task 1 used Pyxis `50e18a5`, userland
 `2430567f519424d83ba4dcd5bf7ba3565ba97c86` and ports
-`03b3ae8ed59ef733b9b21f2beda34770f5d2fb66`. No library build or capture was run.
+`03b3ae8ed59ef733b9b21f2beda34770f5d2fb66`. No library build or capture was run
+at that point; subsequent library validation is recorded in the handoff.
 
 - [DRAW](../interfaces/graphics.md#authority-and-ownership) applies only to a
   display's owning space. Remote shells receive no display resource. A DRAW
@@ -50,9 +52,9 @@ Source inspection for task 1 used Pyxis `50e18a5`, userland
   support explicit-offset READ. A read-only exported handle can carry an
   immutable completed image without a new user mapping or release protocol.
 - The pinned libc has real `setjmp`/`longjmp`, allocation, memory functions,
-  ordinary file I/O and math functions. No prerequisite libc gap has been
-  demonstrated for the proposed library profiles. Their exact source/build
-  requirements still need checking in tasks 2 and 3.
+  ordinary file I/O and math functions. The task-3 source audit identified
+  `modf` as a concrete prerequisite for libpng's conventional floating-point
+  sCAL API; a focused userland dependency adds it from the existing musl pin.
 
 ## Agreed contracts
 
@@ -176,18 +178,32 @@ changes to that choice.
 ### Command, output and host workflow
 
 Use `screenshot PATH`: a required guest output path, resolved through the
-caller's existing writable roots. Capture authority grants no additional path
-access. Like ordinary output redirection, an existing regular file is truncated
-and rewritten; a handled write/encode failure reports failure and can leave a
-partial file after losing its old contents.
-Abrupt termination can also leave partial output. Atomic file publication and
-an overwrite option are deferred rather than borrowing transfer-specific code.
+caller's existing roots. Capture authority grants no additional path access.
+Accepted owner follow-up on 2026-10-08 in
+[PR #504](https://git.internal/PyxisOS/pyxis-os/pulls/504): encode into an
+exclusively created sibling temporary file, finish and close its output, then
+rename that completed file into place, following
+[cp's staged replacement](../userland/cp.md#staged-replacement-and-authority).
+A failed capture, encode or write before publication leaves an existing
+destination untouched. Success replaces the destination object; older held
+handles retain the old object.
 
-Use ordinary libc output and propagate capture, allocation, PNG and I/O errors.
-Success requires completed encoding and checked output completion. Closing the
-file alone makes no durability promise; document `sync PATH` and syncing its
-parent directory when persistence across reboot matters. Do not claim RAM-backed
-`tmp://` survives reboot.
+Hold the destination parent through reservation, publication and cleanup. Its
+LOOKUP, CREATE, WRITE_FILES and REMOVE authority is required; permission to
+write the old file alone is insufficient, and there is no direct-write fallback.
+As with cp, other writers must leave the temporary name/file alone. Follow
+[cp's failure ownership rules](../userland/cp.md#failures-and-limits): clean up
+only confirmed reservations before publication; an unconfirmed creation or
+publication reports the possible names without retrying or deleting uncertain
+state. Abrupt termination can leave a temporary file; there is no automatic
+stale-file removal.
+
+Keep PNG encoding in userland and use libc/libpyxis interfaces for ordinary I/O
+and native publication. Propagate capture, allocation, PNG and I/O errors.
+Success requires checked output completion and confirmed rename. Closing or
+renaming alone makes no durability promise; document `sync PATH` and syncing
+its parent directory when persistence across reboot matters. Do not claim
+RAM-backed `tmp://` survives reboot.
 
 The first workflow stays two explicit guest commands:
 
@@ -211,11 +227,12 @@ The owner accepted these three groups on 2026-10-08:
 2. **Consistency and capacity:** one presenter composition with existing tearing,
    one pending capture, immutable FILE lifetime and no new retained-image quota.
 3. **Ports and workflow:** the pinned library profiles, initial compression
-   choice, explicit two-command download and output/failure behavior above.
+   choice and explicit two-command download. The owner's subsequent PR #504
+   comment accepts the staged-replacement output/failure behavior above.
 
 Changes to these contracts require discussion before implementation. The owner
 authorized task 2 after accepting them. Its zlib source mirror is available;
-libpng mirror availability still needs checking before task 3.
+the owner's shared SourceForge mirror now supplies the pinned libpng archive.
 
 ## Tasks
 
@@ -232,7 +249,7 @@ are part of this milestone.
    in pyxis-ports. Wire its focused ordinary build in Pyxis. Completion: a
    target archive built with the current SDK, documented profile, published
    dependency/integration PRs and exact-head CI reported.
-3. [ ] **Port libpng.** Depends on task 2 and its source mirror. Add the pinned
+3. [x] **Port libpng.** Depends on task 2 and its source mirror. Add the pinned
    recipe with explicit zlib input, matching configuration/header export and
    license staging; integrate the development prefixes and build order.
    Completion: the static target archive builds against exported zlib/SDK,
@@ -251,7 +268,8 @@ are part of this milestone.
    remote launches distinguish granted and ungranted callers while DRAW-only
    applications retain their existing behavior. Update init/resource references.
 6. [ ] **Add and package the PNG command.** Depends on tasks 3–5. Add row-wise
-   encoding, required output path, checked cleanup/error reporting, normal
+   encoding, required output path, exclusive sibling staging and rename, checked
+   cleanup/error reporting, normal
    userland/image integration and command usage. Completion: the ordinary image
    produces a host-decodable PNG and the existing `xfer send` workflow downloads
    it; existing destinations and failed writes behave as documented.
@@ -269,21 +287,30 @@ are part of this milestone.
 
 ## Handoff
 
-The owner accepted all contracts on 2026-10-08 after PR #501 merged. Task 2 is
-complete on Pyxis branch `ports/zlib`, with dependency
-[pyxis-ports PR #55](https://git.internal/PyxisOS/pyxis-ports/pulls/55) at
-`312c4da6958a04e8492c46f91fb0a552d605d623` (`library/zlib`). Merge that dependency
-before the Pyxis integration PR. No userland, filesystem or lwIP pin changed.
+The owner accepted all contracts on 2026-10-08 after PR #501 merged. Tasks 2
+and 3 are complete. Task 3 uses Pyxis branch `ports/libpng` and these published
+dependencies, which must merge before its parent integration:
 
-The owner's zlib mirror archive matches the accepted SHA-256. The unchanged
-core sources built with LLVM 23.1.3 against the exported SDK; archive inspection
-found only `malloc`, `free`, `memcpy` and `memset` as external references, all
-supplied by libc. Public headers and license match upstream byte for byte.
-`make -j16 image bundle-ports` passed, and the bundle/boot staging separates the
-static library and headers from guest notices/provenance. Existing exact-head
-CI results are recorded in the PR; pyxis-ports reports zero Actions tasks and
-its `fj pr status` response is unparsable, so it provides no CI pass evidence.
+- [userland PR #155](https://git.internal/PyxisOS/pyxis-userland/pulls/155),
+  `47308da28c04c2e71a460bacec5767471479a3dd` (`libc/libpng-modf`): the unmodified
+  musl `modf` prerequisite, public declaration and runtime inclusion.
+- [ports PR #57](https://git.internal/PyxisOS/pyxis-ports/pulls/57),
+  `1064c452a0236040c7d673ab51dbea3a5b81ff80` (`library/libpng`): the pinned
+  library, generated configuration, explicit zlib input and staging exports.
 
-Task 3, libpng, is next after owner authorization and source mirror availability.
-No screenshot implementation or PNG runtime qualification has begun. No QEMU,
-debugger or build process remains active.
+The owner's shared `raw-sourceforge` mirror supplies the accepted libpng
+archive/hash. Current LLVM 23.1.3 SDK, zlib and libpng builds passed; generated
+configuration and symbol inspection preserve conventional read/write, stdio,
+setjmp and floating-point support while omitting the simplified API and
+architecture acceleration. Every libpng external reference is supplied by
+zlib/libc. Public source headers and licenses remain unchanged, and the exported
+configuration matches the archive build. Ordinary image/bundle staging and
+exact-head existing CI results are recorded in the parent PR. Dependency
+repositories report zero Actions tasks, so they provide no CI pass evidence.
+
+The owner comment on merged PR #504 is incorporated into task 6's agreed
+contract: exclusive sibling staging and rename, following cp's held-directory
+and failure-ownership rules, with no direct-write fallback. Task 4, native
+capture, is next after owner authorization. No screenshot implementation or
+PNG runtime qualification has begun. No QEMU, debugger or build process remains
+active.
