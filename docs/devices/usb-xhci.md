@@ -114,7 +114,9 @@ zero. Supported hubs receive Slot-only Configure Endpoint metadata for
 [boot traversal](usb-hubs.md). Supported storage configures its checked bulk
 endpoints from a separate pre-AP device pool for an internal read-only probe.
 Every inspectable device receives an address/descriptor record; other classes
-remain unbound.
+remain unbound. Private class consumers can configure the
+[root full-speed interrupt-IN interface](usb-interrupt-in.md), with independent
+pre-AP receive resources and post-event rearm during every controller wait.
 
 A connection change after the snapshot retires that startup candidate. Loss of
 an enabled reserved port runs Disable Slot after prior command completion, then
