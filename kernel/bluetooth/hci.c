@@ -94,8 +94,13 @@ struct hci_record {
   uint8_t wire[BLUETOOTH_HCI_ACL_MAX];
 };
 
+struct hci_deferred_acl {
+  struct hci_record record;
+  uint64_t deadline;
+};
+
 struct hci_stream {
-  uint64_t sequence, generation;
+  uint64_t sequence, generation, epoch, deadline;
   size_t used, expected;
   uint8_t wire[BLUETOOTH_HCI_ACL_MAX];
 };
@@ -137,7 +142,9 @@ static struct {
   struct hci_connection connections[HCI_CONNECTION_CAPACITY];
   uint8_t seen_handles[(HCI_HANDLE_MAX + 1 + 7) / 8];
   struct hci_record received[HCI_RECEIVE_CAPACITY];
+  struct hci_deferred_acl deferred_acl[HCI_DEFERRED_ACL_CAPACITY];
   size_t receive_head, receive_count;
+  size_t deferred_head, deferred_count;
   size_t request_count;
   struct hci_stream event_stream, acl_stream;
   uint8_t chunk[BLUETOOTH_HCI_ACL_MAX];
@@ -225,7 +232,8 @@ static bool work_accounted(void)
       return false;
     }
   }
-  return !adapter.reader && !adapter.event_stream.used && !adapter.acl_stream.used;
+  return !adapter.reader && !adapter.event_stream.used && !adapter.acl_stream.used &&
+      !adapter.deferred_count;
 }
 
 static void end_session(void)
@@ -867,6 +875,60 @@ static bool event_generation(const uint8_t *wire, size_t length, uint64_t *gener
   return true;
 }
 
+static void defer_acl(const uint8_t *wire, size_t length, uint64_t generation,
+    uint64_t epoch, uint64_t deadline)
+{
+  if (adapter.deferred_count == HCI_DEFERRED_ACL_CAPACITY) {
+    fail_adapter(CALL_INPUT_LOST);
+    return;
+  }
+  size_t tail = (adapter.deferred_head + adapter.deferred_count) % HCI_DEFERRED_ACL_CAPACITY;
+  struct hci_deferred_acl *deferred = &adapter.deferred_acl[tail];
+  deferred->record.metadata = (struct bluetooth_hci_record){
+    .kind = BLUETOOTH_HCI_RECORD_ACL, .length = length,
+    .epoch = epoch, .connection_generation = generation,
+  };
+  memcpy(deferred->record.wire, wire, length);
+  deferred->deadline = deadline;
+  ++adapter.deferred_count;
+}
+
+static void flush_deferred_acl(void)
+{
+  for (size_t i = 0; i < HCI_DEFERRED_ACL_CAPACITY && adapter.deferred_count &&
+       !adapter.terminal; ++i) {
+    struct hci_deferred_acl *deferred = &adapter.deferred_acl[adapter.deferred_head];
+    struct hci_record *record = &deferred->record;
+    uint16_t handle = read16(record->wire) & HCI_HANDLE_MASK;
+    if (!adapter.owner || record->metadata.epoch != adapter.epoch ||
+        deferred->deadline <= arch_monotonic_ns()) {
+      fail_adapter(CALL_INPUT_LOST);
+      return;
+    }
+    struct hci_connection *connection = find_connection(handle);
+    if (connection) {
+      if (record->metadata.connection_generation &&
+          record->metadata.connection_generation != connection->generation) {
+        fail_adapter(CALL_INPUT_LOST);
+        return;
+      }
+      queue_record(BLUETOOTH_HCI_RECORD_ACL, record->wire, record->metadata.length,
+          connection->generation, 0);
+      if (adapter.terminal) {
+        return;
+      }
+    } else if (!handle_seen(handle)) {
+      /* The bulk endpoint can finish before the first connection event.
+       * Keep its whole frame and every later ACL frame in endpoint order. */
+      return;
+    }
+    /* A seen, retired handle needs no delivery; Disconnect remains visible. */
+    memzero_explicit(deferred, sizeof(*deferred));
+    adapter.deferred_head = (adapter.deferred_head + 1) % HCI_DEFERRED_ACL_CAPACITY;
+    --adapter.deferred_count;
+  }
+}
+
 static void receive_event(const uint8_t *wire, size_t length)
 {
   uint64_t generation = 0, submission_id = 0;
@@ -900,12 +962,13 @@ static void receive_event(const uint8_t *wire, size_t length)
   queue_record(BLUETOOTH_HCI_RECORD_EVENT, wire, length, generation, submission_id);
 }
 
-static void receive_acl(const uint8_t *wire, size_t length, uint64_t generation)
+static void receive_acl(const uint8_t *wire, size_t length, uint64_t generation,
+    uint64_t epoch, uint64_t deadline)
 {
   uint16_t flags = read16(wire);
   unsigned boundary = (flags >> HCI_ACL_PB_SHIFT) & 3;
   uint16_t handle = flags & HCI_HANDLE_MASK;
-  if ((flags & HCI_ACL_BC_MASK) ||
+  if (handle > HCI_HANDLE_MAX || (flags & HCI_ACL_BC_MASK) ||
       (boundary != HCI_ACL_START_RX && boundary != HCI_ACL_CONTINUE)) {
     fail_adapter(CALL_INPUT_LOST);
     return;
@@ -916,8 +979,16 @@ static void receive_acl(const uint8_t *wire, size_t length, uint64_t generation)
      * valid old-link packet can arrive after its Disconnect notification. */
     return;
   }
-  if (!connection || connection->generation != generation) {
+  if (!adapter.owner || !epoch || epoch != adapter.epoch ||
+      (connection && generation && connection->generation != generation)) {
     fail_adapter(CALL_INPUT_LOST);
+    return;
+  }
+  if (connection && !generation) {
+    generation = connection->generation;
+  }
+  if (!connection || adapter.deferred_count) {
+    defer_acl(wire, length, generation, epoch, deadline);
     return;
   }
   queue_record(BLUETOOTH_HCI_RECORD_ACL, wire, length, connection->generation, 0);
@@ -937,6 +1008,15 @@ static void consume_chunk(struct hci_stream *stream, bool acl,
   size_t offset = 0;
   size_t header = acl ? HCI_ACL_HEADER : HCI_EVENT_HEADER;
   while (offset < completion->bytes && !adapter.terminal) {
+    if (acl && !stream->used) {
+      uint64_t now = arch_monotonic_ns();
+      if (now > UINT64_MAX - HCI_OPERATION_NS) {
+        fail_adapter(CALL_LIMIT);
+        return;
+      }
+      stream->deadline = now + HCI_OPERATION_NS;
+      stream->epoch = adapter.epoch;
+    }
     size_t target = stream->expected ? stream->expected : header;
     size_t bytes = target - stream->used;
     if (bytes > completion->bytes - offset) {
@@ -954,7 +1034,7 @@ static void consume_chunk(struct hci_stream *stream, bool acl,
       if (acl) {
         uint16_t handle = read16(stream->wire) & HCI_HANDLE_MASK;
         struct hci_connection *connection = find_connection(handle);
-        if (!connection && !handle_seen(handle)) {
+        if (handle > HCI_HANDLE_MAX) {
           fail_adapter(CALL_INPUT_LOST);
           return;
         }
@@ -963,11 +1043,12 @@ static void consume_chunk(struct hci_stream *stream, bool acl,
     }
     if (stream->expected && stream->used == stream->expected) {
       if (acl) {
-        receive_acl(stream->wire, stream->used, stream->generation);
+        receive_acl(stream->wire, stream->used, stream->generation, stream->epoch, stream->deadline);
       } else {
         receive_event(stream->wire, stream->used);
       }
       stream->used = stream->expected = 0;
+      stream->generation = stream->epoch = stream->deadline = 0;
     }
   }
 }
@@ -998,6 +1079,11 @@ static void check_deadlines(void)
     return;
   }
   uint64_t now = arch_monotonic_ns();
+  if ((adapter.acl_stream.used && adapter.acl_stream.deadline <= now) ||
+      (adapter.deferred_count && adapter.deferred_acl[adapter.deferred_head].deadline <= now)) {
+    fail_adapter(CALL_INPUT_LOST);
+    return;
+  }
   for (size_t i = 0; i < HCI_COMMAND_CAPACITY; ++i) {
     struct hci_command *command = &adapter.commands[i];
     if (command->used && command->deadline <= now) {
@@ -1095,6 +1181,11 @@ static void collect_receives(void)
       }
       consume_chunk(stream_index ? &adapter.acl_stream : &adapter.event_stream,
           stream_index != 0, &completion);
+      cpu_restore_interrupts(flags);
+    }
+    if (!stream_index) {
+      uint64_t flags = cpu_save_interrupts();
+      flush_deferred_acl();
       cpu_restore_interrupts(flags);
     }
   }
@@ -1309,6 +1400,7 @@ static void work_tick(struct usb_host_controller *host)
     adapter.cleanup = false;
     end_session();
   }
+  flush_deferred_acl();
   /* A resumed AP can publish its next copied call while collection runs.
    * Consume it within the same fixed request budget before ending this tick. */
   service_requests(HCI_REQUEST_CAPACITY - serviced);
