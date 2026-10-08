@@ -37,10 +37,12 @@ pinned probe:
    fork carries the Pyxis target and driver contract, compiler-rt builtins replace
    libgcc, and the owner-built container supplies the toolchain to CI.
 2. **Native C++ and OS prerequisites.** Clang is a C++ application even when it
-   compiles C. Determine the runtime/library subset it actually requires and
-   investigate libc++, libc++abi and unwinding needs explicitly. Establish useful
-   native file, process, memory, synchronization and thread contracts through
-   bounded consumers. Do not bury missing OS behavior in compiler-specific stubs.
+   compiles C. The userspace part completed on 2026-10-08:
+   [C++ in userspace](../development/cxx-userspace.md) puts libc++, libc++abi and
+   libunwind in the SDK, without threads or localization. Still open: the further
+   runtime/library subset Clang requires, and useful native file, process,
+   memory, synchronization and thread contracts, established through bounded
+   consumers. Do not bury missing OS behavior in compiler-specific stubs.
 3. **Clang hosted on Pyxis.** Cross-build the selected compiler, linker and tools
    to run in the guest. First completion: compile, link and run one small C program
    entirely inside Pyxis. Rebuilding LLVM itself in the guest is a later result,
@@ -68,24 +70,11 @@ that it builds unchanged. TCC retains its existing small native development role
 
 ## C++ in userspace
 
-**Selected 2026-10-07 as Claude's next milestone** (owner). Its scope is C++
-in userspace only: cross-compiled C++ programs with a runtime from the
-`pyxis-llvm` fork. Clang running on Pyxis, and the further OS prerequisites it
-needs, threads first among them, remain a later milestone. The milestone starts
-with a probe and proposal, as the [host toolchain](../development/llvm-toolchain.md)
-milestone did; see [C++ in userspace](cxx-userspace.md).
-
-Cross-compiled C++ applications can precede a hosted C++ compiler. Start with an
-explicit runtime subset and a small real consumer, then expand toward ports
-such as DevilutionX and other C++ libraries. This does not change the kernel's
-language or authorize reviving the kernel C++ experiment.
-
-Probe startup/destruction, allocation, ABI support and the chosen standard
-library. Decide exceptions/unwinding, RTTI, local-static initialization, TLS and
-thread support explicitly; do not advertise a complete hosted C++ environment
-because one freestanding example links. Standard-library coverage and unsupported
-features must be visible to downstream ports. Compiler/container changes remain
-separate from ordinary SDK changes.
+Completed 2026-10-08: [C++ in userspace](../development/cxx-userspace.md).
+Cross-compiled C++ programs run with libc++, libc++abi and libunwind from the
+SDK, and fmt is the first C++ port. Its [accepted limits](../technical-debt.md#c-runtime-subset)
+name threads, localization and `<cmath>` as the next runtime additions, each
+when a selected port such as DevilutionX or the Clang hosting milestone needs it.
 
 ## Go cross compiler, then hosted Go toolchain
 

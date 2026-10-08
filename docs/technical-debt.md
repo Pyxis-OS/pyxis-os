@@ -1017,6 +1017,35 @@ compiler macros instead of the header gets a different type. Reconsider if a
 port relies on those macros; the fork's target information could then match
 the header.
 
+## C++ runtime subset
+
+The [C++ in userspace milestone](development/cxx-userspace.md) shipped a
+deliberate subset, accepted by the owner on 2026-10-08:
+
+- **No threads or thread-local storage.** `<thread>`, `<mutex>`, `thread_local`
+  and non-lock-free atomics are absent, and local statics use single-threaded
+  guards. Programs that start threads cannot be ported yet.
+- **No localization or wide characters.** `<iostream>`, `<locale>`, `<regex>`
+  and wide strings are absent; so are the fmt headers that need them
+  (`chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h`). Ports that print
+  through `std::cout` need a "C"-locale libc first: `locale.h` and the missing
+  wide-character functions, 59 names in `<cwchar>` alone.
+- **Most of `<cmath>` is missing.** libc's math subset leaves 161 of the 186
+  names `<cmath>` imports undefined, so their first use fails to compile.
+- **Exceptions cannot cross C frames.** C code has no unwind tables, so an
+  exception thrown through, for example, a `qsort` comparator terminates the
+  program.
+- **Uncaught exceptions name mangled types,** such as `St11logic_error`, because
+  the terminate handler leaves out the 184 KB demangler.
+- **No `<filesystem>`, `random_device` or time zones.**
+- **fmt's license is not staged for the boot payload yet.** It lives only in
+  the fmt development files; a port that ships an fmt program must install it.
+
+Revisit threads and TLS with the Clang hosting milestone. Revisit
+localization, wide characters and `<cmath>` when a selected port, such as
+DevilutionX, needs them. Each addition belongs in libc or the runtime
+configuration, never in a port-local stub.
+
 ## Quake port limits
 
 The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240.

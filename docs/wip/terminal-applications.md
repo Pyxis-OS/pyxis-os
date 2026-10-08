@@ -1,9 +1,11 @@
 # Terminal applications: multiplexer and navigator
 
 Status: agreed sequence of separate milestones (2026-09-29, reordered by the
-owner on 2026-10-07); the display milestone, its first step, is complete. Each
-later milestone still needs its behavior, authority and lifetime decisions
-settled before implementation. Nothing here authorizes code.
+owner on 2026-10-07); the display milestone, its first step, is complete, and
+[space layers](../userland/space-layers.md) place graphical programs above the
+terminal. **The multiplexer is assigned to Codex 1 (2026-10-08), starting with
+a proposal** that settles its remaining behavior, authority and lifetime
+decisions. Nothing here authorizes code before that proposal is accepted.
 
 ## Direction
 

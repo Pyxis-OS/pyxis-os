@@ -1,7 +1,7 @@
 # Bluetooth investigation
 
-Status: **task 1 qualified, 2026-10-08; tasks 2–5 not yet assigned.** The owner wants
-to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
+Status: **task 1 qualified and task 2 assessed, 2026-10-08; tasks 3–5 not yet assigned.**
+The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Probe code stays on a branch and is not merged;
 nothing here authorizes committed implementation.
@@ -55,10 +55,14 @@ option can follow once the setup works, recorded beside the NIC reference.
    addresses. Natively, confirm the same from the existing inventory.
    The [task 1 report](../development/experiments/bluetooth-task1/README.md)
    records successful QEMU attachment, guest descriptors and native evidence limits.
-- [ ] **2. Interrupt IN transfers.** Pyxis's xHCI configures only bulk endpoints for
+- [x] **2. Interrupt IN transfers.** Pyxis's xHCI configures only bulk endpoints for
    USB storage today. HCI events need an interrupt IN endpoint. This gap is shared
    with the planned [USB HID mice](pointer.md#devices), so record what a real
    implementation needs: endpoint context, ring ownership, buffering and loss.
+   The [task 2 assessment](../development/experiments/bluetooth-task2/README.md)
+   records the code gaps, required hardware fields and proposed ownership/loss
+   policies. Interrupt transfers remain unimplemented; the probe choices need
+   agreement before task 3.
 - [ ] **3. HCI transport and controller state.** Send HCI commands as class requests
    to interface 0 and read events from the interrupt endpoint. Issue HCI Reset
    and Intel's Read Version, and record whether the controller is in its
