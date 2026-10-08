@@ -1,22 +1,25 @@
 # A system pointer
 
-Status: **tasks 1 and 2 merged; task 3 delivered for review by Codex alpha, 2026-10-08.**
+Status: **tasks 1–3 merged; task 4 authorized, 2026-10-08.**
 [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545),
 [userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164) and
 [ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)/
 [#66](https://git.internal/PyxisOS/pyxis-ports/pulls/66) are merged.
 The parent merge is `abbeded`; published pins are userland `b83ff67` and ports
 `a642f07`. Task 3 starts from that fresh main on `pointer/terminal-selection` in
-[draft #550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
+[#550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
 It includes local TTY retention/selection, trusted mux terminal control,
 terminal spatial readiness, mux hit-testing/selection/wheel history and the
 owner's addition of graphics pointer subscription readiness through `wait_many`.
 The SDL blocking-event adapter fix remains separately assigned to beta.
-Task 3 is delivered in #550 with published [userland #166](https://git.internal/PyxisOS/pyxis-userland/pulls/166)
-`63d4324`; merge that dependency before the parent.
+Task 3 is merged in #550 with [userland #166](https://git.internal/PyxisOS/pyxis-userland/pulls/166)
+`63d4324`; its parent merge is `b43a573`.
 [Task 3 qualification](../development/system-pointer-qualification.md#task-3-qualification)
 records baseline, input/overlay/capture/wait checks and source-only limits.
-Tasks 4 and 5 still require separate authorization.
+The owner authorized task 4, the VirtIO hardware cursor. It starts from fresh main
+`b43a573` on `pointer/virtio-cursor`. The [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
+and [task-specific proposals](#task-4-planning) precede implementation. Task 5
+still requires separate authorization.
 
 The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
 All three original decision rounds are accepted on 2026-10-08; round three was
@@ -638,3 +641,67 @@ Implementation breakdown:
 14. **Kernel-log selection:** allow visible-cell selection in Caelum's
     kernel log through the kernel handler, without a program stream or clipboard
     publication.
+
+
+## Task 4 planning
+
+The owner authorized the VirtIO hardware cursor on 2026-10-08. This task owns
+only the kernel display backend and cursor-inclusive capture integration;
+ordinary input, locks, grants and the public image contract remain unchanged.
+Boot and Bochs continue software composition. Task 5 closure is not authorized.
+
+Proposed implementation breakdown:
+
+1. Prepare bounded cursor command/queue/backing storage alongside the normal
+   VirtIO driver. Runtime control and cursor queues remain sole BSP presenter
+   work, with one outstanding cursor request, bounded waits and IRQ wakeups.
+   Bootstrap geometry querying remains control-only; panic adds no device work.
+2. Keep two fixed 64x64 cursor resources, upload an inactive transparently padded
+   image through fenced control commands, then switch shape/hotspot after cursor
+   completion. Repack accepted BGRA bytes to the resource format; retain the
+   frame's immutable image lease through both cursor and capture completion.
+   Use a transparent backend shape for hidden/locked state so GTK cannot leave
+   the previous shape visible. Preserve physical hotspot/clipping semantics.
+3. Keep normal VirtIO scanout cursor-free and blend the same snapshot into
+   capture backing only. Submit cursor changes only when image, hotspot,
+   position, visibility or required edge clipping changes. Retain the existing
+   full-frame stream/cadence; no frame submission per physical report.
+4. Extend existing failure retention to both queues and cursor resources. No
+   runtime recovery/software fallback is added after uncertain device exposure.
+   Release device backing only after the existing confirmed detach/unreference
+   contract permits it; owner exit retires the image lease, not driver storage.
+5. Finish pre-code software workloads, then compare matched hardware workloads:
+   idle/moving pointer, selection, Quake with/without lock, capture, focus,
+   teardown and live VirtIO resize. Qualify the local-only DevilutionX image
+   with its hardware-cursor option. Recheck the boot/Bochs software path, build
+   the ordinary image and inspect exact submitted-head CI. No tests or new
+   benchmark/boot automation are added.
+
+**Proposed task 4 decisions, 2026-10-08 — neither is accepted:**
+
+15. **Response-less cursor completion and capture.** VirtIO specifies a cursor
+    response, but QEMU 10.2.2 returns the used descriptor with zero bytes and no
+    response/fence, including some refused commands. Recommended default:
+    validate scanout/resource/shape locally, require successful fenced image
+    preparation and frame submission, and wait for the matching bounded cursor
+    used completion before publishing capture. Document that this confirms
+    buffer consumption, without independent acknowledgment of cursor application
+    or visible scanout timing. Timeout, malformed completion, status change or
+    failed prerequisites prevent capture publication and invoke existing terminal
+    driver failure/retention. This explicitly clarifies the earlier stronger
+    "successful completion" wording; it is not yet an implementation guarantee.
+16. **QEMU frontend qualification.** QEMU installs the hardware shape through
+    its host GUI. Recommended default: qualify GTK on X11, relative PS/2 and
+    unscaled 1:1 geometry. GTK's Wayland position warp is a no-op; its scaled or
+    centered placement differs from its input transform. SDL consumes cursor
+    colors differently. Document these frontend limitations without adding
+    frontend-specific switches to the guest driver. The ordinary boot/Bochs
+    software path is unaffected.
+
+Evidence: [VirtIO 1.4 GPU definition](https://github.com/oasis-tcs/virtio-spec/blob/v1.4-cs01/device-types/gpu/description.tex),
+[QEMU 10.2.2 cursor processing](https://github.com/qemu/qemu/blob/v10.2.2/hw/display/virtio-gpu.c#L1132),
+[GTK position and image callbacks](https://github.com/qemu/qemu/blob/v10.2.2/ui/gtk.c#L447),
+[SDL image masks](https://github.com/qemu/qemu/blob/v10.2.2/ui/sdl2.c#L748) and
+[GDK Wayland warp](https://github.com/GNOME/gtk/blob/3.24.49/gdk/wayland/gdkdevice-wayland.c#L642).
+These are inspected host implementations, not runtime hardware qualification.
+No task 4 code has been changed; implementation waits for these owner decisions.

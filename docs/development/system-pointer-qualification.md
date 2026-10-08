@@ -550,3 +550,56 @@ selection/wheel/input timing remains in the accepted ThinkPad debt. No clipboard
 publication/paste, USB HID or second input source is implemented. Bluetooth's
 accepted conditional reset/revoke predicates remain documented future integration.
 All task-owned QEMU, GDB and remote-client processes are stopped after validation.
+
+
+## Task 4 software baseline
+
+Initial pre-code observations on 2026-10-08 use fresh main `b43a573`, after
+pointer tasks 1–3 merged. Pins: userland `63d4324`, ports `a642f07`, fs `b427df2`,
+lwIP `a1aadb9`. The worktree is `pyxis-pointer-task4`, branch
+`pointer/virtio-cursor`; tracked source was clean during these observations.
+The complete ordinary `make -j16 image` passed using
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a`.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Kernel ELF | `984cca3b8565c5e4e37d8afea846b0ebb7f4cc89e0c47b564d3e65a1230def05` |
+| Default initrd | `38473b0652cf93aa09931364bf23d5a61a0ec4c0560cbf24640c4e7d21ba7128` |
+| Default ISO | `c1ec182d84350ccffdcec853396b50b8272f09654bc45b15d2eefa6d3bd068ca` |
+
+QEMU 10.2.2 (`qemu-10.2.2-1.fc44`), Q35, nested KVM, `-cpu max`, four CPUs
+(one socket/four cores/one thread), 512 MiB and UTC RTC used the matching raw
+OVMF code/variables pair with fresh variables. No NIC, HOST or storage export;
+modern VirtIO RNG and VirtIO SCSI CD boot avoid the known AHCI emulator issue.
+Display arguments were `-vga none -device virtio-gpu-pci,disable-legacy=on
+-display none`; PS/2 remained the only pointer source. Read-only GDB confirmed
+`DISPLAY_VIRTIO_GPU`, 1280x800, pitch 5120 and native RGB shifts 16/8/0.
+
+The initial four idle `space_present` entry/finish samples use the existing
+hardware breakpoint/direct HPET method, 10 ns ticks. Caelum's terminal caret
+and 9x20 software I-beam were visible at the initial physical hotspot (640,400).
+After normal HMP relative motion, a completed selection at physical (144,80)
+covered visible glyph indices 490–498; GDB confirmed the selection and physical
+position before the second set of samples.
+
+| Software workload | Samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Idle Caelum, visible pointer | 1.78791, 1.77650, 1.64776, 1.96830 | 1.782205 | 1.64776–1.96830 |
+| Caelum, completed selection and visible pointer | 2.35495, 1.95409, 1.84484, 1.74706 | 1.899465 | 1.74706–2.35495 |
+
+Quake `+timedemo demo1` and a second console `timedemo demo1` each completed
+969 frames while the relative lock was held. Unprofiled reported rates were
+1335.8 and 1559.4 fps (rounded reported elapsed 0.7/0.6 seconds). GDB observed
+ownership/read terminal output after completion, without breaking during either
+run. These are initial locked observations, not a completed repeated locked/
+unlocked comparison. Later attempts to recall the console command did not
+produce confirmed new timing output and are not samples.
+
+Raw logs, the matched ELF/ISO, framebuffer dump and terminal output remain local
+under `build/pointer-task4` and `/tmp/pyxis-pointer-task4-*`. All task-owned
+QEMU/GDB jobs are stopped. These initial samples make no hardware or isolated
+cursor-cost claim. Before changing pointer code, finish the remaining software
+motion, unlocked Quake, capture and resize workloads with this baseline artifact;
+repeat the matching workloads after hardware implementation. The task's capture
+completion and host frontend proposals remain unanswered in
+[task 4 planning](../wip/pointer.md#task-4-planning).
