@@ -1,9 +1,9 @@
 # SDL2 with a native backend
 
-Status: **task 1 delivered, 2026-10-08; assigned to Claude.** The owner
-accepted the three [decisions](#accepted-decisions) on 2026-10-08. The planned
-scope and tasks take effect when task 1 merges; later tasks start one at a
-time.
+Status: **task 2 delivered for review, 2026-10-08; assigned to Claude.** Task 1
+merged in [PR #522](https://git.internal/PyxisOS/pyxis-os/pulls/522). The owner
+accepted its three [decisions](#accepted-decisions), then two more after its
+review. Later tasks start one at a time.
 
 ## Goal and completion
 
@@ -163,13 +163,20 @@ No fork repository. The backend's parts:
   through REPLACE and sends SDL's size-changed event. No OpenGL, Vulkan,
   hardware cursor, message boxes, clipboard or second window.
 - **Keyboard.** Pyxis key positions map to SDL scancodes, keycodes follow
-  SDL's US defaults, and text input uses the same US table as the terminal.
+  SDL's US defaults, and text input uses the terminal's US layout.
   Focus gain, focus loss and reset release every held key, as Quake and Doom
   do.
+  - The layout lives in one place. Today it is a table in
+    `kernel/keyboard_text.c`. Task 3 moves it into a Pyxis-owned source that
+    the SDK exports and libpyxis compiles, as the shebang parser already is
+    (`share/pyxis/shebang.c`). The kernel and the backend then share one copy.
 - **Pointer.** Relative counts become SDL motion. SDL keeps the absolute
   position, clamped to the window, because Pyxis reports none. There is no
   acceleration; `SDL_HINT_MOUSE_NORMAL_SPEED_SCALE` is the user's scale. Focus
   changes release buttons. Relative mouse mode works by SDL's own rules.
+  - The translation from relative counts to a position stays in one function,
+    so the planned [system pointer](pointer.md), which reports positions,
+    replaces it in a single change.
 - **Timer.** Ticks and the performance counter from `clock_now`, and
   `SDL_Delay` from `clock_sleep_for`. Without the clock grant, initialization
   fails with a clear error.
@@ -199,12 +206,24 @@ They are not separate ports. Patches as listed above, plus:
 - hardware cursor off and its option hidden;
 - default paths, so a bare `devilutionx` starts without arguments.
 
+Its packaging changed after task 1; see [decision 4](#4-devilutionx-packaging).
+Before task 5, record the licence of DevilutionX, of its assets, and of each
+small dependency (bzip2, libmpq, libsmackerdec, SimpleIni and SDL_image) in
+the recipe's `PORT-NOTICE`. Stage each licence wherever the program is staged,
+as the other ports do.
+
 ### libc
 
-The standard functions the probe stood in for: `fileno`, `fseeko`/`ftello`,
-`wcslen`, `sqrtf`, `roundf`, and `setlocale` with `<locale.h>`. `setlocale`
-supports the "C" locale only: it returns `"C"` for queries, `""` and `"C"`, and
-refuses every other name. Where possible these come from the vendored musl.
+Delivered in task 2: the standard functions the probe stood in for.
+
+- `fileno`, under [decision 5](#5-fileno).
+- `fseeko`/`ftello`, which forward to `fseek`/`ftell` because `off_t` is `long`.
+- `setlocale` with `<locale.h>`, "C" only: it returns `"C"` for queries, `""`
+  and `"C"`, and refuses every other name. There is no `localeconv`.
+- `roundf`, `sqrtf` and `wcslen`, unmodified from the vendored musl.
+
+The [libc reference](../kernel/userspace.md#foundational-libc) and
+[stdio](../userland/stdio.md) describe them.
 
 ## Accepted decisions
 
@@ -219,8 +238,7 @@ Accepted by the owner on 2026-10-08, as proposed in task 1.
   pinned or put in CI images.
 - `make image DIABLO_DATA=DIR` stages `spawn.mpq` or `DIABDAT.MPQ`, as
   `QUAKE_DATA` does for retail Quake.
-- The ordinary image always carries the program and its 5.7 MB of assets.
-  Without data, the program says where the data belongs and exits.
+- Packaging was revised after task 1; see [decision 4](#4-devilutionx-packaging).
 
 ### 2. Frame presentation
 
@@ -249,21 +267,43 @@ compositor or double-buffering contract would replace this.
   sets its read-only paths instead; for DevilutionX that is
   `boot://share/devilutionx/`.
 
+### 4. DevilutionX packaging
+
+Accepted by the owner on 2026-10-08, after task 1's review.
+
+- DevilutionX 1.5.5 is under the Sustainable Use License: free, non-commercial
+  distribution only. It is not open source.
+- So it is an **opt-in build**: the recipe builds and stages DevilutionX only
+  when `DIABLO_DATA` is supplied. Ordinary and CI images never contain it,
+  which keeps their terms independent of it.
+- Whenever it is staged, its licence and notices go with it.
+
+### 5. `fileno`
+
+Accepted by the owner on 2026-10-08, as the separately agreed extension that
+[technical debt](../technical-debt.md#libc-compatibility-gaps) requires.
+
+- `fileno` returns the stream's current descriptor, or -1 with `EBADF` once the
+  stream or its descriptor is closed.
+- It adds no `fdopen`, `O_RDWR` or duplication, so no new descriptor aliases.
+
 ## Tasks
 
 1. [x] Probe and proposal: this document. Documentation only.
-2. [ ] **libc additions** (userland), with the Pyxis gitlink: the functions
-   listed above.
+2. [x] **libc additions**: [userland #161](https://git.internal/PyxisOS/pyxis-userland/pulls/161)
+   and its Pyxis gitlink PR.
 3. [ ] **SDL2 port** (ports), with the Pyxis integration that builds it into
    `build/ports-dev/sdl2`:
    - the backend, patches and configuration;
+   - the shared US key layout (Pyxis and userland);
    - checked in QEMU with a test program that is not committed, on standard
      VGA, Bochs, and VirtIO with a resize.
 4. [ ] **SDK CMake toolchain file** (Pyxis): `share/pyxis.cmake`, documented in
    the SDK reference.
 5. [ ] **DevilutionX** (ports and Pyxis):
    - the recipe, dependencies and patches;
-   - the `DIABLO_DATA` input and image staging;
+   - licence notices for it and each dependency;
+   - the opt-in `DIABLO_DATA` build and image staging;
    - a userland reference;
    - QEMU play with shareware data.
 6. [ ] **Native check by the owner**, then close: the reference documents,
@@ -271,12 +311,9 @@ compositor or double-buffering contract would replace this.
 
 ## Owner actions
 
-- Mirrors before task 3:
-  - `libsdl-org/SDL` and `diasurgical/DevilutionX`;
-  - bzip2 from `sourceware.org/git/bzip2`;
-  - `diasurgical/libmpq`, `diasurgical/libsmackerdec` and `brofield/simpleini`;
-  - `libsdl-org/SDL_image`, unless `raw-github` already serves its release
-    archive.
+- Mirrors: done on 2026-10-08. `git.internal/mirrors/` has SDL, DevilutionX,
+  bzip2, libmpq, libsmackerdec and simpleini, and every pinned commit fetches
+  by hash. SDL_image's release archive comes through `raw-github`.
 - No compiler container rebuild: nothing changes in the toolchain.
 
 ## Limits
@@ -286,6 +323,7 @@ These are stated now, so the implementation does not hide them:
 - No audio, threads, game controllers or networking.
 - One window, no hardware cursor, US text layout only.
 - Polling `SDL_WaitEvent`.
-- Sleep at 8.33 ms granularity.
+- Sleep at 8.33 ms granularity, a kernel limit recorded in
+  [technical debt](../technical-debt.md#sleep-wake-granularity).
 - Programs keep running and rendering while hidden, as Quake and Doom do.
 - All measurements are from nested KVM; none are native.
