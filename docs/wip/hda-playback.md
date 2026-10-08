@@ -1,7 +1,7 @@
 # HD Audio playback milestone proposal
 
 Status: **three defaults accepted 2026-10-08; first controller/codec bring-up
-task assigned; task-specific defaults accepted**. Prepared from
+stage delivered for review; task-specific defaults accepted**. Prepared from
 main `67e14be` and the completed
 [QEMU investigation](../development/audio-investigation.md). Publishing or
 merging this document does not start implementation; public call details
@@ -9,8 +9,9 @@ still need task-specific review.
 The investigation probes stay unmerged. The owner has accepted the defaults
 below. The owner assigned the first controller/codec bring-up task on
 2026-10-08. Its [baseline and decision handoff](../development/experiments/audio-task1/README.md)
-records the accepted call-layout/write/admission choices and fresh no-audio
-baseline. Task 1 branches from main after #549 merged. Later tasks still
+records the accepted call-layout/write/admission choices, private engine
+qualification and matched no-audio/engine-idle observations. Task 1 branches
+from main after #549 merged. Later tasks still
 require their own assignments.
 
 The proposed goal is one analog playback engine, bounded per-space PCM sessions
@@ -182,14 +183,13 @@ controller or all other sessions.
 
 ## Proposed task sequence and review gates
 
-1. [ ] **Session contract and native evidence.** Use the accepted defaults.
-   Specify rights, exclusive acquisition, close/exit, wait/readiness,
-   queue accounting, byte/frame bounds, deadlines/cancellation and generations.
-   Use the supplied [ALC257 dump](../development/audio-investigation.md#native-handoff)
-   to propose speaker/headphone route/jack policy; do not request it again.
-   Review these concrete contracts before writing a public ABI; unsupported
-   hardware reports unavailable without exposing DMA.
-2. [ ] **QEMU controller and codec engine.** Implement production PCI claim,
+1. [x] **Accepted session contract and native inventory.** Document
+   ACQUIRE/WRITE/STATUS/RELEASE, process ownership/exit, copied atomic writes,
+   writable readiness and distinct admission errors. Retain the supplied
+   [ALC257 dump](../development/audio-investigation.md#native-handoff) as inventory.
+   Public ABI encoding/session implementation belongs to task 4; native
+   speaker/headphone route/jack policy belongs to task 5.
+2. [x] **QEMU controller and codec engine.** Implement production PCI claim,
    CORB/RIRB, checked graph traversal and one discovered analog output route.
    Keep arch/device and BSP boundaries explicit. Qualify known PCM through WAV,
    independent left/right signals, command wrap and stop ownership with normal
@@ -200,13 +200,17 @@ controller or all other sessions.
    thresholds; exercise sustained playback, ordinary producer pauses, close/reopen
    and normal concurrent guest activity. Measure position/clock agreement and
    queue-to-output behavior. Revisit the proposed period before freezing policy.
-4. [ ] **Per-space sessions and bounded mixing.** Implement only the reviewed
+4. [ ] **Per-space sessions and bounded mixing.** Review exact reply packing,
+   protocol/right constants, validation precedence, priming and hidden-space
+   policy before implementing the public calls. Implement only the reviewed
    grant/calls and BSP request bridge, with copied queues and generation-aware
    cancellation/exit. Qualify two distinct simultaneous signals, silent/active
    spaces, denied authority, exclusive acquisition and capacity admission.
    Measure BSP cost and refill margin with one and multiple CPUs. Add only the
    concrete native PCM producer needed to exercise the accepted interface.
-5. [ ] **Native AMD analog qualification.** Bind `1022:15e3` after verifying
+5. [ ] **Native AMD analog qualification.** Propose speaker/headphone route
+   and jack policy from the supplied ALC257 graph before native binding.
+   Bind `1022:15e3` after verifying
    capabilities and the actual codec route. Inspect licensed/pinned fixups where
    needed; require owner speaker/headphone evidence, sustained output under load,
    underrun/recovery, stop/reset and usable latency. No physical-host access
@@ -221,6 +225,11 @@ controller or all other sessions.
    native debt for the later ThinkPad batch, or native qualification before
    closure. Carry only owner-confirmed deferred work into technical debt. Publish
    no success claim for SDL2, Quake, recording or other devices.
+
+The owner's first implementation assignment combined the contract review and
+private controller/codec engine steps above. The [engine reference](../devices/hda.md)
+records the implemented boundary; the unmerged consumer qualifies it without
+shipping a tone, ABI or sessions. No later task starts from this completion.
 
 Tasks are focused PRs, each assigned by the owner after its predecessor is
 reviewed. No probe cherry-pick is implied by accepting this proposal. Production
