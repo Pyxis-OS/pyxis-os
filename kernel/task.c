@@ -516,27 +516,15 @@ static void expire_timed_waits(void)
     unlock_queues();
     return;
   }
-  size_t cpu_count = arch_cpu_count();
-  bool destinations[cpu_count];
-  memset(destinations, 0, sizeof(destinations));
   uint64_t now = arch_monotonic_ns();
   while (*link && (*link)->deadline <= now) {
     struct task_wait *wait = *link;
     *link = wait->timeout_next;
     wait->timeout_next = NULL;
     wait->timed = false;
-    if (wait->task->parked) {
-      destinations[wait->task->cpu_index] = true;
-    }
     wake_wait_locked(wait);
   }
   unlock_queues();
-  /* Publication transfers wait/task ownership; retain only CPU destinations. */
-  for (size_t cpu_index = 0; cpu_index < cpu_count; ++cpu_index) {
-    if (destinations[cpu_index]) {
-      notify_remote_cpu(cpu_index);
-    }
-  }
 }
 
 static struct task *current_user_task(void)
