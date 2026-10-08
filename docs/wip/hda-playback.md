@@ -37,8 +37,10 @@ Accepted by the owner through the orchestrator on **2026-10-08**, after the
    userspace. The kernel combines session PCM; it adds no resampler. Both the
    measured QEMU route and the supplied ALC257 analog DAC capabilities support
    this format. Advertised native support does not qualify native playback.
-3. **Starting buffer tuning:** **four 10 ms DMA periods (40 ms)** and an
-   **80 ms copied queue per session**. These are starting tuning values, not
+3. **Starting buffer tuning:** **eight 10 ms DMA periods (80 ms)** and an
+   **80 ms copied queue per session**. The DMA depth was revised from four periods on 2026-10-08 because QEMU
+   can fetch 8192 bytes in a burst, exceeding the earlier 7680-byte ring.
+   These are starting tuning values to revisit natively, not
    hard real-time or audible-latency guarantees. A timely refill can substitute
    zeros for producer starvation; a missed hardware refill can replay old cyclic
    DMA frames before detection. Measure and report underrun, discontinuity and
@@ -125,7 +127,7 @@ proof that every HDA-compatible controller works.
 One hardware output stream and BDL belongs to the worker for the boot. Sessions
 own copied queue storage, never DMA mappings. The worker alone advances queue
 consumption and hardware period generations. With eight sessions, the proposed
-PCM queues total 122,880 bytes; the 40 ms DMA payload is 7,680 bytes before
+PCM queues total 122,880 bytes; the 80 ms DMA payload is 15,360 bytes before
 page/alignment rounding. Counters, request staging and descriptor storage are
 additional. Admission must fail explicitly when capacity/allocation is unavailable;
 there is no silently dropped ninth session. Mix cost scales with active sessions

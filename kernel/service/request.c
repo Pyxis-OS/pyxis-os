@@ -151,6 +151,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_POWER:
+  case BSP_SERVICE_AUDIO:
     return false;
   case BSP_SERVICE_POINTER:
   case BSP_SERVICE_DISPLAY:
@@ -230,7 +231,7 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
         request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
-        request->service == BSP_SERVICE_SCREEN_CAPTURE) &&
+        request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;

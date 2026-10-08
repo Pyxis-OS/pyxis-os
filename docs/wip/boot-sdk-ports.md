@@ -66,7 +66,7 @@ Chosen by the owner, each starting with a proposal:
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
-  exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
+  exclusive per-space sessions, 48 kHz S16LE stereo, and 8 × 10 ms DMA/80 ms
   queues as starting tuning. Controller/codec bring-up merged in #553.
   Sessions/mixing and IRQ refill assigned as task 2 on 2026-10-08;
   [fresh baseline and accepted task-specific policies](../development/experiments/audio-task2/README.md).

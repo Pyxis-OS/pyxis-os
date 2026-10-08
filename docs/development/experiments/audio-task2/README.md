@@ -140,7 +140,7 @@ allocation-free notice and generation-safe ownership invalidation. Closing a
 handle does not release the acquired session. The worker must continue serving
 cleanup/status after terminal hardware failure.
 
-Next: settle the DMA tuning issue below, finish the worker/refill integration,
+Next: finish the worker/refill integration,
 then qualify the public interface, concurrent signals, ordinary producer pauses,
 exit/release, admission and sustained refill with manual QEMU/debugger checks.
 Publish any concrete libpyxis/grant-forwarding/PCM-producer dependency before
@@ -152,10 +152,10 @@ All task-owned baseline builds, guests and debuggers are stopped. Local baseline
 SDK/userland/ports bundles are packaged for verified reuse. This report records
 a baseline and accepted design round, not completed implementation or task 2 CI.
 
-## DMA tuning decision and implementation checkpoint
+## Accepted DMA tuning and implementation checkpoint
 
-A new tuning decision is pending after source review, distinct from the three
-accepted policies above. Stock QEMU 10.2.2's codec output timer can request
+The owner accepted the DMA tuning change on **2026-10-08**, after source review,
+in addition to the three accepted policies above. Stock QEMU 10.2.2's codec output timer can request
 **8192 bytes**, exceeding the original **7680-byte / 40 ms** ring. Controller
 transfer walks at most the configured descriptor count; a whole lap can leave
 LPIB unchanged with only coalesced BCIS. The codec adjusts or resets its timer
@@ -167,12 +167,12 @@ Primary source: [QEMU codec output timer and adaptive clock](https://gitlab.com/
 [controller DMA transfer](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/intel-hda.c).
 This is source evidence, not an injected stall or measured production refill.
 
-The recommendation sent to the owner is **eight 10 ms DMA periods (80 ms)**,
+The accepted starting tuning is **eight 10 ms DMA periods (80 ms)**,
 keeping 80 ms session queues, the fixed format and 4096-byte atomic writes.
 That adds up to 40 ms of hardware buffering and needs position/time guards and
-qualification; it is not a hard real-time or audible-drain guarantee. The
-alternative is retaining 40 ms and deferring production refill until safe
-accounting is established. **No tuning change is accepted or applied yet.**
+qualification; it is not a hard real-time or audible-drain guarantee. Revisit DMA depth and latency during native qualification. The 8192-byte burst
+and initial 7680-byte ring are established from QEMU source, not an injected
+stall or a measured native result.
 
 Local implementation on `audio/sessions-mixer` includes the object/session,
 space/grant, wait/readiness and typed BSP request changes, saturating mixer,
@@ -199,6 +199,6 @@ order is userland before the parent implementation, once runtime qualification
 is complete; neither draft is ready for task completion.
 
 All owned build/debugger/guest processes are stopped at this checkpoint. The
-remaining work is worker/refill/drain integration after the tuning decision,
+remaining work is worker/refill/drain integration with the accepted tuning,
 manual QEMU interface and PCM/mixing qualification, matched after measurements,
 final review and exact submitted-head CI. Native and consumer tasks do not start.
