@@ -9,7 +9,7 @@
 static struct hda_controller controller;
 static struct hda_route route;
 static struct task_wait *idle_wait;
-static bool started, available;
+static bool started;
 
 static void audio_worker(void *argument);
 
@@ -41,7 +41,6 @@ static void audio_worker(void *argument)
   if (!hda_commands_stop(&controller)) {
     return;
   }
-  available = true;
   klog("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",
       route.vendor, (unsigned)route.codec, (unsigned)route.pin,
       (unsigned)route.converter, HDA_RATE, HDA_STREAM_FORMAT);
