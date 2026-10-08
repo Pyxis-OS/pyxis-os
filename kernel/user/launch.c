@@ -37,6 +37,7 @@
 #include <kernel/object/disk.h>
 #include <kernel/object/power.h>
 #include <kernel/object/screen_capture.h>
+#include <kernel/object/bluetooth_hci.h>
 #include <abi/power.h>
 #include <kernel/fs/initrd_tree.h>
 #include <kernel/object/directory.h>
@@ -102,6 +103,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *disks = NULL;
   struct kernel_object *power = NULL;
   struct kernel_object *screen_capture = NULL;
+  struct kernel_object *bluetooth_hci = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *factory = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
@@ -142,12 +144,13 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   random = random_create();
   power = power_create();
   screen_capture = screen_capture_create();
+  bluetooth_hci = bluetooth_hci_create();
   profile = profile_create();
   pipe = pipe_service_create();
   service = endpoint_service_create();
   namespace_service = namespace_service_create();
   terminal_service = terminal_service_create();
-  if (!memory || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !profile || !pipe || !service || !namespace_service || !terminal_service) {
+  if (!memory || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !namespace_service || !terminal_service) {
     goto fail;
   }
 
@@ -155,6 +158,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
+  handle_t bluetooth_hci_handle;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
@@ -171,6 +175,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, power, POWER_RIGHTS, 0, &power_handle) != CAP_OK ||
       capability_install(&process->capabilities, screen_capture,
           SCREEN_CAPTURE_RIGHT_CAPTURE, 0, &screen_capture_handle) != CAP_OK ||
+      capability_install(&process->capabilities, bluetooth_hci,
+          BLUETOOTH_HCI_RIGHT_CONTROL, 0, &bluetooth_hci_handle) != CAP_OK ||
       capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHTS, 0, &tcp_handle) != CAP_OK ||
       capability_install(&process->capabilities, udp,
           UDP_SERVICE_RIGHT_OPEN | UDP_SERVICE_RIGHT_BROADCAST, 0, &udp_handle) != CAP_OK ||
@@ -267,6 +273,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   power = NULL;
   object_release(screen_capture);
   screen_capture = NULL;
+  object_release(bluetooth_hci);
+  bluetooth_hci = NULL;
   object_release(udp);
   udp = NULL;
   object_release(tcp);
@@ -286,7 +294,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[25] = {
+  struct process_binding resources[26] = {
     {"memory", memory_handle},
     {"launcher", launcher_handle},
     {"clock", clock_handle},
@@ -304,8 +312,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"terminal", terminal_service_handle},
     {"power", power_handle},
     {"screen_capture", screen_capture_handle},
+    {"bluetooth_hci", bluetooth_hci_handle},
   };
-  size_t resource_count = 17;
+  size_t resource_count = 18;
   resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
   resources[resource_count++] = (struct process_binding){"ram", ram};
   if (script_handle != HANDLE_INVALID) {
@@ -369,6 +378,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
 fail:
   if (screen_capture) {
     object_release(screen_capture);
+  }
+  if (bluetooth_hci) {
+    object_release(bluetooth_hci);
   }
   if (log) {
     object_release(log);

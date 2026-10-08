@@ -11,6 +11,7 @@
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
+#include <kernel/object/bluetooth_hci.h>
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
 #include <kernel/object/pipe.h>
@@ -257,6 +258,12 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_WRONG_TYPE, 0};
     }
     return screen_capture_call(rights, header.operation, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_BLUETOOTH_HCI:
+    if (header.protocol != PROTOCOL_BLUETOOTH_HCI) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return bluetooth_hci_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
   case OBJECT_KEYBOARD:
     if (header.protocol != PROTOCOL_KEYBOARD) {

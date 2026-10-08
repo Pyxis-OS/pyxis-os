@@ -24,6 +24,7 @@ enum bsp_service {
   BSP_SERVICE_SYSTEM_INFO_POWER,
   BSP_SERVICE_POWER,
   BSP_SERVICE_SCREEN_CAPTURE,
+  BSP_SERVICE_BLUETOOTH_HCI,
   BSP_SERVICE_COUNT,
 };
 
@@ -42,7 +43,7 @@ enum bsp_request_state {
  * requests. DEFERRED belongs to the caller until its scheduler establishes the
  * parked handoff. Queue publication and wait notification synchronize loans.
  * FORWARDED belongs to the HOST, native filesystem, readiness, audio or ACPI worker,
- * or the sole screen presenter until final completion.
+ * the USB worker, or the sole screen presenter until final completion.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;

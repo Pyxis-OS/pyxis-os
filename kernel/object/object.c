@@ -22,6 +22,7 @@
 #include <abi/log.h>
 #include <abi/display.h>
 #include <abi/screen_capture.h>
+#include <abi/bluetooth_hci.h>
 #include <abi/file.h>
 #include <abi/process.h>
 #include <abi/launcher.h>
@@ -72,6 +73,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_DISPLAY;
   case OBJECT_SCREEN_CAPTURE:
     return PROTOCOL_SCREEN_CAPTURE;
+  case OBJECT_BLUETOOTH_HCI:
+    return PROTOCOL_BLUETOOTH_HCI;
   case OBJECT_SYSTEM_INFO:
     return PROTOCOL_SYSTEM_INFO;
   case OBJECT_LOG:
@@ -199,6 +202,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~POWER_RIGHTS);
   case OBJECT_SCREEN_CAPTURE:
     return !(rights & ~SCREEN_CAPTURE_RIGHT_CAPTURE);
+  case OBJECT_BLUETOOTH_HCI:
+    return !(rights & ~BLUETOOTH_HCI_RIGHT_CONTROL);
   case OBJECT_TERMINAL_SERVICE:
     return !(rights & ~TERMINAL_SERVICE_RIGHT_CREATE);
   case OBJECT_TERMINAL_ATTACHMENT:

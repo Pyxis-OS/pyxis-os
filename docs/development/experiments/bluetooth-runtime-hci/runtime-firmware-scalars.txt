@@ -1,0 +1,5 @@
+cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+firmware platform=55 variant=20 hw_revision=1 fw_variant=35 fw_revision=3 build=193 week=33 year=24 patch=0
+core_bytes=214344 async_metadata_bytes=33152 deferred=0 dirty=0
+[Inferior 1 (process 1) detached]

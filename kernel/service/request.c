@@ -15,6 +15,7 @@
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
 #include <kernel/audio.h>
+#include <kernel/object/bluetooth_hci.h>
 #include <kernel/object/screen_capture.h>
 #include <kernel/display_capture.h>
 #include <kernel/object/system_info.h>
@@ -35,6 +36,8 @@ struct request_layout {
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
   [BSP_SERVICE_AUDIO] = {sizeof(struct audio_request), alignof(struct audio_request),
       offsetof(struct audio_request, request)},
+  [BSP_SERVICE_BLUETOOTH_HCI] = {sizeof(struct bluetooth_hci_request), alignof(struct bluetooth_hci_request),
+      offsetof(struct bluetooth_hci_request, request)},
   [BSP_SERVICE_SCREEN_CAPTURE] = {sizeof(struct screen_capture_request), alignof(struct screen_capture_request),
       offsetof(struct screen_capture_request, request)},
   [BSP_SERVICE_POWER] = {sizeof(struct acpi_power_request), alignof(struct acpi_power_request),
@@ -152,6 +155,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_POWER:
   case BSP_SERVICE_AUDIO:
+  case BSP_SERVICE_BLUETOOTH_HCI:
     return false;
   case BSP_SERVICE_POINTER:
   case BSP_SERVICE_DISPLAY:
@@ -231,7 +235,8 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
         request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
-        request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO) &&
+        request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
+        request->service == BSP_SERVICE_BLUETOOTH_HCI) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;
@@ -247,6 +252,11 @@ static void service_request(struct bsp_request *request)
 {
   struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
+  case BSP_SERVICE_BLUETOOTH_HCI:
+    object_cleanup_leave(previous);
+    request->state = BSP_REQUEST_FORWARDED;
+    bluetooth_hci_request_forward((struct bluetooth_hci_request *)request);
+    return;
   case BSP_SERVICE_SCREEN_CAPTURE:
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
