@@ -2,7 +2,8 @@
 
 `boot://session.pxe` is a native userspace launcher that evaluates
 `boot://config/session.lua` and optional `boot://config/network.lua`, applies
-terminal tab spacing, and hands off to `boot://shell.pxe`. The optional
+terminal tab spacing, and hands off to `boot://shell.pxe`, or `bin://mux.pxe` when the local space
+opts into the [multiplexer](multiplexer.md). The optional
 `--configure-network` argument also applies shared NIC settings.
 `--start-services` selects the trusted `boot://init-services` script after
 configuration; it publishes HTTP with the configured resolver, then optionally
@@ -93,7 +94,7 @@ namespace-creation authority is forwarded explicitly through trusted session
 handoff. Ordinary shell children receive namespace LOOKUP only.
 The init shell explicitly delegates `net_config` through session handoff only.
 The launcher applies network settings only with `--configure-network`, then
-passes READ alone to the interactive shell for later child DNS snapshots.
+passes READ alone to the interactive shell or mux for later child DNS snapshots.
 Non-owner provider scripts wait within the initial ten-second setup budget before
 launching providers. The read-only init omits
 the option, so starting its session does not reconfigure the shared NIC. DNS

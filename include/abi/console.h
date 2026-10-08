@@ -101,7 +101,7 @@ struct console_read_reply {
 /* Character cells, excluding session navigation. SIZE needs READ or WRITE;
  * its fixed-size payload is ignored. Geometry and generation are one snapshot.
  * Generation starts at 1; local consoles advance it on committed screen resize.
- * Remote sessions retain their independent fixed geometry and generation.
+ * Independent sessions advance on explicit attachment-authorized resize.
  * wait_many RESIZED compares an interest's observed generation with this value. */
 struct console_size_reply {
   uint64_t columns;

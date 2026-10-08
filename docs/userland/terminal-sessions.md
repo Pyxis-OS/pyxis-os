@@ -1,6 +1,6 @@
 # Independent terminal sessions
 
-A terminal session owns bounded input/output queues and fixed dimensions without
+A terminal session owns bounded input/output queues and independent dimensions without
 borrowing a framebuffer, keyboard or space TTY. Application input/output handles
 implement the existing CONSOLE protocol; libterm, libc standard streams and
 launcher forwarding use the same interface as local framebuffer consoles.
@@ -12,7 +12,8 @@ Native layouts live in [the terminal ABI](../../include/abi/terminal.h).
 Trusted init receives a `terminal` creation service. Its CREATE right returns
 application input, application output, one attachment and a separate event
 handle, or no handles on failure. The normal session launcher does not delegate
-the service. Creation accepts 1–512 columns and 1–256 rows, immutable for that session. Allocation and
+the service. An opted-in local multiplexer receives CREATE separately through trusted
+startup. Creation accepts 1–512 columns and 1–256 rows. Allocation and
 failure unwinding remain BSP-owned.
 
 The application input handle permits CONSOLE READ and SIZE, plus
@@ -20,7 +21,7 @@ The application input handle permits CONSOLE READ and SIZE, plus
 permits WRITE, SIZE, FRESH_LINE and SET_TAB_WIDTH. Application grants cannot
 inject input, intercept output or hang up the terminal. Attachment rights are
 separate: INJECT permits input injection and END_INPUT; DRAIN permits output
-collection; HANGUP controls disconnection. Copies refer to the same attachment;
+collection; HANGUP controls disconnection; RESIZE changes character dimensions. Copies refer to the same attachment;
 there is no detach/reattach operation.
 
 The event handle implements TERMINAL_EVENTS with only EMIT authority. It is not
@@ -90,13 +91,28 @@ incomplete escape and advances only when required. Parser state survives DATA
 record boundaries. Both framebuffer and host presentations must honor
 these rules; no shared parser framework is introduced here.
 
+## Resize
+
+`terminal_resize(attachment, columns, rows)` requires RESIZE, separately from
+INJECT, DRAIN and HANGUP. It accepts the same bounds as creation and updates
+dimensions and generation as one locked snapshot. Identical dimensions succeed
+without advancing generation. A changed size at UINT64_MAX returns LIMIT;
+hangup returns ENDPOINT_CLOSED. Neither failure changes geometry. No queues,
+handles or processes are replaced, and no output record is inserted.
+
+Applications observe SIZE and the existing RESIZED interest on input/output.
+Changes coalesce; callers re-query the generation before waiting again. The
+attachment owns presentation and cropping: the kernel retains only geometry.
+Queued output is interpreted at the presentation's current geometry. Remote
+wire negotiation and host-window resize remain separate work.
+
 ## EOF and hangup
 
 END_INPUT is idempotent. Previously injected bytes drain before application
 reads return zero-byte EOF; later nonempty injection fails ENDPOINT_CLOSED.
 Output remains usable. Zero-capacity application reads and zero-length application
 writes/injections remain validated no-ops, including after hangup; they do not
-probe closure. SIZE still reports immutable dimensions. Closing the last
+probe closure. SIZE still reports the current dimensions. Closing the last
 READ-authorized application input grant
 also closes injection, discarding input no reader can consume. Closing the last
 WRITE-authorized application output grant and the last EMIT-authorized event
@@ -127,8 +143,8 @@ WRITABLE includes closure. Either direction automatically reports ERROR on
 hangup. Output closure can coexist with queued records, which must be drained
 before zero-byte EOF. Application input handles support READABLE/PEER_FIN under
 READ, including END_INPUT after buffered bytes drain. Input and output support
-RESIZED under READ and WRITE respectively; independent sessions keep their
-creation geometry and generation one. Framebuffer console READ/WRITE handles
+RESIZED under READ and WRITE respectively. Session generations start at one
+and advance on committed attachment-authorized resize. Framebuffer console READ/WRITE handles
 observe local resize generations. Both input kinds also support INTERRUPT on
 an [armed handle](terminal.md#interrupt-arming-and-passthrough).
 
@@ -137,7 +153,7 @@ for deadline/poll precedence and removal of all registrations/references before
 return. Queue mutations notify waiters; terminal state is observed under its own lock. A BSP readiness worker handles
 terminal-only waits without a NIC. TCP and mixed waits remain in the network
 worker, which exclusively observes lwIP state. Shared per-task request storage
-bounds each wait at sixteen interests without a new global waiter cap.
+bounds each wait at 32 interests without a new global waiter cap.
 
 The [remote server and host client](remote-terminal.md) combine these attachments
 with execution-group supervision. Resize, reconnection and new framebuffer

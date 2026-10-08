@@ -157,7 +157,8 @@ the dimensions. Local [display resizing](../interfaces/graphics.md#live-destinat
 updates every TTY without replacing its console. It crops whole rasterized cells
 without reflow, keeps the cursor visible and fills new cells with the background.
 Colors, tab width and escape-parser state survive; pending wrap is cleared.
-Remote terminal sessions keep their independent dimensions and generation one.
+Independent sessions keep their own dimensions; attachment-authorized resize
+advances their generation. The remote server does not yet request resize.
 `WAIT_RESIZED` compares the interest's observed generation against this
 snapshot. READ or WRITE authorizes observation; input `WAIT_READABLE` needs
 READ. The blocked line editor wakes, re-queries geometry and redraws its retained

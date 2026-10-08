@@ -12,6 +12,9 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
+  first slice, with up to eight equal/BSP panes and colored scrollback.
+
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
   libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
@@ -43,9 +46,6 @@ Chosen by the owner, each starting with a proposal:
   keyboard, pointer and clock sessions; audio waits for an audio driver.
   DevilutionX on local shareware data is the first consumer; the owner
   accepted the three task 1 decisions on 2026-10-08.
-- **Codex 1** (2026-10-08): the [terminal multiplexer](terminal-applications.md),
-  with its three accepted decisions, starting with a proposal for the prefix
-  key and commands, pane layout, scrollback, pane exit and how it is started.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
   PNG through new zlib and libpng ports, with the file fetched through
   pyxis-remote.
@@ -64,9 +64,8 @@ Chosen by the owner, each starting with a proposal:
 
 None is selected.
 
-- [Terminal applications](terminal-applications.md) after the assigned
-  multiplexer: a single-panel file navigator, then operations between
-  navigators.
+- [Terminal applications](terminal-applications.md): a single-panel file
+  navigator, then operations between navigators.
 - [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm,
   with one terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
   through a native VFS.
