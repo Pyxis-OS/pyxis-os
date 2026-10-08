@@ -105,6 +105,26 @@ network or display authority. The [screenshot milestone](../wip/screenshots.md)
 will qualify it at runtime through the PNG consumer; archive compilation is
 not that qualification.
 
+## libpng development library
+
+The [libpng recipe](../../ports/libpng/README.md) builds unmodified conventional
+read/write sources from the pinned 1.6.59 archive through the owner's shared
+SourceForge mirror. Zlib's development prefix is an explicit input, built first
+against the same SDK. The upstream awk/target-preprocessor scripts generate
+the selected configuration without running target code. Conventional APIs,
+stdio and setjmp error recovery remain available; the simplified API,
+architecture acceleration, shared libraries and upstream programs/tests are
+omitted. Libc supplies the required math functions, including `modf`.
+
+`build/ports-dev/libpng` contains `libpng.a`, upstream `png.h`/`pngconf.h` and
+the matching generated `pnglibconf.h`. Consumers use both library include
+paths and link libpng, zlib and the SDK runtime in that order. The image build
+passes `LIBPNG_PREFIX` and `ZLIB_PREFIX` to userland for the future consumer;
+no existing application gains a PNG dependency. Headers/libraries remain
+outside the base/guest SDK. Only licenses, notices and provenance enter the
+boot tree. Archive/configuration/symbol inspection is build evidence; the
+screenshot command will provide runtime qualification.
+
 ## TLS development libraries
 
 The [Mbed TLS recipe](../../ports/mbedtls/README.md) verifies the official 4.1.1
