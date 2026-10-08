@@ -95,19 +95,59 @@ fields and scalar debugger inspection. The scan made no connection and saved
 no keys. All investigation QEMU/GDB jobs exited and both host interfaces rebound
 to `btusb`; Fedora Bluetooth was disabled at the end of those probe runs. That is
 historical cleanup, not a claim about the host's current service state. The
-owner-run native-check batch, including re-enabling Fedora Bluetooth, follows
-this investigation and has not been performed here.
+owner subsequently completed the native-check batch in
+[merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547) and returned to
+Fedora with Bluetooth disabled. That batch is separate from these passthrough
+measurements and establishes no Pyxis pairing or mouse-input result.
 
 ## Owner-reported Linux pairing
 
 On 2026-10-08 the owner reported that Fedora needed `bluetoothctl` to pair the
 MX Master 3S: it did not appear in KDE's scan. Pairing required no PIN or
 confirmation. The first pairing attempt failed and the second worked. This is
-the owner's account, without a supplied protocol capture or a new Pyxis run.
+the owner's initial account, then without protocol fields or a new Pyxis run.
 
 The lack of PIN/confirmation fits Just Works, by inference; it establishes
 neither Secure Connections support, negotiated key size nor exact IO capability.
 Combined with Pyxis's measured scan, the account supports explicit discovery and
 selection, with another enrollment attempt authorized by a user action after
 failure. It does not justify an automatic pairing retry loop or legacy fallback.
-The proposed early SMP feature gate remains unmeasured.
+The later SMP account below answers the device capability question; the early
+Pyxis-side feature check remains to be implemented and measured.
+
+## Owner-reported SMP evidence
+
+The [owner's native observation comment on merged #542](https://git.internal/PyxisOS/pyxis-os/pulls/542)
+reports Fedora/BlueZ pairing this mouse through `bluetoothctl` with `btmon` on
+2026-10-08. Only the supplied address-free fields are recorded here. These are
+owner-reported Linux observations, not our measurement or Pyxis qualification.
+
+| Field | Pairing Request (Fedora) | Pairing Response (MX Master 3S) |
+| --- | --- | --- |
+| IO capability | KeyboardDisplay (`0x04`) | NoInputNoOutput (`0x03`) |
+| OOB data | not present | not present |
+| AuthReq | Bonding/MITM/SC/CT2 (`0x2D`) | Bonding/No MITM/SC (`0x09`) |
+| maximum key size | 16 | 16 |
+| initiator key distribution | EncKey/Sign/LinkKey requested | none |
+| responder key distribution | EncKey/IdKey/Sign/LinkKey requested | EncKey+IdKey (`0x03`) |
+
+The owner reports SC public-key, Confirm, Random and DHKey Check exchanges;
+BlueZ auto-accepted its confirmation hint as Just Works. Encryption succeeded
+with AES-CCM and size 16, followed by Identity Information and Identity Address
+Information. No Pairing Failed appeared in that capture; it does not explain
+the failure in the owner's earlier first attempt.
+
+This mouse therefore meets the accepted SC/Just Works/128-bit capability policy
+in the owner's Linux account; the legacy-only stop is not indicated. The bond
+design must retain the SC-derived LTK and peer IRK/private identity for reconnect
+and resolvable-private-address resolution. Final negotiated distribution includes
+no signing key or initiator keys. The
+[SMP key-distribution rules](https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-54/out/en/host/security-manager-specification.html)
+ignore EncKey for LE SC; those flags are not evidence of a legacy LTK exchange.
+IRK distribution establishes the resolution requirement,
+without measuring address rotation or Pyxis resolution.
+
+[Milestone task 1](../wip/bluetooth-task1-contracts.md) carries this evidence into
+its dependency gates. Tasks 4/5 still verify the actual Pyxis feature exchange
+and encryption before accepting input. No addresses, identity values, keys or
+raw packets enter this report.
