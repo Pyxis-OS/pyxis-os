@@ -48,13 +48,11 @@ Chosen by the owner, each starting with a proposal:
   scan results. The [report](../development/bluetooth-investigation.md) records
   measured evidence; the [MX Master 3S milestone proposal](bluetooth-mouse.md)
   awaits decisions, at most three per round. No production task is assigned.
-- **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
-  documentation-only proposal for program cursor images, surface routing,
-  tab clicks, terminal/mux selection and pointer lock with Super+Esc.
-  The original directions and both decision rounds are accepted on 2026-10-08;
-  selection/export, presentation/capture and delivery/closure await round three.
-  Task 1 requires explicit owner authorization, including after plan merge.
-  SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
+- **Codex alpha** (owner update, 2026-10-08): accepted
+  [system-pointer milestone](pointer.md), with task 1 in progress and kernel-owned
+  positions, cursor and surface routing. The owner's latest assignment supersedes
+  the older awaiting-authorization status in the proposal. SDL2 adapter changes
+  land after its milestone closes. This milestone's devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
   upstream SDL2 with video, input and timer support over the display,

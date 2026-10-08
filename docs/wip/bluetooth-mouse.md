@@ -148,7 +148,8 @@ Read the actual SMP feature exchange before choosing an association method. The
 [Security Manager specification](https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-54/out/en/host/security-manager-specification.html)
 distinguishes LE Secure Connections from authenticated pairing: a NoInputNoOutput
 peer normally selects unauthenticated Just Works. No such capability was measured
-in the scan. Decision 2 permits that method only with explicit enrollment consent;
+in the scan. If accepted, decision 2 would permit that method only with explicit
+enrollment consent;
 a required unsupported association method stops for a decision. Verify the
 negotiated key size and encryption success before accepting any HID input, and
 reject legacy downgrade, debug keys and malformed pairing exchanges.
