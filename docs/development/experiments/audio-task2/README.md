@@ -140,8 +140,8 @@ allocation-free notice and generation-safe ownership invalidation. Closing a
 handle does not release the acquired session. The worker must continue serving
 cleanup/status after terminal hardware failure.
 
-Next: implement the accepted scope, then
-qualify the public interface, concurrent signals, ordinary producer pauses,
+Next: settle the DMA tuning issue below, finish the worker/refill integration,
+then qualify the public interface, concurrent signals, ordinary producer pauses,
 exit/release, admission and sustained refill with manual QEMU/debugger checks.
 Publish any concrete libpyxis/grant-forwarding/PCM-producer dependency before
 updating the parent pin. No tests, self-tests, fault injection, boot/output
@@ -151,3 +151,54 @@ the owner's QEMU-closure/native-batch choice at milestone closure.
 All task-owned baseline builds, guests and debuggers are stopped. Local baseline
 SDK/userland/ports bundles are packaged for verified reuse. This report records
 a baseline and accepted design round, not completed implementation or task 2 CI.
+
+## DMA tuning decision and implementation checkpoint
+
+A new tuning decision is pending after source review, distinct from the three
+accepted policies above. Stock QEMU 10.2.2's codec output timer can request
+**8192 bytes**, exceeding the original **7680-byte / 40 ms** ring. Controller
+transfer walks at most the configured descriptor count; a whole lap can leave
+LPIB unchanged with only coalesced BCIS. The codec adjusts or resets its timer
+origin, so WALCLK since RUN is not an absolute byte counter. Small new observation
+gaps alone cannot exclude catch-up from an earlier lag. Counting IRQs or guessing
+missed laps from nominal rate is insufficient.
+
+Primary source: [QEMU codec output timer and adaptive clock](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/hda-codec.c),
+[controller DMA transfer](https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/audio/intel-hda.c).
+This is source evidence, not an injected stall or measured production refill.
+
+The recommendation sent to the owner is **eight 10 ms DMA periods (80 ms)**,
+keeping 80 ms session queues, the fixed format and 4096-byte atomic writes.
+That adds up to 40 ms of hardware buffering and needs position/time guards and
+qualification; it is not a hard real-time or audible-drain guarantee. The
+alternative is retaining 40 ms and deferring production refill until safe
+accounting is established. **No tuning change is accepted or applied yet.**
+
+Local implementation on `audio/sessions-mixer` includes the object/session,
+space/grant, wait/readiness and typed BSP request changes, saturating mixer,
+checked single-message MSI, interrupt vector and stream observation/prepare/RUN
+helpers. Component commits are retained on `audio/task2-objects` (`e40f9c6`)
+and `audio/task2-irq` (`168e337`); integration review additionally corrected
+starvation to count empty episodes and avoid notifications from unchanged empty
+queues. Kernel object compilation passed for all changed C sources, with no
+warnings. The final owning worker/FIFO, refill and drain integration remains
+unfinished; no complete kernel/image or runtime playback pass is claimed.
+Those code commits remain local while this checkpoint is published.
+
+The separately published userspace dependency is draft
+[#168](https://git.internal/PyxisOS/pyxis-userland/pulls/168), branch
+`audio/session-producer`, head **`97770cd`**. It adds libpyxis wrappers, optional
+audio forwarding independent of input focus and the native PCM producer. An
+ordinary new source-built SDK plus ports and all userspace applications passed
+at that head; focused PCM/shell/session/mux/remote-terminal builds passed too.
+WRITE returns an eight-byte accepted-count payload; CALL_WOULD_BLOCK is distinct
+from CALL_QUEUE_FULL and the producer uses the accepted former status. The new
+SDK must be used for these headers/libraries; no baseline bundle identity is
+substituted. Parent gitlink publication follows dependency publication. Merge
+order is userland before the parent implementation, once runtime qualification
+is complete; neither draft is ready for task completion.
+
+All owned build/debugger/guest processes are stopped at this checkpoint. The
+remaining work is worker/refill/drain integration after the tuning decision,
+manual QEMU interface and PCM/mixing qualification, matched after measurements,
+final review and exact submitted-head CI. Native and consumer tasks do not start.
