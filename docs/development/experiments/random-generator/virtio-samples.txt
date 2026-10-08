@@ -1,0 +1,27 @@
+length=0 reads=512 sum_ns=38833650 mean_ns=75846 min_ns=68930 max_ns=282580 loop_ns=57926630
+length=1 reads=512 sum_ns=598072900 mean_ns=1168111 min_ns=571000 max_ns=5940790 loop_ns=637639030
+length=32 reads=512 sum_ns=700900520 mean_ns=1368946 min_ns=528440 max_ns=7113650 loop_ns=734232670
+length=256 reads=512 sum_ns=567813630 mean_ns=1109010 min_ns=524280 max_ns=4803920 loop_ns=595575230
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=36621450 mean_ns=71526 min_ns=67980 max_ns=153410 loop_ns=54893850
+length=1 reads=512 sum_ns=531865930 mean_ns=1038800 min_ns=535970 max_ns=4284860 loop_ns=566683750
+length=32 reads=512 sum_ns=481808420 mean_ns=941032 min_ns=549070 max_ns=4016890 loop_ns=508722520
+length=256 reads=512 sum_ns=458344490 mean_ns=895204 min_ns=530910 max_ns=4712270 loop_ns=481046300
+{"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=36790580 mean_ns=71856 min_ns=69190 max_ns=157320 loop_ns=55230770
+length=1 reads=512 sum_ns=434160160 mean_ns=847969 min_ns=504100 max_ns=3304870 loop_ns=455434870
+length=32 reads=512 sum_ns=366039950 mean_ns=714921 min_ns=451640 max_ns=2009420 loop_ns=388200680
+length=256 reads=512 sum_ns=388058960 mean_ns=757927 min_ns=473710 max_ns=1947840 loop_ns=409795980
+{"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=37323500 mean_ns=72897 min_ns=69090 max_ns=152090 loop_ns=56325750
+length=1 reads=512 sum_ns=465769150 mean_ns=909705 min_ns=533220 max_ns=3317710 loop_ns=488800850
+length=32 reads=512 sum_ns=469373630 mean_ns=916745 min_ns=540700 max_ns=5387380 loop_ns=494690400
+length=256 reads=512 sum_ns=481348980 mean_ns=940134 min_ns=517770 max_ns=4837440 loop_ns=503785380
+{"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=36616050 mean_ns=71515 min_ns=68650 max_ns=151700 loop_ns=54791830
+length=1 reads=512 sum_ns=435513320 mean_ns=850611 min_ns=531330 max_ns=1801760 loop_ns=454929180
+length=32 reads=512 sum_ns=448784520 mean_ns=876532 min_ns=531790 max_ns=2869530 loop_ns=469418120
+length=256 reads=512 sum_ns=450040160 mean_ns=878984 min_ns=522250 max_ns=2091090 loop_ns=471891730
+{"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 6, "kind": "builtin", "status": 0}
+{"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}

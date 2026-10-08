@@ -1,0 +1,27 @@
+length=0 reads=512 sum_ns=33377640 mean_ns=65190 min_ns=62100 max_ns=176400 loop_ns=50175940
+length=1 reads=512 sum_ns=276764740 mean_ns=540556 min_ns=382870 max_ns=1357670 loop_ns=293350320
+length=32 reads=512 sum_ns=352668430 mean_ns=688805 min_ns=492840 max_ns=1730090 loop_ns=371438370
+length=256 reads=512 sum_ns=932111570 mean_ns=1820530 min_ns=1479800 max_ns=3713440 loop_ns=953664020
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=37042440 mean_ns=72348 min_ns=64250 max_ns=441630 loop_ns=55320390
+length=1 reads=512 sum_ns=280773120 mean_ns=548385 min_ns=292930 max_ns=2370890 loop_ns=301005150
+length=32 reads=512 sum_ns=344968660 mean_ns=673766 min_ns=441520 max_ns=1466770 loop_ns=366832470
+length=256 reads=512 sum_ns=923868450 mean_ns=1804430 min_ns=1329140 max_ns=7044770 loop_ns=947091740
+{"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=33377520 mean_ns=65190 min_ns=62460 max_ns=170270 loop_ns=50221250
+length=1 reads=512 sum_ns=328257510 mean_ns=641127 min_ns=391230 max_ns=2699930 loop_ns=347801690
+length=32 reads=512 sum_ns=432502860 mean_ns=844732 min_ns=527560 max_ns=4732120 loop_ns=455802980
+length=256 reads=512 sum_ns=887227450 mean_ns=1732866 min_ns=1352540 max_ns=3085840 loop_ns=908762900
+{"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=33478290 mean_ns=65387 min_ns=61960 max_ns=331620 loop_ns=50116470
+length=1 reads=512 sum_ns=276828320 mean_ns=540680 min_ns=387060 max_ns=1460300 loop_ns=293552280
+length=32 reads=512 sum_ns=367961390 mean_ns=718674 min_ns=499370 max_ns=2007450 loop_ns=388592980
+length=256 reads=512 sum_ns=913713220 mean_ns=1784596 min_ns=1514290 max_ns=3034710 loop_ns=934498000
+{"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+length=0 reads=512 sum_ns=33231380 mean_ns=64905 min_ns=62460 max_ns=168540 loop_ns=49989120
+length=1 reads=512 sum_ns=274837580 mean_ns=536792 min_ns=384250 max_ns=1586700 loop_ns=291426190
+length=32 reads=512 sum_ns=342287190 mean_ns=668529 min_ns=493690 max_ns=1816370 loop_ns=360216500
+length=256 reads=512 sum_ns=939242940 mean_ns=1834458 min_ns=1479530 max_ns=7245310 loop_ns=961882440
+{"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 6, "kind": "builtin", "status": 0}
+{"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}
