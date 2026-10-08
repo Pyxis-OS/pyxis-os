@@ -3,7 +3,8 @@
 
 #include <abi/handle.h>
 
-#define WAIT_MAX_INTERESTS UINT64_C(16)
+/* Eight supervised panes plus their outer console input. */
+#define WAIT_MAX_INTERESTS UINT64_C(17)
 #define WAIT_MAX_WAIT_NS UINT64_C(30000000000)
 #define WAIT_READABLE (UINT64_C(1) << 0)
 #define WAIT_WRITABLE (UINT64_C(1) << 1)
@@ -23,7 +24,7 @@ struct wait_interest {
 };
 
 /* WAIT_MANY takes interests/count/deadline/output in RDI/RSI/RDX/R10.
- * Count is 1..16; output is count uint64_t event masks in input order, including
+ * Count is 1..17; output is count uint64_t event masks in input order, including
  * zeros for unready entries. Success returns count*8 reply bytes, failure zero
  * and leaves output untouched. Inputs are copied before any output is written.
  *
@@ -52,8 +53,8 @@ struct wait_interest {
  * loss reports ERROR for console READABLE; terminal hangup reports ERROR.
  * INTERRUPT requires ARMED and observes the Ctrl+C latch without consuming it.
  * Console RESIZED requires READ or WRITE;
- * terminal input/output RESIZED requires READ/WRITE respectively. Remote
- * terminal geometry stays at generation 1. Display RESIZED requires DRAW and
+ * terminal input/output RESIZED requires READ/WRITE respectively. Explicit
+ * terminal resize advances its geometry generation. Display RESIZED requires DRAW and
  * the caller's own space, without acquiring graphics. Keyboard accepts only
  * READABLE with INPUT in the caller's own space and an acquired session.
  * RESIZED reports observed_generation != current generation, level-triggered
