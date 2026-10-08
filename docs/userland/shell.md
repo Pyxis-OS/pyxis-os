@@ -28,6 +28,13 @@ remain alive. There is no automatic restart or new input consumer in that
 space, but tab switching and kernel presentation continue. In the single-CPU
 fallback, Caelum logs and shell output share a TTY and can disrupt line editing.
 
+An optional `screen_capture` resource is preserved through session successors,
+service launches, foreground and background commands, and every pipeline stage.
+It carries CAPTURE alone, with no transport rights, independently of DRAW and
+filesystem grants. A shell without it grants none. The
+[`screenshot` boot policy](init.md#boot-configuration) controls which spaces
+receive it; the PNG command remains a later milestone task.
+
 ## Commands and quoting
 
 The shell uses libterm's line editor and waits for the complete foreground
