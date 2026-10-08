@@ -496,6 +496,18 @@ A serial port that stops accepting output remains latched off for the boot.
 Revisit retry policy when reliable late recovery is needed; an absent/stuck port
 must not block early boot or panic output.
 
+## Unselected graphical applications
+
+The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without
+input focus. An unattended game in an unselected space can use a CPU indefinitely
+and continues writing its mapped pixels even though the presenter copies only
+the selected space. Programs may still pause themselves explicitly; completing
+a Mandelbrot render returns it to its ordinary input/resize wait.
+
+Revisit resource budgets or application-specific idle behavior when concurrent
+graphical workloads make this cost a practical problem. Selecting a space does
+not establish a scheduler budget or suspend other spaces.
+
 ## VirtIO GPU resize limits and runtime retention
 
 The [2D display driver](interfaces/graphics.md#live-destination-geometry)
