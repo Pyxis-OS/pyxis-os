@@ -14,24 +14,25 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define TRANSFER_LIMIT (16u * 1024u * 1024u)
 #define TRANSFER_CHUNK 2048u
+#define HASH_STEP 65536u
 #define TRANSFER_WAIT_MS 120000
 #define CANCEL_WAIT_MS 5000
 #define NOTICE_CAPACITY 18000u
 #define PRESENT_RESERVE 16384u
 
-/* A single negotiated session owns its snapshot and, during publication, its
- * staging name. No cleanup operation ever takes ownership of an old name. */
+/* A single negotiated session owns its open source and, from the first
+ * download data, its staging name. No cleanup operation ever takes ownership
+ * of an old name. */
 enum phase {
   IDLE, UPLOAD_QUERY, CONFIRM_UPLOAD, CONFIRM_DOWNLOAD,
-  DOWNLOAD_FILE, DOWNLOAD_DATA, DOWNLOAD_WRITE, DOWNLOAD_SYNC, DOWNLOAD_RENAME, DOWNLOAD_FINISH,
-  UPLOAD_REQUEST, UPLOAD_READY, UPLOAD_ACK, UPLOAD_FINISH,
+  DOWNLOAD_FILE, DOWNLOAD_DATA, DOWNLOAD_SYNC, DOWNLOAD_RENAME, DOWNLOAD_FINISH,
+  UPLOAD_HASH, UPLOAD_REQUEST, UPLOAD_READY, UPLOAD_ACK, UPLOAD_FINISH,
   CANCELING, FAILED
 };
 
 struct file_transfer {
-  int download_fd, staging_fd;
+  int download_fd, staging_fd, source_fd;
   bool fatal;
   const volatile sig_atomic_t *interrupted;
   enum phase phase;
@@ -40,8 +41,8 @@ struct file_transfer {
   bool staging_owned;
   char authorized_path[1025];
   bool automatic_upload;
-  unsigned char *bytes;
-  size_t size, position, written;
+  size_t size, position;
+  struct sha256 hash;
   char digest[65];
   int64_t deadline;
   unsigned char osc[REMOTE_PAYLOAD_MAX];
@@ -201,13 +202,10 @@ static bool hash_value(const char *text, char output[65])
   return true;
 }
 
-static void checksum(const void *bytes, size_t size, char digest[65])
+static void digest_text(struct sha256 *state, char digest[65])
 {
-  struct sha256 state;
   unsigned char hash[SHA256_DIGEST_LENGTH];
-  sha256_init(&state);
-  sha256_update(&state, bytes, size);
-  sha256_sum(&state, hash);
+  sha256_sum(state, hash);
   static const char hex[] = "0123456789abcdef";
   for (size_t i = 0; i < sizeof(hash); ++i) {
     digest[2 * i] = hex[hash[i] >> 4];
@@ -288,6 +286,10 @@ static bool status_packet(struct file_transfer *transfer, struct byte_buffer *ou
 
 static void cleanup(struct file_transfer *transfer)
 {
+  if (transfer->source_fd >= 0) {
+    close(transfer->source_fd);
+    transfer->source_fd = -1;
+  }
   if (transfer->staging_fd >= 0) {
     close(transfer->staging_fd);
     transfer->staging_fd = -1;
@@ -305,8 +307,6 @@ static void cleanup(struct file_transfer *transfer)
 static void reset(struct file_transfer *transfer)
 {
   cleanup(transfer);
-  free(transfer->bytes);
-  transfer->bytes = NULL;
   transfer->phase = IDLE;
   transfer->size = transfer->position = 0;
   transfer->deadline = 0;
@@ -386,7 +386,7 @@ static bool basename_value(const char *path, char name[256])
   return true;
 }
 
-static bool read_source(struct file_transfer *transfer)
+static bool open_source(struct file_transfer *transfer)
 {
   const char *query = transfer->path;
   char absolute[4097];
@@ -420,53 +420,76 @@ static bool read_source(struct file_transfer *transfer)
   }
   struct stat info;
   int stat_result = fstat(fd, &info);
-  if (stat_result < 0 || !S_ISREG(info.st_mode)) {
+  if (stat_result < 0 || !S_ISREG(info.st_mode) || info.st_size < 0 ||
+      (uintmax_t)info.st_size > SIZE_MAX) {
     int error = stat_result < 0 ? errno : EINVAL;
     close(fd);
     errno = error;
     return false;
   }
-  if (info.st_size < 0 || (uintmax_t)info.st_size > TRANSFER_LIMIT) {
-    close(fd);
-    errno = EFBIG;
-    return false;
-  }
-  transfer->bytes = malloc(TRANSFER_LIMIT + 1u);
-  if (!transfer->bytes) {
-    close(fd);
-    errno = ENOMEM;
-    return false;
-  }
-  transfer->size = 0;
-  while (transfer->size <= TRANSFER_LIMIT) {
-    ssize_t count = read(fd, transfer->bytes + transfer->size,
-        TRANSFER_LIMIT + 1u - transfer->size);
-    if (count < 0) {
-      int error = errno;
-      close(fd);
-      errno = error;
-      return false;
-    }
-    if (!count) {
-      break;
-    }
-    transfer->size += (size_t)count;
-  }
-  if (close(fd) < 0) {
-    return false;
-  }
-  if (transfer->size > TRANSFER_LIMIT) {
-    errno = EFBIG;
-    return false;
-  }
-  if (transfer->size != (size_t)info.st_size) {
-    errno = EIO;
-    return false;
-  }
   if (query != transfer->path) {
     strcpy(transfer->path, query);
   }
-  checksum(transfer->bytes, transfer->size, transfer->digest);
+  transfer->source_fd = fd;
+  transfer->size = (size_t)info.st_size;
+  transfer->position = 0;
+  sha256_init(&transfer->hash);
+  return true;
+}
+
+/* Exact positioned reads: a short read means the source shrank. */
+static bool read_source(struct file_transfer *transfer, void *bytes, size_t size, size_t offset)
+{
+  unsigned char *output = bytes;
+  while (size) {
+    ssize_t count = pread(transfer->source_fd, output, size, (off_t)offset);
+    if (count < 0 && errno == EINTR) {
+      continue;
+    }
+    if (count <= 0) {
+      if (!count) {
+        errno = EIO;
+      }
+      return false;
+    }
+    output += count;
+    size -= (size_t)count;
+    offset += (size_t)count;
+  }
+  return true;
+}
+
+static bool source_at_end(struct file_transfer *transfer)
+{
+  unsigned char extra;
+  ssize_t count;
+  do {
+    count = pread(transfer->source_fd, &extra, 1, (off_t)transfer->size);
+  } while (count < 0 && errno == EINTR);
+  if (count) {
+    errno = count < 0 ? errno : EIO;
+    return false;
+  }
+  return true;
+}
+
+static bool write_staging(struct file_transfer *transfer, const void *bytes, size_t size)
+{
+  const unsigned char *input = bytes;
+  while (size) {
+    ssize_t count = write(transfer->staging_fd, input, size);
+    if (count < 0 && errno == EINTR) {
+      continue;
+    }
+    if (count <= 0) {
+      if (!count) {
+        errno = EIO;
+      }
+      return false;
+    }
+    input += count;
+    size -= (size_t)count;
+  }
   return true;
 }
 
@@ -487,8 +510,7 @@ static bool stage(struct file_transfer *transfer)
     return false;
   }
   transfer->staging_owned = true;
-  transfer->written = 0;
-  transfer->phase = DOWNLOAD_WRITE;
+  sha256_init(&transfer->hash);
   return true;
 }
 
@@ -551,8 +573,7 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
     }
     if (!string_value(frame.name, transfer->path, sizeof(transfer->path)) ||
         !basename_value(transfer->path, transfer->name) ||
-        !number(frame.size, &transfer->size) || transfer->size > TRANSFER_LIMIT ||
-        !hash_value(frame.hash, transfer->digest)) {
+        !number(frame.size, &transfer->size) || !hash_value(frame.hash, transfer->digest)) {
       fail(transfer, outgoing, "EINVAL:Invalid download metadata or size", now);
       return;
     }
@@ -637,6 +658,13 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
       return;
     }
     strcpy(transfer->file_id, frame.file_id);
+    /* Data starts now: verified frames stream into the private staging name. */
+    if (!stage(transfer)) {
+      char message[256];
+      snprintf(message, sizeof(message), "EIO:Cannot create staging file: %s", strerror(errno));
+      fail(transfer, outgoing, message, now);
+      return;
+    }
     transfer->phase = DOWNLOAD_DATA;
     status_packet(transfer, outgoing, transfer->file_id, "STARTED", 0, false);
     return;
@@ -662,24 +690,26 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
       fail(transfer, outgoing, "EINVAL:Invalid download data or size", now);
       return;
     }
-    memcpy(transfer->bytes + transfer->position, data, count);
+    if (!write_staging(transfer, data, count)) {
+      char message[256];
+      snprintf(message, sizeof(message), "%s:Cannot write download: %s",
+          errno == ENOSPC ? "ENOSPC" : "EIO", strerror(errno));
+      fail(transfer, outgoing, message, now);
+      return;
+    }
+    sha256_update(&transfer->hash, data, count);
     transfer->position += count;
     if (!strcmp(frame.action, "data")) {
       status_packet(transfer, outgoing, transfer->file_id, "PROGRESS", transfer->position, false);
       return;
     }
     char digest[65];
-    checksum(transfer->bytes, transfer->position, digest);
+    digest_text(&transfer->hash, digest);
     if (transfer->position != transfer->size || strcmp(digest, transfer->digest)) {
       fail(transfer, outgoing, "EBADMSG:File size or SHA-256 mismatch", now);
       return;
     }
-    if (!stage(transfer)) {
-      char message[256];
-      snprintf(message, sizeof(message), "EIO:Cannot publish download: %s", strerror(errno));
-      fail(transfer, outgoing, message, now);
-      return;
-    }
+    transfer->phase = DOWNLOAD_SYNC;
     return;
   }
   if (!strcmp(frame.action, "finish") &&
@@ -701,7 +731,7 @@ struct file_transfer *transfer_create(const char *download_directory,
   if (!transfer) {
     return NULL;
   }
-  transfer->download_fd = transfer->staging_fd = -1;
+  transfer->download_fd = transfer->staging_fd = transfer->source_fd = -1;
   transfer->interrupted = interrupted;
   if (download_directory) {
     transfer->download_fd = open(download_directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
@@ -820,30 +850,14 @@ bool transfer_input(struct file_transfer *transfer, struct presentation *screen,
     }
     bool upload = transfer->phase == CONFIRM_UPLOAD;
     if (upload) {
-      if (!read_source(transfer)) {
+      if (!open_source(transfer)) {
         char message[256];
         snprintf(message, sizeof(message), "EIO:Cannot read host file: %s", strerror(errno));
         fail(transfer, outgoing, message, now);
         return true;
       }
-      strcpy(transfer->file_id, "f1");
-      char name[5465], status[89];
-      encode(transfer->path, strlen(transfer->path), name);
-      encode(transfer->file_id, strlen(transfer->file_id), status);
-      status_packet(transfer, outgoing, NULL, "OK", 0, true);
-      if (!packet(outgoing, "ac=file;id=%s;fid=%s;st=%s;n=%s;sz=%zu;ft=regular;sha256=%s",
-          transfer->id, transfer->query_id, status, name, transfer->size, transfer->digest)) {
-        fail(transfer, outgoing, "EINVAL:Host file path is too long for a metadata frame", now);
-        return true;
-      }
-      status_packet(transfer, outgoing, NULL, "OK", 0, false);
-      transfer->phase = UPLOAD_REQUEST;
+      transfer->phase = UPLOAD_HASH;
     } else {
-      transfer->bytes = malloc(transfer->size ? transfer->size : 1);
-      if (!transfer->bytes) {
-        fail(transfer, outgoing, "ENOMEM:Cannot buffer download", now);
-        return true;
-      }
       status_packet(transfer, outgoing, NULL, "OK", 0, true);
       transfer->phase = DOWNLOAD_FILE;
     }
@@ -894,31 +908,51 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
     transfer->automatic_upload = false;
     transfer_input(transfer, screen, outgoing, 'y', now);
   }
+  /* The first upload pass hashes one bounded step per event-loop turn,
+   * allowing cancellation input between reads. The digest is announced before
+   * any data, so the source is read again while sending. */
+  if (transfer->phase == UPLOAD_HASH && !*transfer->interrupted &&
+      buffer_space(outgoing) >= TRANSFER_REPLY_RESERVE) {
+    unsigned char bytes[HASH_STEP];
+    size_t count = transfer->size - transfer->position;
+    if (count > sizeof(bytes)) {
+      count = sizeof(bytes);
+    }
+    if (!read_source(transfer, bytes, count, transfer->position) ||
+        (transfer->position + count == transfer->size && !source_at_end(transfer))) {
+      char message[256];
+      snprintf(message, sizeof(message), "EIO:Cannot read host file or its size changed: %s",
+          strerror(errno));
+      fail(transfer, outgoing, message, now);
+      return;
+    }
+    sha256_update(&transfer->hash, bytes, count);
+    transfer->position += count;
+    if (transfer->position == transfer->size) {
+      digest_text(&transfer->hash, transfer->digest);
+      sha256_init(&transfer->hash);
+      transfer->position = 0;
+      strcpy(transfer->file_id, "f1");
+      char name[5465], status[89];
+      encode(transfer->path, strlen(transfer->path), name);
+      encode(transfer->file_id, strlen(transfer->file_id), status);
+      status_packet(transfer, outgoing, NULL, "OK", 0, true);
+      if (!packet(outgoing, "ac=file;id=%s;fid=%s;st=%s;n=%s;sz=%zu;ft=regular;sha256=%s",
+          transfer->id, transfer->query_id, status, name, transfer->size, transfer->digest)) {
+        fail(transfer, outgoing, "EINVAL:Host file path is too long for a metadata frame", now);
+        return;
+      }
+      status_packet(transfer, outgoing, NULL, "OK", 0, false);
+      transfer->phase = UPLOAD_REQUEST;
+      transfer->deadline = now + TRANSFER_WAIT_MS;
+    }
+  }
   /* Publication advances one bounded step per event-loop turn, allowing
-   * cancellation input between writes, synchronization and the rename. */
-  if (transfer->phase >= DOWNLOAD_WRITE && transfer->phase <= DOWNLOAD_RENAME &&
+   * cancellation input between synchronization and the rename. */
+  if (transfer->phase >= DOWNLOAD_SYNC && transfer->phase <= DOWNLOAD_RENAME &&
       !*transfer->interrupted && buffer_space(outgoing) >= TRANSFER_REPLY_RESERVE) {
     bool ok = true;
-    if (transfer->phase == DOWNLOAD_WRITE) {
-      size_t count = transfer->size - transfer->written;
-      if (count > 16384) {
-        count = 16384;
-      }
-      if (!count) {
-        transfer->phase = DOWNLOAD_SYNC;
-      } else {
-        ssize_t written = write(transfer->staging_fd,
-            transfer->bytes + transfer->written, count);
-        if (written > 0) {
-          transfer->written += (size_t)written;
-        } else if (written < 0 && errno == EINTR) {
-          return;
-        } else {
-          if (!written) { errno = EIO; }
-          ok = false;
-        }
-      }
-    } else if (transfer->phase == DOWNLOAD_SYNC) {
+    if (transfer->phase == DOWNLOAD_SYNC) {
       ok = fsync(transfer->staging_fd) == 0;
       int error = errno;
       if (close(transfer->staging_fd) < 0 && ok) {
@@ -956,10 +990,32 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
       count = TRANSFER_CHUNK;
     }
     bool last = transfer->position + count == transfer->size;
+    unsigned char bytes[TRANSFER_CHUNK];
+    if (!read_source(transfer, bytes, count, transfer->position) ||
+        (last && !source_at_end(transfer))) {
+      char message[256];
+      snprintf(message, sizeof(message), "EIO:Cannot read host file or its size changed: %s",
+          strerror(errno));
+      fail(transfer, outgoing, message, now);
+      return;
+    }
+    /* The hash advances only with a queued frame; the second read must match
+     * the announced digest before end_data. */
+    struct sha256 hash = transfer->hash;
+    sha256_update(&hash, bytes, count);
+    if (last) {
+      char digest[65];
+      digest_text(&hash, digest);
+      if (strcmp(digest, transfer->digest)) {
+        fail(transfer, outgoing, "EIO:Host file changed during upload", now);
+        return;
+      }
+    }
     char data[4 * ((TRANSFER_CHUNK + 2) / 3) + 1];
-    encode(transfer->bytes + transfer->position, count, data);
+    encode(bytes, count, data);
     if (packet(outgoing, "ac=%s;id=%s;fid=%s;d=%s",
         last ? "end_data" : "data", transfer->id, transfer->file_id, data)) {
+      transfer->hash = hash;
       transfer->position += count;
       transfer->phase = last ? UPLOAD_FINISH : UPLOAD_ACK;
       transfer->deadline = now + TRANSFER_WAIT_MS;
@@ -976,7 +1032,8 @@ int transfer_timeout(const struct file_transfer *transfer, int64_t now, bool can
 {
   if ((can_present && transfer->notice_position < transfer->notice_length) ||
       (can_reply && (transfer->automatic_upload || transfer->phase == UPLOAD_READY ||
-       (transfer->phase >= DOWNLOAD_WRITE && transfer->phase <= DOWNLOAD_RENAME)))) {
+       transfer->phase == UPLOAD_HASH ||
+       (transfer->phase >= DOWNLOAD_SYNC && transfer->phase <= DOWNLOAD_RENAME)))) {
     return 0;
   }
   if (transfer->phase == IDLE) {

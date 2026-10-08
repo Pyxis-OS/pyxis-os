@@ -33,8 +33,8 @@ build/tools/pyxis-remote --download-dir ./downloads 127.0.0.1 2323
 
 The host keeps its confirmation and refusal to overwrite a host name. These
 remain two explicit guest commands; there is no one-step host capture command.
-File transfer is limited to 16 MiB per encoded PNG. A noisy 4K frame can exceed
-that limit: it can still be saved locally, but download is refused.
+File transfer streams, so even a large encoded PNG downloads; a noisy 4K frame
+takes longer at the current transfer rate.
 `tmp://` is RAM-backed and disappears on reboot.
 
 ## Staged replacement and failure ownership
