@@ -62,6 +62,8 @@ Other sessions keep running and draining at their previous dimensions. When
 even the focused pane does not fit, its session retains at least 12x4 content
 and the outer view clips it; an off-view cursor is hidden. Arrows
 then cycle through the retained panes; growing the display restores the layout.
+Split admission uses the current geometry snapshot, independently of cached
+render buffers. An empty outer view retains sessions and defers presentation.
 Visible panes receive [session resize](terminal-sessions.md#resize), with the
 existing SIZE generation and RESIZED event. Apps that observe resize redraw;
 other apps retain their own existing behavior. The presentation uses at most
@@ -117,7 +119,7 @@ screen as their shell; no alternate-screen protocol is introduced.
 Ordinary `make -j16 image` builds passed with the existing
 `pyxis-llvm23.1.3-49e2c1a` builder. No compiler-container rebuild or new
 upstream source was needed. Userland dependency is
-[fe07036](https://git.internal/PyxisOS/pyxis-userland/commit/fe0703699289b002caccf045d94f20f35c84d2b1),
+[77fef6a](https://git.internal/PyxisOS/pyxis-userland/commit/77fef6a299eefbbde6c44d2294984b2cf1bac449),
 [PR #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160). Manual images
 used only a temporary `multiplexer = true` addition to Development; packaged
 profiles keep the default opt-out. The final dependency
