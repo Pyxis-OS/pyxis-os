@@ -1,11 +1,17 @@
 # HD Audio playback milestone proposal
 
-Status: **three defaults accepted 2026-10-08; no implementation assigned**. Prepared from main `67e14be` and the completed
+Status: **three defaults accepted 2026-10-08; first controller/codec bring-up
+task assigned, task-specific decisions pending before code**. Prepared from
+main `67e14be` and the completed
 [QEMU investigation](../development/audio-investigation.md). Publishing or
 merging this document does not start implementation; public call details
 still need task-specific review.
 The investigation probes stay unmerged. The owner has accepted the defaults
-below; the first implementation task still requires an explicit assignment.
+below. The owner assigned the first controller/codec bring-up task on
+2026-10-08. Its [baseline and decision handoff](../development/experiments/audio-task1/README.md)
+records the pending call-layout/write/admission choices, fresh no-audio baseline
+and stack order. No code has changed before those decisions. Later tasks still
+require their own assignments.
 
 The proposed goal is one analog playback engine, bounded per-space PCM sessions
 and native ThinkPad speaker/headphone qualification. QEMU comes first. Recording,
