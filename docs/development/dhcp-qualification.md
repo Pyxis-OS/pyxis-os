@@ -17,7 +17,7 @@ milestone planning and full task-1/task-2 measurement records remain in Git.
 Lifecycle code: userland `a089c29`, with subsequent review corrections `9880d21`.
 Kernel code: parent `b352a1d`; task 3 changes no kernel ABI or packet path.
 Ordinary `make -j16 image` passed using
-`CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-` and
+`CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis-` and
 `PYTHON=build/hpet-config-venv/bin/python3`. No compiler container rebuild is needed.
 
 The short-lease run used host KVM, four CPUs, 2 GiB, VirtIO net/RNG and an isolated

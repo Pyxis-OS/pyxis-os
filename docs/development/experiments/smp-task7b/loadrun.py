@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # loadrun.py LOG JOBS FOREGROUND: start JOBS copies of a compute command in the
 # background of one remote shell, run FOREGROUND, then wait for every job.
-import base64, json, re, subprocess, sys, time
-CLIENT = ["/home/chronium/src/pyxis-smp/build/tools/pyxis-remote", "--machine", "--no-shell-echo",
+import base64, json, os, re, subprocess, sys, time
+CLIENT = [os.path.expanduser("~/src/pyxis-smp/build/tools/pyxis-remote"), "--machine", "--no-shell-echo",
           "--columns", "160", "--rows", "50", "127.0.0.1", "23411"]
 BG = "allocbench heap --rounds 1000000"
 log, jobs, fg = sys.argv[1], int(sys.argv[2]), sys.argv[3]

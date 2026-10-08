@@ -153,7 +153,7 @@ ownership checking remains fsck's job. The source must remain immutable througho
 
 Inputs, copied files, digests, ACL snapshots, raw repeated timings and build logs
 are retained outside Git at
-`/home/chronium/src/pyxis-npfs-fuse-validation/task2/`. All own QEMU, GDB and FUSE
+`~/src/pyxis-npfs-fuse-validation/task2/`. All own QEMU, GDB and FUSE
 processes ended, and the read-only loop device was detached. A successful job in
 the old builder could skip the optional FUSE target; the freshly pulled builder's
 direct build above confirms its compilation. The owner subsequently reported

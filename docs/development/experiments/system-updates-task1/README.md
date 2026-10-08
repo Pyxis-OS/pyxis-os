@@ -24,9 +24,9 @@ This is not native USB/ThinkPad, real power-loss or I/O-error qualification.
 Ordinary full source builds passed before and after review fixes:
 
 ```sh
-PATH=/home/chronium/src/pyxis-native-writer-build/host-tools/bin:$PATH \
+PATH=$HOME/src/pyxis-native-writer-build/host-tools/bin:$PATH \
 make -j16 image fs-tools \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3 BOOT_MENU_TIMEOUT=60
 ```
 
@@ -108,4 +108,4 @@ eligibility under exclusive access before writing.
 
 Raw fixtures, ISO/ELF builds, logs, remote transcripts and full SHA-256 records
 were retained outside Git at
-`/home/chronium/src/pyxis-system-updates-build/system-updates-task1/`.
+`~/src/pyxis-system-updates-build/system-updates-task1/`.

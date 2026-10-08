@@ -16,7 +16,7 @@ build tools. The final runtime image was built with:
 
 ```sh
 make -j16 image fs-tools \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3 BOOT_MENU_TIMEOUT=5
 ```
 
