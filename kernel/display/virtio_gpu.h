@@ -5,6 +5,7 @@
 #include <kernel/fb/fb.h>
 
 struct pci_device;
+struct pointer_frame;
 bool virtio_gpu_matches(const struct pci_device *device);
 /* BSP/IF=0 before AP startup, selected device and early console retired.
  * Without a boot framebuffer, a bounded temporary queue queries geometry.
@@ -17,6 +18,10 @@ const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
  * Failure is permanent and retains all runtime DMA storage until reboot. */
 bool virtio_gpu_start(void);
 bool virtio_gpu_present(void);
+/* After successful normal presentation, within the same immutable frame lease.
+ * Cursor completion confirms consumption, not independently acknowledged display.
+ * Failure stops both queues and prevents matching capture publication. */
+bool virtio_gpu_pointer_present(const struct pointer_frame *frame);
 /* The display owner bounds and gates copies, with no command in flight. */
 void virtio_gpu_copy(size_t offset, const void *pixels, size_t bytes);
 /* BSP interrupt entry, IF=0: records activity and detaches/wakes the waiter. */
