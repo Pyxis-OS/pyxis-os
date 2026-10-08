@@ -1,8 +1,8 @@
 # Sleep wake granularity
 
-Status: **proposal awaiting owner decisions, 2026-10-08**. Assigned to Codex
-through the orchestrator. Baseline/investigation are authorized; implementation
-has not started. Base: `9acf597fec897119256a0c0044785771b19f9132`.
+Status: **all three defaults accepted by the owner, 2026-10-08**. The owner
+authorized implementation through the orchestrator on the same date. Baseline
+base: `9acf597fec897119256a0c0044785771b19f9132`.
 
 ## Goal and evidence
 
@@ -22,9 +22,9 @@ of an AP waiter enqueues it without a reschedule IPI. A BSP one-shot alone
 would leave that AP tick wait intact. See [timekeeping](../kernel/timekeeping.md)
 and the [SMP contracts](../kernel/smp.md).
 
-## Three proposed decisions
+## Accepted decisions
 
-Recommendations below remain unaccepted.
+The owner accepted all three recommended defaults on 2026-10-08.
 
 1. **Ownership/timer — recommend per-CPU deadlines and calibrated LAPIC
    one-shot countdowns.** Only the executing CPU programs its LAPIC, with IF=0;
@@ -77,13 +77,12 @@ See [Intel SDM 3A, section 11.5.4](https://cdrdv2-public.intel.com/812386/253668
 ## Work and qualification
 
 - [x] Investigate and record a fresh baseline/proposal.
-- [ ] Owner settles the three decisions and authorizes implementation.
-- [ ] Proposed review follow-up: fix the missing expiry reschedule IPI as a
+- [x] Owner settles the three decisions and authorizes implementation.
+- [ ] Fix the missing expiry reschedule IPI as a
   separate measured step. Collect destination CPU indices under the queue lock
   and notify after unlocking, without retaining published task/wait pointers.
   Repeat the baseline before timer changes to distinguish AP wake delay from
-  BSP tick quantization. This sequencing suggestion is not implementation
-  authority.
+  BSP tick quantization before implementing the accepted one-shot design.
 - [ ] Implement deadline ownership/dispatch and timer multiplexing together;
   update clock/scheduler contracts in the implementation PR.
 - [ ] Repeat identical baseline workload/library bytes with only the kernel
@@ -105,5 +104,6 @@ availability and results are not assumed from screenshot qualification.
 
 Branch: `kernel/sleep-deadline-proposal`. No dependency changes or compiler
 rebuild. Baseline consumer is a measurement artifact, not a normal application.
-All task-owned guest/debugger/client/build jobs stopped. Implementation waits
-for owner decisions; opening/reviewing the proposal does not start it.
+Baseline guest/debugger/client/build jobs stopped. The path-normalization review
+fix preserves all numerical readings. Implementation is now authorized; the
+three defaults above are accepted decisions rather than reviewer approval alone.

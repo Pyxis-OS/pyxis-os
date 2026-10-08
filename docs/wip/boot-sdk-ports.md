@@ -57,7 +57,8 @@ Chosen by the owner, each starting with a proposal:
   clipboard implementation and USB HID mice are separate milestones.
 - **Codex** (2026-10-08): [sleep wake granularity](sleep-wake-granularity.md),
   deadline-driven wakeups with the existing 120 Hz preemption schedule;
-  baseline and proposal first, implementation awaiting owner decisions.
+  the owner accepted the three proposal defaults and authorized implementation
+  on 2026-10-08.
 - **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
   replacing the 16 MiB buffered `xfer` limit so large files such as retail
   game data can be sent. It starts with a baseline measurement and a

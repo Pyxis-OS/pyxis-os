@@ -1029,7 +1029,8 @@ Nanosecond units remain a representation, not a precision promise. Revisit
 with a one-shot deadline timer or tickless sleeping, as a kernel task, when a
 consumer needs finer pacing than its own deadline tracking provides. The owner
 assigned this work on 2026-10-08; the [bounded proposal](wip/sleep-wake-granularity.md)
-and its current-main baseline await decisions before kernel implementation.
+and its current-main baseline record the three defaults accepted by the owner
+on 2026-10-08. Implementation is authorized but not yet qualified.
 
 ## Wall-clock time and clock-source performance
 
