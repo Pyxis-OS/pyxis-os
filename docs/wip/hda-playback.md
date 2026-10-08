@@ -7,9 +7,9 @@ the completed [QEMU investigation](../development/audio-investigation.md).
 The investigation probes stay unmerged. The owner assigned task 2 on
 2026-10-08, combining periodic refill and per-space session/mixing steps below,
 with the accepted call/write/admission semantics. Its
-[baseline and pending policy round](../development/experiments/audio-task2/README.md)
+[baseline and accepted policies](../development/experiments/audio-task2/README.md)
 record fresh main `780f5d2`, no-playback observations and the remaining
-hidden-space/start-stop/failure decisions. Implementation awaits that round.
+hidden-space/start-stop/failure defaults, accepted 2026-10-08.
 The [task 1 report](../development/experiments/audio-task1/README.md) retains
 private engine qualification and matched no-audio/engine-idle observations.
 Native and consumer tasks still require their own assignments.
@@ -46,7 +46,7 @@ Accepted by the owner through the orchestrator on **2026-10-08**, after the
 
 The accepted task-specific call contract below and current task assignment
 settle public call behavior and scope. Session priming, hidden-space playback
-and refill failure/stop policy remain pending for task 2. Numeric ABI encoding
+and refill failure/stop policy are accepted in the task 2 report. Numeric ABI encoding
 and rights bits are implementation choices; native route preference and jack
 switching remain later task-specific review items. Proposed details below are distinct from the accepted decisions.
 

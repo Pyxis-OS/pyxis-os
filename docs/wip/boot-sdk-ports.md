@@ -69,7 +69,7 @@ Chosen by the owner, each starting with a proposal:
   exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
   queues as starting tuning. Controller/codec bring-up merged in #553.
   Sessions/mixing and IRQ refill assigned as task 2 on 2026-10-08;
-  [fresh baseline and pending task-specific policy round](../development/experiments/audio-task2/README.md).
+  [fresh baseline and accepted task-specific policies](../development/experiments/audio-task2/README.md).
   QEMU closure with
   a later ThinkPad native batch is carried forward for confirmation at closure;
   native playback remains unqualified. Quake can produce sound

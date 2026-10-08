@@ -9,27 +9,24 @@ its public per-space grant, at most eight process-owned sessions, copied queues,
 kernel mixing and owned interrupt delivery. SDL2, Quake and native AMD binding
 remain separately assigned work.
 
-## Task-specific policies awaiting owner decisions
+## Accepted task-specific policies
 
-These are recommended defaults, **not accepted decisions**. No implementation
-code has changed for task 2 while this round is pending.
+Accepted by the owner through the orchestrator on **2026-10-08**, before
+implementation. Hidden-space playback also carries forward the proposal policy.
 
 1. Continue playback in hidden spaces independently of keyboard/pointer focus.
    Provision a named audio grant alongside each space's display/keyboard grants;
    shell delegation is independent of stdin/input focus. Initial controls remain
-   PCM/session-only, without volume or pause UI. Alternatives are pausing hidden
-   spaces or deferring focus/delegation policy.
+   PCM/session-only, without volume or pause UI.
 2. Start on the first queued frames without a 20 ms priming threshold. Stop
    hardware after queued and mixed PCM is consumed, then park without idle IRQs.
    Preserve acquired sessions for subsequent writes and count producer starvation
-   once per empty episode. Alternatives are 20 ms priming or running silence
-   until release. The public interface still makes no audible-drain promise;
+   once per empty episode. The public interface still makes no audible-drain promise;
    internal stopping must account for the codec/backend tail and be qualified.
 3. Fail closed until reboot when refill progress is ambiguous or unsafe, or a
    FIFO/descriptor fault occurs: stop the engine, report WAIT_ERROR and
    CALL_UNAVAILABLE, and retain DMA. Ordinary producer starvation supplies zeros
-   and is not terminal. Alternatives are reset/resume with a discontinuity or
-   deferring recovery policy.
+   and is not terminal.
 
 The already accepted ACQUIRE/WRITE/STATUS/RELEASE, atomic copied writes of at
 most 4096 bytes, maximum-write writable waits and admission errors remain the
@@ -143,7 +140,7 @@ allocation-free notice and generation-safe ownership invalidation. Closing a
 handle does not release the acquired session. The worker must continue serving
 cleanup/status after terminal hardware failure.
 
-Next: obtain the three policy decisions, implement the accepted scope, then
+Next: implement the accepted scope, then
 qualify the public interface, concurrent signals, ordinary producer pauses,
 exit/release, admission and sustained refill with manual QEMU/debugger checks.
 Publish any concrete libpyxis/grant-forwarding/PCM-producer dependency before
@@ -153,4 +150,4 @@ the owner's QEMU-closure/native-batch choice at milestone closure.
 
 All task-owned baseline builds, guests and debuggers are stopped. Local baseline
 SDK/userland/ports bundles are packaged for verified reuse. This report records
-a baseline and pending design round, not completed implementation or task 2 CI.
+a baseline and accepted design round, not completed implementation or task 2 CI.
