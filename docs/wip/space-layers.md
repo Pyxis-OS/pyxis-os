@@ -1,9 +1,8 @@
 # Graphics and terminal layers in a space
 
-Status: **owner idea with accepted decisions, 2026-10-07; assigned to Codex 1.**
-The task starts with a short proposal that settles the
-[open questions](#open-questions-for-the-proposal). Nothing here authorizes code
-before that proposal is accepted.
+Status: **proposal for review, 2026-10-08; assigned to Codex 1.**
+The owner decisions below are accepted. The remaining contract and task sequence
+are proposed; nothing here authorizes code before the proposal is accepted.
 
 ## Today
 
@@ -39,25 +38,167 @@ Accepted 2026-10-07:
    graphics session newly started from the terminal is shown, because the user
    just launched it.
 
-## Open questions for the proposal
+Accepted 2026-10-08:
 
-- **Focus events.** Today a space switch is a focus loss, and Quake then blocks
-  and excludes the time from game time. Decision 1 needs a hidden program to keep
-  running. Settle how a hidden layer differs from an unselected space, and what
-  Quake, Doom and Mandelbrot do in each.
-- **Terminal input while hidden.** When the shell is waiting for the graphical
-  program, where typed input goes, and whether it is queued for later.
-- **Edge states.** An acquired but never-presented session, RELEASE or exit while
-  hidden, a space switch while hidden, and display resizing while hidden.
-- **The bar.** Where the marker fits within the existing tab width.
-- **Presentation cost.** The presenter copies only the shown surface; confirm
-  that a hidden graphics buffer adds no copying.
+4. **An unselected space keeps running too.** Quake, Doom and Mandelbrot do not
+   pause on a space switch. Input focus controls input eligibility, not game
+   time or rendering eligibility.
+5. **Terminal typing uses the normal queue.** While graphics is hidden, ordinary
+   text enters the existing 4 KiB console queue. The shell still waits for its
+   foreground job; it does not open a second prompt. If no program reads, bytes
+   wait for a later reader. Returning to graphics clears unread terminal bytes.
+   Ctrl+C retains the terminal's existing foreground-interrupt behavior.
+
+## Source investigation
+
+Inspected Pyxis `50e18a5`, its pinned userland `2430567f` and ports `03b3ae8e`.
+These are source findings, not runtime qualification:
+
+- [Display sessions](../../kernel/object/display.c) have an owner, mapping and
+  `visible` flag. Every PRESENT sets `visible`; acquisition leaves it false.
+  [Presentation](../../kernel/space.c) snapshots only the active space's selected
+  graphics backing, or uses its TTY. It never copies both surfaces.
+- [Keyboard](../../kernel/object/keyboard.c) and
+  [pointer](../../kernel/object/pointer.c) capture are independent of display
+  ownership. Focus changes discard pending events and reset accepted presses.
+  Keyboard acquisition and release also discard console bytes today; that must
+  change when hidden graphics leaves the console as the input destination.
+- Quake and Doom use keyboard focus to block their game loops and exclude paused
+  time. Quake also lets pointer control events alter that same pause state.
+  Mandelbrot stops rendering on focus loss. Userland's `mousetest` also blocks
+  its loop on focus loss and belongs in the consumer update.
+- The shell waits for foreground completion and an armed Ctrl+C interrupt,
+  without reading ordinary terminal bytes. Text routing while graphics is
+  hidden therefore makes Ctrl+C available through that existing authority.
+- The bar has one character cell of padding on each side of the title. Its font
+  has no Unicode minus glyph; the marker can be drawn directly in its cell.
+
+## Proposed contract
+
+### Session and layer state
+
+Keep graphics ownership, whether the session has ever presented, and the user's
+layer choice distinct. All mutations remain BSP-owned. Layer switching allocates
+nothing and neither releases capture nor removes the graphics mapping.
+
+| State or action | Selected surface and marker | Input behavior |
+| --- | --- | --- |
+| No graphics session | TTY, no marker | Existing console/capture routing |
+| ACQUIRE, before first PRESENT | TTY, no marker | Existing console/capture routing |
+| First successful PRESENT of this session | Graphics, `+` | Existing acquired input sessions receive focus if the space is selected |
+| Super+Down after first PRESENT | TTY, `−` | Console text; captured keyboard and pointer lose focus |
+| Further PRESENT while hidden | TTY, `−` | Unchanged |
+| Super+Up after first PRESENT | Graphics, `+` | Restore normal capture routing; discard unread console bytes |
+| REPLACE | Preserve the layer and marker | Unchanged |
+| RELEASE or owner exit | TTY, no marker | Resume existing routing for any surviving independent capture |
+
+The first PRESENT is the observable start of a graphical session; acquisition
+alone does not show a blank layer. A new session gets this first-PRESENT behavior
+even if the previous one ended while hidden. The kernel does not infer whether
+a launch was interactive. Starting or presenting in another space never selects
+that space, but records its layer choice for the next visit.
+
+Switching spaces preserves each space's layer choice. An unselected space gets
+no physical input and no surface copy. Its programs remain runnable under the
+ordinary scheduler. Returning to a hidden session restores terminal text routing.
+RELEASE does not release separately owned keyboard or pointer sessions; normal
+owner exit still tears down all sessions through existing process cleanup.
+
+Super+Up/Down follows Super+Left/Right's modifier and held-arrow rules: either
+Super key, no Shift/Control/Alt, one action per press, and consumed arrow repeats
+and releases even if Super is released first. With no presented session the
+shortcut is consumed without changing state. Repeating the current layer choice
+does not reset input or discard terminal bytes.
+
+### Focus and terminal input
+
+Keep the public keyboard and pointer event layouts and focus flags. Focus means
+eligibility for captured input. A layer transition sends the existing focus
+notification when that eligibility changes, dropping stale captured events and
+clearing held keys, buttons and motion. No separate space-selection event is
+needed because programs keep running in both hidden and unselected states.
+
+Quake and Doom clear held controls on focus/reset events, continue polling those
+events, and advance game time without focus-based pauses. Remove their initial
+focus waits too, so starting in another space does not block startup. Mandelbrot
+finishes pending rendering without focus and idles normally once complete;
+`mousetest` continues its ordinary update loop. Input controls remain disabled
+without focus. Pointer notifications must not change Quake's run/time policy.
+These are application changes; the kernel does not force other programs to
+render or prohibit an application's own explicit pause.
+
+While a presented session is hidden, terminal text routing overrides an acquired
+keyboard session. Acquisition/release of that capture cannot steal text routing
+or clear the console queue. Captured ownership remains exclusive and blocking
+reads may wait for focus/reset notifications; terminal typing never enters the
+captured event queue. The pointer supplies no terminal input in this milestone.
+
+Each routing change resets accepted held input, requiring fresh key/button
+presses in the new destination. Console queue overflow retains the existing
+`CALL_INPUT_LOST` behavior. Device loss must invalidate console input when it is
+the destination, even while a hidden program retains keyboard ownership.
+The queue-clear rule also applies on the first PRESENT when routing changes
+from terminal text to graphics capture. RELEASE or exit while hidden preserves
+queued text if routing remains terminal text; restoring a surviving raw capture
+discards unread text. Decide preservation from the routing destination before
+and after each operation: process cleanup releases keyboard before display,
+and must preserve hidden-layer text through that order. Already-read bytes
+cannot be recalled. Output stays live in the TTY regardless of the chosen layer.
+
+### Bar, resize and presentation
+
+Use the existing right padding cell at the end of each tab for `+` or a drawn
+minus. Reserve that cell even without a marker, preserving current equal tab
+widths, title centering, clipping, selection underline and scrolling. An inactive
+tab's marker records its layer choice, not what the physical screen shows.
+Draw the marker even when the title cannot fit, provided one whole marker cell
+fits inside the tab; otherwise omit it without drawing outside the tab.
+
+Physical resizing retains the existing all-space TTY transaction, fixed acquired
+mapping contract and RESIZED notification. Hidden or unselected Doom adapts at
+its continuing frame boundaries; Mandelbrot uses its existing resize wait and
+render checkpoints. Quake and `mousetest` retain their current fixed mappings
+and existing clipping behavior. REPLACE preserves hidden state; resizing must
+not manufacture a focus transition or bring graphics forward.
+
+Only the chosen surface of the active space is snapshotted and copied. Hidden
+graphics retains its existing session backing without taking a presenter lease
+or adding a pixel copy. Application rendering still costs CPU and memory
+bandwidth; hiding does not promise a performance saving. An already-snapshotted
+frame may finish after a transition, as today. Mapping retirement keeps the
+existing presenter-reference and execution-group cleanup contracts.
 
 ## Tasks
 
-1. [ ] Proposal settling the open questions.
-2. [ ] Implementation, with the [graphics](../interfaces/graphics.md),
-   [keyboard](../devices/keyboard.md), [mouse](../devices/mouse.md) and
-   [space bar](../userland/init.md#space-bar) references updated, and any
-   Quake/Doom/Mandelbrot changes the focus rule needs. Check in QEMU and ask the
-   owner for a native ThinkPad check with Quake.
+1. [x] Investigate current code and write this proposal, recording accepted
+   decisions separately from the remaining proposed contract.
+2. [ ] Owner review and acceptance of the session/input edge rules, bar placement
+   and task sequence. Acceptance authorizes only the selected implementation task.
+3. [ ] Update Quake/Doom in ports and Mandelbrot/`mousetest` in userland so focus
+   loss resets input without pausing execution or game time. Publish focused
+   dependency PRs before a Pyxis integration PR updates their pins; merge the
+   dependencies first. Build against the existing SDK and check focus loss,
+   fresh presses and inactive startup interactively in QEMU.
+4. [ ] Implement session layer state, Super+Up/Down, capture/text routing,
+   queue/loss handling, marker drawing and chosen-surface presentation in Pyxis.
+   Include the published consumer pins. Update the
+   [graphics](../interfaces/graphics.md), [keyboard](../devices/keyboard.md),
+   [mouse](../devices/mouse.md), [shell](../userland/shell.md) and
+   [space bar](../userland/init.md#space-bar) references in this PR.
+5. [ ] Qualify interactively in QEMU: repeated PRESENT after hiding; held
+   keys/buttons and shortcut releases; queued terminal text and Ctrl+C;
+   acquisition without presentation; hidden RELEASE/exit and fresh acquisition;
+   switching away/back in either layer; continuing game time; live resize and
+   hidden REPLACE; narrow tabs. Use debugger inspection for hidden-frame leases
+   and backing lifetime. Check the exact submitted revisions' existing CI.
+   Ask the owner for a native ThinkPad check with Quake and record its result.
+6. [ ] After implementation and qualification, move the implemented contract to
+   the interface references, remove this completed worklist and update inbound
+   links. Record any accepted remaining limits in technical debt.
+
+## Proposal handoff
+
+Branch: `docs/space-layers-proposal`, based on Pyxis `50e18a5`.
+No implementation, dependency edits, builds or boots were performed for task 1.
+The two 2026-10-08 decisions above were confirmed by the owner during this
+investigation. Task 2 is the next step; the rest of the contract remains proposed.
