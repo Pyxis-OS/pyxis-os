@@ -41,7 +41,7 @@ void chacha20_init(struct chacha_state *state,
                    const uint8_t key[CHACHA20_KEY_BYTES],
                    const uint8_t nonce[CHACHA20_NONCE_BYTES])
 {
-  static const uint8_t sigma[16] = "expand 32-byte k";
+  static const uint8_t sigma[] = "expand 32-byte k";
 
   memzero_explicit(state, sizeof(*state));
   for (size_t i = 0; i < 4; ++i) {
