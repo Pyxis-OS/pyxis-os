@@ -1,6 +1,6 @@
 # Development milestone index
 
-Status: the current state of planned work, updated 2026-10-07. Nothing here
+Status: the current state of planned work, updated 2026-10-08. Nothing here
 authorizes implementation: each milestone settles its decisions in its own
 document before code work starts. Milestone order is flexible; the owner's
 current choice wins. Everyday use for simple tasks guides the order; website
@@ -34,9 +34,9 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner on 2026-10-07, each starting with a proposal:
 
-- **Claude:** [C++ in userspace](toolchains-and-runtimes.md#c-in-userspace),
-  cross-compiled C++ programs with a runtime from the `pyxis-llvm` fork. Clang
-  running on Pyxis is a later milestone.
+- **Claude:** [C++ in userspace](cxx-userspace.md), cross-compiled C++
+  programs with a runtime from the `pyxis-llvm` fork; probe done and decisions
+  accepted. Clang running on Pyxis is a later milestone.
 - **Codex 1:** [graphics and terminal layers in a space](space-layers.md),
   switched with Super+Up/Down.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
