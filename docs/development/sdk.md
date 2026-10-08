@@ -74,7 +74,9 @@ make -C userspace SDK=../build/sdk BUILD=../build/userspace hello client server
 make -C /path/to/pyxis-userland SDK=/path/to/sdk \
   LUA_PREFIX=/path/to/ports-dev/lua \
   PICOHTTPPARSER_PREFIX=/path/to/ports-dev/picohttpparser \
-  MBEDTLS_PREFIX=/path/to/ports-dev/mbedtls all
+  MBEDTLS_PREFIX=/path/to/ports-dev/mbedtls \
+  ZLIB_PREFIX=/path/to/ports-dev/zlib \
+  LIBPNG_PREFIX=/path/to/ports-dev/libpng all
 ```
 
 The `session` application also consumes Lua headers and `liblua.a` through
@@ -82,8 +84,10 @@ The `session` application also consumes Lua headers and `liblua.a` through
 `libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. Its fetch library also
 links the native `libtls.a` adapter and the configured Mbed TLS export through
 `MBEDTLS_PREFIX`, even while the installed provider remains in HTTP mode.
-These development prefixes are exported by the ports build. Other application targets can still build with
-the SDK alone.
+The [screenshot command](../userland/screenshot.md) consumes libpng and zlib
+through `LIBPNG_PREFIX` and `ZLIB_PREFIX`, linking its objects, libpng, zlib
+and the normal runtime in that order. These development prefixes are exported
+by the ports build. Other application targets can still build with the SDK alone.
 
 The userspace Makefile builds applications and their support archives. It consumes a complete SDK
 and does not build the runtime. `SDK` defaults to `build/sdk`
