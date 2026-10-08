@@ -6,7 +6,8 @@ Status: **tasks 1 and 2 merged; task 3 authorized to Codex alpha, 2026-10-08.**
 [ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)/
 [#66](https://git.internal/PyxisOS/pyxis-ports/pulls/66) are merged.
 The parent merge is `abbeded`; published pins are userland `b83ff67` and ports
-`a642f07`. Task 3 starts from that fresh main on `pointer/terminal-selection`.
+`a642f07`. Task 3 starts from that fresh main on `pointer/terminal-selection` in
+[draft #550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
 It includes local TTY retention/selection, trusted mux terminal control,
 terminal spatial readiness, mux hit-testing/selection/wheel history and the
 owner's addition of graphics pointer subscription readiness through `wait_many`.

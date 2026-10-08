@@ -70,7 +70,8 @@ Chosen by the owner, each starting with a proposal:
   terminal spatial queue/readiness and mux selection/wheel history. The owner's
   addition makes graphics pointer subscriptions waitable through `wait_many`;
   the later SDL blocking-event fix remains beta's work. Fresh main `abbeded`
-  has a pre-code [baseline](../development/system-pointer-qualification.md#task-3-baseline).
+  has a pre-code [baseline](../development/system-pointer-qualification.md#task-3-baseline)
+  recorded in [draft #550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
   [Three task 3 decisions](pointer.md#task-3-planning) are pending, with defaults;
   no task 3 code is implemented yet. Tasks 4 and 5 need separate authorization.
   Matched QEMU checks suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
