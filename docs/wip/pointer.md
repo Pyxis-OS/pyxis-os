@@ -85,7 +85,7 @@ routing. An unlocked pointer does not release keyboard capture or pause a game.
 
 Include a VirtIO cursor backend after a common software path works; boot and
 Bochs keep software composition. Coordinate changes with the separately assigned
-[SDL2 backend](sdl2.md), replacing its private integration of relative counts.
+[SDL2 backend](../development/sdl2.md), replacing its private integration of relative counts.
 Its pointer adapter change lands **after the SDL2 milestone closes**, including
 its DevilutionX consumer and owner qualification. Do not change that milestone's
 tasks 4–5 or build a second SDL2 port.

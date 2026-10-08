@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream
+  SDL 2.32.10 for graphical ports, the SDK's CMake toolchain file, and
+  [DevilutionX](../userland/devilutionx.md) as an opt-in, personal-use first
+  consumer; [native ThinkPad qualification is deferred](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
 - [Screenshots](../userland/screenshot.md), 2026-10-08: reusable zlib/libpng
   ports, native CAPTURE and staged PNG output with explicit remote download;
   [native ThinkPad qualification is deferred](../technical-debt.md#native-screenshot-qualification).
@@ -51,11 +55,10 @@ Chosen by the owner, each starting with a proposal:
   Task 1 requires explicit owner authorization, including after plan merge.
   SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
-- **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
-  upstream SDL2 with video, input and timer support over the display,
-  keyboard, pointer and clock sessions; audio waits for an audio driver.
-  DevilutionX on local shareware data is the first consumer; the owner
-  accepted the three task 1 decisions on 2026-10-08.
+- **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
+  replacing the 16 MiB buffered `xfer` limit so large files such as retail
+  game data can be sent. It starts with a baseline measurement and a
+  documentation-only proposal for the publication contract.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
