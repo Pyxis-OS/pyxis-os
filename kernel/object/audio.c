@@ -31,10 +31,7 @@ static void unlock_audio(struct audio_object *audio)
 
 static void require_worker(void)
 {
-  KASSERT(arch_cpu_index() == 0);
-  uint64_t flags = cpu_save_interrupts();
-  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  cpu_restore_interrupts(flags);
+  audio_require_worker();
 }
 
 static void destroy_audio(struct kernel_object *object)
@@ -213,7 +210,7 @@ static enum call_status acquire_session(struct audio_request *request)
   ++audio->generation;
   audio->free_frames = AUDIO_QUEUE_FRAMES;
   audio->starvations = audio->discontinuities = 0;
-  audio->failed = false;
+  audio->failed = audio->starved = false;
   sessions[slot] = audio;
   request->reply.acquire = (struct audio_acquire_reply){
     .generation = audio->generation, .rate = AUDIO_RATE,
@@ -280,6 +277,9 @@ void audio_session_request_execute(struct audio_request *request)
       audio->free_frames -= frames;
       request->reply.written = request->length;
       changed = frames != 0;
+      if (changed) {
+        audio->starved = false;
+      }
     }
     unlock_audio(audio);
     if (release) {
@@ -341,9 +341,10 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
     audio->count -= count;
     lock_audio(audio);
     audio->free_frames += count;
-    if (count < frames && audio->starvations != UINT64_MAX) {
+    if (count < frames && !audio->starved && audio->starvations != UINT64_MAX) {
       ++audio->starvations;
     }
+    audio->starved = count < frames;
     unlock_audio(audio);
     if (count > consumed) {
       consumed = count;
@@ -353,7 +354,9 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
     int32_t value = mixed[i];
     output[i] = value > INT16_MAX ? INT16_MAX : value < INT16_MIN ? INT16_MIN : value;
   }
-  readiness_notify();
+  if (consumed) {
+    readiness_notify();
+  }
   return consumed;
 }
 

@@ -27,7 +27,8 @@ struct audio_acquire_reply {
 };
 
 /* Nonblocking atomic copy: <=4096 bytes, complete four-byte stereo frames.
- * Full queue accepts nothing. Zero length is a validated no-op. */
+ * Full queue accepts nothing. Zero length is a validated no-op. Success replies
+ * with a uint64_t accepted byte count, including zero. */
 struct audio_write_request {
   struct message_header header;
   uint64_t buffer, length;

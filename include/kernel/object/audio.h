@@ -18,7 +18,7 @@ struct audio_object {
   uint64_t generation;
   size_t free_frames;
   uint64_t starvations, discontinuities;
-  bool failed;
+  bool failed, starved;
   bool cleanup_pending;
   struct execution_group *cleanup_group;
   /* The sole audio worker owns storage and queue mutation. Exit only invalidates

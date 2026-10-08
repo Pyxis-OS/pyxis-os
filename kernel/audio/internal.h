@@ -2,13 +2,14 @@
 #define KERNEL_AUDIO_INTERNAL_H
 
 #include <kernel/boot.h>
+#include <kernel/audio.h>
 #include <kernel/mm/dma.h>
 #include <kernel/pci.h>
 #include <kernel/pci/msi.h>
 
 #define HDA_RATE 48000
 #define HDA_FRAME_BYTES 4
-#define HDA_PERIOD_FRAMES 480
+#define HDA_PERIOD_FRAMES AUDIO_PERIOD_FRAMES
 #define HDA_PERIOD_BYTES (HDA_PERIOD_FRAMES * HDA_FRAME_BYTES)
 #define HDA_PERIOD_COUNT 4
 #define HDA_BUFFER_BYTES (HDA_PERIOD_BYTES * HDA_PERIOD_COUNT)

@@ -14,6 +14,8 @@ struct audio_request;
  * precedes AP startup; start creates the sole DMA owner after task_init(). */
 void audio_prepare(const struct boot_info *boot);
 void audio_start(void);
+void audio_interrupt(void);
+void audio_require_worker(void);
 
 /* BSP executor, IF=0: transfer to the sole audio worker. Notification may be
  * called on the BSP with either interrupt state, after releasing object locks. */
