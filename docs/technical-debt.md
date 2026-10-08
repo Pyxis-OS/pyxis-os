@@ -591,11 +591,29 @@ The captured bytes freeze one presenter composition and preserve tearing from
 concurrent single-buffer application or TTY writes. No atomic application frame,
 vblank or physical scanout timing is promised. A stuck presenter/scheduler or
 panic cannot complete a capture. Revisit stronger consistency or bounded recovery
-only with a separate presenter/backing ownership contract. Current runtime
-evidence covers QEMU boot-framebuffer and VirtIO captures, including BUSY admission.
-Failure cleanup remains source-reviewed. The command's boot-framebuffer PNG
-encode/download path is qualified; Bochs, native hardware and broader layer/resize
-qualification remain in the [screenshots milestone](wip/screenshots.md).
+only with a separate presenter/backing ownership contract. The
+[qualification report](development/screenshot-qualification.md) records QEMU
+boot-framebuffer, Bochs and VirtIO PNG/monitor comparisons, shown-layer and
+resize coverage, retained snapshot checks and BUSY admission. Failure cleanup
+remains source-reviewed without injected failures.
+
+## Native screenshot qualification
+
+The owner accepted screenshot milestone closure on 2026-10-08 with the native
+ThinkPad check deferred: the machine is unavailable while Bluetooth is being
+worked on directly. QEMU qualification does not establish native framebuffer
+layout, capture/download behavior or performance on that hardware. Revisit when
+the ThinkPad is available, using the merged screenshot image and a granted shell:
+
+```text
+screenshot tmp://thinkpad.png
+xfer send tmp://thinkpad.png
+```
+
+Connect the host client with `--download-dir`, confirm the transfer, and check
+that the downloaded PNG opens and shows navigation, the selected content and
+cursor. Record the image revision and native display geometry alongside that
+result in the [qualification report](development/screenshot-qualification.md).
 
 ## Bochs boot-mode scope and aperture retention
 

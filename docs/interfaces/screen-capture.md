@@ -23,7 +23,10 @@ accepted for bring-up; its revisit point is recorded under
 [LAN visibility](../technical-debt.md#kernel-log-retention-and-lan-visibility).
 The packaged [screenshot command](../userland/screenshot.md) saves a PNG and
 uses the existing explicit file-download workflow. See the
-[screenshots milestone](../wip/screenshots.md) for remaining qualification.
+[qualification report](../development/screenshot-qualification.md) for measured
+QEMU coverage and cost, and
+[native qualification debt](../technical-debt.md#native-screenshot-qualification)
+for the deferred ThinkPad check.
 
 ## Request and owned result
 
@@ -103,36 +106,16 @@ memory despite the single in-flight slot. Backing costs `4 * width * height`
 bytes, in addition to existing display buffers. See
 [capture limits](../technical-debt.md#screen-capture-memory-and-consistency-limits).
 
-Interactive QEMU/debugger inspection on 2026-10-08 used q35, the boot framebuffer
-at 1280x800 with physical pitch 5120, four CPUs, 2 GiB and nested KVM. A real CALL
-returned 64 bytes and a native READ-only FILE of 4,096,000 bytes, RGB shifts
-16/8/0 and generation one. FILE READ bytes and EOF, RESIZE refusal, a zero-right
-capture refusal, and a copied FILE surviving the original handle's CLOSE were
-observed. Full snapshot dumps remained identical as boot progressed; the final
-CLOSE reached the FILE destructor.
+Interactive QEMU/debugger inspection established READ-only FILE layout and EOF,
+DENIED and BUSY refusal, copied-handle lifetime and final FILE destruction.
+Ordinary init/session/shell handoffs were checked in Development and Remote,
+including pipeline and background children; Read-only retained DRAW without
+CAPTURE. Installed/rescue policy and strict boot-setting parsing were
+source-reviewed, without an installed boot or injected errors.
 
-A second q35 boot selected VirtIO GPU with the same geometry. Capture succeeded;
-with one real caller pending, another returned BUSY with zero reply bytes and its
-table loan cleared. The admitted caller subsequently received its FILE, leaving
-pending/active state and private backing clear. The child received its diagnostic
-CAPTURE grant through an ordinary kernel grant at its unsubmitted-process
-checkpoint; these task-4 checks did not establish the subsequent boot policy.
-
-Allocation/backend failure and stop cleanup are source-reviewed, without injected
-failures. Bochs, native hardware, PNG encoding and host download remain unqualified.
-The separately versioned helper is included in the image's SDK and is consumed
-by the [PNG command](../userland/screenshot.md).
-
-Task-5 manual inspection used the ordinary image built with the current LLVM
-23.1.3 / 49e2c1a builder, q35 standard VGA, 1280x800 boot framebuffer, four CPUs,
-2 GiB and nested KVM. Development's final shell retained CAPTURE through its
-init/session chain; Read-only's shell had DRAW and no capture resource. A
-connected Remote shell had CAPTURE without DRAW. Its foreground `echo` child
-held CAPTURE alone with transport zero; a real debugger-substituted CALL returned
-the successful 64-byte reply and a 4,096,000-byte FILE, which was closed before
-replaying the original syscall. Both `echo pipe | cat` stages and
-`echo background &` inherited CAPTURE. Doom launched and visibly rendered in
-Read-only with DRAW and no CAPTURE. Installed/rescue configuration, strict
-boolean parsing and missing-seed refusal are source-reviewed, without injected
-errors or an installed boot in this task. The PNG consumer and native capture
-qualification remain pending.
+The [qualification report](../development/screenshot-qualification.md) records
+PNG/monitor comparisons across boot, Bochs and VirtIO displays, shown-layer and
+resize coverage, snapshot retention, and matched presenter/encoder measurements.
+Allocation/backend failure and stop cleanup remain source-reviewed without
+injected failures. The owner accepted milestone closure with
+[native ThinkPad qualification deferred](../technical-debt.md#native-screenshot-qualification).

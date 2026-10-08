@@ -101,9 +101,10 @@ The profile retains compression/decompression streams, checksums, default
 allocators and buffer convenience APIs. It omits `gz*` file helpers, contrib,
 shared libraries and upstream programs/tests. Public headers are unchanged,
 so using an omitted helper fails at link time. The library adds no file,
-network or display authority. The [screenshot milestone](../wip/screenshots.md)
-will qualify it at runtime through the PNG consumer; archive compilation is
-not that qualification.
+network or display authority. The [screenshot consumer](../userland/screenshot.md)
+qualifies deflate-to-PNG output through host decoding; archive compilation alone
+is not runtime qualification. Other compression/decompression profiles remain
+[unqualified](../technical-debt.md#zlib-core-profile-and-qualification).
 
 ## libpng development library
 
