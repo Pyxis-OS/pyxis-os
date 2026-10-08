@@ -111,7 +111,7 @@ and [one-shot qualification](../development/experiments/sleep-wake-granularity/t
 record the separate steps. The implementation branch is
 `kernel/sleep-deadline-timer`, following `kernel/sleep-expiry-ipi`;
 the ports documentation dependency is
-[ports #62](https://git.internal/PyxisOS/pyxis-ports/pulls/62), `c4f41376`.
+[ports #62](https://git.internal/PyxisOS/pyxis-ports/pulls/62), `2a5c30f4`.
 The measured kernel and submitted-head CI are identified separately in the PR.
 Task-owned guests/debuggers/clients stopped; the final ordinary image/checks
 are completed before submission. Native evidence or an owner-accepted limit
