@@ -71,7 +71,7 @@ void task_wait_wake(struct task_wait *wait);
 
 /* Absolute monotonic nanosecond deadlines. Relative conversion saturates on
  * overflow. Use one deadline across all waits within an operation. Expiry is
- * checked during BSP scheduling/timer interrupts; wakeup may be late. */
+ * serviced by the sleeping CPU's scheduler/timer; execution may be late. */
 uint64_t task_deadline_after_ms(uint32_t milliseconds);
 bool task_deadline_expired(uint64_t deadline);
 /* As sleep, but also resumes at deadline. After return, the caller MUST detach
@@ -132,6 +132,11 @@ void task_user_release(void);
  * stack. Call once per CPU with IF=0; the BSP releases waiting AP schedulers.
  * Only kernel task bodies and userspace run with interrupts enabled. */
 [[noreturn]] void task_schedule(void);
+
+/* Local timer/reschedule entry or scheduler, IF=0. Expires local deadlines and
+ * rearms the CPU's timer before EOI/context switching. Safe before startup;
+ * never switches stacks, allocates, cleans up or logs. */
+void task_timer_interrupt(void);
 
 /* Timer entry after EOI, IF=0. user_mode describes the interrupted CS.
  * May switch stacks; never allocates, cleans up or logs in interrupt entry. */

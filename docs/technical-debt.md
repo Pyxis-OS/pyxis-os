@@ -1015,22 +1015,32 @@ not infer the location from `argv[0]` or add path normalization for one port.
 
 ## Sleep wake granularity
 
-Deadline sleeps wake on the 120 Hz local APIC preemption tick, so a sleep can
-end up to 8.33 ms after its deadline; see [timekeeping](kernel/timekeeping.md).
-The [SDL2 milestone](development/sdl2.md#measurements) measured a `SDL_Delay(16)` loop at
-24.8 ms per frame instead of about 17. DevilutionX's own limiter tracks
-deadlines and held 57.8–62.3 FPS. Quake's 72 Hz cap and other fixed-rate
-sleepers can be delayed the same way; that is not measured.
+Per-CPU one-shot LAPIC timers now target local deadlines while retaining nominal
+120 Hz preemption and HPET timekeeping. The owner accepted this scope on
+2026-10-08. The [matched qualification](development/experiments/sleep-wake-granularity/timer.md)
+records SDL mean-frame medians of 25.565 ms before, 24.243 ms with expiry IPIs
+alone and 17.415 ms with local deadlines; Quake capped-loop medians were
+49.223, 59.595 and 70.291 FPS. These are nested-KVM observations, not native
+or maximum-latency guarantees. See [timekeeping](kernel/timekeeping.md).
 
-Nanosecond units remain a representation, not a precision promise. Revisit
-with a one-shot deadline timer or tickless sleeping, as a kernel task, when a
-consumer needs finer pacing than its own deadline tracking provides.
+ThinkPad LAPIC calibration/power-state behavior, actual sleep/cap latency and
+sustained 32-bit HPET extension with this timer remain unqualified. Revisit when
+owner hardware is available: repeat the recorded SDL and normal Quake workloads,
+record image revision/configuration, and confirm clock continuity and interrupt
+delivery. The [task](wip/sleep-wake-granularity.md) remains open for native evidence
+or an explicitly owner-accepted qualification limit.
+
+Nanosecond units remain a representation, not a precision promise. Interrupt-
+disabled intervals, runnable load, firmware/host stalls and large due batches
+still delay execution. Sorted-list insertion/cancellation remains linear, with
+no separate timer quota. Revisit stronger bounds or another data structure only
+with a measured consumer need; tickless scheduling is outside this task.
 
 ## Wall-clock time and clock-source performance
 
 [Monotonic time and deadline sleep](kernel/timekeeping.md) now use the shared HPET
-counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
-interrupts still bound wakeup latency; nanosecond units do not promise precise
+counter. Console timeouts no longer count delivered BSP interrupts. Local timer
+dispatch and scheduling still delay execution; nanosecond units do not promise precise
 wakeup, and time spent with the VM paused need not count.
 
 [UTC wall time](kernel/wall-clock.md) uses a whole-second Limine RTC seed plus elapsed
@@ -1154,9 +1164,13 @@ and preference paths. Missing pieces:
 - **Audio:** absent until there is an audio driver.
 - **Threads:** without them, `SDL_INIT_TIMER` callback timers and
   `SDL_CreateThread` fail. Revisit with userspace threads.
-- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop, a 1 ms delay that
-  becomes the 8.33 ms tick, so waiting programs wake about 120 times a second.
-  A blocking wait on the input and display handles is the fix when a consumer
+- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.
+  Deadline sleeps now make that about 1 ms rather than the old 8.33 ms tick,
+  so an idle waiting program wakes about 1000 times a second instead of about
+  120, increasing its CPU wake cost. This is the expected polling rate, not a
+  measured `SDL_WaitEvent` run; see the
+  [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
+  Revisit a blocking wait on the input and display handles when a consumer
   waits for events.
 - **Windows and cursor:** one fullscreen window; no system cursor,
   `SDL_ShowCursor` or hardware cursor. The pointer position is SDL's, built
