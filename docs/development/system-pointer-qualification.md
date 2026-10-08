@@ -598,9 +598,8 @@ produce confirmed new timing output and are not samples.
 Raw logs, the matched ELF/ISO, framebuffer dump and terminal output remain local
 under `build/pointer-task4` and `/tmp/pyxis-pointer-task4-*`. All task-owned
 QEMU/GDB jobs are stopped. These initial samples make no hardware or isolated
-cursor-cost claim. Before changing pointer code, finish the remaining software
-motion, unlocked Quake, capture and resize workloads with this baseline artifact;
-repeat the matching workloads after hardware implementation. The task's capture
+cursor-cost claim. The remaining software workloads were completed before code changes, as
+recorded below; the hardware comparison follows them. The task's capture
 completion and host frontend defaults are accepted 2026-10-08 in
 [task 4 planning](../wip/pointer.md#task-4-planning).
 
@@ -667,3 +666,186 @@ An initial assembly attempt omitted that mount and correctly refused missing
 `spawn.mpq`; no fallback download or data publication occurred. All baseline
 QEMU/GDB jobs are stopped. No task 4 pointer code changed before these checks;
 raw logs/artifacts remain local for the hardware comparison.
+
+
+## Task 4 hardware qualification
+
+Both task-specific defaults were accepted on 2026-10-08 and recorded in
+`67ef2be` before implementation. The completed software baseline was committed
+as `87b311a`, also before code. Implementation commits `f5b288a` and `09cb32d`
+add capture-only pointer composition and the bounded VirtIO cursor backend.
+Merge `eafe6e9` incorporates documentation/CI main `0179163`, without changing
+runtime inputs. No public ABI, SDK helper, dependency pin or compiler-container
+change belongs to task 4. Userland remains `63d4324`, ports `a642f07`, fs
+`b427df2` and lwIP `a1aadb9`.
+
+The complete ordinary image and a separate local-only `DIABLO_DATA` image built
+with the existing LLVM builder. No shareware data, game screenshots or raw
+qualification artifacts are published. Saved artifacts identify which image
+was used; later documentation/build provenance can change ELF bytes without
+changing pointer source.
+
+| Saved artifact | SHA-256 |
+| --- | --- |
+| Ordinary hardware kernel, `09cb32d` | `1db78f74368f8dfa9528badaefb9c086c8782f06db178fcab97ec3bf5280cb5a` |
+| Ordinary hardware ISO, `09cb32d` | `4d184f67aa7ada5fadd4e34b44a2b3ec0421ea84d95d8063ee885d03380a8d13` |
+| Local-only hardware shareware kernel, `eafe6e9` | `435fd3b7fa745a26dd36fb05c356200903900ec80ba5507843fd017764b427ef` |
+| Local-only hardware shareware ISO, `eafe6e9` | `b7bfa5ac6b719165acb445d9425063d981f280a61498061bca13bfe0f9b7d88f` |
+| Bochs software-regression kernel, `79873a5` | `ba85c599096e665b3232f4f40c1e71df7c193201cf752af8e17d36088f6fd51f` |
+| Bochs software-regression ISO, `79873a5` | `24f4e757dba50fe32f2727a28e4fc5000165b84b2666dcabf08eb93cd786a87b` |
+
+### Configuration and matched costs
+
+The primary hardware run repeats the completed software baseline: packaged
+QEMU 10.2.2, Q35, nested KVM, CPU max, four CPUs, 512 MiB, UTC RTC, fresh
+matching OVMF variables, modern VirtIO GPU/RNG/SCSI CD-ROM, no NIC or exported
+storage, GTK/X11, relative PS/2 and a committed unscaled 1280x800 guest surface
+inside a 1280x827 window. No build overlapped cost measurements. Read-only GDB
+used the matching saved ELF, hardware breakpoints and direct HPET reads with
+10 ns ticks. Each sample was entered manually. Motion reports arrived while
+the VM was running; a conditional breakpoint confirmed an actual position
+change before measuring the changed frame. These measure presentation, not
+packet-to-screen latency or sustained motion throughput.
+
+| Hardware workload | Four samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Idle Caelum, visible I-beam | 3.55336, 4.68190, 4.00721, 3.33636 | 3.780285 | 3.33636–4.68190 |
+| Initial confirmed interior motion | 17.14174, 6.76218, 6.04804, 4.77307 | 6.40511 | 4.77307–17.14174 |
+| Repeated warm interior motion | 5.91814, 5.26302, 5.39955, 6.61419 | 5.658845 | 5.26302–6.61419 |
+| Completed Caelum selection, visible I-beam | 4.38211, 3.36930, 4.31554, 4.37819 | 4.346865 | 3.36930–4.38211 |
+| Development TTY, capture frame | 11.45258, 3.88325, 5.13161, 4.55891 | 4.84526 | 3.88325–11.45258 |
+
+Selection was valid at the same indices 506–514 as the software comparison.
+Capture timing spans presenter entry through capture finish, including backing
+allocation and FILE publication; its first sample is cold. Unchanged cursor
+state reused request ID 11 across these capture samples.
+
+Warm motion was repeated to investigate the higher initial cost. Its median
+is 1.461125 ms, approximately 35%, above the software median 4.19772 ms; those
+warm ranges do not overlap. A direct MOVE request measured 1.68972 ms through
+matching completion, returning success with no outstanding request. Source
+review confirms one serial cursor wait after the existing frame transfer/flush,
+without allocation, image transfer or another full-frame copy on an interior
+warm move. The initial 17.14174 ms sample exceeds the nominal 16.67 ms frame
+interval. These small debugger-profiled nested-VM samples include device waits,
+scheduling and shared-host variation; they do not establish native performance
+or an isolated CPU saving. Full-frame transfer/cadence is deliberately unchanged.
+This task claims cursor ownership/composition behavior, not a performance gain.
+Idle and capture ranges overlap their software baselines.
+
+Warm Quake console runs repeated `timedemo demo1`, 969 frames each with rounded
+reported elapsed time 0.6 seconds. There were no debugger stops during measured
+runs. Initial launch warm-up is excluded; lock state and retained terminal
+output were read after completion. The first three unlocked runs preceded a
+fresh click and the locked group; Super+Esc preceded the final unlocked run.
+
+| Hardware Quake state | Four samples (fps) | Median (fps) | Range (fps) |
+| --- | --- | --- | --- |
+| Unlocked, visible system pointer | 1600.7, 1590.8, 1571.9, 1596.4 | 1593.6 | 1571.9–1600.7 |
+| Locked, transparent hardware shape | 1578.7, 1599.4, 1595.3, 1599.0 | 1597.15 | 1578.7–1599.4 |
+
+Both ranges overlap the corresponding software runs. No native or stable
+frame-rate improvement follows from these short runs.
+
+### Cursor, capture and lifetime checks
+
+Debugger inspection confirmed `DISPLAY_VIRTIO_GPU`, started/not stopped, and
+both queues drained. The visible default I-beam is 9x20 with hotspot 4,10 inside
+a padded 64x64 resource. Read-only XFixes inspection of GTK's live host cursor
+matched uploaded RGBA pixels exactly. Idle frames reused the confirmed cursor
+request; interior motion added one MOVE with a nonzero active resource ID.
+
+A native screenshot reached `screen_capture_finish(true)` with both queues
+drained. Its 1280x800 RGB backing equalled cursor-free HMP scanout plus exactly
+one uploaded I-beam at physical hotspot (172,80). All differing pixels from
+scanout were within x=168–176, y=70–89. This independently checks capture-only
+composition without doubling the pointer. HMP screendump itself excludes the
+host hardware cursor. Successful zero-byte cursor completion confirms buffer
+consumption; QEMU supplies no separate acknowledgment of cursor application
+or visible scanout timing, as accepted by the owner.
+
+`mousetest` supplied its 16x20 cursor, hotspot 1,1. Upload and live host cursor
+preserved opaque colours and alpha. W warped to the bounded surface center;
+H installed a wholly transparent hardware resource. Lock also installed the
+transparent shape while retaining the program's visible preference. Super+Esc
+restored the custom cursor. Super+Down showed the terminal I-beam while graphics
+ownership remained alive but unfocused; Super+Up restored the program image.
+Exit cleared display/pointer/image ownership and restored the default cursor.
+
+With the complete 1:1 viewport visible, a left-edge hotspot x=0 masked source
+column zero while retaining hotspot 1,1. At physical (1279,799), only a 2x2
+portion of the image remained, with all other resource pixels transparent.
+Large HMP deltas that had not yet reached an edge were not treated as edge
+checks; actual physical positions and resource masks were inspected afterward.
+Resizing the primary GTK window to 1400x927 committed a 1400x900 guest surface,
+generation two and framebuffer resource ID 4; fixed cursor IDs 2/3 stayed
+independent. Cursor clipping returned to the complete image and both queues
+drained. Four TTY copies took 3,160,440 ns in this single resize observation,
+compared with the baseline's 3,114,460 ns; neither is a repeated benchmark.
+
+### DevilutionX and software backends
+
+The local-only shareware run used GTK/X11 fit mode for additional resize
+checks. Pointer checks waited until committed guest dimensions matched the
+viewport 1:1; transient scaled states are outside qualification. At 640x480,
+ordinary motion exposed DevilutionX's 33x28 cursor with hotspot 0,0. Its BGRA
+source matched the padded RGBA resource exactly. Live XFixes pixels preserved
+all alpha values and opaque colours; 118 pixels had fractional alpha, with
+host premultiplied colours within one value of rounded source colour times
+alpha/255. Keyboard navigation hides the image by program choice.
+
+Disabling the game's hardware-cursor option set explicit hidden state and
+installed a transparent resource while the game's software pointer remained
+visible in scanout. Re-enabling it and moving restored the program image.
+A committed 800x600 resize used framebuffer ID 4 and a new 42x35 program image;
+a later 480x360 resize used ID 5 and a narrower image clipped at the bottom.
+Both retained cursor ownership/visibility and drained the queues. Single
+four-TTY copy observations were 1,056,930 ns and 441,600 ns respectively.
+Exit cleared graphics/pointer/image ownership. These are functional resize
+checks, not matched cost samples or publication of game data.
+
+Separate no-NIC headless 1280x800 boots confirmed `DISPLAY_BOOT` with the saved
+ordinary hardware image and `DISPLAY_BOCHS` with `DISPLAY_SIZE=1280x800`.
+Both retained the visible software I-beam and motion/local selection; GDB
+confirmed completed selections at indices 509–518 and 500–509 respectively.
+VirtIO startup was false and cursor backing remained unallocated on both.
+Their software composition continues through the existing capture tee.
+These smoke checks do not repeat the earlier tasks' complete consumer matrix.
+
+### Limits and current-main integration
+
+Malformed replies, prerequisite refusal, timeout, failure retention, panic,
+maximum-size images and allocation unwind were inspected in source without
+fault injection or synthetic clients. Frame/image leases last through normal
+submission, matching changed-cursor completion and capture finish. Owner exit
+releases source image ownership; the fixed driver cursor resources remain until
+reboot. No second source, input policy, clipboard or USB HID work was added.
+
+GTK/X11, relative PS/2 and stable 1:1 geometry are the qualified hardware path.
+Wayland warp, scaled/centered placement and other frontend colour/position
+callbacks are source-inspected limitations, not positive runtime qualification.
+See [frontend limits](qemu.md#hardware-pointer-frontend) and their
+[revisit point](../technical-debt.md#virtio-cursor-frontend-limits).
+[Native PS/2 qualification](../technical-debt.md#native-system-pointer-qualification)
+remains deferred to the owner's ThinkPad batch after Bluetooth investigation.
+Task 5 milestone closure still requires separate owner authorization.
+
+Main's separately merged Bluetooth runtime transport `114f2acb` was integrated
+as `a84fb601`, preserving unchanged dependency pins and pointer rules. The
+matched cost/consumer checks above precede that merge; no integrated-head cost
+claim is made. Raw logs and images remain local under `build/pointer-task4`
+and `/tmp/pyxis-pointer-task4-*`.
+
+The complete ordinary image passed after this merge and contains no shareware
+MPQ data. A fresh no-NIC, four-CPU, 512 MiB headless VirtIO/PS/2 boot confirmed
+startup, default cursor upload, `mousetest` custom shape/hotspot, bounded warp,
+lock hiding, Super+Esc restoration and owner/image/display cleanup. Both queues
+drained and the driver remained available. This integration smoke checks guest
+state, not host GUI placement; the earlier GTK qualification remains separate.
+All task-owned QEMU and GDB processes are stopped.
+
+| Current-main integration artifact, `a84fb601` | SHA-256 |
+| --- | --- |
+| Kernel ELF | `b1d001d1e9b7bdd7a5e3c32c8c7e39e0345e6f03ba8daf7e6db109c9d9a96419` |
+| Default initrd | `6f403d68cdf92ccceb9b69c5ab2b5d3506b0b740c47f9b1360af5b4ad2e343b6` |
+| Default ISO | `4628b38c4e87f9c887dfb94ab44cb569d7a766dd36d57eff27e0f9a49cd0994c` |

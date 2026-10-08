@@ -85,13 +85,15 @@ Chosen by the owner, each starting with a proposal:
   tasks need explicit assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   Tasks 1–3 are merged: Pyxis #545/#550, userland #164/#166, ports #65/#66.
-  Task 4, the VirtIO hardware cursor, is authorized and starts from fresh main
-  `b43a573` on `pointer/virtio-cursor` in
-  [draft #560](https://git.internal/PyxisOS/pyxis-os/pulls/560). Its
-  [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
-  is recorded; [capture completion and QEMU frontend defaults](pointer.md#task-4-planning)
-  are accepted 2026-10-08; task 4 implementation is authorized. The later SDL blocking-event adapter fix remains
-  beta's work. Task 5 needs separate authorization. Matched QEMU checks suffice
+  Task 4, the VirtIO hardware cursor, is delivered for review on
+  `pointer/virtio-cursor` in [#560](https://git.internal/PyxisOS/pyxis-os/pulls/560).
+  The [pre-code software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
+  and [hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+  record matched cost samples, cursor-inclusive capture, DevilutionX, resize
+  and boot/Bochs regression checks, including the extra cursor wait on motion.
+  Both [task-specific defaults](pointer.md#task-4-planning) are accepted
+  2026-10-08. No dependency pins or public ABI change. The later SDL
+  blocking-event adapter fix remains beta's work. Task 5 needs separate authorization. Matched QEMU checks suffice
   for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
   clipboard and USB HID implementation remain separate. Bluetooth's accepted

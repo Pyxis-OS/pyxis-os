@@ -1,6 +1,6 @@
 # A system pointer
 
-Status: **tasks 1–3 merged; task 4 authorized, 2026-10-08.**
+Status: **tasks 1–3 merged; task 4 delivered for review, 2026-10-08.**
 [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545),
 [userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164) and
 [ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)/
@@ -18,10 +18,13 @@ Task 3 is merged in #550 with [userland #166](https://git.internal/PyxisOS/pyxis
 records baseline, input/overlay/capture/wait checks and source-only limits.
 The owner authorized task 4, the VirtIO hardware cursor. It starts from fresh main
 `b43a573` on `pointer/virtio-cursor` in
-[draft #560](https://git.internal/PyxisOS/pyxis-os/pulls/560).
+[#560](https://git.internal/PyxisOS/pyxis-os/pulls/560).
 The [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
-and [task-specific proposals](#task-4-planning) precede implementation. Task 5
-still requires separate authorization.
+and [accepted task-specific decisions](#task-4-planning) preceded implementation.
+[Task 4 qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+records hardware/capture/consumer checks, software regressions and measured
+costs, including the extra cursor wait on motion. Task 5 still requires separate
+authorization.
 
 The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
 All three original decision rounds are accepted on 2026-10-08; round three was
@@ -528,8 +531,8 @@ of at most three, with defaults, rather than silently becoming a requirement.
 
 ## Task breakdown
 
-Tasks 1–3 have explicit owner authorization on 2026-10-08.
-Proposal review/merge does not authorize tasks 4 or 5.
+Tasks 1–4 have explicit owner authorization on 2026-10-08.
+Task delivery/review does not authorize task 5.
 
 - [x] **Documentation proposal.** Inspect current main and describe contracts,
   recommendations, boundaries and a task sequence without code or placeholder APIs.
@@ -558,7 +561,7 @@ Proposal review/merge does not authorize tasks 4 or 5.
   published userland and Quake/SDL2 changes; the
   [qualification report](../development/system-pointer-qualification.md#task-2-and-joint-integration)
   records QEMU input/cursor/warp/capture checks and source-only limits.
-- [x] **3. Terminal selection and mux wheel (delivered for review).** Add local TTY text retention and
+- [x] **3. Terminal selection and mux wheel (merged).** Add local TTY text retention and
   selection overlay. Give trusted mux startup the accepted
   terminal-controller grant and implement its typed spatial queue and native wait
   readiness here, where mux consumes them; make the graphics pointer subscription
@@ -569,13 +572,17 @@ Proposal review/merge does not authorize tasks 4 or 5.
   Record the owned-text handoff direction; do not build or fake the clipboard.
   Delivered with native graphics/terminal readiness in #550 and userland #166;
   [qualification](../development/system-pointer-qualification.md#task-3-qualification)
-  distinguishes interactive checks from source review. This is task delivery,
-  not a merge or milestone closure.
-- [ ] **4. VirtIO hardware cursor.** Add cursor resource/queue ownership and uploads,
+  distinguishes interactive checks from source review. Task 3 is merged;
+  milestone closure remains task 5.
+- [x] **4. VirtIO hardware cursor (delivered for review).** Add cursor resource/queue ownership and uploads,
   image/hotspot changes, lock hiding and capture-only software composition.
   Qualify ordinary/captured pointer appearance, resize, focus and teardown;
   qualify DevilutionX's hardware-cursor option and compare matched software and
   hardware cost samples. Boot/Bochs retain the common software path.
+  Delivered in #560; [qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+  records host/upload matching, cursor-inclusive capture, lock/focus/teardown,
+  clipping/resize and the higher measured moving-frame cost. This checkbox
+  records task delivery, not merge or milestone closure.
 - [ ] **5. Close the milestone.** Review matched QEMU behavior/cost checks on
   boot, Bochs and VirtIO; these suffice for closure. Keep the accepted native
   PS/2 deferral in technical debt for the owner's later ThinkPad batch. Rewrite
@@ -652,7 +659,7 @@ only the kernel display backend and cursor-inclusive capture integration;
 ordinary input, locks, grants and the public image contract remain unchanged.
 Boot and Bochs continue software composition. Task 5 closure is not authorized.
 
-Proposed implementation breakdown:
+Implemented breakdown (task 4 delivered for review in #560):
 
 1. Prepare bounded cursor command/queue/backing storage alongside the normal
    VirtIO driver. Runtime control and cursor queues remain sole BSP presenter
