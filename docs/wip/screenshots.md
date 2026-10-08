@@ -71,9 +71,9 @@ mode setting or device access.
 
 The result includes the navigation bar, the selected space's shown layer,
 clipping/background margins and the visible software cursor. It does not
-capture hidden surfaces or each space separately. After the parallel
-[space-layer milestone](space-layers.md), it follows the layer actually selected
-by the presenter, without adding screenshot-specific layer selection.
+capture hidden surfaces or each space separately. It follows the
+[space layer](../userland/space-layers.md) actually selected by the presenter,
+without adding screenshot-specific layer selection.
 
 Add an optional per-space boot setting `screenshot = true`, defaulting to false.
 Boot init delegates the resource only for opted-in spaces. Enable it

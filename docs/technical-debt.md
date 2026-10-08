@@ -496,6 +496,29 @@ A serial port that stops accepting output remains latched off for the boot.
 Revisit retry policy when reliable late recovery is needed; an absent/stuck port
 must not block early boot or panic output.
 
+## Space-layer qualification
+
+The [space-layer milestone](userland/space-layers.md) closed on 2026-10-08 with
+ordinary image builds, nested QEMU interaction/debugger inspection and exact-head
+CI on `f838b21`. Native ThinkPad behavior and performance remain unqualified.
+The owner deferred that check because the machine is occupied by the Bluetooth
+stack investigation; QEMU results do not establish native input or display timing.
+
+- [ ] Owner native ThinkPad Quake check: hide/show with Super+Down/Up, confirm
+  continued game time and live terminal output, fresh held-input behavior,
+  switching away/back, queued-text clearing and hidden-layer Ctrl+C cleanup.
+  Record the tested revision, configuration and result here when the machine
+  becomes available after the Bluetooth investigation. Compare ordinary visible
+  Quake behavior/timing; current short nested-VM timedemos establish no stable
+  performance change.
+
+Acquisition without PRESENT, explicit repeated PRESENT while hidden, independently
+surviving capture on DISPLAY_RELEASE, shortcut releases after Super and device/
+queue-loss propagation were source-inspected, without separate runtime coverage.
+Revisit those checks when changing the corresponding session, input or teardown
+paths, or when a concrete failure appears. Milestone closure does not convert
+source inspection into measured coverage.
+
 ## Unselected graphical applications
 
 The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without

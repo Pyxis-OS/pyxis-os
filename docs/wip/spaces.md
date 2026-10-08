@@ -147,7 +147,7 @@ The owner considers supervision, startup and recovery policies and runtime
 configuration needed; they are mostly planned already. Pieces in place or
 assigned: spaces configured in the [boot configuration](../userland/init.md#boot-configuration),
 [execution groups](../interfaces/execution-groups.md) for terminating a group of
-processes, and the [terminal and graphical layers](space-layers.md) with the
+processes, and the [terminal and graphical layers](../userland/space-layers.md) with the
 [multiplexer](terminal-applications.md).
 
 ## Named endpoints
