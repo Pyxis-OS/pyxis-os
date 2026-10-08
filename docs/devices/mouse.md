@@ -16,9 +16,11 @@ Events carry raw device counts without acceleration. Signs follow the display:
 buttons after the packet. QEMU and some devices also send a packet with all
 deltas zero, for example when a wheel step ends.
 
-The presentation task drains these events and routes them to the active space's
-eligible [pointer session](#userspace-pointer-sessions). A hidden graphics layer
-withholds captured pointer input; the terminal layer has no pointer input.
+The presentation task drains these events into one kernel-owned physical pointer
+position and routes ordinary input to the shown surface. Graphics owners use
+[the pointer session](#userspace-pointer-sessions); navigation and local terminals
+retain kernel cursor defaults. This task-1 integration is a draft: Quake and SDL
+consumers still need the task-2 lock and protocol migration before integration.
 
 ## Controller and setup
 
@@ -87,68 +89,99 @@ each event. A hardware breakpoint set before boot can stop inside setup.
 Each space owns a pointer object. Boot gives each workload init a named `pointer`
 grant, and the shell and session launcher forward it wherever they forward
 `keyboard`: to a pipeline's first stage when its stdin is a console. Its `INPUT`
-right authorizes [the pointer protocol](../../include/abi/pointer.h), restricted
-to processes in the object's own space. Libpyxis provides `pointer_acquire`,
-`pointer_read` and `pointer_release` in `<pointer.h>`.
+right authorizes [the pointer protocol](../../include/abi/pointer.h) only in the
+object's own space. ACQUIRE also requires the caller to own that space's
+[graphics session](../interfaces/graphics.md). Copying or closing a grant does
+not transfer or end process ownership.
 
-ACQUIRE, READ and RELEASE follow the [keyboard session](keyboard.md#userspace-keyboard-sessions)
-rules: exclusive acquisition by one process (`CALL_BUSY` otherwise, including
-for the owner), `CALL_UNAVAILABLE` without a working mouse, process ownership
-independent of handles, release on RELEASE or process exit, and blocking or
-`POINTER_READ_POLL` reads of one 24-byte event. Pointer, keyboard and display
-sessions are independent; a game acquires each it needs. There is no
-cross-session wait, so an application reading both input sessions polls or
-blocks on one of them.
+Acquisition is exclusive (`CALL_BUSY` for another or repeated acquisition), and
+returns `CALL_UNAVAILABLE` without a working mouse. RELEASE, display RELEASE and
+owner exit end the subscription and remove its image and visibility preference.
+Keyboard ownership remains independent. READ blocks for one 48-byte event, or
+returns `CALL_TIMED_OUT` for an empty `POINTER_READ_POLL` read. Libpyxis exposes
+acquire/read/release, geometry, image, visibility and warp helpers in
+`<pointer.h>`. There is no cross-session wait; applications reading keyboard
+and pointer input poll or block on one session.
 
-`POINTER_INPUT` events carry the device's relative counts with the signs above,
-plus the buttons held after the event. There is no absolute position,
-acceleration or on-screen cursor. A packet that changes nothing for the session,
-such as QEMU's zero wheel-release packet, produces no event.
+### Position, focus and dragging
 
-### Focus, held buttons and loss
+The physical hotspot starts at screen center, moves one pixel per PS/2 count
+without acceleration and stays inside the physical screen. `POINTER_INPUT`
+carries signed surface-local `x` and `y` below navigation, held `buttons`, wheel
+counts, destination `generation` and `mapping_identity`. Positive wheel counts
+are toward the user. GEOMETRY returns destination and fixed mapping extents with
+both identities. A committed physical resize changes generation; even a
+same-size graphics REPLACE changes mapping identity. Clients re-query on either
+change rather than stretching old coordinates.
 
-Only the active space receives input; the log space on multicore boots receives
-none. A presented but hidden [graphics session](../interfaces/graphics.md#choosing-the-visible-layer)
-also removes pointer input eligibility, retaining the independent pointer
-session. Focus means input eligibility, not permission to run or render.
-Switching spaces or graphics/terminal layers discards queued session events and
-publishes `POINTER_FOCUS_LOST` or `POINTER_FOCUS_GAINED` when eligibility changes.
-Each event's `POINTER_EVENT_FOCUSED` flag records focus when it was queued.
-Control events carry no motion or buttons. Applications release all held
-buttons on any focus or `POINTER_STATE_RESET` event.
+Focus means that this space's graphics layer is selected, independently of
+keyboard capture and execution. Only the top-left intersection of its mapping
+and current destination receives ordinary input. Exposed margins and navigation
+receive no program input and use the kernel arrow; local terminal content uses
+the kernel terminal cursor, except the log space, which uses the arrow. Selecting
+the terminal retains the graphics subscription while publishing focus loss.
+Switching spaces or layers clears queued input and accepted buttons and reports
+`POINTER_FOCUS_LOST` or `POINTER_FOCUS_GAINED`. Each event records focus in
+`POINTER_EVENT_FOCUSED`. Hover boundaries report `POINTER_ENTER` and
+`POINTER_LEAVE`.
 
-A button counts as held for a session only after a press it observed. A button
-held across acquisition, a focus change or a reset is withheld until it is
-released and pressed again, so a drag begun in another space cannot arrive as a
-held button. Presses are judged against the device's previous packet, not the
-session's.
+A fresh press anchors a drag to its starting surface until its accepted buttons
+are released. Motion and releases keep that destination, so signed positions
+may extend outside it; wheel input follows the currently hovered surface.
+A left press on a displayed tab selects that space and consumes the press and
+release. Buttons held across acquisition, focus change or reset need a release
+and fresh press before being accepted. Resize and REPLACE discard queued spatial
+input, cancel drags, clear accepted buttons and publish
+`POINTER_GEOMETRY_CHANGED`. Clients clear held controls on focus, boundary,
+geometry and reset notifications. A packet with no relevant change produces no
+ordinary event.
 
-The queue holds 64 events. When it is full, a new event with the same buttons
-as the newest `POINTER_INPUT` event adds its motion and wheel into that event,
-saturating at the 32-bit limits. Any other event discards the queue, clears held
-buttons and queues `POINTER_STATE_RESET`. Device loss resets every application
-space's session the same way. These notifications wake a blocked reader even
-while graphics is hidden or its space is inactive. A blocking read can keep
-waiting without a notification; the kernel does not suspend its owner.
+The queue holds 64 events. At capacity, an ordinary event can coalesce with the
+newest ordinary event only when buttons and both identities match: it retains
+the latest position and saturates wheel accumulation at the signed 32-bit
+limits. Otherwise the queue and accepted buttons are cleared and
+`POINTER_STATE_RESET` is queued. Device loss resets every space. Notifications
+wake blocked readers while graphics is hidden or its space is inactive; a read
+may otherwise continue waiting. Focus loss preserves execution authority.
 
-Routing, ownership and the queue share a per-object lock. All callers hold
-IF=0; lock order is pointer, then scheduler queues. No allocation, user copy or
-context switch occurs under the pointer lock. Space switching and event
-delivery run on the BSP; session calls can run on APs.
+### Images, visibility and warp
+
+SET_IMAGE copies tightly packed BGRA8 bytes with straight alpha into immutable
+kernel storage before returning. Both dimensions are 1 through 64; the integer
+hotspot must lie inside the image. Failure preserves the previous image. Images
+are clipped at physical screen edges and keep their pixel size through resize.
+DEFAULT_IMAGE restores the kernel arrow without changing saved visibility.
+VISIBILITY takes zero or one: hiding retains the image and affects drawing,
+while input routing and focus continue normally. An inactive owner can update
+its own preference for its next visit; navigation and margins retain defaults.
+
+WARP takes surface-local coordinates and both current identities. It requires
+shown, focused graphics and a target inside the mapping/destination intersection.
+Stale identities return `CALL_BUSY`; invalid coordinates return `CALL_BAD_REQUEST`.
+A drag anchored elsewhere or a consumed tab press returns `CALL_DENIED`.
+Success updates the authoritative position and queues ordinary position without
+synthesizing a device press or selecting a surface. Hidden graphics cursors can
+still warp when these eligibility rules hold.
+
+Ownership and image publication run on BSP with IF=0 through deferred requests;
+READ and the event queue use the per-object lock. Lock order is pointer, then
+scheduler queues. Allocation and user copying occur outside that lock. The sole
+presenter leases one image/position/visibility snapshot through frame completion,
+so replacement or exit cannot free pixels it is reading. See
+[software presentation](../kernel/display.md#software-pointer).
 
 ## Mouse test program
 
-`mousetest` shows pointer input and needs named `display`, `keyboard`,
-`pointer` and `clock` grants. The left 30% of the screen shows the left, middle
-and right buttons, coloured while held; an up or down arrow for half a second
-after a wheel step away from or toward the user; and the position. The position
-starts at the screen centre, moves one pixel per device count and is clamped to
-the screen. The right 70% is a white drawing pad: each input event with the left
-button held sets one black pixel at the position, so fast strokes are dotted
-rather than lost. A red marker shows the position without drawing into the pad. Escape releases the sessions and returns
-to the shell.
+`mousetest` needs named `display`, `keyboard`, `pointer` and `clock` grants. It
+shows native surface-local positions, held buttons and wheel direction in the
+left 30% of its view. The right 70% is a white drawing pad: each input event with
+the left button held sets one black pixel, so fast strokes are dotted. It uses
+the system pointer with a supplied 16x20 image and hotspot `(1, 1)`.
 
-It polls both input sessions every 10 ms, including while unfocused. Keyboard
-and pointer focus independently gate their controls, and focus/reset events
-release held buttons. Its text uses a built-in 5x7 font with only
-the digits and letters it displays.
+H toggles visibility, D restores the default image, C restores the supplied
+image, W warps to the mapping/destination intersection's center, and Escape
+releases the sessions and returns to the shell. It polls both input sessions
+every 10 ms, clears held controls on state changes and adapts its mapping when
+the destination generation changes. See the
+[system pointer qualification](../development/system-pointer-qualification.md)
+for configuration, measurements and the current runtime coverage.

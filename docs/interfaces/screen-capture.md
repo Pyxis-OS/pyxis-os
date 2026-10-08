@@ -4,7 +4,9 @@ The native screen-capture object observes the whole currently shown local screen
 It is independent of the per-space [DRAW capability](graphics.md): CAPTURE permits
 no drawing, graphics acquisition, input access, mode setting or device access.
 The result includes navigation, the selected space's shown layer, clipping and
-background margins, and the visible software cursor. Hidden surfaces are omitted.
+background margins, the visible software system pointer and the TTY block caret
+when the terminal is shown. Hidden surfaces are omitted. A hidden system pointer
+is omitted without changing input routing.
 Layer selection remains the presenter's ordinary `display_snapshot()` selection.
 
 Boot init receives the named `screen_capture` resource with CAPTURE authority.
@@ -59,6 +61,15 @@ One global pending or in-flight capture is admitted. Another admission returns
 BUSY rather than queuing. The request captures the next presenter composition;
 arrival during a composition waits for the following frame. Geometry is selected
 at that frame boundary, after any resize transaction.
+
+After successful frame begin, the presenter retains one pointer image, hotspot,
+position and visibility snapshot alongside the chosen surface. It blends that
+image into intersecting spans after navigation, surface and TTY caret composition,
+then passes only final pixels into the capture tee. Image replacement, hiding,
+warp or owner exit during composition affects a later frame. The lease remains
+through display and capture completion. See
+[software pointer presentation](../kernel/display.md#software-pointer) and
+[system pointer qualification](../development/system-pointer-qualification.md).
 
 The presenter allocates compact backing only for an admitted request. For each
 visible source span it first copies into that backing, then sends those same

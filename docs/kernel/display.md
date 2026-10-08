@@ -11,12 +11,40 @@ drivers in [kernel/display](../../kernel/display/) and hardware access under
 arch. [Mapped graphics](../interfaces/graphics.md) describes the independent
 per-space DRAW capability; it grants no hardware or mode-setting authority.
 
+## Software pointer
+
+The sole BSP presenter snapshots physical position, image, hotspot and effective
+visibility alongside the chosen graphics frame with IF=0, after a successful
+frame begin. A custom immutable image retains a reference through display and
+capture completion; replacement or owner exit releases only its published
+reference. Static arrow and terminal defaults need no allocated image lease.
+Surface ownership, routing, visibility and warp are described in
+[mouse input](../devices/mouse.md#userspace-pointer-sessions).
+
+[The compositor](../../kernel/display/pointer.c) overlays the pointer after
+navigation, the chosen surface and the TTY block caret. It subtracts the hotspot
+using signed coordinates and clips against physical geometry. Only intersecting
+native spans are staged, at most 64 pixels in 256 bytes of scratch. Straight
+BGRA alpha is blended into native RGB channel shifts, preserving transparent
+background and unused pixel bits. Device row padding passes through unchanged.
+Final spans enter the existing capture tee once; application, TTY and navigation
+backing remain cursor-free.
+
+Boot, Bochs and VirtIO use this software path with the existing full repaint and
+approximately 60 Hz cadence. The next repaint restores the old pointer location;
+mouse packets add no frame submission. There is no additional full-screen
+buffer. A 64x64 image bounds blending to 4,096 pixels per frame; measured cost
+and runtime coverage are recorded separately in
+[system pointer qualification](../development/system-pointer-qualification.md).
+This task-1 draft implements ordinary pointer presentation; task-2 game/SDL
+migration and the VirtIO hardware cursor remain pending.
+
 ## Screen capture
 
 The independent [screen-capture protocol](../interfaces/screen-capture.md)
-observes the presenter's shown layer, navigation, margins and visible software
-cursor. A single admitted request selects layout/generation at the next frame
-boundary. The presenter tees visible spans into tightly packed native 32-bit
+observes the presenter's shown layer, navigation, margins, visible system pointer
+and TTY block caret. A single admitted request selects layout/generation at the
+next frame boundary. The presenter tees visible spans into tightly packed native 32-bit
 backing, then copies those same staged bytes to the driver, preserving physical
 row-padding handling. It publishes an immutable READ-only FILE only after normal
 frame submission succeeds. This preserves the existing single-buffer tearing
