@@ -321,11 +321,23 @@ The rate comes from the framing, not from buffering:
 - Uploads also pass the remote terminal's 4 KiB typeahead limit, so at most
   about two frames can be outstanding however the protocol changes.
 
-At the upload rate, the owner's 692 MB would take about 25 minutes. That is a
-QEMU estimate: the per-chunk cost was measured in nested KVM through a
-forwarded port, and the round trip over the ThinkPad's wired network may be
-much shorter, so the native rate is unknown. Streaming lifts the size limit
-but does not, by itself, make transfers faster.
+At the QEMU upload rate, the owner's 692 MB would take about 25 minutes. The
+per-chunk cost there was measured in nested KVM through a forwarded port.
+
+The owner timed the same 15 MiB transfers natively on 2026-10-08: the ThinkPad
+booted by PXE from main `4332801`, with `pyxis-remote` from the same revision
+on the desktop host over the wired LAN. These are stopwatch times from
+confirmation to the prompt.
+
+| Direction | Size | Time | Rate |
+| --- | --- | --- | --- |
+| Upload (`xfer receive`) | 15 MiB | about 6 s | about 2.5 MiB/s |
+| Download (`xfer send`) | 15 MiB | about 45 s | about 0.33 MiB/s |
+
+Natively, uploads run about five times faster than in QEMU, so the 692 MB
+would take about 4½ minutes, which the owner accepts. Downloads stay slow, so
+the throughput follow-up after streaming concentrates on them. Streaming lifts
+the size limit but does not, by itself, make transfers faster.
 
 ### Proposed shape
 
@@ -376,10 +388,10 @@ Accepted by the owner 2026-10-08, all as the defaults.
      mismatched peer then fails negotiation.
 3. **Scope.**
    - **Default:** this work only removes the size limit for `xfer`, in both
-     directions. It keeps the current framing, accepting about 25 minutes for
-     the owner's data. Throughput is a separate follow-up after profiling the
-     per-chunk cost; for uploads it would also involve the 4 KiB typeahead
-     limit.
+     directions. It keeps the current framing, accepting about 25 minutes in
+     QEMU (about 4½ natively) for the owner's data. Throughput is a separate
+     follow-up after profiling the per-chunk cost; for uploads it would also
+     involve the 4 KiB typeahead limit.
    - **HTTP(S) fetch bodies stay out.** Provider FILE snapshots are in memory by
      their own contract and keep their 16 MiB limit.
    - **Alternative:** include a window of several chunks in flight now. That
