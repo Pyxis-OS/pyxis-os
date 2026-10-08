@@ -581,14 +581,21 @@ callers can exhaust available memory by retaining several. Revisit admission and
 retained-image policy with concrete pressure workloads and an explicit authority
 and lifetime contract; the one in-flight slot does not bound retained storage.
 
+Capture backing starts uninitialized and relies on the presenter's full repaint
+to fill every visible pixel before publication. Revisit this invariant before
+adding damage tracking: a pending capture must force full composition to avoid
+exposing unwritten or stale allocation bytes. See the authoritative
+[frame contract](interfaces/screen-capture.md#frame-boundary-and-lifetime).
+
 The captured bytes freeze one presenter composition and preserve tearing from
 concurrent single-buffer application or TTY writes. No atomic application frame,
 vblank or physical scanout timing is promised. A stuck presenter/scheduler or
 panic cannot complete a capture. Revisit stronger consistency or bounded recovery
 only with a separate presenter/backing ownership contract. Current runtime
 evidence covers QEMU boot-framebuffer and VirtIO captures, including BUSY admission.
-Failure cleanup remains source-reviewed; Bochs, native hardware and PNG/download qualification are pending
-in the [screenshots milestone](wip/screenshots.md).
+Failure cleanup remains source-reviewed. The command's boot-framebuffer PNG
+encode/download path is qualified; Bochs, native hardware and broader layer/resize
+qualification remain in the [screenshots milestone](wip/screenshots.md).
 
 ## Bochs boot-mode scope and aperture retention
 
@@ -641,6 +648,15 @@ shells. Kernel addresses in log text are therefore readable through the
 unauthenticated remote terminal on the trusted development LAN. The owner
 accepted this exposure for bring-up. Revisit the default grants and disclosure
 policy when Pyxis gains authentication or runs on an untrusted network.
+
+The packaged [capture policy](userland/init.md#boot-configuration) opts live
+Development, installed `pyxis` and Remote into whole-screen CAPTURE. Any program
+in a granted space can observe whatever any space currently shows; anyone
+reaching the unauthenticated remote terminal on the development LAN can read the
+whole local screen, including all spaces as they are shown. The owner accepted
+this authority breadth for bring-up. Revisit it with user isolation,
+authentication and capture delegation policy when Pyxis gains users or runs on
+an untrusted network. See [screen capture](interfaces/screen-capture.md).
 
 Panic ring capture is best effort: a fatal interruption of a ring lock owner
 skips retention without waiting. Userspace readers also require a functioning
@@ -840,8 +856,9 @@ consumer that needs them, auditing its actual libc and file-authority needs.
 In-memory gzip framing remains available through the core stream APIs.
 
 Archive builds, symbol inspection and staging checks do not establish runtime
-compression correctness on Pyxis. The screenshot PNG consumer provides the
-planned runtime qualification; until then the port has build evidence only.
+compression correctness on Pyxis. The [screenshot consumer](userland/screenshot.md)
+now supplies observed deflate-to-PNG output that decoded on the host. Other
+compression/decompression profiles remain unqualified.
 
 ## libpng profile and runtime qualification
 
@@ -852,8 +869,9 @@ Those omissions are accepted for the screenshot milestone. Revisit them with a
 concrete consumer or measured cost that needs the omitted API or acceleration.
 
 Archive/configuration/symbol inspection and image staging provide build
-evidence only. The screenshot consumer supplies the planned PNG runtime
-qualification; no target PNG decode/encode result is qualified yet.
+evidence only. The [screenshot consumer](userland/screenshot.md) now qualifies
+the conventional RGB8 non-interlaced write path through host-decoded captures.
+Target PNG decoding and other write profiles remain unqualified.
 
 ## Unexpected native close failures
 

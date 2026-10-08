@@ -128,8 +128,8 @@ return {
   restriction. Live Development and Remote and installed `pyxis` opt in;
   Read-only and the built-in rescue space do not. If an opted-in space's boot
   init lacks the resource, that space does not start and reports the reason.
-  See [screen capture](../interfaces/screen-capture.md). The PNG command is a
-  later milestone task.
+  See [screen capture](../interfaces/screen-capture.md) and the
+  [PNG command](screenshot.md).
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).

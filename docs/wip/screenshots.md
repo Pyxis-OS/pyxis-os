@@ -2,7 +2,7 @@
 
 Status: **accepted milestone, 2026-10-08; assigned to Codex 2.** The owner
 merged [PR #501](https://git.internal/PyxisOS/pyxis-os/pulls/501), accepted all
-three contract groups below. Tasks 2–5 are delivered for review, including the owner's
+three contract groups below. Tasks 2–6 are delivered for review, including the owner's
 staged-output follow-up from PR #504. Later tasks remain separate assignments;
 acceptance does not start them implicitly.
 
@@ -216,7 +216,8 @@ The host connects with an existing `--download-dir` and retains its normal
 confirmation and refusal to overwrite a host name. No one-step pyxis-remote
 capture command is included. File transfer's existing 16 MiB limit still applies
 to the encoded PNG; an oversized image can be saved locally but its download
-is refused. Do not enlarge transfer buffers as part of this milestone.
+is refused. A noisy 4K frame can exceed that limit. Do not enlarge transfer
+buffers as part of this milestone.
 
 ## Accepted review decisions
 
@@ -267,7 +268,7 @@ are part of this milestone.
    session, remote service and shell handoffs. Completion: interactive local and
    remote launches distinguish granted and ungranted callers while DRAW-only
    applications retain their existing behavior. Update init/resource references.
-6. [ ] **Add and package the PNG command.** Depends on tasks 3–5. Add row-wise
+6. [x] **Add and package the PNG command.** Depends on tasks 3–5. Add row-wise
    encoding, required output path, exclusive sibling staging and rename, checked
    cleanup/error reporting, normal
    userland/image integration and command usage. Completion: the ordinary image
@@ -287,40 +288,47 @@ are part of this milestone.
 
 ## Handoff
 
-Tasks 1–5 are delivered for review. On resumption, userland #157 was merged;
-Pyxis #513 was still open with a userspace-pin conflict against the merged C++
-SDK work. Neither PR had review comments. #513 now incorporates current main,
-pins the merged helper (`35910c1`) and is mergeable. Its updated exact-head CI
-is reported in that PR. The space-layer reference move from merged #514 is
-included, so screenshot links follow the implemented reference.
+Tasks 1–5 are merged. Task 6 is delivered on Pyxis branch `commands/screenshot`
+and userland branch `commands/screenshot`, dependency
+`28f8c1686a92e7872cab1e2e2cecae09a4a26070`. Merge the published userland
+command dependency before the parent integration; the PR links and exact-head
+existing CI are reported in the parent PR. The current main-pinned LLVM 23.1.3 /
+49e2c1a builder is used, with no compiler-container rebuild needed.
 
-Task 5 is Pyxis branch `display/capture-delegation`, stacked on #513, and
-[userland PR #158](https://git.internal/PyxisOS/pyxis-userland/pulls/158),
-`e8ad03985519132cda6044e2b46b23680d8cf562` (`init/capture-delegation`).
-Merge native capture #513 and the published userland #158 dependency before the
-parent task-5 integration. Ports stays at
-`1064c452a0236040c7d673ab51dbea3a5b81ff80`. The currently published
-LLVM 23.1.3 / 49e2c1a builder includes the C++ support required by merged main;
-no owner container rebuild is needed for capture delegation.
+The [command reference](../userland/screenshot.md) records usage, staging/failure
+ownership, row-wise encoding and measured qualification. Focused command and
+ordinary kernel/SDK/runtime/ports/image builds passed. Manual q35 standard-VGA
+1280x800 boot-framebuffer, four-CPU/2 GiB nested-KVM checks produced Caelum and
+Development TTY PNGs of 64,208 and 18,563 bytes. Both passed host PNG verification
+and decoded as RGB8, non-interlaced; existing `xfer send` confirmation and
+SHA-256 publication completed. A second capture replaced the guest file; the
+host refused an existing download name and preserved its earlier hash.
 
-The [native reference](../interfaces/screen-capture.md) records task-4 capture
-and lifetime evidence and task-5 policy qualification. The ordinary kernel,
-SDK/runtime, ports and image build passed with the current builder. Manual
-four-CPU, 2 GiB nested-KVM q35 QEMU/GDB inspection observed Development's final
-shell retaining CAPTURE, Read-only's shell retaining DRAW without CAPTURE, and
-a connected Remote shell holding CAPTURE without DRAW. A remote foreground
-command used its inherited grant in a real substituted capture CALL and closed
-the result before replaying its original syscall. Both pipeline stages and a
-background command inherited CAPTURE. Doom visibly rendered in Read-only with
-DRAW and no CAPTURE. Installed/rescue policy, parser errors and missing-seed
-refusal are source-reviewed, not booted/injected. Exact-head existing CI is
-reported in the parent PR; userland reports zero Actions tasks and supplies no
-dependency CI pass evidence. No new tests, probe programs or workflows were added.
+Read-only's missing CAPTURE and a boot-archive parent-authority refusal were
+observed. The former preserved the existing destination hash. An attempted
+publication over an existing directory preserved the directory and reported
+both possible names without deleting the temporary. A later capture skipped
+that colliding temporary and preserved its hash. Capture pending/active/private
+state was clear after successful encoding. Allocation, short I/O and uncertain
+write/cleanup error paths were source-reviewed without fault injection. Userland
+reports zero Actions tasks and supplies no dependency CI pass evidence.
 
-The owner comment on #504 remains in task 6's accepted staged-replacement
-contract. Task 6, the PNG command, is next after owner authorization. Capture
-consistency, quota and stuck-system limits remain accepted. PNG/download,
-layer/resize comparison, Bochs and native ThinkPad qualification are pending.
+The reviews were reread from #501 through #516. The owner decision in #504 remains
+implemented as staged output and rename. Task 6 also closes the outstanding
+#501/#516 authority-breadth note in
+[LAN visibility debt](../technical-debt.md#kernel-log-retention-and-lan-visibility):
+programs in granted spaces, including anyone reaching the unauthenticated Remote
+terminal, can observe the whole shown local screen; revisit with users and
+authority. The #513 full-repaint dependency is recorded in the native reference
+and capture debt: future damage tracking must force full composition for a
+pending capture. The noisy-4K transfer-limit example is now explicit.
+
+Task 7 is next after owner authorization. Driver/layer/resize comparisons,
+matched idle/active presenter and encoding measurements, and native ThinkPad
+capture/download remain qualification work. The accepted consistency, quota
+and stuck-system limits remain. There is no matched current baseline from this
+task's command run; the earlier pre-change control below must account for
+intervening layer and compiler changes before it can support an attribution.
 
 A pre-change presenter control used the task-3 image (ELF SHA-256
 `a1eaf85a13dfd6f46621ec237fb20efa46d53162d7bf1f28b22669f6df073beb`), whose

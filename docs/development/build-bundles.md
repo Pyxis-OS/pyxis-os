@@ -58,8 +58,8 @@ static libraries and headers under `ports-dev/lua`, `ports-dev/picohttpparser`,
 `ports-dev/mbedtls`, `ports-dev/zlib`, `ports-dev/libpng` and `ports-dev/fmt`;
 these do not enter the boot archive or the SDK. Standalone userland builds select the current
 dependencies with `LUA_PREFIX`, `PICOHTTPPARSER_PREFIX` and `MBEDTLS_PREFIX`;
-the image build also supplies `ZLIB_PREFIX` and `LIBPNG_PREFIX` for the planned
-screenshot consumer. TLS consumers include the export's `share/mbedtls.mk` to
+the image build also supplies `ZLIB_PREFIX` and `LIBPNG_PREFIX` for the
+screenshot command. TLS consumers include the export's `share/mbedtls.mk` to
 use the matching configuration defines and ordered libraries. SDK runtime builds
 remain independent of ports, so there is no dependency cycle.
 
