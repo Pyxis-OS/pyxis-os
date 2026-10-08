@@ -1,5 +1,5 @@
 Current compatibility integration 0e3c266efd9ed9421c1a26ace90b2a486cb457e8; userspace052ac5ea0c1b045924aee439470f66e7f3382c1c; manual qualification2026-10-08.
-The unqualified GDB expression available resolves a different static symbol and is not audio availability evidence. The later file-qualified availability record is authoritative (false). No GDB or screenshot during playback.
+The unqualified GDB expression available resolves a different static symbol and is not audio availability evidence. The later file-qualified availability record is authoritative (false). No GDB attachment or screenshot during playback. GDB started and loaded symbols while playback ran, then attached only after failure.
 
 SERIAL
 [2J[001;001H[=3h[2J[001;001H[2J[001;001H[8;042;160t[2J[001;001H[2J[001;001H[8;056;240t[2J[001;001HBdsDxe: loading Boot0002 "UEFI QEMU QEMU CD-ROM " from PciRoot(0x0)/Pci(0x2,0x0)/Scsi(0x0,0x0)

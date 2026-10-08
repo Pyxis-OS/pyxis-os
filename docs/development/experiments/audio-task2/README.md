@@ -314,7 +314,8 @@ The [current four-CPU `hda-output` record](current-qualification.txt) completes
 96,000-frame run (2.051498010 s, 94 writes, 86 full/waits, starvation 4,
 discontinuity 0). The second run acquired generation 5 and resumed after its
 pause, then failed closed on an **expired completion notification at the 20 ms
-guard**. No debugger or screenshot ran during playback. This is an ordinary
+guard**. No debugger attachment or screenshot occurred during playback; GDB was
+started and loaded symbols, but attached only after the failure. This is an ordinary
 nested-QEMU failure; the current image did not complete both repetitions.
 Historical duplex repetitions above remain evidence for their named revision.
 

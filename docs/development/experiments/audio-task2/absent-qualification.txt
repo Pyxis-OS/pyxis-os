@@ -101,22 +101,22 @@ Remote debugging using :1243
     at arch/x86_64/include/arch/cpu.h:156
 156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
 $1 = false
-$2 = {claim = {device = 0x0, saved_command = 0, 
+$2 = {claim = {device = 0x0, saved_command = 0,
     capabilities = '\000' <repeats 47 times>, capability_count = 0, bars = {{
-        physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, 
+        physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0,
         bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {
-        physical = 0, bytes = 0}}, mappings = 0x0, reserved = false, 
-    dma_started = false}, registers = {address = 0, base = 0, bytes = 0, 
-    next = 0x0}, firmware = {command = 0, pmcsr = 0, power_capability = 0, 
-    command_changed = false, power_changed = false}, msi = {claim = 0x0, 
+        physical = 0, bytes = 0}}, mappings = 0x0, reserved = false,
+    dma_started = false}, registers = {address = 0, base = 0, bytes = 0,
+    next = 0x0}, firmware = {command = 0, pmcsr = 0, power_capability = 0,
+    command_changed = false, power_changed = false}, msi = {claim = 0x0,
     capability = 0}, corb = {address = 0, physical = 0, bytes = 0}, rirb = {
-    address = 0, physical = 0, bytes = 0}, bdl = {address = 0, physical = 0, 
-    bytes = 0}, pcm = {address = 0, physical = 0, bytes = 0}, stream = 0, 
-  corb_entries = 0, rirb_entries = 0, corb_write = 0, rirb_read = 0, 
-  codec_mask = 0, commands = 0, responses = 0, unsolicited = 0, run_time = 0, 
-  run_wallclock = 0, irq = {first_time = 0, errors = 0 '\000', 
-    completed = false}, prepared = false, link_ready = false, 
-  command_ready = false, stream_prepared = false, stream_running = false, 
+    address = 0, physical = 0, bytes = 0}, bdl = {address = 0, physical = 0,
+    bytes = 0}, pcm = {address = 0, physical = 0, bytes = 0}, stream = 0,
+  corb_entries = 0, rirb_entries = 0, corb_write = 0, rirb_read = 0,
+  codec_mask = 0, commands = 0, responses = 0, unsolicited = 0, run_time = 0,
+  run_wallclock = 0, irq = {first_time = 0, errors = 0 '\000',
+    completed = false}, prepared = false, link_ready = false,
+  command_ready = false, stream_prepared = false, stream_running = false,
   failed = false, shutdown = false}
 $3 = true
 $4 = (struct task_wait *) 0xffff801000006d98

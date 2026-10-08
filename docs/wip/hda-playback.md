@@ -219,9 +219,10 @@ controller or all other sessions.
    reacquisition, eight admissions/ninth refusal, and matched idle/BSP costs.
    Eight admitted producers later exceeded the service horizon and failed closed;
    admission is not a sustained-playback guarantee. Strict absolute DMA progress,
-   zero-gap startup and native playback are unqualified. The current integration image built and
-   passed basic PCM/absent checks; a later paused repetition failed closed before
-   debugger attachment. Publication and exact-head CI remain delivery gates.
+   zero-gap startup and native playback are unqualified. The updated main image
+   passed ordinary source builds, a complete five-second producer and quiet
+   absent-controller refusal. A later repetition also failed closed before
+   debugger attachment. The PR records CI for the exact submitted revision.
 5. [ ] **Native AMD analog qualification.** Propose speaker/headphone route
    and jack policy from the supplied ALC257 graph before native binding.
    Bind `1022:15e3` after verifying
