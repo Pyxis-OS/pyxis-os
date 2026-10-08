@@ -532,6 +532,12 @@ pointer/keyboard/display wait and normal cleanup of both owners. No audio device
 was added to this pointer qualification. The detailed checks and cost/artifact
 tables above precede that integration; no integrated-head cost claim is made.
 
+Main then advanced to `8c823b3` with the separately merged remote transfer
+changes and provider direction. Userland #166 integrates its main `36d3059` at
+`63d4324`; the parent pins that published merge, preserving both pointer and
+transfer changes. Pointer code is unchanged from the preceding smoke; the
+complete default image was rebuilt after this integration.
+
 ### Limits
 
 Stale-view refusal, repeated/foreign acquisition, copied/closed grant lifetime,

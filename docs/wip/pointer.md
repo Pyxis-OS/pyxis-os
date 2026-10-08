@@ -13,7 +13,7 @@ terminal spatial readiness, mux hit-testing/selection/wheel history and the
 owner's addition of graphics pointer subscription readiness through `wait_many`.
 The SDL blocking-event adapter fix remains separately assigned to beta.
 Task 3 is delivered in #550 with published [userland #166](https://git.internal/PyxisOS/pyxis-userland/pulls/166)
-`91cc6c7`; merge that dependency before the parent.
+`63d4324`; merge that dependency before the parent.
 [Task 3 qualification](../development/system-pointer-qualification.md#task-3-qualification)
 records baseline, input/overlay/capture/wait checks and source-only limits.
 Tasks 4 and 5 still require separate authorization.

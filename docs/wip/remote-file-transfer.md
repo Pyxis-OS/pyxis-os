@@ -4,6 +4,14 @@ Status: **accepted, 2026-10-04.** The owner chose the frame format, the
 confirmation policy and the scope [below](#owner-decisions). Any decision can be
 revised later by the owner. Each task starts only when the owner says so.
 
+**Streaming transfers: implemented, 2026-10-08** (Pyxis #551, userland #165).
+See [streaming transfers](#streaming-transfers) and its
+[validation](#streaming-validation-2026-10-08).
+
+**Transfer throughput: measured, 2026-10-08,** assigned to Claude. The first
+fix is in review; see [transfer throughput](#transfer-throughput). Further
+changes wait for the owner's native re-timing.
+
 ## Goal
 
 Move single files between the host running `pyxis-remote` and Pyxis through the
@@ -87,8 +95,9 @@ Both sides require that echo before data. The sender includes `sha256=HEX` in
 file metadata, and receivers verify that 64-digit digest and the declared size
 before publication. Serialized kitty keys (`ac`, `fid`, `n`, `st`, `sz`, `d`)
 retain their standard encodings. Uncompressed data chunks are 2048 bytes before
-base64 encoding. Each implementation initially bounds buffered files at 16 MiB;
-this is an implementation memory limit, not a protocol version.
+base64 encoding. The first implementation bounded buffered files at 16 MiB;
+[streaming](#streaming-transfers) replaced that memory limit without changing
+the protocol.
 
 For downloads, `send` also carries name, size and hash for the host's confirmation
 before its initial permission reply. Then `file`, per-chunk `data`/`PROGRESS`,
@@ -276,6 +285,264 @@ image, `rebased.class` again uploaded with one confirmation and the matching
 `.class` digest above. Quiet machine completion, FINAL and acknowledged client
 closure still worked. Those client/QEMU jobs were stopped as well. The final
 published userland dependency is `352cf14`; the base's other pins are unchanged.
+
+## Streaming transfers
+
+Proposed and accepted 2026-10-08. The owner accepted the three defaults
+[below](#streaming-decisions).
+
+### Need
+
+Before streaming, each side buffered the whole file and the limit was 16 MiB.
+The owner wants to put retail Diablo data on the installed ThinkPad stick:
+`DIABDAT.MPQ` is 517 MB, and Hellfire's MPQs add about 175 MB. Within that
+limit they had to be split into about 45 pieces and joined with `cat`.
+
+### Baseline
+
+Measured on 2026-10-08 in QEMU 10.2.2 with nested KVM, 4 CPUs, `VIRTIO_NET=1`
+and a forwarded TCP port. The guest image was #539's head (main `abb251f`,
+ports `5000ae6`, userland `df78002`); the host's `pyxis-remote` was built from
+main `769535a`. Each time runs from pressing `y` at the host's confirmation
+until the shell prompt returned. The files were random data in `tmp://`.
+
+| Direction | Size | Times | Rate |
+| --- | --- | --- | --- |
+| Upload (`xfer receive`) | 1 MiB | 2.12 s | 0.49 MiB/s |
+| Upload | 15 MiB | 33.3, 34.1, 33.5 s | about 0.46 MiB/s |
+| Download (`xfer send`) | 15 MiB | 81.2, 80.6, 81.1 s | about 0.19 MiB/s |
+
+All downloads matched the source's SHA-256 on the host.
+
+The rate comes from the framing, not from buffering:
+
+- Uploads send 2048-byte chunks, and the host waits for a PROGRESS reply to
+  each one, as the [`xfer` notes](../../userspace/xfer/README.md) describe.
+  That is about 4.3 ms per chunk.
+- Downloads take about 10.5 ms per chunk. Their cost has not been profiled.
+- Uploads also pass the remote terminal's 4 KiB typeahead limit, so at most
+  about two frames can be outstanding however the protocol changes.
+
+At the QEMU upload rate, the owner's 692 MB would take about 25 minutes. The
+per-chunk cost there was measured in nested KVM through a forwarded port.
+
+The owner timed the same 15 MiB transfers natively on 2026-10-08: the ThinkPad
+booted by PXE from main `4332801`, with `pyxis-remote` from the same revision
+on the desktop host over the wired LAN. These are stopwatch times from
+confirmation to the prompt.
+
+| Direction | Size | Time | Rate |
+| --- | --- | --- | --- |
+| Upload (`xfer receive`) | 15 MiB | about 6 s | about 2.5 MiB/s |
+| Download (`xfer send`) | 15 MiB | about 45 s | about 0.33 MiB/s |
+
+Natively, uploads run about five times faster than in QEMU, so the 692 MB
+would take about 4½ minutes, which the owner accepts. Downloads stay slow, so
+the throughput follow-up after streaming concentrates on them. Streaming lifts
+the size limit but does not, by itself, make transfers faster.
+
+### Proposed shape
+
+- **Pyxis side.** `xfer` reads and writes the file in chunks and keeps memory
+  constant: one frame, the chunk being encoded or decoded, and the SHA-256
+  state, independent of file size.
+- **Host side.** `pyxis-remote` does the same.
+- **Receiving.** A receiver exclusively creates the existing
+  `.NAME.xfer-partial-ID` staging file when data starts, writes each verified
+  frame to it, and hashes the bytes as they arrive.
+- **Publishing.** Only after the declared size and SHA-256 both match does it
+  synchronize the staging file, rename it atomically with today's NO_REPLACE
+  or explicit-replacement rules, and synchronize the directory. A mismatch
+  publishes nothing.
+- **Cancellation and handled errors**, including running out of space, remove
+  only that transfer's staging file. Abrupt death leaves it behind, as today,
+  except that it can now hold a partial file of any size. It is still never
+  removed automatically.
+- **Finding orphans.** A leftover staging file sits beside its intended target
+  as `.NAME.xfer-partial-ID`: in the Pyxis directory for uploads, in the
+  download directory on the host for downloads. Pyxis `ls` lists dot names;
+  on the host, `ls` needs `-a` to show them. No transfer reuses or resumes a
+  staging file, so one is safe to delete by hand once no transfer into that
+  directory is running.
+- **Confirmation, overwrite rules, name limits and deadlines** stay as they are.
+- **No resume and no progress display.** Both remain out of scope.
+
+### Streaming decisions
+
+Accepted by the owner 2026-10-08, all as the defaults.
+
+1. **Publication contract.**
+   - **Default:** the shape above. Unverified bytes go to disk, but only into
+     the private staging name, and are published only after verification.
+   - **What replaces the 16 MiB cap:** no fixed size limit. A transfer is bound
+     by its declared 64-bit size, the destination's free space, and the
+     existing per-reply deadlines.
+   - **Alternative:** keep verifying in memory, but raise the cap to a bound
+     the owner names. Memory would grow with the cap.
+2. **Where the SHA-256 is sent.**
+   - **Default:** keep today's protocol. The sender hashes the file in one pass
+     before announcing it, then reads it again to send. If the file changes in
+     between, the sender's second hash or the receiver's check fails, and
+     nothing is published. The cost is reading the source twice; for 692 MB on
+     the host that is seconds.
+   - **Alternative:** move `sha256` to the final frame, so the sender reads
+     once. That changes the Pyxis-only OSC 5113 extension on both sides, and a
+     mismatched peer then fails negotiation.
+3. **Scope.**
+   - **Default:** this work only removes the size limit for `xfer`, in both
+     directions. It keeps the current framing, accepting about 25 minutes in
+     QEMU (about 4½ natively) for the owner's data. Throughput is a separate
+     follow-up after profiling the per-chunk cost; for uploads it would also
+     involve the 4 KiB typeahead limit.
+   - **HTTP(S) fetch bodies stay out.** Provider FILE snapshots are in memory by
+     their own contract and keep their 16 MiB limit.
+   - **Alternative:** include a window of several chunks in flight now. That
+     changes the framing and needs a larger guest input allowance for uploads.
+
+### Validation plan
+
+- in QEMU, transfer a file larger than 1 GiB both ways and confirm the
+  SHA-256;
+- confirm that Pyxis and host memory stay flat during the transfer;
+- show that cancellation and a forced hash mismatch leave no destination and
+  no staging file, and that a full destination fails cleanly;
+- repeat the baseline to show the rate is unchanged;
+- the owner then sends the Diablo data to the stick.
+
+### Streaming validation (2026-10-08)
+
+Interactive QEMU 10.2.2 with nested KVM, 4 CPUs, 8 GiB, `VIRTIO_NET=1` and a
+forwarded TCP port, as for the baseline. The guest ran userland `53fca52`,
+since rebased onto userland main without changes as `2ade239`; the host
+`pyxis-remote` was built from the same branch. Fixtures were random data.
+Host memory is the RSS of `pyxis-remote`, sampled every minute; guest memory
+is fastfetch's allocator figure.
+
+- **1.1 GiB upload.** 1,153,433,723 bytes into `tmp://` were verified and
+  published in 2492 s, about 0.44 MiB/s. Guest `sha256sum` matched the host.
+  Host RSS stayed at 2088 KiB throughout. The guest allocator rose from
+  112 MiB to 4.32 GiB, because the RAM file's growing heap buffer keeps its
+  pools mapped; see
+  [contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing).
+  `xfer` itself holds one 64 KiB block.
+- **1.1 GiB download, stopped deliberately.** The same file was sent from
+  `host://` into a disk-backed host directory. After 51 minutes, at 480,811,008
+  bytes (about 459 MiB), it was cancelled with Ctrl+C on the host. That run
+  already showed flat memory: the guest allocator read 42.25 MiB before,
+  43.80 MiB at 4 and 24 minutes, and host RSS stayed at 2108 KiB. Finishing
+  would have taken about 80 more minutes and added only the final checksum,
+  which the 100 MiB download below covers. The run doubled as the
+  cancellation check: the host removed its 459 MiB staging file, no
+  destination appeared, and the shell went on working.
+- **100 MiB download.** 104,857,607 bytes from `host://`, past the old 16 MiB
+  limit, were published on the host in 646 s, about 0.155 MiB/s, and its
+  SHA-256 matched the source.
+- **Source changed during a transfer.** Overwriting 16 bytes near the end of a
+  15 MiB source after the first pass failed both directions before
+  publication. `xfer send` reported "Source changed while it was being sent";
+  `pyxis-remote` reported "Host file changed during upload", which the guest
+  now prints as the peer's status. Neither side kept a destination or a
+  staging file.
+- **Full destination.** An 8 MiB tmpfs as the guest's `host://small` failed a
+  15 MiB upload with `ENOSPC` (native status 24). The same size as the host's
+  download directory failed with `ENOSPC: No space left on device`. Both
+  directories were left empty.
+- **Rate.** The 15 MiB baseline repeated with uploads of 32.8, 32.5 and 34.1 s,
+  against 33.3–34.1 s. Downloads into a tmpfs host directory took 80.4, 80.9
+  and 87.5 s, against 80.6–81.2 s; into the disk-backed directory, 85–97 s.
+  Other agents shared this VM, so the spread is noise rather than a change.
+  The 1 MiB round trip was also checked on the final build.
+- **Not checked.** The receiver's own SHA-256 mismatch path was reviewed in
+  code; producing it needs a sender that lies about its data. Writing to an
+  npfs pool was not exercised in QEMU; the owner's transfer to the stick is
+  that check.
+
+## Transfer throughput
+
+Assigned 2026-10-08, downloads first. Natively a 15 MiB `xfer send` took about
+45 s, about 5.9 ms per 2 KiB chunk, while `xfer receive` took about 6 s, about
+0.8 ms per chunk.
+
+### Throughput decisions
+
+Accepted by the owner 2026-10-08:
+
+1. Fix the reply reads below, with no framing change.
+2. Leave the TCP path alone until the owner re-times 15 MiB natively with that
+   fix.
+3. Keep one chunk in flight for now.
+
+### Measurement (2026-10-08)
+
+QEMU 10.2.2, nested KVM, 4 CPUs, `VIRTIO_NET=1`, forwarded port, sources in
+`tmp://` unless stated. Packets were captured at the guest NIC with QEMU's
+`filter-dump` and on the host loopback with `tcpdump`. Local `xfer` and server
+builds carried temporary timing probes, since removed. Medians per chunk:
+
+| Stage | Time |
+| --- | --- |
+| Host turnaround, guest data out → PROGRESS in, at the guest NIC | 0.39–0.44 ms |
+| `xfer` source read, hash, encode and frame write | 0.05–0.07 ms |
+| `xfer` reading one PROGRESS reply, 65–66 one-byte console reads | 5.1 ms |
+| Guest network path: server TCP calls, segments and wake-ups | about 6.5–7 ms |
+
+The hypotheses came out as follows:
+
+- **A round trip per chunk.** Present in both directions by design; the host's
+  share is under half a millisecond.
+- **Nagle and delayed ACKs.** Not seen: no 40 ms or longer gaps, and each
+  chunk's six segments leave back to back, about 0.22 ms apart.
+- **Console output flushing or yielding per write.** Not significant: writing
+  a 2.8 KB frame takes about 50 µs.
+- **Host work per output chunk.** Not significant: about 0.4 ms including
+  `pyxis-remote`'s per-byte parsing.
+- **Found instead:** `xfer send` read each reply one byte at a time. Receiving
+  already read in blocks. Each console read costs about 77 µs even with the
+  bytes queued; why was not traced. The owner's native gap,
+  (5.86 − 0.78 ms) / 66, works out to the same 77 µs, which suggests this is
+  nearly all of the native stall. That is an inference until re-timed.
+
+### Reply-read fix
+
+`xfer send` now reads PROGRESS replies in blocks during the data phase and
+returns to exact reads before `finish`, as receiving does (userland `{u}`).
+Matched 15 MiB downloads in QEMU on the same day, with other agents loading the
+host (load average about 1.7):
+
+| Build | Times |
+| --- | --- |
+| Before, userland `a5a48b4` | 90.6, 97.8, 91.7 s |
+| After, userland `{u}` | 52.6, 52.2, 56.9 s |
+
+All downloads matched the source's SHA-256. A cancelled download left no
+staging file, a command typed after a download ran normally, and a 1 MiB
+upload still matched.
+
+### Remaining guest network cost
+
+With the fix, a chunk takes about 6.5–7 ms in QEMU. The remote-terminal server
+spends most of it in TCP calls, each handed to the BSP network worker:
+
+| Server step per chunk | Calls | Time |
+| --- | --- | --- |
+| `tcp_try_read` | 4.2 | 2.2 ms |
+| `tcp_try_write` of the 2.8 KB frame | 1.0 | 1.8 ms |
+| Blocked in `wait_many` | 1.45 | 1.9 ms |
+| `xfer`'s turn, reply injected → next frame drained | – | 1.2 ms |
+
+Uploads pay the same costs and take 0.8 ms per chunk natively, so these are
+likely much smaller on the ThinkPad. Candidates if the native re-timing still
+falls short, neither changed yet:
+
+- **Server reads.** Only the header and payload reads per INPUT frame carry
+  data; the others return WOULD_BLOCK after readiness, each costing a worker
+  handoff.
+- **Segment size.** lwIP's `TCP_MSS` is 536 in
+  `kernel/net/lwip/include/lwipopts.h`, so each 2.8 KB frame leaves as six
+  segments. That likely limits TCP throughput generally, not only transfers.
+
+Several chunks in flight would change the framing and, for uploads, the guest's
+4 KiB typeahead allowance; that would come back to the owner as a decision.
 
 ## Out of scope
 

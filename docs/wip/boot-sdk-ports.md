@@ -89,7 +89,7 @@ Chosen by the owner, each starting with a proposal:
   has a pre-code [baseline](../development/system-pointer-qualification.md#task-3-baseline)
   recorded in [#550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
   [Three task 3 defaults](pointer.md#task-3-planning) are accepted on 2026-10-08;
-  task 3 is delivered in #550 with published userland #166 (`91cc6c7`),
+  task 3 is delivered in #550 with published userland #166 (`63d4324`),
   which merges before the parent. [Qualification](../development/system-pointer-qualification.md#task-3-qualification)
   records runtime/source limits and matched samples. Tasks 4 and 5 need separate authorization.
   Matched QEMU checks suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
@@ -97,11 +97,10 @@ Chosen by the owner, each starting with a proposal:
   clipboard and USB HID implementation remain separate. Bluetooth's accepted
   conditional source-loss rule is recorded for future integration, without a
   second input source.
-
-- **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
-  replacing the 16 MiB buffered `xfer` limit so large files such as retail
-  game data can be sent. It starts with a baseline measurement and a
-  documentation-only proposal for the publication contract.
+- **Claude** (2026-10-08): [remote file transfer](remote-file-transfer.md)
+  throughput, downloads first. Streaming replaced the 16 MiB `xfer` limit
+  (#551). The measured reply-read fix is in review; TCP-path changes wait for
+  the owner's native re-timing.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
@@ -160,6 +159,9 @@ prerequisites and result are clear.
   until a package manager exists.
 - [Desktop and graphics](desktop-graphics.md), including where to start on the
   owner's compositor.
+- [Interchangeable providers](interchangeable-providers.md): programs depend on
+  protocols, and launchers choose who serves them, so a compositor can serve the
+  same display, pointer and keyboard interfaces as the kernel.
 - [Users and authority](users-and-authority.md), a cross-cutting design
   checkpoint, and [credentials and biometric unlock](credentials-and-biometrics.md),
   parked after local users.

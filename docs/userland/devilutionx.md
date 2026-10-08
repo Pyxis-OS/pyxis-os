@@ -115,19 +115,11 @@ A bundle can be packed on the host with `tar --format=ustar -cf
 devilutionx.tar diablo` and extracted in Pyxis with `tar xf` from `home://`.
 `tar` holds the whole archive in memory.
 
-Getting the data there is the hard part.
-[Remote transfers](remote-terminal.md#explicit-file-transfer) and HTTP(S)
-bodies are limited to 16 MiB per file. The bundle without data, about 9 MB,
-fits in one transfer. The MPQ files do not: `spawn.mpq` is 25 MB and
-`DIABDAT.MPQ` about 500 MB. They can be split on the host into pieces of at
-most 15 MiB, sent one by one, and joined in Pyxis with `cat`:
-
-```text
-cat home://DIABDAT.MPQ.00 home://DIABDAT.MPQ.01 > home://diablo/DIABDAT.MPQ
-```
-
-The join was checked with `spawn.mpq` in QEMU. For `DIABDAT.MPQ` it means
-about 35 transfers.
+[Remote transfers](remote-terminal.md#explicit-file-transfer) carry files of
+any size, one file per transfer, so the bundle and the MPQ files can each be
+sent with `xfer receive`. On the ThinkPad over wired LAN uploads run at about
+2.5 MiB/s, so `DIABDAT.MPQ`, about 500 MB, takes about 3½ minutes. HTTP(S)
+bodies remain limited to 16 MiB per file.
 
 ## Settings and display
 
