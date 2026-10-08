@@ -92,7 +92,8 @@ Chosen by the owner, each starting with a proposal:
 - **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
   replacing the 16 MiB buffered `xfer` limit so large files such as retail
   game data can be sent. Its baseline and publication contract were accepted
-  2026-10-08; implementation is in progress.
+  2026-10-08; the implementation is in review. Transfer throughput, downloads
+  first, follows as Claude's next task.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 

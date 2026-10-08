@@ -159,12 +159,24 @@ late transfer bytes to the shell. Machine mode preserves OSC bytes in its normal
 base64 output events and provides no transfer interception; `--download-dir` is
 an interactive option.
 
-Each side buffers at most 16 MiB and requires negotiated SHA-256 before data.
-Whole-file size/hash verification precedes exclusive sibling staging creation.
-The staging file is synchronized, renamed atomically, and its directory
-synchronized. A handled failure/cancellation removes only that transfer's staging
-file. Abrupt death may leave `.NAME.xfer-partial-ID`; stale names are never
-automatically removed. Atomic rename commits the complete destination, which
+Both sides stream with constant memory and require negotiated SHA-256 before
+data. There is no fixed size limit: a transfer is bounded by its declared size,
+the destination's free space and the reply deadlines. The sender hashes the
+source in a first pass, because the digest is announced before data, then reads
+it again to send; a source that changes in between fails before publication.
+The receiver exclusively creates a sibling staging file when data starts and
+writes each chunk to it while hashing. Only after the size and SHA-256 match is
+the staging file synchronized, renamed atomically, and its directory
+synchronized. A handled failure/cancellation, including a full destination,
+removes only that transfer's staging file. Abrupt death may leave
+`.NAME.xfer-partial-ID`, holding a partial file of any size, beside the target:
+in the Pyxis directory for uploads, in the download directory for downloads.
+Stale names are never automatically removed. Pyxis `ls` lists them; the host
+needs `ls -a`. One is safe to delete by hand once no transfer into that
+directory is running. A large upload into a RAM-backed directory, such as
+`tmp://` or a live boot's `home://`, costs several times its size in kernel
+memory for the rest of the boot; see
+[contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing). Atomic rename commits the complete destination, which
 survives a later cancellation, synchronization failure or lost acknowledgement.
 Host publication uses Linux `renameat2(RENAME_NOREPLACE)` or macOS
 `renameatx_np(RENAME_EXCL)`; other host platforms fail publication explicitly.

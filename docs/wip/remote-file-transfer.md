@@ -6,7 +6,8 @@ revised later by the owner. Each task starts only when the owner says so.
 
 **Streaming transfers: accepted, 2026-10-08,** assigned to Claude. See
 [streaming transfers](#streaming-transfers). The owner accepted its three
-defaults; implementation follows.
+defaults; the implementation is in review, with its
+[validation](#streaming-validation-2026-10-08) below.
 
 ## Goal
 
@@ -91,8 +92,9 @@ Both sides require that echo before data. The sender includes `sha256=HEX` in
 file metadata, and receivers verify that 64-digit digest and the declared size
 before publication. Serialized kitty keys (`ac`, `fid`, `n`, `st`, `sz`, `d`)
 retain their standard encodings. Uncompressed data chunks are 2048 bytes before
-base64 encoding. Each implementation initially bounds buffered files at 16 MiB;
-this is an implementation memory limit, not a protocol version.
+base64 encoding. The first implementation bounded buffered files at 16 MiB;
+[streaming](#streaming-transfers) replaced that memory limit without changing
+the protocol.
 
 For downloads, `send` also carries name, size and hash for the host's confirmation
 before its initial permission reply. Then `file`, per-chunk `data`/`PROGRESS`,
@@ -288,13 +290,10 @@ Proposed and accepted 2026-10-08. The owner accepted the three defaults
 
 ### Need
 
-Today each side buffers the whole file and the limit is 16 MiB; see
-[technical debt](../technical-debt.md#remote-transfer-memory-and-staging-limits).
+Before streaming, each side buffered the whole file and the limit was 16 MiB.
 The owner wants to put retail Diablo data on the installed ThinkPad stick:
-`DIABDAT.MPQ` is 517 MB, and Hellfire's MPQs add about 175 MB. Within the
-limit that means splitting the files into about 45 pieces and joining them
-with `cat`, which the
-[DevilutionX reference](../userland/devilutionx.md#standalone-bundle) describes.
+`DIABDAT.MPQ` is 517 MB, and Hellfire's MPQs add about 175 MB. Within that
+limit they had to be split into about 45 pieces and joined with `cat`.
 
 ### Baseline
 
@@ -406,6 +405,54 @@ Accepted by the owner 2026-10-08, all as the defaults.
   no staging file, and that a full destination fails cleanly;
 - repeat the baseline to show the rate is unchanged;
 - the owner then sends the Diablo data to the stick.
+
+### Streaming validation (2026-10-08)
+
+Interactive QEMU 10.2.2 with nested KVM, 4 CPUs, 8 GiB, `VIRTIO_NET=1` and a
+forwarded TCP port, as for the baseline. The guest ran userland `53fca52`,
+since rebased onto userland main without changes as `2ade239`; the host
+`pyxis-remote` was built from the same branch. Fixtures were random data.
+Host memory is the RSS of `pyxis-remote`, sampled every minute; guest memory
+is fastfetch's allocator figure.
+
+- **1.1 GiB upload.** 1,153,433,723 bytes into `tmp://` were verified and
+  published in 2492 s, about 0.44 MiB/s. Guest `sha256sum` matched the host.
+  Host RSS stayed at 2088 KiB throughout. The guest allocator rose from
+  112 MiB to 4.32 GiB, because the RAM file's growing heap buffer keeps its
+  pools mapped; see
+  [contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing).
+  `xfer` itself holds one 64 KiB block.
+- **1.1 GiB download, stopped deliberately.** The same file was sent from
+  `host://` into a disk-backed host directory. After 51 minutes, at 480,811,008
+  bytes (about 459 MiB), it was cancelled with Ctrl+C on the host. That run
+  already showed flat memory: the guest allocator read 42.25 MiB before,
+  43.80 MiB at 4 and 24 minutes, and host RSS stayed at 2108 KiB. Finishing
+  would have taken about 80 more minutes and added only the final checksum,
+  which the 100 MiB download below covers. The run doubled as the
+  cancellation check: the host removed its 459 MiB staging file, no
+  destination appeared, and the shell went on working.
+- **100 MiB download.** 104,857,607 bytes from `host://`, past the old 16 MiB
+  limit, were published on the host in 646 s, about 0.155 MiB/s, and its
+  SHA-256 matched the source.
+- **Source changed during a transfer.** Overwriting 16 bytes near the end of a
+  15 MiB source after the first pass failed both directions before
+  publication. `xfer send` reported "Source changed while it was being sent";
+  `pyxis-remote` reported "Host file changed during upload", which the guest
+  now prints as the peer's status. Neither side kept a destination or a
+  staging file.
+- **Full destination.** An 8 MiB tmpfs as the guest's `host://small` failed a
+  15 MiB upload with `ENOSPC` (native status 24). The same size as the host's
+  download directory failed with `ENOSPC: No space left on device`. Both
+  directories were left empty.
+- **Rate.** The 15 MiB baseline repeated with uploads of 32.8, 32.5 and 34.1 s,
+  against 33.3–34.1 s. Downloads into a tmpfs host directory took 80.4, 80.9
+  and 87.5 s, against 80.6–81.2 s; into the disk-backed directory, 85–97 s.
+  Other agents shared this VM, so the spread is noise rather than a change.
+  The 1 MiB round trip was also checked on the final build.
+- **Not checked.** The receiver's own SHA-256 mismatch path was reviewed in
+  code; producing it needs a sender that lies about its data. Writing to an
+  npfs pool was not exercised in QEMU; the owner's transfer to the stick is
+  that check.
 
 ## Out of scope
 
