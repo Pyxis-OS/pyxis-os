@@ -1,9 +1,10 @@
 # C++ in userspace
 
-Status: **probe done and proposal open, 2026-10-08.** The owner selected this
-milestone for Claude on 2026-10-07. Nothing below is agreed beyond that
-selection: the [decisions](#decisions-for-the-owner) await the owner, and no
-code work starts before them. It is the second of the three
+Status: **probe done, decisions accepted 2026-10-08.** The owner selected this
+milestone for Claude on 2026-10-07 and accepted the three
+[decisions](#decisions) on 2026-10-08. The rest of the [proposal](#proposal)
+guides the tasks; each task starts when the owner says so. It is the second of
+the three
 [LLVM milestones](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
 narrowed to userspace. Clang running on Pyxis, and threads, come later.
 
@@ -167,7 +168,7 @@ installed in the SDK sysroot:
 
 The guest SDK gets none of it, because TCC cannot compile C++.
 
-| Feature | Proposed | Reason |
+| Feature | Setting | Reason |
 | --- | --- | --- |
 | Exceptions and RTTI | on | the language default; libc++ itself throws; `-fno-exceptions` code still links |
 | Unwinder | libunwind, static mode | locates `.eh_frame_hdr` from linker-script symbols; no loader change |
@@ -236,39 +237,42 @@ C++ library parts are absent.
   `PYXIS_CXXLIBS`, with the libc++ header directory ahead of libc's. libc++'s
   `<stdlib.h>` must be found before libc's.
 
-## Decisions for the owner
+## Decisions
 
-1. **Where the runtime is built.**
-   - *Proposed:* the SDK build compiles it from the fork commit recorded by the
-     installed toolchain (`share/pyxis-toolchain/llvm-revision`), using the
-     sparse fetch measured above.
-     - One authority keeps the libc++ headers matched to the compiler.
-     - A libc change never needs a container rebuild.
-     - A runtime-only fork change does need one, because it moves the pin.
-   - *Alternatives:*
-     - Build it in the toolchain container. libc's headers would then be baked
-       into the image, so any libc change needs a rebuild.
-     - Make it a recipe in `pyxis-ports`. That gives a second pin, and the
-       runtime would sit outside the SDK that the driver searches.
-2. **The first library configuration**, as in the [table](#runtime).
-   - *Proposed:* exceptions and RTTI on, `steady_clock` on, a non-demangling
-     terminate handler, and everything else listed there off.
-   - *Main alternative:* include `<iostream>` and locales now. That first needs
-     a "C"-locale libc: `locale.h` and the missing wide-character functions
-     (59 names in `<cwchar>` alone).
-   - Either way, libc only grows where the runtime or the consumer needs it.
-3. **The first consumer.** It must work without threads or `<iostream>` (if
-   decision 2 stays as proposed), and its source needs a mirror on
-   `git.internal`.
-   - *Proposed:* [{fmt}](https://github.com/fmtlib/fmt). It is a C++ library
-     that DevilutionX requires, and it uses templates, exceptions and
-     floating-point formatting heavily.
-     - It is checked in QEMU with a small program that is not committed. No C++
-       program then ships in the image.
-     - fmt's locale support has to be disabled at build time; the probe did not
-       check this.
-   - *Alternative:* the owner names a small C++ program to port and ship
-     instead.
+Accepted by the owner on 2026-10-08, as proposed after the probe:
+
+1. **Where the runtime is built: in the SDK build.** It compiles from the
+   fork commit recorded by the installed toolchain
+   (`share/pyxis-toolchain/llvm-revision`), using the sparse fetch measured
+   above.
+   - One authority keeps the libc++ headers matched to the compiler.
+   - A libc change never needs a container rebuild.
+   - A runtime-only fork change does need one, because it moves the pin.
+
+   Considered instead:
+   - building it in the toolchain container, which bakes libc's headers into
+     the image;
+   - a recipe in `pyxis-ports`, which adds a second pin and puts the runtime
+     outside the SDK that the driver searches.
+2. **The first library configuration, as in the [table](#runtime).**
+   - Exceptions and RTTI are on, `steady_clock` is on, and the terminate
+     handler does not demangle.
+   - Everything else listed there is off.
+   - libc grows only where the runtime or the consumer needs it.
+
+   `<iostream>` and locales were considered and deferred. They first need a
+   "C"-locale libc: `locale.h` and the missing wide-character functions (59
+   names in `<cwchar>` alone).
+3. **The first consumer: [{fmt}](https://github.com/fmtlib/fmt).** It is a C++
+   library that DevilutionX requires, and it uses templates, exceptions and
+   floating-point formatting heavily.
+   - Its source needs a mirror on `git.internal`, which the owner creates.
+   - It is checked in QEMU with a small program that is not committed, so no
+     C++ program ships in the image yet.
+   - fmt's locale support has to be disabled at build time; the probe did not
+     check this.
+
+   Porting a small C++ program chosen by the owner was the alternative.
 
 ## Tasks
 
@@ -287,7 +291,7 @@ Each task starts when the owner says so.
    - the SDK runtime build and `pyxis.mk`'s C++ settings.
 
    The owner builds the image before CI can pass.
-4. **The first consumer**, with its libc additions.
+4. **The {fmt} port**, with its libc additions, once the owner has mirrored fmt.
 5. **Close.** Turn this document into a reference under `docs/development`,
    listing the supported subset and its gaps.
 
