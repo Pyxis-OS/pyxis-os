@@ -353,3 +353,11 @@ no QEMU, GDB, passthrough or probe process remains. Final files are retained in
 Fedora Bluetooth stays inactive/disabled. No address, private packet or key was
 recorded. Task 2 is complete within its recorded measurement limits. Later tasks
 remain unassigned. The ThinkPad is free in Fedora with Bluetooth disabled.
+
+The approval review of #552 at `78f4fbd` requested a logging-only follow-up:
+successful initialization emits one `Bluetooth HCI: AX200 USB ready (development
+firmware)` summary. HCI version/revision, firmware/features/credits and successful
+USB transport details use `ktrace`; failure diagnostics remain `klog`. The
+ordinary kernel build passed for this follow-up. Passthrough measurements above
+retain their recorded revisions; no further guest was started for the log change.
+The branch is parked at the owner's request. Task 3 remains unassigned.

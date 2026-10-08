@@ -1577,8 +1577,11 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
         usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id)) {
       enum usb_result result = usb_bluetooth_bind(&device->bluetooth,
           discovery->host, device->host, deadline);
-      klog("bluetooth: AX200 USB transport %s (result %u)\n",
-           result == USB_OK ? "configured" : "unavailable", (unsigned)result);
+      if (result == USB_OK) {
+        ktrace("bluetooth: AX200 USB transport configured (result %u)\n", (unsigned)result);
+      } else {
+        klog("bluetooth: AX200 USB transport unavailable (result %u)\n", (unsigned)result);
+      }
     }
     struct usb_bot *storage = &device->storage;
     if (storage->configuration) {

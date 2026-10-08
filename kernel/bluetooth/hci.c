@@ -570,7 +570,7 @@ static bool initialization_reply(const uint8_t *reply, size_t length)
     if (length != 9 || reply[1] < 6 || read16(reply + 5) != 2) {
       return false;
     }
-    klog("Bluetooth HCI: HCI version %u, revision %u\n", reply[1], read16(reply + 2));
+    ktrace("Bluetooth HCI: HCI version %u, revision %u\n", reply[1], read16(reply + 2));
     break;
   case HCI_INIT_COMMANDS:
     if (length != 65 || (reply[26] & 7) != 7) {
@@ -635,7 +635,8 @@ static void advance_initialization(void)
     adapter.acl_credits = adapter.acl_total;
   }
   if (adapter.initialization == HCI_INIT_READY) {
-    klog("Bluetooth HCI: development firmware 193/33/2024, LE features %llx, ACL bytes %u credits %u\n",
+    klog("Bluetooth HCI: AX200 USB ready (development firmware)\n");
+    ktrace("Bluetooth HCI: development firmware 193/33/2024, LE features %llx, ACL bytes %u credits %u\n",
         (unsigned long long)adapter.le_features, adapter.acl_packet_length, adapter.acl_total);
   }
 }
