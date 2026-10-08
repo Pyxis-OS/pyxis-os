@@ -788,6 +788,19 @@ file. Revisit the build integration to derive output dependencies from one
 authoritative list without growing a new build framework. Until then, review
 both lists when updating a recipe's outputs.
 
+## zlib core profile and qualification
+
+The [zlib development library](development/ports.md#zlib-development-library)
+retains unmodified public headers but omits `gz*` file helpers, as accepted for
+the screenshot milestone on 2026-10-08. Those declarations therefore have no
+linkable definitions in this profile. Revisit the file helpers with a concrete
+consumer that needs them, auditing its actual libc and file-authority needs.
+In-memory gzip framing remains available through the core stream APIs.
+
+Archive builds, symbol inspection and staging checks do not establish runtime
+compression correctness on Pyxis. The screenshot PNG consumer provides the
+planned runtime qualification; until then the port has build evidence only.
+
 ## Unexpected native close failures
 
 Libc invalidates a descriptor and its FILE association before one native CLOSE

@@ -363,9 +363,11 @@ ISO C leaves input `fflush` undefined, so this is a Pyxis guarantee.
 indicator.
 Normal exit calls it, closes each live descriptor once, then disposes of FILE
 metadata, including invalid associations. Cleanup errors do not replace the
-requested exit status. `_Exit` and fatal faults bypass libc cleanup; the kernel
-still reclaims process resources. There are no
-atexit callbacks, buffering controls, wide I/O or fdopen/fileno. Scanning and
+requested exit status. Exit handlers and `.fini_array` run before this cleanup,
+so they can still write to the streams; see
+[startup and exit](../development/sdk.md#startup-exit-and-layout). `_Exit` and
+fatal faults bypass libc cleanup; the kernel still reclaims process resources.
+There are no buffering controls, wide I/O or fdopen/fileno. Scanning and
 one-byte pushback are described above.
 
 `fclose` invalidates the association and makes one native close attempt. Success

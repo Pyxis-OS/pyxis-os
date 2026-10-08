@@ -102,9 +102,9 @@ battery for native performance figures, and compare on AC.
 - [Clang code generation and predefines](../technical-debt.md#clang-code-generation-and-predefines):
   the remaining heap and Quake differences, extra byte-sized read-modify-writes,
   and Clang's fast-type predefines, which differ from libc's `stdint.h`.
-- compiler-rt's `cpu_model` stays in the builtins archive. Its constructor never
-  runs, because Pyxis startup runs no constructors; a program using
-  `__builtin_cpu_supports` must call `__builtin_cpu_init()` first.
+- compiler-rt's `cpu_model` stays in the builtins archive. A program that uses
+  `__builtin_cpu_supports` links it, and libc's startup runs its constructor
+  before `main`.
 - Go's linker output, converted by the removed `elf2pxe` in the
   [Go investigation](../wip/go-runtime.md), now needs P1F output from Go's
   linker or a restored converter.

@@ -213,6 +213,15 @@ codec), and the ThinkPad's analog audio is on an HD Audio controller
 Its codec is not yet identified. The userspace interface, mixing and the first
 consumer (Quake's sound, for example) need their own decisions.
 
+## Bluetooth
+
+Investigation candidate (owner, 2026-10-08): pair the owner's Logitech MX Master
+3S, a Bluetooth-only mouse, and use it on Pyxis. The ThinkPad's Bluetooth is the
+AX200's USB function (`8087:0029`), so it builds on the planned USB HID work in
+the [system pointer](pointer.md#devices). The stack is deep: Intel firmware
+loading, HCI, L2CAP, LE pairing with Secure Connections and persistent bond keys,
+then HID over GATT. Investigate the minimum path before any milestone.
+
 ## Clock source
 
 Accepted direction (owner, 2026-10-03), not scheduled: TSC with extended-HPET

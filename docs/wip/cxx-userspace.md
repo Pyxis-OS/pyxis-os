@@ -212,9 +212,9 @@ absent: `std::thread`, `std::mutex`, `std::cout << 1`, `random_device` and
   - the pointer format macros;
   - `fenv.h`;
   - `TIME_MONOTONIC`.
-- Add whatever further standard functions the first consumer needs, such as
-  `ceilf`. These are real implementations, taken from the vendored musl where
-  possible.
+- Add `ceilf`, which libc++'s unordered containers use, and whatever further
+  standard functions the first consumer needs. These are real implementations,
+  taken from the vendored musl where possible.
 
 A full libm stays outside the milestone. The SDK reference lists which C and
 C++ library parts are absent.
@@ -231,7 +231,7 @@ C++ library parts are absent.
 - **libc++ platform selection:**
   - `timespec_get` drives `system_clock` and `steady_clock`;
   - `std::print` does not ask whether the output is a terminal. Pyxis libc has
-    no `isatty`, and stdio is unbuffered anyway.
+    no `isatty`, and stdout is unbuffered anyway.
 - **The toolchain** installs `x86_64-unknown-pyxis-clang++`.
 - **The SDK fragment.** `share/pyxis.mk` gains `PYXIS_CXX`, `PYXIS_CXXFLAGS` and
   `PYXIS_CXXLIBS`, with the libc++ header directory ahead of libc's. libc++'s
@@ -280,12 +280,15 @@ Accepted by the owner on 2026-10-08, as proposed after the probe:
 Each task starts when the owner says so.
 
 1. **Probe and proposal** (this document).
-2. **libc and SDK layout** (userland, then a Pyxis gitlink PR):
+2. **libc and SDK layout** (userland #153 and its Pyxis gitlink PR). In review,
+   2026-10-08:
    - C++-safe headers;
    - constructors, exit handlers and `aligned_alloc`;
+   - the other [libc additions](#libc-additions-userland) the runtime build
+     needs, so task 3 changes no libc;
    - the linker-script sections.
 
-   C executables are compared before and after.
+   See [task 2 results](#task-2-results).
 3. **Fork, toolchain and runtime build:**
    - the driver and libc++ commits in `pyxis-llvm`;
    - the toolchain pin, the `clang++` name and the new image tag;
@@ -295,6 +298,46 @@ Each task starts when the owner says so.
 4. **The {fmt} port**, from `mirrors/fmt`, with its libc additions.
 5. **Close.** Turn this document into a reference under `docs/development`,
    listing the supported subset and its gaps.
+
+## Task 2 results
+
+Measured on 2026-10-08 in the same VM as the probe, against main `2a9ddd6`
+and userland `38886c7`.
+
+- **C executables.** All 81 executables in the build still have the same three
+  segments with the same flags, and no read-only data changes, so none gained
+  unwind tables. Each grows by the new startup and exit code:
+  - text grows 624 to 848 bytes;
+  - initialized data grows 16 bytes (`__dso_handle` and the handler list
+    pointer);
+  - the data segment's memory size grows 784 or 800 bytes, mostly the 32
+    static handler slots.
+
+  In 9 executables the text crosses a page boundary, so the later segments
+  move up one page. The build's 399 warnings are unchanged, all in ports'
+  upstream code.
+- **The kernel.** It differs from the earlier build only in the 12 bytes of its
+  embedded revision string. Its own linker script still discards `.eh_frame`.
+- **In QEMU** (4 CPUs, KVM), a throwaway C program showed:
+  - a constructor using `malloc` and stdio before `main`;
+  - atexit handlers in reverse order, including more than 32 and one
+    registered during exit;
+  - `.fini_array` running last, and `_Exit` skipping all of them;
+  - `aligned_alloc` at 64 and 4096 bytes, and `NULL` for 3 and 8192;
+  - the `div` family, the new format macros and `ceilf`;
+  - `timespec_get(TIME_MONOTONIC)` advancing;
+  - fenv flags from SSE and x87 division, both rounding directions, and
+    `feholdexcept`/`feupdateenv`.
+- **TCC.** A program compiled and linked by TCC inside Pyxis ran its `atexit`
+  handler and used `aligned_alloc`.
+- **The C++ probe.** The probe program rebuilt against these headers with no
+  forced declarations except `fileno`/`isatty`, now with `steady_clock` on and
+  the non-demangling terminate handler. Linked with the SDK's `crt0.o` and
+  `pyxis.ld` (no probe shim), it behaved as in the probe, and `steady_clock`
+  advanced.
+
+For task 3: libc++'s `system_error` warns that `ELAST` is not defined for
+Pyxis.
 
 ## Not in this milestone
 

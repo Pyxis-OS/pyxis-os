@@ -35,8 +35,8 @@ Implemented behavior lives in the subsystem references listed in the
 Chosen by the owner on 2026-10-07, each starting with a proposal:
 
 - **Claude:** [C++ in userspace](cxx-userspace.md), cross-compiled C++
-  programs with a runtime from the `pyxis-llvm` fork; probe done and decisions
-  accepted. Clang running on Pyxis is a later milestone.
+  programs with a runtime from the `pyxis-llvm` fork; decisions accepted, task 2
+  (libc and SDK layout) in review. Clang running on Pyxis is a later milestone.
 - **Codex 1:** [graphics and terminal layers in a space](space-layers.md),
   switched with Super+Up/Down.
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
@@ -65,6 +65,10 @@ None is selected.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
+- [A system pointer](pointer.md): a cursor programs can customize, tab clicks,
+  terminal selection, pointer lock with Super+Esc, and USB HID mice.
+- [Clipboard](clipboard.md): typed objects with a text form, local and shared
+  across spaces.
 - [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
 - Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
   after C++ in userspace.
@@ -83,8 +87,8 @@ Parked directions and investigations; promote one to a milestone when its
 prerequisites and result are clear.
 
 - [Later OS directions](later-os-directions.md): execution lifecycle, backend
-  interfaces, networking, device ownership, developer tools, audio, clock
-  source, power, storage.
+  interfaces, networking, device ownership, developer tools, audio, Bluetooth,
+  clock source, power, storage.
 - [Application port candidates](application-ports.md), including SDL2/GrafX2,
   Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 - [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
@@ -97,6 +101,8 @@ prerequisites and result are clear.
   parked after local users.
 - [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
   [filesystems and namespaces](vfs.md), working drafts.
+- [Control, events and faults](control-events-faults.md), Pyxis's answer to
+  signals, tied to Continuum.
 - [Userspace scheme providers](userspace-scheme-providers.md).
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).
