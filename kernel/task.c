@@ -69,6 +69,7 @@ struct task {
 struct scheduler {
   struct task *ready_head, *ready_tail;
   struct task *current_task;
+  struct task_wait *timed_waits; /* queues_locked, sorted by deadline. */
   uintptr_t stack;
   struct execution_group *cleanup_group;
   /* queues_locked. Load is queued tasks plus one while a task occupies the CPU. */
@@ -80,9 +81,8 @@ static struct scheduler *schedulers;
 static struct task *completed_head;
 static atomic_bool started;
 static struct spinlock queues_locked;
-static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
 
-/* Sleeping kernel tasks belong to the BSP and are accessed only with IF=0. */
+/* Sorted kernel sleepers belong to the BSP and are accessed only with IF=0. */
 static struct task *sleeping_tasks;
 
 /* Power-off hold. Changed under queues_locked; read without it at user
@@ -106,6 +106,21 @@ static void unlock_queues(void)
 static struct scheduler *local_scheduler(void)
 {
   return &schedulers[arch_cpu_index()];
+}
+
+static void arm_local_deadline(void)
+{
+  lock_queues();
+  struct task_wait *wait = local_scheduler()->timed_waits;
+  uint64_t deadline = wait ? wait->deadline : UINT64_MAX;
+  unlock_queues();
+  if (arch_cpu_index() == 0 && sleeping_tasks &&
+      sleeping_tasks->sleep_deadline < deadline) {
+    deadline = sleeping_tasks->sleep_deadline;
+  }
+  /* Only this CPU inserts deadlines. A remote removal can leave one harmless
+   * earlier interrupt armed, but cannot introduce a deadline we missed. */
+  arch_timer_arm(deadline);
 }
 
 struct process *process_current(void)
@@ -393,11 +408,18 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bo
   if (timed) {
     wait->timed = true;
     wait->deadline = deadline;
-    wait->timeout_next = timed_waits;
-    timed_waits = wait;
+    struct task_wait **link = &scheduler->timed_waits;
+    while (*link && (*link)->deadline <= deadline) {
+      link = &(*link)->timeout_next;
+    }
+    wait->timeout_next = *link;
+    *link = wait;
   }
   unlock_queues();
 
+  if (timed) {
+    arm_local_deadline();
+  }
   if (task->kind == TASK_USER) {
     arch_user_save(&task->cpu);
   }
@@ -445,7 +467,7 @@ static void remove_timeout_locked(struct task_wait *wait)
   if (!wait->timed) {
     return;
   }
-  struct task_wait **link = &timed_waits;
+  struct task_wait **link = &schedulers[wait->task->cpu_index].timed_waits;
   while (*link != wait) {
     KASSERT(*link);
     link = &(*link)->timeout_next;
@@ -489,7 +511,8 @@ void task_wait_wake(struct task_wait *wait)
 static void expire_timed_waits(void)
 {
   lock_queues();
-  if (!timed_waits) {
+  struct task_wait **link = &local_scheduler()->timed_waits;
+  if (!*link) {
     unlock_queues();
     return;
   }
@@ -497,13 +520,8 @@ static void expire_timed_waits(void)
   bool destinations[cpu_count];
   memset(destinations, 0, sizeof(destinations));
   uint64_t now = arch_monotonic_ns();
-  struct task_wait **link = &timed_waits;
-  while (*link) {
+  while (*link && (*link)->deadline <= now) {
     struct task_wait *wait = *link;
-    if (now < wait->deadline) {
-      link = &wait->timeout_next;
-      continue;
-    }
     *link = wait->timeout_next;
     wait->timeout_next = NULL;
     wait->timed = false;
@@ -942,19 +960,25 @@ static void wake_sleepers(void)
     return;
   }
   uint64_t now = arch_monotonic_ns();
-  struct task **link = &sleeping_tasks;
-
-  while (*link) {
-    struct task *task = *link;
-    if (now < task->sleep_deadline) {
-      link = &task->next;
-      continue;
-    }
-
-    *link = task->next;
+  while (sleeping_tasks && sleeping_tasks->sleep_deadline <= now) {
+    struct task *task = sleeping_tasks;
+    sleeping_tasks = task->next;
     task->sleep_deadline = 0;
     enqueue(&schedulers[0], task);
   }
+}
+
+void task_timer_interrupt(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!atomic_load_explicit(&started, memory_order_acquire)) {
+    return;
+  }
+  expire_timed_waits();
+  if (arch_cpu_index() == 0) {
+    wake_sleepers();
+  }
+  arm_local_deadline();
 }
 
 void kernel_task_sleep_until(uint64_t deadline)
@@ -1001,13 +1025,13 @@ void kernel_task_yield_if_runnable(void)
   }
 
   struct scheduler *scheduler = local_scheduler();
+  arch_timer_deadline_start();
   bool idle_reported = false;
   for (;;) {
+    task_timer_interrupt();
     if (cpu_index == 0) {
-      expire_timed_waits();
       reap_completed();
       object_reap();
-      wake_sleepers();
     }
 
     struct task *task = dequeue(scheduler, cpu_index);
@@ -1068,8 +1092,12 @@ void kernel_task_yield_if_runnable(void)
       }
       unlock_queues();
     } else if (task->sleep_deadline) {
-      task->next = sleeping_tasks;
-      sleeping_tasks = task;
+      struct task **link = &sleeping_tasks;
+      while (*link && (*link)->sleep_deadline <= task->sleep_deadline) {
+        link = &(*link)->next;
+      }
+      task->next = *link;
+      *link = task;
     } else if (!hold_user_task(task)) {
       requeue_preempted(task, cpu_index);
     }
@@ -1100,11 +1128,6 @@ void task_preempt(bool user_mode)
   if (task->kind == TASK_USER && user_mode && task_stop_requested()) {
     terminate_task();
   }
-  if (arch_cpu_index() == 0) {
-    expire_timed_waits();
-    wake_sleepers();
-  }
-
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
