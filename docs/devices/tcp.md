@@ -148,7 +148,7 @@ can cancel them without confusing a reused tuple or slot.
 | --- | --- |
 | Transport records | 32 globally, including listeners, setup, closing and TIME_WAIT |
 | Listeners / pending connections | Four listeners; four combined half-open/ready connections each |
-| Payload storage | 16 KiB receive window and 16 KiB send budget per connection; allocated as needed |
+| Payload storage | 65,535-byte receive window and send budget per connection; allocated as needed |
 | Out-of-order receive | Shares the receive window; at most 16 pbufs |
 | READ/WRITE extent | At most 4 KiB per call; helpers validate returned counts |
 | Pending calls | Eight shared CONNECT/LISTEN/ACCEPT/control, sixteen READ and sixteen WRITE slots, including completed replies |
@@ -169,11 +169,15 @@ connections explicitly while ordinary boot, UDP and numeric ping still work.
 The transport owns this authority, independent of caller DNS/random grants.
 
 lwIP handles congestion control, ACK validation, retransmission, RTT/RTO, Nagle
-coalescing, zero windows and FIN ordering. The initial MSS ceiling is 536 bytes,
-further reduced by the peer or local MTU. This is not PMTU discovery. Window
-scaling, SACK, timestamps, ECN, IPv4 fragmentation and new ICMP-error/PMTU handling
-are not implemented. These limits constrain performance; throughput tuning is
-separate work.
+coalescing, zero windows and FIN ordering. Connections advertise an MSS of 1460
+bytes for the 1500-byte interface MTU and send at most that to on-link peers,
+further reduced by the peer's MSS. Without path-MTU discovery, a connection
+whose peer is reached through a gateway sends at most 536 bytes per segment,
+IPv4's minimum reassembly size minus headers. The clamp is applied once the
+connection is established, before the application can send. Windows are
+65,535 bytes, the largest without window scaling. Window scaling, SACK,
+timestamps, ECN, IPv4 fragmentation and ICMP-error/PMTU handling are not
+implemented; see [network throughput](../wip/network-throughput.md).
 
 ## Request/response utility
 

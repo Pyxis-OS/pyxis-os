@@ -127,7 +127,7 @@ through the public interface.
 The 32-record admission limit includes listeners, pending, closing and TIME_WAIT records,
 and terminal records still retained by an owner. Exhaustion does not evict any
 connection. The configured receive window and send payload budget are each
-16 KiB. Payload is allocated as needed, not eagerly reserved at preparation.
+65,535 bytes. Payload is allocated as needed, not eagerly reserved at preparation.
 These are payload limits, not total heap limits: metadata is accounted separately.
 Receive storage and window accounting are described below.
 
@@ -255,17 +255,17 @@ extra reference before returning, including on WOULD_BLOCK.
 The sole caller task's existing grant and mappings remain live while it parks.
 
 lwIP validates sequence space and trims duplicates/overlaps. The receive callback
-copies ordered data into a 16 KiB ring, allocated on first payload receipt, and
+copies ordered data into a 65,535-byte ring, allocated on first payload receipt, and
 frees the incoming pbuf. Allocation failure aborts with NO_MEMORY rather than
 silently discarding acknowledged data. Ring storage remains until failure/final
 release or until peer FIN and the last buffered byte have been consumed; an idle stream that has never received data allocates no ring. Reassembly
-uses lwIP's out-of-order queue, capped at 16 KiB and sixteen pbufs; excess is dropped
+uses lwIP's out-of-order queue, capped at 65,535 bytes and sixteen pbufs; excess is dropped
 for retransmission. The receive window covers ordered unread bytes, successful
 read replies not yet collected, and out-of-order sequence space together. READ
 moves bytes from the ring to a slot without calling `tcp_recved`; only after the
 caller resumes and collects the result does the worker return that credit.
 
-The 16 KiB window bounds retained payload, not total allocated memory. Reserved
+The 65,535-byte window bounds retained payload, not total allocated memory. Reserved
 ring space and read slots can coexist with reassembly pbufs. Ring allocations,
 pbuf storage/headers, segment records and allocator headers are all included in
 `lwip_memory`; static slots and shared packet/DMA budgets are separate. Packet
@@ -307,9 +307,9 @@ returns QUEUE_FULL. A full send byte/pbuf budget parks the writer until the work
 processes ACKs, a terminal event or its original deadline, at most 30 seconds
 ahead. A timeout leaves data from earlier successful calls queued.
 
-The 16 KiB per-connection send budget covers accepted unsent and unacknowledged
-payload together. lwIP additionally caps queued pbufs with its existing
-`TCP_SND_QUEUELEN` formula (123 for this profile); heap accounting includes segment
+The 65,535-byte per-connection send budget covers accepted unsent and
+unacknowledged payload together. lwIP additionally caps queued pbufs with its
+existing `TCP_SND_QUEUELEN` formula (180 for this profile); heap accounting includes segment
 records, pbuf headers, spare tail capacity and allocator headers. Static staging
 copies and shared ARP/local/NIC packet copies have separate bounded storage.
 There is no second adapter retransmission queue. If a whole attempted copy does
@@ -325,12 +325,16 @@ retained send data; successful WRITE calls do not reset that deadline. Pending
 WRITE deadlines join the worker's earliest-deadline sleep, without polling loops
 or a second networking task.
 
-`TCP_MSS` is explicitly 536 bytes, retaining the conservative existing default.
-The peer's advertised MSS and local interface MTU can reduce the effective send
-size further. This ceiling is not path-MTU discovery or a guarantee for every
-route. No window scaling, timestamps, SACK, fragmentation or new ICMP error/PMTU
-handling is added. Throughput tuning belongs after the initial interoperability
-and graceful-lifecycle work.
+`TCP_MSS` is 1460 bytes for the 1500-byte interface MTU; lwIP advertises it and
+reduces the send size to the peer's MSS at establishment. lwIP sets that send
+MSS only when the connection is established, after `LWIP_HOOK_TCP_PCB_ALLOCATED`
+has run, so `tcp_connection_limit_mss` clamps it in the connect and accept
+callbacks instead. When `net_ipv4_route` reaches the peer through a gateway,
+or fails, the connection sends at most `TCP_ROUTED_MSS`, 536 bytes. The initial
+congestion window lwIP computed for 1460, 4380 bytes, is left as is; it is
+within RFC 6928's initial window for 536. No second lwIP interface is involved.
+This is not path-MTU discovery. No window scaling, timestamps, SACK,
+fragmentation or new ICMP error/PMTU handling is added.
 
 ## Readiness and nonblocking attempts
 

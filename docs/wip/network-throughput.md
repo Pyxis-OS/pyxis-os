@@ -1,8 +1,10 @@
 # Network throughput
 
-Status: **proposal, 2026-10-08,** assigned to Claude. Measurement only; nothing
-here is accepted yet. The three [decisions](#decisions-for-the-owner) have
-defaults and await the owner.
+Status: **accepted, 2026-10-08,** assigned to Claude. The owner accepted the
+three [decisions](#accepted-decisions), with the review's adjustment to the
+segment-size mechanism. Decisions 1 and 2 are implemented; two
+[questions](#open-questions) came out of implementation and await the owner.
+The native baseline waits for the owner's next ThinkPad batch.
 
 ## Goal
 
@@ -162,40 +164,96 @@ How to read the results:
   RAM-file heap pools for the rest of the boot. That is acceptable for three
   runs; see [contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing).
 
-## Decisions for the owner
+## Accepted decisions
 
-1. **Segment size.**
-   - **Default:** `TCP_MSS` 1460 for on-link destinations, keeping 536 for
-     routed ones. The route hook would pick a second lwIP interface with a
-     576-byte MTU for destinations behind a gateway, so lwIP's own
-     effective-MSS calculation applies per route.
-   - **Why not everywhere:** without path-MTU discovery, a routed path below
-     1500 bytes that does not clamp MSS would drop full-size segments, so the
-     connection would stall after the handshake. Advertising 1460 is safe either
-     way: the peer handles its own path.
-   - **Alternative:** 1460 everywhere, relying on the peer's MSS option and
-     router clamping. It is simpler, with that black-hole risk.
-   - **Alternative:** keep 536.
-2. **Windows.**
-   - **Default:** `NET_TCP_RECEIVE_BYTES` and `NET_TCP_SEND_BYTES` at 65,535
-     bytes, the largest window without scaling. At about 0.6 ms that allows
-     roughly 100 MiB/s per connection, near gigabit, if nothing else limits.
-   - **Memory:** a connection that receives allocates a 64 KiB ring instead of
-     16 KiB, and can hold up to 64 KiB of queued sends and 64 KiB out of order.
-     That is about 192 KiB at worst, and 6 MiB across the 32 transport records.
-   - **Alternative:** 32 KiB, a cap of about 55 MiB/s and half the memory.
-   - **Window scaling:** not now. A LAN at this round trip fits in 64 KiB;
-     scaling matters for longer paths and is a later decision.
-3. **A receive benchmark.**
-   - **Default:** add `ttcp -r [-p PORT]` to the Pyxis `ttcp`. It would accept
-     one connection, discard the data and report bytes and MiB/s, so receive
-     can be timed without a RAM file or a pipe in the way.
-   - **Alternative:** keep timing receive from host captures.
+Accepted by the owner 2026-10-08.
 
-Changes to the worker's per-packet cost wait for the native results. Those are
-the clock reads and timer re-arming in its wake and sleep cycle, the 4 KiB call
-extent and batching. TSC timekeeping is already the accepted
-[later direction](later-os-directions.md#clock-source), separate from this work.
+1. **Segment size:** 1460 bytes to on-link peers, 536 to peers behind a
+   gateway. The review asked for a per-connection clamp before considering a
+   second lwIP interface.
+2. **Windows:** TCP send and receive buffers at 65,535 bytes, without window
+   scaling.
+3. **Receive benchmark:** `ttcp -r`, discarding what it receives. Its
+   connection direction is an [open question](#open-questions).
+
+Worker per-packet costs, such as the clock reads and timer re-arming per wake,
+the 4 KiB call extent and batching, wait for the native results. TSC timekeeping
+is already the accepted [later direction](later-os-directions.md#clock-source),
+separate from this work.
+
+## Implementation
+
+- **Segment size.** `TCP_MSS` is 1460. A per-connection clamp,
+  `tcp_connection_limit_mss`, runs in the connect and accept callbacks: when
+  `net_ipv4_route` reaches the peer through a gateway, or fails, it caps
+  `pcb->mss` at `TCP_ROUTED_MSS`, 536. No second lwIP interface was needed.
+  - **Why not the PCB-allocation hook:** for passive opens lwIP allocates the
+    PCB before parsing the SYN's options. `tcp_parseopt` then resets `mss`
+    from the peer's option and `tcp_eff_send_mss` recomputes it, and active
+    opens recompute it again on the SYN-ACK. A cap at allocation would be
+    overwritten.
+  - **Why the callbacks work:** both run right after lwIP fixes `mss` at
+    establishment, before the application can send.
+  - **Initial window:** lwIP has already set it for 1460, to 4380 bytes. That
+    is within RFC 6928's initial window for 536, so the clamp leaves it.
+  - **What peers see:** 1460 is advertised either way; the peer's own path
+    handling covers what it sends.
+- **Windows.** `NET_TCP_RECEIVE_BYTES` and `NET_TCP_SEND_BYTES` are 65,535.
+  lwIP's `TCP_SND_QUEUELEN` formula now gives 180 pbufs, and the out-of-order
+  cap follows the receive window.
+
+### QEMU validation (2026-10-08)
+
+Same configuration as the baseline, kernel from this branch:
+
+| Check | Result |
+| --- | --- |
+| On-link send, 16 MiB | 3.256, 3.220, 3.252 MiB/s (baseline 1.649–1.659); 1460-byte segments; both SYNs show MSS 1460, window 65,535 |
+| Routed send, 4 MiB to this VM's Tailscale address through the gateway | 536-byte segments although both sides advertised 1460 |
+| On-link receive, 16 MiB | 4.30, 4.54, 4.36 MiB/s; SHA-256 matched; the guest window opens to 65,535 |
+| Passive on-link, the remote-terminal server's own connection | its frames leave as 1460 + 1322 bytes |
+
+A routed passive open cannot be produced with QEMU user networking, because
+forwarded connections all arrive from the on-link `10.0.2.2`. That path was
+checked in code only.
+
+## Open questions
+
+Each has a default and needs an owner decision.
+
+1. **Nagle with request and response framing.**
+   - **The problem:** each 2.8 KB `xfer` frame is now one full segment plus a
+     1322-byte tail. QEMU holds its ACK of the lone full segment for about
+     2.1 ms, and lwIP's Nagle holds the tail until that ACK. Under the old
+     536-byte MSS a frame was five full segments and a tail, and the receiver
+     ACKed promptly.
+   - **QEMU, 15 MiB `xfer` download:**
+
+     | Kernel | Seconds |
+     | --- | --- |
+     | Before, #554 | 52.2–56.9 |
+     | This branch | 59.7, 66.3, 64.6 |
+     | This branch with Nagle off (local experiment) | 41.7, 49.9, 41.4 |
+
+   - **Natively it may be worse:** Linux can delay the ACK for a lone segment
+     by up to about 40 ms, and the host cannot reply until the frame is
+     complete. That is an inference, not a measurement.
+   - **Default:** disable Nagle on every connection in the same established
+     callbacks. Caelum's calls already hand lwIP up to 4 KiB at once, so the
+     cost is extra small segments for small writes, such as terminal echo.
+     `ttcp` sends were unchanged with Nagle off (3.17, 3.19 MiB/s).
+   - **Alternative:** a per-stream no-delay option, which is new ABI.
+   - **Alternative:** keep Nagle and accept the stall.
+2. **Which way `ttcp -r` connects.**
+   - **The problem:** the proposal said `ttcp -r` would accept one connection,
+     like classic `ttcp`. Ordinary Pyxis sessions have connect-only TCP
+     authority; listening needs the `session` handoff the echo server uses.
+   - **Default:** `ttcp -r [-p PORT] HOST` connects to a host that serves data,
+     for example `socat -u OPEN:FILE TCP4-LISTEN:5002`, reads until EOF,
+     discards it and reports bytes and MiB/s. This works from any ordinary
+     shell.
+   - **Alternative:** listen as classic `ttcp` does, launched through the
+     `session` handoff with LISTEN authority.
 
 ## Out of scope
 

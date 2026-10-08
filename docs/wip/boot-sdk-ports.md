@@ -98,8 +98,9 @@ Chosen by the owner, each starting with a proposal:
   conditional source-loss rule is recorded for future integration, without a
   second input source.
 - **Claude** (2026-10-08): [network throughput](network-throughput.md), TCP
-  toward the owner's gigabit LAN. It starts with a QEMU baseline, a native
-  measurement plan and a proposal of three decisions. The
+  toward the owner's gigabit LAN. Three decisions are accepted; segment size
+  and windows are implemented, with Nagle and the `ttcp -r` direction open.
+  The native baseline waits for the owner's next ThinkPad batch. The
   [remote transfer](remote-file-transfer.md#transfer-throughput) reply-read
   fix merged in #554; its native re-timing is pending.
 - **The owner:** the Java virtual machine of
