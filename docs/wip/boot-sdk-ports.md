@@ -72,8 +72,8 @@ Chosen by the owner, each starting with a proposal:
   the later SDL blocking-event fix remains beta's work. Fresh main `abbeded`
   has a pre-code [baseline](../development/system-pointer-qualification.md#task-3-baseline)
   recorded in [draft #550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
-  [Three task 3 decisions](pointer.md#task-3-planning) are pending, with defaults;
-  no task 3 code is implemented yet. Tasks 4 and 5 need separate authorization.
+  [Three task 3 defaults](pointer.md#task-3-planning) are accepted on 2026-10-08;
+  implementation is authorized and in progress. Tasks 4 and 5 need separate authorization.
   Matched QEMU checks suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
   clipboard and USB HID implementation remain separate. Bluetooth's accepted

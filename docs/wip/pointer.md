@@ -17,8 +17,7 @@ Tasks 4 and 5 still require separate authorization.
 The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
 All three original decision rounds are accepted on 2026-10-08; round three was
 recorded in the first task 1 commit. Task 3's first decision round is
-[pending](#task-3-planning). No implementation choice in that round counts as
-accepted until the owner answers.
+[accepted, 2026-10-08](#task-3-planning), and implementation is authorized.
 
 [Qualification](../development/system-pointer-qualification.md) records the
 pre-code task 1 baseline, joint task 1/2 validation and the fresh-main task 3
@@ -592,7 +591,7 @@ ownership, and uses the existing cancellation and scan-to-sleep notification
 contract. Direct blocking reads remain available. This task supplies readiness;
 it does not change SDL or Quake event-loop ordering.
 
-Implementation breakdown after owner decisions:
+Implementation breakdown:
 
 1. Retain checked, geometry-sized local TTY glyph storage with transactional
    resize and the existing cropping/no-reflow rules. Track visible-cell selection
@@ -619,17 +618,16 @@ Implementation breakdown after owner decisions:
    dependency before the parent pin, then inspect exact-head CI. Clipboard
    publication/paste, USB HID and the second input source stay out of this task.
 
-**Pending owner round, proposed 2026-10-08 — none accepted yet:**
+**Task 3 round accepted by the owner, 2026-10-08:**
 
-12. **Selection lifetime. Recommended:** clear selection on local TTY scroll,
+12. **Selection lifetime:** clear selection on local TTY scroll,
     committed resize, mux layout change or explicit history-view movement.
     Preserve it through unrelated output and color changes while selected
     characters and the visible view remain unchanged; mutation or eviction
-    clears it. Alternative: translate surviving selections through scroll/resize.
-13. **Wheel step and live return. Recommended:** three rows per detent over pane
+    clears it.
+13. **Wheel step and live return:** three rows per detent over pane
     content, without changing keyboard focus, and return to ordinary live input
-    at the newest endpoint. Keep existing keyboard history controls. Alternative:
-    one row per detent with the same endpoint behavior.
-14. **Kernel-log selection. Recommended:** allow visible-cell selection in Caelum's
+    at the newest endpoint. Keep existing keyboard history controls.
+14. **Kernel-log selection:** allow visible-cell selection in Caelum's
     kernel log through the kernel handler, without a program stream or clipboard
-    publication. Alternative: leave that terminal unselectable.
+    publication.
