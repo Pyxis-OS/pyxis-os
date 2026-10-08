@@ -170,3 +170,6 @@ data. Five samples of the in-game counter, two seconds apart:
   build host has no gettext) and Hellfire's music and voice.
 - **Text input** uses the US layout.
 - **Not yet checked:** the native ThinkPad.
+
+[Technical debt](../technical-debt.md#devilutionx-port-limits) records these
+limits and the [deferred native check](../technical-debt.md#sdl2-and-devilutionx-native-qualification).

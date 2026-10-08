@@ -831,7 +831,7 @@ open/read/write/close for cksum and restricted tee, and `lseek` for files.
 Public O_RDWR, fdopen and duplication remain absent even though fopen
 supports update modes internally. Consumers requiring those interfaces need
 a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
-[SDL2 port](wip/sdl2.md); it exposes the stream's existing descriptor and adds
+[SDL2 port](development/sdl2.md); it exposes the stream's existing descriptor and adds
 no new aliasing. Revisit them against a pinned consumer's actual
 needs; duplication must settle shared open-state/cursor ownership before adding
 new descriptor aliases. Descriptor inheritance and cross-process shared offsets
@@ -1017,7 +1017,7 @@ not infer the location from `argv[0]` or add path normalization for one port.
 
 Deadline sleeps wake on the 120 Hz local APIC preemption tick, so a sleep can
 end up to 8.33 ms after its deadline; see [timekeeping](kernel/timekeeping.md).
-The [SDL2 probe](wip/sdl2.md#a-test-program) measured a `SDL_Delay(16)` loop at
+The [SDL2 milestone](development/sdl2.md#measurements) measured a `SDL_Delay(16)` loop at
 24.8 ms per frame instead of about 17. DevilutionX's own limiter tracks
 deadlines and held 57.8–62.3 FPS. Quake's 72 Hz cap and other fixed-rate
 sleepers can be delayed the same way; that is not measured.
@@ -1145,6 +1145,61 @@ Revisit threads and TLS with the Clang hosting milestone. Revisit
 localization, wide characters and `<cmath>` when a selected port, such as
 DevilutionX, needs them. Each addition belongs in libc or the runtime
 configuration, never in a port-local stub.
+
+## SDL2 port limits
+
+The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
+and preference paths. Missing pieces:
+
+- **Audio:** absent until there is an audio driver.
+- **Threads:** without them, `SDL_INIT_TIMER` callback timers and
+  `SDL_CreateThread` fail. Revisit with userspace threads.
+- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop, a 1 ms delay that
+  becomes the 8.33 ms tick, so waiting programs wake about 120 times a second.
+  A blocking wait on the input and display handles is the fix when a consumer
+  waits for events.
+- **Windows and cursor:** one fullscreen window; no system cursor,
+  `SDL_ShowCursor` or hardware cursor. The pointer position is SDL's, built
+  from relative counts. The [system pointer](wip/pointer.md) milestone replaces
+  that translation after the SDL2 milestone.
+- **Text:** US layout only, from the shared kernel table.
+- **Not covered by validation:** key repeat, because QEMU's injected PS/2 input
+  has no typematic repeat.
+
+## DevilutionX port limits
+
+[DevilutionX](userland/devilutionx.md) is personal-use only, because its
+non-commercial licence and libmpq's GPL cannot both be met by someone who
+distributes it. It is therefore an opt-in build that ordinary images, CI and
+bundles never contain.
+
+It has no sound, multiplayer, game controllers or translations; the build
+host has no gettext. Saves are in `home://devilution/`, which is RAM on live
+boots.
+
+Retail data cannot be staged in images: `DIABDAT.MPQ` is about 500 MB, which
+would stay in RAM and does not fit the ESP. On installed systems it has to
+arrive through [remote transfers](#remote-transfer-memory-and-staging-limits),
+which today means splitting it into 15 MiB pieces. Revisit with streaming
+transfers.
+
+## SDL2 and DevilutionX native qualification
+
+The owner closed the SDL2 milestone on 2026-10-08 with its native ThinkPad
+check deferred, because the machine is busy with the Bluetooth investigation.
+QEMU runs do not establish native display, PS/2 pointer and keyboard
+behaviour, touchpad and TrackPoint feel, or frame rates on that hardware.
+
+Revisit in the owner's batch of native ThinkPad checks after the Bluetooth
+investigation:
+
+- Boot a `DIABLO_DATA` image and play the shareware with keyboard and mouse,
+  including key repeat in name entry.
+- Note the frame rate with the default "Limit FPS" setting.
+- Run a [standalone bundle](userland/devilutionx.md#standalone-bundle) with
+  the retail data on the installed stick.
+
+Record the result in the [DevilutionX reference](userland/devilutionx.md).
 
 ## Quake port limits
 

@@ -155,7 +155,7 @@ owner's `mirrors/SDL` mirror as a static library with a native backend:
 SDL draws into its own surface and presents by copying updated rectangles into
 the display mapping. Text input uses the SDK's shared US layout. Threads, audio
 devices and the other facilities Pyxis lacks are left out and report
-themselves as unsupported. The [SDL2 milestone](../wip/sdl2.md) has the
+themselves as unsupported. The [SDL2 reference](sdl2.md) has the
 decisions and measurements.
 
 `build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
