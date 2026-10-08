@@ -1,6 +1,7 @@
 # MX Master 3S on Pyxis
 
-Status: **documentation proposal, assigned 2026-10-08; no decisions accepted.**
+Status: **documentation proposal; first round accepted 2026-10-08 with review
+adjustments. Second round pending; no implementation authorized.**
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -16,34 +17,53 @@ outside this proposed milestone. Extra buttons, horizontal/high-resolution wheel
 and any vendor report needed for basic input require inspection and a scope
 decision, rather than successful fake support.
 
-## First owner decision round
+## Accepted first round
 
-Only these three decisions are put to the owner now. Each remains **open** until
-an explicit answer is recorded here. All later recommendations are tentative;
-later rounds wait for this round, with at most three decisions per round.
+Accepted by the owner through the orchestrator on **2026-10-08**, incorporating
+the [review of #542](https://git.internal/PyxisOS/pyxis-os/pulls/542):
 
-1. **Stack boundary.** Recommended: kernel USB transport, Intel initialization
-   and HCI packet/flow-control ownership; one trusted userspace service owns GAP
-   policy, L2CAP, SMP pairing, ATT/GATT and HID interpretation. This keeps DMA
-   and controller state with their existing owner and pairing/key policy out of
-   the kernel. Alternatives are a userspace HCI owner over a narrower transport,
-   or a kernel Bluetooth stack; either changes the contracts below.
-2. **Pairing security.** Recommended: require LE Secure Connections and a
-   128-bit encryption key, permit unauthenticated Just Works only during an
-   explicitly authorized enrollment of this mouse, and never fall back to LE
-   legacy pairing. Just Works does not authenticate the selected mouse against
-   an active attacker. Requiring authenticated pairing instead may block the
-   mouse if it has no suitable I/O/OOB capability; that capability is unmeasured.
-3. **Closure.** Recommended: staged warm-host development, but cold AX200
-   initialization, durable bond reuse and native pointer use are required before
-   calling the mouse milestone complete. A warm-only milestone is an alternative
-   with an explicit dependency on another OS having initialized the controller.
-   This proposal recommends resolving the deferred cold upload in this milestone.
+1. **Stack boundary:** kernel USB/xHCI, Intel initialization and HCI ownership;
+   one trusted userspace service for GAP policy, L2CAP, SMP, ATT/GATT and HID.
+2. **Pairing security:** LE Secure Connections with a 128-bit key; unauthenticated
+   Just Works only during explicitly authorized enrollment, with no silent legacy
+   fallback. Missing SC support stops for an owner decision, not permanent
+   rejection of the mouse. Measure SMP features before task 5's crypto work.
+   Just Works does not authenticate the peer against an active attacker.
+3. **Closure:** cold AX200 initialization, durable bond reuse and native pointer
+   use are required; warm-host development can come first. Cold upload is the
+   riskiest task: bootloader bulk transport and possibly USB re-enumeration put
+   it on the critical path, and closure needs native owner evidence. The warm-only
+   alternative would avoid that work but depend on another OS having initialized
+   the controller.
 
-## Proposed ownership and service lifetime
+## Second owner decision round
 
-The lean boundary in decision 1 would assign ownership as follows. It is not
-implemented by the existing probes.
+Only these three decisions are put to the owner now; all remain **open**.
+Recommendations elsewhere are tentative unless recorded as accepted above.
+
+4. **Running firmware policy.** Recommended: package pinned, mirrored SFI/DDC
+   and license/provenance in the boot archive; reuse an operational warm build
+   only after it is explicitly qualified as compatible, without resetting solely
+   to enforce the packaged pin. Unknown builds stop for an owner decision.
+   The exact pin/mirror follows cold identification, not today's host file names.
+   An alternative is requiring the packaged build on every startup, which may
+   force upload/re-enumeration even on a working warm controller.
+5. **Bond and control authority.** Recommended: one system-wide private npfs
+   root granted only to trusted startup and the Bluetooth service; separate
+   enrollment/forget authority supplied to a trusted local control tool, withheld
+   from ordinary applications. Bond reuse is system-wide, not per-space. A
+   per-user store would depend on the later users/authority design.
+6. **Protection at rest.** Recommended: capability isolation for this milestone,
+   with no disk encryption claim; raw disk/mount/backup authority can expose keys.
+   Defer wrapping to the [credentials and biometric-unlock direction](credentials-and-biometrics.md).
+   Requiring that protection now would add its master-key/unlock prerequisites
+   to the Bluetooth milestone's closure path.
+
+## Accepted ownership and proposed service lifetime
+
+The accepted stack boundary assigns these responsibilities. The service and HCI
+adapter are not implemented by the existing probes; their lifetime contracts
+below remain proposed until reviewed and accepted.
 
 | Owner | Responsibility |
 | --- | --- |
@@ -133,7 +153,7 @@ Do not merge the warm probes as a substitute. The accepted
 [cold-upload debt](../technical-debt.md#bluetooth-cold-firmware-upload-and-running-version-policy)
 stays open until cold initialization is measured.
 
-## Proposed pairing and bonds
+## Pairing gates and proposed bond storage
 
 Discover a candidate with the accepted bounded active scan; surface parsed names,
 HID service/appearance and run-local labels only. Scanning is an explicit control
@@ -144,15 +164,37 @@ Keep the public scanner-address policy for initial development only as a propose
 default; privacy-address configuration and discovery/reconnect parameters need
 their own later policy review.
 
+The [owner's Fedora account](../development/bluetooth-investigation.md#owner-reported-linux-pairing)
+supports an explicit scan-and-select flow: `bluetoothctl` found and paired the mouse
+when KDE's scan did not show it. The first attempt failed and the second worked.
+Enrollment failure must permit another explicitly authorized user attempt after
+the previous attempt is accounted for, with no automatic pairing retry loop.
+Uncertain transport ownership can still require reboot, and missing SC remains
+an owner-decision gate; retry does not bypass either boundary.
+
 Read the actual SMP feature exchange before choosing an association method. The
 [Security Manager specification](https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-54/out/en/host/security-manager-specification.html)
 distinguishes LE Secure Connections from authenticated pairing: a NoInputNoOutput
 peer normally selects unauthenticated Just Works. No such capability was measured
-in the scan. If accepted, decision 2 would permit that method only with explicit
-enrollment consent;
-a required unsupported association method stops for a decision. Verify the
-negotiated key size and encryption success before accepting any HID input, and
-reject legacy downgrade, debug keys and malformed pairing exchanges.
+in the scan. Pairing without a PIN or confirmation, as reported by the owner,
+fits Just Works but establishes neither SC support nor negotiated key size.
+The accepted policy permits that method only with explicit enrollment
+consent. Missing SC support or a required unsupported association method stops
+for an owner decision before crypto implementation; it does not authorize legacy
+pairing. Verify the negotiated key size and encryption success before accepting
+any HID input. Reject legacy downgrade, debug keys and malformed exchanges.
+
+Task 4 first exchanges SMP Pairing Request/Response and aborts with Pairing Failed
+before key generation, then disconnects without completing pairing or storing a
+bond. Record only IO capability, AuthReq (including the SC bit) and maximum key
+size, with addresses excluded before recording. Check SC, key size and association
+prerequisites; advertised features are a gate before task 5's crypto work, not
+successful pairing, encrypted HID or permission to use legacy SMP. As an optional
+earlier input for the owner's native batch, the owner could inspect `btmon` live
+while pairing on Fedora and transcribe just those fields.
+Do not save a raw trace, terminal transcript or packet dump and redact it later.
+This option is offered, not scheduled or assumed; the owner has supplied no such
+capture yet. A Fedora capture may inform the gate but does not qualify Pyxis SMP.
 
 Prefer the existing pinned [Mbed TLS/TF-PSA-Crypto port](../../ports/mbedtls/README.md)
 for P-256 and AES-CMAC primitives, subject to checking its exported configuration
@@ -176,7 +218,9 @@ The storage authority is capability isolation, not an invented UID or permission
 bit. Initial proposal has no encryption at rest: possession of the disk or raw
 mount/backup authority can expose keys. If that is unacceptable, stop to design
 key wrapping and its separate unlock authority; a key beside the encrypted bond
-is not protection. Live boots without a private persistent root should report
+is not protection. Keep that design aligned with
+[credentials and biometric unlock](credentials-and-biometrics.md). Live boots
+without a private persistent root should report
 bonding unavailable, rather than claim RAM storage is persistent.
 
 Write a bounded bond record to a temporary file, atomically replace its entry and
@@ -242,8 +286,8 @@ Every task starts only after its necessary decisions and explicit owner
 assignment. Use focused kernel/userspace/ports PRs, publish dependency commits
 first and state merge order. Probe branches remain historical evidence.
 
-- [ ] **1. Contracts and dependencies.** Record accepted stack/security/closure
-  choices, then resolve the remaining firmware, bond-authority, scan/reconnect,
+- [ ] **1. Contracts and dependencies.** Refine the accepted stack/security/closure
+  direction and resolve the remaining firmware, bond-authority, scan/reconnect,
   HID/sharing and failure-lifetime decisions in rounds of at most three. Agree
   the packet/control and input-source contracts with pointer task 1. Identify
   capability/report questions and their measurement gates in the later tasks;
@@ -261,11 +305,16 @@ first and state merge order. Probe branches remain historical evidence.
   evidence rather than forcing the controller into a guessed state.
 - [ ] **4. LE connection and discovery.** Bounded authorized scan/selection,
   connection/disconnection, ACL/L2CAP framing and signaling, and minimal public
-  ATT/GATT discovery. Protected attributes, the secured HID map and all input
+  ATT/GATT discovery. At the start, measure SMP Pairing Request/Response fields
+  and abort before key generation: missing SC or inadequate key size stops for
+  an owner decision before task 5. This warm-path gate can precede cold task 3
+  when explicitly assigned after runtime transport; cold remains required for
+  closure. Protected attributes, the secured HID map and all input
   wait for the required encryption and bond state; encryption-required replies
   are a boundary, not a failure to bypass.
-- [ ] **5. Secure Connections enrollment.** Check the actual association model,
-  capture SMP feature exchange, implement pairing with reviewed crypto/entropy
+- [ ] **5. Secure Connections enrollment.** Proceed only after task 4's feature
+  gate supports the accepted security policy, or an explicit owner decision
+  revises it. Implement the observed association with reviewed crypto/entropy
   integration, enforce decision 2 and measure encrypted operation. Report
   security properties accurately.
 - [ ] **6. Durable bonds and reconnect.** Private npfs grants, checked record
@@ -279,7 +328,7 @@ first and state merge order. Probe branches remain historical evidence.
   idle/active input and concurrent storage, with repetitions and variation;
   ordinary interactive boots/debugger inspection, no new test infrastructure.
   Owner-run native cold start, durable reconnect and everyday pointer use close
-  the proposed hardware goal. Document remaining limits/debt, retire this WIP
+  the accepted hardware goal. Document remaining limits/debt, retire this WIP
   to subsystem references and update links after the owner accepts completion.
 
 The ThinkPad's already-requested native-check batch, including re-enabling Fedora
@@ -289,15 +338,13 @@ authorize the production milestone or its new native qualification tasks.
 
 ## Decision and investigation handoff
 
-First-round answers: **pending**. The firmware pin/mirror and warm-version policy,
-private bond authority/at-rest policy, discovery/reconnect behavior, report scope,
-input-source lifetime and USB HID sharing are queued topics, not further questions
-put to the owner now. Refine their recommendations after the first round, and
-obtain explicit answers before implementing dependent behavior.
+Round one is **accepted 2026-10-08**; round two is pending. The exact firmware
+pin/mirror, discovery/reconnect behavior, report scope, input-source lifetime and
+USB HID sharing remain later topics; they are not additional questions in this
+round. Obtain answers before implementing dependent behavior.
 
-Once the owner has decided on this proposal, retire
-[the investigation WIP](bluetooth.md) into an appropriate concise reference,
-linking the existing task reports and final report instead of duplicating them.
-Keep this proposed milestone in WIP until it is accepted and implemented. This
-document neither marks it assigned for implementation nor closes the accepted
-cold-firmware debt.
+With the direction decided, the completed investigation is now the
+[AX200 reference](../devices/bluetooth-investigation.md), linked to the final
+report and detailed task reports. This production proposal stays in WIP; no
+implementation task is assigned and cold-firmware debt remains open. No native
+batch, host Bluetooth service change or SMP exchange was performed for this PR.

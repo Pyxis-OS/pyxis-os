@@ -85,7 +85,7 @@ connect/inventory/exit workload per image measured 0.05 seconds with a
 ## Accepted scan profile and implementation
 
 The owner accepted the
-[profile](../../../wip/bluetooth.md#accepted-task-5-scan-profile) before code:
+[profile](../../../devices/bluetooth-investigation.md#accepted-task-5-scan-profile) before code:
 legacy 1M active scanning, 30 seconds after confirmed enable, 100 ms interval
 and window, controller duplicate filtering enabled and no accept-list filter.
 The controller's existing public scanner address is used over the air; addresses

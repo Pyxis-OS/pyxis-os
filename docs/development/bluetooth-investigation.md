@@ -7,10 +7,11 @@ This establishes a path to implementing a mouse stack; it does not establish a
 working Bluetooth mouse. Connections, pairing, bonds, GATT and pointer delivery
 were not attempted.
 
-The owner has seen the scan results and assigned this report and the
-[mouse milestone proposal](../wip/bluetooth-mouse.md). That proposal remains
-undecided. The [investigation WIP](../wip/bluetooth.md) stays in place until the
-owner decides on it; retiring that WIP does not merge any probe code.
+The owner has seen the scan results and accepted the stack, security and closure
+direction in the [mouse milestone proposal](../wip/bluetooth-mouse.md) on
+2026-10-08. Its later policy decisions remain pending. The completed WIP is now
+the [AX200 reference](../devices/bluetooth-investigation.md); retiring it merges
+no probe code and authorizes no implementation.
 
 ## Evidence by task
 
@@ -92,6 +93,21 @@ Bluetooth addresses stayed out of the retained scan output, repository, docs and
 PRs. Candidate identity was correlated privately in RAM; captures used parsed
 fields and scalar debugger inspection. The scan made no connection and saved
 no keys. All investigation QEMU/GDB jobs exited and both host interfaces rebound
-to `btusb`; Fedora Bluetooth stayed disabled. The owner-run native-check batch,
-including re-enabling Fedora Bluetooth, follows this investigation and has not
-been performed here.
+to `btusb`; Fedora Bluetooth was disabled at the end of those probe runs. That is
+historical cleanup, not a claim about the host's current service state. The
+owner-run native-check batch, including re-enabling Fedora Bluetooth, follows
+this investigation and has not been performed here.
+
+## Owner-reported Linux pairing
+
+On 2026-10-08 the owner reported that Fedora needed `bluetoothctl` to pair the
+MX Master 3S: it did not appear in KDE's scan. Pairing required no PIN or
+confirmation. The first pairing attempt failed and the second worked. This is
+the owner's account, without a supplied protocol capture or a new Pyxis run.
+
+The lack of PIN/confirmation fits Just Works, by inference; it establishes
+neither Secure Connections support, negotiated key size nor exact IO capability.
+Combined with Pyxis's measured scan, the account supports explicit discovery and
+selection, with another enrollment attempt authorized by a user action after
+failure. It does not justify an automatic pairing retry loop or legacy fallback.
+The proposed early SMP feature gate remains unmeasured.

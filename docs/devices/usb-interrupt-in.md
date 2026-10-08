@@ -7,7 +7,7 @@ and downstream devices return `USB_UNSUPPORTED`; there is no public raw-USB ABI
 or automatic Bluetooth/HID binding.
 
 The initial implementation follows the
-[accepted investigation scope](../wip/bluetooth.md#accepted-interrupt-in-decisions).
+[accepted investigation scope](bluetooth-investigation.md#accepted-interrupt-in-decisions).
 The [qualification record](../development/experiments/usb-interrupt-in/README.md)
 distinguishes real AX200 passthrough traffic, emulated storage coexistence and
 source-reviewed error paths from native hardware qualification.

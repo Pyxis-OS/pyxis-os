@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [AX200 Bluetooth investigation](../devices/bluetooth-investigation.md),
+  2026-10-08: warm-host QEMU passthrough through identification of the MX Master
+  3S; [final report](../development/bluetooth-investigation.md). Native Pyxis
+  evidence is inventory only; production mouse work remains proposed below.
 - [Screenshots](../userland/screenshot.md), 2026-10-08: reusable zlib/libpng
   ports, native CAPTURE and staged PNG output with explicit remote download;
   [native ThinkPad qualification is deferred](../technical-debt.md#native-screenshot-qualification).
@@ -43,11 +47,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-08): final documentation deliverables for the
-  [Bluetooth investigation](bluetooth.md), after the owner saw the merged task 5
-  scan results. The [report](../development/bluetooth-investigation.md) records
-  measured evidence; the [MX Master 3S milestone proposal](bluetooth-mouse.md)
-  awaits decisions, at most three per round. No production task is assigned.
+- **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
+  documentation only. The owner accepted stack/security/closure direction in
+  round one; round two awaits decisions, at most three per round. The completed
+  investigation is referenced above. No production task is assigned.
 - **Codex alpha** (owner update, 2026-10-08): accepted
   [system-pointer milestone](pointer.md), with task 1 in progress and kernel-owned
   positions, cursor and surface routing. The owner's latest assignment supersedes
@@ -122,8 +125,9 @@ prerequisites and result are clear.
 - [Control, events and faults](control-events-faults.md), Pyxis's answer to
   signals, tied to Continuum.
 - [Userspace scheme providers](userspace-scheme-providers.md).
-- [Bluetooth investigation](bluetooth.md): QEMU passthrough of the AX200's
-  Bluetooth, firmware load and a first LE scan, toward the MX Master 3S.
+- [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI/userspace stack
+  direction, explicit Secure Connections enrollment and cold/native closure;
+  remaining policy decisions are open.
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).
 

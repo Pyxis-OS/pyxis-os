@@ -1,7 +1,7 @@
 # Bluetooth task 2: interrupt-IN requirements
 
 This is the 2026-10-08 assessment requested by
-[investigation task 2](../../../wip/bluetooth.md#steps), after
+[investigation task 2](../../../devices/bluetooth-investigation.md#qualified-scope), after
 [task 1](../bluetooth-task1/README.md) and its
 [merged PR #511](https://git.internal/PyxisOS/pyxis-os/pulls/511).
 It records source inspection and specification requirements, not measured
@@ -170,7 +170,7 @@ queue overflow; an empty successful transfer is not an HCI event.
 
 ## Sharing with USB HID and decisions before a probe
 
-The planned [USB HID mouse](../../../wip/pointer.md#devices) can share checked
+The planned [USB HID mouse](../../../wip/bluetooth-mouse.md#proposed-sharing-with-usb-hid) can share checked
 interrupt-IN endpoint configuration, retained rings, completion dispatch and
 receive-buffer ownership. Keep USB configuration/interface selection and class
 framing with their consumers. HID boot/report interpretation and pointer delivery
@@ -208,7 +208,7 @@ storage on the same controller. The owner subsequently accepted STALL as a
 terminal stream failure with DMA backing/ring identity retained until reboot and
 no automatic recovery.
 
-The [current milestone decisions](../../../wip/bluetooth.md#accepted-interrupt-in-decisions)
+The [accepted investigation decisions](../../../devices/bluetooth-investigation.md#accepted-interrupt-in-decisions)
 replace the unresolved status of those choices. Task 3a is now authorized to
 implement shared kernel interrupt-IN support for merge through private interfaces,
 without a public ABI; task 3b remains the unmerged HCI/controller-state probe,
