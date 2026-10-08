@@ -76,7 +76,7 @@ struct bluetooth_hci_submit_reply {
 /* RECEIVE returns this metadata followed immediately by length wire bytes.
  * One entire EVENT or ACL record is copied; an undersized reply preserves the
  * queue head and returns BUFFER_TOO_SMALL. Sequence is session-consecutive.
- * Generation disambiguates reused connection handles; zero means no link.
+ * Generation identifies one connection; zero means no single-link context.
  * submission_id matches a command response when applicable, otherwise zero.
  * Lost stream continuity terminates availability rather than hiding loss. */
 struct bluetooth_hci_record {

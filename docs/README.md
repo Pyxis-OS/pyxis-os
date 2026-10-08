@@ -40,7 +40,8 @@ The [Bluetooth investigation report](development/bluetooth-investigation.md)
 summarizes the AX200 passthrough evidence through identification of the MX Master
 3S. The completed investigation is the [AX200 reference](devices/ax200-bluetooth.md).
 Its [mouse milestone](wip/bluetooth-mouse.md) records the accepted direction and
-completed task 1 contracts. Runtime HCI transport is the assigned next task.
+completed task 1 contracts. The [runtime HCI reference](devices/bluetooth-hci.md) describes the assigned
+task 2 implementation; qualification remains in progress.
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals. Files in [wip](wip/) describe unfinished work or design directions;

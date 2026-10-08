@@ -1,7 +1,7 @@
 # Bluetooth mouse task 2: runtime HCI transport
 
 Status: **assigned 2026-10-08; attached-controller baseline captured before code
-changes.** This is task 2 of the [mouse milestone](../../../wip/bluetooth-mouse.md),
+changes; implementation built, warm qualification pending.** This is task 2 of the [mouse milestone](../../../wip/bluetooth-mouse.md),
 separate from the completed investigation's identically numbered source-assessment
 task. The owner authorized production AX200 binding, an exclusive process-owned
 controller grant, event/asynchronous ACL reception, kernel-owned command/data
@@ -18,7 +18,10 @@ on #548 remains.
 
 The [accepted contracts](../../../wip/bluetooth-task1-contracts.md) settle the
 task's policy. Read-only implementation audits found no further owner choices
-needed to begin. Numeric ABI, capacity and deadline choices remain ordinary
+needed to begin. Later review exposed the independent-stream handle-reuse limit;
+the owner accepted fail-closed reuse for task 2 on 2026-10-08. Connection/reconnect
+tasks must qualify the retirement boundary before bonded reconnect is ready.
+See the [runtime contract](../../../devices/bluetooth-hci.md). Numeric ABI, capacity and deadline choices remain ordinary
 implementation choices under those contracts. New contrary hardware evidence
 returns to the owner. The historical warm profile may produce staged development
 evidence under this assignment; it is not production firmware qualification.
@@ -169,14 +172,12 @@ identity before attachment; a changed node returns to the owner for access,
 rather than blind retries. The attached baseline is complete. Runtime code,
 warm transport validation and matched post-change measurements remain.
 
-The local installed compiler still uses fork `41ab6043`; the pinned `49e2c1a`
-toolchain is being prepared separately through the existing owner-hosted source
-and `toolchain/build.sh`, preserving the old compiler. Prefix:
-`/home/chronium/opt/pyxis-llvm-49e2c1a`; work directory:
-`/home/chronium/.cache/pyxis-llvm-build-49e2c1a`; log:
-`/tmp/pyxis-bluetooth-runtime-toolchain.log`. It was paused for the baseline and
-has resumed; finish/check it before source builds, and keep build activity out
-of later timed measurements. No compiler container rebuild is assigned.
+The pinned local compiler completed successfully at
+`/home/chronium/opt/pyxis-llvm-49e2c1a`, preserving the older prefix. Its recorded
+fork is `49e2c1a1518b3e4687b52ceb6001069c1b6d261e`; a clean ordinary
+`make -j16 kernel` passed with it. No compiler container rebuild is assigned.
+Matching CI SDK/userspace/ports bundles are required for the changed public ABI;
+baseline artifacts cannot stand in for those inputs.
 
 Preparation and all three baseline guests exited; no QEMU, GDB, passthrough or probe process
 remains. Fedora Bluetooth stays inactive/disabled. No address, private packet

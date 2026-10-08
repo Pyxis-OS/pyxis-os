@@ -1,6 +1,6 @@
 # MX Master 3S on Pyxis
 
-Status: **task 1 complete; task 2 assigned 2026-10-08, baseline captured.**
+Status: **task 1 complete; task 2 implementation, baseline captured 2026-10-08.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
 remain. Task 2 is assigned; tasks 3–8 still need explicit owner assignment.
@@ -399,3 +399,18 @@ Task 2 now uses branch `bluetooth/runtime-hci`, from fresh main `3bda2c3` after
 #548 merged. The attached-controller baseline was
 captured before code changes after the owner granted USB-node access. Measurements,
 current toolchain inputs and cleanup are recorded in the runtime transport note.
+
+### Task 2 continuity decision
+
+Accepted by the owner on **2026-10-08**: task 2 fails closed with explicit
+input-loss/unavailability if the controller reuses a previously disconnected
+connection handle. Independent event and ACL reception cannot yet establish a
+retirement boundary that proves delayed old bytes belong to the old connection;
+a new generation alone is insufficient. Valid old-link ACL data for a known
+retired handle is discarded without erasing the disconnect notification or
+disabling storage. This is distinct from attaching that data to a reused handle.
+
+The connection/reconnect tasks must establish and qualify a safe reuse boundary
+before bonded reconnect is ready. This limit does not relax required durable
+reconnect or native closure. See the
+[revisit condition](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).

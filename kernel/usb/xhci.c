@@ -6,6 +6,7 @@
 #include <arch/pci.h>
 #include <arch/smp.h>
 #include <kernel/format.h>
+#include <kernel/bluetooth.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/dma.h>
@@ -1500,7 +1501,14 @@ static bool drain_events(struct usb_host_controller *controller)
   }
   /* Rearm only after the consumed events and ERDP are published. Every command,
    * control and bulk wait drains here; this progress issues no new commands. */
-  return async_bulk_deadlines(controller) && rearm_interrupts(controller) && rearm_async_bulk(controller);
+  if (!async_bulk_deadlines(controller) || !rearm_interrupts(controller) ||
+      !rearm_async_bulk(controller)) {
+    return false;
+  }
+  /* The class tick is bounded: it copies/collects and can publish transfers,
+   * but cannot wait or recursively drain the event ring. */
+  bluetooth_hci_drain_progress(controller);
+  return controller->running && !controller->failed;
 }
 
 static bool controller_healthy(struct usb_host_controller *controller)
@@ -1819,6 +1827,7 @@ static void stop_controller(struct usb_host_controller *controller)
       device->request.result = USB_IO;
     }
   }
+  bluetooth_hci_transport_failed(controller);
   klog("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
        controller->address.bus, controller->address.device, controller->address.function,
        controller->failure, halted, interrupts_disabled);
@@ -3162,6 +3171,7 @@ static void controller_worker(void *argument)
       stop_controller(controller);
       return;
     }
+    bluetooth_hci_progress(controller);
     usb_storage_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;

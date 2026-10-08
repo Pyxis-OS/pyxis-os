@@ -4,7 +4,8 @@ With `CONFIG_XHCI=y`, the private USB host interface supports one interrupt-IN
 stream per boot-present, root-connected full-speed device. Class code supplies
 checked endpoint facts and selects the device's USB configuration. Other speeds
 and downstream devices return `USB_UNSUPPORTED`; there is no public raw-USB ABI
-or automatic Bluetooth/HID binding.
+or general HID binding. The checked [AX200 binder](bluetooth-hci.md) is its
+first production class consumer.
 
 The initial implementation follows the
 [accepted investigation scope](ax200-bluetooth.md#accepted-interrupt-in-decisions).
@@ -51,7 +52,10 @@ Transfer Events match controller, slot, DCI and physical TD. Successful full or
 short completions copy actual bytes into the FIFO before the receive becomes
 reusable. Rearm runs after event traversal and ERDP publication at the end of
 `drain_events`. Command, control and bulk waits all reach that same progress
-point. It performs no class commands, recovery, allocation or recursive waits.
+point. Receive rearm performs no class commands, recovery, allocation or
+recursive waits. A subsequent bounded HCI progress pass also admits native
+requests, consumes copied packets and publishes nonblocking commands/data, so
+a long storage wait cannot strand an active HCI reader.
 
 ## Wait, collection and failure
 
