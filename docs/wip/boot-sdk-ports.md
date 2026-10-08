@@ -83,7 +83,8 @@ Chosen by the owner, each starting with a proposal:
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   Tasks 1–3 are merged: Pyxis #545/#550, userland #164/#166, ports #65/#66.
   Task 4, the VirtIO hardware cursor, is authorized and starts from fresh main
-  `b43a573` on `pointer/virtio-cursor`. Its
+  `b43a573` on `pointer/virtio-cursor` in
+  [draft #560](https://git.internal/PyxisOS/pyxis-os/pulls/560). Its
   [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
   is recorded; [capture completion and QEMU frontend proposals](pointer.md#task-4-planning)
   await the owner before code. The later SDL blocking-event adapter fix remains

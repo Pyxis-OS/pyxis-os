@@ -17,7 +17,9 @@ Task 3 is merged in #550 with [userland #166](https://git.internal/PyxisOS/pyxis
 [Task 3 qualification](../development/system-pointer-qualification.md#task-3-qualification)
 records baseline, input/overlay/capture/wait checks and source-only limits.
 The owner authorized task 4, the VirtIO hardware cursor. It starts from fresh main
-`b43a573` on `pointer/virtio-cursor`. The [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
+`b43a573` on `pointer/virtio-cursor` in
+[draft #560](https://git.internal/PyxisOS/pyxis-os/pulls/560).
+The [initial software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
 and [task-specific proposals](#task-4-planning) precede implementation. Task 5
 still requires separate authorization.
 
