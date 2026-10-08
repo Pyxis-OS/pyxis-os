@@ -5,8 +5,9 @@ Based on main `8c4368e`, including the owner's native batch
 [merged #547](https://git.internal/PyxisOS/pyxis-os/pulls/547). The
 [mouse milestone](bluetooth-mouse.md) retains accepted rounds one and two.
 The owner accepted both task 1 rounds below on 2026-10-08, including the
-source-loss adjustment. The third round remains pending. Task 1 cannot close until
-decisions and pointer coordination are recorded; it authorizes no implementation.
+source-loss adjustment. Alpha's agreement was relayed on 2026-10-08; the two
+third-round owner decisions remain pending. Task 1 stays open for those decisions
+and authorizes no implementation.
 
 ## Accepted first task 1 round
 
@@ -114,16 +115,33 @@ migration; terminal/mux wheel delivery waits for pointer task 3. Bluetooth must
 not claim those terminal consumers already work or create a separate cursor,
 SDL position or focus path.
 
-The current router has one anonymous `device_buttons` snapshot. Passing separate
+At that inspected revision, the router had one anonymous `device_buttons`
+snapshot. Passing separate
 mouse snapshots directly would release each other's held buttons. Also, cursor
 visibility and consumer acquisition still check PS/2 `mouse_available()`. Future
 integration needs per-source state and availability from any admitted live source,
 then the same kernel router. These are required extensions to coordinate with
 alpha, not a claim that #545 already implements a producer interface.
 
+### Alpha agreement
+
+Relayed by the orchestrator on **2026-10-08**: alpha reports no conflict between
+this input-source contract and pointer tasks 1+2 at
+[#545 revision `a2ff720`](https://git.internal/PyxisOS/pyxis-os/src/commit/a2ff720487667e4afa63dbc2b9e0b0fff2a81c13).
+Read-only inspection confirms that source quarantine is separate from physical
+buttons: `pointer_input_report` carries `buttons` and `suppressed_buttons`, and
+`pointer_source_lost` accepts the surviving physical mask and revokes lock.
+With PS/2 as the only source, the loss hook matches the accepted single-source
+case. No second source, producer API or multi-source availability was added.
+
+Future Bluetooth integration still needs the accepted per-source snapshots,
+aggregation and loss predicate before invoking reset/lock-loss handling. The
+buttonless-loss/other-live-source case must preserve the active pointer path;
+this agreement does not claim that #545 already implements that adapter.
+
 ## Input-source contract for coordination
 
-These source semantics are owner-accepted; alpha's agreement is pending.
+These source semantics are owner-accepted; alpha's agreement is recorded above.
 
 **Authority/lifetime.** Trusted startup supplies a dedicated producer grant only
 to the Bluetooth service. Acquisition is exclusive and process-owned; handle
@@ -189,9 +207,9 @@ source exists, input is unavailable and the effective cursor is hidden, while
 consumer cursor preferences and geometry retain their existing session ownership.
 
 This records owner-accepted semantics, not numeric ABI declarations or implemented
-operations. The orchestrator has sent the contract to alpha for per-source
-device-loss handling in pointer task 2. Record alpha's agreement only when relayed;
-none is recorded yet, and no alpha branch or ABI file was edited.
+operations. Alpha's no-conflict agreement was relayed against `a2ff720` on
+2026-10-08. No alpha branch or ABI file was edited, and the future Bluetooth
+producer/aggregation adapter remains unimplemented.
 
 ## Later decisions and gates
 
@@ -234,6 +252,7 @@ unqualified running version returns to the owner.
 | Producer ABI and PS/2 coexistence | #545's consumer/router design inspected | Alpha coordination agrees source lifetime/aggregation and availability; task 7 qualifies held-button loss, stale epochs, locked/ordinary input and PS/2 coexistence. |
 | Terminal/mux consumption | #545 ordinary graphics and lock are draft; terminal wheel waits | Integrate only with the pointer tasks that supply each destination; qualify routing without inventing a Bluetooth terminal path. |
 
-Task 1 remains unchecked while decisions or alpha agreement are pending. None of
+Task 1 remains unchecked while the two owner decisions are pending; alpha
+coordination is recorded as agreed. None of
 these gates authorizes a probe, firmware reset, pairing attempt, build or native
 check in this documentation task. No address or secret is included in its evidence.

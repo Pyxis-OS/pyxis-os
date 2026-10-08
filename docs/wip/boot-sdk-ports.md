@@ -64,8 +64,8 @@ Chosen by the owner, each starting with a proposal:
   Two milestone rounds and the first task 1 round are accepted 2026-10-08,
   including conditional per-source loss. Task 1 round two is also accepted;
   the [third round](bluetooth-task1-contracts.md) proposes durable bond success
-  and production firmware qualification. Alpha agreement
-  awaits relay and later gates remain open; no implementation.
+  and production firmware qualification. Alpha's agreement is relayed against
+  `a2ff720`; the two owner decisions and later gates remain open; no implementation.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   All three decision rounds are accepted; proposal #530 is merged. Task 1 is
   delivered in #545 with [qualification](../development/system-pointer-qualification.md).

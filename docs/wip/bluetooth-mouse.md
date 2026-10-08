@@ -274,14 +274,16 @@ The owner has accepted the [system-pointer milestone](pointer.md), with kernel
 positions. Codex alpha is integrating tasks 1+2 in draft
 [#545](https://git.internal/PyxisOS/pyxis-os/pulls/545). Task 1 records the
 [owner-accepted producer, aggregation and source-loss contract](bluetooth-task1-contracts.md#input-source-contract-for-coordination)
-against inspected revision `304d1d7`. The orchestrator sent it to alpha for
-per-source device-loss handling; alpha's agreement awaits relay. It uses the same
+against initial inspected revision `304d1d7`. The orchestrator relayed alpha's
+[no-conflict agreement at `a2ff720`](bluetooth-task1-contracts.md#alpha-agreement)
+on 2026-10-08. It uses the same
 kernel position, routing, cursor and lock path as PS/2;
 consumer APIs do not confer input-injection authority. Physical held state is
 per source. Reset/cancel only when the lost source held buttons; revoke lock then
 or when no live source remains. Idle loss of an unused mouse is invisible while
 PS/2 is live. Terminal/mux wheel remains pointer task 3, not implemented by
-this draft or Bluetooth. No alpha agreement or ABI addition is claimed here.
+this draft or Bluetooth. The agreement adds no second source or producer API;
+the future Bluetooth adapter remains to be implemented in its assigned task.
 
 ## Proposed sharing with USB HID
 
@@ -318,7 +320,7 @@ first and state merge order. Probe branches remain historical evidence.
   [first task 1 round](bluetooth-task1-contracts.md#accepted-first-task-1-round)
   and second round are accepted 2026-10-08. The third round presents two policies,
   with dependency/measurement gates recorded. This task stays unchecked until
-  decisions and alpha coordination finish.
+  the two pending owner decisions finish; alpha's agreement is recorded.
 - [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
   progress and process-exit/loss behavior. Validate warm passthrough framing and
@@ -373,7 +375,7 @@ Remaining decisions and dependency gates include later topics not presented now:
 - Durable bond success/failure and production warm-version evidence (third task 1 round).
 - Exact firmware pin/mirror and actual compatibility list, selected after measurement.
 - Later parameter qualification and ordinary implementation choices such as record encoding.
-- Alpha's agreement on the owner-accepted input-source contract (awaiting relay).
+- Alpha's input-source agreement is recorded against `a2ff720` on 2026-10-08.
 
 Producer authority, OR aggregation, conditional source loss and initial
 scan/reconnect policy are settled, as are HID scope, USB sharing and controller
@@ -389,5 +391,5 @@ report and detailed task reports. This production proposal stays in WIP; no
 implementation task is assigned and cold-firmware debt remains open. The owner
 reports the native batch completed and Fedora Bluetooth disabled. Task 1's
 branch is `docs/bluetooth-task1-contracts`, based on fresh main `8c4368e`; only
-documentation is edited. Pointer draft `304d1d7` was read, not changed. No QEMU,
-debugger, passthrough or probe job is started for this task.
+documentation is edited. Pointer drafts `304d1d7` and `a2ff720` were read, not
+changed. No QEMU, debugger, passthrough or probe job is started for this task.
