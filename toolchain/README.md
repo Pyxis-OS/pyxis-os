@@ -30,7 +30,7 @@ A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
 `ci/Containerfile` runs the same build script. The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-41ab604` before merging
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a` before merging
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
@@ -41,8 +41,8 @@ rebuild; a new fork commit does:
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-41ab604 .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-41ab604
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a
 ```
 
 ## Installation
@@ -52,7 +52,7 @@ podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-41ab604
 - the LLVM archive and object tools;
 - compiler-rt builtins for Pyxis in Clang's resource directory.
 
-`x86_64-unknown-pyxis-` names (`clang`, `ld.lld`, `ar`, `nm`, `ranlib`,
+`x86_64-unknown-pyxis-` names (`clang`, `clang++`, `ld.lld`, `ar`, `nm`, `ranlib`,
 `objcopy`, `strip`, `objdump`, `readelf`, `size`, `addr2line`) point at
 those tools. The SDK Make fragment asks Clang for `llvm-ar` by path, so another
 `ar` earlier in `PATH` cannot supply it.
@@ -90,16 +90,20 @@ x87/SSE state across task switches; AVX remains unsupported. Do not select
 builds explicitly retain `-mgeneral-regs-only`. The compiler-rt builtins include
 the x87, quad, half-precision and complex helpers and are built without the red
 zone; they are not a libc or libm implementation. The target has no 32-bit/x32
-multilib, shared libraries, PIE, C++ runtime, thread runtime or exception-handling
-contract.
+multilib, shared libraries, PIE, threads or thread-local storage: `thread_local`
+and `_Thread_local` fail when compiling.
 
 Applications select an external SDK with `--sysroot=/path/to/sdk/sysroot`.
 The driver finds `crt0.o`, `pyxis.ld`, libc and libpyxis there, and the
-compiler-rt builtins in its resource directory. The SDK owns the linker script
+compiler-rt builtins in its resource directory. For C++ it also searches
+`usr/include/c++/v1` ahead of libc's headers and links libc++, libc++abi and
+libunwind from the sysroot. The SDK builds that [C++ runtime](../docs/development/sdk.md#c)
+from this toolchain's fork commit, so the compiler installs none. The SDK owns the linker script
 and fixed load layout; objects and `.a` archives are ordinary ELF.
 
 A normal C link supplies startup, the SDK script and a grouped compiler-rt,
-libc and libpyxis sequence, and links with LLD. Pass `-lterm` for terminal
+libc and libpyxis sequence, and links with LLD. Every executable link passes
+`--eh-frame-hdr`; C code has no unwind tables, so C executables gain nothing. Pass `-lterm` for terminal
 helpers. `-nostdlib` suppresses the runtime and default SDK script for
 kernel/custom links; `-T` overrides the default script. Existing SDK Make
 settings name runtime inputs explicitly for dependency tracking. Changing the
@@ -110,9 +114,12 @@ changing SDK headers/libraries/startup/linker script does not.
 
 [LLVM 23.1.3](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.3),
 through the `mirrors/llvm-project` mirror and the `pyxis-llvm` fork, adds:
-- Pyxis OS support in LLVM's triple, Clang's target information and its driver;
+- Pyxis OS support in LLVM's triple, Clang's target information and its driver,
+  including the SDK's C++ runtime and rejecting thread-local storage;
 - P1F output in LLD;
-- a compiler-rt helper that avoids the red zone.
+- a compiler-rt helper that avoids the red zone;
+- libc++ selections for Pyxis libc: `timespec_get` clocks, no terminal check
+  and no `ELAST` limit.
 
 The installation records the fork commit in `share/pyxis-toolchain/llvm-revision`.
 LLVM, including Clang, LLD and compiler-rt, is Apache-2.0 WITH LLVM-exception.

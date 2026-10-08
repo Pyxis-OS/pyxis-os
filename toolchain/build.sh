@@ -18,7 +18,7 @@ target=x86_64-unknown-pyxis
 
 # Pyxis commits on top of llvmorg-23.1.3, from the pyxis-23.1.3 branch.
 llvm_repository=https://git.internal/PyxisOS/pyxis-llvm.git
-llvm_commit=41ab6043cc4fd63e0a358d1e60bba249a751d8ee
+llvm_commit=49e2c1a1518b3e4687b52ceb6001069c1b6d261e
 
 mkdir -p "$prefix" "$work"
 cd "$work"
@@ -77,11 +77,11 @@ cmake -G Ninja -S "$source/compiler-rt/lib/builtins" -B build-builtins \
   -DCOMPILER_RT_INSTALL_PATH="$resource"
 ninja -C build-builtins -j"$jobs" install
 
-# Builds select tools by the target prefix.
-# llvm-readobj and llvm-symbolizer select readelf/addr2line behaviour by name.
-for tool in clang ar ranlib nm objcopy strip objdump readelf size addr2line; do
+# Builds select tools by the target prefix. clang++ selects C++ mode by name,
+# as llvm-readobj and llvm-symbolizer select readelf/addr2line behaviour.
+for tool in clang clang++ ar ranlib nm objcopy strip objdump readelf size addr2line; do
   case "$tool" in
-    clang) name=clang ;;
+    clang | clang++) name=clang ;;
     readelf) name=llvm-readobj ;;
     addr2line) name=llvm-symbolizer ;;
     *) name=llvm-$tool ;;
