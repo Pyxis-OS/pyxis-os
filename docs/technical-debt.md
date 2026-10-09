@@ -745,19 +745,26 @@ wants to play the retail data.
 The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240; a resolution switcher would need a video driver with a mode
 list behind Quake's Video Modes menu, reallocation of the frame, z-buffer and surface cache, and a check of the renderer's size limits
 (upstream reverted 640x480 as unstable). Sound, networking, CD audio and joysticks are absent, and sound needs a native audio device first.
-Saves are Quake's trusted text format written in place without a temporary file, and shareware and retail data share `home://quake/id1`
-so their configuration and saves mix; QuakeC strings outside the hunk use a 512-entry table whose overflow stops the game with an error.
-Revisit when a second data set or atomic saves matter.
+Saves are Quake's trusted text format, and shareware and retail data share `home://quake/id1` so their configuration and saves mix;
+QuakeC strings outside the hunk use a 512-entry table whose overflow stops the game with an error. Revisit when a second data set matters.
+Config, saves and screenshots follow the [atomic-save limits](#atomic-save-limits); demos are still recorded in place.
 
 ## vi port limits
 
 [BusyBox vi](userland/vi.md) displays ASCII only. BRE search and substitution use libc's [regex limits](#regex-character-classes-and-back-references)
 through bounded copies (owner decision 2026-10-07), so matching stops at an embedded NUL within a copied slice; revisit bounded or binary
-regex interfaces for a concrete consumer. Saves keep upstream's in-place write followed by `ftruncate`, so a short write or crash can leave a
-truncated or mixed file (revisit with atomic replacement or a durable-save policy, [filesystem](devices/filesystem-native-adapter.md)).
+regex interfaces for a concrete consumer. Saves follow the [atomic-save limits](#atomic-save-limits).
 `:!` and shell filters need a native launch adapter, the read-only marker probes WRITE authority because truthful file metadata does not
 exist, and the recipe's libbb adapter covers only the selected vi and less helpers. Input EOF exits and loses unsaved edits, as upstream does
 (Kilo handles it explicitly).
+
+## Atomic save limits
+
+[Quake](userland/quake.md#saves-and-configuration) (config, saves, screenshots) and [vi](userland/vi.md) write a synced `NAME.XXXXXX` file beside
+the target and rename it over the target; a failure keeps the old file. Libc cannot sync a directory (a descriptor cannot open one), so a crash
+can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Libc has no
+`fdopen`, so Quake reopens the name `mkstemp` reserved. Saving needs directory CREATE and REMOVE, not only file WRITE, with no in-place fallback.
+A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md)) or `fdopen`.
 
 ## less pager limits
 
