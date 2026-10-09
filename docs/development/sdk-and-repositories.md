@@ -41,6 +41,16 @@ Git reads must be allowed by the Forgejo instance. The workflow builds the
 integrated kernel and ISO; it does not build a compiler or follow any
 submodule's latest main.
 
+A pull request that changes a gitlink must pin a commit that contains that
+repository's current `main` and that has been published. The `pins` job
+(`scripts/check-submodule-pins.sh`) fetches `main` and the pinned commit anonymously
+and fails otherwise, naming the submodule, the pin and `main`; rebase the dependency
+PR onto `main` and repin. It checks only gitlinks the pull request changed since it
+left its base branch, so an unrelated PR is not blocked when a dependency's `main` moves
+ahead, and it does not run for pushes or manual runs. A PR changing a gitlink is never
+documentation-only, so the image build still runs. The check does not judge whether a
+dependency PR is ready to merge: merge the dependency first, as in the PR's stated order.
+
 To update a checkout that still points to the former personal namespace:
 
 ```sh
