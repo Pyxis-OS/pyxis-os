@@ -20,7 +20,8 @@ Implemented behavior lives in the subsystem references listed in the
   input, program cursors, relative lock and user escape, terminal selection and
   mux wheel browsing, and VirtIO hardware cursors. Tasks 1–4 are merged in
   #545/#550/#560; task 5's reference closure and default-cursor redraw are
-  delivered for review, not merged. The
+  delivered for review in [#562](https://git.internal/PyxisOS/pyxis-os/pulls/562),
+  not merged. The
   [qualification report](../development/system-pointer-qualification.md) records
   matched QEMU checks and partial native evidence;
   [remaining native checks](../technical-debt.md#native-system-pointer-qualification)

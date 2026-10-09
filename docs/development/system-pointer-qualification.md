@@ -1,5 +1,11 @@
 # System pointer qualification
 
+Tasks 1–4 are merged. Task 5 closure and the default-cursor redraw are delivered
+for review in [#562](https://git.internal/PyxisOS/pyxis-os/pulls/562); its
+[closure record](#task-5-closure-and-cursor-redraw) reviews the matched QEMU
+evidence and partial owner-reported native checks. Remaining native coverage
+stays open in [technical debt](../technical-debt.md#native-system-pointer-qualification).
+
 Task 1 baseline was captured on 2026-10-08 before pointer code changes. Runtime
 source is main `9a88813`; documentation-only commit `1c27d28` records round-three
 acceptance and task 1 authorization. Pins: userland `df78002`, ports `8bdac14`,
