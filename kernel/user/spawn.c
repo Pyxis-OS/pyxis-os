@@ -245,7 +245,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
     }
     return status;
   }
-  enum mm_result loaded = user_process_load(space, bytes, size, &child, &entry, &stack_top);
+  enum mm_result loaded = user_process_load(space, bytes, size,
+      capture->initial_stack_bytes, &child, &entry, &stack_top);
   if (!external) {
     file_end_operation(capture->image);
   }

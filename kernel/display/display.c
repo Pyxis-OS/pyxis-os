@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <kernel/display.h>
 #include <kernel/display_capture.h>
 #include <kernel/fb/early_console.h>
@@ -13,6 +14,7 @@
 #include "bochs.h"
 #include "virtio_gpu.h"
 #include "internal.h"
+#include "timing.h"
 
 #define DISPLAY_COPY_BYTES (64 * 1024)
 #define DISPLAY_PANIC_WAIT_LIMIT 1000000
@@ -56,7 +58,8 @@ bool display_modeset_begin(void)
   return retired && !display_is_panicking();
 }
 
-void display_init(const struct boot_info *boot, const char *size)
+void display_init(const struct boot_info *boot, const char *size, const char *timing,
+                  bool timing_metrics)
 {
   if (boot->framebuffer.size) {
     target = boot_display_init(&boot->framebuffer);
@@ -90,6 +93,7 @@ void display_init(const struct boot_info *boot, const char *size)
   if (!target) {
     panic("no usable display: firmware framebuffer or supported driver required");
   }
+  display_timing_prepare(boot, driver == DISPLAY_BOOT, timing, timing_metrics);
 }
 
 /* BSP presenter. A frame without staging still presents, directly. */
@@ -118,6 +122,9 @@ bool display_start(void)
       break;
   }
   set_availability(ready);
+  if (ready && driver == DISPLAY_BOOT && staging) {
+    display_timing_start();
+  }
   return ready;
 }
 
@@ -245,6 +252,23 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
 
 /* Copies the visible rows of a complete staged frame to scanout memory,
  * leaving row padding untouched. A panic claim stops it between chunks. */
+static size_t copy_first_pixel(void)
+{
+  if (!display_timing_front_write()) {
+    return 0;
+  }
+  uint32_t pixel;
+  memcpy(&pixel, (const void *)staging, sizeof(pixel));
+  /* Only the timestamp and one pixel store are IRQ-atomic. All observation,
+   * waiting and the remaining copy run IF=1; no duplicated front write. */
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t stamp = arch_monotonic_ns();
+  __builtin_memcpy((void *)target->address, &pixel, sizeof(pixel));
+  cpu_restore_interrupts(flags);
+  display_timing_write_stamp(stamp);
+  return sizeof(pixel);
+}
+
 static void copy_staging(void)
 {
   size_t row_bytes = target->width * sizeof(uint32_t);
@@ -253,13 +277,21 @@ static void copy_staging(void)
     for (size_t offset = 0; offset < total && !atomic_load(&panic_claimed);
         offset += DISPLAY_COPY_BYTES) {
       size_t count = MIN(total - offset, DISPLAY_COPY_BYTES);
-      memcpy((void *)(target->address + offset), (const void *)(staging + offset), count);
+      size_t prefix = offset ? 0 : copy_first_pixel();
+      memcpy((void *)(target->address + offset + prefix),
+          (const void *)(staging + offset + prefix), count - prefix);
+      display_timing_progress((offset + count) / row_bytes);
     }
     return;
   }
   for (size_t y = 0; y < target->height && !atomic_load(&panic_claimed); ++y) {
     size_t offset = y * target->pitch;
-    memcpy((void *)(target->address + offset), (const void *)(staging + offset), row_bytes);
+    size_t prefix = y ? 0 : copy_first_pixel();
+    memcpy((void *)(target->address + offset + prefix),
+        (const void *)(staging + offset + prefix), row_bytes - prefix);
+    if ((y + 1) % 8 == 0 || y + 1 == target->height) {
+      display_timing_progress(y + 1);
+    }
   }
 }
 
@@ -267,7 +299,14 @@ bool display_end_frame(const struct pointer_frame *frame)
 {
   bool ready = available;
   if (staging && available && !display_is_panicking()) {
-    copy_staging();
+    /* Staging is private RAM. Panic must not wait on a sleeping presenter.
+     * Publish/recheck again before any direct write, just as at frame begin. */
+    atomic_store(&writer, DISPLAY_NO_WRITER);
+    display_timing_wait();
+    atomic_store(&writer, cpu_initial_apic_id());
+    if (!display_is_panicking()) {
+      copy_staging();
+    }
   }
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
     ready = virtio_gpu_present();
@@ -277,10 +316,16 @@ bool display_end_frame(const struct pointer_frame *frame)
   }
   cpu_store_fence();
   atomic_store(&writer, DISPLAY_NO_WRITER);
+  display_timing_finish();
   if (ready != available) {
     set_availability(ready);
   }
   return ready && !display_is_panicking();
+}
+
+uint64_t display_next_deadline(void)
+{
+  return staging && driver == DISPLAY_BOOT ? display_timing_next_deadline() : 0;
 }
 
 const struct framebuffer *display_panic_target(void)
