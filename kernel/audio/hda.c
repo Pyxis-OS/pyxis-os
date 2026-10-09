@@ -30,6 +30,8 @@
 #define HDA_PCIE_TYPE_MASK 0x0f
 #define HDA_PCIE_ENDPOINT 0
 #define HDA_PCIE_ROOT_ENDPOINT 9
+#define HDA_PCIE_SLOT_IMPLEMENTED (1u << 8)
+#define HDA_PCIE_RESERVED_FLAGS (3u << 14)
 #define HDA_PCIE_DEVICE_CONTROL 0x08
 #define HDA_PCIE_DEVICE_CONTROL_BYTES 0x0a
 #define HDA_PCIE_NO_SNOOP (1u << 11)
@@ -807,11 +809,12 @@ static const char *prepare_native_coherence(struct hda_controller *controller)
       capability, (unsigned)flags, (unsigned)control);
   if ((version != 1 && version != 2) ||
       (type != HDA_PCIE_ENDPOINT && type != HDA_PCIE_ROOT_ENDPOINT) ||
+      (flags & (HDA_PCIE_SLOT_IMPLEMENTED | HDA_PCIE_RESERVED_FLAGS)) ||
       control == UINT16_MAX || (control & HDA_PCIE_FUNCTION_RESET)) {
     return "native PCIe Device Control state is invalid";
   }
-  /* Never issue a word update that can restore firmware bus mastering or
-   * trigger FLR. The adjacent Device Status word has W1C bits. */
+  /* BME stays off and FLR stays clear. Use a word write because the adjacent
+   * Device Status word has W1C bits. */
   uint16_t expected = control & ~HDA_PCIE_NO_SNOOP;
   if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
     return "native PCI BME enabled during coherence setup";

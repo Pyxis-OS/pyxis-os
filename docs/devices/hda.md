@@ -30,9 +30,15 @@ remain refused with specific failure explanations. There is no new handoff
 helper. An already usable D0/memory-decode device retains firmware BME until
 the established halt/claim sequence.
 
-After halt and claim, native initialization updates only PCI snoop byte `0x42`
-under mask `0x07` to value `0x02`, with full readback. It does not copy PCIe
-NoSnoop/Relaxed Ordering settings or unknown vendor capabilities. Complete DMA
+After halt and claim, native initialization requires one valid PCIe endpoint
+capability containing Device Control. With BME off, it clears only No Snoop
+Enable (bit 11), using a 16-bit write that preserves other controls and the
+adjacent Device Status W1C word. An already clear bit needs no write; the full
+control word and BME-off state are checked before DMA allocation. Missing,
+malformed or ambiguous capabilities, invalid state and refused clear fail closed.
+The owner accepted this replacement on **2026-10-09**. PCI byte `0x42` is
+read-only ktrace evidence; no legacy write or admission gate remains. Relaxed
+Ordering and unknown vendor controls are unchanged. Complete DMA
 allocations respect 128-byte alignment and a conservative 40-bit ceiling when
 GCAP permits 64-bit addresses, otherwise 32-bit. The supplied single-message,
 64-bit, non-maskable MSI layout uses the existing helper. Boot-enabled MSI/MSI-X
@@ -43,8 +49,8 @@ evidence. See the [accepted native plan](../wip/hda-native.md).
 The owner's **2026-10-09** cold boot reached GCAP `4401`/HDA 1.0 with
 COMMAND `0` and PMCSR `8` (D0, NoSoftRst, PME off). The D3+BME refusal was
 not hit; native preparation failed the `0x42` snoop readback before driver DMA.
-Ktrace now records that byte before/requested/after and bounded PCIe Device
-Control/NoSnoop observations. The gate remains fail-closed.
+That historical image used the now-replaced legacy gate. Ktrace records the
+read-only byte and PCIe Device Control before/requested/after in the new image.
 
 Pinned [Linux's 15e3 entry and ATI capability](https://github.com/torvalds/linux/blob/adc218676eef25575469234709c2d87185ca223a/sound/pci/hda/hda_intel.c#L2570)
 select the same write, but its helper never checks readback. AMD's public
@@ -52,9 +58,9 @@ select the same write, but its helper never checks readback. AMD's public
 Table 13, identifies this controller without defining `0x42`. The older
 [SP5100 guide, p. 252](https://www.amd.com/content/dam/amd/en/documents/archived-tech-docs/programmer-references/44413.pdf#page=252)
 defines a snoop control there; that is not a Renoir register contract. No
-read-only-bit explanation, unsupported-register bypass or replacement coherence
-policy is established by the current evidence. The proposed PCIe NoSnoop policy
-requires an owner decision in #578 before implementation.
+read-only-bit explanation or Renoir vendor-register contract is established
+by that evidence. The accepted implementation relies on the standard PCIe
+NoSnoop permission and verified clear, with native qualification still pending.
 
 The [worker](../../kernel/audio/audio.c) alone releases reset, initializes command
 transport and reads the codec graph. Runtime helpers assert the owning worker

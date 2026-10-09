@@ -94,6 +94,14 @@ until reboot remains accepted; native evidence decides on any later reset recove
    report a specific unavailable reason if that state cannot be used. The
    supplied Linux runtime-suspended state does not establish Pyxis boot state.
    Only native evidence of D3+BME at boot can reopen a separate helper decision.
+3. **Native coherence: option A accepted 2026-10-09.** Replace the undocumented
+   `0x42` admission gate with standard PCIe Device Control No Snoop Enable.
+   With BME off, clear only bit 11 using a 16-bit write, preserve other controls
+   and verify the resulting word before allowing DMA. A missing/malformed
+   capability, invalid state or refused clear remains fail-closed. Keep `0x42`
+   as read-only ktrace evidence; never write it. Cached mappings, barriers,
+   address limits and ownership stay unchanged. Native playback still needs
+   the owner's sitting.
 
 ## Controller bring-up beyond adding a PCI ID
 
@@ -128,10 +136,10 @@ Pinned [Linux v6.12 controller reference](https://github.com/torvalds/linux/blob
 (`adc218676eef25575469234709c2d87185ca223a`) classifies `15e3` with AMD southbridge
 quirks: no Intel TCSEL write, ATI-style snoop control, AMD FIFO-position handling,
 and a conservative 40-bit DMA ceiling. Its snoop path updates PCI byte `0x42`
-(mask `0x07`, enabled value `0x02`). Its 32-frame FIFO position correction is not
-an 8192-byte PCI-prefetch bound. Inspect these behaviors against the actual
-controller before adopting a narrowly matched, checked native profile; do not
-copy every upstream power-management or probe-retry policy.
+(mask `0x07`, enabled value `0x02`), without checking readback. The accepted
+Pyxis contract uses PCIe NoSnoop clearing instead and never writes this legacy
+byte. Its 32-frame FIFO position correction is not an 8192-byte PCI-prefetch
+bound. Do not copy every upstream power-management or probe-retry policy.
 
 The [Realtek reference at the same revision](https://github.com/torvalds/linux/blob/adc218676eef25575469234709c2d87185ca223a/sound/pci/hda/patch_realtek.c)
 uses the ALC269 family path for ALC257. No exact `5081` table entry was found in

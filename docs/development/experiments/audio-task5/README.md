@@ -85,8 +85,10 @@ Native batch instructions are in [#578](https://git.internal/PyxisOS/pyxis-os/pu
 The owner initially froze that PR pending the native batch. The 2026-10-09 cold
 boot (reported integration of main/#577/#564/#578, trace logging) then reached
 COMMAND `0`, PMCSR `8` and GCAP `4401`, but failed the `0x42` snoop readback
-before driver DMA. No native playback ran. The follow-up adds before/after byte
-and PCIe NoSnoop traces, preserving fail-closed while the replacement coherence
-policy is reviewed. D3+BME remains refused; no PCI helper, live jack switching,
-recovery or batching.
+before driver DMA. No native playback ran. The owner accepted the replacement
+coherence contract on **2026-10-09**: clear and verify standard PCIe No Snoop
+Enable with BME off, preserving other controls and cached DMA policy. `0x42`
+is now read-only trace evidence; missing or invalid capability/state and refused
+clear fail closed. The new image still needs native playback evidence. D3+BME
+remains refused; no PCI helper, live jack switching, recovery or batching.
 Native eight-session speaker/headphone playback remains the closure gate.
