@@ -32,8 +32,8 @@ permits unmodified binary redistribution subject to its notice, disclaimer and
 other conditions. Ship its complete text, pinned WHENCE and provenance.
 Firmware is separate from kernel source licensing and stays outside Git.
 
-Pyxis owns this dependency and image assembly. A focused parent recipe will
-download only owner mirror URLs, check all four sizes/hashes, and stage unchanged
+Pyxis owns this dependency and image assembly. The focused parent recipe downloads
+only owner mirror URLs, checks all four sizes/hashes, and stages unchanged
 firmware under share/firmware/intel/ and license/provenance under
 share/licenses/intel-bluetooth/ in the boot archive. Runtime needs no network or
 disk mount. Missing/mismatched assets fail image assembly; no upstream fallback
@@ -87,7 +87,7 @@ Both revisions share this code. A decoded non-warm version would also log
 candidate/attachment, rejected initialization reply, invalid capabilities and
 unclean logical cleanup can share the generic emitter. The sole line cannot
 identify its caller; the exact cold branch remains unconfirmed.
-Task 3 will report one specific initialization phase/reason in klog, without a
+Task 3 now reports one specific initialization phase/reason in klog, without a
 second generic Bluetooth failure line. Success remains one upload/warm-skip
 summary; details use ktrace. No addresses, raw packets or keys are recorded.
 
@@ -173,3 +173,11 @@ native batch; no cold outcome is inferred from the old warm-only shape.
 Known unexpected firmware boot/secure-result notifications after initialization
 terminate continuity; they cannot silently restart the owned runtime controller.
 No automatic upload or recovery follows that failure.
+
+Resume review at signed d796271 found no concrete correctness defect in the
+publication, retirement, notification-race or endpoint-transition paths by
+independent source inspection. This is not controller validation. Exact-head
+CI run [1373](https://git.internal/PyxisOS/pyxis-os/actions/runs/1373) passed
+change detection and filesystem checks, but image build failed explicitly with
+“AX200 owner mirror_root is missing in the metadata”. The published source
+therefore remains a draft awaiting the owner's cache prefix and USB access.

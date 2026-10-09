@@ -81,6 +81,10 @@ Chosen by the owner, each starting with a proposal:
   accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
   remain prerequisites. Task 2 runtime HCI transport is complete in #552, with
   [baseline and warm qualification](../development/experiments/bluetooth-runtime-hci/README.md).
+  Task 3 firmware readiness is assigned 2026-10-09 on
+  [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564); its
+  [asset plan and native batch](../development/experiments/bluetooth-firmware-readiness/README.md)
+  record implementation, pending mirror/access and unmeasured cold initialization.
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
