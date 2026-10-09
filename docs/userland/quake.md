@@ -79,8 +79,9 @@ cap. The video mode is fixed at 320x240.
 Generated files go to `home://quake/id1/`, created on first start: `config.cfg`
 (written on quit), saves (`save NAME`, F6 quicksave, the Save and Load menus),
 demos and screenshots. That directory is searched before the game data. Shareware
-and retail data share it. Like all of `home://`, it survives quitting but not
-reboot.
+and retail data share it. On a live boot `home://` is a RAM volume, so these files
+survive quitting but not reboot. An installed system keeps `home://` on the pool
+(see [system layout](system-layout.md#roots)), so they persist across reboots.
 
 ## Timedemo
 
