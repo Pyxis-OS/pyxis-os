@@ -149,7 +149,12 @@ period or tear-free output. Start-upper is age since an estimated preceding
 blank, not proof of a within-blank start; active-scanout copies can have
 millisecond ages. No native safety-fix result is claimed yet.
 
-## Native safety recheck
+## Native ThinkPad batch
+
+Batch 2 failed qualification. The current owner-requested two-boot recheck is
+below; the original three-mode qualification procedure is superseded.
+
+### Native safety recheck
 
 Two boots only, the same reviewed revision and private Quake data, wired AC,
 unchanged GOP mode and peripherals. Use the default info log level; global
@@ -194,3 +199,27 @@ period accuracy, blank-copy tear-free output, or a default timing-policy change.
 Screenshots/FPS are not tearing checks. Existing prepared RO/NX/UC mappings,
 panic ownership, actual first-store marker, copy fences and capture contracts
 remain. No EDID, modeset, clocks, power, firmware or GPU register writes are added.
+
+## Safety-fix QEMU checks
+
+Pre-code baseline `b0a050b7` ISO/ELF/initrd/configuration was archived. Code
+`c51122ba` built default, observe+metrics and blank+metrics images using the
+existing LLVM23.1.3/49e2c1a builder and verified unchanged SDK/userland/ports
+bundles. Observe and blank kernel ELF and initrd were byte-identical; only
+boot policy differed.
+
+Fresh QEMU10.2.2/Q35/nested-KVM/four-core/2-GiB standard-VGA boots used fresh
+OVMF variables, VirtIO-SCSI CD and RNG, relative PS/2, no network/disk/audio/USB,
+and a disabled host window. Read-only GDB confirmed DISPLAY_BOOT, the respective
+mode, an unprepared observer and zero hardware capability/period/timestamp.
+Both retained one unavailable summary, tab switching, keyboard input and `ls`
+completion; the pointer/caret and screen were visually checked. PNGs after
+the same command were identical (SHA-256
+`830a8fd53863ea0a5de544b8b6f09009c1e0ff1a9f48b56e723835a2ce9f3295`).
+
+Cadence parity, qualification publication, guarded rejection and supported
+formatting were independently source-reviewed. QEMU cannot exercise native
+Renoir registers, period estimation, rejected hardware bounds or visible tearing;
+no native or performance pass is claimed. No new tests, device emulation, fault
+injection or boot/input automation were added. Task-owned QEMU/GDB/build jobs
+stopped; artifacts and captures remain local and ignored.
