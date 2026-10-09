@@ -85,6 +85,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-09, debt paydown): [HTTP redirects](http-redirects.md),
+  documentation-only proposal with three owner decisions; implementation unassigned.
 - **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
   three defaults accepted; task 1 assigned after #567 merges. Split process
   ownership from task retirement while keeping one user task per process;
