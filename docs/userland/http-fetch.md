@@ -71,7 +71,8 @@ outside the SDK runtime. Its parser dependency is the pinned
 `build/ports-dev/picohttpparser`. Consumers also link userland's `libtls.a` and
 the configured Mbed TLS libraries from `build/ports-dev/mbedtls`, in the order
 supplied by that export's `share/mbedtls.mk`. All consume the same SDK.
-There are no kernel changes or new libc operations.
+The kernel does not interpret HTTP; the shared provider ABI carries redirect
+context/outcomes and libc exposes copied response metadata.
 
 The caller supplies borrowed TCP, UDP, random and monotonic-clock capabilities
 and a numeric DNS server through `http_client`. Its explicit HTTP/HTTPS mode
@@ -107,7 +108,7 @@ TLS transport, entropy and clock failures preserve their native status.
 
 ## Request and response policy
 
-One fetch sends one HTTP/1.1 GET with Host, Connection: close and
+Each provider hop sends one HTTP/1.1 GET with Host, Connection: close and
 Accept-Encoding: identity. The request is framed by its header terminator;
 TCP write shutdown waits until the response is complete. URI syntax accepts ASCII DNS names or numeric IPv4,
 an optional decimal port, path and query. It rejects credentials, IPv6 literals,
@@ -123,7 +124,7 @@ chain, name and validity checks complete before the GET is sent.
 
 Responses use HTTP/1.0 or HTTP/1.1. Status 200 returns bytes; 204 returns an empty
 body without waiting for connection close. Other final statuses are retained and
-rejected. Redirects are never followed, including HTTPS locations. There is no
+rejected. The shared open bridge follows the selected redirects below. There is no
 decompression, connection reuse, cache or whole-request replay. An HTTPS failure
 never triggers a plaintext request.
 
@@ -154,16 +155,73 @@ optional descriptive printable ASCII metadata, at most 127 bytes; excess is a
 limit failure. Trailers cannot supply framing, content representation, Host,
 Connection or Trailer fields.
 
+## Redirect chains
+
+Accepted **2026-10-09**: follow 301/302/303/307/308, at most **ten redirects**
+(eleven requests), checking every target against visited network URLs before
+contacting it. Keys normalize scheme/host, effective port, empty path, escapes
+of unreserved characters and dot segments; query order stays significant and
+fragments are ignored. Comparison does not rewrite outgoing escapes. The cap
+also bounds DNS aliases and changing-query chains. Loop/hop exhaustion is CALL_LIMIT.
+
+Require exactly one valid nonempty Location and resolve against the current hop,
+including relative/query-only/scheme-relative forms and inherited fragments.
+Only HTTP(S) provider targets are allowed; native roots and ambiguous bindings
+are refused. Invalid Location/outcomes are CALL_BAD_REQUEST, size excess is
+CALL_FILE_TOO_LARGE. Final statuses remain 200/204; unselected 3xx remain errors.
+301/302/303 choose GET without a body; 307/308 preserve method/body and would
+require safe replay. Delivery is GET-only; POST/body replay is not implemented.
+
+The caller's shared libpyxis path bridge owns the chain and retains each delegated
+scheme binding on first use until completion/failure. HTTP providers have no
+TLS runtime or caller namespace; they do not acquire cross-scheme authority.
+Each validated REDIRECT reply has no FILE grant. The provider closes the stream
+without draining its intermediate body and releases TLS/staging before replying;
+only final BYTES success owns a snapshot. Malformed replies close received grants.
+
+HTTP→HTTPS and public-root cross-origin following are allowed. HTTPS→HTTP is
+CALL_DENIED with no target contact or TLS-failure fallback. Custom-CA providers
+keep their immutable public+custom union only for an initial HTTPS request and
+same-origin chain: initial-origin and sticky crossing context are checked before
+DNS/connect/TLS. Even publicly signed cross-origin targets through such an
+instance are refused; HTTP upgrades into it are refused too. This continuity
+policy does not restrict independent direct opens. Rebuild Host/Connection/Accept-Encoding
+per hop; no custom headers, credentials, cookies or Referer are supplied.
+
+One absolute **30 s** deadline (or earlier caller cap), **16 MiB body allowance**,
+**32 KiB headers/trailers**, **256 fields** and **eight informational responses**
+cover the chain. Enforce remaining amounts inside each provider before reads or
+allocations. Charge redirect HTTP-parser body read-ahead conservatively; unread
+redirect bodies are neither allocated nor drained. Final decoded bytes use the
+remainder; the existing framing-overhead bound and 64 MiB per-instance storage
+quota still apply. An exact-limit close-delimited body needs a bounded one-byte
+EOF probe; excess fails without retaining/publishing it. No budget refresh or
+transport-error replay occurs. Caller-owned scratch is bounded independently of
+initial path length; libc supplies it, native helpers remain allocation-free.
+
+`pyxis_stdio_response()` in `<pyxis/stdio.h>` copies final URL (with fragment),
+redirect count, HTTP status and media type from an open FILE without changing
+position/indicators or granting authority. Local/inherited handles have absent
+metadata; close frees it. Native path callers can request the same data. Failed
+fopen still reports errno; the native bridge retains diagnostic HTTP status.
+[Links](links.md) adopts the final URL and cached bytes without another fetch.
+
+The [qualification record](../development/experiments/http-redirects/README.md)
+separates controlled QEMU results from source inspection. Protocol references:
+[RFC 9110 redirects](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.4),
+[Location](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.2), and
+[RFC 3986 resolution](https://www.rfc-editor.org/rfc/rfc3986.html#section-5.2).
+
 ## Bounds, storage and lifetime
 
 | Resource | Limit |
 | --- | --- |
-| Complete URI | 2,048 bytes |
+| Complete URI / Location reference | 2,048 bytes |
 | Aggregate response headers and trailers, including informational responses | 32 KiB |
 | Aggregate fields | 256 |
 | Informational responses | 8 |
 | Each chunk size/extension line | 8 KiB |
-| Completed body | 16 MiB |
+| Body allowance across an open chain | 16 MiB |
 | Shared body-storage reservations | 64 MiB |
 | Overall fetch time | 30 seconds, capped by an earlier caller deadline |
 
@@ -173,7 +231,8 @@ ratio bound. Tiny-chunk responses can therefore be rejected below the body limit
 Parser/request scratch is fixed and bounded separately from body storage; the
 large receive buffer and field array live on the heap.
 
-The deadline starts before URI processing and covers DNS, connect, send and the
+For path/libc HTTP opens the deadline starts before URI processing/binding lookup
+and spans all hops. A direct one-hop fetch starts its own bounded deadline. It covers DNS, connect, send and the
 TLS handshake when applicable and the complete response. Existing DNS attempts retain their three-second maximum and
 at most two attempts, capped by this same absolute deadline. No retry,
 informational response or successful short transfer refreshes it. CPU-side work

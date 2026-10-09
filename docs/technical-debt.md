@@ -1084,19 +1084,16 @@ bodies.
 
 ## HTTP redirects
 
-The [HTTP/HTTPS providers](userland/http-fetch.md) reject 3xx, so ordinary browsing
-in Links fails at redirects. Deferred 2026-10-04 (wanted, not yet); the assigned
-[proposal](wip/http-redirects.md) now covers follow/loop limits, transport/trust,
-final URLs and snapshot bounds, accepted 2026-10-09; implementation is assigned,
-but providers still reject redirects until that delivery.
+[Redirects](userland/http-fetch.md#redirect-chains) remain GET-only and capped at ten
+hops. Custom-CA instances refuse any origin crossing, including HTTP upgrades;
+there is no hidden public-only trust fallback. Revisit broader trust/replay only
+with a concrete consumer and a separate policy decision.
 
 ## Response metadata through fopen
 
-A program reading a provider URI through libc `fopen` gets only bytes: no media type, HTTP status or (once redirects exist) final URL, although the native OPEN
-reply already carries an optional media type and the providers keep the final status. The [Links port](userland/links.md) therefore sniffs HTML by content or
-extension and shows a rejected status only as an open error. Revisit with a way to expose response metadata that fits Pyxis, alongside
-[discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations); the assigned
-[redirects proposal](wip/http-redirects.md) includes the final-URL accessor for Links, accepted 2026-10-09.
+The [FILE accessor](userland/http-fetch.md#redirect-chains) exposes successful-open
+status/media type/final URL, but failed fopen still reports only errno. Revisit
+failed-response diagnostics or representation discovery when a consumer needs them.
 
 ## HTTPS trust and platform limits
 

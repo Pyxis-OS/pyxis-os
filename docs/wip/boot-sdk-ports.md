@@ -17,6 +17,9 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [HTTP redirects](../userland/http-fetch.md#redirect-chains), 2026-10-09:
+  bounded delegated-provider chains and FILE response metadata, with Links
+  adopting the final URL; [controlled QEMU qualification](../development/experiments/http-redirects/README.md).
 - [HD Audio playback](../devices/hda.md), 2026-10-09: BSP-owned analog engine and
   [up to eight PCM sessions](../interfaces/audio.md), one per space; native speaker/headphone
   tones and eleven-minute eight-session silence passed, ninth refused. Volume,
@@ -85,8 +88,6 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-09, debt paydown): [HTTP redirects](http-redirects.md),
-  three defaults accepted 2026-10-09; shared bridge, providers and Links implementation assigned.
 - **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
   three defaults accepted; task 1 assigned after #567 merges. Split process
   ownership from task retirement while keeping one user task per process;
