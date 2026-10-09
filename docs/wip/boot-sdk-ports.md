@@ -96,9 +96,11 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-09): [SDL2 clipboard](clipboard.md#graphics-activation),
+  accepted graphics authority/activation, SDL adapter and opt-in manual qualification tool.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
-  Lua Messages harness first, Hax after; docs only. ZIP bundle defaults are
-  accepted in #639; delivery tasks still need separate owner go-aheads.
+  prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
+  Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   design accepted after failed native step 2 qualification, alongside the
   small observer safety follow-up. Read-only task 1 assigned separately.
@@ -146,8 +148,8 @@ Other candidates; current assignments are listed above.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
 - [Network kernel debugger](network-debugger.md): owner-requested planning for
-  opt-in LAN GDB during native PXE bring-up; accepted stop/transport plan awaits
-  task assignment.
+  opt-in LAN GDB during native PXE bring-up; checkpoint foundation assigned,
+  transport and later tasks await assignment.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after

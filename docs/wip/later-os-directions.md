@@ -289,6 +289,17 @@ Ideas recorded when npfs was planned, none of them agreed:
   inits start which spaces.
 - **Filesystem overlays,** for example a volume overlaid on the boot archive.
 - **Writing from Linux.** The host mount is read-only; writing is a later step.
+- **FAT32 as a mountable filesystem (owner, 2026-10-09).** The installer and
+  [system updates](../userland/system-updates.md) already format and rewrite
+  the ESP whole. A read-only and later read-write FAT32 volume would let Pyxis
+  inspect and change single files on the boot partition, such as `limine.conf`,
+  and read ordinary FAT media.
+- **Machine settings that survive updates (owner, 2026-10-09).** Today the boot
+  configuration, `boot://config/installed.lua`, is part of the boot archive, so
+  changing a per-machine value such as a future hostname means rebuilding the
+  archive, and an update replaces it. A more granular installer and update would
+  keep a small machine-settings record (hostname and similar) separate from the
+  archive and carry it across updates and reinstalls.
 - **NVMe.** Installing onto the ThinkPad's internal disk needs an NVMe driver.
   With it, the Fedora disk would appear under Read the room as a foreign disk,
   which the owner accepted.

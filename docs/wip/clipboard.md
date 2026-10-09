@@ -1,11 +1,11 @@
 # Clipboard
 
-Status: **first terminal delivery implemented, pending owner review**. The
+Status: **first terminal delivery implemented; SDL2 graphics contract accepted, implementation assigned**. The
 accepted 2026-10-09 rounds authorize local-terminal and mux Copy + Paste into
 opted-in stock libterm readers. The [implemented interface](../interfaces/clipboard.md)
 and [qualification record](../development/clipboard-first-delivery-qualification.md)
 describe its native authority, receiver contract and validation limits.
-Graphics, FILE and converter contracts remain proposed.
+The SDL2 round below is accepted **2026-10-09**; FILE and converters remain proposed.
 
 ## Owner decisions
 
@@ -98,9 +98,9 @@ binding's fixed grants, not per-application approval.
 Trusted boot/init/session/shell startup forwards grants deliberately where it
 forwards the corresponding UI ownership. Pane children get no mux-controller
 clipboard authority; a graphics child may receive its own attenuated graphics
-clipboard grant. Session handoff currently drops arbitrary resources, so this
-must be implemented explicitly. The kernel-local handler needs no userspace
-controller grant, including Copy from Caelum's visible log selection. Caelum has
+clipboard grant. First delivery forwards these named resources only on mux
+startup; the accepted graphics extension below is not implemented yet. The
+kernel-local handler needs no userspace controller grant, including Copy from Caelum's visible log selection. Caelum has
 no application paste destination.
 
 A local grant names one space; use checks the caller's actual space. Shared
@@ -151,23 +151,57 @@ refuses without overwriting the previous item. Explicit history movement clears
 selection as today. Paste to a non-live history view refuses without changing
 history or keyboard focus.
 
-## Proposed graphics activation
+## Graphics activation
 
-This routing remains proposed for the later SDL2 task, outside round one. Graphical Ctrl+C/V (and Ctrl+Shift+C/V, without Alt/Super) remain
-application key events. While an
-eligible graphics owner is shown, a fresh physical chord may establish the
-matching **local** clipboard intent without consuming the application's key.
-It does not force the application to copy/paste or authorize shared access.
-Pointer activation alone is not a clipboard operation: menu-button clipboard
-requests will need an explicit native approval interaction; general clicks do
-not authorize reading another program's saved text.
+SDL2 round accepted **2026-10-09**, with implementation assigned by the owner. Terminal routing and safe line-reader Paste remain unchanged.
 
-The shared Super+Shift chords remain system actions in graphics too. A native
-client receives a layer-specific action; if it cannot handle it, nothing is
-copied or inserted. For SDL2, the adapter would translate that action into the
-application's conventional Ctrl+C/V request while retaining its one-attempt
-shared-layer context privately. Such translation does not manufacture fresh
-native activation. No global remapping of ordinary application keys is proposed.
+Trusted boot explicitly requests `SPACE_CREATE_CLIPBOARD_LOCAL` and,
+separately, `SPACE_CREATE_CLIPBOARD_SHARED` for stock local interactive spaces,
+as it already does for mux startup. Forward the named `clipboard_local` and,
+only when independently granted, `clipboard_shared` through
+boot → session → shell → foreground graphics-capable launch, including
+mux → pane shell → foreground launch. Session successors retain the same
+separate grants independently of `mux_terminal`. Startup can withhold shared
+while retaining local. Existing mux-controller grants remain unchanged.
+Background/service/remote launches get neither. A pane shell forwarding a
+graphics grant gains no mux-controller authority or terminal CONTROL.
+
+Possessing grants alone is insufficient: the caller must own both the shown
+graphics display and currently focused keyboard session in its actual space.
+No pointer grant is required. A fresh exact physical Ctrl+C/V or Ctrl+Shift+C/V
+(without Alt/Super) supplies one matching local Copy/Paste activation while
+leaving the application's key events intact. Ctrl+X creates none. Get requires
+Paste; Set requires Copy. Each is one attempt, consumed even on refusal, with
+the existing five-second expiry. Repeats, synthetic SDL events, ordinary clicks,
+startup/polling and menu calls create none. No app-initiated read exception,
+including cached self-publications, is permitted. Menu approval is later work.
+
+Exact Super+Shift+C/V remains a consumed shared system action. The adapter
+presents one conventional Ctrl+C/V command with that event's Control modifier
+snapshot, suppressing character input, and retains the real operation/layer/action
+identity privately. It does not fake global Control state or generate native
+activation. Unsupported actions copy/insert nothing; no local/shared fallback.
+Applications using global `SDL_GetModState()` rather than the command event's
+modifiers need a focused consumer adaptation to recognize the translated command.
+
+Bind activation to the display/keyboard acquisition epochs and current geometry.
+Focus/overlay/layer loss, reset, release/exit, resize/remap or event-queue loss
+cancels it. An older queued SDL command must never bind a newer or different-layer
+activation: require private identity tracking through delivery, with refusal on
+overlapping gestures or ambiguous batches. A mutable latest-layer slot is
+insufficient; narrow Pyxis-only SDL event-core support may be needed. Kernel
+ownership, identity, layer and expiry checks remain authoritative regardless of
+public SDL event fields. Cancelled commands cannot rearm permission.
+
+### Accepted SDL2 decisions, 2026-10-09
+
+1. Both separately delegated grants through stock local interactive foreground
+   startup, including mux pane shells; background/service/remote launches get neither.
+2. Fresh physical operation-specific activation only, with private shared-action
+   identity; no app/menu/background read exception.
+3. Bounded UTF-8 Get/Set/Has, qualified with DevilutionX and an authorized opt-in
+   minimal SDL clipboard exercise program. It is a manual tool like mousetest,
+   excluded from ordinary images unless the owner asks.
 
 ## Owned text handoff
 
@@ -432,26 +466,50 @@ only trusted packaged handlers in this milestone; hostile plugin containment,
 supervision/restart and conversion caches remain separate work. Settle retained
 result accounting and actual cleanup limits before authorizing converter code.
 
-## Proposed SDL2 first graphical consumer
+## SDL2 text contract
 
-After terminal text delivery, implement the native clipboard adapter in the
-[SDL2 port](../development/sdl2.md). SDL2's string clipboard surface maps to
-UTF-8 `text/plain` and its text form; it does not pretend to expose arbitrary
-MIME objects through string functions. Set publishes copied text; Get returns
-an SDL-owned NUL-terminated copy; Has reports eligibility/availability without
-returning contents. Denied, expired or unsupported requests report SDL errors,
-never synthesize a successful clipboard operation.
+The [SDL2 adapter](../development/sdl2.md) maps UTF-8 `text/plain`
+only: no FILE/rich data, converter, primary-selection or host/remote bridge.
+Set validates bytes before the first terminating NUL as Unicode scalar UTF-8
+(no overlong encodings, surrogates or out-of-range values). Native
+length-delimited text rejects embedded NUL. Preserve bytes/line endings without
+terminal export trimming. Terminal Paste retains CRLF/CR normalization and its
+restrictive receiver rules; broader graphics text is never injected raw.
+The existing **64 KiB** bound excludes SDL's NUL terminator; **8 MiB** aggregate store/staging/
+active-snapshot payload admission remains unchanged. No truncation; rejection
+preserves the old store. Get pins one immutable current item for its bounded
+copy, independent of source exit/replacement, then returns an SDL-allocated
+NUL-terminated copy to be freed with `SDL_free()`.
 
-Ordinary application Ctrl+C/V supplies local intent as above. Explicit shared
-system actions use the adapter's private operation/layer context. Neither
-continuous polling nor SDL-generated key events refreshes native permission.
-Has must not consume Paste activation merely by checking; Get/Set consume the
-matching attempt. With no eligible input ownership/activation, Has returns false
-and Get/Set report refusal. No background clipboard monitoring is included.
-Qualify copy, paste, empty text, focus changes, source exit, shared refusal and
-one-attempt consumption with a real SDL text consumer before pinning the port.
-Publish its ports PR before the Pyxis gitlink; userland/native dependencies merge
-first. Pointer/cursor/input and clipboard remain separate grants and protocols.
+| SDL call | Accepted result |
+| --- | --- |
+| `SDL_SetClipboardText` | 0 only after native publication with Copy activation; negative plus SDL error on denial, expiry, invalid text or limit/allocation failure. Authorized empty text is a valid item. |
+| `SDL_GetClipboardText` | Paste attempt consumes activation. Authorized empty/missing item returns an allocated empty string; refusal returns an empty string plus SDL error, never another layer or cached text. Allocation failure may return NULL with an error. |
+| `SDL_HasClipboardText` | Only with a live matching Paste activation: reveal one boolean, whether that layer currently has nonempty text. No bytes, size, type list or generation; no activation means false regardless of store state. Does not consume/extend activation or cache contents, so Has then Get works. The result is advisory across replacement. |
+
+Install all three hooks even when grants are absent: SDL's
+[pinned clipboard core](https://github.com/libsdl-org/SDL/blob/5d249570393f7a37e037abf22cd6012a4cc56a71/src/video/SDL_clipboard.c)
+otherwise reports Set success using its private cache. Hooks must never use
+that fallback or claim successful publication on denial. Empty content itself
+is not an error; native refusal is surfaced through SDL's error channel.
+
+Capture idle/event-pump baseline before code; record matched QEMU configuration
+and revisions. Qualify real SDL calls: local and shared Copy/Paste,
+Has-before-Get, source exit/replacement, focus/owner/queue loss, expiry,
+second attempts, unarmed/background queries, overlapping local/shared commands,
+missing shared grants, empty text, valid multibyte UTF-8, malformed input and
+64 KiB/over-limit refusal, and terminal refusal of non-ASCII graphics text.
+Use DevilutionX's
+[text editor](https://github.com/diasurgical/DevilutionX/blob/7223eeac9e8274fbf665b4de86fda26d3b22c52f/Source/DiabloUI/text_input.cpp)
+for integration: it calls Set and Has-then-Get. A narrow event-modifier adaptation
+is included in the accepted consumer scope. Chocolate Doom has no clipboard use.
+The authorized manual exercise program covers otherwise unreachable cases;
+it stays opt-in and out of ordinary images, with no autoplay or CI automation.
+
+Publish dependency PRs from current userland/ports mains,
+fast-forward only, then pin their published heads in Pyxis. State merge order
+(userland/native interface, ports, Pyxis integration) and check pins CI. No new
+klog lines. Implementation is assigned; runtime qualification remains unstarted.
 
 ## Task breakdown
 
@@ -468,7 +526,8 @@ first. Pointer/cursor/input and clipboard remain separate grants and protocols.
    focus/view changes and multiline paste not executing commands in matched QEMU.
 2. [ ] **SDL2 text adapter.** Local/shared graphical action routing and native
    Set/Get/Has integration, owned text and a real consumer. No background access
-   or implied menu-pointer permission; graphical activation awaits a later round.
+   or implied menu-pointer permission; graphics authority/activation and the
+   opt-in manual exercise tool are accepted above. Implementation is assigned.
 3. [ ] **Typed objects and FILE retention.** Exact-match representations and
    mandatory text form; immutable/source-independent backing, capability
    attenuation, retained admission and concrete path examples qualified.
