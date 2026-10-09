@@ -1,6 +1,6 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **hosting-inventory correction in progress; native cold/warm rerun pending.**
+Status: **hosting-inventory correction warm-validated; native cold/warm rerun pending.**
 The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
 at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
@@ -341,3 +341,33 @@ precondition, not a controller recovery policy or proof of quiescence. Unknown
 completions remain terminal; no ignore, drain-and-reset, automatic retry or USB
 re-enumeration recovery was added. Native cold/warm boots still need the owner
 batch above. Actual ACL, encrypted reconnect and pointer use remain later tasks.
+
+## Hosting-controller follow-up, 2026-10-09
+
+Signed code revision **a2e81782** implements the accepted controller-local
+inventory gate. Kernel/image builds passed with the same compiler and reused
+bundles; [CI run 1446](https://git.internal/PyxisOS/pyxis-os/actions/runs/1446)
+passed all jobs. Independent source review confirms that only the final core
+COMPLETE record qualifies the host, including descriptor/descendant, budget,
+deadline and hardware-failure checks. Identified candidates count before binding,
+and calls before successful attachment return unavailable without queuing.
+
+An interactive QEMU boot used the earlier four-CPU/2-GiB KVM configuration plus
+`-device usb-ehci,id=bt_other`. AX200 and the private storage fixture remained on
+qemu-xhci. Inventory retained two controllers: xHCI COMPLETE, EHCI UNSUPPORTED,
+global USB INCOMPLETE. HCI was sealed, hosting-complete, attached to one AX200 and
+READY, with zero SFI upload commands, two completed DDC records, one command
+credit and three ACL credits. The single Bluetooth summary reported warm skip,
+DDC and development firmware. This is warm passthrough, not native cold evidence.
+
+The existing commands above verified text reading and all storage samples.
+`lsusb -n` correctly exited 1 for global incompleteness while listing both
+controller states; the text/iobench commands exited 0. Payload median/range was
+**125.306 / 116.379–129.631 ms**, complete consumption
+**127.999 / 118.784–131.731 ms**. During a 30.000412-second idle observation, xHCI
+IRQ/command/event deltas were all zero; HCI stayed READY, endpoint sequences and
+partial counts were unchanged, both receive pairs stayed POSTED and queues empty.
+No new performance comparison or runtime incomplete-host injection was performed.
+Raw captures remain local in /tmp/pyxis-bluetooth-host-inventory. QEMU/debugger
+jobs are stopped. The owner must repeat native cold power-on and warm reboot
+with a fresh image; #564 remains draft and task 4 remains unassigned.

@@ -435,4 +435,6 @@ The owner-reported 2026-10-09 integration cold boot stopped at global USB
 inventory sealing, before firmware initialization, because of the built-in
 unsupported Realtek DASH EHCI function. The owner accepted hosting-controller
 completeness on #564; fresh cold power-on and warm reboot must be repeated after
-that correction. Native upload remains unqualified.
+that correction. Its warm QEMU check retained an unsupported EHCI and global
+incompleteness while Bluetooth and storage worked on the complete hosting xHCI.
+Native upload remains unqualified; task 3 stays open and #564 draft.
