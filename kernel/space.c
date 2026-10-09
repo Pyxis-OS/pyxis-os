@@ -36,8 +36,10 @@
 #include <kernel/pointer_present.h>
 #include <kernel/display_capture.h>
 #include <kernel/volume_ui.h>
+#include "display/presentation.h"
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
+#define FLIP_POLL_INTERVAL_NS UINT64_C(1000000)
 
 #define SPACES_NAV_HEIGHT 32
 /* Character cells: a chevron slot at each end, and blank margin each side of a title. */
@@ -56,6 +58,7 @@ static const struct framebuffer *screen;
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
 static uint32_t ps2_suppressed_buttons;
+static void handle_space_input(void);
 /* Registry index of the leftmost visible tab. Presenter-owned. */
 static size_t viewport_first;
 /* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
@@ -1021,7 +1024,16 @@ void space_present()
   }
 
 frame_done:
-  bool presented = display_end_frame(pointer) && composed;
+  bool presented = display_end_frame(composed ? pointer : NULL);
+  while (display_frame_pending()) {
+    presented = display_frame_poll();
+    if (display_frame_pending()) {
+      handle_space_input();
+      space_pointer_sync_input();
+      kernel_task_sleep_until(arch_monotonic_ns() + FLIP_POLL_INTERVAL_NS);
+    }
+  }
+  presented = presented && composed;
   flags = cpu_save_interrupts();
   if (presented) {
     drawn_nav_layout = nav;

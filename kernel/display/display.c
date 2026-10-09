@@ -1,5 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/clock.h>
+#include <arch/amd/renoir_flip.h>
+#include <kernel/boot/options.h>
 #include <kernel/display.h>
 #include <kernel/display_capture.h>
 #include <kernel/fb/early_console.h>
@@ -15,6 +17,7 @@
 #include "virtio_gpu.h"
 #include "internal.h"
 #include "timing.h"
+#include "presentation.h"
 
 #define DISPLAY_COPY_BYTES (64 * 1024)
 #define DISPLAY_PANIC_WAIT_LIMIT 1000000
@@ -34,6 +37,11 @@ static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
  * Zero means composition writes the front buffer directly. Fixed for the
  * boot: these drivers never resize. VirtIO composes into its own RAM backing. */
 static uintptr_t staging;
+static bool flip_enabled, flip_pending;
+static atomic_bool flip_failed;
+/* Prepared before AP startup and retained until reboot. Panic never queries
+ * the GPU, including while normal completion polling is interrupted. */
+static const struct framebuffer *panic_surfaces[2];
 
 /* Runtime availability is BSP-owned. Publish failure after backend waits and
  * outside rendering locks, then wake observers before restoring interrupts. */
@@ -93,7 +101,19 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
   if (!target) {
     panic("no usable display: firmware framebuffer or supported driver required");
   }
-  display_timing_prepare(boot, driver == DISPLAY_BOOT, timing, timing_metrics);
+  panic_surfaces[0] = target;
+  const struct boot_options *options = boot_options_get();
+  if (driver == DISPLAY_BOOT && options->display_flip) {
+    flip_enabled = renoir_flip_prepare(boot, target, options->display_flip_metrics);
+    if (flip_enabled) {
+      panic_surfaces[1] = renoir_flip_surface(1);
+    }
+  } else if (options->display_flip) {
+    klog("renoir-flip: unavailable: not a firmware framebuffer backend\n");
+  }
+  if (!flip_enabled) {
+    display_timing_prepare(boot, driver == DISPLAY_BOOT, timing, timing_metrics);
+  }
 }
 
 /* BSP presenter. A frame without staging still presents, directly. */
@@ -115,6 +135,12 @@ bool display_start(void)
     case DISPLAY_BOOT:
     case DISPLAY_BOCHS:
       allocate_staging();
+      if (flip_enabled && !staging) {
+        /* Qualification alone grants no submission without a complete staged
+         * image. Cancel before the first GPU write; keep backing pinned. */
+        renoir_flip_cancel_prepare();
+        flip_enabled = false;
+      }
       ready = true;
       break;
     case DISPLAY_VIRTIO_GPU:
@@ -122,7 +148,7 @@ bool display_start(void)
       break;
   }
   set_availability(ready);
-  if (ready && driver == DISPLAY_BOOT && staging) {
+  if (ready && driver == DISPLAY_BOOT && staging && !flip_enabled) {
     display_timing_start();
   }
   return ready;
@@ -210,6 +236,7 @@ void display_resize_disable(void)
 
 bool display_begin_frame(void)
 {
+  KASSERT(!flip_pending);
   atomic_store(&writer, cpu_initial_apic_id());
   if (atomic_load(&panic_claimed) || !available) {
     display_end_frame(NULL);
@@ -295,8 +322,103 @@ static void copy_staging(void)
   }
 }
 
+static void copy_flip_surface(const struct framebuffer *surface)
+{
+  size_t row_bytes = target->width * sizeof(uint32_t);
+  for (size_t y = 0; y < target->height && !display_is_panicking(); ++y) {
+    for (size_t x = 0; x < row_bytes && !display_is_panicking();
+        x += DISPLAY_COPY_BYTES) {
+      size_t count = MIN(row_bytes - x, DISPLAY_COPY_BYTES);
+      memcpy((void *)(surface->address + y * surface->pitch + x),
+          (const void *)(staging + y * target->pitch + x), count);
+    }
+  }
+}
+
+/* Read-only validation/polling runs without the writer. A timeout retains
+ * both possible fronts and copies the same immutable composite into each. */
+static bool finish_flip(enum renoir_flip_state state)
+{
+  if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+    atomic_store(&flip_failed, true);
+    set_availability(false);
+    return false;
+  }
+  if (display_is_panicking()) {
+    return false;
+  }
+  if (state == RENOIR_FLIP_READY) {
+    return true;
+  }
+  if (state == RENOIR_FLIP_FALLBACK) {
+    atomic_store(&writer, cpu_initial_apic_id());
+    if (!display_is_panicking()) {
+      copy_flip_surface(panic_surfaces[0]);
+      copy_flip_surface(panic_surfaces[1]);
+    }
+    cpu_store_fence();
+    atomic_store(&writer, DISPLAY_NO_WRITER);
+    return !display_is_panicking();
+  }
+  return false;
+}
+
+bool display_frame_pending(void)
+{
+  return flip_pending;
+}
+
+bool display_frame_poll(void)
+{
+  KASSERT(flip_pending && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  if (!display_available()) {
+    flip_pending = false;
+    return false;
+  }
+  enum renoir_flip_state state = renoir_flip_poll();
+  flip_pending = state == RENOIR_FLIP_PENDING && !display_is_panicking();
+  return finish_flip(state);
+}
+
+static bool end_flip_frame(const struct pointer_frame *frame)
+{
+  enum renoir_flip_state state = renoir_flip_state();
+  if (frame && available && !display_is_panicking() && state == RENOIR_FLIP_READY) {
+    const struct framebuffer *back = renoir_flip_back();
+    KASSERT(back);
+    copy_flip_surface(back);
+    cpu_store_fence();
+    if (!display_is_panicking()) {
+      state = renoir_flip_submit();
+    }
+  }
+  if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+    atomic_store(&flip_failed, true);
+  }
+  cpu_store_fence();
+  atomic_store(&writer, DISPLAY_NO_WRITER);
+  if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+    return finish_flip(state);
+  }
+  if (!frame || !available || display_is_panicking()) {
+    return false;
+  }
+  if (state == RENOIR_FLIP_FALLBACK) {
+    state = renoir_flip_poll();
+  }
+  flip_pending = state == RENOIR_FLIP_PENDING;
+  /* Submission alone cannot confirm that the staged image became visible. */
+  if (state == RENOIR_FLIP_READY) {
+    return false;
+  }
+  return finish_flip(state);
+}
+
 bool display_end_frame(const struct pointer_frame *frame)
 {
+  if (flip_enabled) {
+    return end_flip_frame(frame);
+  }
   bool ready = available;
   if (staging && available && !display_is_panicking()) {
     /* Publish/recheck before any direct write, just as at frame begin. */
@@ -325,7 +447,8 @@ bool display_end_frame(const struct pointer_frame *frame)
 const struct framebuffer *display_panic_target(void)
 {
   atomic_store(&panic_claimed, true);
-  if (driver == DISPLAY_VIRTIO_GPU || atomic_load(&direct_disabled)) {
+  if (driver == DISPLAY_VIRTIO_GPU || atomic_load(&direct_disabled) ||
+      atomic_load(&flip_failed)) {
     return NULL;
   }
   uint32_t self = cpu_initial_apic_id();
@@ -342,5 +465,10 @@ const struct framebuffer *display_panic_target(void)
   }
   /* Drain an interrupted local writer before panic overwrites its pixels. */
   cpu_store_fence();
-  return target;
+  return atomic_load(&flip_failed) ? NULL : target;
+}
+
+const struct framebuffer *display_panic_surface(unsigned index)
+{
+  return index < 2 ? panic_surfaces[index] : NULL;
 }

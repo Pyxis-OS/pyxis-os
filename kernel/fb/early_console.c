@@ -36,7 +36,7 @@ static _Atomic uint32_t panic_owner = EARLY_CONSOLE_NO_OWNER;
 static volatile bool panic_rendering;
 
 /* Rendering state, changed only by the current rendering owner. */
-static uintptr_t address;
+static uintptr_t addresses[2];
 static size_t pitch, pixel_width, pixel_height, scale, columns, rows, column, row;
 static uint32_t foreground, background;
 static char cells[EARLY_CONSOLE_ROWS_MAX][EARLY_CONSOLE_COLUMNS_MAX];
@@ -58,15 +58,20 @@ static void draw_cell(size_t cell_row, size_t cell_column)
   const uint8_t *glyph = font->data + (size_t)character * font->stride;
   size_t x = cell_column * font->width * scale;
   size_t y = cell_row * font->height * scale;
-  for (size_t glyph_row = 0; glyph_row < font->height; ++glyph_row) {
-    for (size_t repeat = 0; repeat < scale; ++repeat) {
-      volatile uint32_t *line = (volatile uint32_t *)(address +
-          (y + glyph_row * scale + repeat) * pitch);
-      for (size_t glyph_column = 0; glyph_column < font->width; ++glyph_column) {
-        uint32_t color = (glyph[glyph_row] >> (glyph_column % 8)) & 1 ?
-            foreground : background;
-        for (size_t step = 0; step < scale; ++step) {
-          line[x + glyph_column * scale + step] = color;
+  for (unsigned surface = 0; surface < 2; ++surface) {
+    if (!addresses[surface]) {
+      continue;
+    }
+    for (size_t glyph_row = 0; glyph_row < font->height; ++glyph_row) {
+      for (size_t repeat = 0; repeat < scale; ++repeat) {
+        volatile uint32_t *line = (volatile uint32_t *)(addresses[surface] +
+            (y + glyph_row * scale + repeat) * pitch);
+        for (size_t glyph_column = 0; glyph_column < font->width; ++glyph_column) {
+          uint32_t color = (glyph[glyph_row] >> (glyph_column % 8)) & 1 ?
+              foreground : background;
+          for (size_t step = 0; step < scale; ++step) {
+            line[x + glyph_column * scale + step] = color;
+          }
         }
       }
     }
@@ -142,7 +147,8 @@ static void render(char character, bool owner)
 static void configure_layout(const struct framebuffer *fb)
 {
   const struct font *font = &bizcat;
-  address = fb->address;
+  addresses[0] = fb->address;
+  addresses[1] = 0;
   pitch = fb->pitch;
   pixel_width = fb->width;
   pixel_height = fb->height;
@@ -161,10 +167,15 @@ static void configure_layout(const struct framebuffer *fb)
 
 static void clear_screen(void)
 {
-  for (size_t y = 0; y < pixel_height; ++y) {
-    volatile uint32_t *line = (volatile uint32_t *)(address + y * pitch);
-    for (size_t x = 0; x < pixel_width; ++x) {
-      line[x] = background;
+  for (unsigned surface = 0; surface < 2; ++surface) {
+    if (!addresses[surface]) {
+      continue;
+    }
+    for (size_t y = 0; y < pixel_height; ++y) {
+      volatile uint32_t *line = (volatile uint32_t *)(addresses[surface] + y * pitch);
+      for (size_t x = 0; x < pixel_width; ++x) {
+        line[x] = background;
+      }
     }
   }
   for (size_t cell_row = 0; cell_row < rows; ++cell_row) {
@@ -198,7 +209,7 @@ void early_console_start(const struct boot_framebuffer *fb, uintptr_t mapped)
 
 void early_console_rebind(uintptr_t mapped)
 {
-  address = mapped;
+  addresses[0] = mapped;
 }
 
 void early_console_putc(char character)
@@ -241,6 +252,10 @@ void early_console_panic_begin(void)
     /* Keep panic_owner unset until layout/reset finish. A fault here reports
      * on serial because its nested claim loses and no renderer is published. */
     configure_layout(target);
+    const struct framebuffer *second = display_panic_surface(1);
+    if (second) {
+      addresses[1] = second->address;
+    }
     if (!columns || !rows) {
       return;
     }

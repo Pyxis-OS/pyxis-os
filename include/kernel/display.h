@@ -49,13 +49,20 @@ bool display_pointer_hardware(void);
 void display_copy(size_t offset, const void *pixels, size_t bytes);
 /* FRAME is the leased pointer snapshot, or NULL for cancelled begin. True only
  * after ordinary submission and pointer posting, without panic. Active capture
- * additionally requires matching hardware pointer completion. */
+ * additionally requires matching hardware pointer completion. Renoir returns
+ * false while its private presenter completion path retains the frame. */
 bool display_end_frame(const struct pointer_frame *frame);
+
+/* Normal device work checks this again before publishing a transaction. */
+bool display_is_panicking(void);
 
 /* First panic claimant, any CPU, IF=0, without GS/locks/allocation. Permanently
  * stop normal writes, fence an interrupted local writer or boundedly wait for
  * a remote direct writer. VirtIO returns NULL without device operations.
  * NULL means serial-only; the returned direct layout stays mapped. */
 const struct framebuffer *display_panic_target(void);
+/* After a successful panic claim: bounded permanent layouts, no device access.
+ * All returned layouts have the claimed target's geometry and channel shifts. */
+const struct framebuffer *display_panic_surface(unsigned index);
 
 #endif
