@@ -99,6 +99,8 @@ no forced panic, fault injection, allocation-refusal test or new test consumer
 was added. Native observer reads, counter stall/rollover extremes, timing
 admission and per-row WC visibility were not exercised in QEMU. All task-owned
 QEMU, debugger and build jobs were stopped after qualification.
+Missed-start reason counters were added afterward to native diagnostics only;
+the unavailable QEMU path performs no such accounting or logging.
 
 ## Native ThinkPad batch
 
@@ -156,7 +158,8 @@ observation. Duplicate kernel options retain the parser's existing fatal rule.
 3. **Unsynchronized start distribution:** from the `observe` logs retain three
    complete 600-copy summaries after warmup for idle and moving Quake. They give
    start upper-bound, copy/fence, read bracket, spin and wake P50/P95/P99/max,
-   admitted/unsynchronized/invalid counts, frame/position/status and prefix gaps.
+   admitted/unsynchronized/invalid counts, missed-start late/poll-expired/
+   unqualified reasons, frame/position/status and prefix gaps.
    Observe always counts copies unsynchronized. A start outside blank is useful
    baseline phase data, not an admission. Unqualified samples are excluded from
    start quantiles, with their count explicit.

@@ -61,6 +61,7 @@ static struct timing_record records[TIMING_RECORDS];
 static uint64_t sorted[TIMING_RECORDS];
 static size_t record_count;
 static uint64_t admitted_count, unsynchronized_count, invalid_count, progress_late_count;
+static uint64_t late_count, expired_count, unavailable_count;
 static uint64_t total_written;
 
 static bool text_is(const char *text, const char *expected)
@@ -515,6 +516,9 @@ void display_timing_finish(void)
   } else {
     ++unsynchronized_count;
   }
+  late_count += copy.result == TIMING_LATE;
+  expired_count += copy.result == TIMING_POLL_EXPIRED;
+  unavailable_count += copy.result == TIMING_UNAVAILABLE;
   progress_late_count += copy.progress_late;
   if (!copy.sample_valid) {
     ++invalid_count;
@@ -532,6 +536,8 @@ void display_timing_finish(void)
       capability.hardware ? "hardware" : "unavailable", mode == TIMING_BLANK ? "blank" : "observe",
       record_count, admitted_count, unsynchronized_count, invalid_count, progress_late_count,
       previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status);
+  klog("display-timing: missed-starts late=%lu poll-expired=%lu unqualified=%lu\n",
+      late_count, expired_count, unavailable_count);
   print_metric("start-upper", METRIC_START);
   print_metric("copy-fence", METRIC_COPY);
   print_metric("spin", METRIC_SPIN);
@@ -540,6 +546,7 @@ void display_timing_finish(void)
   print_metric("issued-prefix-gap", METRIC_PROGRESS);
   record_count = 0;
   admitted_count = unsynchronized_count = invalid_count = progress_late_count = 0;
+  late_count = expired_count = unavailable_count = 0;
 }
 
 uint64_t display_timing_next_deadline(void)
