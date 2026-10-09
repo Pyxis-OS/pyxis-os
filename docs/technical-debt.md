@@ -535,27 +535,34 @@ source inspection into measured coverage.
 
 ## Native system pointer qualification
 
-For the [system pointer milestone](wip/pointer.md), the owner accepted native
-PS/2 validation deferral on 2026-10-08 because the ThinkPad is occupied by the
-[Bluetooth investigation](development/bluetooth-investigation.md). Matched QEMU checks on boot,
-Bochs and VirtIO displays may close the milestone without a native run. This
-records an accepted qualification limit, not a completed native check.
+The owner accepted native PS/2 deferral on 2026-10-08 while the ThinkPad was
+occupied by the [Bluetooth investigation](development/bluetooth-investigation.md).
+Matched QEMU checks on boot, Bochs and VirtIO displays suffice to close the
+[system pointer milestone](wip/pointer.md); this native entry remains open.
 
-The consequence is that PS/2 touchpad/TrackPoint routing, held-button behavior,
-lock escape/relock, local selection/mux wheel behavior, and cursor composition/cost
-on the ThinkPad boot framebuffer
-remain unqualified on physical hardware even after successful QEMU checks.
-Nested-VM results do not establish native input latency or display performance.
+Owner-reported boot 1, 2026-10-09: ThinkPad, PXE main `114f2ac`, PS/2 touchpad
+and TrackPoint, 1920x1080 boot framebuffer.
 
-Revisit when the Bluetooth investigation finishes: the owner will run a batch
-of native ThinkPad checks, including this deferred PS/2 check.
+- Checked and working: ordinary motion and buttons, tab clicks, and **text
+  selection**. The owner did not specify local terminal, multiplexer or both.
+  A `screenshot` taken from the remote terminal while the local I-beam was
+  showing contained the cursor.
+- Not checked: multiplexer wheel; Quake lock/Super+Esc/click-to-relock; space and
+  layer changes with the cursor shown; program cursor image/hotspot/show/hide
+  and bounded warp; cursor cost samples.
+- The default arrow looked wrong natively. The task 5 redraw addresses its
+  shape; its updated native appearance remains to be judged by the owner.
 
-- [ ] Owner native ThinkPad pointer check: ordinary motion/buttons, tab clicks,
-  program cursor image/hotspot/show/hide and bounded warp, local-terminal/mux
-  selection, Quake lock/Super+Esc/click-to-relock, space/layer changes and capture.
-  Record kernel, userland and ports revisions, boot/display/device configuration,
-  behavior and matched cursor cost samples when the batch runs. Update this
-  entry with the results; QEMU milestone closure does not mark it complete.
+The consequence is that the unchecked behavior and native cursor cost remain
+unqualified. The text-selection report does not establish separate local-TTY
+and mux coverage. Nested-VM results do not establish native input latency or
+display performance.
+
+- [ ] Finish the unchecked native items in a later owner ThinkPad batch and
+  judge the redrawn default cursor. Record revisions, boot/display/device
+  configuration, behavior and cursor cost samples. Update this entry with
+  the reported results; neither partial native coverage nor QEMU milestone
+  closure marks it complete.
 
 ## VirtIO cursor frontend limits
 
