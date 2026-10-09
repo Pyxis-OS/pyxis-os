@@ -232,6 +232,26 @@ random-access deflate index or signature layout.
 
 ## Future larger-image admission
 
+The owner has authorized the shared-ceiling task and accepted these contracts:
+
+- **128 MiB per selected executable**, uniformly for HOST, NPFS and RAM capture.
+  This is one admission policy, not a global concurrent-capture budget. Concurrent
+  launches may consume more in aggregate; physical-memory exhaustion still rejects.
+- Capture backing uses **reclaimable, BSP-owned whole pages**, released after
+  loading or on every failure, including partial allocation. Large capture buffers
+  must not remain resident as reusable kernel heap pools.
+- Over-ceiling capture returns `CALL_LIMIT`; allocation failure returns
+  `CALL_NO_MEMORY`; existing I/O errors remain unchanged. Failed batches publish
+  no children and discard earlier prepared children and provisional observers.
+  Boot archive bytes remain uncopied, eager segment loading remains, and the
+  256 MiB mapped span is independent.
+
+Implementation and qualification remain pending. Capture matched plain-launch
+and session-backing baselines on the exact main revision before code changes;
+then measure near-ceiling peak memory alongside other processes and inspect
+over-ceiling and mid-capture allocation failure cleanup. Add no new kernel log
+lines. ZIP and Clang remain outside this task.
+
 The accepted next direction captures only the selected executable, retains
 existing eager segment loading, and shares a 128 MiB serialized-image ceiling
 across installed HOST/NPFS and RAM capture. It must replace the current installed
