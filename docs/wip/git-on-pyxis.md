@@ -2,9 +2,11 @@
 
 Investigation, accepted direction and task status, 2026-10-09. The original
 compile evidence below records the investigation snapshot. The owner accepted
-the three decisions and assigned the public-open and positioned-I/O libc tasks;
-later work remains unassigned. Their [status](#task-status-and-accepted-decisions)
-supersedes the historical O_RDWR/O_EXCL/pread/pwrite gap entries.
+the three decisions and assigned the public-open, positioned-I/O and
+path/byte-order libc tasks; later work remains unassigned.
+Their [status](#task-status-and-accepted-decisions)
+supersedes the historical O_RDWR/O_EXCL/pread/pwrite/lstat/access/rmdir/endian
+and ENOTDIR gap entries. The original Git/libgit2 probes have not been rerun.
 This supports [source builds](source-builds.md) after hosted Clang. The question
 is obtaining pinned source, separately from providing a developer's Git CLI.
 
@@ -83,7 +85,7 @@ The no-curl Git probe is a **core build probe**, not an HTTPS candidate. Git's
 `NO_CURL` removes HTTPS. Empty diagnostic headers declare and implement nothing;
 they only let the compiler reveal later dependencies. Those results are not a
 successful cross-build. The investigation ran no target executable, QEMU boot,
-timing measurement, filesystem durability experiment or on-Pyxis clone. Task 1's
+timing measurement, filesystem durability experiment or on-Pyxis clone. The tasks'
 later runtime qualification is recorded separately below.
 
 Independent interface probes compile real SDK headers and try target links.
@@ -167,11 +169,11 @@ This is a smaller route, not an unmodified libgit2 build:
 
 | Area | Measured/inspected gaps and proposed adaptation |
 | --- | --- |
-| Filesystem core | Tasks 1 and 2 supply real `O_RDWR/O_EXCL` and `pread/pwrite`. Missing `lstat/access`, `rmdir`, path/cwd support and directory sync bridge remain. Deeper `indexer.c` diagnostics also identify endian functions (`htonl/ntohl`, with `htons/ntohs` elsewhere); those are later tasks. Standard support belongs in libc. |
+| Filesystem core | Tasks 1 and 2 supply real `O_RDWR/O_EXCL` and `pread/pwrite`; task 3 adds `lstat/access/rmdir` and `htonl/htons/ntohl/ntohs`. Access checks grants and refuses providers/X_OK; lstat cannot expose symlink metadata. Path/cwd support and the directory sync bridge remain. Standard support belongs in libc. |
 | Mapping | No public `mmap`; libgit2's `NO_MMAP` fallback reads into owned memory and explicitly rejects writable mappings. The non-Windows pack indexer uses `pwrite`, supplied by task 2 with native explicit offsets. Shared-file mapping is unnecessary for the proposed slice; bounded allocation and the remaining source/path closure still need work. |
 | Metadata even without checkout | ODB alternate deduplication reads `st_ino`; pack/config/file-buffer caches read mtime/inode; discovery reads device identity. Bare fetch alone does not eliminate these compile/runtime assumptions. A single fresh store with no alternates/discovery and explicit cache reloads can be adapted without fabricated stat fields; that adaptation remains unbuilt. |
 | Worktree features | Building all sources still compiles `index.c` and iterators, which read stat ctime/mtime/ino/uid/gid. Runtime avoidance is not a compile fix. Restrict or adapt that source closure explicitly; reject unsupported APIs. `checkout` with suppressed index writes still has stat/filter/mode assumptions. |
-| Unix support | Shared headers still include networking headers with HTTPS off. Missing `gettimeofday`, `struct timeval`, `ino_t`, `lstat`, `readlink/link/symlink/chmod`, `getcwd`, `utimes`, `EINTR/ENOTDIR` appear in selected-source diagnostics. Avoid omitted feature code or implement standard behavior where native objects support it. |
+| Unix support | Shared headers still include networking headers with HTTPS off. Missing `gettimeofday`, `struct timeval`, `ino_t`, `readlink/link/symlink/chmod`, `getcwd`, `utimes` and `EINTR` remain from selected-source diagnostics. Task 3 supplies lstat and ENOTDIR, and arpa/inet.h with only four byte-order conversions. Avoid omitted feature code or implement standard behavior where native objects support it. |
 | Stock networking | Socket/connect/send/recv, getaddrinfo/freeaddrinfo/gai_strerror, inet_pton and poll/select are absent from SDK probes. Native TCP/DNS exists, but is not a BSD socket API. Use the library's stream/subtransport extension for platform integration; ordinary missing libc calls remain shared libc work. |
 | TLS | Stock `FindmbedTLS.cmake` requires `libmbedcrypto`; Pyxis exports `libtfpsacrypto`. Source includes `mbedtls/entropy.h` and `mbedtls/ctr_drbg.h`, absent in this 4.1.1 export, and seeds its own global entropy/DRBG. Renaming a library cannot repair the backend or provide Pyxis clock/random/trust authority. Prefer an adapter to existing native `libtls`, outside the base SDK. |
 
@@ -243,7 +245,10 @@ libgit2 transaction nor an on-Pyxis TLS/network result, nor a promise for all mi
 - [x] Task 1: public **`O_RDWR` and `O_CREAT|O_EXCL` in userland libc**, implemented
   and manually qualified; userland #171 and Pyxis #573 merged.
 - [x] Task 2: public **`pread` and `pwrite` in userland libc**, implemented and
-  manually qualified; pending owner review and dependency merge.
+  manually qualified; userland #172 and Pyxis #576 merged.
+- [x] Task 3: **`lstat`, `access`, `rmdir` and byte-order helpers in userland
+  libc**, implemented and manually qualified; userland #174 merged,
+  Pyxis #585 approved and awaiting integration.
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171) publishes
 `ff278aec50adfaf6af8d8c15062084a8594642e3`, integrated by merged
@@ -260,10 +265,9 @@ without truncation, seek/read/write on one descriptor and denied-create cleanup.
 separate these observations from inspected invariants and unexercised storage/
 failure cases. No kernel change, new test infrastructure or compiler rebuild.
 
-Task 2, [userland PR #172](https://git.internal/PyxisOS/pyxis-userland/pulls/172),
-publishes `88217be07f089c90d79c71b3cf9387f7420d0ec9`. This integration pins that
-published commit. Merge userland first, then this Pyxis gitlink/docs PR. No later
-task starts as part of this delivery.
+Task 2, merged [userland PR #172](https://git.internal/PyxisOS/pyxis-userland/pulls/172),
+publishes `88217be07f089c90d79c71b3cf9387f7420d0ec9`, integrated by merged
+[Pyxis PR #576](https://git.internal/PyxisOS/pyxis-os/pulls/576).
 
 Pread/pwrite call the existing native FILE operations at explicit offsets,
 without seek/restore or private-position changes. Pread preserves unread cached
@@ -274,8 +278,33 @@ An ordinary image build and manual QEMU/GDB inspection qualified interleaving,
 read-ahead refetch, zero-filled past-EOF gaps, short transfers and console refusal.
 The [positioned-I/O contract and evidence](../userland/libc-portability.md#positioned-file-io-and-qualification)
 record configurations and unexercised cases. No kernel/protocol change or new
-test infrastructure was needed. Endian helpers and lstat/access/rmdir are not
-part of this task.
+test infrastructure was needed.
+
+Task 3, merged [userland PR #174](https://git.internal/PyxisOS/pyxis-userland/pulls/174),
+publishes `7add29afabcba078a7e344dfd627fb451ef3a575`. After merging Pyxis main
+(including #582), this integration pins published userland main
+`b32da949ae1a0d12bc8b1e3ae2c58c4f1684c11b`, containing both #174 and #175.
+`git merge-base --is-ancestor origin/main <pin>` passed after fetching and before
+pinning. Userland is merged; this Pyxis gitlink/docs PR follows. No later task
+starts as part of this delivery.
+
+The owner accepted access profile 1 on 2026-10-09: F_OK requests no child rights;
+files R_OK/W_OK request READ/WRITE; directories R_OK checks ENUMERATE and W_OK
+CREATE|REMOVE, with unions for combined modes. Provider routes return ENOTSUP
+before OPEN, and X_OK returns ENOTSUP because launch READ/launcher authority
+is separate from a nonexistent execute bit. Each returned file/directory lease is
+released immediately under libc's existing uncertain-close policy. Success is
+an authority observation at lookup time, not a promise that later I/O succeeds.
+
+Lstat equals stat under the current no-native-symlink/no-follow host contract,
+documented beside its declaration. Rmdir uses existing native directory removal,
+reports ENOTEMPTY/ENOTDIR/ENOENT honestly and never recurses. Arpa/inet.h exports
+only the four pure byte-order functions. The ordinary image build and manual
+QEMU/GDB inspection covered successful operations, missing/denied/wrong-type
+paths, host symlink refusal, provider/X/invalid-mode refusal and conversion wire
+bytes. The [path and byte-order evidence](../userland/libc-portability.md#path-and-byte-order-qualification)
+separates observed results from inspected lifetime rules and unforced failures.
+No kernel change, new test infrastructure or compiler rebuild was needed.
 
 These tasks unblock shared dependencies, not a functioning fetch tool.
 Subsequent separately approved work would cover remaining libc support;
@@ -318,4 +347,4 @@ TLS adapter in userland, parent integration only after published dependencies.
 The base SDK stays independent of TLS/libgit2. This task changes only the userland
 pin and related docs in Pyxis. No new upstream source or compiler container is
 needed. The original investigation probe branch stays unmerged; task-owned
-qualification processes are stopped. Stop for owner review of task 2.
+qualification processes are stopped. Stop for owner review of task 3.

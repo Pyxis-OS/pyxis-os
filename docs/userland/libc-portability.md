@@ -155,7 +155,9 @@ x86-64 LP64 interface is:
 | Header | Supported interface |
 | --- | --- |
 | `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x100, O_TRUNC = 0x200, O_EXCL = 0x400 |
-| `unistd.h` | read, write, pread, pwrite, close, lseek, ftruncate, fsync, unlink; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
+| `unistd.h` | read, write, pread, pwrite, close, lseek, ftruncate, fsync, unlink, rmdir, access; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
+| `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size |
+| `arpa/inet.h` | htonl, htons, ntohl, ntohs only; no socket or address parsing/formatting declarations |
 | `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
@@ -292,6 +294,86 @@ was added. Task-owned QEMU, GDB, remote client and virtiofsd processes are stopp
 Persistent backend writes, racing callers, malformed/uncertain replies and
 allocation-failure paths were not qualified by these RAM-file observations.
 
+## Native path checks and removal
+
+Owner decision, 2026-10-09: `access` reports a minimal native authority check,
+not Unix mode/owner permission checks. It resolves through the caller's startup
+roots and working-directory grants and releases each temporary owned handle
+immediately using the validated [close policy](#close-failure-and-cleanup).
+
+| Request | File rights | Directory rights |
+| --- | --- | --- |
+| F_OK | None | None |
+| R_OK | READ | ENUMERATE |
+| W_OK | WRITE | CREATE and REMOVE |
+| R_OK \| W_OK | READ and WRITE | ENUMERATE, CREATE and REMOVE |
+
+Kind detection first requests no file rights, so a directory check does not
+require the unrelated READ_FILES/WRITE_FILES delegation rights. File R/W then
+does a second lookup with the requested rights. Traversal still needs LOOKUP;
+success is only a time-of-check observation. It does not promise later lookup,
+backing I/O, host permission or volume writability. No content is read or written.
+X_OK returns ENOTSUP: launch requires an executable READ grant and separate
+launcher authority, with no native execute bit. Provider routes return ENOTSUP
+after binding discovery and before provider OPEN; unknown/unavailable routes
+retain the resolver's real errors. Unknown mode bits and NULL/empty paths return
+EINVAL; missing, denied and intermediate-file paths return ENOENT, EACCES and
+ENOTDIR. A close failure is reported, without retry or successful fake cleanup.
+
+`lstat` is equivalent to `stat` only while native filesystems have no symlinks
+and lookup never follows host symlinks (ENOTSUP). This condition is recorded
+beside its declaration; it does not expose symlink metadata. Existing sizing
+authority and provider-request behavior are inherited from `stat`.
+
+`rmdir` removes one empty directory through native parent REMOVE authority.
+Nonempty, wrong-type and missing paths return ENOTEMPTY, ENOTDIR and ENOENT;
+denied removal returns EACCES. Roots and final dot/dot-dot components return
+EINVAL. A trailing slash is accepted; no recursive deletion occurs. Only
+access/rmdir translate WRONG_TYPE to ENOTDIR; existing generic translation
+remains EINVAL. ENOTDIR and its strerror message are public libc additions.
+
+The four byte-order helpers are pure fixed-width conversions for the current
+little-endian x86-64 target. They leave errno unchanged. Their header supplies
+no placeholder socket or inet functions.
+
+### Path and byte-order qualification
+
+[Userland PR #174](https://git.internal/PyxisOS/pyxis-userland/pulls/174) publishes
+`7add29afabcba078a7e344dfd627fb451ef3a575`. The ordinary `make -j16 image` passed
+with that exact commit, parent `d6733033`, ports `cff4a82b` and filesystem
+`b427df29`, using the existing Clang/LLD 23.1.3 builder. Libc emitted no warnings;
+existing vendor warnings remained. No compiler rebuild was needed.
+
+Manual qualification used nested-KVM Q35, two vCPUs, 256 MiB, VirtIO network/RNG
+and virtio-fs for a disposable observation executable and a host symlink.
+File mutations used RAM `tmp://`; the program was not packaged or committed.
+
+| Observation | Result |
+| --- | --- |
+| lstat on a four-byte file / directory | S_IFREG and size 4 / S_IFDIR and size 0 |
+| lstat on missing / denied parent traversal / host symlink | ENOENT / EACCES / ENOTSUP |
+| File and directory access F_OK, R_OK, W_OK, R_OK \| W_OK | All succeeded with the tmp grants |
+| Boot file/directory W_OK / boot directory R_OK | EACCES / success |
+| Access missing / intermediate file / host symlink | ENOENT / ENOTDIR / ENOTSUP |
+| Access X_OK / unknown mode bit / NULL path / text provider | ENOTSUP / EINVAL / EINVAL / ENOTSUP |
+| Rmdir nonempty / file / missing / intermediate file / denied parent | ENOTEMPTY / ENOTDIR / ENOENT / ENOTDIR / EACCES |
+| Rmdir root / final dot or dot-dot | EINVAL |
+| Rmdir empty directory with trailing slash | Success; subsequent lstat ENOENT; refused nonempty directory's child still present |
+| htonl(0x11223344) / htons(0x1122) | Values 0x44332211 / 0x2211; memory bytes 11 22 33 44 / 11 22 |
+| Inverse conversions / zero and all-one values | Original host values / unchanged boundary values; errno unchanged |
+
+Read-only GDB observed directory requests of 0, 2, 40 and 42 (the exact native
+rights above), successful lease slot reuse with changing handle generations,
+and the wire bytes. A breakpoint at provider binding discovery fired; a
+provider_open breakpoint did not fire before access returned ENOTSUP.
+Source inspection establishes the native-only branch and existing one-attempt,
+reply-validating close policy; no malformed/uncertain reply was forced.
+
+Task-owned QEMU, debugger, client and virtiofsd processes are stopped. No kernel
+change, tests, fault injection or boot/output automation was added. Persistent
+backend removal, races and allocation-failure paths were not qualified by these
+RAM-file observations.
+
 ## Close failure and cleanup
 
 Code inspection of [close_handle](../../kernel/syscall.c) and
@@ -340,8 +422,9 @@ it cannot provide this translation. Libc uses this native syscall directly.
   retry of descriptors already invalidated by close/fclose; the kernel's
   process teardown reclaims any residual native entries.
 
-The same release primitive is used for rollback of an internal open failure,
-while preserving that open failure's errno. A failed rollback release has the
+The same release primitive is used for temporary access-check handles and for
+rollback of an internal open failure, preserving that open failure's errno.
+A failed rollback release has the
 same process-exit reclamation limit. Successful close is not a durability
 promise; the existing explicit file-sync contract is unchanged.
 
