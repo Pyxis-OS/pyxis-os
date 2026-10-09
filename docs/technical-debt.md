@@ -1176,13 +1176,15 @@ configuration, never in a port-local stub.
 
 The [HDA engine](devices/hda.md#progress-and-refill-limits) uses the accepted
 80 ms hardware ring and fails closed until reboot when its conservative refill
-guards cannot establish safe progress. Nested-QEMU qualification captured exact
-PCM and saturated mixing, but longer runs hit those guards; eight-session
-admission does not guarantee sustained playback under host load. Immediate,
-unprimed start also produced a 58.667 ms initial silence gap. Revisit ring depth,
+guards cannot establish safe progress. Immediate, unprimed start produced a
+58.667 ms initial silence gap. Revisit ring depth,
 startup latency and service margins during native qualification and separately
 assigned audio-consumer work. The [task 2 report](development/experiments/audio-task2/README.md)
 records the evidence and limits; native and milestone closure checks remain open.
+The eight-session overhead/failure finding remains a delivery issue on
+[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), with
+[profiling and proposed fixes](development/experiments/audio-task2/profiling.md)
+awaiting the owner. It has not been deferred as an accepted capacity limitation.
 
 ## SDL2 port limits
 

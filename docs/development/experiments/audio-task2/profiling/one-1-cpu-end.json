@@ -1,0 +1,42 @@
+{
+  "monotonic_ns": 59277063718217,
+  "clk_tck": 100,
+  "pid": 741799,
+  "threads": {
+    "741799": {
+      "utime": 23,
+      "stime": 27,
+      "guest_time": 0
+    },
+    "741824": {
+      "utime": 1,
+      "stime": 1,
+      "guest_time": 0
+    },
+    "741825": {
+      "utime": 840,
+      "stime": 420,
+      "guest_time": 604
+    },
+    "741826": {
+      "utime": 139,
+      "stime": 58,
+      "guest_time": 96
+    },
+    "741827": {
+      "utime": 92,
+      "stime": 47,
+      "guest_time": 70
+    },
+    "741828": {
+      "utime": 111,
+      "stime": 52,
+      "guest_time": 109
+    },
+    "741832": {
+      "utime": 0,
+      "stime": 0,
+      "guest_time": 0
+    }
+  }
+}

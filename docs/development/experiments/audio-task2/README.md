@@ -1,5 +1,10 @@
 # Audio task 2: sessions, mixing and IRQ refill
 
+**2026-10-09 review gate:** #557 remains draft. The owner requested a
+[BSP profiling follow-up](profiling.md) before choosing a fix. Sustained
+eight-session playback remains a delivery requirement; the earlier failures
+are unresolved performance findings. No fix has been implemented.
+
 Owner assignment **2026-10-08**, after [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553)
 merged. Task branch **`audio/sessions-mixer`** starts from fresh main
 **`780f5d22dce25aaa79fe9a0d842db6cd9e9883f3`**. This assignment combines the

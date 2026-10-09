@@ -3,7 +3,8 @@
 Status: **three defaults accepted 2026-10-08; first controller/codec task
 merged in [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553); sessions,
 mixing and IRQ refill implemented in
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), awaiting owner review/merge**.
+[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), with qualification open
+and merge blocked pending the owner's performance-fix decision**.
 Prepared from main `67e14be` and
 the completed [QEMU investigation](../development/audio-investigation.md).
 The investigation probes stay unmerged. The owner assigned task 2 on
@@ -13,8 +14,9 @@ with the accepted call/write/admission semantics. Its
 record fresh main `780f5d2`, no-playback observations and the remaining
 hidden-space/start-stop/failure defaults, accepted 2026-10-08. Exact PCM and
 saturated mixing were observed, but an eight-admitted nested-QEMU run exceeded
-the service horizon and failed closed; sustained eight-session playback is not
-guaranteed.
+the service horizon and failed closed. The owner requested
+[measurement and a proposed fix](../development/experiments/audio-task2/profiling.md)
+on 2026-10-09; sustained eight-session playback still needs qualification.
 The [task 1 report](../development/experiments/audio-task1/README.md) retains
 private engine qualification and matched no-audio/engine-idle observations.
 Native and consumer tasks still require their own assignments.
@@ -201,12 +203,12 @@ controller or all other sessions.
    independent left/right signals, command wrap and stop ownership with normal
    builds, interactive boots and debugger inspection. Polling may be a bounded
    bring-up step, not the completed runtime implementation.
-3. [x] **Periodic output and refill.** Add owned interrupt delivery, BDL/position
+3. [ ] **Periodic output and refill.** Add owned interrupt delivery, BDL/position
    accounting, silence on starvation and explicit discontinuity. Review recovery
    thresholds; exercise sustained playback, ordinary producer pauses, close/reopen
    and normal concurrent guest activity. Measure position/clock agreement and
    queue-to-output behavior. Revisit the proposed period before freezing policy.
-4. [x] **Per-space sessions and bounded mixing.** Review exact reply packing,
+4. [ ] **Per-space sessions and bounded mixing.** Review exact reply packing,
    protocol/right constants, validation precedence, priming and hidden-space
    policy before implementing the public calls. Implement only the reviewed
    grant/calls and BSP request bridge, with copied queues and generation-aware
@@ -214,11 +216,14 @@ controller or all other sessions.
    spaces, denied authority, exclusive acquisition and capacity admission.
    Measure BSP cost and refill margin with one and multiple CPUs. Add only the
    concrete native PCM producer needed to exercise the accepted interface.
-   Task 2 implements steps 3–4 together. The [qualification report](../development/experiments/audio-task2/README.md)
+   Task 2's code implements steps 3–4 together; their delivery gates remain open.
+   The [qualification report](../development/experiments/audio-task2/README.md)
    records exact single-producer and eight-source saturated PCM, pause/exit and
    reacquisition, eight admissions/ninth refusal, and matched idle/BSP costs.
    Eight admitted producers later exceeded the service horizon and failed closed;
-   admission is not a sustained-playback guarantee. Strict absolute DMA progress,
+   the [profiling follow-up](../development/experiments/audio-task2/profiling.md)
+   identifies wake/deadline/HPET overhead. The owner must choose the next fix,
+   followed by repeat sustained eight-session qualification. Strict absolute DMA progress,
    zero-gap startup and native playback are unqualified. The updated main image
    passed ordinary source builds, a complete five-second producer and quiet
    absent-controller refusal. A later repetition also failed closed before

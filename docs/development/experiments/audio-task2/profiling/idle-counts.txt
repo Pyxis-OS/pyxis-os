@@ -1,0 +1,77 @@
+Reading symbols from build/caelum.elf...
+Remote debugging using :1243
+0xffffffff800151e6 in cpu_wait_interrupt ()
+    at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = {enabled = false, target_sessions = 0, begin_tsc = 0, end_tsc = 0, mix = {
+    calls = 0, ticks = 0}, inner = {calls = 0, ticks = 0}, output = {
+    calls = 0, ticks = 0}, queue_copy = {calls = 0, ticks = 0}, position = {
+    calls = 0, ticks = 0}, hda_mmio = {calls = 0, ticks = 0}, irq = {
+    calls = 0, ticks = 0}, request = {calls = 0, ticks = 0}, hpet = {{
+      calls = 37068, ticks = 4893502549}, {calls = 9686, ticks = 1696249802}, {
+      calls = 9713, ticks = 1632832491}, {calls = 16133, ticks = 2186744317}, {
+      calls = 0, ticks = 0} <repeats 60 times>}, stage_copy = {{calls = 0,
+      ticks = 0} <repeats 64 times>}, prepare_request = {{calls = 0,
+      ticks = 0} <repeats 64 times>}, hpet_reads = {111204, 29058, 29139,
+    48399, 0 <repeats 60 times>}, hpet_first_ns = {93696403870, 93696475170,
+    93696415570, 93696405370, 0 <repeats 60 times>}, hpet_last_ns = {
+    120552442720, 120554922000, 120555123960, 120555460830,
+    0 <repeats 60 times>}, hpet_first_tsc = {302525778615, 302526136785,
+    302525816011, 302525783619, 0 <repeats 60 times>}, hpet_last_tsc = {
+    388117632370, 388125533760, 388126177398, 388127251212,
+    0 <repeats 60 times>}, loops = 0, sleeps = 0, notifications = 0,
+  requests = 0, writes = 0, accepted_bytes = 0, mixed_frames = 0,
+  hpet_callers = {{18446744071562076788, 4975, 799098606}, {
+      18446744071562151730, 10146, 1296366649}, {18446744071562151949, 6903,
+      869705321}, {18446744071562076459, 10299, 1284505481}, {
+      18446744071562136998, 1611, 239878591}, {18446744071562152511, 1615,
+      201036441}, {18446744071562643384, 264, 37998697}, {
+      18446744071562639449, 367, 42340321}, {18446744071562206419, 346,
+      59408201}, {18446744071562640647, 128, 16646759}, {18446744071562145118,
+      233, 26268739}, {18446744071562145455, 153, 17131076}, {
+      18446744071562145069, 28, 3117667}, {0, 0, 0} <repeats 51 times>},
+  hpet_if0 = {{calls = 34324, ticks = 4494112313}, {calls = 9686,
+      ticks = 1696249802}, {calls = 9713, ticks = 1632832491}, {calls = 16133,
+      ticks = 2186744317}, {calls = 0, ticks = 0} <repeats 60 times>},
+  timer_time = {{calls = 10299, ticks = 1467059982}, {calls = 6456,
+      ticks = 1182708256}, {calls = 6474, ticks = 1181137661}, {calls = 6453,
+      ticks = 960112407}, {calls = 0, ticks = 0} <repeats 60 times>},
+  readiness_time = {{calls = 8, ticks = 10566}, {calls = 0,
+      ticks = 0} <repeats 63 times>}, net_time = {{calls = 10, ticks = 6831}, {
+      calls = 0, ticks = 0}, {calls = 4, ticks = 1820}, {calls = 0,
+      ticks = 0} <repeats 61 times>}, hpet_caller_if0 = {{calls = 4975,
+      ticks = 799098606}, {calls = 10146, ticks = 1296366649}, {calls = 6903,
+      ticks = 869705321}, {calls = 10299, ticks = 1284505481}, {calls = 0,
+      ticks = 0}, {calls = 1615, ticks = 201036441}, {calls = 0, ticks = 0}, {
+      calls = 0, ticks = 0}, {calls = 0, ticks = 0}, {calls = 0, ticks = 0}, {
+      calls = 233, ticks = 26268739}, {calls = 153, ticks = 17131076}, {
+      calls = 0, ticks = 0} <repeats 52 times>}, readiness_wakes = {1,
+    0 <repeats 63 times>}, net_wakes = {8, 0 <repeats 63 times>},
+  audio_wakes = 0, readiness = {8, 0 <repeats 63 times>}, net_notify = {10, 0,
+    4, 0 <repeats 61 times>}, schedules = {5161, 3229, 3241, 3227,
+    0 <repeats 60 times>}, timer_arm = {10299, 6456, 6474, 6453,
+    0 <repeats 60 times>}, poll_sleeps = 0}
+$2 = {claim = {device = 0xffff8010000001d0, saved_command = 7,
+    capabilities = "`", '\000' <repeats 46 times>, capability_count = 1,
+    bars = {{physical = 2164523008, bytes = 16384}, {physical = 0, bytes = 0},
+      {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0,
+        bytes = 0}, {physical = 0, bytes = 0}},
+    mappings = 0xffffffff80128058 <controller+176>, reserved = false,
+    dma_started = true}, registers = {address = 18446603336264663040,
+    base = 18446603336264663040, bytes = 4096, next = 0x0}, firmware = {
+    command = 7, pmcsr = 0, power_capability = 0, command_changed = false,
+    power_changed = false}, msi = {claim = 0xffffffff80127fa8 <controller>,
+    capability = 96}, corb = {address = 18446603336264667136,
+    physical = 2088960, bytes = 4096}, rirb = {address = 18446603336264671232,
+    physical = 2093056, bytes = 4096}, bdl = {address = 18446603336264675328,
+    physical = 2097152, bytes = 4096}, pcm = {address = 18446603336264679424,
+    physical = 2101248, bytes = 16384}, stream = 256, corb_entries = 256,
+  rirb_entries = 256, corb_write = 22, rirb_read = 22, codec_mask = 1,
+  commands = 22, responses = 22, unsolicited = 0, run_time = 0,
+  run_wallclock = 0, irq = {first_time = 0, errors = 0 '\000',
+    completed = false}, prepared = true, link_ready = true,
+  command_ready = false, stream_prepared = false, stream_running = false,
+  failed = false, shutdown = false}
+Detaching from program: <probe-worktree>, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]

@@ -73,7 +73,10 @@ Chosen by the owner, each starting with a proposal:
   record exact PCM/saturated mixing, eight admissions/ninth refusal and measured
   BSP cost. An eight-admitted nested-QEMU run failed closed at its service horizon;
   the current integration image also passed basic/absent checks, then failed closed
-  in a later paused repetition. Publication and exact-head CI remain pending.
+  in a later paused repetition. #557 remains draft: the
+  [profiling report](../development/experiments/audio-task2/profiling.md) identifies
+  wake/deadline/HPET overhead and proposes bounded fixes. No fix is implemented;
+  sustained eight-session qualification remains required before delivery.
   QEMU closure with
   a later ThinkPad native batch is carried forward for confirmation at closure;
   native playback remains unqualified. Quake can produce sound

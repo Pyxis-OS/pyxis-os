@@ -145,8 +145,10 @@ startup or audible-latency guarantee follows from the waveform match.
 
 Eight admitted producers also produced an exact saturated mix segment, but the
 nested-QEMU run subsequently exceeded the 20 ms observation horizon and failed
-closed. Its measured BSP cost was about one full host CPU. Admission capacity
-therefore does not promise sustained playback under arbitrary host load.
+closed. Its measured BSP-thread cost was about one full host CPU. The
+[profiling follow-up](../development/experiments/audio-task2/profiling.md)
+separates guest time from host exit/emulation work and identifies deadline/HPET
+amplification. Sustained eight-session qualification remains a delivery gate.
 
 Native AMD `1022:15e3` remains unbound. The supplied ALC257 dump establishes
 advertised topology, format and EAPD state, not native Pyxis cold-init, speaker or

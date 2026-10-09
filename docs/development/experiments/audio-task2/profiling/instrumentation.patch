@@ -1,0 +1,490 @@
+diff --git a/arch/x86_64/apic.c b/arch/x86_64/apic.c
+index 92ea9a54..103c189d 100644
+--- a/arch/x86_64/apic.c
++++ b/arch/x86_64/apic.c
+@@ -1,3 +1,4 @@
++#include "../../kernel/audio/probe.h"
+ #include <arch/apic.h>
+ #include <arch/clock.h>
+ #include <arch/cpu.h>
+@@ -196,6 +197,8 @@ void arch_timer_deadline_start(void)
+ 
+ void arch_timer_arm(uint64_t deadline)
+ {
++  uint64_t probe_start = probe_begin();
++  if (audio_cost.enabled) { ++audio_cost.timer_arm[arch_cpu_index()]; }
+   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+   struct cpu_local *cpu = cpu_current();
+   if (!cpu->timer_deadline_started) {
+@@ -222,6 +225,7 @@ void arch_timer_arm(uint64_t deadline)
+     count = UINT32_MAX;
+   }
+   apic_write(APIC_TIMER_INITIAL, (uint32_t)count);
++  probe_end(&audio_cost.timer_time[arch_cpu_index()], probe_start);
+ }
+ 
+ void arch_timer_interrupt(void)
+diff --git a/arch/x86_64/clock.c b/arch/x86_64/clock.c
+index ea86eec7..648c679e 100644
+--- a/arch/x86_64/clock.c
++++ b/arch/x86_64/clock.c
+@@ -1,4 +1,5 @@
+ #include <arch/acpi.h>
++#include "../../kernel/audio/probe.h"
+ #include <arch/clock.h>
+ #include <arch/cpu.h>
+ #include <arch/layout.h>
+@@ -34,6 +35,9 @@ static _Atomic uint64_t extended_ticks;
+ 
+ static uint32_t hpet_read(unsigned offset)
+ {
++  if (audio_cost.enabled && (offset == HPET_COUNTER || offset == HPET_COUNTER + 4)) {
++    ++audio_cost.hpet_reads[arch_cpu_index()];
++  }
+   return *(volatile uint32_t *)(HPET_BASE + offset);
+ }
+ 
+@@ -151,6 +155,9 @@ static uint64_t hpet_direct_ticks(void)
+ 
+ uint64_t arch_monotonic_ns(void)
+ {
++  uint64_t probe_start = probe_begin();
++  uint64_t probe_flags = probe_start ? cpu_save_interrupts() : 0;
++  if (probe_start) { cpu_restore_interrupts(probe_flags); }
+   uint64_t ticks = software_extended ? hpet_extended_ticks() : hpet_direct_ticks();
+   /* Tick exhaustion is terminal too: a saturated accumulator's low word no
+    * longer corresponds to hardware and must never feed another modular delta. */
+@@ -165,5 +172,40 @@ uint64_t arch_monotonic_ns(void)
+   if (whole > (UINT64_MAX - fraction) / period_fs) {
+     return UINT64_MAX;
+   }
+-  return whole * period_fs + fraction;
++  uint64_t result = whole * period_fs + fraction;
++  if (probe_start && audio_cost.enabled) {
++    unsigned cpu = arch_cpu_index();
++    uint64_t end = probe_tsc();
++    uint64_t flags = cpu_save_interrupts();
++    if (!cpu) {
++      uint64_t caller = (uintptr_t)__builtin_return_address(0);
++      for (unsigned i = 0; i < 64; ++i) {
++        uint64_t *slot = audio_cost.hpet_callers[i];
++        if (!slot[0] || slot[0] == caller) {
++          slot[0] = caller;
++          ++slot[1];
++          slot[2] += end - probe_start;
++          if (!(probe_flags & RFLAGS_INTERRUPT_ENABLE)) {
++            ++audio_cost.hpet_caller_if0[i].calls;
++            audio_cost.hpet_caller_if0[i].ticks += end - probe_start;
++          }
++          break;
++        }
++      }
++    }
++    if (!audio_cost.hpet[cpu].calls) {
++      audio_cost.hpet_first_ns[cpu] = result;
++      audio_cost.hpet_first_tsc[cpu] = end;
++    }
++    audio_cost.hpet_last_ns[cpu] = result;
++    audio_cost.hpet_last_tsc[cpu] = end;
++    audio_cost.hpet[cpu].ticks += end - probe_start;
++    ++audio_cost.hpet[cpu].calls;
++    if (!(probe_flags & RFLAGS_INTERRUPT_ENABLE)) {
++      ++audio_cost.hpet_if0[cpu].calls;
++      audio_cost.hpet_if0[cpu].ticks += end - probe_start;
++    }
++    cpu_restore_interrupts(flags);
++  }
++  return result;
+ }
+diff --git a/kernel/audio/audio.c b/kernel/audio/audio.c
+index 4baa92b3..eaf52202 100644
+--- a/kernel/audio/audio.c
++++ b/kernel/audio/audio.c
+@@ -8,6 +8,8 @@
+ #include <kernel/panic.h>
+ #include <kernel/task.h>
+ #include "internal.h"
++#include "probe.h"
++struct audio_cost_probe audio_cost;
+ 
+ #define AUDIO_WATCHDOG_MS 5
+ #define AUDIO_SERVICE_LIMIT_NS UINT64_C(20000000)
+@@ -52,10 +54,12 @@ void audio_worker_notify(void)
+ {
+   uint64_t flags = cpu_save_interrupts();
+   KASSERT(cpu_current() == cpu_bsp());
++  if (audio_cost.enabled) { ++audio_cost.notifications; }
+   ++notifications;
+   struct task_wait *wait = worker_wait;
+   worker_wait = NULL;
+   if (wait) {
++    if (audio_cost.enabled) { ++audio_cost.audio_wakes; }
+     task_wait_wake(wait);
+   }
+   cpu_restore_interrupts(flags);
+@@ -63,10 +67,12 @@ void audio_worker_notify(void)
+ 
+ void audio_interrupt(void)
+ {
++  uint64_t probe_start = probe_begin();
+   if (hda_interrupt(&controller)) {
+     ++interrupts;
+     audio_worker_notify();
+   }
++  probe_end(&audio_cost.irq, probe_start);
+ }
+ 
+ bool audio_engine_available(void)
+@@ -114,6 +120,7 @@ static struct audio_request *take_request(void)
+ static void fail_engine(const char *reason)
+ {
+   audio_require_worker();
++  if (audio_cost.enabled) { audio_cost.end_tsc = probe_tsc(); audio_cost.enabled = false; }
+   available = false;
+   audio_sessions_fail();
+   hda_fail(&controller, reason);
+@@ -307,6 +314,7 @@ static void audio_worker(void *argument)
+     }
+   }
+   for (;;) {
++    if (audio_cost.enabled) { ++audio_cost.loops; }
+     uint64_t flags = cpu_save_interrupts();
+     uint64_t observed_notifications = notifications;
+     cpu_restore_interrupts(flags);
+@@ -319,7 +327,10 @@ static void audio_worker(void *argument)
+       flags = cpu_save_interrupts();
+       struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
+       cpu_restore_interrupts(flags);
++      if (audio_cost.enabled) { ++audio_cost.requests; }
++      uint64_t probe_request_start = probe_begin();
+       audio_session_request_execute(request);
++      probe_end(&audio_cost.request, probe_request_start);
+       flags = cpu_save_interrupts();
+       object_cleanup_leave(previous);
+       bsp_request_complete(&request->request);
+@@ -333,6 +344,7 @@ static void audio_worker(void *argument)
+       cpu_restore_interrupts(flags);
+       continue;
+     }
++    if (audio_cost.enabled) { ++audio_cost.sleeps; }
+     worker_wait = task_wait_prepare();
+     struct task_wait *wait = worker_wait;
+     if (available && controller.stream_running) {
+diff --git a/kernel/audio/hda.c b/kernel/audio/hda.c
+index 754f0dc6..075624e1 100644
+--- a/kernel/audio/hda.c
++++ b/kernel/audio/hda.c
+@@ -1,4 +1,5 @@
+ #include "internal.h"
++#include "probe.h"
+ 
+ #include <arch/apic.h>
+ #include <arch/clock.h>
+@@ -111,17 +112,26 @@ struct hda_buffer_descriptor {
+ 
+ static uint8_t read8(const struct hda_controller *controller, unsigned offset)
+ {
+-  return *(volatile uint8_t *)(controller->registers.address + offset);
++  uint64_t probe_start = probe_begin();
++  uint8_t value = *(volatile uint8_t *)(controller->registers.address + offset);
++  probe_end(&audio_cost.hda_mmio, probe_start);
++  return value;
+ }
+ 
+ static uint16_t read16(const struct hda_controller *controller, unsigned offset)
+ {
+-  return *(volatile uint16_t *)(controller->registers.address + offset);
++  uint64_t probe_start = probe_begin();
++  uint16_t value = *(volatile uint16_t *)(controller->registers.address + offset);
++  probe_end(&audio_cost.hda_mmio, probe_start);
++  return value;
+ }
+ 
+ static uint32_t read32(const struct hda_controller *controller, unsigned offset)
+ {
+-  return *(volatile uint32_t *)(controller->registers.address + offset);
++  uint64_t probe_start = probe_begin();
++  uint32_t value = *(volatile uint32_t *)(controller->registers.address + offset);
++  probe_end(&audio_cost.hda_mmio, probe_start);
++  return value;
+ }
+ 
+ static void write8(struct hda_controller *controller, unsigned offset, uint8_t value)
+@@ -146,6 +156,7 @@ static bool wait8(struct hda_controller *controller, unsigned offset, uint8_t ma
+     if ((read8(controller, offset) & mask) == value) {
+       return true;
+     }
++    if (audio_cost.enabled) { ++audio_cost.poll_sleeps; }
+     kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+   } while (!task_deadline_expired(deadline));
+   return false;
+@@ -158,6 +169,7 @@ static bool wait16(struct hda_controller *controller, unsigned offset, uint16_t
+     if ((read16(controller, offset) & mask) == value) {
+       return true;
+     }
++    if (audio_cost.enabled) { ++audio_cost.poll_sleeps; }
+     kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+   } while (!task_deadline_expired(deadline));
+   return false;
+@@ -170,6 +182,7 @@ static bool wait32(struct hda_controller *controller, unsigned offset, uint32_t
+     if ((read32(controller, offset) & mask) == value) {
+       return true;
+     }
++    if (audio_cost.enabled) { ++audio_cost.poll_sleeps; }
+     kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+   } while (!task_deadline_expired(deadline));
+   return false;
+@@ -471,6 +484,7 @@ bool hda_command(struct hda_controller *controller, uint8_t codec, uint8_t node,
+           (unsigned)controller->corb_write, write_pointer);
+       return fail_controller(controller, "command deadline expired");
+     }
++    if (audio_cost.enabled) { ++audio_cost.poll_sleeps; }
+     kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+   }
+ }
+@@ -573,7 +587,7 @@ bool hda_interrupt(struct hda_controller *controller)
+   return collect_status(controller);
+ }
+ 
+-bool hda_stream_position_locked(struct hda_controller *controller,
++static bool probe_stream_position_locked(struct hda_controller *controller,
+     struct hda_stream_position *position, struct hda_irq_event *event)
+ {
+   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+@@ -601,6 +615,15 @@ bool hda_stream_position_locked(struct hda_controller *controller,
+   return false;
+ }
+ 
++bool hda_stream_position_locked(struct hda_controller *controller,
++    struct hda_stream_position *position, struct hda_irq_event *event)
++{
++  uint64_t probe_start = probe_begin();
++  bool result = probe_stream_position_locked(controller, position, event);
++  probe_end(&audio_cost.position, probe_start);
++  return result;
++}
++
+ bool hda_stream_stop(struct hda_controller *controller)
+ {
+   audio_require_worker();
+diff --git a/kernel/audio/probe.h b/kernel/audio/probe.h
+new file mode 100644
+index 00000000..2cca5166
+--- /dev/null
++++ b/kernel/audio/probe.h
+@@ -0,0 +1,41 @@
++/* Temporary measurement counters on the unmerged cost probe only. */
++#ifndef AUDIO_COST_PROBE_H
++#define AUDIO_COST_PROBE_H
++#include <stdint.h>
++#include <stdbool.h>
++#include <stdatomic.h>
++#include <arch/smp.h>
++struct probe_time { uint64_t calls, ticks; };
++struct audio_cost_probe {
++  atomic_bool enabled;
++  uint64_t target_sessions, begin_tsc, end_tsc;
++  struct probe_time mix, inner, output, queue_copy, position, hda_mmio, irq, request;
++  struct probe_time hpet[64], stage_copy[64], prepare_request[64];
++  uint64_t hpet_reads[64];
++  uint64_t hpet_first_ns[64], hpet_last_ns[64], hpet_first_tsc[64], hpet_last_tsc[64];
++  uint64_t loops, sleeps, notifications, requests, writes, accepted_bytes, mixed_frames;
++  uint64_t hpet_callers[64][3];
++  struct probe_time hpet_if0[64], timer_time[64], readiness_time[64], net_time[64];
++  struct probe_time hpet_caller_if0[64];
++  uint64_t readiness_wakes[64], net_wakes[64], audio_wakes;
++  uint64_t readiness[64], net_notify[64], schedules[64], timer_arm[64], poll_sleeps;
++};
++extern struct audio_cost_probe audio_cost;
++static inline uint64_t probe_tsc(void)
++{
++  uint32_t low, high, aux;
++  __asm__ volatile("lfence; rdtscp; lfence" : "=a"(low), "=d"(high), "=c"(aux) :: "memory");
++  return ((uint64_t)high << 32) | low;
++}
++static inline uint64_t probe_begin(void)
++{
++  return audio_cost.enabled ? probe_tsc() : 0;
++}
++static inline void probe_end(struct probe_time *time, uint64_t begin)
++{
++  if (begin && audio_cost.enabled) {
++    time->ticks += probe_tsc() - begin;
++    ++time->calls;
++  }
++}
++#endif
+diff --git a/kernel/net/interface.c b/kernel/net/interface.c
+index 88546962..52afca0b 100644
+--- a/kernel/net/interface.c
++++ b/kernel/net/interface.c
+@@ -1,3 +1,4 @@
++#include "../audio/probe.h"
+ #include <arch/cpu.h>
+ #include <arch/smp.h>
+ #include <kernel/log.h>
+@@ -65,15 +66,19 @@ bool net_worker_available(void)
+ 
+ void net_worker_notify(void)
+ {
++  uint64_t probe_start = probe_begin();
++  if (audio_cost.enabled) { ++audio_cost.net_notify[arch_cpu_index()]; }
+   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+   lock_worker();
+   worker_notified = true;
+   if (worker_wait) {
++    if (audio_cost.enabled) { ++audio_cost.net_wakes[arch_cpu_index()]; }
+     struct task_wait *wait = worker_wait;
+     worker_wait = NULL;
+     task_wait_wake(wait);
+   }
+   unlock_worker();
++  probe_end(&audio_cost.net_time[arch_cpu_index()], probe_start);
+ }
+ 
+ enum net_result net_transmit(const struct net_interface *interface,
+diff --git a/kernel/object/audio.c b/kernel/object/audio.c
+index 3587a44e..083130eb 100644
+--- a/kernel/object/audio.c
++++ b/kernel/object/audio.c
+@@ -1,4 +1,5 @@
+ #include <abi/wait.h>
++#include "../audio/probe.h"
+ #include <arch/cpu.h>
+ #include <arch/smp.h>
+ #include <kernel/audio.h>
+@@ -267,12 +268,15 @@ void audio_session_request_execute(struct audio_request *request)
+       status = CALL_WOULD_BLOCK;
+     } else {
+       KASSERT(request->operation == AUDIO_WRITE);
++      uint64_t probe_copy_start = probe_begin();
+       size_t frames = request->length / AUDIO_FRAME_BYTES;
+       for (size_t i = 0; i < frames; ++i) {
+         size_t tail = (audio->head + audio->count + i) % AUDIO_QUEUE_FRAMES;
+         audio->queue[tail * AUDIO_CHANNELS] = request->pcm[i * AUDIO_CHANNELS];
+         audio->queue[tail * AUDIO_CHANNELS + 1] = request->pcm[i * AUDIO_CHANNELS + 1];
+       }
++      probe_end(&audio_cost.queue_copy, probe_copy_start);
++      if (audio_cost.enabled) { ++audio_cost.writes; audio_cost.accepted_bytes += request->length; }
+       audio->count += frames;
+       audio->free_frames -= frames;
+       request->reply.written = request->length;
+@@ -316,6 +320,20 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
+ {
+   KASSERT(arch_cpu_index() == 0 && frames <= AUDIO_PERIOD_FRAMES);
+   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
++  if (audio_cost.target_sessions) {
++    size_t active = 0;
++    for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
++      if (sessions[i] && sessions[i]->owner && !sessions[i]->failed && !sessions[i]->cleanup_pending) { ++active; }
++    }
++    if (!audio_cost.enabled && !audio_cost.begin_tsc && active == audio_cost.target_sessions) {
++      audio_cost.begin_tsc = probe_tsc();
++      audio_cost.enabled = true;
++    } else if (audio_cost.enabled && active < audio_cost.target_sessions) {
++      audio_cost.end_tsc = probe_tsc();
++      audio_cost.enabled = false;
++    }
++  }
++  uint64_t probe_mix_start = probe_begin();
+   int32_t mixed[AUDIO_PERIOD_FRAMES * AUDIO_CHANNELS] = {0};
+   size_t consumed = 0;
+   for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
+@@ -332,11 +350,14 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
+       continue;
+     }
+     size_t count = audio->count < frames ? audio->count : frames;
++    uint64_t probe_inner_start = probe_begin();
+     for (size_t j = 0; j < count; ++j) {
+       size_t source = (audio->head + j) % AUDIO_QUEUE_FRAMES;
+       mixed[j * AUDIO_CHANNELS] += audio->queue[source * AUDIO_CHANNELS];
+       mixed[j * AUDIO_CHANNELS + 1] += audio->queue[source * AUDIO_CHANNELS + 1];
+     }
++    probe_end(&audio_cost.inner, probe_inner_start);
++    if (audio_cost.enabled) { audio_cost.mixed_frames += count; }
+     audio->head = (audio->head + count) % AUDIO_QUEUE_FRAMES;
+     audio->count -= count;
+     lock_audio(audio);
+@@ -350,13 +371,16 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
+       consumed = count;
+     }
+   }
++  uint64_t probe_output_start = probe_begin();
+   for (size_t i = 0; i < frames * AUDIO_CHANNELS; ++i) {
+     int32_t value = mixed[i];
+     output[i] = value > INT16_MAX ? INT16_MAX : value < INT16_MIN ? INT16_MIN : value;
+   }
++  probe_end(&audio_cost.output, probe_output_start);
+   if (consumed) {
+     readiness_notify();
+   }
++  probe_end(&audio_cost.mix, probe_mix_start);
+   return consumed;
+ }
+ 
+@@ -422,15 +446,19 @@ struct syscall_result audio_call(struct audio_object *audio, uint64_t rights,
+   if (operation != AUDIO_ACQUIRE && !owned) {
+     return (struct syscall_result){CALL_DENIED, 0};
+   }
++  uint64_t probe_prepare_start = probe_begin();
+   struct audio_request *request =
+       (struct audio_request *)bsp_request_prepare(BSP_SERVICE_AUDIO);
++  probe_end(&audio_cost.prepare_request[arch_cpu_index()], probe_prepare_start);
+   request->process = process;
+   request->audio = audio;
+   request->operation = operation;
+   request->generation = generation;
+   request->length = write.length;
+   if (write.length) {
++    uint64_t probe_copy_start = probe_begin();
+     KASSERT(copy_from_user(request->pcm, write.buffer, write.length));
++    probe_end(&audio_cost.stage_copy[arch_cpu_index()], probe_copy_start);
+   }
+   bsp_request_submit_and_wait(&request->request);
+   enum call_status status = request->result;
+diff --git a/kernel/task.c b/kernel/task.c
+index e125e046..57400677 100644
+--- a/kernel/task.c
++++ b/kernel/task.c
+@@ -1,3 +1,4 @@
++#include "audio/probe.h"
+ #include <kernel/service/profile.h>
+ #include <arch/cpu.h>
+ #include <arch/clock.h>
+@@ -1016,6 +1017,7 @@ void kernel_task_yield_if_runnable(void)
+   arch_timer_deadline_start();
+   bool idle_reported = false;
+   for (;;) {
++    if (audio_cost.enabled) { ++audio_cost.schedules[cpu_index]; }
+     task_timer_interrupt();
+     if (cpu_index == 0) {
+       reap_completed();
+diff --git a/kernel/user/readiness.c b/kernel/user/readiness.c
+index d73e1eda..898ea945 100644
+--- a/kernel/user/readiness.c
++++ b/kernel/user/readiness.c
+@@ -1,3 +1,4 @@
++#include "../audio/probe.h"
+ #include <arch/clock.h>
+ #include <arch/cpu.h>
+ #include <arch/smp.h>
+@@ -41,15 +42,19 @@ static void unlock_worker(void)
+ 
+ void readiness_notify(void)
+ {
++  uint64_t probe_start = probe_begin();
++  if (audio_cost.enabled) { ++audio_cost.readiness[arch_cpu_index()]; }
+   lock_worker();
+   worker_notified = true;
+   struct task_wait *wake = worker_wait;
+   worker_wait = NULL;
+   if (wake) {
++    if (audio_cost.enabled) { ++audio_cost.readiness_wakes[arch_cpu_index()]; }
+     task_wait_wake(wake);
+   }
+   unlock_worker();
+   net_worker_notify();
++  probe_end(&audio_cost.readiness_time[arch_cpu_index()], probe_start);
+ }
+ 
+ void readiness_complete(struct readiness_request *request, enum call_status status)
