@@ -16,6 +16,7 @@ struct clipboard_space;
 struct clipboard_receiver;
 struct clipboard_item;
 struct key_event;
+struct keyboard_event;
 
 /* Borrowed descriptors are used only while their input object is retained.
  * Input lock -> clipboard lock -> scheduler locks. No heap/user access locked. */
@@ -52,6 +53,9 @@ void clipboard_space_cancel(struct space *space);
 void clipboard_input_hangup(struct kernel_object *object);
 void clipboard_input_notify(struct kernel_object *object);
 void clipboard_stop_notify(void);
+/* BSP, under the focused keyboard lock; fills only action metadata. */
+void clipboard_graphics_key_event(struct space *space, struct process *owner,
+    uint64_t acquisition, const struct key_event *physical, struct keyboard_event *event);
 bool clipboard_key_event(struct space *space, const struct key_event *event);
 bool clipboard_ordinary_allowed(struct kernel_object *object);
 void clipboard_ordinary_transfer(struct kernel_object *object);

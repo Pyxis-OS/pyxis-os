@@ -36,9 +36,14 @@ struct keyboard_event {
   uint32_t action;
   uint32_t modifiers;
   uint32_t flags;
+  /* Only a fresh physical Copy/Paste press carries metadata. Public key fields
+   * never supply authority; the kernel checks this opaque action identity. */
+  uint64_t clipboard_action_id;
+  uint64_t clipboard_operation;
+  uint64_t clipboard_layer;
 };
 
 _Static_assert(sizeof(struct keyboard_read_request) == 24, "keyboard read layout");
-_Static_assert(sizeof(struct keyboard_event) == 16, "keyboard event layout");
+_Static_assert(sizeof(struct keyboard_event) == 40, "keyboard event layout");
 
 #endif

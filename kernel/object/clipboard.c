@@ -8,6 +8,7 @@
 #include <kernel/object/terminal.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/display.h>
+#include <kernel/object/keyboard.h>
 #include <kernel/object/process.h>
 #include <kernel/object/capability.h>
 #include <kernel/process.h>
@@ -25,11 +26,14 @@
 #define CLIPBOARD_ALLOCATE UINT64_C(100)
 #define CLIPBOARD_COMMIT UINT64_C(101)
 #define CLIPBOARD_CONTROLLER_REFUSE UINT64_C(102)
+#define CLIPBOARD_GRAPHICS_ALLOCATE UINT64_C(103)
+#define CLIPBOARD_GRAPHICS_COMMIT UINT64_C(104)
 #define CLIPBOARD_READ_CHUNK 256
 
 struct clipboard_item {
   struct kernel_object object;
   size_t length, allocated;
+  bool terminal_safe;
   uint8_t bytes[];
 };
 
@@ -43,6 +47,8 @@ struct clipboard_activation {
   struct process *owner;
   uint64_t id, operation, layer, generation, mapping_identity, deadline, receiver_epoch;
   enum call_status refusal;
+  uint64_t keyboard_acquisition;
+  bool graphics, attempted;
 };
 
 struct clipboard_space {
@@ -175,7 +181,105 @@ static struct clipboard_item *allocate_item(size_t length)
   }
   object_init(&item->object, OBJECT_CLIPBOARD, destroy_item);
   item->length = item->allocated = length;
+  item->terminal_safe = false;
   return item;
+}
+
+static bool normalize_terminal_text(struct clipboard_item *item)
+{
+  size_t output = 0;
+  for (size_t i = 0; i < item->length; ++i) {
+    uint8_t byte = item->bytes[i];
+    if (byte == '\r') {
+      if (i + 1 < item->length && item->bytes[i + 1] == '\n') {
+        ++i;
+      }
+      byte = '\n';
+    }
+    if ((byte < 0x20 && byte != '\n' && byte != '\t') || byte > 0x7e) {
+      return false;
+    }
+    item->bytes[output++] = byte;
+  }
+  item->length = output;
+  item->terminal_safe = true;
+  return true;
+}
+
+static bool scalar_utf8(const uint8_t *bytes, size_t length)
+{
+  for (size_t offset = 0; offset < length;) {
+    uint32_t value = bytes[offset++];
+    if (!value) {
+      return false;
+    }
+    if (value < 0x80) {
+      continue;
+    }
+    unsigned trailing;
+    uint32_t minimum;
+    if (value >= 0xc2 && value <= 0xdf) {
+      trailing = 1;
+      minimum = 0x80;
+      value &= 0x1f;
+    } else if (value >= 0xe0 && value <= 0xef) {
+      trailing = 2;
+      minimum = 0x800;
+      value &= 0x0f;
+    } else if (value >= 0xf0 && value <= 0xf4) {
+      trailing = 3;
+      minimum = 0x10000;
+      value &= 7;
+    } else {
+      return false;
+    }
+    if (trailing > length - offset) {
+      return false;
+    }
+    while (trailing--) {
+      uint8_t byte = bytes[offset++];
+      if ((byte & 0xc0) != 0x80) {
+        return false;
+      }
+      value = (value << 6) | (byte & 0x3f);
+    }
+    if (value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Store items are immutable. Retain before dropping the lock; terminal
+ * conversion owns separate storage and is charged to the aggregate bound. */
+static enum call_status terminal_snapshot(struct clipboard_store *store,
+    struct clipboard_item **result)
+{
+  lock_clipboard();
+  struct clipboard_item *source = store->item;
+  enum call_status status = !source ? CALL_NOT_FOUND :
+      object_retain(&source->object) ? CALL_OK : CALL_LIMIT;
+  unlock_clipboard();
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (source->terminal_safe) {
+    *result = source;
+    return CALL_OK;
+  }
+  struct clipboard_item *item = allocate_item(source->length);
+  if (!item) {
+    object_release(&source->object);
+    return CALL_NO_SPACE;
+  }
+  memcpy(item->bytes, source->bytes, source->length);
+  object_release(&source->object);
+  if (!normalize_terminal_text(item)) {
+    object_release(&item->object);
+    return CALL_BAD_REQUEST;
+  }
+  *result = item;
+  return CALL_OK;
 }
 
 static void destroy_store(struct kernel_object *object)
@@ -402,6 +506,11 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
   if (!clipboard_input_descriptor(input_object, &target) || target.space != space) {
     return CALL_DENIED;
   }
+  struct clipboard_item *snapshot = NULL;
+  enum call_status status = terminal_snapshot(store, &snapshot);
+  if (status != CALL_OK) {
+    return status;
+  }
   clipboard_input_descriptor(&space->console->object, &outer);
   lock_input(&outer);
   bool distinct = target.locked != outer.locked;
@@ -410,7 +519,7 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
   }
   lock_clipboard();
   struct clipboard_receiver *receiver = find_receiver(input_object);
-  enum call_status status = CALL_OK;
+  status = CALL_OK;
   if (!receiver) {
     status = CALL_UNAVAILABLE;
   } else if ((expected_epoch && receiver->epoch != expected_epoch) ||
@@ -420,12 +529,11 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
     status = CALL_BUSY;
   } else if (process_control_stopped(receiver->owner->control)) {
     status = CALL_ENDPOINT_CLOSED;
-  } else if (!store->item) {
-    status = CALL_NOT_FOUND;
-  } else if (next_transaction == UINT64_MAX || !object_retain(&store->item->object)) {
+  } else if (next_transaction == UINT64_MAX) {
     status = CALL_LIMIT;
   } else {
-    receiver->item = store->item;
+    receiver->item = snapshot;
+    snapshot = NULL;
     receiver->offset = 0;
     receiver->transaction_id = ++next_transaction;
     receiver->phase = CONSOLE_PASTE_BEGIN;
@@ -443,6 +551,9 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
     unlock_input(&target);
   }
   unlock_input(&outer);
+  if (snapshot) {
+    object_release(&snapshot->object);
+  }
   if (status == CALL_OK) {
     readiness_notify();
   }
@@ -468,7 +579,7 @@ static enum call_status consume_activation(struct clipboard_request *request)
   }
   lock_clipboard();
   struct clipboard_activation activation = space->clipboard->activation;
-  bool matches = activation.owner == request->process && activation.id &&
+  bool matches = !activation.graphics && activation.owner == request->process && activation.id &&
       activation.id == request->action_id && activation.operation == operation &&
       activation.layer == layer && activation.generation == request->generation &&
       activation.mapping_identity == request->mapping_identity && arch_monotonic_ns() < activation.deadline;
@@ -479,17 +590,163 @@ static enum call_status consume_activation(struct clipboard_request *request)
   return matches ? CALL_OK : CALL_DENIED;
 }
 
+static bool graphics_owner_current(struct process *process,
+    const struct clipboard_activation *action)
+{
+  struct space *space = process->space;
+  struct display_object *display = space->display;
+  return space_pointer_active() == space && display->owner == process &&
+      display->presented && display->visible &&
+      space->tty->geometry_generation == action->generation &&
+      display->mapping_identity == action->mapping_identity &&
+      !process_control_stopped(process->control) &&
+      keyboard_clipboard_owner(space->keyboard, process, action->keyboard_acquisition);
+}
+
+/* BSP/IF=0. The caller is blocked in this request; its owner cannot release or
+ * reacquire the keyboard concurrently. Focus and display mutation are BSP-only. */
+static enum call_status graphics_activation(struct clipboard_request *request,
+    bool consume, bool committing)
+{
+  struct clipboard_store *store = (struct clipboard_store *)request->object;
+  struct space *space = request->process->space;
+  if (store->space && store->space != space) {
+    return CALL_DENIED;
+  }
+  uint64_t operation = request->operation == CLIPBOARD_GRAPHICS_ALLOCATE ||
+      request->operation == CLIPBOARD_GRAPHICS_COMMIT ? CLIPBOARD_PUBLISH :
+      request->operation == CLIPBOARD_GRAPHICS_REFUSE ? request->length : CLIPBOARD_PASTE;
+  uint64_t layer = store->space ? CLIPBOARD_LAYER_LOCAL : CLIPBOARD_LAYER_SHARED;
+  lock_clipboard();
+  struct clipboard_activation action = space->clipboard->activation;
+  unlock_clipboard();
+  if (!action.graphics || action.owner != request->process || !action.id ||
+      action.id != request->action_id || action.operation != operation || action.layer != layer ||
+      action.attempted != committing || arch_monotonic_ns() >= action.deadline ||
+      !graphics_owner_current(request->process, &action)) {
+    return CALL_DENIED;
+  }
+  lock_clipboard();
+  /* The keyboard owner can run on an AP; revocation must win over consumption. */
+  bool current = space->clipboard->activation.id == action.id;
+  if (current && consume) {
+    if (request->operation == CLIPBOARD_GRAPHICS_ALLOCATE && request->refusal == CALL_OK) {
+      space->clipboard->activation.attempted = true;
+    } else {
+      space->clipboard->activation = (struct clipboard_activation){0};
+    }
+  }
+  unlock_clipboard();
+  return current ? CALL_OK : CALL_DENIED;
+}
+
+static void graphics_request_execute(struct clipboard_request *request)
+{
+  space_keyboard_sync_input();
+  bool commit = request->operation == CLIPBOARD_GRAPHICS_COMMIT;
+  request->status = graphics_activation(request,
+      request->operation != CLIPBOARD_GRAPHICS_HAS, commit);
+  if (request->status != CALL_OK) {
+    return;
+  }
+  if (request->refusal != CALL_OK) {
+    request->status = request->refusal;
+    return;
+  }
+  struct clipboard_store *store = (struct clipboard_store *)request->object;
+  if (request->operation == CLIPBOARD_GRAPHICS_ALLOCATE) {
+    request->item = allocate_item(request->length);
+    if (!request->item) {
+      lock_clipboard();
+      if (request->process->space->clipboard->activation.id == request->action_id) {
+        request->process->space->clipboard->activation = (struct clipboard_activation){0};
+      }
+      unlock_clipboard();
+      request->status = CALL_NO_SPACE;
+    }
+  } else if (commit) {
+    lock_clipboard();
+    struct clipboard_item *previous = store->item;
+    store->item = request->item;
+    request->item = NULL;
+    unlock_clipboard();
+    if (previous) {
+      object_release(&previous->object);
+    }
+  } else if (request->operation == CLIPBOARD_GRAPHICS_READ) {
+    lock_clipboard();
+    struct clipboard_item *item = store->item;
+    if (item && !object_retain(&item->object)) {
+      request->status = CALL_LIMIT;
+    } else {
+      request->item = item;
+      request->length = item ? item->length : 0;
+    }
+    unlock_clipboard();
+  } else if (request->operation == CLIPBOARD_GRAPHICS_HAS) {
+    lock_clipboard();
+    request->length = store->item && store->item->length;
+    unlock_clipboard();
+  }
+}
+
+void clipboard_graphics_key_event(struct space *space, struct process *owner,
+    uint64_t acquisition, const struct key_event *physical, struct keyboard_event *event)
+{
+  KASSERT(arch_cpu_index() == 0);
+  const unsigned command_modifiers = KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
+  unsigned modifiers = physical->modifiers & command_modifiers;
+  bool local = modifiers == KEY_MOD_CONTROL || modifiers == (KEY_MOD_CONTROL | KEY_MOD_SHIFT);
+  bool shared_command = modifiers == (KEY_MOD_SUPER | KEY_MOD_SHIFT);
+  struct display_object *display = space->display;
+  if (physical->action != KEY_PRESS || (physical->key != KEY_C && physical->key != KEY_V) ||
+      (!local && !shared_command) || (event->modifiers & command_modifiers) != modifiers ||
+      display->owner != owner || !display->presented || !display->visible ||
+      process_control_stopped(owner->control)) {
+    return;
+  }
+  lock_clipboard();
+  struct clipboard_activation *action = &space->clipboard->activation;
+  bool overlap = action->id && arch_monotonic_ns() < action->deadline;
+  /* Neither queued command may select the other's layer or newer authority. */
+  if (overlap || next_action == UINT64_MAX) {
+    *action = (struct clipboard_activation){0};
+    unlock_clipboard();
+    return;
+  }
+  *action = (struct clipboard_activation){
+    .owner = owner, .id = ++next_action,
+    .operation = physical->key == KEY_C ? CLIPBOARD_PUBLISH : CLIPBOARD_PASTE,
+    .layer = local ? CLIPBOARD_LAYER_LOCAL : CLIPBOARD_LAYER_SHARED,
+    .generation = space->tty->geometry_generation, .mapping_identity = display->mapping_identity,
+    .keyboard_acquisition = acquisition, .graphics = true,
+    .deadline = task_deadline_after_ms(CLIPBOARD_TIMEOUT_MS),
+  };
+  event->clipboard_action_id = action->id;
+  event->clipboard_operation = action->operation;
+  event->clipboard_layer = action->layer;
+  notify_worker_locked();
+  unlock_clipboard();
+}
+
 void clipboard_request_execute(struct clipboard_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   request->status = CALL_OK;
+  if (request->operation == CLIPBOARD_GRAPHICS_ALLOCATE ||
+      request->operation == CLIPBOARD_GRAPHICS_COMMIT ||
+      (request->operation >= CLIPBOARD_GRAPHICS_READ && request->operation <= CLIPBOARD_GRAPHICS_REFUSE)) {
+    graphics_request_execute(request);
+    return;
+  }
   if (request->operation == CLIPBOARD_CONTROLLER_REFUSE) {
     space_keyboard_sync_input();
     struct space *space = request->process->space;
     struct pointer_geometry geometry = pointer_surface_geometry(space->terminal_pointer);
     lock_clipboard();
     struct clipboard_activation action = space->clipboard->activation;
-    bool matches = action.owner == request->process && action.id && action.id == request->action_id &&
+    bool matches = !action.graphics && action.owner == request->process && action.id &&
+        arch_monotonic_ns() < action.deadline && action.id == request->action_id &&
         action.operation == request->length && action.generation == request->generation &&
         action.mapping_identity == request->mapping_identity && geometry.generation == request->generation &&
         geometry.mapping_identity == request->mapping_identity &&
@@ -748,6 +1005,7 @@ static void local_copy(struct space *space, struct clipboard_store *store)
     ktrace("clipboard copy: selection changed\n");
     return;
   }
+  item->terminal_safe = true;
   lock_clipboard();
   struct clipboard_item *previous = store->item;
   store->item = item;
@@ -862,6 +1120,9 @@ bool clipboard_key_event(struct space *space, const struct key_event *event)
     }
     return true;
   }
+  if (space->display->visible) {
+    return false;
+  }
   lock_clipboard();
   struct clipboard_receiver *receiver = space->clipboard->transaction;
   bool receiver_active = active(receiver);
@@ -946,8 +1207,13 @@ static void clipboard_worker(void *argument)
       changed = true;
     }
     for (struct clipboard_space *state = spaces; state; state = state->next) {
-      if (state->activation.owner && process_control_stopped(state->activation.owner->control)) {
-        state->activation = (struct clipboard_activation){0};
+      if (state->activation.id) {
+        if (arch_monotonic_ns() >= state->activation.deadline ||
+            (state->activation.owner && process_control_stopped(state->activation.owner->control))) {
+          state->activation = (struct clipboard_activation){0};
+        } else if (state->activation.deadline < deadline) {
+          deadline = state->activation.deadline;
+        }
       }
       if (state->resume_pending && input_complete) {
         resume_input_locked(state, true);
@@ -1192,10 +1458,95 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
   return (struct syscall_result){status, 0};
 }
 
+static struct syscall_result graphics_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  uint64_t payload[3] = {0};
+  size_t expected = operation == CLIPBOARD_GRAPHICS_PUBLISH ? 24 :
+      operation == CLIPBOARD_GRAPHICS_REFUSE ? 16 : 8;
+  if (request_size != expected) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(payload, request_address, expected)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  uint64_t command = operation == CLIPBOARD_GRAPHICS_PUBLISH ? CLIPBOARD_PUBLISH :
+      operation == CLIPBOARD_GRAPHICS_REFUSE ? payload[1] : CLIPBOARD_PASTE;
+  if (command != CLIPBOARD_PUBLISH && command != CLIPBOARD_PASTE) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  uint64_t required = command == CLIPBOARD_PUBLISH ? CLIPBOARD_RIGHT_PUBLISH : CLIPBOARD_RIGHT_PASTE;
+  enum call_status precheck = (rights & required) ? CALL_OK : CALL_DENIED;
+  if (operation == CLIPBOARD_GRAPHICS_PUBLISH) {
+    if (payload[2] > CLIPBOARD_TEXT_MAX) {
+      precheck = CALL_LIMIT;
+    } else if (!user_buffer_check(payload[1], payload[2], USER_BUFFER_READ)) {
+      precheck = CALL_BAD_BUFFER;
+    }
+  } else if (operation == CLIPBOARD_GRAPHICS_READ || operation == CLIPBOARD_GRAPHICS_HAS) {
+    size_t capacity = operation == CLIPBOARD_GRAPHICS_READ ? CLIPBOARD_TEXT_MAX :
+        sizeof(struct clipboard_graphics_has_reply);
+    if (reply_capacity < capacity) {
+      precheck = CALL_BAD_REQUEST;
+    } else if (!user_buffer_check(reply_address, capacity, USER_BUFFER_WRITE)) {
+      precheck = CALL_BAD_BUFFER;
+    }
+  }
+  /* Carry preflight refusal to the BSP: a matched consuming operation spends
+   * its attempt even when its grant, size or user buffer is unusable. */
+  struct process *process = process_current();
+  struct clipboard_request *request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
+  request->process = process;
+  request->object = object;
+  request->operation = operation == CLIPBOARD_GRAPHICS_PUBLISH ? CLIPBOARD_GRAPHICS_ALLOCATE : operation;
+  request->action_id = payload[0];
+  request->length = operation == CLIPBOARD_GRAPHICS_REFUSE ? payload[1] : payload[2];
+  request->refusal = precheck;
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->status;
+  size_t length = request->length;
+  struct clipboard_item *item = request->item;
+  bsp_request_release(&request->request);
+  if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_PUBLISH) {
+    KASSERT(item);
+    KASSERT(copy_from_user(item->bytes, payload[1], item->length));
+    enum call_status validation = scalar_utf8(item->bytes, item->length) ? CALL_OK : CALL_BAD_REQUEST;
+    request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
+    request->process = process;
+    request->object = object;
+    request->operation = CLIPBOARD_GRAPHICS_COMMIT;
+    request->action_id = payload[0];
+    request->item = item;
+    request->refusal = validation;
+    bsp_request_submit_and_wait(&request->request);
+    status = request->status;
+    item = request->item;
+    bsp_request_release(&request->request);
+  } else if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_READ && length) {
+    KASSERT(item);
+    KASSERT(copy_to_user(reply_address, item->bytes, length));
+  } else if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_HAS) {
+    struct clipboard_graphics_has_reply reply = {.has_text = length};
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    length = sizeof(reply);
+  }
+  if (item) {
+    object_release(&item->object);
+  }
+  size_t reply_size = status == CALL_OK && (operation == CLIPBOARD_GRAPHICS_READ ||
+      operation == CLIPBOARD_GRAPHICS_HAS) ? length : 0;
+  return (struct syscall_result){status, reply_size};
+}
+
 struct syscall_result clipboard_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation >= CLIPBOARD_GRAPHICS_PUBLISH && operation <= CLIPBOARD_GRAPHICS_REFUSE) {
+    return graphics_call(object, rights, operation, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   uint64_t required = operation == CLIPBOARD_PASTE ? CLIPBOARD_RIGHT_PASTE :
       operation == CLIPBOARD_REFUSE ? CLIPBOARD_RIGHTS : CLIPBOARD_RIGHT_PUBLISH;
   if (operation < CLIPBOARD_PUBLISH || operation > CLIPBOARD_REFUSE) {
@@ -1253,21 +1604,8 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   bsp_request_release(&request->request);
   if (item) {
     KASSERT(copy_from_user(item->bytes, payload[3], item->length));
-    /* text/plain is ASCII for this slice. Normalize CRLF/CR before publication. */
-    size_t output = 0;
-    for (size_t i = 0; i < item->length; ++i) {
-      uint8_t byte = item->bytes[i];
-      if (byte == '\r') {
-        if (i + 1 < item->length && item->bytes[i + 1] == '\n') {
-          ++i;
-        }
-        byte = '\n';
-      }
-      if ((byte < 0x20 && byte != '\n' && byte != '\t') || byte > 0x7e) {
-        status = CALL_BAD_REQUEST;
-        break;
-      }
-      item->bytes[output++] = byte;
+    if (!normalize_terminal_text(item)) {
+      status = CALL_BAD_REQUEST;
     }
     /* Retained accounting charges the allocation, not merely normalized length. */
     if (status == CALL_OK) {
@@ -1278,7 +1616,7 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
       request->item = item;
       request->generation = payload[1];
       request->mapping_identity = payload[2];
-      request->length = output;
+      request->length = item->length;
       bsp_request_submit_and_wait(&request->request);
       status = request->status;
       item = request->item;
