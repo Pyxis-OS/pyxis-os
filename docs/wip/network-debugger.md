@@ -1,8 +1,8 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Accepted decisions and task order below are not implemented. No implementation
-is assigned; task 1 requires an explicit owner assignment. Goal: GDB on the
+The owner assigned task 1 on 2026-10-09; implementation and qualification are
+in progress. Tasks 2–4 remain unimplemented and unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
 
@@ -239,9 +239,15 @@ inside an interrupted mutation is not a coherent snapshot of device state.
 
 ## Accepted task split and qualification
 
-All tasks are unimplemented and await assignment.
+Task 1 is assigned; tasks 2–4 await assignment. Accepted task 1 control:
+`debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
+and before BSP scheduling. A complete stop resumes on whichever comes first:
+QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
+expiry. This is checkpoint expiry, not transport-loss detection. Incomplete stops
+remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
+`debug.wait` when task 3 provides transport; keep no compatibility option.
 
-1. **Small first task: resumable stop foundation.**
+1. [ ] **Small first task: resumable stop foundation.**
 
    Owner can then inspect captured CPU frames and resume a known checkpoint using
    QEMU's existing debugger; native network GDB is not available yet.
@@ -332,5 +338,4 @@ code is copied here; protocol implementation does not import GDB itself. Any lat
 per-file licence/provenance and preserved notices; audit other GDB files separately.
 
 Only docs/wip changes in this PR. No stub, bridge, boot option, hardware access,
-probe branch or qualification infrastructure added. Accepted plan only; stop
-for review and await the owner's explicit task 1 assignment.
+probe branch or qualification infrastructure added. Task 1 is assigned; later tasks require separate owner assignment.
