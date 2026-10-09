@@ -7,11 +7,12 @@
 
 struct space;
 struct task;
+struct process;
 struct task_wait_link;
 
 struct execution_group_member {
   struct execution_group_member *next;
-  struct task *task;
+  struct process *process;
 };
 
 /* Immutable space. Lock protects admission, controlling grants, member links
@@ -39,7 +40,7 @@ struct execution_group *execution_group_create(struct space *space);
  * sealed admission is ENDPOINT_CLOSED. Publication rechecks under the lock. */
 enum call_status execution_group_check(struct execution_group *group, struct space *space);
 
-/* BSP, IF=0. All tasks already own group storage references. Serialize final
+/* BSP, IF=0. All prepared processes already own group storage references. Serialize final
  * admission and enrollment with sealing, then transfer every task together.
  * Failure leaves all tasks unpublished and owned by the preparer. */
 enum call_status execution_group_publish(struct execution_group *group,
