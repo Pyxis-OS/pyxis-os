@@ -30,6 +30,7 @@ struct popup_layout {
 static struct volume_ui_layout frame_layout, drawn_layout;
 static struct popup_layout frame_popup, drawn_popup;
 static bool drawn_valid, open, focused, dragging;
+static uint64_t cancel_generation, frame_cancel_generation;
 static struct space *target, *focus_space;
 static uint32_t popup_pixels[POPUP_WIDTH * POPUP_HEIGHT];
 
@@ -114,6 +115,7 @@ static void set_focus(bool next)
 
 void volume_ui_cancel(void)
 {
+  ++cancel_generation;
   set_focus(false);
   open = dragging = false;
   drawn_popup.shown = false;
@@ -329,6 +331,7 @@ void volume_ui_begin_frame(const struct volume_ui_layout *layout,
       .width = POPUP_WIDTH, .height = MIN(POPUP_HEIGHT, layout->screen_height - BAR_HEIGHT),
       .shown = true};
   }
+  frame_cancel_generation = cancel_generation;
   cpu_restore_interrupts(flags);
   if (!visible) {
     return;
@@ -370,6 +373,11 @@ void volume_ui_end_frame(bool presented)
   if (presented) {
     drawn_layout = frame_layout;
     drawn_popup = frame_popup;
+    /* A lock/focus boundary can cancel while this immutable frame composes.
+     * Its pixels may finish, but its former popup cannot regain input. */
+    if (frame_cancel_generation != cancel_generation) {
+      drawn_popup.shown = false;
+    }
   }
 }
 
