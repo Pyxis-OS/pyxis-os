@@ -67,7 +67,9 @@ Escape returns byte 27; incomplete or unsupported sequences return
 named `TERM_KEY_*` values. These are logical terminal keys, not physical events.
 The line editor ignores Escape and Page Up/Down. With a caller-owned
 `struct term_history`, `term_read_line_history` and `term_read_line_marked`
-recall submitted lines with Up/Down; other entry points ignore them.
+recall submitted lines with Up/Down and set `recorded` when they appended the
+line; other entry points ignore them. `term_history_add` applies the same
+recording rules, for example to lines loaded from a file.
 Tab and non-ASCII input are ignored; Unicode widths remain later work. `CALL_INPUT_LOST` abandons the
 line and returns a distinct result, so the caller can explain the loss and retry.
 On an output failure, the screen/cursor may be partially updated and must not be

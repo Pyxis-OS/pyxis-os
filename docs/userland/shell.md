@@ -71,10 +71,39 @@ libterm's visible-area limit may be smaller.
 Up and Down recall earlier lines into the editor, where they can be edited
 before Enter runs them; Down past the newest line brings back what was being
 typed. Each interactive shell keeps its own last 100 submitted lines in memory,
-leaving out empty and all-space lines and a repeat of the line before. Local
-spaces, remote sessions and mux panes therefore have separate histories, and a
-`--no-echo` shell keeps none. History is lost when the shell exits; saving it
-and searching it with Ctrl+R are [deferred](../technical-debt.md#initial-terminal-editor).
+leaving out empty and all-space lines and a repeat of the line before. A
+`--no-echo` shell and scripts keep none.
+
+**Saved history.** Lines are saved in `home://.history`, one file per home,
+shared by every shell of every space that can write that home.
+- **Loading:** a shell loads the newest 100 saved entries when it starts. It
+  doesn't see lines other running shells save later; a new shell, including a
+  `session` successor, picks them up.
+- **Saving:** each line the shell records is saved before it runs. The shell
+  merges it into the newest file contents, writes them to a new
+  `.history.HEX` file and renames that over `.history`.
+- **Concurrent shells:** they interleave in the order they saved. Two saves
+  within the same few milliseconds can lose one line, because the later
+  rename wins.
+- **Crashes:** a crash or kill loses at most the line being saved. It may leave
+  one `.history.HEX` file, which is safe to delete when no shell is running.
+- **No sync:** a native volume flushes the moved file before a replacing rename
+  commits, and a RAM home has nothing to make durable.
+- **Private lines:** a line starting with a space stays in memory, so Up still
+  recalls it, but is never saved.
+
+**File format.** One entry per line, ending in LF, printable ASCII and at most
+1023 bytes.
+- **Bounds:** the file keeps the newest 1000 entries within 64 KiB.
+- **Loading:** it skips anything else, and the next save rewrites the file
+  without it.
+
+**No writable home.** A space without `home://`, or with a read-only one such
+as Read-only's, still loads what it can read but saves nothing, without a
+message. The first failed save prints one `shell: history not saved` line, and
+that shell stops saving.
+
+Searching history with Ctrl+R is [deferred](../technical-debt.md#initial-terminal-editor).
 
 There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
 argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
