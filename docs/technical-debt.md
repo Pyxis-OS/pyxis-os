@@ -1038,7 +1038,7 @@ records the current status and errno rules.
 
 ## Narrow libc file metadata
 
-Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`fstat` for
+Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`lstat`/`fstat` for
 ports such as [Links](userland/links.md). Native objects report only a kind and,
 for files, a size, so `struct stat` has only `st_mode` file-type bits and
 `st_size`. There are no permission, owner, link-count, identity or time fields,
@@ -1048,14 +1048,21 @@ and code that reads one fails to compile instead of seeing invented values.
   denied, so a file with neither right cannot be sized. On a provider URI it
   performs the request, so a port that calls `stat` before `fopen` fetches
   twice. Links sends provider URIs straight to `fopen`.
-- **Symlinks.** Lookup never follows a symlink, so `stat` of a symlink entry
-  fails; `readdir` reports it as `DT_LNK`. `lstat` and `readlink` are absent.
+- **Symlinks.** Lookup never follows a symlink, so `stat` and `lstat` of a host
+  symlink entry fail with ENOTSUP; `readdir` reports it as `DT_LNK`. Native
+  filesystems have no symlinks. Lstat currently equals stat; revisit that
+  implementation if following or symlink metadata is added. Readlink is absent.
+- **Access checks.** `access` checks current native grants, not mode bits or
+  backing I/O success. Directory R_OK requires ENUMERATE and W_OK CREATE|REMOVE.
+  X_OK and provider routes return ENOTSUP. Revisit only with a concrete need for
+  launch checks or provider existence/request semantics; do not infer these from
+  a URI binding. See the [accepted contract](userland/libc-portability.md#native-path-checks-and-removal).
 - **Listings.** `readdir` returns no `.` or `..` entries. A detected
   concurrent change ends the listing with EAGAIN rather than restarting it.
 - **Native utilities.** The first ls and mkdir still use libpyxis helpers.
 
 Revisit when native objects gain timestamps or other metadata, when a port
-needs `lstat`, `readlink` or `access`, or when a port calls `stat` on provider
+needs `readlink` or when a port calls `stat` on provider
 URIs. Review of the Links port proposed failing there with ENODEV, as
 `opendir` does, without issuing the request. Add fields only for values
 the native layer reports.
