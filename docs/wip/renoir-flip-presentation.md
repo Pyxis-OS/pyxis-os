@@ -1,6 +1,7 @@
 # Renoir flip presentation
 
-**Proposal only, 2026-10-09. No implementation or placeholder interfaces.**
+**Design accepted 2026-10-09; not implemented. No placeholder interfaces.**
+The owner assigned read-only task 1 for a separate implementation PR.
 The owner redirected presentation step 2 after native batch 2 failed on main
 `11d35fa6`: inaccurate counter-derived periods, excessive uncertainty and worse
 tearing/input delay in blank-copy mode. The separate observer safety fix keeps
@@ -14,11 +15,12 @@ firmware and interrupt configuration. Begin with one verified Renoir
 the original GOP surface and one independently owned spare. Three surfaces are
 a later option, not hardware triple-buffer enablement.
 
-## Authority: an owner decision
+## Authority: accepted boundary
 
 This is the first Pyxis AMD GPU register **write** path. It overturns #622's
-read-only boundary and therefore needs the owner's explicit decision 1 below
-and implementation authorization. Until then #622 remains binding.
+read-only boundary for the bounded backend only, as accepted in decision 1
+below on 2026-10-09. Implementation still requires the owner's explicit task
+assignment; the current observer remains read-only.
 
 The kernel's BSP display driver exclusively owns the device, mappings and
 surface-address writes. Programs continue supplying pixels through DRAW and
@@ -26,10 +28,10 @@ the existing RAM frame handoff; no BAR mapping, address-setting capability or
 GPU command interface is delegated. Keep Limine in its adapter, hardware under
 arch, and allocation/VM mutation under the existing BSP memory contracts.
 
-The proposed first write allowlist is one qualified HUBP's synchronized flip
+The accepted first write allowlist is one qualified HUBP's synchronized flip
 control and primary address high/low pair. No modeset, clock, power, VM setup,
 firmware command, reset, GSL reconfiguration or display interrupt writes.
-Optional OTG blanking is described below but deferred by the recommended default.
+Optional OTG blanking is described below but deferred by the accepted scope.
 
 ## Identify the inherited pipe
 
@@ -94,7 +96,7 @@ requires both pending clear and earliest-in-use address equal to the request.
 Read a stable address/control tuple; a clear pending bit alone is insufficient.
 Only this confirmation permits writing the previous front as the next back.
 Keep the software input/presentation deadline independent. While a flip is
-outstanding, propose 1 ms sleeping polls with a 50 ms wall-clock deadline (at
+outstanding, use 1 ms sleeping polls with a 50 ms wall-clock deadline (at
 most 50 polls), no display interrupt and no blank-start spin. Check pending at
 the earlier poll/presenter wake, without composing a new image while both
 surfaces are busy. Ordinary-cadence-only polling could miss the in-use transition
@@ -127,7 +129,7 @@ set blank-data enable, clear DE mode and disable blank-data double buffering;
 blank confirmation requires enable plus current blank state. Unblank also
 clears OTG underflow status, a write that must be recorded explicitly if adopted.
 Blanking output does not prove HUBP fetch has stopped or cancel a pending flip.
-The default first slice does not use it; a demonstrated need returns to the owner
+The accepted first slice does not use it; a demonstrated need returns to the owner
 before extending the write allowlist.
 
 ## Extra surface memory: proof before writes
@@ -144,6 +146,31 @@ an allocator ownership proof. Linux owns a different initialized GPU lifetime.
 The [Linux plane address path](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_plane.c#L839-L872)
 uses a GPU address obtained from its buffer object; CPU physical addresses are
 not interchangeable with it.
+
+Task 1 starts with the firmware's VBIOS claim: obtain the matching image from
+ACPI VFCT following
+[`amdgpu_acpi_vfct_bios()`](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c#L374-L423),
+with table/image bounds, PCI identity and ATOM validation. Decode the versioned
+ATOM `vram_usagebyfirmware` table as in
+[`amdgpu_atomfirmware_allocate_fb_scratch()`](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_atomfirmware.c#L103-L210).
+The [table contract](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/atomfirmware.h#L742-L799)
+describes the posted VBIOS/GOP reservation at the top of framebuffer memory and
+version-specific firmware/driver ranges. Validate lengths, units and flags;
+do not treat a driver-size field as an already delegated pool. Linux's helper
+allocates host scratch, and its reservation bookkeeping includes SR-IOV-specific
+branches; it is not a bare-metal Renoir spare-VRAM allocator.
+
+A validated posted table tied to this boot can establish the firmware's reported
+reserved extent. Pool proof additionally requires a documented firmware/boot
+handoff assigning the proposed range to this driver, verified translation and
+exclusion of all other owners. An absent/zero table, a range below that reservation,
+or a Linux allocation succeeding is insufficient. PSP TMR and DMCUB allocations
+made after Linux driver load describe that driver's lifetime; task 1 must establish
+whether pre-OS PSP/DMCUB regions exist on this machine and their extents or evidence
+of absence. Linux's [PSP setup](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_psp.c#L849-L886)
+also allows a boot-time TMR, while its
+[DMCUB buffer setup](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c#L2567-L2591)
+allocates a driver buffer. Neither path proves this machine's inherited state.
 
 Before allocating, produce a bounded native inventory establishing:
 
@@ -249,13 +276,18 @@ MIT umbrella. No source is vendored in this proposal PR.
 ## Tasks and native qualification
 
 1. **Read-only inventory and memory proof.** Record the actual GOP route,
-   complete surface state, address translation and reservation evidence. Stop
+   complete surface state, address translation and reservation evidence, starting
+   with the VFCT/VBIOS ATOM sources above. Stop
    if any prerequisite is missing; return the report before write implementation.
+   **What the owner sees:** a native route/reservation report with a proven pool
+   or a precise blocker, before any GPU write.
 2. **Qualified two-surface backend.** Only after owner authorization, implement
    private allocation/ownership, fenced offscreen copies, the exact mono flip
    sequence, bounded completion polling, capture, timeout fallback and panic.
    Boot/Bochs/VirtIO retain their own paths; default remains GOP copy until native
    qualification passes.
+   **What the owner sees:** an opt-in two-surface backend PR with QEMU fallback
+   checks and exact native qualification commands; GOP copy remains the default.
 3. **Native qualification and references.** Owner's ThinkPad: same revision and
    unchanged mode, info logging, opt-in disabled/enabled paired boots. Record
    source/reservation evidence, register snapshots before/after, requested versus
@@ -264,29 +296,30 @@ MIT umbrella. No source is vendored in this proposal PR.
    lock/unlock, spaces/layers, screenshots and ordinary shutdown. A framebuffer
    screenshot or FPS does not establish a tear-free panel. Keep optional blank
    and timeout recovery unqualified until actually exercised and recorded.
+   **What the owner sees:** matched native completion/camera/input/cost results,
+   an explicit qualification outcome and references documenting remaining limits.
 
 QEMU has no DCN 2.1. It can check refusal/unavailable behavior, unchanged
 boot/Bochs/VirtIO, frame/capture lifetime and ordinary input; it cannot qualify
 register writes, VRAM ownership, flip completion, native panic or tear reduction.
 No synthetic DCN device, new tests or fault injection is implicit in this plan.
 
-## Owner decisions — pending
+## Owner decisions — accepted 2026-10-09, not implemented
 
-Nothing here counts as accepted until the owner answers.
+1. **First GPU writes authorized for the bounded backend only:** kernel-exclusive,
+   one verified mono HUBP, synchronized flip control plus primary address
+   high/low, after all read-only prerequisites pass. No OTG blank in the first
+   slice; no modeset/clock/power/VM/firmware/interrupt changes. This replaces
+   #622's read-only rule for that backend.
+2. **Spare memory only from a firmware/boot-proven driver-owned pool:** use the
+   original GOP allocation plus one proven spare. No proof, no allocation and
+   no flips; neither BAR space nor missing reservations establishes ownership.
+3. **Two scanout surfaces and bounded completion:** unchanged three-slot producer
+   handoff, one outstanding flip, 1 ms sleeping polls with a 50 ms deadline only
+   while pending, preserving the independent ordinary input/presentation
+   deadline. Timeout stops GPU writes, pins possible fronts and falls back to
+   unsynchronized copies to the known owned set; unknown routing makes display
+   unavailable. Three surfaces, interrupts and blanking are deferred.
 
-1. **Authorize the first GPU writes? Recommended default:** kernel-exclusive,
-   one verified mono HUBP, synchronized flip control plus primary high/low only,
-   after all read-only prerequisites pass. No optional OTG blank in the first
-   slice; no modeset/clock/power/VM/firmware/interrupt changes. This explicitly
-   replaces #622's read-only rule for that bounded backend.
-2. **How is spare memory authorized? Recommended default:** use the original
-   GOP allocation plus one spare in a firmware/boot-proven driver-owned VRAM
-   pool. Missing PSP/DMCUB/firmware reservation or address-translation proof
-   means no allocation and no flips; do not infer free memory from BAR space.
-3. **Buffering and failure policy? Recommended default:** two scanout surfaces,
-   unchanged three-slot producer handoff, one outstanding flip, 50 ms bounded
-   polling with 1 ms sleeps only while pending, preserving the independent
-   ordinary input/presentation deadline. Timeout stops GPU writes,
-   pins possible fronts and falls back to unsynchronized copies to the known
-   owned set; unknown routing makes display unavailable. Defer three surfaces,
-   interrupts and optional blanking until measurements justify them.
+Acceptance records the design. Task 1 is assigned separately; tasks 2 and 3
+still require the owner's explicit assignment.

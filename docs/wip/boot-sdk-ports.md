@@ -99,9 +99,8 @@ Chosen by the owner, each starting with a proposal:
   master/per-space gain and the owner's four-icon bar UI; delivery steps 1–3
   assigned after #616, with native listening by the owner afterward.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
-  docs-only proposal after failed native step 2 qualification, alongside the
-  small observer safety follow-up. GPU writes and memory ownership require
-  explicit owner decisions; implementation is not authorized.
+  design accepted after failed native step 2 qualification, alongside the
+  small observer safety follow-up. Read-only task 1 assigned separately.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
   Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
   (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),
