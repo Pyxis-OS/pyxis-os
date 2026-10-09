@@ -101,7 +101,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
 
   const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
   const char *remote_beacon = NULL, *log_udp = NULL, *display_size = NULL;
-  const char *display_timing = NULL;
+  const char *display_timing = NULL, *display_timing_metrics = NULL;
 
   char *cursor = command_line_storage;
   while (*cursor) {
@@ -142,6 +142,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&display_size, key, value);
     } else if (same_text(key, "display.timing")) {
       take_option(&display_timing, key, value);
+    } else if (same_text(key, "display.timing.metrics")) {
+      take_option(&display_timing_metrics, key, value);
     } else {
       panic("unknown kernel option: %s", key);
     }
@@ -170,5 +172,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.remote_beacon = remote_beacon;
   options.display_size = display_size;
   options.display_timing = display_timing;
+  options.display_timing_metrics = display_timing_metrics &&
+    flag_option("display.timing.metrics", display_timing_metrics);
   return &options;
 }

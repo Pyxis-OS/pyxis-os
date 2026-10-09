@@ -12,6 +12,7 @@ struct boot_options {
   bool log_udp;
   const char *display_size;
   const char *display_timing;
+  bool display_timing_metrics;
 };
 
 /* BSP, IF=0: call once before display/AP initialization. Copies the command

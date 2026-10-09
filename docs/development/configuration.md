@@ -76,8 +76,15 @@ copy path when hardware observation is qualified. It remains off by default
 pending native qualification. This boot-only policy has no runtime program
 setter; unsupported backends retain their existing presentation path.
 
+`DISPLAY_TIMING_METRICS=1` adds `display.timing.metrics=1` to the same entries
+for native qualification. Register dumps and periodic summaries then print at
+the default info log level, without enabling unrelated kernel traces. Its
+default `0` omits the flag and keeps one preparation summary plus rare loss
+reports; it does not enable timed copies and has no effect with `off` or
+unavailable hardware. Native batches must keep `LOG_LEVEL=info`.
+
 ```sh
-make -j16 image DISPLAY_TIMING=observe
+make -j16 image LOG_LEVEL=info DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1
 ```
 
 `BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds,

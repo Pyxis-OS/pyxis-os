@@ -58,7 +58,8 @@ bool display_modeset_begin(void)
   return retired && !display_is_panicking();
 }
 
-void display_init(const struct boot_info *boot, const char *size, const char *timing)
+void display_init(const struct boot_info *boot, const char *size, const char *timing,
+                  bool timing_metrics)
 {
   if (boot->framebuffer.size) {
     target = boot_display_init(&boot->framebuffer);
@@ -92,7 +93,7 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
   if (!target) {
     panic("no usable display: firmware framebuffer or supported driver required");
   }
-  display_timing_prepare(boot, driver == DISPLAY_BOOT, timing);
+  display_timing_prepare(boot, driver == DISPLAY_BOOT, timing, timing_metrics);
 }
 
 /* BSP presenter. A frame without staging still presents, directly. */

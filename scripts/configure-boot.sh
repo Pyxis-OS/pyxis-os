@@ -39,6 +39,12 @@ case "$display_timing" in
   off|observe|blank) command_line="$command_line display.timing=$display_timing" ;;
   *) echo 'DISPLAY_TIMING must be off, observe or blank.' >&2; exit 1 ;;
 esac
+display_timing_metrics=${DISPLAY_TIMING_METRICS:-0}
+case "$display_timing_metrics" in
+  0) ;;
+  1) command_line="$command_line display.timing.metrics=1" ;;
+  *) echo 'DISPLAY_TIMING_METRICS must be 0 or 1.' >&2; exit 1 ;;
+esac
 rescue_line=
 mount_disk=${MOUNT_DISK:-}
 if [ -n "$mount_disk" ]; then
@@ -61,18 +67,21 @@ fi
 mkdir -p build
 PYXIS_NORMAL_LINE="$command_line" PYXIS_RESCUE_LINE="$rescue_line" \
 PYXIS_BEACON_NAME="$remote_beacon" PYXIS_DISPLAY_SIZE="$display_size" PYXIS_DISPLAY_TIMING="$display_timing" \
+PYXIS_DISPLAY_TIMING_METRICS="$display_timing_metrics" \
 awk -v timeout="$BOOT_MENU_TIMEOUT" '
   BEGIN {
     normal = ENVIRON["PYXIS_NORMAL_LINE"]; rescue = ENVIRON["PYXIS_RESCUE_LINE"]
     beacon = ENVIRON["PYXIS_BEACON_NAME"]
     display = ENVIRON["PYXIS_DISPLAY_SIZE"]
     timing = ENVIRON["PYXIS_DISPLAY_TIMING"]
+    timing_metrics = ENVIRON["PYXIS_DISPLAY_TIMING_METRICS"] == "1"
     normal_bytes = length(normal)
     if (beacon != "") normal_bytes += length(beacon) - length("${PYXIS_REMOTE_BEACON}")
     if (display != "") normal_bytes += length(display) - length("${PYXIS_DISPLAY_SIZE}")
     install_bytes = length("init=boot://init-install.pxe boot.install=1")
     if (display != "") install_bytes += length(" display.size=") + length(display)
     if (timing != "") install_bytes += length(" display.timing=") + length(timing)
+    if (timing_metrics) install_bytes += length(" display.timing.metrics=1")
     if (normal_bytes > 4095 || install_bytes > 4095 ||
         (rescue != "" && normal_bytes + length(" boot.default_config=1") > 4095)) {
       print "Kernel command line must fit within 4095 bytes." > "/dev/stderr"
@@ -90,6 +99,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     line = $0
     if (display != "") line = line " display.size=${PYXIS_DISPLAY_SIZE}"
     if (timing != "") line = line " display.timing=" timing
+    if (timing_metrics) line = line " display.timing.metrics=1"
     print line; next
   }
   { print }

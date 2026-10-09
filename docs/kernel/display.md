@@ -343,9 +343,13 @@ before copying; its fence/release precedes diagnostic sorting/logging. Panic,
 frame leases and cursor-inclusive capture retain their existing contracts.
 
 Normal logging retains one preparation summary and rare observation-loss
-reports. Register dumps, qualification details and periodic metrics use `ktrace`;
-native measurement images need `LOG_LEVEL=trace`. Periodic metric sorting is
-also skipped at the normal info level.
+reports. `DISPLAY_TIMING_METRICS=1` adds the boot-only
+`display.timing.metrics=1` qualification flag: register dumps, qualification
+details and periodic metrics are printed at the normal info level only when
+requested. Omission or `0` disables these reports and periodic metric sorting,
+independently of the copy policy. It has no effect with `off` or unavailable
+hardware. Native batches use `LOG_LEVEL=info`; global trace output floods the
+ThinkPad console and distorts timing.
 
 The [qualification and native batch record](../development/experiments/renoir-presentation/README.md)
 distinguishes CPU-issued prefix progress from WC visibility/display fetch.

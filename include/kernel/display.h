@@ -8,7 +8,8 @@ struct pointer_frame;
 
 /* Physical screen, distinct from a space's graphics capability. BSP, before
  * AP startup: retain the boot mapping and prepare the first supported device. */
-void display_init(const struct boot_info *boot, const char *size, const char *timing);
+void display_init(const struct boot_info *boot, const char *size, const char *timing,
+                  bool timing_metrics);
 /* Sole BSP presenter, IF=1, once. Failure leaves presentation unavailable. */
 bool display_start(void);
 /* BSP display services: acquisition/presentation fail after backend failure. */

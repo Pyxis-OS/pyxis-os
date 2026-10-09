@@ -11,7 +11,7 @@ struct display_timing_capability {
 };
 
 void display_timing_prepare(const struct boot_info *boot, bool firmware_backend,
-                           const char *option);
+                           const char *option, bool metrics);
 void display_timing_start(void);
 void display_timing_wait(void);
 bool display_timing_front_write(void);

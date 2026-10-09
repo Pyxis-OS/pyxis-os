@@ -103,8 +103,19 @@ Missed-start reason counters were added afterward to native diagnostics only;
 the unavailable QEMU path performs no such accounting or logging.
 The review follow-up makes fine polling read only frame, position and status,
 with full device/BAR/mode validation once per cadence and before an admitted
-write. Register dumps and periodic metrics now require trace logging. These
-native-only changes do not provide new hardware cost or latency measurements.
+write. A subsequent review replaces global trace logging for register dumps
+and periodic metrics with the explicit display-timing qualification flag at
+info level: trace floods the ThinkPad console and was ruled out for timing
+batches. These native-only changes do not provide new hardware cost or latency
+measurements.
+
+The qualification-flag follow-up built default and flagged images at info
+level. A Q35/nested-KVM/four-CPU/8-GiB standard-VGA boot with
+`display.timing=observe display.timing.metrics=1` reached normal startup.
+Read-only GDB confirmed both parsed and presenter metrics flags, with the
+observer unprepared and hardware capability zero. Serial retained one
+unavailable summary and no register/periodic dumps. The native reporting path
+is source-reviewed, not exercised by this QEMU check.
 
 ## Native ThinkPad batch
 
@@ -116,25 +127,27 @@ settings, or run a debugger during latency samples. Firmware timing may differ
 from Fedora's 1920x1080 / 60.0204 Hz / 31-line reference; qualify the actual boot.
 
 Build three measurement images from the **same source revision and private Quake
-data**, in the usual compiler environment. Use `LOG_LEVEL=trace` for register
-dumps and bounded metrics; normal info builds retain one preparation summary
-and rare observation-loss reports, with no periodic logging or metric sorting.
-Trace also enables other kernel traces: match this setting across measurement
-images and record its overhead. Set `QUAKE_DATA` to the local id1 directory:
+data**, in the usual compiler environment. Keep the default `LOG_LEVEL=info`
+(explicit below) and request `DISPLAY_TIMING_METRICS=1` only for observation and
+blank qualification. This enables register dumps and bounded summaries without
+unrelated kernel traces. Ordinary boots omit the flag, retaining one preparation
+summary and rare observation-loss reports, with no periodic logging or metric
+sorting. Record the qualification summaries' overhead and keep reporting
+outliers. Set `QUAKE_DATA` to the local id1 directory:
 
 ```sh
 mkdir -p build/renoir-native
-make -j16 image LOG_LEVEL=trace DISPLAY_TIMING=off QUAKE_DATA=/path/to/id1
+make -j16 image LOG_LEVEL=info DISPLAY_TIMING=off QUAKE_DATA=/path/to/id1
 cp build/pyxis.iso build/renoir-native/off.iso
 cp build/caelum.elf build/renoir-native/off.elf
 cp build/initrd.cpio build/renoir-native/off.cpio
 cp build/limine.conf build/renoir-native/off.conf
-make -j16 image LOG_LEVEL=trace DISPLAY_TIMING=observe QUAKE_DATA=/path/to/id1
+make -j16 image LOG_LEVEL=info DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1 QUAKE_DATA=/path/to/id1
 cp build/pyxis.iso build/renoir-native/observe.iso
 cp build/caelum.elf build/renoir-native/observe.elf
 cp build/initrd.cpio build/renoir-native/observe.cpio
 cp build/limine.conf build/renoir-native/observe.conf
-make -j16 image LOG_LEVEL=trace DISPLAY_TIMING=blank QUAKE_DATA=/path/to/id1
+make -j16 image LOG_LEVEL=info DISPLAY_TIMING=blank DISPLAY_TIMING_METRICS=1 QUAKE_DATA=/path/to/id1
 cp build/pyxis.iso build/renoir-native/blank.iso
 cp build/caelum.elf build/renoir-native/blank.elf
 cp build/initrd.cpio build/renoir-native/blank.cpio
@@ -147,7 +160,11 @@ Use the owner's existing PXE staging procedure with the
 to select each variant, retaining its kernel, initrd and generated
 `build/limine.conf` together. `DISPLAY_TIMING` writes the boot option into normal,
 rescue and installer entries; changing a runtime shell environment cannot change
-the kernel policy. An omitted value defaults to `observe`; invalid generated
+the kernel policy. `DISPLAY_TIMING_METRICS=1` adds `display.timing.metrics=1`
+to the same entries; omission or `0` disables reports and sorting without
+changing copy admission. Generated values other than `0`/`1` are refused;
+a manually supplied metrics flag accepts only `1`. An omitted timing policy
+defaults to `observe`; invalid generated
 values are refused, and an invalid manually supplied kernel value falls back to
 observation. Duplicate kernel options retain the parser's existing fatal rule.
 
@@ -186,8 +203,9 @@ observation. Duplicate kernel options retain the parser's existing fatal rule.
    visible cursor; report input responsiveness alongside the distributions.
    A screenshot/FPS is not a tearing check. Stop each workload before the next.
 
-Repeat the `off`/`blank` camera comparison with `LOG_LEVEL=info` images from the
-same revision to check the visible result without trace-output overhead.
+Repeat the `off`/`blank` camera comparison with `DISPLAY_TIMING_METRICS=0`
+images from the same revision, still at `LOG_LEVEL=info`, to check the visible
+result without periodic qualification-output overhead.
 
 The start marker timestamps one actual four-byte front store with IRQs saved,
 then restores IF before remaining copying/accounting. GPU observation and waits
