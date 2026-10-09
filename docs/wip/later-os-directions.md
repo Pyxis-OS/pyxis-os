@@ -299,7 +299,8 @@ Ideas recorded when npfs was planned, none of them agreed:
   changing a per-machine value such as a future hostname means rebuilding the
   archive, and an update replaces it. A more granular installer and update would
   keep a small machine-settings record (hostname and similar) separate from the
-  archive and carry it across updates and reinstalls.
+  archive and carry it across updates and reinstalls. The
+  [machine settings proposal](machine-settings.md) develops it.
 - **NVMe.** Installing onto the ThinkPad's internal disk needs an NVMe driver.
   With it, the Fedora disk would appear under Read the room as a foreign disk,
   which the owner accepted.
