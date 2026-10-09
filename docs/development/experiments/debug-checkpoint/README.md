@@ -41,22 +41,57 @@ Every run printed 100 lines and exited 0 with complete session drain. Separate
 GDB inspection observed 1,268 reschedule IPI sends, including background/setup/
 cleanup; its timing is excluded and the count is not a workload contract.
 
-Default boot/one-launch ranges overlap; both read medians are lower. The 100-launch proxy remained
-**23.1% higher in median** than the fresh old-kernel control (25.5% versus the
-original baseline), with overlapping, widely varying ranges. An earlier candidate
-(`b7975848`) had a 3.8% median difference versus that control; its raw captures
-remain local. Final-source samples are retained without selecting faster runs. **Zero measurable option-off cost is not established.**
-No ordinary timer/scheduler/IPI hook was added; the cause of this end-to-end proxy
-difference remains unassigned in shared nested KVM. Do not infer isolated IPI
-latency or native performance. This qualification limit remains for owner review;
-no unrelated optimization was added.
+## Interleaved review follow-up
 
-The default baseline preceded implementation. The additional old-kernel launch
-profile followed implementation start, using the unchanged baseline image.
-After samples were repeated with other task-owned qualification VMs stopped;
-concurrent-VM/read-client observations are excluded. Fresh old-kernel controls
-followed the accepted after samples. Raw captures and commands remain local/PR
-material, not repository fixtures. All owned processes were stopped.
+The earlier sequential launch blocks were inconclusive. The review requested
+fresh boots in **A B A B A B A B A B** order, five per image, using the same
+100-launch profile. A is baseline `807cba49`; B is final kernel `5cc7b59f`
+(the code reviewed at PR head `b9bf312a`). No code changed for this rerun.
+
+| Pair, A then B | Baseline A, s | Option off B, s |
+| --- | --- | --- |
+| 1 | 0.52 | 0.50 |
+| 2 | 0.52 | 0.49 |
+| 3 | 0.49 | 0.49 |
+| 4 | 0.49 | 0.52 |
+| 5 | 0.52 | 0.49 |
+| Median (range) | 0.52 (0.49–0.52) | 0.49 (0.49–0.52) |
+
+Every trial used fresh firmware variables and exactly one timed 100-launch
+command after normal network/remote startup. Same QEMU/settings/input/client as
+above; no debugger attached, no profiling, warmup or sample exclusion. All ten
+runs produced exactly 100 echo lines, Lua exit 0, shell exit 0 and complete FINAL
+drain. Both ISOs' extracted kernel hashes match their recorded revisions; boot
+command lines are identical with the option absent. All 886 initrd payload
+entries have identical contents/modes; archive metadata differs.
+
+The host was at low load (preflight load average 0.58), with no concurrent build
+processes observed before, during or after the trials; load averages were
+0.68 mid-run and 1.02 at the end. One unrelated SDL QEMU
+remained active, about 0.12 CPU in the preflight interval; it was left untouched.
+This is a recorded low-load window, not a fully idle host. Only one task-owned
+VM ran at a time. All ten were stopped after their sample.
+
+**The review criterion is met:** each median falls within the other image's
+range. The prior slowdown was not reproduced, so the option-off qualification
+gate is closed. This establishes no measurable slowdown in this run; it does
+not establish a speedup, isolated IPI latency, exact zero machine cost or native
+performance. Inspection likewise finds no new timer/scheduler/IPI/syscall/launch
+work when disabled. No bisect is needed under the review's stated criterion.
+
+Reproduction: select the archived A/B profile ISO alternately with `-cdrom`,
+copy the same OVMF variables for every boot, and use the unchanged Lua input:
+
+```sh
+/usr/bin/time -f '%e' -o sample.seconds \
+  build/tools/pyxis-remote --machine --no-shell-echo --columns 80 --rows 24 \
+  127.0.0.1 24569 <lua100.input >sample.events.jsonl
+```
+
+A profile ISO SHA-256: `7ed724f4ef893399fe281a7ff5da171258ccf008272a11185f0f01e131e04a99`;
+B: `28fc88eea807cc777eb4a93aed1d3f1439e653a6af86bf50b7a9c1dcaa42b8d0`.
+Raw events, boot logs, host observations and original sequential captures remain
+local/PR material. No measurement framework or kernel mechanism was added.
 
 Enabled behavior: interactive one/four-CPU QEMU/GDB confirmed all ACKs/IST stacks,
 unmapped guards, mismatched/matching release, unmodified BSP return registers,

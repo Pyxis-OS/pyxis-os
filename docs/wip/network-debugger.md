@@ -1,8 +1,8 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Task 1 is implemented for review on 2026-10-09; its option-off performance
-acceptance remains unresolved. Tasks 2–4 remain unimplemented and unassigned. Goal: GDB on the
+Task 1 is implemented and qualified for review on 2026-10-09. Tasks 2–4
+remain unimplemented and unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
 
@@ -231,7 +231,9 @@ info threads
 All-stop stops CPUs, **not DMA or device clocks**. Timers/sleeps/deadlines age;
 keep monotonic elapsed time, do not silently rebase deadlines. The polling loop
 must maintain the software-extended 32-bit HPET below its wrap interval even with
-no packets; losing wraps requires reboot. Audio's 5 ms watchdog/20 ms observation
+no packets; losing wraps requires reboot. Before tasks 3/4 enable arbitrary entry,
+qualify clock-read/maintenance reentry or defer past an unsafe update; the task 1
+known checkpoint does not qualify arbitrary interrupted clock contexts. Audio's 5 ms watchdog/20 ms observation
 horizon cannot survive a normal debugger pause: use an inactive-audio bring-up
 profile, not a promise to pause playback. Long stops can expire outstanding
 five-second network/block deadlines; drain confirmed completions on return,
@@ -289,17 +291,14 @@ past 30 seconds. Normal network/remote echo worked after complete release.
 QEMU used a direct 64-bit HPET; native 32-bit wrap maintenance and syscall-window
 entry were inspected in code, not physically exercised. Performance qualification
 is recorded in [matched checkpoint qualification](../development/experiments/debug-checkpoint/README.md).
-Default boot/one-launch ranges overlap and read medians are lower, but the final
-100-launch proxy has
-a 0.64 s median versus the old control's 0.52 s (ranges overlap): zero measurable
-option-off cost is
-**not established** and remains a qualification limit for owner review. No native
-debugger result is claimed.
+The review's interleaved five-boot-per-image follow-up met its acceptance criterion:
+baseline/option-off medians 0.52/0.49 s, both ranges 0.49–0.52 s. No measurable
+option-off slowdown was reproduced in that run; the timing gate is closed.
+No isolated IPI-latency, speedup or native debugger result is claimed.
 
 ## Accepted task split and qualification
 
-Task 1 is implemented; its option-off qualification gate remains open for
-review. Tasks 2–4 await assignment. Accepted task 1 control:
+Task 1 is complete for review; tasks 2–4 await assignment. Accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
 QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
@@ -307,8 +306,7 @@ expiry. This is checkpoint expiry, not transport-loss detection. Incomplete stop
 remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
 `debug.wait` when task 3 provides transport; keep no compatibility option.
 
-1. [ ] **Small first task: resumable stop foundation — implemented; option-off
-   performance acceptance unresolved.**
+1. [x] **Small first task: resumable stop foundation.**
 
    Owner can then inspect captured CPU frames and resume a known checkpoint using
    QEMU's existing debugger; native network GDB is not available yet.
