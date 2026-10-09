@@ -17,13 +17,17 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [Volume controls](../userland/audio-volume.md), 2026-10-09: master/per-space
+  gain and bar widgets; native listening, mute and reboot default checked.
+  [Remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).
 - [HTTP redirects](../userland/http-fetch.md#redirect-chains), 2026-10-09:
   bounded delegated-provider chains and FILE response metadata, with Links
   adopting the final URL; [controlled QEMU qualification](../development/experiments/http-redirects/README.md).
 - [HD Audio playback](../devices/hda.md), 2026-10-09: BSP-owned analog engine and
   [up to eight PCM sessions](../interfaces/audio.md), one per space; native speaker/headphone
-  tones and eleven-minute eight-session silence passed, ninth refused. Volume,
-  live jack switching and the nested-QEMU limit remain [debt](../technical-debt.md#hd-audio-volume-control).
+  tones and eleven-minute eight-session silence passed, ninth refused.
+  [Live jack switching](../technical-debt.md#hd-audio-jack-routing-at-playback-start)
+  and the [nested-QEMU limit](../technical-debt.md#hd-audio-sustained-eight-session-playback) remain debt.
 - [Network throughput](../development/network-throughput.md), 2026-10-09:
   1460-byte segments on-link, 64 KiB windows and Nagle off; natively send went
   from 35.8 to 70.5 MiB/s and receive reaches 85 MiB/s with `ttcp -r`, with
@@ -93,17 +97,14 @@ status belong in the milestone document and the PR.
 Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  design accepted: `.pxa`/`.pxb`, per-program app view, JSON stack/grant requests
-  and shared 128 MiB capture. Implementation awaits plan merge and owner go.
-- **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
-  master/per-space gain and the owner's four-icon bar UI; delivery steps 1–3
-  assigned after #616, with native listening by the owner afterward.
+  shared 128 MiB selected-image capture ceiling and failure rollback qualification,
+  using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   design accepted after failed native step 2 qualification, alongside the
   small observer safety follow-up. Read-only task 1 assigned separately.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
   Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
-  (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),
+  (Chocolate Doom) merged in #623, task 2 (Chocolate Quake) in progress. Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
@@ -144,6 +145,9 @@ Other candidates; current assignments are listed above.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
+- [Network kernel debugger](network-debugger.md): owner-requested planning for
+  opt-in LAN GDB during native PXE bring-up; accepted stop/transport plan awaits
+  task assignment.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after

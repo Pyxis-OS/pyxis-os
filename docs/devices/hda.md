@@ -119,8 +119,31 @@ Frames already mixed into DMA can remain audible. After the last queued PCM,
 the worker lets one ring of zeros follow the last observed mixed data before
 stopping. This accounts for QEMU's backend tail internally; it exports no audible
 drain promise. Acquired sessions survive a normal stop and can restart on later
-writes. Stop verifies RUN clear/reset and codec detach/mute, then command-ring
-stop and BME clear. The worker parks without idle IRQs or periodic watchdog work.
+writes. Stop verifies RUN clear/reset; QEMU and the native speaker then mute,
+detach/disable the route and stop command rings with BME clear.
+
+Accepted **2026-10-09**: the ALC257 headphone route instead verifies amplifier
+mute, settles for at least **75 ms**, disables both pins/EAPD and detaches the
+converter, then settles for at least **75 ms**. Command rings and BME are off
+during both waits. Fully parked idle remains muted/disabled with EAPD off, in D0,
+without idle IRQs or periodic watchdog work. This independently implemented
+sequence follows the mute/pin-disable settling steps in Linux's GPL-2.0
+[`alc256_shutup()`](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/hda/codecs/realtek/alc269.c#L505),
+used for ALC257 suspend; no Linux code or vendor coefficients are imported.
+Pyxis retains its existing EAPD-off idle policy rather than importing the full
+Linux suspend implementation.
+
+The BSP worker owns absolute settle deadlines and continues servicing requests,
+volume changes and exit cleanup. Codec work requires IF enabled; settle waits
+use the ordinary task-wait handoff, never IRQ, exit or IF=0 mix/commit paths.
+Queued PCM cancels either settle before its next phase. A restart samples jack
+presence afresh: during the first settle it preserves the selected pin's bias
+if the route still matches; during the second it performs ordinary activation.
+Neither restart waits out the remaining settle. The software gain, 5 ms ramp,
+mute and zero-tail contracts are unchanged. The owner reported no end-of-tone
+headphone pops across many runs after #628 in the
+[native stop recheck](../development/experiments/audio-headphone-pop/README.md);
+rapid restart during settling remains separately unqualified.
 
 QEMU's two measured codec IDs ignore pin-control writes and retain OUT=0x40.
 That exception is explicit and narrowly matched. Codec detach and supported mute
@@ -218,8 +241,10 @@ DMA path. Audible eight-source content was skipped because full-scale speaker
 tones were painfully loud; content and routing were checked by ear at one
 session. This meets the owner's native eight-session closure requirement. It
 establishes neither end-to-end latency nor native CPU/commit-time distributions.
-That evidence predates the [software volume controls](../interfaces/audio.md#user-volume-controls);
-their native listening check remains [pending](../wip/audio-volume.md).
+That evidence predates the [software volume controls](../interfaces/audio.md#user-volume-controls).
+Their [native listening/mute/reboot check](../userland/audio-volume.md#native-qualification)
+passed later that day; the post-volume eight-session silent regression remains
+[open](../technical-debt.md#hd-audio-volume-native-regression).
 
 For later native batches, **two minutes of eight simultaneous silent sessions**
 (`pcm 0 0 120` in eight spaces) is sufficient as a regression check. Let every
@@ -253,9 +278,9 @@ remain outside this analog playback implementation.
 
 ## Later directions
 
-Owner ideas, **2026-10-09**. [Volume control](../wip/audio-volume.md) now has
-software gain and the owner's four-mask bar UI; native listening remains its gate
-before ordinary use and the later players. Players remain unassigned: MIDI with
+Owner ideas, **2026-10-09**. [Volume control](../userland/audio-volume.md) is
+implemented and natively checked, completing the prerequisite for later players.
+Players remain unassigned: MIDI with
 TinySoundFont + TinyMidiLoader (MIT, single-header C; a SoundFont needs its own
 asset licence/cache entry), SPC with blargg's snes_spc (LGPL 2.1, C++, userspace
 32→48 kHz resampling), and the keyboard piano test app. A broader shared

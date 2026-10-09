@@ -214,6 +214,9 @@ over native TCP/DNS/random/clock grants. It already supports custom CA bundles,
 DNS identity verification, deadlines and short transfers. `git.internal` may
 need its private CA supplied under that same explicit trust policy. Do not
 disable verification or add fallback plaintext/ambient network authority.
+Pyxis reaches `git.internal` through the planned
+[read-only LAN gateway](source-builds.md#reaching-the-sources), which forwards
+only smart HTTP discovery and `git-upload-pack`.
 
 The [FILE snapshot provider](../userland/http-fetch.md) sends GET only, without
 custom request headers or body; it buffers at most 16 MiB and does not follow

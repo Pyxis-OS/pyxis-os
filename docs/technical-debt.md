@@ -469,7 +469,9 @@ Execution groups supervise separately; the [remote server](userland/remote-termi
 after five seconds, and can still wait indefinitely on published HOST work while holding a slot. Four idle or blocked sessions can
 exhaust the server, and there is no idle timeout, authentication, encryption, restart or reconnection; host-loopback forwarding limits the
 QEMU entry point, but any process reaching it gets the configured shell privileges, with shared roots, space and CPU and no separate
-principals or quotas. Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
+principals or quotas. Live/PXE Remote explicitly enables power: any reachable LAN peer can reboot or power off the machine, an owner-accepted
+sole-user home-LAN exposure; installed remote defaults omit it. Revisit power delegation with authentication or a broader deployment.
+Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
 cell for non-ASCII bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
 then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
 ([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and
@@ -500,8 +502,8 @@ requests callers expect to restrict access.
 
 ## Non-atomic stdio append
 
-Append streams query the file size before each native write, so concurrent appenders can overwrite each other, and seeking does not make
-the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
+Append streams and `O_APPEND` descriptors query the file size before each native write, so concurrent appenders can overwrite each
+other, and seeking does not make the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
 Formatted output stages the full result with `snprintf` (heap allocation and a second pass when the stack buffer is too small), so large
 formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. All FILE output is unbuffered.
 
@@ -675,9 +677,20 @@ DevilutionX needs them. Additions belong in libc or the runtime configuration, n
 
 [Software master/per-space controls](interfaces/audio.md#user-volume-controls)
 boot unmuted at 50% (about −30.3 dB); settings do not persist, and software mute
-can leave up to the nominal 80 ms of published DMA audio. Native volume listening
-remains [pending](wip/audio-volume.md): earlier full-scale speaker tones were
-painfully loud. Revisit persistence/media keys when ordinary use requires them.
+can leave up to the nominal 80 ms of published DMA audio. Media keys are not
+decoded, so use the bar or Super+M. [Native listening passed](userland/audio-volume.md#native-qualification).
+Revisit persistence/media-key input when ordinary use requires them, and mute
+latency with the ring-tuning work.
+
+## HD Audio volume native regression
+
+After volume control and #628, the native two-minute eight-session silent
+regression (`pcm 0 0 120` x8) remains unrun; the earlier eleven-minute pass
+predates these changes. Native per-space isolation/retention, hidden playback,
+the full slider/keyboard interaction matrix, pops/dropouts during level changes,
+published-ring mute delay and rapid restart during codec settling remain unqualified. Revisit in the next
+ThinkPad batch, retaining each final STATUS/log; current closure establishes
+[one-session listening/mute/reboot behavior](userland/audio-volume.md#native-qualification).
 
 ## HD Audio scheduling and startup tuning
 
@@ -1006,8 +1019,9 @@ allocate. Every user task pays both even if it never uses HOST or profiling; thi
 Revisit lazy provisioning if task counts or memory pressure make it material, with explicit failure, BSP handoff and cleanup ownership and no extra
 fixed registry. The native enumeration ABI returns one name per call and the backend requests a fresh 4 KiB READDIR batch discarding unused entries,
 so large listings can transfer trailing names repeatedly, with no attribute or data cache or directory snapshot (revisit batching with a consumer and
-host-change semantics). Host executable loading captures at most 16 MiB per launch into owned memory without a coherent snapshot if the host edits
-the file in place meanwhile; callers must avoid in-place changes, and revisit the limit only with a bounded staging and concurrency design.
+host-change semantics). Host executable loading captures at most 128 MiB per selected image into reclaimable BSP-owned pages, without a coherent
+snapshot if the host edits the file in place meanwhile; callers must avoid in-place changes. There is no aggregate concurrent-capture budget;
+physical exhaustion rejects. Revisit snapshot semantics or aggregate admission with a measured consumer need.
 
 ## Initial TCP listener limits
 
@@ -1181,7 +1195,7 @@ wrappers; per pool up to 4 MiB of cached file payload plus entry metadata, a 512
 images and encoding buffers; a retained allocation bitmap of one bit per block rounded to 4 KiB (32 KiB for 1 GiB, about 8 MiB for 256 GiB) read and validated at
 mount and never evicted; mount scans the selected volume's inode file to build a free list whose reclaimed slots keep their inode allocation as a list node until
 reuse, so large inode files can exhaust memory or mount slowly (revisit compact free-slot storage or a pool budget, preserving NO_MEMORY/LIMIT versus corrupt-image
-reporting); executable capture of one image up to 16 MiB per caller outside the wrapper and cache limits with no aggregate staging budget; userspace root selection
+reporting); executable capture of one image up to 128 MiB per selected executable into reclaimable pages outside the wrapper and cache limits, with no aggregate staging budget; userspace root selection
 bounded to 16 entries within 64 KiB of startup and capture storage. Memory pressure wakes the filesystem worker after allocator work to flush dirty data and return
 whole clean cache chunks to VM (failed writeback preserves dirty chunks, the allocating call is not retried, and kernel heap backing stays mapped); revisit
 reclaim granularity and admission with measured pressure workloads and BSP ownership intact.

@@ -488,9 +488,9 @@ disabled, with no BSP request:
   touches at most two pages.
 - Readers cannot observe an intermediate state.
 
-**Executables.** Program launch copies a RAM file's bytes into one heap buffer
-during capture, as it does for host and native files. Boot-archive executables
-are read in place.
+**Executables.** BSP copies selected RAM file bytes into reclaimable whole pages,
+under the same 128 MiB per-image ceiling as host and native files. Boot-archive
+executables are read in place. See [image capture](../kernel/program-loading.md#file-capture-and-costs).
 
 The current single-task/private-mapping contract keeps checked user sources and
 replies stable across waits. Only the resumed caller accesses them. Request
@@ -643,23 +643,22 @@ startup layout use the existing startup validation. Empty arrays are ignored;
 working_path is optional and requires a nonempty directory chain. argv contains
 argc string addresses; the kernel adds the child's final NULL.
 
-For RAM/archive images, the caller obtains staging storage from BSP, then
-captures all metadata on its own CPU/root. Source handles remain alive in its
-exclusively owned table while blocked. It acquires the file's existing
-operation ownership before lending the table and file to BSP. The image remains
-stable throughout validation and load: other reads/writes/resizes queue until
-loading releases ownership. No spinlock is held during loading, and no second
-whole-image snapshot is allocated. Later file changes cannot alter the child's
-copied image.
+The caller obtains launch metadata storage from BSP, then captures metadata on
+its own CPU/root. Source handles remain alive in its exclusively owned table
+while blocked. For RAM images it acquires the file's operation ownership, then
+lends the file to BSP for a selected-image copy; other reads/writes/resizes queue
+until the copy finishes and BSP ends that operation exactly once. Boot-archive
+images retain their immutable bytes without a new copy. No spinlock is held
+during loading; later RAM file changes cannot alter captured or child image bytes.
 
 A caller still needs its existing LAUNCH-authorized launcher capability. A READ
 file handle is sufficient as the source for a host-backed binary or interpreter;
 the launcher creates the process in the caller's space on its assigned CPU and
 applies the caller's explicit grants. This uses the existing launcher request,
 with no new syscall, rights or image-format version. The host executable file
-limit is 16 MiB and reports CALL_LIMIT; it is not a process runtime memory
-limit. The host worker reads into an owned heap copy, then the existing BSP
-loader validates and maps that image. It accepts positive short reads. An empty
+limit is 128 MiB and reports CALL_LIMIT; it is not a process runtime memory
+limit. The host worker reads into owned BSP-backed whole pages, then the existing
+BSP loader validates and maps that image. It accepts positive short reads. An empty
 or invalid image reports BAD_REQUEST. Premature EOF or a detected difference
 between file sizes before and after capture reports CALL_IO. Transport and
 other backend errors retain their status, and failed capture is not retried.
@@ -673,16 +672,21 @@ checks cannot prove that captured contents form a coherent snapshot. Script
 files retain their existing live READ-handle behavior; this capture path applies
 only to binary executables and interpreters.
 
-Native filesystem binaries and interpreters use the same 16 MiB external-image
-staging limit (`LAUNCH_EXTERNAL_IMAGE_MAX_SIZE`). Their worker reads length and
-bytes through the held policy view, requiring the caller's READ grant and both
+Native filesystem and RAM binaries and interpreters use the same 128 MiB
+selected-image limit (`LAUNCH_CAPTURED_IMAGE_MAX_SIZE`). The native worker reads
+length and bytes through the held policy view, requiring the caller's READ grant and both
 core read/metadata rights. It publishes a complete owned copy only on success;
 errors or an unexpected short read publish no staging bytes. The immutable view
 fixes identity and generation, provided the attached image is not modified by
 an external writer. The native request reservation is released before launch
 preparation uses the BSP executor. Staging remains owned by launch capture and
 is freed on every success, failure or stop path, outside the native adapter's
-wrapper budget. This adds no aggregate staging cap across callers.
+wrapper budget. RAM copying also runs on BSP. Allocation failures return
+CALL_NO_MEMORY and unwind any partially backed prefix and its virtual reservation.
+Release after loading returns all capture data frames; shared kernel page-table
+ancestors retain their ordinary lifetime. Only BSP accesses capture buffers;
+APs transfer ownership descriptors without reading them. This adds no aggregate
+staging cap across callers; physical-memory exhaustion still rejects.
 
 BSP creates an inactive process and initial stack using the same helper as boot
 setup, installs explicit grants and prepares startup. It installs a WAIT observer

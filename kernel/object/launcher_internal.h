@@ -4,6 +4,7 @@
 #include <abi/space.h>
 #include <kernel/object/launcher.h>
 #include <kernel/user/startup.h>
+#include <kernel/user/image_capture.h>
 
 struct file_object;
 struct space;
@@ -29,9 +30,7 @@ struct launch_capture {
   size_t grant_count;
   size_t initial_stack_bytes; /* Validated, with the default resolved. */
   struct file_object *image;
-  /* HOST/native backing only: owned stable bytes, freed with capture on the BSP. */
-  void *external_image;
-  size_t external_image_size;
+  struct image_capture captured_image;
   size_t used;
   enum call_status error;
   struct launch_space space;

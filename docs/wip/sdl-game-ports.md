@@ -13,7 +13,7 @@ The comparisons isolate the cost of the SDL2 path, including the
 **Accepted by the owner** (2026-10-09): no audio for any of the three games.
 They are built video- and input-only, without SDL2_mixer or audio libraries
 wherever the build allows. Sound and music become a separate, later plan after
-[volume control](audio-volume.md). Today's SDL2 port has no audio either:
+[volume control](../userland/audio-volume.md), now closed. Today's SDL2 port has no audio either:
 `SDL_INIT_AUDIO` fails, and SDL's audio needs threads the port doesn't have.
 
 ## What each game needs
@@ -78,9 +78,13 @@ mirrors, recorded patches and licences, and outputs derived from
   - **Built without:** SDL2_mixer and SDL2_net through upstream's options,
     plus three patches: the SDL2 static target, Pyxis platform gaps and the
     software-scaling default.
-- [ ] **Task 2, Chocolate Quake.** Chocolate Quake 2.1.0 with the local
-  patch above, staged as `chocolate-quake`, reading the staged Quake data and
-  saving to `home://chocolate-quake/`.
+- [x] **Task 2, Chocolate Quake.** Delivered for review: the recipe and the
+  matched comparison, in the [reference](../userland/chocolate-quake.md) and
+  its [measurements](../development/experiments/chocolate-quake/README.md).
+  - **Built without:** SDL2_net, the UDP driver and the music codecs, through
+    a local patch. Two more patches cover the Pyxis platform (timer, data and
+    write directories, `mkdir`) and decision 4's frame sleep.
+  - **Libc:** `powf` from the musl pin and `O_APPEND` for `open`.
 - [ ] **Task 3, EDuke32.** The classic renderer only, through the opt-in data
   handling in decision 1. It is checked by playing E1L1 in QEMU; there is no
   head-to-head. Its demos aren't a stable benchmark across versions.
@@ -105,6 +109,8 @@ engine accepts it.
 **Quake:**
 - **Command:** `timedemo demo1`, five runs per side.
 - **Matched resolution:** Chocolate Quake set to native Quake's 320x240.
+  Without integer scaling it is drawn at 1024x768, against native Quake's
+  960x720.
 - **Defaults:** a second set at Chocolate Quake's defaults.
 
 **Configuration:** QEMU first, on std VGA and VirtIO, in the nested-KVM
@@ -137,6 +143,19 @@ Accepted 2026-10-09:
    1024x768 in a 1280x768 area. Task 1 also measures upstream's two-stage
    scaling (an integer upscale, then a linear pass, both on the CPU) before
    the default is final.
+
+Accepted 2026-10-09 for Chocolate Quake, before task 2's implementation:
+4. **Chocolate Quake sleeps between frames.** Upstream checks the clock in a
+   tight loop until its next 72 Hz frame is due, keeping one CPU busy. The
+   port sleeps for the rest of the frame instead, as native Quake does.
+   Timedemos don't sleep.
+5. **Generated files are written in place,** as upstream and Chocolate Doom
+   do. Native Quake's atomic replacement isn't carried over.
+6. **The heap stays at upstream's 256 MiB.** Pyxis backs it eagerly, so about
+   288 MiB is committed while the game runs, against about 52 MiB with a
+   32 MiB heap. The [port README](../../ports/chocolate-quake/README.md#memory)
+   records the cost; small QEMU configurations such as 512 MiB need room for
+   it.
 
 ## Out of scope
 

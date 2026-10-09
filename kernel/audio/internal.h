@@ -88,6 +88,10 @@ void hda_fail(struct hda_controller *controller, const char *reason);
  * when a stream is requested. These are private engine helpers, not an audio ABI. */
 bool hda_codec_discover(struct hda_controller *controller, struct hda_route *route);
 bool hda_codec_enable(struct hda_controller *controller, const struct hda_route *route);
+/* Native normal-stop first phase, owning IF-enabled worker only. Mutes both
+ * outputs without changing pin/EAPD controls; the worker owns settle deadlines. */
+bool hda_codec_stop_mute(struct hda_controller *controller, const struct hda_route *route,
+    bool *headphone_active);
 bool hda_codec_disable(struct hda_controller *controller, const struct hda_route *route);
 
 #endif

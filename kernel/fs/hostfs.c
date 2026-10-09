@@ -146,7 +146,8 @@ void hostfs_request_submit_and_wait(struct hostfs_request *request)
 void hostfs_request_release(struct hostfs_request *request)
 {
   KASSERT(request && !request->next && !request->node && !request->destination && !request->table);
-  KASSERT(!request->captured && !request->object);
+  KASSERT(!request->captured.address && !request->captured.size &&
+      !request->captured.backing_bytes && !request->object);
   bsp_request_release(&request->request);
 }
 
@@ -472,20 +473,15 @@ static enum call_status capture_file(struct hostfs_request *request)
   if (status != CALL_OK) {
     return status;
   }
-  if (!attributes.size) {
-    return CALL_BAD_REQUEST;
-  }
-  if (attributes.size > request->count) {
-    return CALL_LIMIT;
-  }
-
-  size_t size = attributes.size;
+  struct image_capture captured = {0};
   uint64_t flags = cpu_save_interrupts();
-  uint8_t *bytes = kmalloc(size);
+  status = image_capture_allocate(attributes.size, &captured);
   cpu_restore_interrupts(flags);
-  if (!bytes) {
-    return CALL_NO_MEMORY;
+  if (status != CALL_OK) {
+    return status;
   }
+  size_t size = captured.size;
+  uint8_t *bytes = (void *)captured.address;
 
   /* Keep using the retained node/open across reads, even if its pathname is
    * replaced. This copy becomes stable, but is not a host-side snapshot. */
@@ -514,13 +510,12 @@ static enum call_status capture_file(struct hostfs_request *request)
     status = CALL_IO;
     goto fail;
   }
-  request->captured = bytes;
-  request->count = size;
+  request->captured = captured;
   return CALL_OK;
 
 fail:
   flags = cpu_save_interrupts();
-  kfree(bytes);
+  image_capture_release(&captured);
   cpu_restore_interrupts(flags);
   return status;
 }

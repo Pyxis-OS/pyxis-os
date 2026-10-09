@@ -169,6 +169,8 @@ records qualification and the accepted tuning; the
 [engine reference](../devices/hda.md#progress-and-refill-limits) describes its
 position and scheduling limits. Native AMD/ALC257 one-session tones and an
 eleven-minute eight-session silent run are
-[qualified](../devices/hda.md#qualification-and-remaining-scope). The volume widgets are QEMU-qualified; the owner’s safe native listening
-check remains in the [volume milestone](../wip/audio-volume.md). SDL2 and Quake
+[qualified](../devices/hda.md#qualification-and-remaining-scope). Volume controls
+have [native listening/mute/reboot evidence](../userland/audio-volume.md#native-qualification)
+and separate QEMU gain/UI qualification; the later eight-session native regression
+remains open. SDL2 and Quake
 sound are separate consumer work.
