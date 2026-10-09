@@ -1,10 +1,11 @@
 # Clipboard
 
-Status: **first terminal delivery authorized, 2026-10-09**. Rounds one and two
-are accepted, not yet implemented. The owner authorized Copy + Paste for local
-terminals and mux into opted-in stock libterm line readers. This proposal update
-records the contract and limits before code; implementation branches from fresh
-main after this PR merges. Graphics, FILE and converter contracts remain proposed.
+Status: **first terminal delivery implemented, pending owner review**. The
+accepted 2026-10-09 rounds authorize local-terminal and mux Copy + Paste into
+opted-in stock libterm readers. The [implemented interface](../interfaces/clipboard.md)
+and [qualification record](../development/clipboard-first-delivery-qualification.md)
+describe its native authority, receiver contract and validation limits.
+Graphics, FILE and converter contracts remain proposed.
 
 ## Owner decisions
 
@@ -334,7 +335,8 @@ source review before the typed-object task; they are proposed tuning, not existi
 
 ## First-delivery limits
 
-Accepted 2026-10-09; the code PR will record which are implemented and qualified.
+Accepted 2026-10-09 and implemented for the first delivery. The qualification
+record distinguishes manual checks from source-reviewed limits.
 
 - Paste goes only to opted-in stock libterm line readers. vi, less, Links and
   other raw-mode programs refuse it until they implement their own receiver.

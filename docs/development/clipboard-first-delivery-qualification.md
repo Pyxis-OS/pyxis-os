@@ -36,3 +36,62 @@ The earlier baseline on `6df2bdd8` predates the fixed click rule and is not used
 as this delivery's matched comparison. Main includes the merged correction;
 the owner also confirmed it natively in boot log, raw terminals and mux.
 Implementation and matched qualification results will be recorded below.
+
+## Matched after samples
+
+At Pyxis `4379e011` plus userland `12c52ff`, the same five workloads and local
+configuration were sampled before starting the independent functional VM.
+No additional VM was running during these measurements. The earlier boot with
+invalid store initialization produced no samples and is excluded. Subsequent
+focus cancellation glue changes no sampled idle/selection execution path.
+
+| Workload | After samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Caelum idle | 1.52351, 1.71927, 2.01727, 1.56174 | 1.64051 | 1.52351–2.01727 |
+| Caelum completed selection | 1.35648, 1.83910, 2.23388, 1.11948 | 1.59779 | 1.11948–2.23388 |
+| Local shell idle | 6.05271, 1.87170, 1.18207, 1.35912 | 1.61541 | 1.18207–6.05271 |
+| Mux one pane idle | 1.51884, 1.10342, 1.14425, 1.19362 | 1.16893 | 1.10342–1.51884 |
+| Mux completed selection | 1.51728, 1.46968, 1.20093, 2.53978 | 1.49348 | 1.20093–2.53978 |
+
+Ranges overlap the baseline for every workload. The local-shell series retains
+its 6.05 ms outlier; these nested/debugger intervals establish no native latency
+claim or speedup. No persistent presentation-cost regression is demonstrated by
+these small repeated samples.
+
+## Functional qualification
+
+Manual local-TTY checks used `4379e011` / userland `12c52ff`; mux routing,
+first drag after a pane-focus change and larger text used `8e74afa4` / userland
+`536d6dc`. Same VM/device configuration as above, existing shell/Lua/vi consumers,
+manual HMP input and read-only debugger inspection. Functional VMs could overlap;
+no timing result was collected during that overlap. Logs/captures stay local.
+
+| Checked behavior | Observed result |
+| --- | --- |
+| Selection without Copy; click-cleared/missing selection Copy | No implicit publication; refusal preserves the previous item |
+| Local and shared ASCII Copy | Exact owned bytes in distinct layer objects |
+| Shared Paste after source space becomes inactive | Destination receives shared text; its empty local layer refuses without fallback |
+| Empty trimmed selection | Empty current item; Paste finishes without submitting |
+| Multiline local Paste | `echo alpha\nalpha` becomes editable `echo alpha alpha`; a later fresh Enter executes one command |
+| Raw vi destination | Refused with no data/frame insertion; a new shell receiver epoch appears afterward |
+| Mux selected pane differs from keyboard-focused pane | Copy freezes `echo left` in the selected pane; Paste inserts it into the other focused pane without submission |
+| First click-and-drag into an unfocused pane | Creates the intended selection after focus-only cancellation stopped resetting spatial input |
+| Mux pending Ctrl+B prefix and history view | Paste refuses; no later insertion when returning live |
+| Larger mux selection | 1600 X glyphs over 20 physical rows export 1619 bytes, including 19 LF separators |
+| Short records and line capacity | Larger item completes multiple short DATA records; line limit is reported, framing completes, and shell refuses execution even after explicit Enter |
+| Selected source pane closes/exits | Both retained 1619-byte layer items survive; shared Paste into the surviving pane still completes |
+
+At larger Copy commit, debugger inspection saw 1628 charged bytes: old current
+9 plus staged 1619. After replacement/reaping it saw 1619; independent shared
+publication raised retained payload to 3238. Paste references did not duplicate
+the retained item charge, and completed transactions released their references.
+These are measured example peaks, not maximum-budget stress qualification.
+
+Authority/identity matching, competing receiver registration/reads, stopped
+receiver invalidation, 64 KiB/8 MiB admission guards and five-second deadlines
+were source-reviewed. No new test program, injected failure or guest function/
+memory mutation was used to force their extremes. No native clipboard check is
+claimed. A pre-admission Return entered while GDB stopped the VM exposed the need
+for a bounded controller/decoder fence; deferred host events not yet observable
+by emulated PS/2 cannot prove physical ordering. Final fence checks are recorded
+with their tested revision below.

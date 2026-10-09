@@ -267,10 +267,9 @@ natively in the boot log, raw terminals and mux on 2026-10-09; that correction n
 
 ## System pointer selection and input limits
 
-Visible-cell selection has no export, clipboard publication or paste, and stored cells are 8-bit glyph indices, so a later text
-snapshot needs an explicit encoding before it can be `text/plain`; clipboard stores, gestures, capability transfer and conversion
-belong to the [clipboard proposal](wip/clipboard.md) (revisit with both kernel-local and mux-owned selections). Mux drag autoscroll
-and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
+[Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as printable ASCII; non-ASCII glyphs,
+original tabs, soft wraps and intentional trailing spaces have the [initial delivery limits](#initial-clipboard-delivery-limits).
+Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
 pointer source, with raw counts and relative-mode Synaptics behavior; Bluetooth aggregation, USB HID, acceleration, absolute-mode
 scrolling, remote pointer transport and multiple-display composition are separate tracks. The current PS/2 reset hook alone does not
 implement the accepted conditional multi-source rules: revisit input routing through the
@@ -680,8 +679,9 @@ proposal without silently changing capacity, queues or safety thresholds.
 ## Initial clipboard delivery limits
 
 Accepted 2026-10-09 in the [clipboard proposal](wip/clipboard.md#first-delivery-limits),
-before implementation. The first delivery is authorized but not yet implemented;
-its code PR must update this entry to match implemented/qualified behavior.
+implemented for local terminal and mux into opted-in stock libterm readers.
+See the [interface](interfaces/clipboard.md) and [qualification record](development/clipboard-first-delivery-qualification.md)
+for behavior, measured/manual evidence and validation limits.
 
 - **Receivers:** Paste is limited to opted-in stock libterm line readers. vi,
   less, Links and other raw-mode programs refuse Paste until they provide their
