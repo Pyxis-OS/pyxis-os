@@ -89,8 +89,12 @@ Chosen by the owner, each starting with a proposal:
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-09): [Native AMD/ALC257 audio task 5 proposal](hda-native.md).
-  Three route/jack/native-batch defaults await the owner; no code yet. Depends
-  on #557's delivered sessions/refill work with the accepted nested-QEMU limit.
+  Decisions accepted 2026-10-09: shared DAC `0x02`, presence sampled at playback
+  start, one attended ten-minute eight-session run per output and a second
+  speaker run checked at completion. Live switching is a separate follow-up;
+  [mid-playback routing debt](../technical-debt.md#hd-audio-jack-routing-at-playback-start)
+  records the consequence. Implementation follows this update and #557 merge;
+  owner-supplied MSI fits the current helper. No native code or result yet.
   The 2026-10-09 decision supersedes the earlier HDA QEMU-closure alternative:
   milestone closure requires native eight-session playback. Fail-closed until
   reboot stays accepted; native evidence decides whether reset recovery is needed.

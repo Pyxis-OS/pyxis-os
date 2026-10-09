@@ -1,12 +1,13 @@
 # Native AMD HD Audio / ALC257: task 5 proposal
 
-Status: **proposal only; three defaults below await the owner**. Assigned
-2026-10-09; prepared from fresh main `26770a0c` on a separate documentation
-branch. Implementation depends on the session/refill work in
+Status: **three owner decisions accepted 2026-10-09**. Prepared from fresh main
+`26770a0c` on a separate documentation branch. Implementation is authorized after
+this accepted-decision update is pushed and the session/refill dependencies
 [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) and
-[userland #168](https://git.internal/PyxisOS/pyxis-userland/pulls/168).
-No implementation or native experiment yet. Coordinate the owner-run ThinkPad
-batch with its Bluetooth work.
+[userland #168](https://git.internal/PyxisOS/pyxis-userland/pulls/168) are merged.
+The owner reports both merged. The forwarded root PCI inventory below settles
+MSI compatibility; no native implementation or qualification is claimed yet.
+Coordinate the owner-run ThinkPad batch with its Bluetooth work.
 
 ## Accepted boundary
 
@@ -45,34 +46,34 @@ Fedora's headphone selector index 1, mute and gains are captured state, not a
 cold-init recipe. The dump has no Pin Sense result or vendor-coefficient setup.
 A shared DAC `0x02` route is graph-supported, but native sound is unqualified.
 
-## Three owner decisions
+## Accepted owner decisions (2026-10-09)
 
-1. **Default: one native output pair through DAC `0x02`.** Explicitly match the
-   AMD controller and ALC257/Lenovo identity and verify the graph again. Select
-   headphone connection index 0, sharing the existing physical mixed stream with
-   the speaker route. Program/read back D0, converter gain at its advertised
-   0 dB offset, selector, pin control, EAPD, format and stream tag. Both pin amps
-   start muted; only the chosen output is unmuted. Idle mutes/disables both pins
-   and detaches the converter. Alternative: retain distinct DAC `0x02`/`0x03`
-   routes, adding a second converter's power/gain/stream state; no native evidence
-   currently requires that complexity.
-2. **Default: headphone priority with checked stop/switch/restart on jack change.**
-   Headphone presence selects headphones; absence selects speaker. At start and
-   jack change, two checked presence readings 20 ms apart must agree; otherwise
-   keep both muted and fail closed. Live events trigger the stopped routing
-   sequence below, with a counted gap/discard of already mixed DMA while session
-   ownership and software queues survive. Alternative: sample only at
-   playback start, deferring live switching; insertion would not immediately mute
-   an already playing speaker.
-3. **Default: native qualification includes two ten-minute eight-session runs
-   on each output**, plus one-session/channel, jack, pause/reacquire and ordinary
-   concurrent-use checks below. Use the same native CPU count/configuration and
-   repeated no-audio baseline. A shorter QEMU check cannot close the milestone.
-   Alternative: choose a longer owner batch duration (for example 30 minutes per
-   run); that extends evidence without changing driver capacity or guard policy.
+1. **One native output pair through DAC `0x02`.** Explicitly match the AMD
+   controller and ALC257/Lenovo identity and verify the graph again. Select
+   headphone connection index 0, sharing the existing physical mixed stream.
+   Program/read back D0, converter gain at its advertised 0 dB offset, selector,
+   pin control, EAPD, format and stream tag. Both pin amps start muted; only the
+   chosen output is unmuted. Idle mutes/disables both and detaches the converter.
+2. **Presence sampled at playback start.** The owner accepted the staged
+   alternative: checked headphone presence selects headphones; absence selects
+   speaker before the physical engine starts. Keep that route until the engine
+   next stops and starts. Another session's ACQUIRE or WRITE during continuing
+   mixed playback is not a new hardware start. Inserting headphones mid-playback
+   therefore keeps the speaker until the next start; unplugging headphones keeps
+   the headphone route until then. Live jack switching and its unsolicited-response
+   transport are a separate follow-up, not task 5. See the
+   [accepted routing debt](../technical-debt.md#hd-audio-jack-routing-at-playback-start).
+3. **Proportionate native batch.** One attended ten-minute eight-session run on
+   speaker and one on headphones, plus a second ten-minute speaker run checked
+   only at completion through each producer's STATUS output and the complete log.
+   Include one-session/channel, start-time routing, pause/reacquire and ordinary
+   concurrent-use checks. More runs only if counters indicate a problem. Freeze
+   CPU count/configuration and repeat the no-audio baseline. Native eight-session
+   output remains required for milestone closure.
 
-These defaults are proposals, not accepted decisions. Binding/guard derivation
-below is required implementation work after acceptance, not a new public API.
+These are accepted plan choices, not evidence of implementation or native sound.
+Binding and guard derivation below introduce no public API. One-trip fail-closed
+until reboot remains accepted; native evidence decides on any later reset recovery.
 
 ## Controller bring-up beyond adding a PCI ID
 
@@ -83,12 +84,25 @@ stream counts/address width, ring sizes, one usable output descriptor and reset
 completion; do not hardcode QEMU's `GCAP=0x4401` or descriptor index. Check every DMA address/alignment and establish coherence/snoop behavior before
 using cached PCM.
 
-Inspect the actual PCI revision/subsystem, power state, MSI layout and command
-bits. Current MSI support requires a single-message 64-bit capability without
-per-vector masking; unsupported native capability is explicit UNAVAILABLE, not
-an implicit INTx or polling fallback. Record that blocker and propose a bounded
-PCI-helper change if hardware needs it. Keep controller selection explicit;
-reject ambiguous candidates instead of choosing the first multimedia function.
+### Owner-supplied root PCI inventory
+
+Read-only `lspci -vvnn -s 07:00.6`, ThinkPad Fedora **2026-10-09**, with
+`snd_hda_intel` bound; forwarded by Claude from the owner's root capture. Record
+these facts here, not as edits to the supplied dump:
+
+| Property | Captured value / consequence |
+| --- | --- |
+| Subsystem / BAR0 | `17aa:5081`; `fd3c0000`, 32-bit non-prefetchable, 32 KiB |
+| Command / interrupt | Mem+, BusMaster+, DisINTx+; interrupt pin C |
+| MSI at `0xa0` | Enable+, Count=1/1, Maskable-, 64bit+; current single-message 64-bit helper fits, no helper change needed |
+| PM v3 at `0x50` | D3, NoSoftRst+, PME-Enable+; Linux runtime-suspended it. Check and establish D0 in Pyxis; do not assume firmware state |
+| PCIe endpoint | DevCtl RlxdOrd+, NoSnoop+, MaxPayload 128, MaxReadReq 512; inspect actual snoop/coherence behavior before DMA |
+| Vendor capabilities | Conventional `0x48` and extended `0x100`, unknown contents; no speculative writes |
+
+Captured Mem+/BME+/MSI+ are Linux ownership state, not the Pyxis start sequence.
+Revalidate capabilities, reset and power transitions at native boot. NoSnoop+
+is permission/state, not proof that our cached DMA mappings are coherent. Keep
+controller selection explicit; reject ambiguous candidates and leave INTx off.
 
 Pinned [Linux v6.12 controller reference](https://github.com/torvalds/linux/blob/adc218676eef25575469234709c2d87185ca223a/sound/pci/hda/hda_intel.c)
 (`adc218676eef25575469234709c2d87185ca223a`) classifies `15e3` with AMD southbridge
@@ -130,33 +144,28 @@ cannot be established, report the blocker instead of enabling unqualified RUN.
 Native evidence may motivate reset recovery later; one guard trip still means
 unavailable until reboot in this task.
 
-## Jack commands, interrupts and parked lifetime
+## Start-time routing and parked lifetime
 
-The current QEMU transport disables unsolicited delivery, handles only stream
-IRQs, stops command rings before RUN and discards unsolicited responses during
-commands. A native event path therefore needs a single BSP-owned RIRB drain
-separating checked solicited responses from codec/tag notifications. Enable
-controller unsolicited/RIRB interrupt delivery while playing; the ISR captures
-bounded status and wakes the worker, never performs routing, allocation or verbs.
-Coalesce jack hints, correlate responses, and reject overflow/ambiguous ownership;
-an event must never become the next command's response. Standard behavior comes
-from [Intel HDA 1.0a](https://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/high-definition-audio-specification.pdf),
-§§3.3.7, 3.3.14, 4.4.2 and 7.3.3.14–15.
+Sample headphone Pin Sense through the BSP worker's existing command path before
+RUN, with both pin amps muted. Validate the expected native pin capability and
+program/read back one output route; an unavailable/error result cannot guess a
+speaker route. No jack verbs run during active playback. Commands may use the
+existing bounded waits while RUN is stopped; the 20 ms running service horizon
+is unchanged. Normal stop mutes/disables both pins and detaches DAC `0x02`;
+command/response DMA and MSI park as today. The next start samples presence again.
+No idle poll, live switch, route-change DMA discard or new discontinuity policy
+is added. Sessions/generations, software queues, focus independence and all DMA
+ownership checks remain unchanged.
 
-Arm/read back the codec tag and controller reception before start-time sensing.
-Drain pending jack hints and resample before unmute/RUN; a start cannot knowingly
-publish a stale route. Measure event-to-mute latency; this is not instantaneous
-hardware automute. Unknown tags are never command replies.
+### Separate follow-up: live jack switching
 
-Parked playback stops response/command DMA and MSI, with both pins muted;
-no idle jack polling is added. The next start rearms reception and rereads presence. During live routing changes, the engine stops before verb waits because
-the existing 100 ms command deadline can exceed the 20 ms playback service
-horizon. Mute both pins, require the settling pair to agree, program/read back
-one route and restart pending PCM. Discard mixed DMA with a discontinuity for
-active sessions; retain generation/ownership and unmixed software queues. Keep
-before/after DMA checks and cleanup/WRITE generation checks intact.
-A checked normal routing restart is distinct from recovery after a guard fault.
-Jack changes do not transfer session authority or follow input focus.
+Deferred by the owner, not authorized here. It will need its own proposal for
+persistent RIRB drain/IRQ delivery, codec/tag correlation, presence settling,
+refill-safe command scheduling and switch/discontinuity policy. Today unsolicited
+responses are disabled/discarded and command rings stop before RUN. Do not add
+that path merely to sample presence at start. The
+[HDA specification](https://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/high-definition-audio-specification.pdf)
+remains the command/register reference; deferred event work does not change task 5.
 
 ## Owner-run native batch after implementation acceptance
 
@@ -175,8 +184,10 @@ Jack changes do not transfer session authority or follow input focus.
    one `audio: ready ...` line. Run `pcm 1000 500 10`, `pcm 1000 0 10` and
    `pcm 0 500 10`. Check audible output/channel separation on headphones, speaker
    behavior, hidden-space continuation and silence/reacquisition after release.
-   Exercise insertion/removal during playback and while parked; report switching
-   gaps, pop/noise and speaker leakage. The accepted unprimed start is not a
+   Insert/remove headphones during playback to confirm the route stays fixed,
+   then stop all output and restart to verify the new presence is selected. Also
+   check parked changes. Report pop/noise and whether the start selected its
+   intended output; live speaker automute is explicitly deferred. The accepted unprimed start is not a
    zero-gap promise. Run
    `pcm --pause-ms 250 --repeat 2 --gap-ms 150 1000 500 2` for starvation and
    normal release/reacquisition. Failure must preserve shell/cleanup service.
@@ -184,13 +195,18 @@ Jack changes do not transfer session authority or follow input focus.
    layout through the existing boot-init configuration: Development, Remote and
    Audio 1–7, with no autoplay. Production has only three shell spaces; a single
    space cannot own eight sessions. In eight distinct spaces run
-   `pcm 1000 500 1200`; timestamp acquisition of the eighth and keep all eight
-   active for at least ten minutes before stopping one. The ninth must return
-   CALL_LIMIT. Repeat twice on speaker and twice on headphones, with the same
-   CPU count and ordinary space switching/shell work. A saturated mix can clip
+   `pcm 1000 500 660`, starting all eight within one minute so at least ten
+   minutes overlap. Timestamp the eighth acquisition and each completion; use a
+   longer command duration only if setup takes longer. The ninth must return
+   CALL_LIMIT. Run once attended on speaker and once attended on headphones, with
+   the same CPU count and ordinary space switching/shell work. A saturated mix can clip
    by design; record unintended dropouts, stuck/repeated chunks, global silence
    and guard trips separately. Stop producers individually; others continue.
-   Verify final silence and fresh one-session acquisition. Observe native timing,
+   Verify final silence and fresh one-session acquisition. For the second speaker
+   run, let all producers finish naturally: Ctrl-C skips their final STATUS output.
+   Check all eight before-release STATUS summaries and the complete log only at
+   the end; missing successful completion/STATUS is not a pass. Extra runs follow
+   only counter findings. Observe native timing,
    refill/IRQ/clock counts and STATUS starvation/discontinuity results with
    existing instrumentation; do not halt the running guest for inspection.
 4. **Closure evidence.** Record exact image/dependency revisions, configuration,
@@ -200,6 +216,7 @@ Jack changes do not transfer session authority or follow input focus.
    stops qualification, preserves DMA and requires reboot; report it for a
    separate recovery/batching/guard decision rather than weakening the policy.
 
-Proposal validation is source/dump/document review only. No QEMU boot, native
-execution, driver code, self-test, fault injection, new CI or benchmark framework
-was performed or added. Stop after this proposal for owner review.
+Plan validation so far is source/dump/document review only. No native execution
+or driver code is claimed by this update. Implementation is authorized after
+publishing this update and verifying the dependency merges; preserve the accepted
+native-batch/guard boundaries and stop the implementation PR for owner review.

@@ -2674,3 +2674,19 @@ radio cleanup or automatic service recovery.
 Revisit with the service/connection tasks when they can establish and qualify
 explicit radio-procedure termination, receive continuity and independent USB
 accounting. The accepted handle-reuse boundary is also required for reconnect.
+
+
+## HD Audio jack routing at playback start
+
+Accepted **2026-10-09** in the [native task 5 plan](wip/hda-native.md): sample
+headphone presence when the physical playback engine starts, then hold that
+route until its next start. This is planned behavior, not native qualification.
+**Headphones inserted mid-playback keep the speaker until the next start.**
+Unplugging headphones also retains the headphone route until then. A new session
+or WRITE while other sessions keep the engine running does not resample presence.
+There is no live speaker automute or unsolicited jack-response path in task 5.
+
+Live switching is a separate follow-up task requiring reviewed RIRB/IRQ reception,
+tag/command correlation, refill-safe routing and discontinuity policy. Revisit
+after native one/eight-session qualification; it does not block task 5's accepted
+start-time routing batch. Public grant/session ownership remains unchanged.

@@ -51,7 +51,8 @@ explicit assignment.
 
 The [native AMD/ALC257 audio proposal](wip/hda-native.md) covers task 5's
 controller profile, speaker/headphone routing and owner-run one/eight-session
-qualification. Its three defaults await acceptance; it introduces no driver code.
+qualification. Its route, start-time jack policy and native batch were accepted
+2026-10-09; native implementation and qualification remain pending.
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals. Files in [wip](wip/) describe unfinished work or design directions;
