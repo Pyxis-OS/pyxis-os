@@ -41,7 +41,8 @@ struct clipboard_store {
 
 struct clipboard_activation {
   struct process *owner;
-  uint64_t id, operation, layer, generation, mapping_identity, deadline;
+  uint64_t id, operation, layer, generation, mapping_identity, deadline, receiver_epoch;
+  enum call_status refusal;
 };
 
 struct clipboard_space {
@@ -128,6 +129,16 @@ void clipboard_stop_notify(void)
   lock_clipboard();
   notify_worker_locked();
   unlock_clipboard();
+}
+
+static void resume_input_locked(struct clipboard_space *state, bool input_complete)
+{
+  state->enter_blocked[0] |= enter_down[0];
+  state->enter_blocked[1] |= enter_down[1];
+  state->resume_pending = !input_complete;
+  if (!input_complete) {
+    notify_worker_locked();
+  }
 }
 
 static void destroy_item(struct kernel_object *object)
@@ -321,10 +332,7 @@ void clipboard_input_hangup(struct kernel_object *object)
     struct clipboard_space *state = receiver->owner->space->clipboard;
     if (state->transaction == receiver) {
       state->transaction = NULL;
-      state->resume_pending = true;
-      notify_worker_locked();
-      state->enter_blocked[0] = enter_down[0];
-      state->enter_blocked[1] = enter_down[1];
+      resume_input_locked(state, false);
     }
     receiver->transaction_id = 0;
     wake_receiver(receiver);
@@ -332,13 +340,12 @@ void clipboard_input_hangup(struct kernel_object *object)
   unlock_clipboard();
 }
 
-static void release_receiver(struct process *process)
+static void release_receiver(struct process *process, bool input_complete)
 {
   struct clipboard_receiver *receiver = process->paste_receiver;
   if (!receiver) {
     return;
   }
-  space_keyboard_sync_input();
   lock_clipboard();
   KASSERT(!receiver->wait);
   struct clipboard_receiver **link = &receivers;
@@ -350,8 +357,7 @@ static void release_receiver(struct process *process)
   struct clipboard_space *state = process->space->clipboard;
   if (state->transaction == receiver) {
     state->transaction = NULL;
-    state->enter_blocked[0] = enter_down[0];
-    state->enter_blocked[1] = enter_down[1];
+    resume_input_locked(state, input_complete);
   }
   process->paste_receiver = NULL;
   struct clipboard_item *item = receiver->item;
@@ -367,7 +373,10 @@ static void release_receiver(struct process *process)
 
 void clipboard_process_exit(struct process *process)
 {
-  release_receiver(process);
+  if (process->paste_receiver) {
+    bool input_complete = space_keyboard_sync_input();
+    release_receiver(process, input_complete);
+  }
   lock_clipboard();
   struct clipboard_space *state = process->space->clipboard;
   if (state->activation.owner == process) {
@@ -387,7 +396,7 @@ static bool input_clean(const struct clipboard_input *input, struct process *own
 }
 
 static enum call_status admit_paste(struct space *space, struct clipboard_store *store,
-    struct kernel_object *input_object, uint64_t *transaction_id)
+    struct kernel_object *input_object, uint64_t expected_epoch, uint64_t *transaction_id)
 {
   struct clipboard_input target, outer;
   if (!clipboard_input_descriptor(input_object, &target) || target.space != space) {
@@ -404,7 +413,8 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
   enum call_status status = CALL_OK;
   if (!receiver) {
     status = CALL_UNAVAILABLE;
-  } else if (space->clipboard->transaction || space->clipboard->resume_pending || (distinct && !input_clean(&outer,
+  } else if ((expected_epoch && receiver->epoch != expected_epoch) ||
+      space->clipboard->transaction || space->clipboard->resume_pending || (distinct && !input_clean(&outer,
         space->terminal_pointer->owner)) || !receiver->boundary ||
       !input_clean(&target, receiver->owner)) {
     status = CALL_BUSY;
@@ -544,14 +554,14 @@ void clipboard_request_execute(struct clipboard_request *request)
     return;
   }
   if (request->operation == CONSOLE_PASTE_RELEASE || request->operation == CONSOLE_PASTE_ACK) {
-    space_keyboard_sync_input();
+    bool input_complete = space_keyboard_sync_input();
     struct clipboard_receiver *receiver = request->process->paste_receiver;
     if (!receiver || receiver->input != request->object || receiver->epoch != request->epoch) {
       request->status = CALL_DENIED;
       return;
     }
     if (request->operation == CONSOLE_PASTE_RELEASE) {
-      release_receiver(request->process);
+      release_receiver(request->process, input_complete);
       return;
     }
     lock_clipboard();
@@ -570,8 +580,7 @@ void clipboard_request_execute(struct clipboard_request *request)
     receiver->phase = 0;
     receiver->boundary = false;
     state->transaction = NULL;
-    state->enter_blocked[0] = enter_down[0];
-    state->enter_blocked[1] = enter_down[1];
+    resume_input_locked(state, input_complete);
     unlock_clipboard();
     if (item) {
       object_release(&item->object);
@@ -622,10 +631,13 @@ void clipboard_request_execute(struct clipboard_request *request)
     }
     return;
   }
-  space_keyboard_sync_input();
+  bool input_complete = space_keyboard_sync_input();
   request->status = consume_activation(request);
   if (request->status == CALL_OK && request->refusal != CALL_OK) {
     request->status = request->refusal;
+  }
+  if (request->status == CALL_OK && request->operation == CLIPBOARD_PASTE && !input_complete) {
+    request->status = CALL_BUSY;
   }
   if (request->status != CALL_OK) {
     return;
@@ -653,7 +665,7 @@ void clipboard_request_execute(struct clipboard_request *request)
       request->status = CALL_WRONG_TYPE;
     } else {
       request->status = admit_paste(request->process->space,
-          (struct clipboard_store *)request->object, input.object, &request->transaction_id);
+          (struct clipboard_store *)request->object, input.object, 0, &request->transaction_id);
     }
   } else {
     request->status = CALL_BAD_OPERATION;
@@ -746,29 +758,103 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   klog("clipboard copied %zu bytes (%s)\n", length, store->space ? "local" : "shared");
 }
 
+static void queue_kernel_paste(struct space *space, uint64_t layer)
+{
+  struct clipboard_input input;
+  clipboard_input_descriptor(&space->console->object, &input);
+  struct pointer_geometry geometry = pointer_surface_geometry(space->terminal_pointer);
+  lock_input(&input);
+  lock_clipboard();
+  struct clipboard_space *state = space->clipboard;
+  struct clipboard_receiver *receiver = find_receiver(input.object);
+  bool pending = state->activation.id && !state->activation.owner;
+  enum call_status refusal = CALL_OK;
+  if (!receiver) {
+    refusal = CALL_UNAVAILABLE;
+  } else if (state->transaction || state->resume_pending || !receiver->boundary ||
+      !input_clean(&input, receiver->owner)) {
+    refusal = CALL_BUSY;
+  }
+  bool exhausted = next_action == UINT64_MAX;
+  if (!pending && !exhausted) {
+    state->activation = (struct clipboard_activation){
+      .id = ++next_action, .operation = CLIPBOARD_PASTE, .layer = layer,
+      .generation = geometry.generation, .mapping_identity = geometry.mapping_identity,
+      .deadline = task_deadline_after_ms(CLIPBOARD_TIMEOUT_MS),
+      .receiver_epoch = receiver ? receiver->epoch : 0, .refusal = refusal,
+    };
+    notify_worker_locked();
+  }
+  unlock_clipboard();
+  unlock_input(&input);
+  if (pending || exhausted) {
+    klog("clipboard paste refused: %u\n", (unsigned)(pending ? CALL_BUSY : CALL_LIMIT));
+  }
+}
+
+static void consume_kernel_pastes(bool input_complete)
+{
+  for (struct clipboard_space *state = spaces; state; state = state->next) {
+    lock_clipboard();
+    struct clipboard_activation action = state->activation;
+    bool pending = action.id && !action.owner;
+    if (pending) {
+      state->activation = (struct clipboard_activation){0};
+    }
+    unlock_clipboard();
+    if (!pending) {
+      continue;
+    }
+    struct space *space = state->space;
+    struct pointer_geometry geometry = pointer_surface_geometry(space->terminal_pointer);
+    enum call_status status = action.refusal;
+    if (space_pointer_active() != space || space->display->visible || space->terminal_pointer->owner ||
+        geometry.generation != action.generation || geometry.mapping_identity != action.mapping_identity ||
+        arch_monotonic_ns() >= action.deadline) {
+      status = CALL_ABANDONED;
+    } else if (!input_complete) {
+      status = CALL_BUSY;
+    } else if (status == CALL_OK) {
+      struct clipboard_store *store = action.layer == CLIPBOARD_LAYER_LOCAL ? &state->local : &shared;
+      uint64_t transaction_id;
+      status = admit_paste(space, store, &space->console->object, action.receiver_epoch, &transaction_id);
+    }
+    if (status != CALL_OK) {
+      klog("clipboard paste refused: %u\n", (unsigned)status);
+    }
+  }
+}
+
 bool clipboard_key_event(struct space *space, const struct key_event *event)
 {
   KASSERT(arch_cpu_index() == 0);
   if (event->action == KEY_STATE_RESET) {
     memset(command_held, 0, sizeof(command_held));
+    lock_clipboard();
     enter_down[0] = enter_down[1] = false;
+    unlock_clipboard();
     for (struct clipboard_space *state = spaces; state; state = state->next) {
       clipboard_space_cancel(state->space);
+      lock_clipboard();
       state->enter_blocked[0] = state->enter_blocked[1] = true;
+      unlock_clipboard();
     }
     return false;
   }
   unsigned enter = event->key == KEY_ENTER ? 0 : 1;
   bool enter_key = event->key == KEY_ENTER || event->key == KEY_KP_ENTER;
   if (enter_key) {
+    lock_clipboard();
     enter_down[enter] = event->action != KEY_RELEASE;
     if (event->action == KEY_RELEASE) {
       for (struct clipboard_space *state = spaces; state; state = state->next) {
         state->enter_blocked[enter] = false;
       }
     } else if (space->clipboard->enter_blocked[enter]) {
+      unlock_clipboard();
       return true;
     }
+    unlock_clipboard();
   }
   if (command_held[event->key]) {
     if (event->action == KEY_RELEASE) {
@@ -813,11 +899,7 @@ bool clipboard_key_event(struct space *space, const struct key_event *event)
     if (operation == CLIPBOARD_PUBLISH) {
       local_copy(space, store);
     } else if (space != space_caelum()) {
-      uint64_t id;
-      enum call_status status = admit_paste(space, store, &space->console->object, &id);
-      if (status != CALL_OK) {
-        klog("clipboard paste refused: %u\n", (unsigned)status);
-      }
+      queue_kernel_paste(space, layer);
     }
     return true;
   }
@@ -843,7 +925,8 @@ static void clipboard_worker(void *argument)
   for (;;) {
     uint64_t flags = cpu_save_interrupts();
     uint64_t deadline = UINT64_MAX;
-    space_keyboard_sync_input();
+    bool input_complete = space_keyboard_sync_input();
+    consume_kernel_pastes(input_complete);
     bool changed = false;
     lock_clipboard();
     for (struct clipboard_receiver *receiver = receivers; receiver; receiver = receiver->next) {
@@ -857,8 +940,7 @@ static void clipboard_worker(void *argument)
       struct clipboard_space *state = receiver->owner->space->clipboard;
       if (state->transaction == receiver) {
         state->transaction = NULL;
-        state->enter_blocked[0] = enter_down[0];
-        state->enter_blocked[1] = enter_down[1];
+        resume_input_locked(state, input_complete);
       }
       wake_receiver(receiver);
       changed = true;
@@ -867,10 +949,13 @@ static void clipboard_worker(void *argument)
       if (state->activation.owner && process_control_stopped(state->activation.owner->control)) {
         state->activation = (struct clipboard_activation){0};
       }
-      if (state->resume_pending) {
-        state->resume_pending = false;
-        state->enter_blocked[0] = enter_down[0];
-        state->enter_blocked[1] = enter_down[1];
+      if (state->resume_pending && input_complete) {
+        resume_input_locked(state, true);
+      } else if (state->resume_pending) {
+        uint64_t retry = task_deadline_after_ms(1);
+        if (retry < deadline) {
+          deadline = retry;
+        }
       }
       struct clipboard_receiver *receiver = state->transaction;
       if (!active(receiver) || receiver->phase == CONSOLE_PASTE_CANCEL) {
@@ -885,8 +970,7 @@ static void clipboard_worker(void *argument)
           receiver->invalid = true;
           receiver->transaction_id = 0;
           state->transaction = NULL;
-          state->enter_blocked[0] = enter_down[0];
-          state->enter_blocked[1] = enter_down[1];
+          resume_input_locked(state, input_complete);
         }
         changed = true;
       } else if (receiver->phase != CONSOLE_PASTE_CANCEL && receiver->deadline < deadline) {

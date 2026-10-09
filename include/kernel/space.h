@@ -86,8 +86,9 @@ bool space_pointer_input_available(void);
 uint32_t space_pointer_suppressed_buttons(void);
 /* BSP, preserves IF: apply physical reports before a terminal view boundary. */
 void space_pointer_sync_input(void);
-/* BSP, IF=0: establish the native clipboard admission/completion input boundary. */
-void space_keyboard_sync_input(void);
+/* BSP, IF=0, outside input decoding. Bounded controller pump plus decoder drain;
+ * false means hardware or a partial physical scan sequence remains pending. */
+bool space_keyboard_sync_input(void);
 size_t space_pointer_content_y(void);
 struct space *space_pointer_tab(int64_t x, int64_t y);
 void space_pointer_select(struct space *space);

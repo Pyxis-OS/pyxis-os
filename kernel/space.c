@@ -1136,10 +1136,15 @@ static void handle_space_input(void)
   cpu_restore_interrupts(flags);
 }
 
-void space_keyboard_sync_input(void)
+bool space_keyboard_sync_input(void)
 {
   KASSERT(arch_cpu_index() == 0);
-  handle_space_input();
+  uint64_t flags = cpu_save_interrupts();
+  bool device_complete = keyboard_sync_device();
+  handle_space_input_locked();
+  bool complete = device_complete && keyboard_input_complete();
+  cpu_restore_interrupts(flags);
+  return complete;
 }
 
 struct space *space_pointer_active(void)
