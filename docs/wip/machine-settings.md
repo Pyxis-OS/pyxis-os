@@ -1,6 +1,6 @@
 # Machine settings and the system hostname
 
-Status: **task 1 implemented, final update qualification in progress**. The
+Status: **task 1 implemented and qualified in QEMU**. The
 owner accepted this direction and task 1 details on 2026-10-09. Tasks 2–7 need
 separate assignment. The [implemented store/hostname reference](../userland/machine-settings.md)
 and [native query](../interfaces/system-information.md#hostname) own task 1's
@@ -63,9 +63,8 @@ consumer such as DHCP re-announcing a rename; do not silently add polling.
 
 ## Tasks
 
-1. [ ] **Store and hostname.** Implemented reference above; complete the
-   installed reboot/update qualification before closing this task. No writer,
-   beacon, log, prompt, Fastfetch or DHCP changes.
+1. [x] **Store and hostname.** Implemented reference above. No writer, beacon,
+   log, prompt, Fastfetch or DHCP changes.
 2. [ ] **Config tool.** `config get`, `set` and `list`, shared validation and
    atomic writes. The owner sets the key, sees invalid input refused and the
    new value apply on the next boot.
@@ -84,3 +83,25 @@ consumer such as DHCP re-announcing a rename; do not silently add polling.
 Narrow writer grants, directory notification, user settings,
 `config validate` as Polaris's [configuration checker](boot-configuration-checker.md),
 mDNS `NAME.local` and Tailscale naming await their own proposals/assignment.
+
+## Task 1 qualification — 2026-10-09
+
+Ordinary `make -j16 image` built the kernel, SDK, runtime, ports and applications
+at Pyxis `c5c5beb8e964`, userland `8cbd9f87bdc7` and ports `19fb10b05549`, with
+the existing `pyxis-llvm23.1.3-49e2c1a` builder. No compiler rebuild was needed.
+Interactive QEMU 10.2.2 used Q35, nested KVM, four host CPUs, 8 GiB, OVMF and
+VirtIO block/RNG/network devices; the installed fixture was a separate 2 GiB disk.
+
+Installed runs at the earlier kernel `ad9d0a897008` / userland `8fbe2ccc4202`
+confirmed missing-key fallback with one hostname report, `ThinkPad-7` with LF,
+`NoLf-7` without LF, preserved case and CRLF rejection with one report. Writes
+were explicitly synced and changed the running name only after reboot. Updating
+that disk to `c5c5beb8e964` / `8cbd9f87bdc7` completed the installer's byte checks;
+after reboot, both `hostname` and the retained key read `ThinkPad-7`, without a
+hostname fallback report.
+
+The earlier live image built with `HOSTNAME=T14-Live` printed that name without
+a store warning. `HOSTNAME=bad.name` failed assembly through the shared validator;
+omitting the option ignored the container's environment hostname. Source review
+covered set-once/child authority and libc short-buffer/error behavior; those
+failure paths were not forced at runtime. No native or power-loss checks ran.

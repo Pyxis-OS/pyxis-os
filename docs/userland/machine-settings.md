@@ -17,8 +17,9 @@ this schema and is also exported in the SDK for image assembly.
 The reader accepts either one final LF or none. CR/CRLF, whitespace, NUL,
 multiple lines and extra bytes refuse. It probes beyond the maximum rather than
 truncating. Missing, unreadable or invalid keys use the archive default with one
-hostname fallback report on Caelum. Changing the file affects the next boot. Before reboot, explicitly sync the
-written key through the ordinary `sync PATH` command.
+hostname fallback report on Caelum. Changing the file affects the next boot.
+Before reboot, explicitly sync the written key through the ordinary `sync PATH`
+command.
 
 Boot init mounts `system` and reads the key before creating any space, including
 rescue/default-config boots. `system://config/boot.lua` remains a volumes/spaces
@@ -48,7 +49,8 @@ The command accepts no arguments and prints the native
 [`SYSTEM_INFO_HOSTNAME`](../interfaces/system-information.md#hostname) result.
 All reads use the explicitly delegated `system_info` grant. They do not open the
 store or require system-root authority. Boot init alone has the set-once right;
-children receive READ. Applications see the same published name throughout the boot.
+children receive READ. Applications see the same published name throughout the
+boot.
 
 For ports, libc declares `gethostname(char *name, size_t size)` in `<unistd.h>`.
 Success writes the complete name and NUL. Insufficient room returns `-1` with
