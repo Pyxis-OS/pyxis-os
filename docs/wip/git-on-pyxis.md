@@ -2,9 +2,9 @@
 
 Investigation, accepted direction and task status, 2026-10-09. The original
 compile evidence below records the investigation snapshot. The owner accepted
-the three decisions and assigned only the first libc task; later work remains
-unassigned. Its [status](#first-task-status-and-accepted-decisions) supersedes the
-historical O_RDWR/O_EXCL gap entries.
+the three decisions and assigned the public-open and positioned-I/O libc tasks;
+later work remains unassigned. Their [status](#task-status-and-accepted-decisions)
+supersedes the historical O_RDWR/O_EXCL/pread/pwrite gap entries.
 This supports [source builds](source-builds.md) after hosted Clang. The question
 is obtaining pinned source, separately from providing a developer's Git CLI.
 
@@ -167,8 +167,8 @@ This is a smaller route, not an unmodified libgit2 build:
 
 | Area | Measured/inspected gaps and proposed adaptation |
 | --- | --- |
-| Filesystem core | Same missing `O_RDWR/O_EXCL`, `lstat/access`, `pread/pwrite`, `rmdir`, path/cwd support and directory sync bridge. Deeper `indexer.c` diagnostics identify positioned writes and endian functions (`htonl/ntohl`, with `htons/ntohs` elsewhere). Standard support belongs in libc. |
-| Mapping | No public `mmap`; libgit2's `NO_MMAP` fallback reads into owned memory and explicitly rejects writable mappings. The non-Windows pack indexer uses `pwrite`. This avoids shared-file mapping for the proposed slice, but needs bounded allocation and real positioned I/O. |
+| Filesystem core | Tasks 1 and 2 supply real `O_RDWR/O_EXCL` and `pread/pwrite`. Missing `lstat/access`, `rmdir`, path/cwd support and directory sync bridge remain. Deeper `indexer.c` diagnostics also identify endian functions (`htonl/ntohl`, with `htons/ntohs` elsewhere); those are later tasks. Standard support belongs in libc. |
+| Mapping | No public `mmap`; libgit2's `NO_MMAP` fallback reads into owned memory and explicitly rejects writable mappings. The non-Windows pack indexer uses `pwrite`, supplied by task 2 with native explicit offsets. Shared-file mapping is unnecessary for the proposed slice; bounded allocation and the remaining source/path closure still need work. |
 | Metadata even without checkout | ODB alternate deduplication reads `st_ino`; pack/config/file-buffer caches read mtime/inode; discovery reads device identity. Bare fetch alone does not eliminate these compile/runtime assumptions. A single fresh store with no alternates/discovery and explicit cache reloads can be adapted without fabricated stat fields; that adaptation remains unbuilt. |
 | Worktree features | Building all sources still compiles `index.c` and iterators, which read stat ctime/mtime/ino/uid/gid. Runtime avoidance is not a compile fix. Restrict or adapt that source closure explicitly; reject unsupported APIs. `checkout` with suppressed index writes still has stat/filter/mode assumptions. |
 | Unix support | Shared headers still include networking headers with HTTPS off. Missing `gettimeofday`, `struct timeval`, `ino_t`, `lstat`, `readlink/link/symlink/chmod`, `getcwd`, `utimes`, `EINTR/ENOTDIR` appear in selected-source diagnostics. Avoid omitted feature code or implement standard behavior where native objects support it. |
@@ -238,15 +238,16 @@ Pyxis commit `26770a0cb95afb4fcc7b0aa6a023565becf99ef7` with depth 1 and verifie
 FETCH_HEAD. This establishes that server route for one pin; it is neither a
 libgit2 transaction nor an on-Pyxis TLS/network result, nor a promise for all mirrors.
 
-## First task status and accepted decisions
+## Task status and accepted decisions
 
 - [x] Task 1: public **`O_RDWR` and `O_CREAT|O_EXCL` in userland libc**, implemented
-  and manually qualified; pending owner review and dependency merge.
+  and manually qualified; userland #171 and Pyxis #573 merged.
+- [x] Task 2: public **`pread` and `pwrite` in userland libc**, implemented and
+  manually qualified; pending owner review and dependency merge.
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171) publishes
-`ff278aec50adfaf6af8d8c15062084a8594642e3`. This integration pins that published
-commit. Merge userland first, then the Pyxis gitlink/docs PR. No later task starts
-as part of this delivery.
+`ff278aec50adfaf6af8d8c15062084a8594642e3`, integrated by merged
+[Pyxis PR #573](https://git.internal/PyxisOS/pyxis-os/pulls/573).
 
 The two-file implementation reuses internal read/write descriptors and native
 exclusive creation, retains the 0666-only policy, and rejects unsupported
@@ -259,9 +260,26 @@ without truncation, seek/read/write on one descriptor and denied-create cleanup.
 separate these observations from inspected invariants and unexercised storage/
 failure cases. No kernel change, new test infrastructure or compiler rebuild.
 
-That task unblocks a concrete shared dependency, not a functioning fetch tool.
-Subsequent separately approved work would cover positioned I/O and remaining
-libc support; restricted libgit2 source/path/cache closure; a native HTTPS
+Task 2, [userland PR #172](https://git.internal/PyxisOS/pyxis-userland/pulls/172),
+publishes `88217be07f089c90d79c71b3cf9387f7420d0ec9`. This integration pins that
+published commit. Merge userland first, then this Pyxis gitlink/docs PR. No later
+task starts as part of this delivery.
+
+Pread/pwrite call the existing native FILE operations at explicit offsets,
+without seek/restore or private-position changes. Pread preserves unread cached
+bytes; nonempty pwrite invalidates them before dispatch, including uncertain
+outcomes. Short counts/EOF remain real; negative offsets are EINVAL and nonfile
+descriptors ESPIPE. FILE pushback/indicators and append policy remain separate.
+An ordinary image build and manual QEMU/GDB inspection qualified interleaving,
+read-ahead refetch, zero-filled past-EOF gaps, short transfers and console refusal.
+The [positioned-I/O contract and evidence](../userland/libc-portability.md#positioned-file-io-and-qualification)
+record configurations and unexercised cases. No kernel/protocol change or new
+test infrastructure was needed. Endian helpers and lstat/access/rmdir are not
+part of this task.
+
+These tasks unblock shared dependencies, not a functioning fetch tool.
+Subsequent separately approved work would cover remaining libc support;
+restricted libgit2 source/path/cache closure; a native HTTPS
 transport; then exact-OID verification and bounded tree export. Pack/index/blob
 hash verification must remain enabled. Require the pin to resolve to a commit,
 not an arbitrary object or substituted ref. Check completeness of its reachable
@@ -300,4 +318,4 @@ TLS adapter in userland, parent integration only after published dependencies.
 The base SDK stays independent of TLS/libgit2. This task changes only the userland
 pin and related docs in Pyxis. No new upstream source or compiler container is
 needed. The original investigation probe branch stays unmerged; task-owned
-qualification processes are stopped. Stop for owner review of task 1.
+qualification processes are stopped. Stop for owner review of task 2.
