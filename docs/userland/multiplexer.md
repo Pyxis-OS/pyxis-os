@@ -129,7 +129,10 @@ receive no outer terminal control. Mux adds the spatial queue to its native
 `wait_many` interests, with no idle polling loop. Remote mux remains keyboard-only.
 
 A content or heading click focuses that visible pane; only content participates
-in linear cell selection. Left drag stays anchored to the starting pane and
+in linear cell selection. A left press clears the old selection and records a
+pending anchor. Selection starts only on a held move to a different cell; a
+click or movement within the starting cell leaves none. A one-cell displacement
+includes both endpoint cells. Left drag stays anchored to the starting pane and
 clamps to its visible content, excluding headings, dividers, footer, other panes
 and clipped cells. Highlighting changes rendered frame copies, not retained
 live/history cells. Selected glyph mutation or row eviction clears selection;
