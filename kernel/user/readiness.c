@@ -87,6 +87,7 @@ static uint64_t display_ready(struct display_object *display,
 bool readiness_service(struct bsp_request **active_list)
 {
   bool worked = false;
+  /* Both workers recheck the earliest absolute deadline before parking. */
   uint64_t now = 0;
   bool have_now = false;
   struct bsp_request **link = active_list;

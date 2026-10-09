@@ -83,7 +83,11 @@ semantics; WRITE has no separate deadline.
 
 Readiness workers inspect locked snapshots of owner, free capacity and failure
 state. They do not borrow mutable PCM queues. The audio worker publishes changes
-before notifying them, outside the snapshot lock.
+before notifying them, outside the snapshot lock. Successful WRITE reduces free
+capacity and emits no readiness notification. Consumption notifies when free
+capacity crosses the 4096-byte writable threshold; acquisition, release, exit
+and failure still notify both the readiness and network workers, including for
+mixed audio/TCP waits.
 
 ## Validation and refusal
 

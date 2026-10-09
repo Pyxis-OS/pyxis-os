@@ -1205,8 +1205,10 @@ assigned audio-consumer work. The [task 2 report](development/experiments/audio-
 records the evidence and limits; native and milestone closure checks remain open.
 The eight-session overhead/failure finding remains a delivery issue on
 [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), with
-[profiling and proposed fixes](development/experiments/audio-task2/profiling.md)
-awaiting the owner. It has not been deferred as an accepted capacity limitation.
+[profiling and accepted fixes](development/experiments/audio-task2/profiling.md)
+recording the owner's accepted 2026-10-09 notification/scan fixes and repeat
+qualification. Batching remains deferred pending those results and owner review.
+This has not been deferred as an accepted capacity limitation.
 
 ## SDL2 port limits
 

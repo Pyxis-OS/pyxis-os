@@ -1,8 +1,9 @@
 # Audio BSP cost: measurement follow-up
 
 Measured **2026-10-09**, following the [early review of #557](https://git.internal/PyxisOS/pyxis-os/pulls/557).
-**Merge remains blocked pending the owner's fix decision and repeat qualification.**
-This report proposes changes; no fix is implemented. Eight sessions, eight 10 ms
+**Candidates 1 and 2 accepted 2026-10-09 and implemented; #557 stays draft
+for owner review.** Candidate 3 (request batching) remains deferred until the
+owner reviews the repeat measurements. Eight sessions, eight 10 ms
 DMA periods, 80 ms session queues, 4096-byte writes and the existing safety
 thresholds remain unchanged. Earlier eight-session failures remain a delivery
 issue to resolve, rather than an accepted capacity limitation.
@@ -12,15 +13,13 @@ issue to resolve, rather than an accepted capacity limitation.
 Implementation under review: `62a63e4bd972229858490b354a4fcfd39c355539`, userland
 `052ac5ea0c1b045924aee439470f66e7f3382c1c`. The unmerged local measurement branch
 `probe/audio-task2-cost`, `cc6af6be548cb5887f4ec33029122e3099e7a8f9`, adds only
-[temporary counters](profiling/instrumentation.patch). The zero-context diff
-requires `git apply --unidiff-zero` in a disposable checkout; it changes no accepted
-tuning. Its ordinary image build
+temporary counters. The instrumentation stays on local probe branches; it changes no accepted tuning. Its ordinary image build
 passed using LLVM 23.1.3/49e2c1a and verified SDK/userspace/ports inputs.
 
 Both repeats use the same ELF/ISO/initrd: QEMU 10.2.2, Q35, **nested KVM**,
 `-cpu max`, four CPUs, 8 GiB, OVMF, VGA 1280×800, VirtIO SCSI/RNG/network,
 `intel-hda` + `hda-output`, WAV 48 kHz S16 stereo. The ordinary
-[nine-shell layout](profiling/space-layout.lua) is the sole userland policy
+nine-shell layout is the sole userland policy
 change; it launches no audio. No ThinkPad, SDL2 or other port was changed.
 
 | Artifact | SHA-256 |
@@ -56,8 +55,9 @@ controller. No debugger, sampler, exit tracing, other owned guest or build ran
 during the four approximately 15.018 s host-accounting windows. These short
 profiles do not establish long-duration qualification.
 
-Raw counters, accounting, calibration, exact values and caller resolution are
-in [the evidence directory](profiling/) and [samples.json](profiling/samples.json).
+Raw counters, accounting, calibration and caller resolution are retained locally
+under the probe worktree's `build/`; repository documentation retains these
+summaries. The submitted evidence was also archived locally before trimming.
 Frozen counter intervals were 41.702/16.132 s for one, 15.970/20.570 s for eight;
 the idle counter interval was 26.856 s. Counts below normalize each interval to
 **10 ms elapsed**, rather than assuming an IRQ is a period.
@@ -112,7 +112,9 @@ The running-only 5 ms watchdog remains; steady playback has no codec polling.
 
 This is the **same wake/sleep → timer handling → HPET traffic pattern** as
 [#559's send measurements](https://git.internal/PyxisOS/pyxis-os/src/branch/net/throughput-baseline/docs/wip/network-throughput.md#send),
-which found about 27 physical counter reads per TCP segment. Audio's strict
+which found about 27 physical counter reads per TCP segment. That work is now
+merged; its [send investigation](../../../wip/network-throughput.md#send)
+retains the measurements. Audio's strict
 timer group accounts for about **158–160 / 256–259 HPET reads per 10 ms** with
 one/eight sessions; the broader group is **205–207 / 338–342 reads**. Readiness
 scans add another **111–112 / 254–258 reads**. Unlike the send result, audio has
@@ -158,9 +160,9 @@ Hardware guest-cycle PMU events were unavailable. Software IP samples are
 statistical; they do not isolate each function's CPU cost. Preserve that limit
 when interpreting the Linux accounting categories and overlapping TSC intervals.
 
-## Candidate fixes, awaiting owner decision
+## Owner decisions and implementation
 
-1. **Recommended first: suppress successful-WRITE readiness notifications and
+1. **Accepted 2026-10-09 and implemented: suppress successful-WRITE readiness notifications and
    notify consumption on a maximum-write writable threshold crossing.** A write
    reduces free capacity, so it cannot raise writable readiness. Dropping that
    notification alone predicts **0.470–0.471 / 3.751 fewer readiness and network
@@ -168,22 +170,26 @@ when interpreting the Linux accounting categories and overlapping TSC intervals.
    Threshold gating may save more; crossings were not counted. Preserve release,
    failure, generation and mixed audio/TCP-wait notifications. Notification
    savings do not imply an equal reduction in actual dispatches or CPU time.
-2. **Amortize readiness deadline checks with one fresh, lazy HPET observation per
+2. **Accepted 2026-10-09 and implemented: amortize readiness deadline checks with one fresh, lazy HPET observation per
    service scan; skip expiry work already superseded by readiness or caller stop.**
    This targets the **28–35% clock-call component** above. Scan invocations and
    ready/blocked partitions were not counted, so precise savings remain unknown.
    Preserve readiness-before-timeout precedence and absolute-deadline parking;
    a snapshot ages during one scan and must not introduce an extra blocking wait.
-3. **Bound audio request batches and schedule routine progress observations from
+3. **Deferred pending repeat results and owner decision: bound audio request batches and schedule routine progress observations from
    IRQ/watchdog work.** Keep fresh before/after DMA-commit checks and all existing
    service/commit thresholds. This targets the growth from **4.7 to 7.4 position
    observations per period**, approximately half a millisecond of observed
    elapsed work at eight. Savings depend on batching and watchdog cadence;
    bounding work must preserve request fairness, cleanup and error handling.
 
-Recommended order is notification/scan work, then remeasure before deciding
-whether batching is needed. These are proposals inside #557's playback path,
-not implemented speedups. **TSC/cheaper clock sources, general scheduler timer
+Notification/scan work is implemented at `9026ac89`; batching is not implemented.
+The writable threshold, release/failure/exit notifications and mixed audio/TCP
+notification routing remain intact. Each readiness scan samples only after a
+blocked request needs expiry checking. Current readiness still precedes timeout;
+both workers recheck their earliest absolute deadline before parking, so an aged
+scan snapshot cannot cause an additional blocking wait.
+**TSC/cheaper clock sources, general scheduler timer
 rearm caching and broad network optimization belong to separate kernel work.**
 Capacity, queue/DMA tuning and safety-threshold changes require the owner and are
 not proposed as an escape from this overhead. After an accepted fix, repeat
