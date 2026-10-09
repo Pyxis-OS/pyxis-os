@@ -638,8 +638,7 @@ calibration and the development VM exposes no invariant TSC). Suspend, resume an
 [filesystem mutations](interfaces/filesystem-mutations.md); saves persist on installed systems and last until reboot on live boots. The
 upstream parser trusts saves matching the loaded game data, with no malformed-file validation or separation by PWAD, and interrupted saves
 can leave temporary files for manual removal. Configuration persistence is disabled in the pinned generic engine; re-enabling it needs a
-writable configuration location and review of its parser and formatting. Floating printf now serves the upstream timedemo report, and
-wall-clock time is not a prerequisite.
+writable configuration location and review of its parser and formatting.
 
 ## Clang code generation and predefines
 

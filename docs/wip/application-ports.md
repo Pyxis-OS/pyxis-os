@@ -84,7 +84,8 @@ proposal for media-type aliases such as `json+http://` remains future work.
   separate slices.
 - **DevilutionX:** [implemented](../userland/devilutionx.md) as an opt-in,
   personal-use build: single player without sound or networking.
-- **Chocolate Duke3D:** a candidate once SDL2 exists.
+- **Chocolate Doom, Chocolate Quake and EDuke32:** proposed in the
+  [SDL game ports](sdl-game-ports.md) milestone.
 - **Peanut-GB:** a single-header Game Boy emulator; parked (owner, 2026-10-07).
   A native display/keyboard backend can come first, converted to SDL2 later; its
   SDL2 example frontend shows what a backend needs.

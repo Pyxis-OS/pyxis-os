@@ -105,10 +105,11 @@ Chosen by the owner, each starting with a proposal:
   still gates qualification. Clipboard terminal Copy +
   Paste merged in #619 / userland #180; its later SDL2, FILE and converter tasks
   remain unassigned.
-- **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
-  RAM staging (#610) and completed-frame handoff (#618) are merged.
-  Saved shell history (#609) and
-  xfer pipelining (#600) are merged; xfer's native runs follow its
+- **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
+  Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
+  (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),
+  saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
+  native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner

@@ -93,8 +93,11 @@ and host restrictions remain authoritative. Virtio-fs still requests 0644.
 See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
 
 `unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync`,
-`unlink`, `pread`, `pwrite`, `access` and `rmdir`, and defines STDIN_FILENO,
-STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `sys/types.h` defines ssize_t as
+`unlink`, `pread`, `pwrite`, `access`, `rmdir` and `isatty`, and defines
+STDIN_FILENO, STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `isatty` returns 1
+for a console stream, the startup binding to the space's terminal, and 0 with
+ENOTTY for files and pipes; `fstat` reports the same console as a character
+device. `sys/types.h` defines ssize_t as
 signed long on the LP64 target; `limits.h` defines SSIZE_MAX as LONG_MAX.
 
 Read/write check descriptor and access validity first (-1/EBADF), then reject
