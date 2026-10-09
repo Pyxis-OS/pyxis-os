@@ -1060,3 +1060,20 @@ and [technical debt](../technical-debt.md#system-pointer-selection-and-input-lim
 retain their consequences and revisit points. Local-only shareware data and game
 images were not republished for task 5. All task-owned QEMU/GDB processes are
 stopped. Final exact-head CI is reported on the task 5 PR; the owner merges it.
+
+
+### Review integration after network closure
+
+The cursor redraw was approved at `535fa5d5`. After `fj pr view 561` confirmed
+its merge, the task 5 branch was rebased onto main `50a47288`. The index retains
+both the completed network and pointer entries and words task 5 as closed in
+#562 so it remains accurate after merge. Main's network reference links and
+removal of its completed Assigned entry are preserved.
+
+Main also includes shell history (#563), so its published userland pin
+`fe6f3efb` is inherited; ports/fs/lwIP pins remain unchanged. The approved
+`kernel/pointer.c` and public ABI are identical to the previous review head.
+The captures and measurements above retain their original revision boundaries;
+this integration does not claim another native run or timing series. The before
+captures remain as historical visual evidence for that comparison. Link/diff
+checks passed; ordinary image and exact-head CI results are reported on #562.
