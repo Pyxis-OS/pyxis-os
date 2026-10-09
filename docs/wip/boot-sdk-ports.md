@@ -88,6 +88,12 @@ Chosen by the owner, each starting with a proposal:
   native playback remains unqualified. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
+- **Codex** (2026-10-09): [Native AMD/ALC257 audio task 5 proposal](hda-native.md).
+  Three route/jack/native-batch defaults await the owner; no code yet. Depends
+  on #557's delivered sessions/refill work with the accepted nested-QEMU limit.
+  The 2026-10-09 decision supersedes the earlier HDA QEMU-closure alternative:
+  milestone closure requires native eight-session playback. Fail-closed until
+  reboot stays accepted; native evidence decides whether reset recovery is needed.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
