@@ -32,6 +32,12 @@ applied: MPL's standard secondary-license provisions remain available.
   Their pinned source provenance, local changes and complete retained notices
   are in [kernel/random/NOTICE](kernel/random/NOTICE). The kernel bundle includes
   that notice, and images stage it at `boot://share/licenses/kernel-random/NOTICE`.
+- AX200 Bluetooth firmware is fetched unchanged through the pinned
+  [asset recipe](firmware/ax200/UPSTREAM.md). Intel's binary firmware terms
+  govern those assets; the boot archive stages the complete
+  `LICENCE.ibt_firmware`, WHENCE and provenance under
+  `boot://share/licenses/intel-bluetooth/`. The firmware is not MPL-licensed
+  kernel source and its binaries are not stored in this repository.
 - `tools/remote/vendor/sha256.c` and `tools/remote/sha256.h`: the imported
   SHA-256 implementation/interface is public domain; see its retained notice
   and [source provenance](tools/remote/vendor/UPSTREAM.md).

@@ -102,6 +102,9 @@ Chosen by the owner, each starting with a proposal:
   accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
   remain prerequisites. Task 2 runtime HCI transport is complete in #552, with
   [baseline and warm qualification](../development/experiments/bluetooth-runtime-hci/README.md).
+  Task 3 firmware readiness is complete 2026-10-09, with owner-reported native
+  cold upload/DDC readiness and warm skip in
+  [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564).
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
 - **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)

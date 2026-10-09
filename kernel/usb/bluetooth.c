@@ -85,7 +85,6 @@ enum usb_result usb_bluetooth_bind(struct usb_bluetooth_binding *binding,
       usb_host_async_bulk_capacity() < BLUETOOTH_HCI_ACL_MAX) {
     return USB_UNSUPPORTED;
   }
-  bluetooth_hci_candidate();
   enum usb_result result = usb_host_configure_interrupt_in(device,
       &binding->event, HCI_EVENT_BYTES, deadline);
   if (result == USB_OK) {

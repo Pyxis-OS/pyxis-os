@@ -12,16 +12,27 @@ distinguishes measured passthrough from source-reviewed behavior.
 Boot enumeration admits only checked AX200 `8087:0029` configuration 1,
 interface 0/alternate 0, with one interrupt-IN and two bulk endpoints matching
 the observed root/full-speed profile. Interrupt and asynchronous bulk reception
-start before initialization. Complete inventory must establish a single adapter.
+start before initialization. After final USB publication, initialization requires
+the AX200's hosting controller record to be COMPLETE, including inspection of
+its devices and descendants. Any incomplete inspection, exhausted budget,
+expired enumeration deadline or hardware failure there prevents readiness.
+Accepted 2026-10-09: unsupported or incomplete controllers elsewhere do not
+invalidate that hosting record; the global USB snapshot retains their states
+and may remain INCOMPLETE. Multiple identified AX200 candidates still make
+selection ambiguous, including candidates whose transport cannot be admitted.
 The owning BSP xHCI worker advances finite initialization transactions without
 waiting for HCI replies. Storage waits reach the same bounded progress point.
 
-Intel Read Version precedes Reset. Only the investigation's operational tuple
-is admitted for development; unknown/cold firmware is unavailable without an
-upload or speculative reset. Read Version after Reset must match. Local version,
-commands, LE features, buffer lengths and packet credits are checked before
-mandatory event masks and readiness. This warm profile is development evidence,
-not production firmware qualification. Cold firmware remains task 3.
+Intel Read Version precedes Reset. The investigation's operational tuple skips
+SFI upload for development. A matching cold bootloader instead enters the bounded
+pinned SFI upload and real boot-event flow; unknown firmware fails closed.
+Operational version is checked before and after Reset, and pinned DDC must
+complete successfully. Local version, commands, LE features, buffer lengths and
+packet credits are checked before mandatory event masks and readiness. The
+[task 3 record](../development/experiments/bluetooth-firmware-readiness/README.md)
+records passing image/warm checks and owner-reported native cold upload/DDC
+readiness and direct warm reboot/skip on 2026-10-09.
+Neither path establishes production firmware qualification.
 
 ## Authority and messages
 
@@ -47,8 +58,21 @@ logged. Applications are not supplied this privileged packet interface.
 
 ## Progress and failure
 
-Independent endpoint sequences and bounded framing detect discontinuity. A first
-ACL frame can precede its connection event across drains. Up to eight whole
+Independent endpoint sequences and bounded framing detect discontinuity. An
+owned IN completion with SUCCESS and a bounded nonzero residual is treated as a
+short transfer, copying only requested minus residual bytes. SHORT_PACKET and
+zero-length reception use the same retirement path. Ownership mismatch,
+oversized residual, STALL or other errors retain the existing terminal limits.
+One owned zero-byte bulk IN USB Transaction Error is admitted only during a
+published cold BOOT, at an empty/whole-frame bulk boundary. It ends bootloader
+bulk event framing and suspends IN rearm. Outside drain/class progress, the outer
+worker issues Reset Endpoint with transfer-state preservation, then Set TR
+Dequeue to the existing producer frontier/cycle. Both receive owners stay retained
+until both commands succeed. The original BOOT deadline bounds the fence; failed
+retirement or a second error still quarantines the controller. Fresh ACL receives
+are posted only after real interrupt boot notification and BOOT USB completion;
+BOOT cannot retire before that host fence/rearm. This is not retry of the failed
+TD or general runtime recovery. A first ACL frame can precede its connection event across drains. Up to eight whole
 frames are retained in endpoint order for at most five seconds from their first
 byte, then replayed only after connection admission in the captured session.
 Overflow, stale epoch/generation or unresolved expiry reports input loss; it does

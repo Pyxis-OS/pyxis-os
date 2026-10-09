@@ -2,6 +2,11 @@ return function(inputs)
   local entries = {
     { tree = inputs.userspace, at = "" },
     { tree = inputs.ports, at = "" },
+    { file = inputs.firmware .. "/intel/ibt-20-1-3.sfi", at = "share/firmware/intel/ibt-20-1-3.sfi" },
+    { file = inputs.firmware .. "/intel/ibt-20-1-3.ddc", at = "share/firmware/intel/ibt-20-1-3.ddc" },
+    { file = inputs.firmware .. "/LICENCE.ibt_firmware", at = "share/licenses/intel-bluetooth/LICENCE.ibt_firmware" },
+    { file = inputs.firmware .. "/WHENCE", at = "share/licenses/intel-bluetooth/WHENCE" },
+    { file = inputs.firmware .. "/PROVENANCE.json", at = "share/licenses/intel-bluetooth/PROVENANCE.json" },
     -- TCC compiles C only; the C++ headers stay out of the guest SDK.
     { tree = inputs.sdk .. "/sysroot/usr/include", at = "sdk/usr/include", exclude = { "c++" } },
     { tree = inputs.sdk .. "/share/licenses", at = "sdk/share/licenses" },

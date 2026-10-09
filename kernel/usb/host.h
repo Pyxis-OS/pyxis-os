@@ -97,7 +97,9 @@ void usb_host_notify(struct usb_host_controller *controller);
  * of the endpoint's packet size. No caller destination survives a call.
  * Wait expiry leaves receives posted. Rejected take preserves the queue head.
  * Terminal stream failure takes precedence over queued data and stops rearm;
- * posted/stalled DMA remains retained. There is no cancellation or recovery. */
+ * posted/stalled DMA remains retained. Owned SUCCESS or SHORT_PACKET with a
+ * bounded residual retires exactly requested minus residual bytes, including
+ * zero. There is no cancellation or recovery. */
 size_t usb_host_interrupt_capacity(void);
 enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
                                                 const struct usb_interrupt_endpoint *endpoint,
@@ -112,7 +114,10 @@ enum usb_result usb_host_interrupt_take(struct usb_host_device *device, void *de
  * ownership and terminal failures match interrupt IN. Idle receives never time
  * out. OUT captures bytes and owns an independent ticket until take; no wait or
  * cancellation is supplied. Active OUT expiry quarantines uncertain DMA. STALL
- * retains the OUT span and prevents later submission, without recovery. */
+ * retains the OUT span and prevents later submission, without recovery. The
+ * AX200's one expected zero-byte bootloader IN transaction error is retired by
+ * the outer worker's reset/dequeue fence; IN take stays BUSY until real BOOT
+ * confirmation permits fresh operational receives. Other errors are terminal. */
 size_t usb_host_async_bulk_capacity(void);
 enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
                                              const struct usb_bulk_endpoint *in,
@@ -121,6 +126,9 @@ enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
 enum usb_result usb_host_async_bulk_start(struct usb_host_device *device);
 enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *destination,
                                         size_t capacity, struct usb_interrupt_completion *completion);
+/* BSP/IF=0, no USB operation. A firmware boot boundary cannot retire until the
+ * expected bootloader IN halt is fenced and fresh operational receives posted. */
+bool usb_host_async_bulk_in_ready(const struct usb_host_device *device);
 enum usb_result usb_host_async_bulk_out_submit(struct usb_host_device *device, const void *bytes,
                                               size_t length, uint64_t deadline, struct usb_ticket *ticket);
 enum usb_result usb_host_async_bulk_out_take(struct usb_host_device *device, struct usb_ticket ticket,

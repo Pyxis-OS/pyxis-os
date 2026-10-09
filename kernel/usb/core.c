@@ -712,7 +712,7 @@ static void publish_inventory(void)
     .interface_count = interface_index,
   };
   atomic_store_explicit(&inventory.state, inventory.info.state, memory_order_release);
-  bluetooth_hci_inventory_sealed(inventory.info.state == SYSTEM_INFO_USB_COMPLETE);
+  bluetooth_hci_inventory_sealed();
 }
 
 static bool is_usb_controller(const struct pci_device *device)
@@ -1573,8 +1573,12 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
   }
   for (size_t index = 0; index < discovery->device_count; ++index) {
     struct usb_device_record *device = &discovery->devices[index];
-    if (device->present && !device->incomplete &&
-        usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id)) {
+    bool ax200 = device->present &&
+        usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id);
+    if (ax200) {
+      bluetooth_hci_candidate(discovery->host);
+    }
+    if (ax200 && !device->incomplete) {
       enum usb_result result = usb_bluetooth_bind(&device->bluetooth,
           discovery->host, device->host, deadline);
       if (result == USB_OK) {
@@ -1637,6 +1641,20 @@ static bool inventory_published(void)
 {
   uint64_t state = atomic_load_explicit(&inventory.state, memory_order_acquire);
   return state == SYSTEM_INFO_USB_COMPLETE || state == SYSTEM_INFO_USB_INCOMPLETE;
+}
+
+bool usb_inventory_host_complete(const struct usb_host_controller *host)
+{
+  if (!host || !inventory_published()) {
+    return false;
+  }
+  for (size_t i = 0; i < inventory.controller_count; ++i) {
+    const struct usb_controller_record *controller = &inventory.controllers[i];
+    if (controller->discovery && controller->discovery->host == host) {
+      return controller->info.state == SYSTEM_INFO_USB_CONTROLLER_COMPLETE;
+    }
+  }
+  return false;
 }
 
 void usb_inventory_read(struct system_info_usb *reply)

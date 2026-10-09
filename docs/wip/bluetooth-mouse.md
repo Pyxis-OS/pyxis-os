@@ -1,9 +1,9 @@
 # MX Master 3S on Pyxis
 
-Status: **tasks 1–2 complete; runtime warm validation recorded 2026-10-08.**
+Status: **tasks 1–3 complete; tasks 4–8 unassigned.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
-remain. Task 2 is complete; tasks 3–8 still need explicit owner assignment.
+remain. Tasks 4–8 still need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -87,6 +87,14 @@ physical addresses or DMA mappings. Kernel initialization finishes before handof
 service commands cannot race its firmware transaction. Numeric protocol/right
 declarations belong to review of later assigned implementation under these
 accepted ownership contracts; no placeholder ABI is proposed here.
+
+Accepted 2026-10-09 after the native cold batch: Bluetooth readiness requires
+complete enumeration of the xHCI controller hosting the AX200 and exactly one
+identified AX200 candidate. Unsupported controllers elsewhere remain in the
+global USB inventory without blocking that controller. Incomplete devices,
+descendants, budgets/deadlines or hardware failure on the hosting controller
+remain terminal. Candidate identity is counted before transport admission;
+multiple known AX200s remain ambiguous even if a transport cannot bind.
 
 Commands and ACL data need separate, bounded queues and the controller's real
 completion/credit events. A command timeout is not permission to associate a late
@@ -333,11 +341,13 @@ first and state merge order. Probe branches remain historical evidence.
   reception and matched storage/CPU checks are recorded; qualify real ACL traffic and storage coexistence with task 4's
   connection consumer. Do not block the xHCI worker for a 30-second userspace
   scan as the investigation probe did.
-- [ ] **3. Firmware readiness.** Choose/mirror/license the exact assets, implement
-  cold bootloader upload/DDC and real boot-event handling, then verify warm skip
-  and cold initialization. Address re-enumeration ownership only if required.
-  QEMU passthrough may remain warm; cold qualification needs owner-run native
-  evidence rather than forcing the controller into a guessed state.
+- [x] **3. Firmware readiness.** Complete 2026-10-09: pinned/mirrored/licensed
+  AX200 SFI/DDC, bounded cold upload and real boot-event retirement. Owner-reported
+  native cold upload/DDC READY and direct warm reboot/skip passed on main 6752bac
+  plus #564 at 8ae58f0f, default log level and production config.
+  [Evidence and limits](../development/experiments/bluetooth-firmware-readiness/README.md#native-confirmation-2026-10-09).
+  Production firmware compatibility still requires later encrypted bond/HID/input
+  evidence; task 4 is unassigned.
 - [ ] **4. LE connection and discovery.** Bounded authorized scan/selection,
   connection/disconnection, ACL/L2CAP framing and signaling, and minimal public
   ATT/GATT discovery. At the start, measure SMP Pairing Request/Response fields
@@ -386,7 +396,7 @@ lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
 prerequisite under the accepted policy, not a blind choice before cold evidence.
 
 New evidence that requires a policy change returns to the owner. Every
-implementation task needs an explicit assignment. Task 2 is complete; tasks 3–8
+implementation task needs an explicit assignment. Task 3 is assigned; tasks 4–8
 remain unassigned.
 
 With the direction decided, the completed investigation is now the
@@ -417,3 +427,9 @@ The connection/reconnect tasks must establish and qualify a safe reuse boundary
 before bonded reconnect is ready. This limit does not relax required durable
 reconnect or native closure. See the
 [revisit condition](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).
+
+Task 3 is complete: [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
+records the pinned assets, warm QEMU/storage/idle checks and owner-reported native
+cold upload/DDC readiness and warm skip on 2026-10-09. The
+[implementation/evidence record](../development/experiments/bluetooth-firmware-readiness/README.md)
+retains the inventory and BOOT transition fixes. Tasks 4–8 remain unassigned.

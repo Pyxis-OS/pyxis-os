@@ -7,6 +7,8 @@
 #include <kernel/object/bluetooth_hci.h>
 #include <kernel/panic.h>
 #include "settings.h"
+#include "firmware.h"
+#include "../usb/core.h"
 #include "../usb/host.h"
 
 #define HCI_COMMAND_HEADER 3
@@ -48,7 +50,6 @@
 #define HCI_OP_LE_EVENT_MASK 0x2001
 #define HCI_OP_LE_BUFFER_SIZE 0x2002
 #define HCI_OP_LE_FEATURES 0x2003
-#define HCI_OP_INTEL_VERSION 0xfc05
 #define HCI_OP_EVENT_FILTER 0x0c05
 #define HCI_OP_CONTROLLER_TO_HOST_FLOW 0x0c31
 #define HCI_OP_HOST_BUFFER_SIZE 0x0c33
@@ -61,11 +62,11 @@
 #define HCI_LE_FEATURE_CONNECTION_PARAMETERS (UINT64_C(1) << 1)
 #define HCI_LE_FEATURE_DATA_LENGTH (UINT64_C(1) << 5)
 #define HCI_LE_FEATURE_PRIVACY (UINT64_C(1) << 6)
-#define HCI_USB_COMMAND_REQUEST_TYPE 0x21
+#define HCI_USB_COMMAND_REQUEST_TYPE 0x20
 #define HCI_USB_COMMAND_REQUEST 0
 
 struct hci_command {
-  bool used, published, usb_done, hci_done, kernel;
+  bool used, published, usb_done, hci_done, kernel, bulk, boot;
   uint16_t opcode;
   uint64_t deadline, id;
   size_t length;
@@ -106,9 +107,7 @@ struct hci_stream {
 };
 
 enum hci_initialization {
-  HCI_INIT_VERSION_BEFORE,
-  HCI_INIT_RESET,
-  HCI_INIT_VERSION_AFTER,
+  HCI_INIT_FIRMWARE,
   HCI_INIT_LOCAL_VERSION,
   HCI_INIT_COMMANDS,
   HCI_INIT_FEATURES,
@@ -126,17 +125,21 @@ enum hci_initialization {
 static struct {
   struct usb_host_controller *host;
   struct usb_host_device *device;
-  uint8_t interface_number;
   unsigned attachments;
   bool sealed, complete, terminal, dirty, cleanup, progress_active;
   enum call_status failure;
   enum hci_initialization initialization;
+  const char *initialization_reason;
+  bool initialization_hci_rejected;
+  uint8_t initialization_hci_status;
   struct process *owner;
   uint64_t epoch_counter, epoch, receive_sequence, submission_counter, generation_counter;
   uint64_t features, le_features;
   uint32_t command_credits, acl_credits, acl_total, acl_packet_length;
   uint8_t supported_commands[64];
-  uint8_t version[10];
+  bool firmware_started;
+  bool boot_bulk_ended;
+  struct bluetooth_firmware firmware;
   struct hci_command commands[HCI_COMMAND_CAPACITY];
   struct hci_acl acl[HCI_ACL_CAPACITY];
   struct hci_connection connections[HCI_CONNECTION_CAPACITY];
@@ -146,7 +149,7 @@ static struct {
   size_t receive_head, receive_count;
   size_t deferred_head, deferred_count;
   size_t request_count;
-  struct hci_stream event_stream, acl_stream;
+  struct hci_stream event_stream, boot_event_stream, acl_stream;
   uint8_t chunk[BLUETOOTH_HCI_ACL_MAX];
   struct bluetooth_hci_request *head, *tail, *reader;
 } adapter;
@@ -173,13 +176,40 @@ static void complete_request(struct bluetooth_hci_request *request, enum call_st
   bsp_request_complete(&request->request);
 }
 
-static void fail_adapter(enum call_status result)
+static const char *initialization_phase(void)
+{
+  if (!adapter.sealed || !adapter.complete || adapter.attachments != 1) {
+    return "inventory";
+  }
+  switch (adapter.initialization) {
+  case HCI_INIT_FIRMWARE: return bluetooth_firmware_phase_name(&adapter.firmware);
+  case HCI_INIT_LOCAL_VERSION: return "local-version";
+  case HCI_INIT_COMMANDS: return "supported-commands";
+  case HCI_INIT_FEATURES: return "local-features";
+  case HCI_INIT_LE_FEATURES: return "LE-features";
+  case HCI_INIT_LE_BUFFER: return "LE-buffers";
+  case HCI_INIT_BR_BUFFER: return "shared-buffers";
+  case HCI_INIT_EVENT_MASK: return "event-mask";
+  case HCI_INIT_LE_EVENT_MASK: return "LE-event-mask";
+  case HCI_INIT_READY: return "runtime";
+  }
+  return "initialization";
+}
+
+static void fail_adapter_reason(enum call_status result, const char *reason)
+
 {
   if (!adapter.terminal) {
     adapter.terminal = true;
     adapter.failure = result;
     adapter.receive_head = adapter.receive_count = 0;
-    klog("Bluetooth HCI: unavailable (status %u); reboot required\n", (unsigned)result);
+    if (adapter.initialization_hci_rejected) {
+      klog("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
+          reason, initialization_phase(), adapter.initialization_hci_status);
+    } else {
+      klog("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
+          reason, initialization_phase(), (unsigned)result);
+    }
   }
   if (adapter.reader) {
     struct bluetooth_hci_request *reader = adapter.reader;
@@ -197,6 +227,20 @@ static void fail_adapter(enum call_status result)
     }
     complete_request(request, adapter.failure);
   }
+}
+
+static void fail_adapter(enum call_status result)
+{
+  const char *reason;
+  switch (result) {
+  case CALL_IO: reason = "USB or controller I/O failure"; break;
+  case CALL_INPUT_LOST: reason = "receive continuity lost"; break;
+  case CALL_TIMED_OUT: reason = "unpublished command deadline expired"; break;
+  case CALL_OUTCOME_UNKNOWN: reason = "published command outcome unknown"; break;
+  case CALL_LIMIT: reason = "sequence or clock limit exhausted"; break;
+  default: reason = "controller operation failed"; break;
+  }
+  fail_adapter_reason(result, reason);
 }
 
 static struct hci_connection *find_connection(uint16_t handle)
@@ -243,7 +287,7 @@ static void end_session(void)
   adapter.receive_sequence = 0;
   adapter.receive_head = adapter.receive_count = 0;
   if (adapter.dirty || !work_accounted()) {
-    fail_adapter(CALL_UNAVAILABLE);
+    fail_adapter_reason(CALL_UNAVAILABLE, "service cleanup unconfirmed");
   }
 }
 
@@ -493,7 +537,7 @@ void bluetooth_hci_request_forward(struct bluetooth_hci_request *request)
     complete_request(request, CALL_BAD_REQUEST);
     return;
   }
-  if (!adapter.host || adapter.terminal) {
+  if (!adapter.device || adapter.terminal) {
     complete_request(request, adapter.terminal ? adapter.failure : CALL_UNAVAILABLE);
     return;
   }
@@ -548,24 +592,17 @@ static size_t service_requests(size_t budget)
 
 static bool initialization_reply(const uint8_t *reply, size_t length)
 {
-  if (!length || reply[0]) {
+  adapter.initialization_reason = "invalid initialization reply";
+  if (!length) {
+    adapter.initialization_reason = "empty initialization reply";
+    return false;
+  }
+  if (reply[0]) {
+    adapter.initialization_reason = "controller rejected initialization command";
+    ktrace("Bluetooth HCI: initialization HCI status %u\n", reply[0]);
     return false;
   }
   switch (adapter.initialization) {
-  case HCI_INIT_VERSION_BEFORE:
-  case HCI_INIT_VERSION_AFTER: {
-    static const uint8_t warm_version[] = {0, 0x37, 0x14, 1, 0x23, 3, 193, 33, 24, 0};
-    if (length != sizeof(warm_version) || memcmp(reply, warm_version, sizeof(warm_version))) {
-      klog("Bluetooth HCI: running firmware outside development profile\n");
-      return false;
-    }
-    if (adapter.initialization == HCI_INIT_VERSION_BEFORE) {
-      memcpy(adapter.version, reply, sizeof(adapter.version));
-    } else if (memcmp(adapter.version, reply, sizeof(adapter.version))) {
-      return false;
-    }
-    break;
-  }
   case HCI_INIT_LOCAL_VERSION:
     if (length != 9 || reply[1] < 6 || read16(reply + 5) != 2) {
       return false;
@@ -607,7 +644,6 @@ static bool initialization_reply(const uint8_t *reply, size_t length)
     adapter.acl_packet_length = read16(reply + 1);
     adapter.acl_total = read16(reply + 4);
     break;
-  case HCI_INIT_RESET:
   case HCI_INIT_EVENT_MASK:
   case HCI_INIT_LE_EVENT_MASK:
     if (length != 1) {
@@ -629,28 +665,54 @@ static void advance_initialization(void)
   if (adapter.initialization == HCI_INIT_EVENT_MASK) {
     if (adapter.acl_packet_length < 27 ||
         adapter.acl_packet_length > BLUETOOTH_HCI_ACL_MAX - HCI_ACL_HEADER || !adapter.acl_total) {
-      fail_adapter(CALL_UNAVAILABLE);
+      fail_adapter_reason(CALL_UNAVAILABLE, "invalid controller ACL buffer limits");
       return;
     }
     adapter.acl_credits = adapter.acl_total;
   }
   if (adapter.initialization == HCI_INIT_READY) {
-    klog("Bluetooth HCI: AX200 USB ready (development firmware)\n");
-    ktrace("Bluetooth HCI: development firmware 193/33/2024, LE features %llx, ACL bytes %u credits %u\n",
-        (unsigned long long)adapter.le_features, adapter.acl_packet_length, adapter.acl_total);
+    klog("Bluetooth HCI: AX200 USB ready (%s, DDC, development firmware)\n",
+        adapter.firmware.cold ? "cold upload" : "warm skip");
+    ktrace("Bluetooth HCI: firmware %u/%u/%u, LE features %llx, ACL bytes %u credits %u\n",
+        adapter.firmware.version[6], adapter.firmware.version[7],
+        2000u + adapter.firmware.version[8], (unsigned long long)adapter.le_features,
+        adapter.acl_packet_length, adapter.acl_total);
   }
 }
 
-static void retire_command(struct hci_command *command)
+static void retire_command(struct hci_command *command, bool boot_boundary)
 {
-  if (!command->usb_done || !command->hci_done) {
+  if (!command->used || !command->usb_done || !command->hci_done) {
     return;
   }
-  bool kernel = command->kernel;
-  memzero_explicit(command, sizeof(*command));
-  if (kernel && !adapter.terminal) {
+  bool kernel = command->kernel, boot = command->boot;
+  if (boot && !boot_boundary) {
+    return;
+  }
+  if (boot && adapter.boot_bulk_ended && !usb_host_async_bulk_in_ready(adapter.device)) {
+    return;
+  }
+  if (kernel && adapter.initialization == HCI_INIT_FIRMWARE && !adapter.terminal) {
+    if (boot && (adapter.event_stream.used || adapter.boot_event_stream.used)) {
+      fail_adapter_reason(CALL_INPUT_LOST, "partial event at firmware boot boundary");
+      return;
+    }
+    if (!bluetooth_firmware_retired(&adapter.firmware, arch_monotonic_ns())) {
+      fail_adapter_reason(CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
+      return;
+    }
+    if (boot) {
+      /* The confirmed firmware restart begins a fresh HCI startup window.
+       * This is its initial allowance, not a synthesized completion event. */
+      adapter.command_credits = 1;
+      if (!adapter.boot_bulk_ended) {
+        adapter.acl_stream.sequence = adapter.boot_event_stream.sequence;
+      }
+    }
+  } else if (kernel && !adapter.terminal) {
     advance_initialization();
   }
+  memzero_explicit(command, sizeof(*command));
 }
 
 static bool command_event(const uint8_t *wire, size_t length, uint64_t *submission_id)
@@ -677,15 +739,35 @@ static bool command_event(const uint8_t *wire, size_t length, uint64_t *submissi
     return false;
   }
   if (command->kernel) {
-    if (!complete || !initialization_reply(wire + 5, length - 5)) {
-      fail_adapter(CALL_UNAVAILABLE);
+    adapter.initialization_hci_status = complete && length > 5 ? wire[5] :
+        complete ? 0 : wire[2];
+    adapter.initialization_hci_rejected = adapter.initialization_hci_status != 0;
+    if (!complete || command->boot) {
+      fail_adapter_reason(CALL_UNAVAILABLE, command->boot ?
+          "unexpected completion for soft boot" : "initialization returned Command Status");
       return true;
+    }
+    bool previous_boot_events = adapter.firmware.bulk_events;
+    bool valid = adapter.initialization == HCI_INIT_FIRMWARE ?
+        bluetooth_firmware_reply(&adapter.firmware, opcode, wire + 5, length - 5,
+            arch_monotonic_ns()) : initialization_reply(wire + 5, length - 5);
+    if (!valid) {
+      fail_adapter_reason(CALL_UNAVAILABLE, adapter.initialization == HCI_INIT_FIRMWARE ?
+          bluetooth_firmware_reason(&adapter.firmware) : adapter.initialization_reason);
+      return true;
+    }
+    if (!previous_boot_events && adapter.firmware.bulk_events) {
+      if (adapter.acl_stream.used) {
+        fail_adapter_reason(CALL_INPUT_LOST, "partial bulk frame entering bootloader mode");
+        return true;
+      }
+      adapter.boot_event_stream.sequence = adapter.acl_stream.sequence;
     }
   } else {
     *submission_id = command->id;
   }
   command->hci_done = true;
-  retire_command(command);
+  retire_command(command, false);
   return true;
 }
 
@@ -930,8 +1012,25 @@ static void flush_deferred_acl(void)
   }
 }
 
-static void receive_event(const uint8_t *wire, size_t length)
+static void receive_event(const uint8_t *wire, size_t length, bool interrupt)
 {
+  if (adapter.firmware_started) {
+    bool previously_boot_notified = adapter.firmware.boot_notified;
+    if (!bluetooth_firmware_notify(&adapter.firmware, wire, length, arch_monotonic_ns())) {
+      fail_adapter_reason(adapter.initialization == HCI_INIT_READY ? CALL_INPUT_LOST :
+          CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
+      return;
+    }
+    if (!previously_boot_notified && adapter.firmware.boot_notified && !interrupt) {
+      fail_adapter_reason(CALL_INPUT_LOST, "boot notification arrived on bootloader bulk IN");
+      return;
+    }
+    struct hci_command *command = &adapter.commands[0];
+    if (adapter.initialization == HCI_INIT_FIRMWARE && command->used && command->kernel && command->boot && command->published &&
+        adapter.firmware.boot_notified) {
+      command->hci_done = true;
+    }
+  }
   uint64_t generation = 0, submission_id = 0;
   bool valid = true;
   if (!wire[0]) {
@@ -1046,7 +1145,7 @@ static void consume_chunk(struct hci_stream *stream, bool acl,
       if (acl) {
         receive_acl(stream->wire, stream->used, stream->generation, stream->epoch, stream->deadline);
       } else {
-        receive_event(stream->wire, stream->used);
+        receive_event(stream->wire, stream->used, stream == &adapter.event_stream);
       }
       stream->used = stream->expected = 0;
       stream->generation = stream->epoch = stream->deadline = 0;
@@ -1078,6 +1177,13 @@ static void check_deadlines(void)
 {
   if (adapter.terminal) {
     return;
+  }
+  if (adapter.initialization == HCI_INIT_FIRMWARE && adapter.firmware_started) {
+    bluetooth_firmware_tick(&adapter.firmware, arch_monotonic_ns());
+    if (adapter.firmware.phase == BLUETOOTH_FIRMWARE_FAILED) {
+      fail_adapter_reason(CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
+      return;
+    }
   }
   uint64_t now = arch_monotonic_ns();
   if ((adapter.acl_stream.used && adapter.acl_stream.deadline <= now) ||
@@ -1115,14 +1221,23 @@ static void collect_usb_commands(void)
       continue;
     }
     struct usb_completion completion;
-    enum usb_result result = usb_host_control_take(adapter.device, ticket, NULL, 0, &completion);
+    enum usb_result result = command->bulk ?
+        usb_host_async_bulk_out_take(adapter.device, ticket, &completion) :
+        usb_host_control_take(adapter.device, ticket, NULL, 0, &completion);
     flags = cpu_save_interrupts();
     if (result == USB_OK) {
       command->usb_done = true;
+      if (command->kernel && command->boot) {
+        ktrace("Bluetooth HCI: BOOT USB collected, ticket %llu result %u bytes %zu "
+            "expected %zu hci-done %u notification %u\n",
+            (unsigned long long)ticket.generation, (unsigned)completion.result,
+            completion.bytes, command->length, command->hci_done,
+            adapter.firmware.boot_notified);
+      }
       if (completion.result != USB_OK || completion.bytes != command->length) {
         fail_adapter(usb_failure(completion.result, true));
       }
-      retire_command(command);
+      retire_command(command, false);
     } else if (result != USB_BUSY) {
       fail_adapter(usb_failure(result, true));
     }
@@ -1165,6 +1280,7 @@ static void collect_receives(void)
 {
   collect_usb_commands();
   collect_usb_acl();
+  bool idle[2] = {false};
   for (unsigned stream_index = 0; stream_index < 2; ++stream_index) {
     for (unsigned i = 0; i < HCI_RECEIVE_PROGRESS_BUDGET; ++i) {
       struct usb_interrupt_completion completion;
@@ -1172,6 +1288,7 @@ static void collect_receives(void)
           usb_host_async_bulk_take(adapter.device, adapter.chunk, sizeof(adapter.chunk), &completion) :
           usb_host_interrupt_take(adapter.device, adapter.chunk, sizeof(adapter.chunk), &completion);
       if (result == USB_BUSY) {
+        idle[stream_index] = true;
         break;
       }
       uint64_t flags = cpu_save_interrupts();
@@ -1180,8 +1297,10 @@ static void collect_receives(void)
         cpu_restore_interrupts(flags);
         break;
       }
-      consume_chunk(stream_index ? &adapter.acl_stream : &adapter.event_stream,
-          stream_index != 0, &completion);
+      /* Framing is fixed for this entire copied USB completion. */
+      bool boot_events = stream_index && adapter.firmware.bulk_events;
+      consume_chunk(stream_index ? (boot_events ? &adapter.boot_event_stream : &adapter.acl_stream) :
+          &adapter.event_stream, stream_index && !boot_events, &completion);
       cpu_restore_interrupts(flags);
     }
     if (!stream_index) {
@@ -1189,6 +1308,11 @@ static void collect_receives(void)
       flush_deferred_acl();
       cpu_restore_interrupts(flags);
     }
+  }
+  if (idle[0] && idle[1]) {
+    uint64_t flags = cpu_save_interrupts();
+    retire_command(&adapter.commands[0], true);
+    cpu_restore_interrupts(flags);
   }
 }
 
@@ -1203,15 +1327,31 @@ static void prepare_initialization(void)
       return;
     }
   }
+  if (adapter.initialization == HCI_INIT_FIRMWARE) {
+    if (!adapter.firmware_started) {
+      bluetooth_firmware_init(&adapter.firmware, arch_monotonic_ns());
+      adapter.firmware_started = true;
+    }
+    struct bluetooth_firmware_command operation;
+    struct hci_command *command = &adapter.commands[0];
+    enum bluetooth_firmware_progress progress = bluetooth_firmware_prepare(&adapter.firmware,
+        command->wire, &operation, arch_monotonic_ns());
+    if (progress == BLUETOOTH_FIRMWARE_ERROR) {
+      fail_adapter_reason(CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
+    } else if (progress == BLUETOOTH_FIRMWARE_DONE) {
+      adapter.initialization = HCI_INIT_LOCAL_VERSION;
+    } else if (progress == BLUETOOTH_FIRMWARE_COMMAND) {
+      command->used = command->kernel = true;
+      command->opcode = read16(command->wire);
+      command->length = operation.length;
+      command->deadline = operation.deadline;
+      command->bulk = operation.route == BLUETOOTH_FIRMWARE_BULK;
+      command->boot = operation.completion == BLUETOOTH_FIRMWARE_BOOT_NOTIFICATION;
+    }
+    return;
+  }
   uint16_t opcode = 0;
   switch (adapter.initialization) {
-  case HCI_INIT_VERSION_BEFORE:
-  case HCI_INIT_VERSION_AFTER:
-    opcode = HCI_OP_INTEL_VERSION;
-    break;
-  case HCI_INIT_RESET:
-    opcode = HCI_OP_RESET;
-    break;
   case HCI_INIT_LOCAL_VERSION:
     opcode = HCI_OP_LOCAL_VERSION;
     break;
@@ -1310,15 +1450,28 @@ static void publish_command(void)
   --adapter.command_credits;
   struct usb_setup setup = {
     .request_type = HCI_USB_COMMAND_REQUEST_TYPE, .request = HCI_USB_COMMAND_REQUEST,
-    .index = adapter.interface_number, .length = selected->length,
+    .length = selected->length,
   };
   cpu_restore_interrupts(flags);
   struct usb_ticket ticket;
-  enum usb_result result = usb_host_control_submit(adapter.device, &setup, selected->wire,
-      selected->deadline, &ticket);
+  enum usb_result result = selected->bulk ?
+      usb_host_async_bulk_out_submit(adapter.device, selected->wire, selected->length,
+          selected->deadline, &ticket) :
+      usb_host_control_submit(adapter.device, &setup, selected->wire, selected->deadline, &ticket);
   flags = cpu_save_interrupts();
   if (result == USB_OK) {
     selected->ticket = ticket;
+    if (selected->kernel && adapter.initialization == HCI_INIT_FIRMWARE &&
+        !bluetooth_firmware_published(&adapter.firmware, arch_monotonic_ns())) {
+      fail_adapter_reason(CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
+    }
+    if (selected->kernel && selected->boot) {
+      ktrace("Bluetooth HCI: BOOT published, opcode %x route %s ticket %llu "
+          "usb-done %u hci-done %u notification %u\n",
+          selected->opcode, selected->bulk ? "bulk" : "control",
+          (unsigned long long)ticket.generation, selected->usb_done, selected->hci_done,
+          adapter.firmware.boot_notified);
+    }
     if (!selected->kernel && !read_only_command(selected->opcode)) {
       adapter.dirty = true;
     }
@@ -1426,14 +1579,57 @@ void bluetooth_hci_drain_progress(struct usb_host_controller *host)
   work_tick(host);
 }
 
-void bluetooth_hci_candidate(void)
+bool bluetooth_hci_boot_bulk_end(struct usb_host_device *device)
 {
   KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  const struct hci_command *command = &adapter.commands[0];
+  bool expected = device == adapter.device && !adapter.terminal && !adapter.boot_bulk_ended &&
+      adapter.initialization == HCI_INIT_FIRMWARE && adapter.firmware.cold &&
+      adapter.firmware.phase == BLUETOOTH_FIRMWARE_BOOT && adapter.firmware.bulk_events &&
+      adapter.firmware.pending && adapter.firmware.published &&
+      command->used && command->kernel && command->boot && command->published &&
+      command->ticket.generation && !adapter.boot_event_stream.used &&
+      command->deadline > arch_monotonic_ns();
+  if (expected) {
+    adapter.boot_bulk_ended = true;
+    adapter.firmware.bulk_events = false;
+    adapter.acl_stream.sequence = adapter.boot_event_stream.sequence;
+    ktrace("Bluetooth HCI: BOOT bulk event path ended; waiting for interrupt notification\n");
+  }
+  cpu_restore_interrupts(flags);
+  return expected;
+}
+
+bool bluetooth_hci_boot_bulk_recovery(struct usb_host_device *device,
+    uint64_t *deadline, bool *resume)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  const struct hci_command *command = &adapter.commands[0];
+  bool allowed = device == adapter.device && !adapter.terminal && adapter.boot_bulk_ended &&
+      adapter.initialization == HCI_INIT_FIRMWARE &&
+      adapter.firmware.phase == BLUETOOTH_FIRMWARE_BOOT && adapter.firmware.published &&
+      command->used && command->boot && command->published && command->ticket.generation;
+  if (allowed) {
+    *deadline = command->deadline;
+    *resume = command->usb_done && command->hci_done && adapter.firmware.boot_notified &&
+        !adapter.event_stream.used && !adapter.boot_event_stream.used;
+  }
+  cpu_restore_interrupts(flags);
+  return allowed;
+}
+
+void bluetooth_hci_candidate(struct usb_host_controller *host)
+{
+  KASSERT(arch_cpu_index() == 0 && host);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   ++adapter.attachments;
   if (adapter.attachments != 1 || adapter.sealed) {
-    fail_adapter(CALL_UNAVAILABLE);
+    fail_adapter_reason(CALL_UNAVAILABLE, "multiple or late AX200 candidates");
+  } else {
+    adapter.host = host;
   }
   cpu_restore_interrupts(flags);
 }
@@ -1444,25 +1640,26 @@ void bluetooth_hci_attach(struct usb_host_controller *host,
   KASSERT(arch_cpu_index() == 0 && host && device);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  if (adapter.attachments != 1 || adapter.host || adapter.sealed) {
-    fail_adapter(CALL_UNAVAILABLE);
+  if (interface_number || adapter.attachments != 1 || adapter.host != host ||
+      adapter.device || adapter.sealed) {
+    fail_adapter_reason(CALL_UNAVAILABLE, "invalid AX200 attachment");
   } else {
-    adapter.host = host;
     adapter.device = device;
-    adapter.interface_number = interface_number;
     adapter.command_credits = 1; /* Initial HCI command allowance before replies. */
   }
   cpu_restore_interrupts(flags);
 }
 
-void bluetooth_hci_inventory_sealed(bool complete)
+void bluetooth_hci_inventory_sealed(void)
 {
   KASSERT(arch_cpu_index() == 0 && !adapter.sealed);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   adapter.sealed = true;
-  adapter.complete = complete;
-  if (!complete || adapter.attachments > 1) {
-    fail_adapter(CALL_UNAVAILABLE);
+  adapter.complete = usb_inventory_host_complete(adapter.host);
+  if (adapter.attachments && !adapter.complete) {
+    fail_adapter_reason(CALL_UNAVAILABLE, "AX200 hosting controller inventory incomplete");
+  } else if (adapter.attachments > 1) {
+    fail_adapter_reason(CALL_UNAVAILABLE, "multiple AX200 candidates");
   }
   if (adapter.host) {
     usb_host_notify(adapter.host);
@@ -1474,6 +1671,14 @@ void bluetooth_hci_transport_failed(struct usb_host_controller *host)
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
   if (adapter.host == host) {
+    if (!adapter.terminal) {
+      const struct hci_command *command = &adapter.commands[0];
+      ktrace("Bluetooth HCI: transport failed, phase %s boot %u published %u "
+          "usb-done %u hci-done %u notification %u partial interrupt/bulk %zu/%zu\n",
+          initialization_phase(), command->boot, command->published, command->usb_done,
+          command->hci_done, adapter.firmware.boot_notified, adapter.event_stream.used,
+          adapter.boot_event_stream.used);
+    }
     fail_adapter(CALL_IO);
   }
   cpu_restore_interrupts(flags);
