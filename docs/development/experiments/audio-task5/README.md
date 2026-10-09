@@ -48,13 +48,52 @@ SDL/QEMU/debugger session was present on the shared host. Repeated windows and
 elapsed presenter ranges include nested-host variation and do not prove native
 performance or a stable change. Owned baseline QEMU/GDB were stopped afterward.
 
-## Implementation and remaining checks
+## Matched implementation observations (2026-10-09)
 
-Controller identification/coherence and stopped-start codec selection are being
-implemented on `audio/native-amd`. Native FIFO/commit guard and D3+BME handoff
-choices were presented to the owner before applying them; their decisions must
-be recorded with implementation. Public ABI, eight-session capacity, DMA/session
-queues, write limits, live-jack deferral and reboot-only fault recovery stay as
-accepted. Repeat matched parked QEMU observations and ordinary playback checks
-after integration. Actual AMD cold-init/speaker/headphone and one/eight-session
-results belong to the owner's native batch, not a QEMU inference.
+The compared kernel is clean revision `3fd540fb` on `audio/native-amd`, before
+integrating later main changes. `make -j16 image PREBUILT="sdk userspace ports"`
+passed with the existing verified bundles. Public ABI and pins/configuration
+are unchanged; initrd is byte-identical to the baseline. Source inspection
+confirms QEMU's existing 8192-byte/1 ms guard path is retained.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| ELF | `7969a159dce3eee6a3bb5bd09b2b0e635bcce5613dc33f505b6c498a92253824` |
+| ISO | `d5426eb521c41fd52ec86bfeb7ab9370892927992b14023de07438784469fc31` |
+
+Same QEMU/device/CPU/display configuration and no playback during idle windows:
+
+| Implementation window | Elapsed s | BSP guest % | BSP host-thread total % | Whole QEMU % |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 15.000412 | 5.27 | 10.33 | 20.07 |
+| 2 | 15.000391 | 5.20 | 10.00 | 19.53 |
+
+Eight separate manual presenter observations: **median 1.57997 ms**, range
+**1.45517–1.82723 ms**. Tick samples: 145517, 157556, 151908, 161697,
+158438, 182723, 149903, 160940. The worker was parked with zero refill/IRQ work,
+22 commands/responses and stream/rings stopped. A different unrelated QEMU/GDB
+workload was present on the shared host. A repeat of the baseline image follows
+to distinguish current host conditions from these higher elapsed samples.
+
+Manual `pcm 1000 500 5` and
+`pcm --pause-ms 250 --repeat 2 --gap-ms 150 1000 500 2` completed successfully.
+Before release, starvation was 2 for the uninterrupted producer and 4 per paused
+repeat; discontinuity stayed zero and state stayed READY. WAV analysis found
+**432,000 PCM frames with zero content mismatches** against the producer's
+triangle waves after removing deliberate/underrun silence. This verifies PCM
+content, not continuous audible timing or physical sound. After all producers
+completed, debugger inspection showed five starts/stops, 970 refills,
+max commit 502,530 ns, no failure, command/stream DMA parked and all session
+slots released. No debugger halted active playback.
+
+## Native implementation and remaining checks
+
+Controller matching/snoop constraints, ALC257 shared-DAC output selection and
+the FIFO-derived 20 ms native guard are implemented. The owner accepted that
+guard and keeping D3+BME refused on **2026-10-09**; no handoff helper is added.
+Boot power/COMMAND/PME/NoSoftRst are recorded through ktrace, with specific
+unavailable reasons. Public ABI, eight-session capacity, DMA/session queues,
+write limits, live-jack deferral and reboot-only fault recovery stay accepted.
+Actual AMD boot state, coherence, cold-init/speaker/headphone and one/eight-session
+results belong to the [owner's native batch](../../../wip/hda-native.md#owner-run-native-batch-after-implementation-acceptance),
+not a QEMU inference. Native eight-session qualification remains open.
