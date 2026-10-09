@@ -771,6 +771,9 @@ static enum pci_selection select_controller(size_t *selected, enum hda_model *mo
 
 static void trace_native_pcie(const struct hda_controller *controller)
 {
+  if (!KLOG_TRACE_ENABLED) {
+    return;
+  }
   const struct pci_claim *claim = &controller->claim;
   for (unsigned i = 0; i < claim->capability_count; ++i) {
     unsigned offset = claim->capabilities[i];

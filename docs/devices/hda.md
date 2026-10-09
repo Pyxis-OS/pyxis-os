@@ -40,6 +40,22 @@ still prevents reservation. No licensed vendor fixup or speculative GPIO/codec
 coefficient write is included; coherence and cold initialization need native
 evidence. See the [accepted native plan](../wip/hda-native.md).
 
+The owner's **2026-10-09** cold boot reached GCAP `4401`/HDA 1.0 with
+COMMAND `0` and PMCSR `8` (D0, NoSoftRst, PME off). The D3+BME refusal was
+not hit; native preparation failed the `0x42` snoop readback before driver DMA.
+Ktrace now records that byte before/requested/after and bounded PCIe Device
+Control/NoSnoop observations. The gate remains fail-closed.
+
+Pinned [Linux's 15e3 entry and ATI capability](https://github.com/torvalds/linux/blob/adc218676eef25575469234709c2d87185ca223a/sound/pci/hda/hda_intel.c#L2570)
+select the same write, but its helper never checks readback. AMD's public
+[Renoir PPR 55922 rev. 3.06](https://docs.amd.com/v/u/en-US/55922-A1-PUB_3.06),
+Table 13, identifies this controller without defining `0x42`. The older
+[SP5100 guide, p. 252](https://www.amd.com/content/dam/amd/en/documents/archived-tech-docs/programmer-references/44413.pdf#page=252)
+defines a snoop control there; that is not a Renoir register contract. No
+read-only-bit explanation, unsupported-register bypass or replacement coherence
+policy is established by the current evidence. The proposed PCIe NoSnoop policy
+requires an owner decision in #578 before implementation.
+
 The [worker](../../kernel/audio/audio.c) alone releases reset, initializes command
 transport and reads the codec graph. Runtime helpers assert the owning worker
 and IF enabled; PCI command writes and explicit observation/mix/RUN commits use
