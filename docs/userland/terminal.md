@@ -65,9 +65,10 @@ for the initial byte and allows 100 ms between escape-sequence bytes. Standalone
 Escape returns byte 27; incomplete or unsupported sequences return
 `TERM_KEY_UNKNOWN`. Other bytes retain their values, while navigation uses the
 named `TERM_KEY_*` values. These are logical terminal keys, not physical events.
-The line editor ignores Escape, Up/Down and Page Up/Down.
-Tab and non-ASCII input are ignored; Unicode widths and history remain later
-work. `CALL_INPUT_LOST` abandons the
+The line editor ignores Escape and Page Up/Down. With a caller-owned
+`struct term_history`, `term_read_line_history` and `term_read_line_marked`
+recall submitted lines with Up/Down; other entry points ignore them.
+Tab and non-ASCII input are ignored; Unicode widths remain later work. `CALL_INPUT_LOST` abandons the
 line and returns a distinct result, so the caller can explain the loss and retry.
 On an output failure, the screen/cursor may be partially updated and must not be
 assumed to match the discarded line.
@@ -171,8 +172,8 @@ into readiness or query SIZE again.
 The shell uses the helper for command input, then stops reading while a child
 runs. It retries after cancellation or input loss and rejects submitted lines
 that reached the editor limit. The native entry points and result contract live
-beside the declarations in `term.h`; no global terminal, stdio stream or shell history
-is hidden inside libterm.
+beside the declarations in `term.h`; no global terminal or stdio stream is hidden
+inside libterm, and the shell owns its history.
 
 ## Bounded console reads
 

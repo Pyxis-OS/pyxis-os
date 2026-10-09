@@ -66,8 +66,15 @@ line does nothing. Ctrl+C at the prompt cancels the current line; while a
 foreground command runs it [interrupts the command](#interrupting-foreground-commands). Input
 loss discards the line; a submitted line that hit the editor's buffer/display
 limit is also rejected. The command buffer has room for 1023 bytes plus NUL;
-libterm's visible-area limit may be smaller. History and scrolling input beyond
-that visible area remain deferred.
+libterm's visible-area limit may be smaller.
+
+Up and Down recall earlier lines into the editor, where they can be edited
+before Enter runs them; Down past the newest line brings back what was being
+typed. Each interactive shell keeps its own last 100 submitted lines in memory,
+leaving out empty and all-space lines and a repeat of the line before. Local
+spaces, remote sessions and mux panes therefore have separate histories, and a
+`--no-echo` shell keeps none. History is lost when the shell exits; saving it
+and searching it with Ctrl+R are [deferred](../technical-debt.md#initial-terminal-editor).
 
 There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
 argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
