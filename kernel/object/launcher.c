@@ -14,6 +14,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
+#include <kernel/user/launch.h>
 #include <kernel/user_memory.h>
 
 #include "launcher_internal.h"
@@ -481,6 +482,10 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     struct launch_capture **result)
 {
   *result = NULL;
+  size_t initial_stack_bytes;
+  if (user_initial_stack_size(request->initial_stack_bytes, &initial_stack_bytes) != MM_OK) {
+    return CALL_BAD_REQUEST;
+  }
   struct kernel_object *image;
   uint64_t image_rights;
   enum capability_result lookup = capability_resolve(&process_current()->capabilities,
@@ -496,6 +501,7 @@ enum call_status launcher_capture_request(const struct launch_request *request,
   if (!capture) {
     return CALL_NO_MEMORY;
   }
+  capture->initial_stack_bytes = initial_stack_bytes;
   if (task_stop_requested()) {
     discard_launch_capture(capture);
     return CALL_ENDPOINT_CLOSED;

@@ -152,16 +152,17 @@ owner's `mirrors/SDL` mirror as a static library with a native backend:
 - the clock;
 - paths: `SDL_GetPrefPath` gives `home://APP/`.
 
-SDL draws into its own surface and presents by copying updated rectangles into
-the display mapping. Text input uses the SDK's shared US layout. Threads, audio
+SDL draws into its own surface and presents by copying the whole surface into
+a held display slot and submitting it. Text input uses the SDK's shared US layout. Threads, audio
 devices and the other facilities Pyxis lacks are left out and report
 themselves as unsupported. The [SDL2 reference](sdl2.md) has the
 decisions and measurements.
 
 `build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
 port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
-base and guest SDK. Its only consumer, [DevilutionX](../userland/devilutionx.md),
-is an opt-in build, so ordinary images contain nothing of SDL2.
+base and guest SDK. [Chocolate Doom](../userland/chocolate-doom.md) links it
+into ordinary images, with SDL2's licence beside its own;
+[DevilutionX](../userland/devilutionx.md) is an opt-in consumer.
 
 ## TLS development libraries
 

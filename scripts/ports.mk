@@ -62,6 +62,11 @@ MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls
                            ports/mbedtls/*.cmake ports/mbedtls/Makefile \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
 
+CHOCOLATE_DOOM_INPUTS := $(wildcard ports/chocolate-doom/*.lua ports/chocolate-doom/Makefile \
+                                   ports/chocolate-doom/PORT-NOTICE \
+                                   ports/chocolate-doom/patches/*.patch) \
+                         ports/ports.lua ports/build.lua
+
 # DevilutionX is built only when DIABLO_DATA asks for it; see its PORT-NOTICE.
 DEVILUTIONX_INPUTS := $(wildcard ports/devilutionx/*.lua ports/devilutionx/Makefile \
                                 ports/devilutionx/PORT-NOTICE ports/devilutionx/patches/*.patch) \
@@ -87,12 +92,13 @@ FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
 MBEDTLS_OUTPUTS := $(call port_outputs,mbedtls)
 DEVILUTIONX_OUTPUTS := $(call port_outputs,devilutionx)
+CHOCOLATE_DOOM_OUTPUTS := $(call port_outputs,chocolate-doom)
 
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
-     $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
+     $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS)
 ifneq ($(DIABLO_DATA),)
 all: $(DEVILUTIONX_OUTPUTS)
 endif
@@ -192,6 +198,11 @@ $(DEVILUTIONX_OUTPUTS) &: $(DEVILUTIONX_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) $(
 	$(LUA) ports/build.lua devilutionx --sdk $(abspath build/sdk) --work $(abspath build/ports/devilutionx) \
 	  --zlib $(abspath build/ports/zlib/stage/dev) --libpng $(abspath build/ports/libpng/stage/dev) \
 	  --fmt $(abspath build/ports/fmt/stage/dev) --sdl2 $(abspath build/ports/sdl2/stage/dev)
+
+$(CHOCOLATE_DOOM_OUTPUTS) &: $(CHOCOLATE_DOOM_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/chocolate-doom
+	$(LUA) ports/build.lua chocolate-doom --sdk $(abspath build/sdk) \
+	  --work $(abspath build/ports/chocolate-doom) --sdl2 $(abspath build/ports/sdl2/stage/dev)
 
 $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mbedtls

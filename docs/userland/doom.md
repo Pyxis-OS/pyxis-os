@@ -33,10 +33,13 @@ doom
 doom -warp 1 1
 doom -playdemo boot://share/doom/e1m1sec.lmp
 doom -playdemo boot://share/doom/e1m2sec.lmp
+doom -timedemo demo1
 ```
 
 Use `-iwad path` to select another accessible WAD. Demo playback returns to the
 shell at its end. The two local demos identify version 109 (Doom 1.9).
+`-timedemo` plays a demo, here the IWAD's own `demo1`, as fast as possible and
+exits with upstream's report on stderr: `timed N gametics in M realtics (F fps)`.
 
 ## Controls and resources
 
@@ -102,9 +105,9 @@ native removal/replacement semantics.
 
 ## Boundaries
 
-This is single-player keyboard gameplay, save/load and demo playback. No audio,
-networking, mouse, configuration persistence, demo recording or timedemo
-reporting. Recording, timedemo and alternate pixel-format/scaling options are
+This is single-player keyboard gameplay, save/load, demo playback and
+timedemo. No audio, networking, mouse, configuration persistence or demo
+recording. Recording and alternate pixel-format/scaling options are
 rejected. See the ports recipe's README for source pin, patch scope and build
-details. Configuration and timedemo remain in
+details. Configuration remains in
 [technical debt](../technical-debt.md#doom-configuration-and-save-format-limits).

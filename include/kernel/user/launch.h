@@ -8,12 +8,18 @@ struct process;
 struct mount_config;
 struct space;
 
+/* Pure admission: zero selects the default; explicit sizes obey launcher ABI
+ * bounds and page alignment. Clears SIZE on failure. No allocation or VM work. */
+enum mm_result user_initial_stack_size(uint64_t requested, size_t *size);
+
 /* BSP, IF=0. Stable kernel image bytes; creates an owned, inactive process and
- * its fixed, eagerly backed initial stack with a reserved unmapped lower guard.
+ * its eagerly backed initial stack with a reserved unmapped lower guard.
+ * INITIAL_STACK_BYTES uses the same admission as user_initial_stack_size.
  * Returns the actual stack top; no growth, startup/grants or task submission.
  * Clears outputs and unwinds on failure. Shared by boot and ordinary launch. */
 enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
-    struct process **process, uintptr_t *entry, uintptr_t *stack_top);
+    uint64_t initial_stack_bytes, struct process **process, uintptr_t *entry,
+    uintptr_t *stack_top);
 
 /* BSP, IF=0, before scheduler startup. Enables requested UDP logging and
  * starts boot init using the previously parsed boot options. */

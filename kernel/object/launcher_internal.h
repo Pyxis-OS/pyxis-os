@@ -27,6 +27,7 @@ struct launch_capture {
   struct process_startup startup;
   struct launch_grant *grants;
   size_t grant_count;
+  size_t initial_stack_bytes; /* Validated, with the default resolved. */
   struct file_object *image;
   /* HOST/native backing only: owned stable bytes, freed with capture on the BSP. */
   void *external_image;
