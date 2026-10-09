@@ -413,7 +413,7 @@ void pointer_handle_input(const struct pointer_input_report *event)
   consumed_buttons &= device_buttons;
   pressed &= ~consumed_buttons;
   if (volume_ui_pointer_input(position_x, position_y, event->wheel,
-      device_buttons & ~event->suppressed_buttons, pressed, drag.space != NULL)) {
+      device_buttons, pressed, drag.space != NULL)) {
     consumed_buttons |= pressed;
     update_hover((struct pointer_destination){0});
     return;

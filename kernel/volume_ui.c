@@ -31,6 +31,7 @@ struct popup_layout {
 static struct volume_ui_layout frame_layout, drawn_layout;
 static struct popup_layout frame_popup, drawn_popup;
 static bool drawn_valid, open, focused, dragging;
+static bool canceled_drag;
 static uint64_t cancel_generation, frame_cancel_generation;
 static struct space *target, *focus_space;
 static uint32_t popup_pixels[POPUP_WIDTH * POPUP_HEIGHT];
@@ -118,6 +119,7 @@ static void set_focus(bool next)
 void volume_ui_cancel(void)
 {
   ++cancel_generation;
+  canceled_drag |= dragging;
   set_focus(false);
   open = dragging = false;
   drawn_popup.shown = false;
@@ -167,6 +169,14 @@ static void track_level(const struct popup_layout *popup, int64_t y)
 bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
     uint32_t buttons, uint32_t pressed, bool content_drag)
 {
+  if (canceled_drag) {
+    /* A canceled gesture stays consumed until the physical release, even
+     * across source-loss suppression or a different space's layout. */
+    if (!(buttons & POINTER_BUTTON_LEFT)) {
+      canceled_drag = false;
+    }
+    return true;
+  }
   if (!drawn_valid || content_drag) {
     return false;
   }
