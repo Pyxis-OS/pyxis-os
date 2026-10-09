@@ -247,6 +247,8 @@ suspend/resume and VM migration are separate scopes; KVM pvclock is another
 possible source. The
 [investigation](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#what-caelum-must-establish-for-tsc)
 records the requirements and references in detail.
+[Cheaper timekeeping](cheaper-timekeeping.md) proposes the work, with fewer
+clock reads in the timer path as a first, separate task.
 
 ## Power and ACPI
 

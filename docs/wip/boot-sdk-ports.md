@@ -103,6 +103,9 @@ Chosen by the owner, each starting with a proposal:
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
   clipboard and USB HID implementation remain separate. Bluetooth's accepted
   conditional source-loss rule remains future integration, without a second source.
+- **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)
+  proposal: fewer clock reads per timer event, then TSC with extended-HPET
+  fallback. Three decisions await the owner.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
