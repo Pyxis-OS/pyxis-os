@@ -17,7 +17,8 @@ sources require an existing destination directory; missing parents are not
 created. Otherwise the single-source destination is an exact file path.
 Existing destination files are replaced; directories are not copied or
 replaced as files. Success is quiet. Options other than `--`, including `-r`,
-are rejected before opening paths. No modes, owners or timestamps are copied.
+are rejected before opening paths; [recursive copying](../wip/recursive-cp.md)
+is proposed, not implemented. No modes, owners or timestamps are copied.
 
 ## Staged replacement and authority
 
