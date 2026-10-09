@@ -98,14 +98,14 @@ Chosen by the owner, each starting with a proposal:
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
   master/per-space gain and the owner's four-icon bar UI; decisions accepted,
   dB floor proposed for final review, implementation unassigned.
-- **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
-  first terminal Copy + Paste delivery implemented for owner review under the
-  accepted rounds one and two. SDL2, FILE representations and converters remain
-  unassigned; [contracts](../interfaces/clipboard.md) and
-  [qualification](../development/clipboard-first-delivery-qualification.md) describe this delivery.
+- **Codex alpha** (2026-10-09): [presentation timing step 2](presentation-timing.md#step-2-read-only-renoir-timing),
+  proposal first for a read-only Renoir OTG observer and measured blank-started
+  copying; its three defaults await owner answers. Clipboard terminal Copy +
+  Paste merged in #619 / userland #180; its later SDL2, FILE and converter tasks
+  remain unassigned.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
-  RAM staging (#610), is merged; the completed-frame handoff is delivered for
-  review with userland and ports PRs. Saved shell history (#609) and
+  RAM staging (#610) and completed-frame handoff (#618) are merged.
+  Saved shell history (#609) and
   xfer pipelining (#600) are merged; xfer's native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
