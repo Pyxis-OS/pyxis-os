@@ -1,5 +1,7 @@
 # SMP task 4a: placement and balancing
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Matched before/after record for [SMP task 4a](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-05. These are nested-VM measurements: the development host is
 itself a KVM guest (Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized i9-12900K), and
@@ -27,7 +29,7 @@ Pipe and endpoint IPC need the `session` handoff, so they ran from local shells:
 
 - **Spaces:** a separate image with six `init-readonly` spaces.
 - **Driving:** the commands were typed through QEMU `sendkey`.
-- **Reading results:** reports were read from `screendump` images and transcribed into [pipe-ipc.txt](pipe-ipc.txt).
+- **Reading results:** reports were read from `screendump` images and transcribed by hand.
 - **Workloads:** `session app://iobench.pxe pipe --buffer 4096` in three spaces and `session app://ipcbench.pxe call --size 64 --messages 8` in three.
 
 Each invocation verified one warmup and five passes.
@@ -67,8 +69,7 @@ the mixed set adds a native write and a TCP transfer.
 
 These differences fall within the spread seen between runs on this VM. The 1-CPU
 native write was faster after the change, although that path is unchanged; it is recorded,
-not attributed. The full per-sample output is in `pre4-output.txt`, `post4-output.txt`,
-`pre1-output.txt` and `post1-output.txt`.
+not attributed.
 
 ### Pipe and endpoint IPC, 4 CPUs
 
@@ -100,7 +101,7 @@ Every set, including both before-runs, has occasional 2.6–4.8 ms passes.
 
 ### Placement check
 
-A conditional GDB breakpoint ([batch-gdb.txt](batch-gdb.txt)) fired just after a two-stage
+A conditional GDB breakpoint fired just after a two-stage
 publication had released the queue lock and before any notification. The command was
 `ls app:// | head -n 1` from a remote session, on 4 CPUs.
 
@@ -112,7 +113,7 @@ So the members were spread across queues before either could run.
 ### Migration check
 
 Four longer heap clients ran (`--rounds 1000000`). Read-only GDB snapshots, about 0.6 s
-apart, recorded each CPU's running and queued task ([migration-gdb.txt](migration-gdb.txt)).
+apart, recorded each CPU's running and queued task.
 
 - **Before:** CPU 2 ran task `…a020` with `…e240` queued behind it.
 - **After CPU 1's client exited:** CPU 1 was running `…a020`, which an idle pull had moved

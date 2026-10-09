@@ -177,9 +177,9 @@ receives an END attempt on error. MEMORY, FILE and HOST collections are independ
 
 The measurements below predate common-FIFO HOST forwarding. The original ten
 off/on controls verified all 60 passes. Each used 1 MiB, one warmup and five
-samples, prepared destinations and sync off. Raw intervals,
-counts, clock calibration and profile sum/max pairs remain in
-[HOST samples](io-host-profile-samples.json). The command keys are `hr` (read),
+samples, prepared destinations and sync off. The raw
+intervals, counts and clock calibration are not kept in the tree (Git history keeps them
+at `d6733033` as `docs/development/io-host-profile-samples.json`). The command keys are `hr` (read),
 `hw` (write), `hc` (HOST → RAM), `ac` (archive → HOST) and `ac8` (4088-byte copy).
 Use `iobench read host://iobench.bin`, `iobench write host://NAME --prepared`,
 `iobench copy host://iobench.bin home://NAME --prepared`, or
@@ -209,7 +209,7 @@ combines guest/host scheduling, device/daemon/backing work and guest completion
 observation; no host-side component timestamps were collected.
 
 The [controlled slowdown experiment](experiments/host-profile-slowdown/README.md)
-and its [samples](experiments/host-profile-slowdown/samples.json) preserve the
+and its recorded samples cover the
 six-cell notification × off/counts/full study and disposable patches. All six
 warmups and thirty samples verified the fixture. Full-profile prepared-write
 medians fell from 1855.850 to 234.100 ms with notification; off controls were
@@ -243,8 +243,8 @@ The prior correction repeated all ten HOST controls on four CPUs and the first s
 on one CPU, with unchanged preparation, sizes and timing boundaries. All 16
 warmups and 80 measured passes verified length, contents and EOF. All 40 profiled
 samples matched the counts above with no failure, short native transfer,
-in-window EOF or saturation. Raw readings and built ELF/ISO hashes remain in
-[notification samples](io-host-notification-samples.json).
+in-window EOF or saturation. The raw readings are not kept in the tree (Git history keeps them at `d6733033` as
+`docs/development/io-host-notification-samples.json`).
 
 Payload/transfer medians in milliseconds; read uses payload elapsed:
 

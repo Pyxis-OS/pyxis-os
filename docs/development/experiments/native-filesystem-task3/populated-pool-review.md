@@ -47,9 +47,9 @@ the retained pool through writable `data://` before starting the session.
 
 ## Observations
 
-Captured [original failure](bitmap-before.txt), [fixed populated workload](bitmap-populated.txt),
-[control workload](bitmap-control.txt) and [read-only GDB inspection](bitmap-gdb.txt)
-retain output and typed completion evidence.
+The original failure, the fixed populated workload, the control workload and
+read-only GDB inspection each produced output and typed completion results,
+summarized below.
 
 On the original populated code, `date > data://t1.txt` succeeded, then
 `sync data://t1.txt` failed with status 17 (`CALL_TIMED_OUT`). The serial record
@@ -89,7 +89,7 @@ pool read-only and upgrading it to writable. It verified all benchmark samples.
 After clean reboot of the populated disk through that same mount-upgrade order,
 the existing read benchmark verified the persisted grow-write fixture. A write
 through `ro://` was rejected before launch; a new writable file was created and
-synchronized successfully. The [reboot output](bitmap-reboot.txt) records this
+synchronized successfully. The reboot output showed this
 normal persistence and first-allocation check.
 These small samples qualify this concrete population case, not arbitrary pool
 sizes, fragmentation, owner-host latency or physical SSD wear. Earlier 128 MiB

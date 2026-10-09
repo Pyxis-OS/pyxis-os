@@ -1311,6 +1311,39 @@ eight-session playback**, not QEMU closure. This supersedes the earlier
 QEMU-closure/native-later alternative. Revisit batching, native bounds and
 recovery with task 5's owner-run ThinkPad speaker/headphone batch.
 
+## Initial clipboard delivery limits
+
+Accepted 2026-10-09 in the [clipboard proposal](wip/clipboard.md#first-delivery-limits),
+before implementation. The first delivery is authorized but not yet implemented;
+its code PR must update this entry to match implemented/qualified behavior.
+
+- **Receivers:** Paste is limited to opted-in stock libterm line readers. vi,
+  less, Links and other raw-mode programs refuse Paste until they provide their
+  own receiver contract. Revisit when assigning those concrete consumers; do
+  not fall back to unframed bytes.
+- **One line:** LF/Tab become spaces and insertion needs a fresh Enter after
+  completion. Multi-line documents cannot be preserved by these line readers;
+  revisit with a multiline/raw-program receiver, preserving newline safety.
+- **Selection fidelity:** ASCII-only Copy refuses non-ASCII glyphs, LF-joins
+  physical rows and trims trailing spaces, including intentional whitespace.
+  Tabs and soft wraps cannot be reconstructed from retained glyph cells. Revisit
+  with a verified font mapping and terminal text/provenance work, not by labeling
+  arbitrary bytes UTF-8.
+- **Storage:** One current item per local/shared layer; RAM only, no history,
+  lost at reboot. Revisit history/persistence as separate owner-chosen work.
+- **Admission:** 64 KiB text and 8 MiB aggregate current/staging/active-snapshot
+  storage; one Paste per space; 5 s unused activation and a separate 5 s total
+  Paste deadline. Larger items or slow/stalled delivery refuse/cancel, preserving
+  current clipboard contents and never submitting partial insertion. Revisit
+  limits only from measured memory/progress needs.
+- **Pending input:** Paste refuses while earlier input is queued/staged or the
+  decoder is incomplete; it is never saved for later. The user must finish that
+  input and issue a fresh gesture. Keep this safety boundary when adding readers.
+- **Later consumers/types:** No SDL2/graphics clipboard, FILE/rich objects,
+  converter execution or remote/host clipboard bridge in this delivery. SDL2,
+  FILE retention and trusted converters follow separate milestone tasks; remote
+  bridging needs its own authority and host/guest paste contract.
+
 ## SDL2 port limits
 
 The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing

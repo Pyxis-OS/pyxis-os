@@ -1,5 +1,7 @@
 # Runtime SMP task-1 baseline
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Pre-implementation baseline for the [runtime SMP milestone](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-05 before any SMP code change. Later tasks repeat the matched
 workloads below and compare against these numbers.
@@ -55,7 +57,7 @@ attached with `cache=writeback`. The commands followed the
 [npfs write-run record](../npfs-io-runs/README.md), using `mkfs.npfs --size 128MiB
 --journal 8MiB --volume bench --source DIR`, `sgdisk` and `dd`. The virtio-fs
 export held a copy of the same fixture. virtiofsd ran with the flags from
-[virtio-fs setup](../../../devices/virtio-fs.md#start-the-host-service). The QEMU
+virtio-fs setup. The QEMU
 command matched the npfs record, with these differences:
 
 ```text
@@ -80,7 +82,7 @@ The remote session cannot run `iobench pipe` or `ipcbench`, because those need t
 `session` handoff ([remote terminal limits](../../../userland/remote-terminal.md)).
 Driving them would mean scripting the local framebuffer console, so they are not
 part of this baseline. The pipe numbers in the
-[BSP request record](../../../kernel/bsp-service-requests.md#validation-and-sizes)
+BSP request record
 remain the only historical context for them.
 
 ## Results
@@ -139,7 +141,7 @@ Native commands were `iobench write data://grow.bin --sync`,
 `iobench write data://prepared.bin --prepared --sync`,
 `iobench copy app://share/iobench.bin data://copy.bin --sync` and `sync data://`.
 The host and RAM commands were the equivalents from the
-[I/O reproduction list](../../io-ipc-baselines.md#manual-reproduction).
+I/O reproduction list.
 QEMU `info blockstats` snapshots bracketed each complete native write command,
 including warmup, preparation and checkpoint work. The table shows the deltas for
 the native pool disk:
@@ -196,8 +198,8 @@ control (ranges over three repetitions):
 ### Placement snapshot
 
 During four concurrent `allocbench heap --rounds 524288` clients on the 4-CPU boot,
-a read-only GDB batch did the following (commands and output are in
-[4cpu-gdb.txt](4cpu-gdb.txt)):
+a read-only GDB batch did the following (the commands are not kept
+in the tree):
 
 - It found CPU 1 running a user task (cpu_index 1) under its private CR3, with
   three more tasks in CPU 1's ready queue.
@@ -208,7 +210,7 @@ The four clients took 6.533 s in aggregate, including the stop.
 
 ### Kernel heap growth
 
-This is context for task-1 decision 4, the heap arena, now [implemented](../../../kernel/smp.md#memory-and-output-boundaries).
+This is context for task-1 decision 4, the heap arena, now implemented.
 Three further boots used the same image and configuration, each with a freshly
 made pool disk. Their timings were not used, because GDB attached between groups.
 
@@ -286,14 +288,3 @@ After each boot, `sync data://` completed and QEMU quit through the monitor. The
 Every remote client ended with `drain: complete`. The QEMU, virtiofsd and ttcp
 processes were stopped, and the `/dev/shm` images were removed after the record
 was assembled.
-
-## Files
-
-- [4cpu-output.txt](4cpu-output.txt) and [1cpu-output.txt](1cpu-output.txt): every
-  decoded guest report, with host completion times.
-- [blockstats.txt](blockstats.txt): the raw QEMU block counters.
-- [4cpu-serial.txt](4cpu-serial.txt) and [1cpu-serial.txt](1cpu-serial.txt): boot
-  serial logs, including xHCI enumeration and init placement.
-- [4cpu-gdb.txt](4cpu-gdb.txt): the placement snapshot.
-- [heap-stats.txt](heap-stats.txt): the kernel heap counter snapshots and the
-  growth-attribution log.

@@ -170,6 +170,17 @@
   folder and update links. Remove completed worklists and superseded discussion;
   Git preserves history. Carry
   relevant deferred work into WIP or technical debt without duplicate archives.
+- Keep documentation lean; Git preserves everything removed. Once the owner
+  accepts a decision, the WIP document keeps the accepted contract and drops the
+  alternatives, earlier rounds and review history. A finished task's working
+  document is folded into its milestone document or removed.
+- An experiment record under docs/development/experiments is a short summary:
+  revisions, configuration, commands, measured results with ranges, and limits.
+  Raw captures, logs, counter dumps and step-by-step session narration belong in
+  the PR or stay local, not in the repository.
+- A technical-debt entry is a few lines: the limit, its consequence and when to
+  revisit it. Measurements and history live in the linked reference or record.
+  Delete an entry when its limit is resolved.
 - Before ending unfinished work or handing off to another thread, leave a concise
   recoverable status: branch/PR and dependency revisions, completed work, remaining
   steps or decisions, validation results and any active tool processes. Keep this
