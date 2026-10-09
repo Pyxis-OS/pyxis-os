@@ -117,7 +117,7 @@ hex digest, streaming the file through Mbed TLS PSA SHA-256. Crypto initializati
 requires clock and random grants; it does not provide fallback entropy. Path,
 read and crypto failures raise Lua errors. Neither helper adds authority.
 
-The native stack has the general [8 MiB eager backing](../kernel/program-loading.md) and an unmapped guard page;
+The native stack has the general [1 MiB eager backing](../kernel/program-loading.md) and an unmapped guard page;
 Lua value stacks live on the heap. Parser, callback and pattern recursion retain
 upstream limits, which do not prove that every combination fits the native stack.
 Automatic stack growth and signal-driven interruption remain deferred.

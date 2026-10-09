@@ -47,7 +47,7 @@ allocations; loading does not change the caller's active address space.
 
 The kernel supplies an executable entry point and a writable, non-executable,
 16-byte-aligned user stack. Boot and subsequently launched processes each get
-8 MiB of eager backing below `0x7ffffffff000`, with a reserved unmapped guard
+1 MiB of eager backing below `0x7ffffffff000`, with a reserved unmapped guard
 immediately below it. The [program-loading reference](program-loading.md)
 defines image admission, stack addresses and ownership: the page-rounded image
 span is capped at 256 MiB, and stack/guard collisions reject before backing.

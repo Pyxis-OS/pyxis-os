@@ -89,13 +89,12 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 
 ## Fixed userspace stacks
 
-Each process eagerly backs a fixed [8 MiB user stack](kernel/program-loading.md), including boot init and small commands.
+Each plain executable eagerly backs a fixed [1 MiB user stack](kernel/program-loading.md), including boot init and small commands.
 An unmapped guard catches ordinary overruns, but a large adjustment can skip it; neither compiler stack probing nor growth exists.
-[Matched nested-KVM qualification](development/experiments/program-capacity/README.md) measured 28 MiB more owned backing for
-mux plus three shells, 42 MiB more with two pipeline children, and roughly 3.2–3.4 times the complete 1,024-launch session cost
-relative to the former 1 MiB stacks. Revisit per-image stack sizing when those session/process-count costs justify coordinated
-P1F/LLD/TCC changes and an owner-built compiler container. Demand backing would separately need a fault/allocation contract
-respecting BSP VM-mutation ownership; it is not part of the accepted eager policy.
+The owner retained 1 MiB after the experimental 8 MiB default's [nested-KVM costs](development/experiments/program-capacity/README.md):
+28–42 MiB more session backing and roughly 3.2–3.4 times the complete 1,024-launch session cost.
+Clang's 8 MiB expectation remains unmet; revisit with future [application-bundle manifest](wip/vfs.md#application-bundles)
+requests passed as a bounded loader parameter, without a P1F field or compiler-container rebuild. That path is unimplemented.
 
 ## BSP-only allocation and VM mutation
 

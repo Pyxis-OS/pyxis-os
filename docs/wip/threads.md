@@ -394,7 +394,7 @@ external source or mirror entry is introduced by this docs PR.
 ## First task and later gates
 
 The [program image and initial stack layout](../kernel/program-loading.md)
-places the fixed eager 8 MiB initial stack high in the lower half, with a reserved
+places the fixed eager 1 MiB initial stack high in the lower half, with a reserved
 unmapped guard. Later thread stacks must remain disjoint; their placement and
 guards still belong to this milestone. Capacity work adds no public threads.
 

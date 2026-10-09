@@ -60,7 +60,7 @@ status belong in the milestone document and the PR.
 - [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
   first slice, with up to eight equal/BSP panes and colored scrollback.
 - [Program image and initial stack capacity](../kernel/program-loading.md),
-  2026-10-09: 256 MiB image span and fixed eager 8 MiB guarded stacks;
+  2026-10-09: 256 MiB image span and high fixed eager 1 MiB guarded stacks;
   [matched costs and session memory](../development/experiments/program-capacity/README.md).
   Thread task 1 merged in #612; later thread tasks remain unassigned.
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,

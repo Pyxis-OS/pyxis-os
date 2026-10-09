@@ -1,10 +1,11 @@
 # Program images and initial stacks
 
-The owner accepted these capacity decisions on 2026-10-09 in
-[#613](https://git.internal/PyxisOS/pyxis-os/pulls/613): a high initial stack
-with a reserved guard and a 256 MiB image-span ceiling; a fixed 8 MiB eager
-initial stack; and unchanged 16 MiB installed-executable capture. Boot and
-ordinary launches use the same loader policy. The
+The owner accepted a high initial stack with a reserved guard, a 256 MiB
+image-span ceiling and unchanged 16 MiB installed-executable capture in
+[#613](https://git.internal/PyxisOS/pyxis-os/pulls/613) on 2026-10-09. After
+reviewing the 8 MiB default's costs, the owner retained the plain executable's
+1 MiB eager stack in [#617](https://git.internal/PyxisOS/pyxis-os/pulls/617)
+on the same date. Boot and ordinary launches use the same loader policy. The
 [qualification report](../development/experiments/program-capacity/README.md)
 records native boundary checks, cleanup, matched launch costs and session memory.
 
@@ -39,8 +40,8 @@ size. Each process, including boot init and small commands, receives:
 
 | Region | Addresses and backing |
 | --- | --- |
-| Initial stack | `[0x7fffff7ff000, 0x7ffffffff000)`, 8 MiB eager zeroed backing, user RW, non-executable |
-| Lower guard | `[0x7fffff7fe000, 0x7fffff7ff000)`, one reserved unmapped page |
+| Initial stack | `[0x7fffffeff000, 0x7ffffffff000)`, 1 MiB eager zeroed backing, user RW, non-executable |
+| Lower guard | `[0x7fffffefe000, 0x7fffffeff000)`, one reserved unmapped page |
 
 The initial one-past stack top, `0x7ffffffff000`, is canonical and 16-byte
 aligned. The common loader returns that actual top with the process and entry;
@@ -73,15 +74,19 @@ backing. Captured bytes coexist with backing and stacks, and a batch retains
 earlier prepared children while capturing its next image. Raising this separate
 budget needs its own peak-memory/admission decision; hosted Clang remains unported.
 
-The fixed eager stack adds 7 MiB per live process relative to the former 1 MiB
-stack, plus page-table costs. Matched nested-KVM qualification measured an exact
+The experimental 8 MiB eager stack added 7 MiB per live process relative to
+1 MiB, plus page-table costs. Matched nested-KVM qualification measured an exact
 28 MiB increase in owned backing for mux plus three shells, and 42 MiB with two
 pipeline children. Complete 1,024-launch sessions increased from median 3.06 to
 10.53 seconds at one CPU and 3.50 to 11.30 seconds at four CPUs. These intervals
 include session startup, transport and final drain, not isolated loader latency.
+Those costs prompted the owner's return to the implemented 1 MiB default.
 
 No P1F, public ABI, SDK linker or dependency change is needed for this policy;
-the existing compiler container remains usable. A per-image stack declaration
-is deferred: it needs coordinated P1F/LLD/TCC changes and an owner-built compiler
-container. The [fixed-stack debt](../technical-debt.md#fixed-userspace-stacks)
-records the cost and revisit condition.
+the existing compiler container remains usable. Larger initial stacks belong
+to a future [application-bundle manifest](../wip/vfs.md#application-bundles)
+request passed to the common loader as a bounded parameter. That path is
+unimplemented and requires neither a P1F field nor a compiler-container rebuild.
+Clang's 8 MiB expectation remains unmet until it exists. The
+[fixed-stack debt](../technical-debt.md#fixed-userspace-stacks) records the limit
+and revisit condition.

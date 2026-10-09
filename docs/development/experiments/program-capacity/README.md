@@ -1,11 +1,13 @@
 # Program image and initial stack capacity
 
 Matched before/after observations for [program capacity](../../../kernel/program-loading.md),
-recorded on 2026-10-09. These are nested-KVM results. Raw timing, JSONL, serial,
+recorded on 2026-10-09. The original 8 MiB candidate below was superseded by the
+owner's 1 MiB decision after cost review; [the recheck](#revised-1-mib-default)
+records the implemented default. These are nested-KVM results. Raw timing, JSONL, serial,
 debugger and image captures remain in ignored `build/capacity-baseline` and
 `build/capacity-after`; no benchmark infrastructure was added.
 
-## Inputs and configuration
+## Original 8 MiB candidate: inputs and configuration
 
 The baseline is main `a2591c444c04b4d5e0f69221b59e8f6f6010c68b`, using exact-head
 [CI #1514](https://git.internal/PyxisOS/pyxis-os/actions/runs/1514) artifacts.
@@ -104,13 +106,14 @@ reservations. Allocatable capacity is identical at 108,244 frames. Kernel heap
 pools retain 3 MiB before and 3.25 MiB after, explaining 256 KiB of the global
 increase. The session walk is a bounded census, not a universal process registry.
 
-The accepted fixed eager 8 MiB default therefore has a material memory and
-short-command cost even for ordinary shells and tiny commands. Per-image stack
-sizing merits a separate owner decision if that cost is unacceptable; a P1F
-declaration requires coordinated LLVM/LLD and TCC changes and an owner-built
-compiler container. This measurement does not change the accepted default.
+The originally accepted fixed eager 8 MiB default therefore has a material memory
+and short-command cost even for ordinary shells and tiny commands. On 2026-10-09
+the owner revised that default to 1 MiB after reviewing these results. Larger
+stacks will come from program-bundle manifests through a bounded load parameter,
+without changing P1F or rebuilding the compiler container. That path is proposed,
+not implemented by the capacity change.
 
-## Native capacity and cleanup
+## Original 8 MiB candidate: native capacity and cleanup
 
 An ordinary `make -j16 image PREBUILT="sdk userspace ports"` passed with the
 existing builder. Separate interactive validation used the same after kernel,
@@ -174,3 +177,62 @@ Source inspection confirms the unchanged 16 MiB installed capture budget in
 size check in `kernel/fs/npfs.c`. This validation did not qualify installed large
 payload capture, native Clang, compiler stack probing or physical-hardware cost.
 All task-owned QEMU, GDB and remote clients were stopped after inspection.
+
+## Revised 1 MiB default
+
+Kernel `fb10f206a15202de807c0d2bb4a17c78f0ba4df5` changes only the stack size from
+the candidate, retaining the high top, guard reservation, span/collision checks
+and returned top. An ordinary image build passed. The earlier exact-main baseline
+`a2591c44` was booted again for the brief comparison, holding the above compiler,
+dependency bundles, devices, 512 MiB RAM, logging and workload constant. Kernel
+configuration matches, and the recheck uses the exact same baseline initrd bytes.
+These controlled captures precede integration of newer main/dependency changes;
+they isolate the capacity revision rather than combine it with unrelated ports.
+Captures stay in ignored `build/capacity-recheck` and `build/capacity-1m`.
+
+Two repetitions per CPU count after the same 16-child warmup produced:
+
+| 1,024-launch complete session | Fresh low-stack baseline (s) | Revised high 1 MiB stack (s) |
+| --- | --- | --- |
+| 1 CPU | 3.03, 3.04 | 3.22, 3.21 |
+| 4 CPUs | 3.00, 3.04 | 3.54, 3.21 |
+
+All samples completed 1,024 children, status zero and final group drain. Costs
+return to the low-three-second scale, compared with the 8 MiB medians of 10.53
+and 11.30 seconds. They do not become identical: these short rechecks are about
+6% higher at one CPU and 6–18% at four CPUs, with too few samples to isolate
+causes or establish confidence. High placement needs additional page tables;
+its share of elapsed cost was not isolated. Allocation workloads were unchanged
+and were not repeated in this brief check.
+
+Fresh four-CPU boots repeated the same three-pane/pipeline sequence:
+
+| Stage | Processes | Owned backing baseline/revised (MiB) | Whole-guest PMM baseline/revised (MiB) |
+| --- | ---: | ---: | ---: |
+| Three idle panes | 4 | 6.234375 / 6.234375 | 47.8984375 / 48.0234375 |
+| Two live pipeline children | 6 | 8.421875 / 8.421875 | 50.16796875 / 50.30859375 |
+| Prompt restored | 4 | 6.234375 / 6.234375 | 47.90234375 / 48.02734375 |
+
+Owned backing returns exactly to baseline at every stage. Both retain 3 MiB of
+kernel heap pools. Whole-guest allocation is 32 frames (128 KiB) higher at idle
+and 36 frames (144 KiB) with children; source inspection of the high placement
+accounts for two extra page-table frames per process. The census and PMM
+definitions remain those above; these values are not host RSS.
+
+Revised interactive four-CPU/1 GiB validation used the same 86 MiB-span native
+fixture with its local frame reduced to 128 KiB (serialized size 2,155,323 bytes).
+Initialized/BSS/private-memory checks and normal exit passed. GDB observed the
+returned high top, 256 backed stack pages starting at `0x7fffffeff000`, and one
+reserved guard at `0x7fffffefe000`; physical page-table inspection found its PTE
+zero and the stack user RW/NX. BSP destruction released 22,346 frames before
+normal process-control completion.
+
+The exact 256 MiB fixture and custom low/top-page images passed again. Rounded
+over-span, sparse over-span and collisions at the revised stack/guard addresses
+rejected. Invalid-stage-two rollback returned 12,168 allocated frames to 11,878.
+A four-stage maximum-span pipeline exhausted memory on stage four after 25,877
+pages of its segment; partial unwind and three-child rollback returned exactly
+to 11,878, followed by successful `echo`, root exit and final drain. These
+validation captures stay in ignored `build/capacity-1m-validation`; their archive
+and memory configuration differ from the matched resident comparison. All
+task-owned QEMU, debugger and client jobs were stopped.
