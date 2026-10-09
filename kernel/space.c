@@ -1111,6 +1111,14 @@ static void handle_space_input_locked(void)
       cpu_restore_interrupts(flags);
       continue;
     }
+    bool volume_suppressed = volume_held[event.key];
+    bool clipboard_release = false;
+    if (event.action == KEY_RELEASE) {
+      volume_held[event.key] = false;
+      /* Physical releases retire clipboard/Enter guards even while an overlay
+       * consumes content input. Releases cannot admit a clipboard action. */
+      clipboard_release = clipboard_key_event(active_space, &event);
+    }
     if (event.key == KEY_ESCAPE) {
       if ((event.modifiers & KEY_MOD_SUPER) && event.action == KEY_PRESS) {
         escape_held = true;
@@ -1147,10 +1155,8 @@ static void handle_space_input_locked(void)
         continue;
       }
     }
-    if (volume_held[event.key]) {
-      if (event.action == KEY_RELEASE) {
-        volume_held[event.key] = false;
-      } else if (volume_ui_keyboard_focused()) {
+    if (volume_suppressed) {
+      if (event.action != KEY_RELEASE && volume_ui_keyboard_focused()) {
         uint64_t flags = cpu_save_interrupts();
         volume_ui_keyboard_input(&event);
         cpu_restore_interrupts(flags);
@@ -1165,10 +1171,10 @@ static void handle_space_input_locked(void)
       continue;
     }
     uint64_t clipboard_flags = cpu_save_interrupts();
-    bool clipboard_consumed = clipboard_key_event(active_space, &event);
+    bool clipboard_consumed = event.action == KEY_RELEASE ? clipboard_release :
+        clipboard_key_event(active_space, &event);
     cpu_restore_interrupts(clipboard_flags);
     if (clipboard_consumed) {
-
       continue;
     }
     /* Caelum's space has no input reader. */

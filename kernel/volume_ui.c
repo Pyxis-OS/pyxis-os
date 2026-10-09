@@ -6,6 +6,7 @@
 #include <kernel/keyboard.h>
 #include <kernel/memory.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/clipboard.h>
 #include <kernel/pointer.h>
 #include <kernel/pointer_present.h>
 #include <kernel/space.h>
@@ -105,6 +106,7 @@ static void set_focus(bool next)
   }
   if (next) {
     focus_space = space_pointer_active();
+    clipboard_space_cancel(focus_space);
     keyboard_set_overlay(focus_space->keyboard, true);
   } else {
     keyboard_set_overlay(focus_space->keyboard, false);
