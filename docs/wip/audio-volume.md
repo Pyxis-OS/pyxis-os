@@ -13,10 +13,12 @@ Native listening remains required before closure; players are separate work.
    bar-only setters and read-only 88-byte STATUS; SDK/libpyxis consumers updated.
 2. [x] Import original MPL-2.0 assets, host conversion of four masks and bar
    widgets/popups; preserve application capture, lock, battery and screenshot composition.
-3. [ ] Baseline and matched QEMU capture/cost qualification: 0/1/10/25/50/100%,
+3. [x] Baseline and matched QEMU gain/UI/cost checks, with the existing nested
+   guard limit recorded in the [experiment](../development/experiments/audio-volume/README.md): 0/1/10/25/50/100%,
    unity, combined gains, ramps/mute, space isolation, hidden playback,
    reacquisition, eight sources, readiness and repeated input. Record revisions,
-   configuration, commands, ranges and nested-QEMU limits in the experiment summary.
+   configuration, commands and ranges. Eight-source attempts fail closed; sustained
+   eight-session playback and a new ninth-session capacity check are not qualified.
 4. [ ] Owner native listening on speaker and wired headphones. Boot has no
    autoplay and reports master50/unmuted, space100/unmuted. **Lower master to1%**
    before brief `pcm 1000 500 2` tones and raise only as comfortable; do not

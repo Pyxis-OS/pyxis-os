@@ -671,6 +671,8 @@ transient host stall, not proven inadequate mixer throughput. BSP host-thread CP
 was 99.55–99.61% before the two fixes and 93.93–96.40% afterward. Native eight
 silent sessions passed eleven minutes. See the [profiling report](development/experiments/audio-task2/profiling.md);
 revisit QEMU scheduling/guard evidence separately from native qualification.
+[Volume qualification](development/experiments/audio-volume/README.md) also saw
+QEMU guard trips during shorter input/start bursts; the accepted bounds are unchanged.
 
 ## HD Audio fail-closed recovery
 
