@@ -92,3 +92,9 @@ is now read-only trace evidence; missing or invalid capability/state and refused
 clear fail closed. The new image still needs native playback evidence. D3+BME
 remains refused; no PCI helper, live jack switching, recovery or batching.
 Native eight-session speaker/headphone playback remains the closure gate.
+
+The PCIe replacement's ordinary image build (`1cd9f929`, main `7910beea`)
+passed. Same four-CPU QEMU configuration: `pcm 1000 500 2` completed, all
+96,000 PCM frames matched after removing silence, discontinuity 0/READY before
+release. Stopped-state inspection showed no engine failure, DMA parked and all
+slots released. This verifies the unchanged QEMU path, not the native PCIe gate.
