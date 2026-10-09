@@ -14,6 +14,21 @@
 
 #define HDA_QEMU_VENDOR 0x8086
 #define HDA_QEMU_DEVICE 0x2668
+#define HDA_AMD_VENDOR 0x1022
+#define HDA_AMD_DEVICE 0x15e3
+#define HDA_LENOVO_VENDOR 0x17aa
+#define HDA_LENOVO_DEVICE 0x5081
+#define HDA_PCI_SUBSYSTEM_VENDOR 0x2c
+#define HDA_PCI_SUBSYSTEM_DEVICE 0x2e
+#define HDA_PCI_CLASS 0x04
+#define HDA_PCI_SUBCLASS 0x03
+#define HDA_PCI_INTERFACE 0x00
+#define HDA_AMD_SNOOP_CONTROL 0x42
+#define HDA_AMD_SNOOP_MASK 0x07
+#define HDA_AMD_SNOOP_ENABLE 0x02
+#define HDA_AMD_DMA_MAX ((UINT64_C(1) << 40) - 1)
+#define HDA_VERSION_MAJOR 1
+#define HDA_DMA_ALIGNMENT 128
 
 #define HDA_GCAP 0x00
 #define HDA_VMIN 0x02
@@ -47,6 +62,7 @@
 #define HDA_SD_LPIB 0x04
 #define HDA_SD_CBL 0x08
 #define HDA_SD_LVI 0x0c
+#define HDA_SD_FIFOS 0x10
 #define HDA_SD_FMT 0x12
 #define HDA_SD_BDPL 0x18
 #define HDA_SD_BDPU 0x1c
@@ -508,6 +524,22 @@ bool hda_stream_prepare(struct hda_controller *controller)
       read32(controller, controller->stream + HDA_SD_BDPU) != controller->bdl.physical >> 32) {
     return fail_controller(controller, "output descriptor configuration did not set");
   }
+  if (controller->model == HDA_MODEL_AMD) {
+    if (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN) {
+      return fail_controller(controller, "native output running during FIFO inspection");
+    }
+    uint16_t encoded = read16(controller, controller->stream + HDA_SD_FIFOS);
+    if (!encoded || encoded == UINT16_MAX) {
+      return fail_controller(controller, "native output FIFO size unavailable");
+    }
+    /* FIFOS encodes bytes minus one; reclaim guards use complete frames. */
+    uint32_t bytes = (uint32_t)encoded + 1;
+    bytes = (bytes + HDA_FRAME_BYTES - 1) / HDA_FRAME_BYTES * HDA_FRAME_BYTES;
+    if (bytes >= HDA_BUFFER_BYTES) {
+      return fail_controller(controller, "native output FIFO exceeds PCM ring");
+    }
+    controller->fifo_bytes = bytes;
+  }
   controller->stream_prepared = true;
   return true;
 }
@@ -592,6 +624,9 @@ bool hda_stream_position_locked(struct hda_controller *controller,
       continue;
     }
     *event = controller->irq;
+    if (controller->model == HDA_MODEL_AMD && bytes == HDA_BUFFER_BYTES) {
+      bytes = 0;
+    }
     *position = (struct hda_stream_position){
       .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
     };
@@ -645,7 +680,8 @@ static bool boot_halt(struct hda_controller *controller)
   unsigned output = (capabilities >> HDA_GCAP_OSS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
   unsigned bidirectional = (capabilities >> HDA_GCAP_BSS_SHIFT) & HDA_GCAP_BSS_COUNT_MASK;
   unsigned streams = input + output + bidirectional;
-  if (HDA_STREAM_BASE + streams * HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES) {
+  if (read8(controller, HDA_VMAJ) != HDA_VERSION_MAJOR || !output ||
+      HDA_STREAM_BASE + streams * HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES) {
     return false;
   }
   write32(controller, HDA_INTCTL, 0);
@@ -676,30 +712,70 @@ static bool boot_halt(struct hda_controller *controller)
   return true;
 }
 
-static bool dma_address_fits(const struct dma_buffer *buffer, bool wide)
+static bool dma_address_fits(const struct dma_buffer *buffer, uint64_t maximum)
 {
-  return wide || (buffer->physical <= UINT32_MAX &&
-      buffer->bytes - 1 <= UINT32_MAX - buffer->physical);
+  return buffer->bytes && !(buffer->physical & (HDA_DMA_ALIGNMENT - 1)) &&
+      buffer->physical <= maximum && buffer->bytes - 1 <= maximum - buffer->physical;
+}
+
+static enum pci_selection select_controller(size_t *selected, enum hda_model *model)
+{
+  if (pci_inventory_state() != PCI_INVENTORY_COMPLETE) {
+    return PCI_SELECTION_INCOMPLETE;
+  }
+  bool found = false;
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *device = pci_device_at(i);
+    enum hda_model candidate;
+    if (device->vendor_id == HDA_QEMU_VENDOR && device->device_id == HDA_QEMU_DEVICE) {
+      candidate = HDA_MODEL_QEMU;
+    } else if (device->vendor_id == HDA_AMD_VENDOR && device->device_id == HDA_AMD_DEVICE &&
+        device->base_class == HDA_PCI_CLASS && device->subclass == HDA_PCI_SUBCLASS &&
+        device->interface == HDA_PCI_INTERFACE &&
+        pci_read16(device->address, HDA_PCI_SUBSYSTEM_VENDOR) == HDA_LENOVO_VENDOR &&
+        pci_read16(device->address, HDA_PCI_SUBSYSTEM_DEVICE) == HDA_LENOVO_DEVICE) {
+      candidate = HDA_MODEL_AMD;
+    } else {
+      continue;
+    }
+    if (found) {
+      return PCI_SELECTION_AMBIGUOUS;
+    }
+    found = true;
+    *selected = i;
+    *model = candidate;
+  }
+  return found ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
+}
+
+static bool enable_native_snoop(struct hda_controller *controller)
+{
+  struct pci_address address = controller->claim.device->address;
+  uint8_t control = pci_read8(address, HDA_AMD_SNOOP_CONTROL);
+  uint8_t expected = (control & ~HDA_AMD_SNOOP_MASK) | HDA_AMD_SNOOP_ENABLE;
+  pci_write8(&controller->claim, HDA_AMD_SNOOP_CONTROL, expected);
+  return pci_read8(address, HDA_AMD_SNOOP_CONTROL) == expected;
 }
 
 void hda_prepare(struct hda_controller *controller, const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!controller->claim.device && !controller->prepared);
-  struct pci_device *device;
-  enum pci_selection selection = pci_select_device(HDA_QEMU_VENDOR, HDA_QEMU_DEVICE, &device);
+  size_t selected = 0;
+  enum pci_selection selection = select_controller(&selected, &controller->model);
   if (selection != PCI_SELECTION_UNIQUE) {
     if (selection == PCI_SELECTION_ABSENT) {
-      ktrace("hda: QEMU 8086:2668 absent; inactive\n");
+      ktrace("hda: supported controller absent; inactive\n");
     } else {
-      klog("hda: QEMU 8086:2668 selection=%u; inactive\n", (unsigned)selection);
+      klog("hda: controller selection=%u; inactive\n", (unsigned)selection);
     }
     return;
   }
-  if (!pci_reserve_device(device, &controller->claim)) {
+  if (!pci_reserve_device_at(selected, &controller->claim)) {
     klog("hda: cannot reserve controller; inactive\n");
     return;
   }
+  struct pci_device *device = controller->claim.device;
   if (!pci_begin_mmio_probe(&controller->claim, &controller->firmware) ||
       pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->registers) != MM_OK) {
     if (pci_restore_mmio_probe(&controller->claim, &controller->firmware)) {
@@ -745,6 +821,11 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
       (unsigned)device->address.bus, (unsigned)device->address.device,
       (unsigned)device->address.function, (unsigned)capabilities, input, output,
       (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
+  if (controller->model == HDA_MODEL_AMD && !enable_native_snoop(controller)) {
+    controller->failed = true;
+    klog("hda: native coherent DMA snoop did not set; ownership retained until reboot\n");
+    return;
+  }
   if (!output || controller->stream + HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES ||
       dma_buffer_allocate(&controller->corb, PAGE_SIZE) != MM_OK ||
       dma_buffer_allocate(&controller->rirb, PAGE_SIZE) != MM_OK ||
@@ -754,9 +835,14 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     klog("hda: output or coherent DMA unavailable; backing retained until reboot\n");
     return;
   }
-  bool wide = capabilities & HDA_GCAP_64OK;
-  if (!dma_address_fits(&controller->corb, wide) || !dma_address_fits(&controller->rirb, wide) ||
-      !dma_address_fits(&controller->bdl, wide) || !dma_address_fits(&controller->pcm, wide)) {
+  uint64_t maximum = UINT32_MAX;
+  if (capabilities & HDA_GCAP_64OK) {
+    maximum = controller->model == HDA_MODEL_AMD ? HDA_AMD_DMA_MAX : UINT64_MAX;
+  }
+  if (!dma_address_fits(&controller->corb, maximum) ||
+      !dma_address_fits(&controller->rirb, maximum) ||
+      !dma_address_fits(&controller->bdl, maximum) ||
+      !dma_address_fits(&controller->pcm, maximum)) {
     controller->failed = true;
     klog("hda: DMA exceeds controller address width; backing retained until reboot\n");
     return;
