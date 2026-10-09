@@ -21,6 +21,7 @@ struct keyboard_object {
   struct keyboard_event events[KEYBOARD_EVENT_CAPACITY];
   size_t head, count;
   bool selected;
+  bool overlay_focused; /* Trusted popup suspends delivery, retaining capture. */
   bool terminal_layer; /* Under lock: hidden graphics overrides capture. */
   bool down[KEY_COUNT]; /* Only presses accepted since the last routing reset. */
 };
@@ -34,6 +35,7 @@ void keyboard_focus(struct keyboard_object *keyboard, bool selected);
 /* BSP, IF=0. Keep capture ownership; optionally discard unread console text. */
 void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
                         bool discard_input);
+void keyboard_set_overlay(struct keyboard_object *keyboard, bool overlay_focused);
 void keyboard_reset_input(struct keyboard_object *keyboard);
 /* Any CPU, preserves IF. INPUT and same-space authority are checked by caller;
  * ownership validation and event observation use the keyboard lock. */

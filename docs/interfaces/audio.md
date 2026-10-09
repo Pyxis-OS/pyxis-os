@@ -21,10 +21,11 @@ The fixed format is **48 kHz S16LE stereo**, four bytes per frame. Conversion an
 resampling belong to userspace. A session owns a copied queue of **3,840 frames /
 15,360 bytes / 80 ms**; it never owns a DMA mapping. The
 [HDA worker](../devices/hda.md) mixes sessions in signed 32-bit accumulators and
-clips to signed 16-bit only after adding every source. Empty sources supply zeros;
+scales each source by its space gain, clips the sum to signed 16-bit, then
+applies master gain. Empty sources supply zeros;
 zero-valued PCM still consumes queue capacity and counts as submitted audio.
-Volume, pause, device selection, recording and application audio backends are
-outside this interface.
+Playback grants observe user volume but cannot change it. Pause, device
+selection, recording and application audio backends remain separate.
 
 ## Calls and replies
 
@@ -41,7 +42,7 @@ accepted byte count; acquire/status helpers clear their outputs on failure.
 | --- | --- | --- |
 | `AUDIO_ACQUIRE` | None | 40-byte `audio_acquire_reply`: `generation`, `rate`, `channels`, `format`, `capacity_frames`. |
 | `AUDIO_WRITE` | `uint64_t buffer`, `uint64_t length` | Eight-byte accepted byte count, equal to `length`. |
-| `AUDIO_STATUS` | None | 48-byte `audio_status_reply`: `generation`, `capacity_frames`, `free_frames`, `starvations`, `discontinuities`, `state`. |
+| `AUDIO_STATUS` | None | 88-byte `audio_status_reply`: `generation`, `capacity_frames`, `free_frames`, `starvations`, `discontinuities`, `state`, `master_percent`, `space_percent`, `master_muted`, `space_muted`, `volume_generation`. |
 | `AUDIO_RELEASE` | None | No payload. |
 
 WRITE is nonblocking and atomic: it copies and commits the whole request or
@@ -71,6 +72,37 @@ STATUS and RELEASE remain available to the owner after terminal engine failure.
 WRITE returns UNAVAILABLE, and acquisition of an unowned session remains
 unavailable until reboot. Ordinary source starvation supplies silence without
 failing the engine.
+
+## User volume controls
+
+Accepted **2026-10-09**: only the trusted [bar](../userland/audio-volume.md)
+sets master and per-space levels. STATUS exposes worker-confirmed selected
+percentages (0–100), boolean mute flags and a saturating change generation;
+it does not expose instantaneous ramp amplitude. Existing session-owner checks
+apply, and no setter operation or master grant is added. Producers may scale
+their PCM but cannot bypass user attenuation.
+
+Both controls use the same curve: 0% is exact silence; for `p=1..100`,
+`dB(p) = -60 + 60*(p-1)/99`. A precomputed 101-entry Q16 table supplies rounded
+coefficients without runtime floating point. 100% is exact unity; 50% is
+about −30.3 dB (coefficient 2001/65536, about 3.05% amplitude).
+Space attenuation precedes summing; saturation precedes master attenuation,
+so settled output magnitude is bounded even with eight sources. Master gain
+cannot recover clipping already introduced by the mix.
+
+Boot master is **50%, unmuted**; new spaces start **100%, unmuted**. Space levels
+survive RELEASE, exit and reacquisition. All settings are volatile across reboot.
+Mute preserves the selected percentage; a positive slider change explicitly
+unmutes that control, and unmuting 0% still gives silence. Muted/zero sessions
+continue consuming PCM and publishing ordinary writable readiness.
+
+The BSP worker owns gains and confirmed snapshots. Bar input composes ordered
+relative changes and mute toggles into one pending target per control, then
+notifies the worker without waiting on codec/DMA. Ordinary changes and unmute
+ramp over **240 stereo frames / 5 ms**; mute/zero produce exact zeros immediately
+in subsequent mixed frames. Already-published PCM can remain in the **80 ms DMA
+ring**: software mute is not an instantaneous audible stop. Hardware amp settings,
+stream lifetime, guards and queue capacities stay unchanged.
 
 ## Writable waits
 
@@ -137,5 +169,6 @@ records qualification and the accepted tuning; the
 [engine reference](../devices/hda.md#progress-and-refill-limits) describes its
 position and scheduling limits. Native AMD/ALC257 one-session tones and an
 eleven-minute eight-session silent run are
-[qualified](../devices/hda.md#qualification-and-remaining-scope). There is no master volume or per-session gain; full-scale speaker tones were painfully
-loud. SDL2 and Quake sound remain separate consumer work.
+[qualified](../devices/hda.md#qualification-and-remaining-scope). The volume widgets are QEMU-qualified; the owner’s safe native listening
+check remains in the [volume milestone](../wip/audio-volume.md). SDL2 and Quake
+sound are separate consumer work.

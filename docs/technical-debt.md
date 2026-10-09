@@ -675,11 +675,11 @@ DevilutionX needs them. Additions belong in libc or the runtime configuration, n
 
 ## HD Audio volume control
 
-The [PCM interface](interfaces/audio.md) has no master volume or per-session gain.
-Full-scale speaker test tones were painfully loud in native qualification. Add
-reviewed gain controls and their authority before ordinary audio use. The assigned
-[volume proposal](wip/audio-volume.md) records accepted decisions; the dB floor
-is proposed for final review, with no runtime change yet.
+[Software master/per-space controls](interfaces/audio.md#user-volume-controls)
+boot unmuted at 50% (about −30.3 dB); settings do not persist, and software mute
+can leave up to the nominal 80 ms of published DMA audio. Native volume listening
+remains [pending](wip/audio-volume.md): earlier full-scale speaker tones were
+painfully loud. Revisit persistence/media keys when ordinary use requires them.
 
 ## HD Audio scheduling and startup tuning
 
@@ -696,6 +696,8 @@ transient host stall, not proven inadequate mixer throughput. BSP host-thread CP
 was 99.55–99.61% before the two fixes and 93.93–96.40% afterward. Native eight
 silent sessions passed eleven minutes. See the [profiling report](development/experiments/audio-task2/profiling.md);
 revisit QEMU scheduling/guard evidence separately from native qualification.
+[Volume qualification](development/experiments/audio-volume/README.md) also saw
+QEMU guard trips during shorter input/start bursts; the accepted bounds are unchanged.
 
 ## HD Audio fail-closed recovery
 

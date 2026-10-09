@@ -96,8 +96,8 @@ Chosen by the owner, each starting with a proposal:
   design accepted: `.pxa`/`.pxb`, per-program app view, JSON stack/grant requests
   and shared 128 MiB capture. Implementation awaits plan merge and owner go.
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
-  master/per-space gain and the owner's four-icon bar UI; decisions accepted,
-  dB floor proposed for final review, implementation unassigned.
+  master/per-space gain and the owner's four-icon bar UI; delivery steps 1–3
+  assigned after #616, with native listening by the owner afterward.
 - **Codex alpha** (2026-10-09): [presentation timing step 2](presentation-timing.md#step-2-read-only-renoir-timing),
   all three defaults accepted; read-only Renoir observation and guarded
   blank-start copies implemented for review. Timed copies remain off by default;
