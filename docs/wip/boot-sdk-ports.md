@@ -93,8 +93,8 @@ status belong in the milestone document and the PR.
 Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  design accepted: `.pxa`/`.pxb`, per-program app view, JSON stack/grant requests
-  and shared 128 MiB capture. Implementation awaits plan merge and owner go.
+  shared 128 MiB selected-image capture ceiling and failure rollback qualification,
+  using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
   master/per-space gain and the owner's four-icon bar UI; delivery steps 1–3
   assigned after #616, with native listening by the owner afterward.

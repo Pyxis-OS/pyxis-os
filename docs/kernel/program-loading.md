@@ -74,13 +74,31 @@ this layout reserves no thread stack arena and adds no public thread or TLS API.
 
 ## File capture and costs
 
-[Installed executable capture](../../include/abi/launcher.h) still limits
-HOST/NPFS files to 16 MiB of serialized bytes. Archive/RAM execution bypasses
-that capture budget, not image admission or stack collision checks. A small
-serialized file with large BSS can fit capture while using much more image
-backing. Captured bytes coexist with backing and stacks, and a batch retains
-earlier prepared children while capturing its next image. Raising this separate
-budget remains deferred to the separate bundle capture task; hosted Clang remains unported.
+[Selected executable capture](../../include/abi/launcher.h) limits HOST, NPFS
+and RAM files uniformly to 128 MiB of serialized bytes per image. There is no
+global concurrent-capture budget; physical exhaustion still rejects. Immutable
+boot archive bytes are loaded in place, without a new copy. The independent
+256 MiB mapped-span and stack collision checks apply to every backend. A small
+serialized file with large BSS can use much more destination backing. Captured
+bytes coexist with eager image backing and stacks, and a batch retains earlier
+prepared children while capturing its next image.
+
+[Capture ownership](../../include/kernel/user/image_capture.h) is an address,
+serialized size and page-rounded backing size. The BSP eagerly backs whole
+RW/NX kernel pages, reads/copies into them, loads the image, then releases their
+data frames and virtual reservation on success or failure. Partial allocation
+unwinds the mapped prefix; an empty descriptor owns nothing. Shared kernel
+page-table ancestors keep their ordinary VM lifetime. Only the BSP accesses the
+buffer: APs transfer the descriptor through request metadata, so reused capture
+mappings have no remote translations to retire. RAM capture keeps its source
+FILE busy across the BSP copy and ends that operation exactly once.
+
+Over-ceiling requests return `CALL_LIMIT`, allocation failures `CALL_NO_MEMORY`,
+and I/O errors retain their existing status. A failed batch publishes no children
+and discards earlier prepared children and provisional observers. The
+[capture qualification](../development/experiments/program-bundles-capture/README.md)
+records matched launch/session costs, 128 MiB native images, simultaneous backing
+and debugger inspection of real allocation failure. Hosted Clang remains unported.
 
 The experimental 8 MiB eager stack added 7 MiB per live process relative to
 1 MiB, plus page-table costs. Matched nested-KVM qualification measured an exact
@@ -94,6 +112,6 @@ The [unpacked bundle path](../wip/program-bundles.md) now carries a bounded
 initial-stack parameter in the launch ABI. Kernel, SDK and in-tree launchers
 must use the coordinated layout; this changes no P1F field, SDK link address
 or compiler container. Plain programs keep 1 MiB. An 8 MiB bundle stack meets
-that capacity request only; it does not port Clang or increase installed capture.
+that capacity request only; it does not port Clang.
 The [bundle qualification](../development/experiments/program-bundles-task1/README.md)
 records the matched plain-launch comparison and manual admission/cleanup checks.

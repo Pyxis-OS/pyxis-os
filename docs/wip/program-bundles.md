@@ -1,11 +1,11 @@
 # Program bundles
 
-Status: the owner merged [#621](https://git.internal/PyxisOS/pyxis-os/pulls/621)
-and separately authorized task 1. Unpacked development bundles are implemented;
-review remains pending. The [qualification record](../development/experiments/program-bundles-task1/README.md)
-reports manual QEMU/GDB checks and matched plain-launch costs. ZIP and the
-accepted larger capture ceiling require separate tasks. Signing, consent UI and a Clang port
-are outside this task.
+Status: the owner merged the design in
+[#621](https://git.internal/PyxisOS/pyxis-os/pulls/621) and unpacked development
+bundles in [#625](https://git.internal/PyxisOS/pyxis-os/pulls/625). The separately
+authorized shared capture ceiling is implemented and qualified; review is
+pending. ZIP remains a separate task. Signing, consent UI and a Clang port are
+outside this milestone's first slice.
 
 ## Unpacked development lookup
 
@@ -161,10 +161,10 @@ All final capture/startup validation occurs before child publication. The parser
 allocates a bounded node array from the JSON byte count and releases each
 manifest parse tree after retaining its decoded strings. Code inspection gives
 about 5 MiB of overlapping catalog/manifest parse-tree heap at maximum JSON sizes;
-this is an allocation bound, not a measured peak. No whole-bundle capture or
-capture-limit increase is implemented. Existing installed HOST/NPFS executable
-capture remains 16 MiB; the 256 MiB mapped-image span remains independently
-bounded.
+this is an allocation bound, not a measured peak. Capture copies only the
+selected executable, with a shared 128 MiB serialized-image ceiling for HOST,
+NPFS and RAM; it never copies the whole bundle. The 256 MiB mapped-image span
+remains independently bounded.
 
 Ordinary kernel/SDK/ports/userland builds and interactive four-CPU QEMU passed
 for a two-command sample with a larger stack, read-only roots and actual grants.
@@ -230,9 +230,9 @@ CRC detects corruption, not provenance. Archive and decoded backing must survive
 the launching process until dependent handles close. The first profile has no
 random-access deflate index or signature layout.
 
-## Future larger-image admission
+## Selected-image admission
 
-The owner has authorized the shared-ceiling task and accepted these contracts:
+The owner accepted these contracts on 2026-10-09; they are implemented:
 
 - **128 MiB per selected executable**, uniformly for HOST, NPFS and RAM capture.
   This is one admission policy, not a global concurrent-capture budget. Concurrent
@@ -246,21 +246,20 @@ The owner has authorized the shared-ceiling task and accepted these contracts:
   Boot archive bytes remain uncopied, eager segment loading remains, and the
   256 MiB mapped span is independent.
 
-Implementation and qualification remain pending. Capture matched plain-launch
-and session-backing baselines on the exact main revision before code changes;
-then measure near-ceiling peak memory alongside other processes and inspect
-over-ceiling and mid-capture allocation failure cleanup. Add no new kernel log
-lines. ZIP and Clang remain outside this task.
+The BSP allocates, reads, loads and releases capture pages. APs transfer the
+ownership descriptor through request metadata without accessing its buffer;
+reusing the kernel mapping therefore requires no remote TLB retirement. Shared
+kernel page-table ancestors retain their ordinary VM lifetime, separately from
+reclaimable capture data. RAM capture holds the source FILE operation busy until
+the BSP finishes copying, releasing that loan on success and failure.
 
-The accepted next direction captures only the selected executable, retains
-existing eager segment loading, and shares a 128 MiB serialized-image ceiling
-across installed HOST/NPFS and RAM capture. It must replace the current installed
-16 MiB ceiling and bound RAM copies together in a separately authorized task.
-Existing immutable boot archive bytes need no new copy. Outer archive size,
-compression and serialized bytes do not define mapped span; its 256 MiB ceiling
-remains independent. Peak memory and failure rollback require qualification:
-capture, eager image backing, requested stack, startup/page tables and other
-processes coexist, and batches retain earlier prepared children.
+Capture, eager image backing, requested stack, startup/page tables and other
+processes coexist; batches also retain earlier prepared children. The
+[qualification record](../development/experiments/program-bundles-capture/README.md)
+reports matched plain-launch and session-backing measurements, near-ceiling
+native images on all three backends, and real allocation-exhaustion rollback.
+Outer archive size and compression do not define either serialized-image or
+mapped-span admission. ZIP and Clang remain unimplemented.
 
 A future Clang-shaped bundle would keep Clang, LLD, resource headers and a SDK
 sysroot in one revision, request an 8 MiB stack and receive group-bound linker
@@ -274,11 +273,11 @@ runtime or metadata blockers.
 
 - [x] Task 1 implementation: unpacked development manifests/catalog, command
   selection, per-program app/resource views, stack requests and actual grant
-  preparation. Qualified in QEMU; owner review is pending.
+  preparation. Qualified in QEMU and merged in #625.
 - [ ] Separate task: native ZIP adapter/backing lifetime and restricted archive
   profile, with matched peak/launch/cleanup qualification.
-- [ ] Separate task: shared 128 MiB captured-image ceiling and failure rollback
-  qualification.
+- [x] Shared 128 MiB captured-image ceiling and failure rollback qualification.
+  Implemented and qualified in QEMU; owner review is pending.
 
 Later tasks require explicit owner authorization. The native Kilo/TCC workflow
 remains usable throughout.
