@@ -1301,21 +1301,17 @@ recovery with task 5's owner-run ThinkPad speaker/headphone batch.
 ## SDL2 port limits
 
 The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
-and preference paths. Missing pieces:
+and preference paths. Video event waits now block on keyboard, acquired pointer
+and display readiness; [matched QEMU qualification](development/sdl2-event-wait-qualification.md)
+records the idle CPU reduction and input-delivery samples. Upstream polling
+remains for missing/nonwaitable sessions and failed waits; enabling threads
+requires a real wakeup sender and revisiting the readiness cache. Missing pieces:
 
 - **Audio:** the [native PCM grant](interfaces/audio.md) and
   [QEMU HDA engine](devices/hda.md) are available, but SDL2 has no audio backend
   yet. Revisit with a separately assigned playback consumer task.
 - **Threads:** without them, `SDL_INIT_TIMER` callback timers and
   `SDL_CreateThread` fail. Revisit with userspace threads.
-- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.
-  Deadline sleeps now make that about 1 ms rather than the old 8.33 ms tick,
-  so an idle waiting program wakes about 1000 times a second instead of about
-  120, increasing its CPU wake cost. This is the expected polling rate, not a
-  measured `SDL_WaitEvent` run; see the
-  [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
-  Revisit a blocking wait on the input and display handles when a consumer
-  waits for events.
 - **Windows:** one fullscreen window; multiple windows remain outside the
   current display contract. System pointer positions, program images,
   show/hide, bounded warp and relative lock now use the

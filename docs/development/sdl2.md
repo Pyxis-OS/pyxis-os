@@ -42,8 +42,19 @@ optional: without it, or without a mouse, the program runs from the keyboard.
   - **Resize.** A display geometry change replaces the mapping, updates the
     display mode and sends SDL's resized event. A failed replacement keeps the
     old mapping until the next change.
-- **Event pump.** One `wait_many` poll covers display geometry and keyboard
-  readiness; the pointer is polled.
+- **Event pump.** One `wait_many` poll covers display geometry, keyboard and the
+  acquired pointer subscription. `SDL_WaitEvent` and positive-timeout
+  `SDL_WaitEventTimeout` block on these interests; the next pump consumes that
+  readiness observation once, avoiding a duplicate BSP handoff. Negative
+  timeouts mean infinite, zero remains nonblocking, and finite deadlines survive
+  re-arming at the native 30-second wait bound. No input session is acquired by
+  waiting. The optional pointer is omitted until acquired.
+- **Wait fallback.** Unsupported/failing waits, native ownership/backend errors
+  or missing window/input sessions retain upstream polling with a 1 ms delay.
+  Initializing joysticks retains upstream's enumeration polling interval, even
+  with zero devices. The threadless build has no asynchronous SDL event producers
+  and needs no `SendWakeupEvent`; threads will require a real wakeup sender and
+  a review of the immediate-next-pump readiness cache.
 - **Keyboard.** Pyxis key positions map to SDL scancodes. Text input comes from
   the US layout shared with the kernel's terminal (`pxe/key_layout.h`). Control,
   Alt and Super suppress text.
@@ -84,9 +95,10 @@ Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 - Haptics, sensors, HIDAPI, shared objects, power, OpenGL and Vulkan are not
   built.
 
-Upstream needs four patches: the dynamic API off, the driver registered, the
+Upstream needs five patches: the dynamic API off, the driver registered, the
 Steam virtual gamepad file skipped because Pyxis `stat` has no modification
-time, and native pointer position/lock authority in SDL mouse core. The last
+time, native pointer position/lock authority in SDL mouse core, and permission
+for the threadless Pyxis wait hook to run without a wakeup sender. The pointer
 patch prevents synthetic warp updates and relative-mode fallback after native
 refusal; it retains other video drivers' behavior.
 
@@ -160,6 +172,12 @@ alpha levels; its own software-cursor option hid the system cursor while
 ordinary motion and clicks continued. Inventory navigation issued a successful
 native bounded warp. These are separate interactive checks from the original
 SDL milestone and frame-time samples above.
+
+The [matched event-wait qualification](sdl2-event-wait-qualification.md) records
+idle CPU usage and keyboard/pointer delivery with the existing upstream
+`checkkeysthreads` consumer. Its optional thread is unsupported; its main event
+loop still runs. DevilutionX menus and Quake's SDL path poll events and do not
+exercise blocking waits.
 
 ## Limits
 
