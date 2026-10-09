@@ -116,6 +116,7 @@ void volume_ui_cancel(void)
 {
   set_focus(false);
   open = dragging = false;
+  drawn_popup.shown = false;
 }
 
 bool volume_ui_keyboard_focused(void)
