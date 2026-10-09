@@ -2,7 +2,8 @@
 
 Caelum presents one software-rendered screen through a boot framebuffer,
 VirtIO GPU 2D or Bochs driver. The navigation bar, every local TTY and selected
-application graphics share its native 32-bit pixel layout. Pixel dimensions are
+application graphics share its native 32-bit pixel layout. The [presentation-timing proposal](../wip/presentation-timing.md) records buffering,
+vblank and native flip limits; it assigns no implementation. Pixel dimensions are
 distinct from terminal cell dimensions. Remote terminal sessions keep their
 creation dimensions and generation one.
 

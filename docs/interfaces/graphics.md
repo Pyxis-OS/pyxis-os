@@ -252,3 +252,7 @@ native 32-bit pixels. Cross-space presentation, shared application mappings,
 dirty rectangles, frame completion and graphics-specific
 resource quotas remain separate work. The single-CPU development fallback can use the same
 display protocol, while its TTY still shares kernel logs.
+
+Presentation timing and completed-frame handoff are proposed separately in
+[presentation timing](../wip/presentation-timing.md); today's mutable mapping and
+PRESENT semantics above remain authoritative.
