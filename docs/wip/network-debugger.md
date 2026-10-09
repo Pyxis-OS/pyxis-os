@@ -348,6 +348,11 @@ x/1bx arch_debug_inspect.data
 Use `DEBUG_INSPECT_REGISTERS` for `arch_debug_inspect.registers`; unavailable
 FP/SIMD state is not synthesized. Requests outside COMPLETE are not serviced.
 This mailbox is temporary task 1–2 scaffolding, replaced by task 3 transport.
+Ordinary builds, interactive QEMU/GDB checks and the before-code/interleaved
+option-off comparison are recorded in
+[guarded inspection qualification](../development/experiments/debug-inspection/README.md).
+Task 2 does not qualify NMI reentry into clock maintenance; retain the task 3/4
+entry restriction and qualification above.
 
 ## Accepted task split and qualification
 
