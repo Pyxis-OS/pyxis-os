@@ -68,9 +68,10 @@ USBIDS_OUTPUTS := $(addprefix build/ports/usbids/stage/,share/hwdata/usb.ids \
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
 SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe \
-  bin/uniq.pxe bin/sha256sum.pxe share/licenses/sbase/LICENSE \
-  share/licenses/sbase/arg.h \
-  share/licenses/sbase/strtonum.c)
+  bin/uniq.pxe bin/sha256sum.pxe bin/wc.pxe bin/tail.pxe bin/sort.pxe \
+  share/licenses/sbase/LICENSE share/licenses/sbase/arg.h \
+  share/licenses/sbase/strtonum.c share/licenses/sbase/memmem.c \
+  share/licenses/sbase/reallocarray.c share/licenses/sbase/queue.h)
 
 PICOHTTPPARSER_INPUTS := $(wildcard ports/picohttpparser/*.lua ports/picohttpparser/Makefile) ports/ports.lua ports/build.lua
 PICOHTTPPARSER_OUTPUTS := $(addprefix build/ports/picohttpparser/stage/,dev/include/picohttpparser.h dev/lib/libpicohttpparser.a share/licenses/picohttpparser/picohttpparser.h)

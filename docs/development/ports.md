@@ -212,12 +212,13 @@ rules; configuration, platform integration and limits are described in
 
 The image includes `bin://cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../../ports/sbase/README.md) pins the task-1 source revision and
-builds cksum, a restricted tee, uniq and sha256sum with their helpers. Ordered
-patches narrow private util.h, restore the declarations uniq needs, and adapt
-tee's options and descriptor lifetimes; cksum, uniq, sha256sum and helper bodies
-remain unchanged and use conventional libc I/O calls. The full license/contributor list, arg.h notice and
-OpenBSD strtonum notice are packaged at `boot://share/licenses/sbase/LICENSE`,
-`boot://share/licenses/sbase/arg.h` and `boot://share/licenses/sbase/strtonum.c`.
+builds cksum, a restricted tee, uniq, sha256sum, wc, tail and sort with their
+helpers. Ordered patches narrow private util.h, restore the declarations the
+tools need, adapt tee's options and descriptor lifetimes and remove tail's
+follow mode; cksum, uniq, sha256sum, wc, sort and helper bodies remain unchanged
+and use conventional libc I/O calls. The full license/contributor list and the
+arg.h, OpenBSD strtonum and reallocarray, memmem and queue.h notices are packaged
+under `boot://share/licenses/sbase/`.
 
 ```text
 cksum host://hello.c
@@ -277,6 +278,23 @@ stdout. File and pipe input is fetched in blocks by
 [one native read per byte](../technical-debt.md#console-line-input). See the
 [uniq reference](../userland/uniq.md) for behavior, limits and validation, and the
 [recipe notes](../../ports/sbase/README.md) for the port adaptation.
+
+## Counting, tailing and sorting with sbase wc, tail and sort
+
+The shell resolves `wc`, `tail` and `sort` to `bin://wc.pxe`, `bin://tail.pxe` and
+`bin://sort.pxe`:
+
+```text
+wc -l host://notes.txt
+tail -n 20 host://log.txt
+cat host://words | sort | uniq -c | wc -l
+```
+
+They are the upstream tools except that `tail -f` and `-F` are refused with an
+explicit message, since Pyxis cannot wait for a file to grow. Sort has no locale
+collation and uses libc's unstable `qsort`. Libc gained `bsearch` for them. See
+the [reference](../userland/wc-tail-sort.md) for behavior, limits and validation,
+and the [recipe notes](../../ports/sbase/README.md) for the adaptation.
 
 ## SHA-256 digests with sbase sha256sum
 
