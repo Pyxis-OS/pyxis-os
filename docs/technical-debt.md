@@ -7,571 +7,284 @@ when the underlying tradeoff changes.
 
 ## Remote transfer memory and staging limits
 
-[Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer)
-stream with constant memory and no fixed size limit (owner decision,
-2026-10-08). Unverified bytes reach the disk, but only under the private staging
-name, and are published after the size and SHA-256 match. Senders read the source
-twice because the digest is announced before data. The framing keeps one 2 KiB
-chunk in flight. On the ThinkPad over wired LAN, 15 MiB took 6.5 s up and
-7.5 s down on 2026-10-09, about 2–2.3 MiB/s, owner timings after the
-[transfer throughput](wip/remote-file-transfer.md#native-re-timing-2026-10-09)
-and [network throughput](development/network-throughput.md) work; nested QEMU
-is slower in both directions. Uploading 692 MB natively takes about 4½ minutes,
-which the owner accepts. Keeping several chunks in flight is an owner decision,
-since it changes the framing and the guest's 4 KiB typeahead allowance. Guest names are
-limited to 200 UTF-8 bytes and host query/resolved paths to 1024 bytes.
+[Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
+(owner decision, 2026-10-08), but keep one 2 KiB chunk in flight and read the source twice because the digest is announced
+first. On the ThinkPad over wired LAN, 15 MiB took 6.5 s up and 7.5 s down (about 2–2.3 MiB/s, owner timings 2026-10-09; see
+[transfer throughput](wip/remote-file-transfer.md#native-re-timing-2026-10-09) and [network throughput](development/network-throughput.md)),
+and nested QEMU is slower; a 692 MB upload takes about 4½ minutes, which the owner accepts. Several chunks in flight would change
+the framing and the guest's 4 KiB typeahead allowance, so it is an owner decision. Guest names are limited to 200 UTF-8 bytes and
+host paths to 1024.
 
-The mandatory negotiated SHA-256 extension intentionally excludes stock kitty
-peers. Reconsider interoperability only if a peer can supply the same verification
-and publication guarantees. Transfers are single regular files without resume,
-compression or deltas.
-
-Exclusive `.NAME.xfer-partial-ID` siblings can survive abrupt process/session
-death, and with streaming they can hold a partial file of any size, which
-matters on a USB stick. Handled cancellation/errors attempt cleanup and report
-failures, but stale files are never automatically deleted or overwritten:
-manual review owns their removal. Rename commits the complete target; late cancellation cannot roll it
-back. Linux host atomic publication is validated; the macOS exclusive-rename path
-still needs an owner run. Revisit staging recovery if interruptions make manual
-cleanup burdensome, with explicit ownership rules rather than age-based deletion.
+The mandatory SHA-256 extension excludes stock kitty peers, and transfers are single regular files without resume, compression or
+deltas. Exclusive `.NAME.xfer-partial-ID` siblings can survive abrupt death and hold a partial file of any size, which matters on a
+USB stick; stale files are never deleted automatically and manual review owns removal. The macOS exclusive-rename path still needs
+an owner run. Revisit staging recovery if manual cleanup becomes burdensome, with explicit ownership rules rather than age-based
+deletion.
 
 ## Regex character classes and back-references
 
-The [libc regex interface](userland/libc-portability.md#regular-expressions-and-utf-8-conversion)
-decodes UTF-8 but classifies and folds only ASCII. Non-ASCII values have no
-character class and fold to themselves, so Unicode class searches and
-case-insensitive non-ASCII searches are incomplete. Revisit Unicode tables or
-locale policy when a concrete consumer requires them.
-
-Owner decision, 2026-10-07: preserve the pinned musl 1.2.5 TRE matcher behavior.
-BRE back-references remain bytewise under `REG_ICASE`, and the backtracking
-path assumes single-byte lookahead and does not fully restore variable-width
-decoder state. UTF-8 back-reference matches and offsets are therefore unreliable.
-Invalid subject UTF-8 returns `REG_NOMATCH` when encountered, with no whole-string
-validation guarantee. Collating symbols and equivalence classes remain unsupported.
-Revisit the pinned engine or a focused matcher correction when a consumer needs
-these behaviors; vi/less retain the documented limits.
+The [libc regex interface](userland/libc-portability.md#regular-expressions-and-utf-8-conversion) decodes UTF-8 but classifies and
+folds only ASCII, so Unicode class and non-ASCII case-insensitive searches are incomplete. Owner decision, 2026-10-07: keep the
+pinned musl 1.2.5 TRE matcher behavior. BRE back-references stay bytewise under `REG_ICASE`, the backtracking path assumes
+single-byte lookahead and does not fully restore variable-width decoder state (UTF-8 back-reference matches and offsets are
+unreliable), invalid subject UTF-8 returns `REG_NOMATCH` when reached with no whole-string validation, and collating symbols and
+equivalence classes are unsupported. Revisit Unicode tables, locale policy or the engine when a consumer needs them; vi and less
+keep the documented limits.
 
 ## Remote drop prompt tracking
 
-[Host file drops](userland/remote-terminal.md#dropping-a-host-file) require a
-known empty root-shell prompt. OSC 133;B and command completion do not acknowledge
-consumption of host input: a completion/prompt can precede queued commands.
-The client therefore latches uncertainty when it forwards input while a command
-is pending. Drops remain normal pastes until reconnection, including after an
-interactive editor. Canceling an edited shell line can also suppress detection
-until a later completed command. This trades missed upload offers for avoiding
-injected commands in running programs, without changing the terminal wire or
-kernel authority. Revisit when a concrete native input-acknowledgment contract
-can establish prompt/input ordering; rendered prompt text is insufficient.
-
-Detection supports printable ASCII host paths only, matching the shell editor's
-input contract, and refuses final symlinks to match `xfer`'s source-opening policy.
-Quoted commands too large for the editor fall back to text. Revisit path coverage
-with native Unicode command editing or a supported argument-delivery interface,
-not by interpreting a host shell or silently truncating names.
+[Host file drops](userland/remote-terminal.md#dropping-a-host-file) need a known empty root-shell prompt, but OSC 133;B and command
+completion do not acknowledge consumption of host input. The client therefore latches uncertainty when it forwards input while a
+command is pending: drops stay normal pastes until reconnection (including after an interactive editor), and canceling an edited
+line can suppress detection until a later completed command. This trades missed upload offers for never injecting commands into
+running programs. Detection supports printable ASCII host paths only, refuses final symlinks to match `xfer`, and falls back to
+text for quoted commands too large for the editor. Revisit when a native input-acknowledgment contract can order prompt and input,
+and with Unicode command editing or a supported argument-delivery interface.
 
 ## SMT placement and later balancing
 
-[Placement](kernel/smp.md#placement-and-migration) prefers idle siblings only
-between equally loaded logical CPUs. The existing preemption push and idle pull
-still balance logical load; they do not guarantee one compute task per core.
-Read-only GDB on an eight-CPU/four-core QEMU run showed four tasks initially
-occupying four cores,
-then a push moved one onto an occupied sibling while a different core became
-idle. The [measurement record](development/experiments/core-placement/README.md)
-records that observation and the owner-run native improvement: heap ×4 wall fell
-from 2.352 s to 1.389 s, with all four clients near the solo-client time.
-
-Revisit topology-aware balancing if owner-run workloads show that these later
-moves erase the benefit. This task leaves the push threshold and pulling policy
-unchanged. CPUID-unavailable CPUs, older AMD compute-unit encodings and AMD
-non-power-of-two thread counts remain isolated; extend detection when a concrete
-supported target requires it.
+[Placement](kernel/smp.md#placement-and-migration) prefers idle siblings only between equally loaded logical CPUs; the preemption
+push and idle pull still balance logical load and do not guarantee one compute task per core (QEMU showed a push moving a task onto
+an occupied sibling while another core idled). The [measurement record](development/experiments/core-placement/README.md) has
+the observation and the owner-run native gain (heap ×4 wall 2.352 s to 1.389 s). Revisit topology-aware balancing if owner-run
+workloads show later moves erase the benefit. CPUID-unavailable CPUs, older AMD compute-unit encodings and AMD
+non-power-of-two thread counts stay isolated until a supported target needs them.
 
 ## Retained userspace heap pools
 
-Libc's TLSF allocator reuses freed blocks but retains every backing pool until
-process exit. Pools are at least 64 KiB; there is no fixed pool-count registry.
-A short-lived peak therefore leaves memory mapped for the rest of that process.
-Shrinking `realloc` also keeps the original block capacity; growth may briefly
-hold both blocks and copy contents to preserve 16-byte alignment.
-
-Kernel process destruction reclaims all private backing, including live malloc
-allocations. Reconsider empty-pool release and in-place aligned growth when
-long-lived applications make retained capacity or copying material. The current
-allocator and errno assume one thread per process; add synchronization and
-thread-local errno when introducing userspace threads.
+Libc's TLSF allocator reuses freed blocks but keeps every backing pool (at least 64 KiB, no fixed pool-count registry) until process
+exit, so a short-lived peak leaves memory mapped for that process; shrinking `realloc` keeps the block capacity and growth may hold
+both blocks while copying to preserve 16-byte alignment. Process destruction reclaims everything. Revisit empty-pool release and
+in-place aligned growth when long-lived applications make retained capacity or copying material. The allocator and errno assume one
+thread per process: add synchronization and thread-local errno with userspace threads.
 
 ## Allocation measurement follow-ups
 
-The [allocation benchmark and caller-scoped memory profile](development/allocation-profiling.md)
-separate warm userspace heap throughput, heap expansion and direct private-page
-requests. Since SMP task 7a, profiling splits service from the whole syscall;
-earlier records also split publication, BSP queue time and resumption. Report the accelerator, CPU count, live set and host/nested-VM context;
-the instrumentation itself reads HPET and perturbs timings.
-
-Standalone kernel `kmalloc`/`kfree` throughput and deeper PMM/VM timing remain
-unmeasured. Pool growth counters describe backing acquired during a measurement
-window, not total retained memory or a fragmentation metric. Private memory
-now runs in the caller's syscall ([memory](kernel/memory.md#execution)). The
-common executor admits the remaining migrated services,
-including HOST forwarding; measure queue and worker costs before changing
-allocation policy.
+The [allocation benchmark and caller-scoped profile](development/allocation-profiling.md) separate warm heap throughput, heap
+expansion and private-page requests (the instrumentation reads HPET and perturbs timings; report accelerator, CPU count, live set
+and host context). Standalone `kmalloc`/`kfree` throughput and deeper PMM/VM timing are unmeasured, and pool growth counters
+describe backing acquired in a window, not retained memory or fragmentation. Private memory runs in the caller's syscall
+([memory](kernel/memory.md#execution)); measure queue and worker costs of the remaining executor services, including HOST
+forwarding, before changing allocation policy.
 
 ## I/O baseline attribution and coverage
 
-The [I/O/IPC baselines](development/io-ipc-baselines.md) measure elapsed workload boundaries
-in nested KVM. HOST profiling now separates guest queues, worker service and transport, but
-strongly perturbs the nested workload; see the profiling entry below. Transport
-still combines device/daemon/backing service and guest/host scheduling. Host
-write/sync baselines used tmpfs and do not establish physical-disk durability cost.
-
-Revisit host attribution resolution before changing batching or transfer limits.
-Private-memory and HOST collections remain independent. Short native
-and SEND intervals are close to clock overhead; finer comparisons need a separate
-longer-batch or scoped-instrumentation contract. Owner-host/physical-hardware
-results, capability attachment cost, cross-space contention, mixed-workload
-fairness and per-process CPU accounting remain unmeasured. The final combined
-IPC/HTTP/RAM/HOST matrix and additional resolution decisions were deferred when
-the reliability milestone closed; no final matched matrix is claimed. Gather
-relevant coverage before making deployment-capacity or fine-grained performance
-claims; keep each environment and completion boundary distinct.
+The [I/O/IPC baselines](development/io-ipc-baselines.md) measure elapsed workload boundaries in nested KVM. HOST profiling splits
+guest queues, worker service and transport but strongly perturbs the workload (next entry), and transport still mixes
+device/daemon/backing service with guest/host scheduling. Host write/sync baselines used tmpfs, so they say nothing about
+physical-disk durability cost. Short native and SEND intervals are close to clock overhead and need a longer-batch or
+scoped-instrumentation contract. Owner-host results, capability attachment cost, cross-space contention, mixed-workload fairness
+and per-process CPU accounting are unmeasured, and the final combined IPC/HTTP/RAM/HOST matrix was deferred when the reliability
+milestone closed. Gather coverage before deployment-capacity or fine-grained performance claims, and revisit host attribution
+resolution before changing batching or transfer limits.
 
 ## Host FILE profiling perturbation
 
-The [HOST attribution matrix](development/io-reliability-attribution.md#host-profiling-and-attribution-limits)
-records separate initial BSP queue, worker queue/service, transport and resumption
-intervals. In the agreed five-sample nested-KVM groups, profiled medians were
-13.7–16.1 times their controls. Initial queue wait took 73.8–78.8% of profiled
-transfer time; these percentages cannot partition normal unprofiled transfer time
-or establish host filesystem cost. Timestamp overhead changes interleaving as
-well as adding elapsed time, so subtracting a constant is inappropriate.
-
-The [task-4 controlled experiment](development/experiments/host-profile-slowdown/README.md)
-reproduces 14.9× full-profile slowdown on prepared HOST writes. Explicit initial
-BSP notification reduces it to 2.0×; counts-only runs stay near their off controls.
-Initial queue mean drops from 5.331 to 0.137 ms/request. This establishes a large
-notification-dependent amplification under the measured workload. Queue-sweep
-timing followed by timer wake is consistent with code and near-8 ms maxima, but
-individual wake causes were not traced. The residual includes direct timestamp
-work and unresolved scheduling/transport observation effects; no constant
-correction or normal-workload phase partition is justified.
-
-Initial HOST publication now uses the common executor's synchronized idle
-notification, preserving request ownership and early wake semantics. The
-[correction validation](development/io-reliability-attribution.md#host-publication-notification)
-repeats the affected off/on controls; full profiling still perturbs execution.
-The milestone closed after this correction. Additional resolution/coverage and
-the final combined IPC/HTTP/RAM/HOST matrix were deferred as independent work,
-not completed. Future comparisons must retain unprofiled elapsed controls and
-settle any additional measurement coverage separately. The report's counts-only
-patches are experimental, with unavailable phase timings explicitly omitted; no permanent
-collection mode or clock change has been accepted. Full-profile attribution
-remains limited to instrumented behavior after the notification correction.
-Host-side component timing and durable storage remain separately scoped work;
-current fixtures are tmpfs with sync off.
+Full HOST profiling strongly perturbs execution: in the nested-KVM groups profiled medians were 13.7–16.1 times their controls, with
+the initial BSP queue wait 73.8–78.8% of profiled transfer time ([attribution matrix](development/io-reliability-attribution.md#host-profiling-and-attribution-limits)).
+The [controlled experiment](development/experiments/host-profile-slowdown/README.md) reproduced a 14.9× slowdown on prepared
+writes, cut to 2.0× by explicit BSP notification, and initial HOST publication now uses the common executor's synchronized idle
+notification ([validation](development/io-reliability-attribution.md#host-publication-notification)). The residual combines
+timestamp work with unresolved scheduling and transport observation effects, so no constant correction or normal-workload phase
+partition is justified. Keep unprofiled controls in comparisons; no permanent counts-only mode or clock change is accepted.
+Host-side component timing and durable storage (fixtures are tmpfs with sync off) are separate work.
 
 ## Fixed userspace stacks
 
-Each process eagerly backs a 1 MiB user stack, including programs that use much
-less. This gives native parsers and callbacks room without port-specific
-recursion limits, at a cost of 960 KiB more backing per process than the former
-64 KiB budget. It is still finite; port stack requirements need review.
-
-A reserved, unmapped page below the stack catches ordinary downward overruns,
-but a large adjustment can skip it. Compiler stack probing and automatic stack
-growth are not implemented. Reconsider eager backing when process counts or
-memory pressure justify it. Demand-backed stacks must respect BSP ownership of
-allocation and page-table mutation; they are not just a fault-handler shortcut.
+Each process eagerly backs a 1 MiB user stack (960 KiB more than the former 64 KiB budget), giving native parsers room without
+port-specific recursion limits; it is still finite and port stack needs need review. An unmapped guard page catches ordinary
+overruns but a large adjustment can skip it, and neither compiler stack probing nor stack growth exists. Reconsider eager backing
+when process counts or memory pressure justify it; demand-backed stacks must respect BSP ownership of allocation and page-table
+mutation.
 
 ## BSP-only allocation and VM mutation
 
-Kernel allocation and page-table mutation remain owned by the BSP, except private
-memory operations, which run in the caller's syscall since SMP task 7a. Tasks
-submit other specific requests and wait for BSP service. The
-[common executor](../kernel/service/request.c) separates subsystem operations
-from scheduling through a closed service catalog and one FIFO. Each user task
-owns one reusable request allocation and a separate caller-only profiling
-allocation; kernel workers own neither. Subsystems own request capture, service
-helpers and profile controls. This keeps allocator and VM ownership explicit,
-but long non-preemptible service operations still delay other requests and BSP
-work.
+Private memory runs in the caller's syscall (since SMP task 7a) and the heap, physical allocator and scratch mappings are safe on any
+CPU, but other allocating services still run on the BSP through the [common executor](../kernel/service/request.c) (a closed
+service catalog and one FIFO; see the [request contract](kernel/bsp-service-requests.md)). Serial services, deferred destruction,
+worker relocation and shared kernel mapping reuse stay BSP-owned and need their own handoff and invalidation contracts
+([follow-ups](wip/scheduling-and-threads.md#serial-services-off-the-bsp)). Long non-preemptible service operations delay other
+requests and BSP work, and each user task owns one reusable request allocation plus a caller-only profiling allocation.
 
-The handoff ordering is part of correctness, not incidental queue plumbing.
-Display requests are published only after the requester has left its task stack
-and private address space; resumption reloads CR3 before returning to
-the task stack. A wake arriving before a task finishes parking records a
-notification without making the still-running context runnable elsewhere.
-Changes to service placement or synchronization must preserve these guarantees
-or explicitly replace them with an equally defined ownership and translation
-invalidation contract.
-
-Reconsider BSP-only service when its latency becomes material or before allowing
-concurrent use and mutation of one private address space. The
-[implemented BSP request contract](kernel/bsp-service-requests.md) has separated operation
-ownership, submission/completion and subsystem service from scheduling while
-retaining BSP-only allocation and the inactive-root handoff. The
-[runtime SMP milestone](kernel/smp.md), completed on 2026-10-06, introduced
-independent spaces, single-task migration and local private-memory operations,
-with allocator synchronization and explicit mapping lifetime rules. The heap,
-physical allocator and scratch mappings are safe on any CPU, and private memory
-operations use them locally; other allocating services still run on the BSP.
-Serial services and deferred destruction remain BSP-owned. Worker relocation and
-shared kernel mapping reuse need their own handoff/invalidation contracts
-([follow-ups](wip/scheduling-and-threads.md#serial-services-off-the-bsp)). Eager
-task-lifetime storage and long non-preemptible operations remain explicit costs;
-measure them in matched before/after workloads.
+The handoff ordering is correctness: display requests are published only after the requester left its task stack and private
+address space, resumption reloads CR3 before returning to the task stack, and a wake arriving before a task finishes parking records
+a notification without making the running context runnable elsewhere. Preserve these or replace them with an equally defined
+ownership and invalidation contract. Revisit when BSP service latency is material or before concurrent use of one private address
+space.
 
 ## PMM first-fit search under its lock
 
-`pmm_alloc()` searches first fit under the PMM lock. Since the SMP task-7 PMM
-follow-up, it skips fully allocated 64-bit bitmap words and starts at a hint
-below which every frame is unavailable. That ended the serialization measured in
-7a: lock wait fell to about 150 cycles per call with two page clients
-([record](development/experiments/smp-task7-pmm/README.md#pmm-lock)).
-
-Search time can still grow with fragmentation: free frames scattered through
-mostly allocated words, or a long run requested among short free stretches. The
-lock is still taken once per frame by `vm_back()` and heap growth, which allocate
-one frame at a time. Revisit if a workload shows PMM lock waiting again; batching
-frames per call would be the next step.
+`pmm_alloc()` searches first fit under the PMM lock, skipping fully allocated 64-bit words and starting at a hint below which every
+frame is unavailable; this ended the serialization measured in 7a (lock wait about 150 cycles per call with two page clients,
+[record](development/experiments/smp-task7-pmm/README.md#pmm-lock)). Search time can still grow with fragmentation, and `vm_back()`
+and heap growth take the lock once per frame. Revisit if a workload shows PMM lock waiting again; batching frames per call is the
+next step.
 
 ## Scratch-slot false sharing
 
-Each CPU's two scratch slots are adjacent PTEs, so the slots of CPUs 0–3, 4–7
-and so on share one 64-byte cache line of the scratch page table. The
-`scratch_busy` flags of every CPU also share lines. Each page that private memory
-or heap growth maps uses the slots about a dozen times, for zeroing and for each
-page-table level read. CPUs doing that at the same time bounce those lines.
+Each CPU's two scratch slots are adjacent PTEs, so the slots of CPUs 0–3, 4–7 and so on share a 64-byte cache line of the scratch
+page table, and the `scratch_busy` flags share lines too; every mapped page uses the slots about a dozen times. In the nested VM two
+concurrent page clients each took about 1.9 times as long as one alone (1.4 times with a throwaway build giving each CPU its own
+line, [record](development/experiments/smp-task7-pmm/README.md#remaining-concurrency-cost-scratch-slot-false-sharing)). Natively
+the cost is small: two clients took 1.15–1.25 times and eight up to 1.5 times ([task 8](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)).
 
-In the nested VM, two concurrent page clients each took about 1.9 times as long
-as one alone. Giving each CPU's PTEs and flags their own line, in a throwaway
-build, cut that to about 1.4 times
-([record](development/experiments/smp-task7-pmm/README.md#remaining-concurrency-cost-scratch-slot-false-sharing)).
-
-There are two options:
-
-- **Spread the slots, one line per CPU.** Covering all 256 xAPIC IDs needs an
-  8 MiB scratch window instead of 2 MiB, which moves the APIC, I/O APIC and
-  HPET mappings.
-- **Walk the active address space through the recursive mapping.** This removes
-  most slot use, and single-CPU cost, entirely.
-
-Natively the cost is small. On the ThinkPad, two page clients each took
-1.15–1.25 times one alone, and eight up to 1.5 times ([task-8
-record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)).
-The owner prefers the recursive walk (2026-10-06); with the native numbers, it
-is a later optimization rather than an SMP prerequisite. Frame zeroing would
-still use a slot. It could instead go through the frame's final mapping before
-anyone can see it, which would change the "zeroed before mapping" rule, or keep
-one padded zeroing slot per CPU. Copy-on-write zero pages were considered and
-set aside. They only move the zeroing to the first write, need allocating page
-faults, and defer NO_MEMORY from ALLOCATE to an ordinary store.
-
-After topology-aware placement (#451), the native page batches looked slower per
-client than the task-8 record: two clients took 0.148–0.149 s each against
-0.105–0.115 s, and eight up to 0.344 s against 0.137 s; one client was unchanged
-([record](development/experiments/core-placement/README.md)). That comparison
-spans sessions and older main, so it is unmeasured. One possibility is that
-spreading clients across cores and the two CCXs makes this sharing costlier. When
-revisiting, start with a same-sitting native A/B against main.
+Options: spread the slots one line per CPU (an 8 MiB scratch window instead of 2 MiB for all 256 xAPIC IDs, moving the APIC, I/O APIC
+and HPET mappings), or walk the active address space through the recursive mapping, which removes most slot use. The owner prefers
+the recursive walk (2026-10-06) as a later optimization; frame zeroing would still need a slot or a change to the
+"zeroed before mapping" rule. Copy-on-write zero pages were set aside. After topology-aware placement (#451) native page batches
+looked slower per client than the task-8 record (two clients 0.148–0.149 s against 0.105–0.115 s) across sessions and older main,
+so this is unmeasured; start a revisit with a same-sitting native A/B against main.
 
 ## RAM-file page access cost
 
-RAM-file reads and overwrites map each 4 KiB page through the calling CPU's
-scratch slot, so in nested QEMU they run about 2.1–2.4x slower than the old
-single-buffer copies, at 2.4–3 GB/s
-([measurements](development/experiments/ram-file-pages/README.md)). Revisit
-with a consumer bound by RAM-file reads, for example by mapping runs of pages
-or a kernel direct map.
+RAM-file reads and overwrites map each 4 KiB page through the calling CPU's scratch slot, so in nested QEMU they run about 2.1–2.4x
+slower than the old single-buffer copies, at 2.4–3 GB/s ([measurements](development/experiments/ram-file-pages/README.md)).
+Revisit with a consumer bound by RAM-file reads, for example by mapping runs of pages or a kernel direct map.
 
 ## Never-reused kernel heap arena
 
-Kernel heap pools come from a 256 GiB arena whose addresses are never reused, so
-publishing a pool needs no TLB shootdown, and pools are never removed. Memory
-freed to the heap therefore stays with the heap, and the arena bounds every pool
-plus every retired page for the whole boot. Growth zeroes and maps its pool with
-interrupts disabled under the growth lock. A growth that loses frames to another
-CPU while mapping retires the pages it mapped.
-
-RAM files keep their data in PMM frames since 2026-10-09; the heap holds only
-their page index, 1/512 of the largest size reached. No current consumer
-approaches the arena. Revisit when `heap_stats` shows arena use or retired bytes
-growing, or growth latency becomes material.
+Kernel heap pools come from a 256 GiB arena whose addresses are never reused, so publishing a pool needs no TLB shootdown and pools
+are never removed: freed memory stays with the heap and the arena bounds every pool plus every retired page for the boot. Growth
+zeroes and maps its pool with interrupts disabled under the growth lock, and a growth that loses frames to another CPU retires what
+it mapped. RAM files keep their data in PMM frames since 2026-10-09 (the heap holds only their page index), and no consumer
+approaches the arena. Revisit when `heap_stats` shows arena use or retired bytes growing, or growth latency becomes material.
 
 ## BSP userspace and kernel workers
 
-Since SMP task 7b, user tasks run on the BSP alongside the kernel workers:
-presentation, the BSP request executor, network, native filesystem, USB and ACPI.
-
-- **Placement:** ties go to the APs first, and the BSP pulls only while none of
-  its workers is runnable.
-- **Preemption:** a woken worker preempts a BSP user task at the next interrupt.
-- **No priorities:** user tasks and workers otherwise share the BSP's queue on
-  equal terms.
-- **Interrupt-masked syscalls:** user syscalls run with interrupts masked, so a
-  long BSP user syscall delays workers and device interrupts until it returns.
-  For example, a large private allocation must zero its pages first.
-
-With all four CPUs loaded in the nested VM, ttcp and RAM-file writes stayed
-within their spread ([7b record](development/experiments/smp-task7b/README.md)).
-Display smoothness and input latency under BSP load were not measured.
-
-Revisit if the native check in SMP task 8 or interactive use shows worker or
-presentation latency under load. Options include excluding the BSP again by
-policy, worker priority, or preemptible long syscalls.
+Since SMP task 7b, user tasks run on the BSP beside the kernel workers (presentation, BSP request executor, network, native
+filesystem, USB, ACPI). Ties go to the APs first and the BSP pulls only while none of its workers is runnable; a woken worker preempts
+a BSP user task at the next interrupt, but there are no priorities and user syscalls run with interrupts masked, so a long BSP user
+syscall (a large private allocation zeroing its pages) delays workers and device interrupts. With all four CPUs loaded in the nested
+VM ttcp and RAM-file writes stayed within their spread ([7b record](development/experiments/smp-task7b/README.md)), and the SMP
+task 8 native check saw no dropped keystrokes or frames under load ([record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)),
+though display smoothness and input latency were judged by feel, not measured. Revisit if interactive use shows worker or
+presentation latency under load: exclude the BSP by policy, add worker priority, or make long syscalls preemptible.
 
 ## ACPI interpreter host limits
 
-The [ACPI host interface](kernel/acpi.md) makes these choices for the first
-milestone task:
+The [ACPI host interface](kernel/acpi.md) makes these choices:
 
-- **PCI configuration writes are refused.** AML that needs them fails the
-  access and logs the function, offset and value. Revisit if the ThinkPad or a
-  later ACPI task logs refusals; a write path would need its own ownership rule
-  for functions that drivers own.
-- **The firmware mapping window is never reused.** Its 64 MiB of address space
-  bounds every distinct mapping for the whole boot, and an operation region
-  is mapped whole. QEMU uses 14 pages and the ThinkPad 2,127 (8.3 MiB).
-  Revisit if a machine fills the window or maps very large regions.
-- **AML is trusted with hardware.** It may use any I/O port, including the
-  legacy PCI configuration ports, and its device-memory mappings can alias
-  registers that the kernel owns, such as the HPET and APICs. Revisit if a
-  firmware access interferes with a driver.
-- **The SCI must share the keyboard's I/O APIC.** It is installed only on the
-  controller mapped for PS/2 routing, and not when no PS/2 route exists. ACPI
-  events are then unavailable.
-- **Waiting for deferred work runs it inline.** Installing the embedded
-  controller's GPE handler does not wait, and nothing removes handlers. Revisit
-  when the power-button task or notifications add handlers that wait.
+- **PCI configuration writes are refused**; AML needing them fails the access and logs function, offset and value. A write path would
+  need an ownership rule for driver-owned functions; revisit if a machine logs refusals.
+- **The 64 MiB firmware mapping window is never reused** and an operation region is mapped whole (QEMU uses 14 pages, the ThinkPad
+  2,127, 8.3 MiB). Revisit if a machine fills it.
+- **AML is trusted with hardware**: any I/O port including legacy PCI configuration ports, and device-memory mappings that can alias
+  registers the kernel owns (HPET, APICs). Revisit if a firmware access interferes with a driver.
+- **The SCI must share the keyboard's I/O APIC**; without a PS/2 route ACPI events are unavailable.
+- **Waiting for deferred work runs it inline**, and nothing removes GPE handlers. Revisit when notifications add handlers that wait.
 
 ## Power-off and restart limits
 
-[Power-off and restart](kernel/acpi.md#power-off-and-restart) follow the first
-version of "clean" agreed for the ACPI milestone (user tasks held, pools flushed):
+[Power-off and restart](kernel/acpi.md#power-off-and-restart) implement the agreed first version of "clean" (user tasks held, pools
+flushed). Accepted limits:
 
-- **No orderly stop of programs or services.** User tasks are held where they
-  are; nothing is asked to exit or save. Revisit with service supervision.
-- **Failed pools are skipped.** A pool whose writeback already failed takes no
-  writes, so power-off proceeds without it; its unsynced changes are lost, as
-  they would be with the power button. The failure was logged when it happened.
-  Refusing instead would make a clean power-off impossible until reboot.
-- **One flush failure keeps the system up.** There is no forced power-off
-  command; holding the power button remains the way out.
-- **Raw disk handles are not flushed.** The installer flushes its own writes;
-  another raw writer would need to.
-- **Untested failure paths.** The flush-failure, firmware-failure and reset
-  fallback paths were checked by code inspection only. Revisit if a machine
-  reaches them.
-- **Held tasks ignore stop requests until release.** A group stopped during a
-  failed power operation stops when its tasks resume.
-- **Control-method power buttons are ignored.** Machines that report presses as
-  `Notify(PNP0C0C, 0x80)` instead of the fixed event get no clean power-off
-  from the button. The T14 and QEMU use the fixed event. Revisit on such a
-  machine, with the notifications work.
-- **A button press interrupts an Update.** A press powers off at once
-  without asking, even while the installer rewrites a stick's ESP through raw
-  disk writes, which are not flushed, so the stick could be left unbootable.
-  Typing `poweroff` had the same effect, but a button is easier to press by
-  accident. Revisit with installer work: it could hold off power operations
-  while it writes.
-- **A failed S5 entry freezes the BSP for 10 s.** uACPI waits that long with
-  interrupts disabled before reporting that the machine did not power off.
-  Revisit if a machine reaches that path.
+- No orderly stop of programs or services (revisit with service supervision); held tasks ignore stop requests until release.
+- Failed pools are skipped (their unsynced changes are lost, as with the power button), and one flush failure keeps the system up with
+  no forced power-off command.
+- Raw disk handles are not flushed; the installer flushes its own writes.
+- Control-method power buttons (`Notify(PNP0C0C, 0x80)`) are ignored; the T14 and QEMU use the fixed event. Revisit on such a machine.
+- A failed S5 entry freezes the BSP for 10 s (uACPI waits with interrupts disabled).
+- The flush-failure, firmware-failure and reset-fallback paths were checked by code inspection only.
+- **A button press or `poweroff` during an Update powers off at once without asking**, while the installer rewrites a stick's ESP
+  through unflushed raw writes, which could leave the stick unbootable. The installer could hold off power operations while it
+  writes; revisit with installer work.
 
 ## Embedded controller and battery limits
 
-The [embedded controller and battery](kernel/acpi.md#embedded-controller-and-battery)
-reader is the smallest that serves the space-bar widget:
+The [embedded controller and battery](kernel/acpi.md#embedded-controller-and-battery) reader is the smallest that serves the space-bar
+widget:
 
-- **EC transactions busy-wait on the BSP.** Each byte waits up to 500 ms by
-  polling rather than sleeping. The worker stays preemptible, but a slow EC
-  turns its time slices into polling while other BSP tasks wait their turn.
-  ThinkPad polls took 1.8–8.3 ms after a first poll of 13.4 ms. Revisit if
-  presentation stutters every five seconds; the EC's GPE could wake the worker
-  instead.
-- **The ACPI global lock is not taken.** uACPI's global lock is not recursive,
-  and AML may already hold it around a field access when the EC handler runs.
-  A `_GLK` request is logged. The T14 has none. Revisit on a machine whose EC
-  asks for it.
-- **One controller, one GPE number.** Only the ECDT or the first `PNP0C09`
-  device is used, and a `_GPE` package naming a GPE block device is refused.
-- **Two batteries, one adapter.** More are ignored. Batteries are summed as
-  reported, so two batteries using different power units would give a wrong
-  percentage.
-- **Polled, not notified.** Charge changes appear within five seconds, and a
-  battery's full capacity is only reread when it reappears. Battery and AC
-  notifications from `_Qxx` methods only reach the trace log. Revisit with
-  [ACPI notifications](wip/later-os-directions.md#power-and-acpi); that work
-  also rereads full capacity and cycle count on `Notify(0x81)`, as Linux does.
+- EC transactions busy-wait on the BSP (up to 500 ms per byte; ThinkPad polls took 1.8–8.3 ms after a first poll of 13.4 ms), so a
+  slow EC turns the worker's time slices into polling. Revisit if presentation stutters every five seconds; the EC's GPE could wake
+  the worker instead.
+- The ACPI global lock is not taken (uACPI's is not recursive and AML may hold it); a `_GLK` request is logged and the T14 has none.
+- One controller, one GPE number: only the ECDT or the first `PNP0C09` device, and a `_GPE` naming a GPE block device is refused.
+- Two batteries and one adapter; more are ignored and batteries with different power units would give a wrong percentage.
+- Polled, not notified: changes appear within five seconds, full capacity is reread only when a battery reappears, and `_Qxx`
+  notifications only reach the trace log. Revisit with [ACPI notifications](wip/later-os-directions.md#power-and-acpi), which also
+  rereads capacity and cycle count on `Notify(0x81)`.
 
 ## Synchronous launch preparation
 
-Each in-flight launch reserves a full 64 KiB metadata capture buffer plus a
-small header from the kernel heap, even for short argument lists. BSP performs
-child preparation with interrupts disabled, as for existing VM/heap services.
-The executable file's operation ownership serializes reads, writes and resizes
-through image validation/loading, avoiding another whole-image copy. Large
-images therefore delay both BSP work and callers using that file.
-
-Revisit staging size and preparation scheduling when larger applications or
-concurrent launches make these costs material. A snapshot or immutable backing
-could shorten file ownership, at a memory/complexity cost. No such mechanism or
-asynchronous launch protocol is introduced now.
+Each in-flight launch reserves a full 64 KiB metadata capture buffer plus a small header from the kernel heap even for short argument
+lists, and the BSP prepares the child with interrupts disabled. The executable file's operation ownership serializes reads, writes and
+resizes through image validation and loading, which avoids another whole-image copy but lets large images delay both BSP work and
+callers using that file. Revisit staging size and preparation scheduling when larger applications or concurrent launches make this
+material; a snapshot or immutable backing could shorten file ownership at a memory and complexity cost.
 
 ## Initial terminal editor
 
-Libterm redraws the full visible line on each edit or cursor move and reads one
-input byte per call. This keeps cursor/scroll behavior explicit and avoids
-holding keystrokes needed by a future foreground child, at a syscall/rendering
-cost. Revisit changed-span rendering or input buffering with an explicit handoff
-when interactive workloads make that cost material.
+Libterm redraws the full visible line on each edit or cursor move and reads one input byte per call, keeping cursor and scroll
+behavior explicit and not holding keystrokes a foreground child needs, at a syscall and rendering cost. It assumes exclusive output
+use of the space's terminal, accepts only one-cell ASCII and keeps the prompt, line and cursor on screen; Unicode widths and
+larger-line viewports are not implemented ([terminal contract](userland/terminal.md)). Revisit changed-span rendering or input
+buffering when interactive workloads make the cost material.
 
-Editing assumes exclusive output use of the space's terminal.
-
-The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
-on screen. Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
-
-[Shell history](userland/shell.md#commands-and-quoting) lives in memory, at most
-100 lines per shell process, so it is lost when the shell exits or the machine
-reboots, and a new remote session or mux pane starts empty. The accepted
-follow-up (owner, 2026-10-09) saves it per space in `home://`. One space can
-run several shells, such as mux panes and remote sessions, and spaces can share
-a home, so that task must first decide how concurrent shells write the saved
-history. Ctrl+R search is deferred too.
+[Shell history](userland/shell.md#commands-and-quoting) lives in memory, at most 100 lines per shell process, so it is lost on exit or
+reboot and new sessions start empty. The accepted follow-up (owner, 2026-10-09) saves it per space in `home://`; since one space can
+run several shells and spaces can share a home, that task must first decide how concurrent shells write the history. Ctrl+R search is
+deferred too.
 
 ## Presenter-drawn block cursor
 
-The presenter draws the [block cursor](userland/terminal.md) by recoloring the
-cursor cell's pixels: the top-left pixel stands for the cell's background, which
-takes the scheme's `cursor` color, and every other pixel takes `cursor_text`.
-The TTY keeps no cell grid, so the glyph cannot be redrawn with its own
-foreground and background. A cell whose top-left pixel belongs to the glyph,
-such as a block or box-drawing character, inverts the wrong way, and a font
-with more than two colors per cell would break the rule. Revisit by keeping a
-TTY cell grid (character, foreground, background, style) and letting the TTY
-render the cursor cell with the scheme's colors.
+The presenter draws the [block cursor](userland/terminal.md) by recoloring the cursor cell's pixels: the top-left pixel stands for the
+cell background (taking the scheme's `cursor` color) and every other pixel takes `cursor_text`. The TTY keeps no cell grid, so a cell
+whose top-left pixel belongs to the glyph (blocks, box drawing) inverts the wrong way, and a font with more than two colors per cell
+would break the rule. Revisit by keeping a TTY cell grid (character, foreground, background, style) and rendering the cursor cell
+with the scheme's colors.
 
 ## Early console and post-handoff panics
 
-The [early console and display panic path](kernel/early-console.md#panic-ownership)
-provides direct boot-framebuffer panic output before and after presenter handoff.
-Taking over another CPU's writer uses a bounded poll count without requiring a
-clock, GS, locks or scheduler progress. A preempted or delayed BSP can exceed that
-budget even though its next copy would notice the panic gate; then reporting is
-serial-only and normal screen writes remain stopped. Framebuffer faults during
-reset or drawing also revoke screen output. Revisit stronger CPU-stop/takeover
-coordination with measured native failures, rather than assuming panic can wait
-for scheduler progress. VirtIO panic output deliberately remains serial-only in
-VMs; no emergency reset/queue or dedicated frame allocation is planned.
-
-A serial port that stops accepting output remains latched off for the boot.
-Revisit retry policy when reliable late recovery is needed; an absent/stuck port
-must not block early boot or panic output.
+The [early console and display panic path](kernel/early-console.md#panic-ownership) writes directly to the boot framebuffer before and
+after presenter handoff. Taking over another CPU's writer uses a bounded poll count without a clock, GS, locks or scheduler progress,
+so a preempted or delayed BSP can exceed it; reporting is then serial-only and normal screen writes stay stopped. Framebuffer faults
+during reset or drawing also revoke screen output, and VirtIO panic output stays serial-only (no emergency reset, queue or dedicated
+frame). A serial port that stops accepting output stays latched off for the boot so a stuck port cannot block early boot or panic
+output. Revisit stronger CPU-stop and takeover coordination with measured native failures, and the retry policy when reliable late
+serial recovery is needed.
 
 ## Space-layer qualification
 
-The [space-layer milestone](userland/space-layers.md) closed on 2026-10-08 with
-nested QEMU qualification. The owner ran the deferred native Quake check on
-2026-10-08 on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC): Super+Down/Up, continued game time and live terminal output,
-fresh held input, switching away and back, queued-text clearing and hidden-layer
-Ctrl+C behaved as specified. `timedemo demo1` ran at 684.5 and 684.7 fps.
-
-Acquisition without PRESENT, explicit repeated PRESENT while hidden, independently
-surviving capture on DISPLAY_RELEASE, shortcut releases after Super and device/
-queue-loss propagation were source-inspected, without separate runtime coverage.
-Revisit those checks when changing the corresponding session, input or teardown
-paths, or when a concrete failure appears. Milestone closure does not convert
-source inspection into measured coverage.
+The [space-layer milestone](userland/space-layers.md) closed on 2026-10-08 with nested QEMU qualification, and the owner ran the native
+Quake check the same day (ThinkPad PXE, main `4332801`, 1920x1080, AC): Super+Down/Up, continued game time and terminal output, held
+input, switching away and back, queued-text clearing and hidden-layer Ctrl+C behaved as specified, and `timedemo demo1` ran at 684.5
+and 684.7 fps. Acquisition without PRESENT, repeated PRESENT while hidden, capture surviving DISPLAY_RELEASE, shortcut releases after
+Super and device/queue-loss propagation were source-inspected only; revisit them when changing the session, input or teardown paths or
+when a failure appears.
 
 ## Native system pointer qualification
 
-The owner accepted native PS/2 deferral on 2026-10-08 while the ThinkPad was
-occupied by the [Bluetooth investigation](development/bluetooth-investigation.md).
-Matched QEMU checks on boot, Bochs and VirtIO displays suffice to close the
-[system pointer](interfaces/pointer.md); this native entry remains open.
-
-Owner-reported boot 1, 2026-10-09: ThinkPad, PXE main `114f2ac`, PS/2 touchpad
-and TrackPoint, 1920x1080 boot framebuffer.
-
-- Checked and working: ordinary motion and buttons, tab clicks, and **text
-  selection**. The owner did not specify local terminal, multiplexer or both.
-  A `screenshot` taken from the remote terminal while the local I-beam was
-  showing contained the cursor.
-- Not checked: multiplexer wheel; Quake lock/Super+Esc/click-to-relock; space and
-  layer changes with the cursor shown; program cursor image/hotspot/show/hide
-  and bounded warp; cursor cost samples.
-- The default arrow looked wrong natively. The task 5 redraw addresses its
-  shape; its updated native appearance remains to be judged by the owner.
-
-Owner-reported boot 2, 2026-10-09: ThinkPad, PXE main `183f793`, PS/2,
-1920x1080 boot framebuffer.
-
-- Checked and working: Super+Esc unlocks the cursor in Quake; switching spaces
-  with the cursor shown; text selection in the local terminal.
-- Multiplexer selection and wheel were not checked. The image had no space
-  with `multiplexer = true`; launching `mux` by hand printed its documented
-  "missing terminal, clock, session creation or launcher authority" diagnostic.
-  This is expected authority refusal, not a failure.
-- Still not checked: click-to-relock after Super+Esc; layer changes
-  (Super+Up/Down) with the cursor; program cursor image/hotspot/show/hide and
-  bounded warp; cursor cost samples.
-
-The consequence is that the remaining behavior and native cursor cost remain
-unqualified. Boot 2 establishes local-terminal selection, while multiplexer
-selection and wheel still lack a native check. Nested-VM results do not
-establish native input latency or display performance.
-
-- [ ] Finish the unchecked native items in a later owner ThinkPad batch and
-  judge the redrawn default cursor. Record revisions, boot/display/device
-  configuration, behavior and cursor cost samples. Update this entry with
-  the reported results; neither partial native coverage nor QEMU milestone
-  closure marks it complete.
+The owner accepted native PS/2 deferral on 2026-10-08 and QEMU checks on boot, Bochs and VirtIO displays closed the
+[system pointer](interfaces/pointer.md); this native entry stays open. Owner ThinkPad batches on 2026-10-09 (PXE, PS/2 touchpad and
+TrackPoint, 1920x1080 boot framebuffer) showed ordinary motion and buttons, tab clicks, text selection, multiplexer selection and
+wheel, Super+Esc unlock and click-to-relock in Quake, Super+Up/Down layers with the cursor shown, and the redrawn default arrow and
+I-beam all working. **Still unchecked natively:** program cursor image, hotspot, show/hide and bounded warp, and cursor cost samples.
+Nested-VM results do not establish native input latency or display performance. Check those items in a later owner ThinkPad batch,
+recording revisions, boot/display/device configuration, behavior and cost samples.
 
 ## System pointer selection and input limits
 
-Visible-cell selection has no export, clipboard publication or paste operation.
-Stored cells are 8-bit glyph indices, so a later owned text snapshot also needs
-an explicit encoding before it can be advertised as `text/plain`. Clipboard
-stores, gestures, capability transfer and conversion remain in the separate
-[clipboard proposal](wip/clipboard.md); revisit this boundary when that milestone
-is assigned, using both kernel-local and mux-owned selections.
-
-Mux drag autoscroll and selection across off-view history are absent; users must
-first browse the desired history into view. Kernel terminals retain visible
-cells without scrollback. Revisit these interaction limits with a concrete
-terminal-history extension. PS/2 remains the sole implemented pointer source,
-with raw counts and relative-mode Synaptics behavior. Bluetooth aggregation and
-conditional source loss, USB HID, acceleration, absolute-mode scrolling, remote
-pointer transport and multiple-display/window composition remain separate
-tracks. Revisit input routing through the
-[pointer source boundary](interfaces/pointer.md#input-source-coordination) when
-another trusted source is integrated; independent masks must not release a
-surviving source's held buttons. The current PS/2 reset hook alone does not
-implement the accepted conditional multi-source rules.
+Visible-cell selection has no export, clipboard publication or paste, and stored cells are 8-bit glyph indices, so a later text
+snapshot needs an explicit encoding before it can be `text/plain`; clipboard stores, gestures, capability transfer and conversion
+belong to the [clipboard proposal](wip/clipboard.md) (revisit with both kernel-local and mux-owned selections). Mux drag autoscroll
+and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
+pointer source, with raw counts and relative-mode Synaptics behavior; Bluetooth aggregation, USB HID, acceleration, absolute-mode
+scrolling, remote pointer transport and multiple-display composition are separate tracks. The current PS/2 reset hook alone does not
+implement the accepted conditional multi-source rules: revisit input routing through the
+[pointer source boundary](interfaces/pointer.md#input-source-coordination) when another trusted source is integrated, so independent
+masks never release a surviving source's held buttons.
 
 ## VirtIO cursor frontend limits
 
-The owner accepted [GTK on X11, relative PS/2 and unscaled 1:1 committed guest
-geometry](development/qemu.md#hardware-pointer-frontend) for hardware-pointer
-qualification on 2026-10-08. QEMU installs the cursor through its host GUI.
-Source inspection found a no-op native Wayland position warp, scaled/centered
-GTK placement differing from the input transform, different SDL channel packing
-and no VNC position callback. Other frontends and modes remain unqualified.
-
-The consequence is that successful guest completion and cursor-inclusive
-capture do not establish correct cursor placement or colors on those host
-frontends. GTK fit-mode output may briefly scale during resizing; qualification
-requires the committed guest dimensions to match actual GTK content at 1:1.
-QEMU 10.2.2's zero-length used completion confirms command-buffer consumption,
-not independently acknowledged cursor application or visible scanout timing.
-The kernel carries no frontend-specific GUI switches. Boot and Bochs keep
-software composition. See [hardware qualification](development/system-pointer-qualification.md#task-4-hardware-qualification).
-
-Revisit on the next emulator/frontend upgrade or when broader frontend support
-is requested, with matched shape, hotspot, position, clipping, alpha and resize
-checks before extending qualification.
+The owner accepted [GTK on X11, relative PS/2 and unscaled 1:1 committed guest geometry](development/qemu.md#hardware-pointer-frontend)
+for hardware-pointer qualification (2026-10-08). Source inspection found a no-op native Wayland position warp, scaled and centered GTK
+placement differing from the input transform, different SDL channel packing and no VNC position callback, so guest completion and
+cursor-inclusive capture do not establish correct placement or colors on other frontends. GTK fit mode may briefly scale during
+resizing (qualify with committed dimensions matching GTK content at 1:1), and QEMU 10.2.2's zero-length used completion confirms
+command-buffer consumption, not cursor application or scanout timing. The kernel carries no frontend-specific switches and boot and
+Bochs keep software composition ([qualification](development/system-pointer-qualification.md#task-4-hardware-qualification)). Revisit
+on the next emulator or frontend upgrade, or when broader support is requested, with matched shape, hotspot, position, clipping,
+alpha and resize checks.
 
 ## Unselected graphical applications
 
