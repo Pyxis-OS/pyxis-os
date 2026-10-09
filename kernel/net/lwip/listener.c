@@ -67,6 +67,7 @@ static err_t accept_connection(void *argument, struct tcp_pcb *pcb, err_t error)
     tcp_connection_abort(connection, CALL_TIMED_OUT);
     return ERR_ABRT;
   }
+  tcp_connection_established(pcb);
   connection->connected = true;
   connection->setup_deadline = 0;
   /* lwIP released the SYN's backlog slot immediately before this callback.

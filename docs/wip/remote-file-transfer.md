@@ -8,9 +8,10 @@ revised later by the owner. Each task starts only when the owner says so.
 See [streaming transfers](#streaming-transfers) and its
 [validation](#streaming-validation-2026-10-08).
 
-**Transfer throughput: measured, 2026-10-08,** assigned to Claude. The first
-fix is in review; see [transfer throughput](#transfer-throughput). Further
-changes wait for the owner's native re-timing.
+**Transfer throughput: first fix merged, 2026-10-08** (#554, userland #167).
+See [transfer throughput](#transfer-throughput). Further changes wait for the
+owner's native re-timing; TCP itself is now the
+[network throughput](network-throughput.md) work.
 
 ## Goal
 
