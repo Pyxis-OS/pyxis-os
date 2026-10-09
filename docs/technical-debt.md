@@ -490,13 +490,6 @@ Buffered file bytes are a private copy: if another descriptor or process writes 
 one-byte `ungetc` works. Revisit together with output buffering in a later stdio completeness task
 ([input read-ahead](userland/stdio.md#input-read-ahead)).
 
-## Duplicated port output lists
-
-`scripts/ports.mk` repeats the staged output paths each recipe already declares in `metadata.lua` (the sbase executables and notices
-among them), so adding an output needs coordinated edits and drift can leave Make unaware of a missing staged file. Derive the
-dependencies from one authoritative list without growing a build framework; until then review both lists when changing a recipe's
-outputs.
-
 ## zlib core profile and qualification
 
 The [zlib development library](development/ports.md#zlib-development-library) keeps unmodified public headers but omits the `gz*` file
