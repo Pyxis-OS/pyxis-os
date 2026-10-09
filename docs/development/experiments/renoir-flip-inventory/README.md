@@ -218,17 +218,22 @@ Opt-in emitted only begin plus Renoir-unavailable; GDB confirmed option/capture
 true, timing off, 105 valid EFI descriptors, no VFCT and all register mappings
 zero. Super+Right and `ls` completed in the opt-in boot with caret/I-beam visible.
 Exact-head CI and sealed artifact checksums are recorded in the PR.
+The BAR0 correction was source-reviewed and the full default image rebuilt after
+merging main `28051508` (#631/#632); changed SDK/userland/ports inputs were rebuilt,
+not substituted by the first-boot bundles. BAR0's positive native path is still
+unmeasured. The follow-up head/build/QEMU/CI evidence is recorded in the PR.
 QEMU has no DCN and cannot qualify the native
 route, memory ownership or reservation completeness. No new tests/fault injection.
 
-## One native PXE boot
+## Read-only BAR0 follow-up
 
 1. Build the submitted revision using the existing builder, `LOG_LEVEL=info`,
    `DISPLAY_INVENTORY=1 DISPLAY_TIMING=off DISPLAY_TIMING_METRICS=0 LOG_UDP=1`.
    Keep the normal GOP mode, boot configuration and devices. No gameplay workload
    or camera batch is needed for this read-only task.
 2. Have **Luna** stage the sealed kernel/initrd/`limine.conf` set and checksum
-   manifest from this task's `build/native-inventory/`. Alpha does not stage PXE.
+   manifest from this task's `build/native-bar0/`. Alpha does not stage PXE;
+   retain the original `build/native-inventory/` set as the first-boot record.
    Confirm the command line contains `display.inventory=1 display.timing=off
    log.udp=1`; no global trace flag. The laptop is already in its PXE loop.
 3. On horse, retain the existing UDP log for that one boot through normal startup.
