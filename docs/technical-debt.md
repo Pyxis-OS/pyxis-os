@@ -482,7 +482,15 @@ when interactive workloads make that cost material.
 Editing assumes exclusive output use of the space's terminal.
 
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
-on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
+on screen. Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
+
+[Shell history](userland/shell.md#commands-and-quoting) lives in memory, at most
+100 lines per shell process, so it is lost when the shell exits or the machine
+reboots, and a new remote session or mux pane starts empty. The accepted
+follow-up (owner, 2026-10-09) saves it per space in `home://`. One space can
+run several shells, such as mux panes and remote sessions, and spaces can share
+a home, so that task must first decide how concurrent shells write the saved
+history. Ctrl+R search is deferred too.
 
 ## Presenter-drawn block cursor
 
