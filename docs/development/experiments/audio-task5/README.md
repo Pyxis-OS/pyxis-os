@@ -72,8 +72,23 @@ Eight separate manual presenter observations: **median 1.57997 ms**, range
 **1.45517–1.82723 ms**. Tick samples: 145517, 157556, 151908, 161697,
 158438, 182723, 149903, 160940. The worker was parked with zero refill/IRQ work,
 22 commands/responses and stream/rings stopped. A different unrelated QEMU/GDB
-workload was present on the shared host. A repeat of the baseline image follows
-to distinguish current host conditions from these higher elapsed samples.
+workload was present on the shared host. A subsequent repeat of the unchanged
+baseline image used the same current configuration and two quiet windows:
+
+| Repeated baseline window | Elapsed s | BSP guest % | BSP host-thread total % | Whole QEMU % |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 15.000406 | 6.20 | 10.40 | 19.73 |
+| 2 | 15.000385 | 6.53 | 10.73 | 20.00 |
+
+Repeated baseline presenter ticks were 129693, 98128, 108836, 136130,
+121815, 118981, 80131, 85203: median **1.13909 ms**, range
+**0.80131–1.36130 ms**. The current idle totals overlap the implementation and
+differ from the earlier baseline, demonstrating host/time variation. The
+implementation's eight presenter samples remain slower than both baseline
+samples; no stable presenter improvement or native cost equivalence is claimed.
+The parked audio worker performs no periodic work by inspection and debugger
+state. These small sequential samples do not isolate a causal presenter cost;
+repeat native matched scene observations in the batch.
 
 Manual `pcm 1000 500 5` and
 `pcm --pause-ms 250 --repeat 2 --gap-ms 150 1000 500 2` completed successfully.
