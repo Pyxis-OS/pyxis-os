@@ -54,10 +54,13 @@ between Links' internal threads.
 - **Terminal.** The size is read when the terminal starts. Mouse-mode
   sequences are not sent, and on exit the screen is cleared with the cursor at
   the top, because the terminal has no saved cursor.
-- **Configuration.** None. Options, bookmarks and history are not saved, and
-  saving options reports an inaccessible home directory. `tmp://` is
-  RAM-backed, and Links' save path needs exclusive creation and private file
-  modes.
+- **Configuration.** Links keeps `links.cfg`, `html.cfg`, bookmarks, cookies and
+  the URL history in `home://links/`, made at startup, and loads them from there.
+  Links' own save writes an exclusive temporary file, syncs it and renames it over
+  the old one; the port only creates the temporary with mode 0666. `home://` is
+  RAM on a live boot, so the files last until reboot, and persist on an installed
+  system. If the directory cannot be found or made, nothing is loaded and saving
+  reports "Home directory inaccessible".
 - **Switched off.** Fork, signals, other programs, asynchronous DNS, SMB and
   file-security checks.
 
@@ -89,10 +92,17 @@ record what those functions cannot report.
   - symlink entries are listed with an unknown type but cannot be opened;
   - directories show size 0 and the date column is blank;
   - listings have no `..` entry.
-- **Other protocols and downloads:** `ftp://` and `finger://` need Links' own
-  name lookup and sockets; lookup always fails, so they report "Host not
-  found". Downloads to disk fail with "Invalid argument", because they need
-  exclusive creation.
+- **Other protocols:** `ftp://` and `finger://` need Links' own name lookup and
+  sockets; lookup always fails, so they report "Host not found".
+- **Downloads:** the Download dialog saves to any path the program's roots allow,
+  relative to the inherited working directory, through exclusive creation. An
+  existing file offers Continue, Overwrite, Rename or Cancel; Overwrite truncates
+  in place and a download is written under its final name, so neither is atomic.
+  A root without CREATE reports its error, such as "Permission denied" in `host://`
+  of the read-only space.
+- **Saves and crashes:** libc has no directory sync, so after a crash a saved
+  configuration may keep its old contents, and a crash can leave a temporary
+  file such as `links.c0`.
 - **Local links from remote pages:** a page fetched over HTTP(S) can link to
   `host://`, `home://` or `system://`, and following the link opens the local
   object. A page cannot script or submit what it opens, but desktop browsers
@@ -126,8 +136,8 @@ Two parts of decision 2 were not needed, so they were not added:
 - **`access`.** Links never calls it, so it waits for a consumer, such as a
   vi follow-up.
 
-Configuration storage was left to implementation. Links runs without saved
-configuration (see above).
+Configuration storage was left to implementation. It now lives in `home://links/`
+(see above).
 
 ## Why Links
 
@@ -169,3 +179,25 @@ exercised:
   name longer than its initial buffer.
 
 `links.pxe` is 1,356,559 bytes.
+
+### Saved configuration and downloads (2026-10-09)
+
+An ordinary `make -j16 image` with the patch changes booted under QEMU 10.2.2 (KVM, four CPUs, virtiofsd export), driven on the framebuffer console
+through `sendkey` and screenshots, with the remote shell for listings:
+
+- **Before:** with the old patch, Setup > Save options and a Download both failed with
+  "Invalid argument" from the unsupported `O_EXCL` sentinel. That was the only cause.
+- **Options:** Save options wrote `links.cfg` with the changed left margin. After quitting
+  and restarting Links the page was indented by it and the dialog showed 7. Save html
+  options wrote `html.cfg`, and quitting added `cookies.txt` and `links.his`. No temporary
+  file remained.
+- **Downloads:** the 5,120-byte `data.bin` from a `host://` page and from a local HTTP
+  server (`http://10.0.2.2:8000`) saved to `home://`, and each matched the original with
+  `cmp` after copying back. A repeated download offered Continue, Overwrite, Rename and
+  Cancel, and Overwrite produced an identical file.
+- **Read-only space:** a download to `host://` there failed with "Could not create file
+  host://ro.bin: Permission denied". With `home://links` made a file, Links started with
+  no configuration and Save options reported "Home directory inaccessible".
+
+Not exercised: a read-only `home://` root, a full or failing write, a crash, and
+Continue on an interrupted download.
