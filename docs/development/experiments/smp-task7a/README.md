@@ -16,7 +16,6 @@ caller's own syscall. The BSP still runs no userspace on multicore boots; that i
 | Item | Before | After |
 | --- | --- | --- |
 | Pyxis | main `a87468c` (task 6) | this PR's kernel commit `e0e23ff` |
-| Kernel ELF SHA-256 | `60d6fdb8…b3624ab7` | `ce28fe46…02075994` |
 | Userspace | `2f01df6` | `76eef93` (allocbench prints the new profile) |
 | Other pins | fs `d352c7e`, ports `36d952e`, lwIP `a1aadb9` | same |
 
@@ -93,10 +92,8 @@ Page clients now run in parallel, but they do not scale. Two P clients on
 separate CPUs each took 628–664 ms, against 359 ms for one alone. Four clients
 on three CPUs split into 935–1027 ms and 1230–1350 ms.
 
-A throwaway build counted PMM lock
-calls, bitmap bits scanned, and `rdtsc` cycles spent waiting for and holding the
-lock. GDB read the counters. `rdtsc` appears costly in
-this nested VM, so the build's absolute times are inflated; only the ratios are
+A throwaway build counted PMM lock calls, bitmap bits scanned, and `rdtsc` cycles spent waiting for and holding the
+lock, read through GDB. `rdtsc` appears costly in this nested VM, so absolute times are inflated and only the ratios are
 used.
 
 | Interval | Lock calls | Bits scanned per call | Wait cycles | Hold cycles |

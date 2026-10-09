@@ -175,7 +175,7 @@ dirty until synchronization.
 The archive/RAM handler checks all user buffers and authority before staging an
 entry. An initrd directory rejects mutation with READ_ONLY even if its grant includes
 CREATE; a grant without CREATE fails the authority check with DENIED first.
-A new RAM file has no data allocation, size zero and immediate EOF through the
+A new RAM file has no pages, size zero and immediate EOF through the
 file protocol. A WRITE grant permits subsequent writes and resizing; see the
 [file contract](processes.md#implemented-file-calls).
 

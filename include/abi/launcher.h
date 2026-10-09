@@ -14,7 +14,8 @@
 #define LAUNCH_NO_STAGE UINT64_MAX
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
 /* HOST and native filesystem executables are copied before loading; this bounds
- * staging bytes, not the child's mapped memory. RAM/archive need no copy. */
+ * staging bytes, not the child's mapped memory. RAM executables are copied
+ * without this bound; archive executables need no copy. */
 #define LAUNCH_EXTERNAL_IMAGE_MAX_SIZE (UINT64_C(16) * 1024 * 1024)
 
 /* CREATE_GROUP sends only a message_header and requires CREATE_GROUP on an

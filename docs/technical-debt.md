@@ -89,31 +89,6 @@ unchanged. CPUID-unavailable CPUs, older AMD compute-unit encodings and AMD
 non-power-of-two thread counts remain isolated; extend detection when a concrete
 supported target requires it.
 
-## Contiguous RAM-file backing
-
-RAM files currently own one kernel heap buffer. Growth reserves geometric spare
-capacity when possible, falling back to the required size if that allocation
-fails. Replacing a buffer temporarily holds both the old and new allocations
-and copies the live contents. Large files therefore amplify peak memory usage
-and copy cost; one allocation is also subject to TLSF's block-size limit.
-
-Shrinking to a nonzero size retains capacity for reuse. Truncated bytes cannot
-be observed after regrowth, but a small file may keep a much larger allocation.
-Resize to zero or final object destruction returns the buffer to the heap;
-the heap's existing pools remain mapped.
-
-Streaming [remote transfers](userland/remote-terminal.md#explicit-file-transfer)
-make such files ordinary: on 2026-10-08 a 1.1 GiB upload into `tmp://`, written
-in 64 KiB pieces, left the allocator reporting 4.32 GiB in use, against 112 MiB
-before, because the replaced buffers' heap pools stay mapped. Large transfers
-belong on a pool-backed directory such as an installed `home://`.
-
-Reconsider this when larger files or memory pressure make those costs material.
-Chunked backing and a policy for releasing excess capacity are possible changes,
-not requirements for the current milestone. RAM writes retain full completion
-or unchanged-on-failure behavior; the general [file contract](interfaces/processes.md#implemented-file-calls)
-also permits short writes.
-
 ## Retained userspace heap pools
 
 Libc's TLSF allocator reuses freed blocks but retains every backing pool until
@@ -147,17 +122,13 @@ allocation policy.
 ## I/O baseline attribution and coverage
 
 The [I/O/IPC baselines](development/io-ipc-baselines.md) measure elapsed workload boundaries
-in nested KVM. The [RAM attribution](development/io-reliability-attribution.md#ram-file-profiling)
-separates RAM replacement costs and identified queue time as dominant in the
-earlier growing writes/copies. The common executor now resolves their missing
-notification; see the FILE service-delay entry below.
-HOST profiling now separates guest queues, worker service and transport, but
+in nested KVM. HOST profiling now separates guest queues, worker service and transport, but
 strongly perturbs the nested workload; see the profiling entry below. Transport
 still combines device/daemon/backing service and guest/host scheduling. Host
 write/sync baselines used tmpfs and do not establish physical-disk durability cost.
 
 Revisit host attribution resolution before changing batching or transfer limits.
-Private-memory, RAM replacement and HOST collections remain independent. Short native
+Private-memory and HOST collections remain independent. Short native
 and SEND intervals are close to clock overhead; finer comparisons need a separate
 longer-batch or scoped-instrumentation contract. Owner-host/physical-hardware
 results, capability attachment cost, cross-space contention, mixed-workload
@@ -166,22 +137,6 @@ IPC/HTTP/RAM/HOST matrix and additional resolution decisions were deferred when
 the reliability milestone closed; no final matched matrix is claimed. Gather
 relevant coverage before making deployment-capacity or fine-grained performance
 claims; keep each environment and completion boundary distinct.
-
-## RAM FILE BSP service delay
-
-Resolved by the [BSP request migration](kernel/bsp-service-requests.md#profiling-and-scheduling-costs):
-RAM replacements now notify the common executor promptly. Matched four-CPU
-nested-KVM controls reduced unprofiled growing-write median from 59.041 to
-1.957 ms and growing-copy median from 58.852 to 2.540 ms. Prepared controls and
-replacement/copy counts stayed comparable. The
-[implementation PR](https://git.internal/PyxisOS/pyxis-os/pulls/237) retains all
-off/on controls and separates queue from service observations.
-
-The [earlier attribution](development/io-reliability-attribution.md#ram-file-profiling) remains
-historical evidence. These results do not remove individual non-preemptible
-allocation/copy costs or establish owner-host performance. Revisit scheduling
-limits when mixed-workload measurements justify a different service policy;
-this task does not change buffer growth or allocator concurrency.
 
 ## Host FILE profiling perturbation
 
@@ -322,31 +277,28 @@ spans sessions and older main, so it is unmeasured. One possibility is that
 spreading clients across cores and the two CCXs makes this sharing costlier. When
 revisiting, start with a same-sitting native A/B against main.
 
+## RAM-file page access cost
+
+RAM-file reads and overwrites map each 4 KiB page through the calling CPU's
+scratch slot, so in nested QEMU they run about 2.1–2.4x slower than the old
+single-buffer copies, at 2.4–3 GB/s
+([measurements](development/experiments/ram-file-pages/README.md)). Revisit
+with a consumer bound by RAM-file reads, for example by mapping runs of pages
+or a kernel direct map.
+
 ## Never-reused kernel heap arena
 
 Kernel heap pools come from a 256 GiB arena whose addresses are never reused, so
-publishing a pool needs no TLB shootdown. Pools are never removed. The arena
-therefore bounds every pool ever added plus every retired page for the whole
-boot. Running out of it makes all later heap growth fail, even after memory is
-freed. RAM FILE backing is heap storage that doubles as a file grows, so it is
-the likeliest consumer.
+publishing a pool needs no TLB shootdown, and pools are never removed. Memory
+freed to the heap therefore stays with the heap, and the arena bounds every pool
+plus every retired page for the whole boot. Growth zeroes and maps its pool with
+interrupts disabled under the growth lock. A growth that loses frames to another
+CPU while mapping retires the pages it mapped.
 
-Growth refuses a pool that does not fit in the free frames before mapping
-anything, so a request larger than free memory retires nothing. A growth still
-retires the pages it mapped when another CPU takes frames while it maps. That
-needs concurrent allocation, which starts in SMP task 7. The check reads a
-snapshot of the free count, so a growth can still briefly take most free frames
-when the pool only just fits.
-
-Growth also zeroes and maps its whole pool with interrupts disabled while holding
-the growth lock. A large RAM-file doubling occupies its CPU for that time, and
-other CPUs that need growth wait. The BSP already behaved this way before SMP
-task 6.
-
-Revisit in SMP task 7, when frames are allocated on several CPUs, and whenever
-`heap_stats` shows retired bytes or arena use approaching its size, or growth
-latency becomes material. Moving RAM-file backing out of the heap is the first
-option.
+RAM files keep their data in PMM frames since 2026-10-09; the heap holds only
+their page index, 1/512 of the largest size reached. No current consumer
+approaches the arena. Revisit when `heap_stats` shows arena use or retired bytes
+growing, or growth latency becomes material.
 
 ## BSP userspace and kernel workers
 
@@ -1149,11 +1101,11 @@ deadlines and profiling still pay the clock cost. Timer passes read the clock at
 most once and rearm only for an earlier target, which in nested QEMU cut idle
 HPET reads by 63% and send-side reads per TCP segment by about a quarter
 ([measurements](development/experiments/timer-clock-reads/README.md)); each
-remaining read keeps its full cost. The current source requires
-a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
-the owner chose
-[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
-with TSC as the [later direction](wip/later-os-directions.md#clock-source). The running HDA
+remaining HPET read keeps its full cost. Boot still requires a memory-mapped
+HPET. On 2026-10-03 the owner chose
+[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit);
+since 2026-10-09 the kernel switches to the [TSC](kernel/timekeeping.md#tsc-selection)
+when every CPU qualifies, which removes HPET reads after boot. The running HDA
 worker also uses a 5 ms watchdog (about 200 timed wake opportunities per second),
 with timer re-arms and HPET reads; it is absent while playback is parked.
 Its measured wake/deadline amplification is in the
@@ -1177,11 +1129,26 @@ wrap between incorporated samples, including individual boot operations, long
 interrupt-disabled execution, firmware stalls and debugger/VM pauses. A violating
 gap requires reboot: the low word cannot identify or reconstruct missing wraps.
 Nominal interval validation cannot enforce the actual gap bound, and suspend,
-resume and migration remain unqualified. Revisit this limitation with an
-independent source or an explicitly scoped stronger progress guarantee. The
-accepted future direction is TSC with extended-HPET fallback, with frequency
-discovery and cross-CPU qualification, preserving the clock protocol. Revisit performance after native
-bring-up when the TSC stage is assigned; it is not part of the first HPET task.
+resume and migration remain unqualified. This applies only while the HPET is
+the clock; revisit it with an independent source or an explicitly scoped
+stronger progress guarantee if a target falls back to the HPET.
+
+[TSC selection](kernel/timekeeping.md#tsc-selection) has its own accepted limits
+(owner, 2026-10-09):
+- **Agreement.** Cross-CPU agreement is checked only during startup, about 2 ms
+  per AP, with no shared floor or runtime watchdog, so a later warp would go
+  unnoticed. Monotonic order between readings on different CPUs after boot
+  therefore rests on that startup check and the hardware's invariant TSC alone.
+- **Calibration.** It costs 100 ms on every boot whose BSP qualifies, and its
+  error bound, up to 100 ppm, adds to the HPET's own crystal error. CPUID
+  `0x15` is only logged.
+- **Nested VMs.** These fall back to the HPET: their HPET reads are too slow
+  for a 100 ppm calibration, and the development VM exposes no invariant TSC.
+- **Unqualified.** Suspend and resume, migration and native behaviour stay
+  unqualified until the owner's ThinkPad run; see the
+  [measurements](development/experiments/tsc-clock/README.md).
+
+Revisit with a target that shows a warp or needs better accuracy.
 Per-packet network work and audio refill both pay several clock reads per
 event; see [TCP throughput limits](#tcp-throughput-limits).
 The VirtIO RTC driver remains deferred.
@@ -1846,10 +1813,12 @@ sink, measured on the ThinkPad on 2026-10-09.
   45–57 MiB/s while Pyxis's advertised window falls close to zero; the program
   writing the file is the limit, not TCP.
 - **Clock reads per packet.** In QEMU the network worker's wake and sleep
-  cycle reads the HPET about 27 times per data segment, nearly all in timer
-  handling. The audio work in #557 found the same amplification. Their native
-  cost is unmeasured; cheaper timekeeping is separate kernel work under
+  cycle read the HPET about 27 times per data segment, nearly all in timer
+  handling, and the audio work in #557 found the same amplification. Timer
+  passes now read the clock at most once, and with a qualifying TSC a read no
+  longer touches the HPET; see
   [clock-source performance](#wall-clock-time-and-clock-source-performance).
+  Native costs before and after are unmeasured.
 - **Not implemented:** path-MTU discovery, so routed peers get 536-byte
   segments; window scaling, so windows stop at 65,535; SACK.
 

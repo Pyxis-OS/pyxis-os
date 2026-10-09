@@ -165,7 +165,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   if (capability_install(&process->capabilities, terminal_service, TERMINAL_SERVICE_RIGHT_CREATE, 0, &terminal_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
-      capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST, 0, &profile_handle) != CAP_OK ||
+      capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_HOST, 0, &profile_handle) != CAP_OK ||
       capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_output) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_error) != CAP_OK ||

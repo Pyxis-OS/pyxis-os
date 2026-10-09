@@ -80,65 +80,11 @@ These reruns establish successful consumption, not a speedup or sustained rate.
 
 ## RAM FILE profiling
 
-`PROFILE_RIGHT_FILE` authorizes independent caller-local FILE BEGIN/SNAPSHOT/END
-collection, preserving private-memory profiling meaning. RAM buffer replacement
-records preparation, the boundary before publication locking, BSP service
-start/end and caller resumption. Elapsed sums/maxima separate publication, queue,
-service and resumption, with allocation, existing-data copy and release calls
-nested inside service. Counters record attempts, success/failure, summed requested
-capacity and actual copied bytes; they saturate and expose no addresses.
-
-BSP owns request results/timestamps from publication until wakeup; the caller
-then aggregates into its caller-local FILE snapshot in the separate persistent
-profile allocation before releasing the request. Transient samples live in the
-typed FILE replacement record in the reusable user-request allocation, which
-uses the common BSP FIFO and promptly notifies an idle executor without a VM
-handoff.
-The publication timestamp remains immediately before publication locking, and
-service timestamps still bracket the local replacement helper. Disabled
-collection adds no clocks or allocations. Existing allocation, geometric growth,
-failure fallback and early-wakeup behavior remain.
-FILE ownership waits, incoming payload copies and nonreplacement work remain
-an unattributed residual. None of these elapsed intervals is kernel CPU time.
-
-`iobench write/copy --profile` collects measured transfer work after preparation
-and before verification/reporting. Warmup is unprofiled; BEGIN/END are outside
-transfer clocks and per-request instrumentation is inside. Optional sync is
-separate and outside collection. The eight off/on controls used 1 MiB, 4080-byte
-requests, grow/prepared output, no sync, one warmup and five samples.
-
-| Workload | Off median ms | Profile median ms |
-| --- | ---: | ---: |
-| RAM write, grow | 52.811340 | 59.037810 |
-| RAM write, prepared | 0.295900 | 0.656270 |
-| Archive → RAM, grow | 56.624600 | 54.279920 |
-| Archive → RAM, prepared | 0.519400 | 0.493820 |
-
-Reproduction uses `iobench write home://NAME` or
-`iobench copy app://share/iobench.bin home://NAME`, adding `--prepared` and/or
-`--profile` for each table cell. Unique outputs and RAM stderr logs were used.
-All 48 passes verified contents, length and EOF with 258 writes per pass; copies
-also had 258 reads. No short transfers or failures occurred. Every profiled grow
-pass reported ten successful replacements, zero failures, 4,173,840 bytes of
-summed requested capacity and 2,084,880 existing-data bytes copied. Prepared
-passes reported zero replacement counts/durations. Requested capacity is not a
-live allocation gauge; no allocation failure was induced or observed.
-
-Publication-to-service queue sums were 44.783–54.129 ms: 88–92% of profiled write
-transfer time and 83–92% of copy time. BSP service was 2.799–5.357 ms, including
-allocation-call sums of 0.357–0.695 ms, copy of 0.629–1.119 ms and release of
-0.351–0.685 ms. Allocation/copy service was not the dominant measured cost.
-Queue timestamps combine publication locking, BSP availability and scheduling.
-These original samples predate the common-FIFO migration, when FILE publication
-had no explicit BSP notification. Their near-8 ms maxima are consistent with
-delayed BSP service but do not identify individual wake causes or measure the
-current executor path. No growth-policy change was made.
-See [RAM service-delay debt](../technical-debt.md#ram-file-bsp-service-delay).
-
-The sequential five-sample groups combine run ordering, cache and nested
-scheduling effects. They do not measure a constant profiling cost or precise
-speedup. Prepared intervals and short SEND/native work need separately agreed
-measurement resolution before fine-grained comparisons.
+Retired on 2026-10-09: RAM files moved to
+[page backing](../interfaces/processes.md#implemented-file-calls), so the BSP
+buffer replacement this profile measured no longer exists. Git history keeps
+its measurements; they showed BSP queueing, not allocation or copying,
+dominating growing writes.
 
 ## HOST profiling and attribution limits
 

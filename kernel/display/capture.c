@@ -187,11 +187,10 @@ void screen_capture_finish(bool presented)
     status = CALL_ENDPOINT_CLOSED;
   } else {
     /* Successful composition filled every visible pixel; failed frames never
-     * publish potentially incomplete backing. The file adopts only on success. */
+     * publish potentially incomplete backing. The file copies the pixels. */
     file = file_create_snapshot(pixels, request->reply.size);
     status = CALL_NO_MEMORY;
     if (file) {
-      pixels = NULL;
       enum capability_result result = capability_install(request->table,
           &file->object, FILE_RIGHT_READ, 0, &request->reply.file);
       if (result == CAP_OK) {

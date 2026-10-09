@@ -131,7 +131,6 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Namespace creation | Ordinary; initial grant installation and cleanup on failure |
 | Endpoint creation/export | Ordinary; table/process loans and retained capability references |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
-| RAM FILE replacement | Ordinary; caller retains logical busy ownership and performs user copies |
 | Group creation / launch preparation and publication | Ordinary; atomic supervision/launcher installation, independent capture/batch ownership, sealed admission and unpublished-child rollback |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
 | Screen capture | Deferred admission, then forwarded; exclusive caller table loan, one pending/in-flight presenter request, owned READ-only FILE installation or unpublished-backing rollback |
@@ -172,19 +171,13 @@ Retirement, deadlines and resource waits remain scheduler responsibilities.
 
 ## Profiling and scheduling costs
 
-Transient timestamps travel in typed requests. Persistent MEMORY, FILE and HOST
+Transient timestamps travel in typed requests. Persistent MEMORY and HOST
 aggregates live in a separate caller-only block (MEMORY's samples are now taken
 in the caller's own syscall); the profiling subsystem owns
 BEGIN/SNAPSHOT/END controls. Services never borrow the aggregates. Disabled
 collection adds no timestamp reads or submission-time allocations. See
 [allocation profiling](../development/allocation-profiling.md) and
 [I/O attribution](../development/io-reliability-attribution.md).
-
-The migration corrected missing RAM FILE publication notification: earlier
-matched four-CPU nested-KVM controls reduced growing-write/copy medians from
-59.041/58.852 to 1.957/2.540 ms without changing growth policy. The
-[task-5 PR](https://git.internal/PyxisOS/pyxis-os/pulls/237) retains its detailed
-validation history.
 
 Initial HOST forwarding exposed unnecessary HPET reads in added scheduler passes.
 Empty deadline lists now skip clock reads, as does the HOST worker's untimed idle
@@ -237,12 +230,9 @@ first child's output empty. Four-CPU early pipe closure returned the expected
 32-byte checksum and upstream endpoint-closed errors, then resumed the shell.
 HOST executable loading and directory/file cleanup also passed.
 
-Growing HOST-to-RAM copies with both profiles enabled verified one warmup and
-five 1 MiB samples on each CPU count. Every sample kept 258 HOST READs and
-successful transport completions independent of ten RAM replacements, 4,173,840
-bytes of requested capacity and 2,084,880 copied bytes, with no failures or short
-transfers. These checks establish profile independence across storage reuse,
-not unprofiled throughput.
+Growing HOST-to-RAM copies with HOST profiling verified one warmup and five
+1 MiB samples on each CPU count, with 258 HOST READs and successful transport
+completions per sample and no failures or short transfers.
 
 GDB observed the idle executor's published parked wait and a parked caller at
 completion under kernel CR3 with IF=0. Deferred MEMORY on one CPU and DISPLAY

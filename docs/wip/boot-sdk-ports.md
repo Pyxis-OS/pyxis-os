@@ -88,6 +88,9 @@ Chosen by the owner, each starting with a proposal:
   unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
+- **Claude** (2026-10-09, debt paydown): page-backed RAM files, three decisions
+  accepted 2026-10-09; delivered for review with its
+  [measurements](../development/experiments/ram-file-pages/README.md).
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
@@ -124,7 +127,8 @@ Chosen by the owner, each starting with a proposal:
   tasks need explicit assignment.
 - **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)
   accepted 2026-10-09: fewer clock reads per timer event (task A, merged in
-  #571), then TSC with extended-HPET fallback (task B, in progress).
+  #571), then TSC with extended-HPET fallback (task B, #577); native
+  qualification is in the ThinkPad batch.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 

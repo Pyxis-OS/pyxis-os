@@ -3,7 +3,9 @@
 Status: **accepted, 2026-10-09,** assigned to Claude. The owner accepted the
 three [decisions](#accepted-decisions) as proposed. Task A merged in #571; its
 [measurements](../development/experiments/timer-clock-reads/README.md) are
-recorded. Task B is in progress.
+recorded. Task B is implemented in #577 and selected the TSC under host KVM
+([measurements](../development/experiments/tsc-clock/README.md)); the
+ThinkPad batch qualifies it natively.
 
 ## Why
 
