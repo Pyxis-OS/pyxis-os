@@ -78,7 +78,7 @@
   arch_clock_maintain();
 
   const struct boot_options *options = boot_options_parse(boot->command_line);
-  display_init(boot, options->display_size);
+  display_init(boot, options->display_size, options->display_timing);
 
   boot_start_cpus();
   system_info_init();

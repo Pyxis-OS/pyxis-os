@@ -125,9 +125,9 @@ static bool find_power_capability(void)
   if (!observer.power_capability) {
     return refuse("D0 cannot be verified without a power capability");
   }
-  for (unsigned offset = observer.power_capability + PCI_REGISTER_BYTES;
-      offset < observer.power_capability + PCI_POWER_BYTES; offset += PCI_REGISTER_BYTES) {
-    if (seen[offset / PCI_REGISTER_BYTES]) {
+  for (unsigned body_offset = observer.power_capability + PCI_REGISTER_BYTES;
+      body_offset < observer.power_capability + PCI_POWER_BYTES; body_offset += PCI_REGISTER_BYTES) {
+    if (seen[body_offset / PCI_REGISTER_BYTES]) {
       return refuse("overlapping PCI power capability");
     }
   }

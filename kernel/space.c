@@ -1240,6 +1240,10 @@ void space_present_task(void *argument)
       /* Drop missed frames rather than catching up in a busy loop. */
       deadline = now + PRESENT_INTERVAL_NS;
     }
+    uint64_t hardware_deadline = display_next_deadline();
+    if (hardware_deadline) {
+      deadline = hardware_deadline;
+    }
     kernel_task_sleep_until(deadline);
   }
 }

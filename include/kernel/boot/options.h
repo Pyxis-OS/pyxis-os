@@ -11,6 +11,7 @@ struct boot_options {
   const char *remote_beacon;
   bool log_udp;
   const char *display_size;
+  const char *display_timing;
 };
 
 /* BSP, IF=0: call once before display/AP initialization. Copies the command
