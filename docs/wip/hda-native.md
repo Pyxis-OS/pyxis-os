@@ -75,6 +75,26 @@ These are accepted plan choices, not evidence of implementation or native sound.
 Binding and guard derivation below introduce no public API. One-trip fail-closed
 until reboot remains accepted; native evidence decides on any later reset recovery.
 
+### Task-specific choices accepted 2026-10-09
+
+1. **Native commit limit: option A, 20 ms.** After programming the stopped
+   stream format, take `F = round_up(FIFOS + 1, 4)` bytes. Before committing a
+   reclaimed period, require headroom greater than `F + 4 + 3840` bytes:
+   48 kHz S16LE stereo consumes 192,000 bytes/s, or 3840 bytes in 20 ms; the
+   additional four bytes are one frame. Check that this reserve fits the ring
+   before RUN. Bound the whole pre-observation, mix/copy/publication and
+   post-observation interval, including the final clock read, to less than
+   20,000,000 ns and 480,000 ticks of the 24 MHz WALCLK. Final headroom must
+   exceed `F + 4`. QEMU retains its existing 8192-byte/1 ms profile. Native
+   FIFOS, progress behavior and commit timings still need batch evidence.
+2. **D3+BME: option B, retain the PCI refusal.** Add no handoff helper.
+   `pci_begin_mmio_probe` still requires BME clear before a wake or memory-decode
+   change and rejects reset-causing D3hot wake. Trace the actual boot COMMAND
+   (Mem/BME), PM state, PME and NoSoftRst in ktrace before attempting bring-up;
+   report a specific unavailable reason if that state cannot be used. The
+   supplied Linux runtime-suspended state does not establish Pyxis boot state.
+   Only native evidence of D3+BME at boot can reopen a separate helper decision.
+
 ## Controller bring-up beyond adding a PCI ID
 
 Retain the [PCI claim/reset](../devices/pci.md) and
@@ -138,8 +158,9 @@ DMA prefetch/headroom and wrap/IRQ-coalescing behavior. FIFO size alone is not a
 proof of the maximum outstanding DMA fetch. Derive a native reclaimed-period
 margin from the controller's documented bounds plus progress during the checked
 commit window. Record the rationale and before/after timing observations, not
-just a successful tone or a histogram maximum. Bring any proposed numeric guard
-or tuning change to the owner before applying it. If a safe native profile
+just a successful tone or a histogram maximum. The owner accepted the FIFO-derived
+20 ms profile above; further numeric guard or tuning changes require another
+decision before applying them. If a safe native profile
 cannot be established, report the blocker instead of enabling unqualified RUN.
 Native evidence may motivate reset recovery later; one guard trip still means
 unavailable until reboot in this task.
