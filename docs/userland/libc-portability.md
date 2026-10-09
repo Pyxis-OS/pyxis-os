@@ -155,7 +155,7 @@ x86-64 LP64 interface is:
 | Header | Supported interface |
 | --- | --- |
 | `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x100, O_TRUNC = 0x200, O_EXCL = 0x400 |
-| `unistd.h` | read, write, close, lseek, ftruncate, fsync, unlink; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
+| `unistd.h` | read, write, pread, pwrite, close, lseek, ftruncate, fsync, unlink; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
 | `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
@@ -185,15 +185,16 @@ Descriptor calls neither inspect nor update FILE indicators.
 
 The [descriptor I/O reference](stdio.md#descriptor-io) and
 [native errno mapping](stdio.md#native-error-translation) give the detailed
-contract. lseek uses the descriptor's existing private position; it is not
-pread/pwrite or a shared cursor. O_APPEND, fdopen and duplication remain absent.
+contract. lseek changes the descriptor's private position; pread/pwrite use an
+explicit file offset without changing it. There is no shared cursor.
+O_APPEND, fdopen and duplication remain absent.
 fileno exposes an existing FILE descriptor without adding an alias.
 
 ### Read/write and exclusive-create qualification
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171), commit
 `ff278aec50adfaf6af8d8c15062084a8594642e3`, implements the first
-[Git source-acquisition task](../wip/git-on-pyxis.md#first-task-status-and-accepted-decisions).
+[Git source-acquisition task](../wip/git-on-pyxis.md#task-status-and-accepted-decisions).
 The ordinary `make -j16 image` build used parent `32ee113d`, userland `f5c4de2`
 plus the exact two-file change subsequently committed above, ports `f2da003d`
 and filesystem `b427df29`. Clang/LLD 23.1.3 came from the existing
@@ -230,6 +231,66 @@ This qualifies the selected RAM-file operations and ordinary denied-create
 unwind. Racing writers, forced allocation failure, malformed close replies,
 NPFS/host mutation and power-loss durability were not exercised. Their unchanged
 preflight and uncertain-close rules were inspected in source.
+
+### Positioned file I/O and qualification
+
+`pread` and `pwrite` use the native FILE protocol's explicit offset directly,
+without seek/restore, new libc allocation or a fill/retry loop. Short counts, read EOF
+and native errno translation match read/write. Descriptor/access validation
+precedes the SSIZE_MAX count limit, then negative-offset EINVAL, then nonfile
+ESPIPE. This also applies to zero-count calls: a valid file request returns
+zero without touching bytes or the backend, but negative offsets and nonfiles
+are still refused. Backend offset/range restrictions retain their real errors.
+
+Pread bypasses read-ahead without consuming or filling it. Nonempty pwrite drops
+that descriptor's read-ahead before the native call; it stays discarded on
+uncertain failure so later reads refetch current bytes. Neither operation changes
+the private position, append flag, associated FILE pushback or EOF/error state.
+Pwrite uses its explicit offset even through fileno on an append FILE. A caller's
+ungetc byte is FILE state, not speculative file data. Other open descriptors'
+buffers retain the existing [read-ahead limits](stdio.md#input-read-ahead).
+
+The helpers snapshot the already-owned handle before blocking and never access
+a descriptor-entry pointer afterward. The current one-user-task-per-process
+contract keeps that handle owned during the call; no extra reference or lock is
+introduced. Mutation failure/uncertainty returns an error, without replay or an
+invented count.
+
+[Userland PR #172](https://git.internal/PyxisOS/pyxis-userland/pulls/172) publishes
+`88217be07f089c90d79c71b3cf9387f7420d0ec9`. The ordinary `make -j16 image` build
+passed at parent `5cf60bc3`, userland `751345c` plus the exact four-file change
+subsequently committed above, ports `f2da003d` and filesystem `b427df29`.
+The existing Clang/LLD 23.1.3 builder was used; libc had no warnings, while
+unchanged third-party warnings, including Links' O_EXCL override, remained.
+No compiler or kernel/protocol change was needed.
+
+Manual qualification used nested-KVM Q35, two vCPUs, 256 MiB, VirtIO network/RNG,
+virtio-fs for launching a disposable observation program, and RAM `tmp://` for
+its file operations. The probe was not packaged or committed.
+
+| Observation | Result |
+| --- | --- |
+| Buffered read of `a`, then pread offset 4 from `abcdef` | Returned `ef`; cursor stayed 1 with five unread bytes; ordinary read next returned `b` and advanced to 2 |
+| Pwrite `XY` at offset 2 | Returned 2; cursor stayed 2; four unread bytes were discarded before FILE_WRITE; next buffered read returned `X`, then ordinary read returned `Y` |
+| Ordinary write `Q` at private offset 4, then pread offset 0 | Ordinary write advanced to 5; pread returned `abXYQf` and kept cursor 5 |
+| Pwrite `Z` at offset 9 past six-byte EOF | Returned 1; size became 10; pread of gap returned `00 00 00 5a`; cursor stayed 5 |
+| 8192-byte requests after resize to 8192 | One pwrite returned 4080; one pread returned 4088; both kept cursor 5, matching native transfer limits |
+| Pread at EOF | Returned zero; cursor, FILE EOF and error indicators were unchanged |
+| Negative offsets / invalid descriptor / console type | EINVAL / EBADF / ESPIPE; zero-count console pwrite also returned ESPIPE |
+| Zero-count file pwrite at offset 30 | Returned zero; size remained 10 and cursor remained 5 |
+| Pwrite on an `a+` FILE | Wrote `L` at offset zero; its private cursor stayed zero |
+
+Read-only GDB confirmed these cursor and cache states, including read-ahead
+already empty at native file_write's explicit offset 2. The inspected helpers
+do not use entry pointers after the blocking call. Associated FILE indicators
+were unchanged after EOF and refused operations. Source inspection establishes
+preserved caller-supplied pushback, zero-count cache preservation and invalidation
+before uncertain mutation; these were not forced separately at runtime.
+
+No new tests, fault injection, boot/output automation or performance measurement
+was added. Task-owned QEMU, GDB, remote client and virtiofsd processes are stopped.
+Persistent backend writes, racing callers, malformed/uncertain replies and
+allocation-failure paths were not qualified by these RAM-file observations.
 
 ## Close failure and cleanup
 

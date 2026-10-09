@@ -47,8 +47,10 @@ Storage exhaustion reports ENOMEM, and descriptor-number exhaustion reports
 EMFILE. Public open/read/write/close use this same ownership/cursor model.
 `fileno` returns a stream's current descriptor, or -1 with EBADF once the
 stream or its descriptor is closed; the stream still owns it, so close it with
-`fclose`. Reading or seeking through that descriptor bypasses the stream's
-pushback and read-ahead; `fstat` is unaffected. fdopen and duplication are not
+`fclose`. Descriptor reads bypass FILE pushback but consume descriptor read-ahead;
+seeking discards that read-ahead. Pread bypasses both without consuming them;
+pwrite discards descriptor read-ahead before a nonempty native write and leaves
+FILE pushback/indicators unchanged. `fstat` is unaffected. fdopen and duplication are not
 exposed.
 
 Append currently performs separate SIZE and WRITE calls. Concurrent appenders
@@ -70,7 +72,7 @@ It creates no FILE wrapper and grants no additional authority. Descriptor
 storage and path workspace are reserved before exclusive creation or truncation,
 with no fallible descriptor publication afterward. Read/write requests require
 both native rights. lseek uses the same private descriptor position as stdio;
-public append, pread/pwrite and descriptor duplication remain absent.
+public append and descriptor duplication remain absent.
 
 With O_CREAT, the third argument has type mode_t (unsigned int in sys/types.h).
 Only 0666 is accepted, meaning native creation policy rather than Unix permission
@@ -81,7 +83,7 @@ and host restrictions remain authoritative. Virtio-fs still requests 0644.
 See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
 
 `unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync` and
-`unlink`, and defines STDIN_FILENO,
+`unlink`, `pread` and `pwrite`, and defines STDIN_FILENO,
 STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `sys/types.h` defines ssize_t as
 signed long on the LP64 target; `limits.h` defines SSIZE_MAX as LONG_MAX.
 
@@ -92,12 +94,26 @@ transfer and return the confirmed byte count, including short progress, or -1
 with the translated errno. They do not fill a buffer or retry the remainder. A
 read first returns bytes the associated FILE read ahead, without a backend call;
 read itself never reads ahead.
+
+`pread` and `pwrite` take an explicit off_t file offset and leave the descriptor's
+private position unchanged. They call native FILE operations directly, never
+seek/restore. Descriptor/access and count checks precede negative-offset EINVAL,
+then nonfile ESPIPE; even zero-count requests must name a file and a nonnegative
+offset. A valid zero-count request touches no buffer/backend or read-ahead.
+Pread does not consume or refill read-ahead. Nonempty pwrite discards it before
+dispatch, including an uncertain mutation outcome; later reads refetch at the
+same private position. Short progress and EOF retain the read/write contract,
+without altering FILE indicators or pushback. Internal FILE append policy does
+not override pwrite's offset; public O_APPEND remains absent. See
+[positioned-I/O qualification](libc-portability.md#positioned-file-io-and-qualification).
+
 Successful zero reads report EOF, including independent terminal input;
 nonempty zero writes report EIO. Native denial remains EACCES, unsupported
 operations remain ENOTSUP and pipe writes with no remaining reader report EPIPE.
 
-Descriptor I/O shares the cursor with an associated FILE but never reads or
-changes its EOF/error indicators. A prior FILE EOF does not suppress read;
+Ordinary read/write and lseek use the private cursor shared with an associated
+FILE; pread/pwrite leave it unchanged. Descriptor calls never read or change
+FILE EOF/error indicators. A prior FILE EOF does not suppress read;
 successful descriptor I/O does not clear that indicator. Closing descriptor 1
 invalidates stdout before native release. Later reuse of 1 does not reconnect
 stdout, and fclose of that stale wrapper cannot close the replacement.
@@ -297,7 +313,7 @@ omitting it is a Pyxis guarantee, not portable behavior.
 read-ahead. A second `ungetc` before a read fails, and `EOF` is never pushed.
 It clears the EOF indicator, and `ftell` reports one less (not below zero).
 A successful `fseek` (a `SEEK_CUR` offset counts from the position before the
-pushback), input `fflush` and any write discard it. Pushback belongs to the
+pushback), input `fflush` and a stdio write discard it. Pushback belongs to the
 FILE: descriptor reads never see it.
 
 `fscanf`, `scanf`, `sscanf` and their `v` forms read through `fgetc` with that
