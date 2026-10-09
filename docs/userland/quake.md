@@ -70,8 +70,8 @@ configuration sets a sound variable that this soundless build does not have.
 
 Rendering uses a 320x240 game buffer scaled by the largest integer that fits
 the content area, with black borders, converting the 8-bit palette to the
-display's channel shifts. Presentation keeps the single-buffer contract, so
-tearing is possible. Outside `timedemo`, the loop sleeps to Quake's 72 Hz frame
+display's channel shifts. Each frame is drawn into a held display slot and
+[submitted](../interfaces/graphics.md#slots-and-frame-handoff) whole. Outside `timedemo`, the loop sleeps to Quake's 72 Hz frame
 cap. The video mode is fixed at 320x240.
 
 ## Saves and configuration

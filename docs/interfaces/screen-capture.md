@@ -121,9 +121,9 @@ payload, and capture does not retry them automatically.
 
 ## Limits and qualification
 
-This freezes one successful presenter composition. Concurrent application or TTY
-writes can already tear that composition; it does not promise an atomic
-application frame, vblank or exact physical scanout timing. It cannot capture a
+This freezes one successful presenter composition. Application graphics appear
+as whole submitted frames; concurrent TTY writes can still tear the composition.
+It does not promise vblank or exact physical scanout timing. It cannot capture a
 panic or make progress with a stuck presenter/scheduler. Completed snapshots have
 no separate retained-image quota, so callers can retain multiple files and exhaust
 memory despite the single in-flight slot. Backing costs `4 * width * height`
