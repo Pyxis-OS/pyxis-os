@@ -167,6 +167,13 @@ static struct clipboard_item *allocate_item(size_t length)
   return item;
 }
 
+static void destroy_store(struct kernel_object *object)
+{
+  (void)object;
+  /* The space registry and boot session retain their initial store references. */
+  panic("clipboard store lost its lifetime owner");
+}
+
 bool clipboard_space_init(struct space *space)
 {
   struct clipboard_space *state = kmalloc(sizeof(*state));
@@ -174,11 +181,11 @@ bool clipboard_space_init(struct space *space)
     return false;
   }
   *state = (struct clipboard_space){.space = space};
-  object_init(&state->local.object, OBJECT_CLIPBOARD, NULL);
+  object_init(&state->local.object, OBJECT_CLIPBOARD, destroy_store);
   state->local.space = space;
   space->clipboard = state;
   if (!shared_initialized) {
-    object_init(&shared.object, OBJECT_CLIPBOARD, NULL);
+    object_init(&shared.object, OBJECT_CLIPBOARD, destroy_store);
     shared_initialized = true;
   }
   lock_clipboard();
