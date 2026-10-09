@@ -1458,3 +1458,12 @@ upstream. Revisit with a stable libc sort or a patch to sort if a consumer
 depends on the retained line, input too large for memory, or reliable `-o`
 errors. Word splitting, character classes and folding use libutf's tables, with
 no locale collation; revisit with locale support.
+
+## Temporary bundle grant policy
+
+The [bundle design](wip/program-bundles.md) accepted on 2026-10-09 temporarily
+delivers every available ordinary grant, including optional grants at launch,
+without consent. It is unimplemented, not a permanent security contract; metadata
+never creates rights or obtains system-only authority, and programs inspect actual
+startup grants. Revisit with users/permissions and the recorded required-grant,
+in-context optional-grant, trusted-picker, stable-identity and revocation model.

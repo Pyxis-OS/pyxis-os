@@ -155,3 +155,14 @@ These are proposed defaults, not accepted implementation authority:
 
 Docs only. No dependency pins, kernel/libc code, toolchain container, tests or
 QEMU changes. Probe branches stay unmerged; stop for owner review.
+
+## Program bundle follow-up
+
+The owner accepted the [program-bundle first-slice design](program-bundles.md)
+on 2026-10-09, after the return to plain 1 MiB stacks in merged
+[#617](https://git.internal/PyxisOS/pyxis-os/pulls/617). It selects ZIP `.pxa` and
+unpacked `.pxb` forms with per-program `app://`, JSON manifest requests for up to
+8 MiB stacks, read-only resource/sysroot roots and linker launch authority, plus
+shared 128 MiB captured-image admission. The temporary grant policy and later
+consent/picker/identity/revocation direction are recorded. The bundle design is
+unimplemented; task 1 awaits plan merge and a separate owner go.
