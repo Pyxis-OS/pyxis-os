@@ -645,7 +645,8 @@ DevilutionX needs them. Additions belong in libc or the runtime configuration, n
 
 The [PCM interface](interfaces/audio.md) has no master volume or per-session gain.
 Full-scale speaker test tones were painfully loud in native qualification. Add
-reviewed gain controls and their authority before ordinary audio use.
+reviewed gain controls and their authority before ordinary audio use. The assigned
+[volume proposal](wip/audio-volume.md) has three pending decisions; no runtime change yet.
 
 ## HD Audio scheduling and startup tuning
 

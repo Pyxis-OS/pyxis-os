@@ -251,7 +251,9 @@ remain outside this analog playback implementation.
 
 ## Later directions
 
-Owner ideas, **2026-10-09**; none is authorized. **Volume comes first**, gating
+Owner ideas, **2026-10-09**. The [volume proposal](../wip/audio-volume.md) is assigned
+for documentation first; its implementation and the players remain unassigned.
+**Volume comes first**, gating
 all players below: master and per-session/space mixer gain, a master widget beside
 the bar's battery and a per-space widget on each tab, with a classic speaker icon
 and a classic volume slider on hover. See the [no-volume debt](../technical-debt.md#hd-audio-volume-control).
