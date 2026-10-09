@@ -10,6 +10,7 @@
 #include "internal.h"
 
 #define AUDIO_WATCHDOG_MS 5
+#define AUDIO_HEADPHONE_SETTLE_MS 75
 #define AUDIO_SERVICE_LIMIT_NS UINT64_C(20000000)
 #define QEMU_COMMIT_LIMIT_NS UINT64_C(1000000)
 #define NATIVE_COMMIT_MS 20
@@ -25,6 +26,15 @@ static struct bsp_request *request_head, *request_tail;
 static uint64_t notifications;
 static bool started, worker_live, available;
 
+enum audio_stop_phase {
+  AUDIO_STOP_NONE,
+  AUDIO_STOP_MUTED,
+  AUDIO_STOP_DISABLED,
+};
+
+static enum audio_stop_phase stop_phase;
+static uint64_t stop_deadline;
+
 /* Observed DMA progress belongs to one RUN epoch. No play cursor or audible
  * drain is exported. Timing violations invalidate the epoch rather than
  * inventing missing laps from a nominal sample rate. */
@@ -35,6 +45,7 @@ static uint64_t starts, stops, interrupts, refills, max_commit_ns;
 static const char *refill_fault;
 
 static void audio_worker(void *argument);
+static bool stop_output(void);
 static bool observe_progress(const struct hda_stream_position *position,
     const struct hda_irq_event *event, uint64_t now);
 
@@ -118,6 +129,7 @@ static void fail_engine(const char *reason)
 {
   audio_require_worker();
   available = false;
+  stop_phase = AUDIO_STOP_NONE;
   audio_volume_available(false);
   audio_sessions_fail();
   hda_fail(&controller, reason);
@@ -148,7 +160,8 @@ static bool start_output(void)
   audio_sessions_cleanup();
   audio_volume_apply();
   if (!audio_sessions_pending()) {
-    return codec_stop();
+    /* Exit can discard all PCM after activation. Settle that output too. */
+    return stop_output();
   }
   uint64_t flags = cpu_save_interrupts();
   observed_bytes = refilled_periods = data_end_bytes = 0;
@@ -175,14 +188,56 @@ static bool start_output(void)
   return running;
 }
 
-static bool stop_output(void)
+static void park_output(void)
 {
-  if (!hda_stream_stop(&controller) || !codec_stop()) {
-    return false;
-  }
+  stop_phase = AUDIO_STOP_NONE;
   ++stops;
   ktrace("audio: parked starts=%lu stops=%lu IRQs=%lu refills=%lu max-commit-ns=%lu\n",
       starts, stops, interrupts, refills, max_commit_ns);
+}
+
+static bool stop_output(void)
+{
+  if (!hda_stream_stop(&controller)) {
+    return false;
+  }
+  if (controller.model == HDA_MODEL_AMD) {
+    bool headphone_active;
+    if (!hda_commands_start(&controller) ||
+        !hda_codec_stop_mute(&controller, &route, &headphone_active)) {
+      return false;
+    }
+    if (headphone_active) {
+      if (!hda_commands_stop(&controller)) {
+        return false;
+      }
+      stop_phase = AUDIO_STOP_MUTED;
+      stop_deadline = task_deadline_after_ms(AUDIO_HEADPHONE_SETTLE_MS);
+      return true;
+    }
+  }
+  if (!codec_stop()) {
+    return false;
+  }
+  park_output();
+  return true;
+}
+
+static bool advance_stop(void)
+{
+  audio_require_worker();
+  if (stop_phase == AUDIO_STOP_NONE || !task_deadline_expired(stop_deadline)) {
+    return true;
+  }
+  if (stop_phase == AUDIO_STOP_MUTED) {
+    if (!codec_stop()) {
+      return false;
+    }
+    stop_phase = AUDIO_STOP_DISABLED;
+    stop_deadline = task_deadline_after_ms(AUDIO_HEADPHONE_SETTLE_MS);
+  } else {
+    park_output();
+  }
   return true;
 }
 
@@ -371,8 +426,17 @@ static void audio_worker(void *argument)
       bsp_request_complete(&request->request);
       cpu_restore_interrupts(flags);
     }
-    if (available && !controller.stream_running && audio_sessions_pending() && !start_output()) {
-      fail_engine("output activation failed");
+    if (available && !controller.stream_running) {
+      /* Accepted PCM wins over either settle deadline. Activation samples the
+       * jack afresh and retains the selected pin if it is still biased. */
+      if (audio_sessions_pending()) {
+        stop_phase = AUDIO_STOP_NONE;
+        if (!start_output()) {
+          fail_engine("output activation failed");
+        }
+      } else if (!advance_stop()) {
+        fail_engine("output stop failed");
+      }
     }
     flags = cpu_save_interrupts();
     if (request_head || observed_notifications != notifications) {
@@ -383,6 +447,8 @@ static void audio_worker(void *argument)
     struct task_wait *wait = worker_wait;
     if (available && controller.stream_running) {
       task_wait_sleep_until(wait, task_deadline_after_ms(AUDIO_WATCHDOG_MS));
+    } else if (available && stop_phase != AUDIO_STOP_NONE) {
+      task_wait_sleep_until(wait, stop_deadline);
     } else {
       task_wait_sleep(wait);
     }
