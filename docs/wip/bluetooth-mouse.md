@@ -1,9 +1,9 @@
 # MX Master 3S on Pyxis
 
-Status: **tasks 1–2 complete; runtime warm validation recorded 2026-10-08.**
+Status: **tasks 1–2 complete; task 3 firmware readiness assigned 2026-10-09.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
-remain. Task 2 is complete; tasks 3–8 still need explicit owner assignment.
+remain. Task 3 is assigned; tasks 4–8 still need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -384,7 +384,7 @@ lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
 prerequisite under the accepted policy, not a blind choice before cold evidence.
 
 New evidence that requires a policy change returns to the owner. Every
-implementation task needs an explicit assignment. Task 2 is complete; tasks 3–8
+implementation task needs an explicit assignment. Task 3 is assigned; tasks 4–8
 remain unassigned.
 
 With the direction decided, the completed investigation is now the
@@ -415,3 +415,10 @@ The connection/reconnect tasks must establish and qualify a safe reuse boundary
 before bonded reconnect is ready. This limit does not relax required durable
 reconnect or native closure. See the
 [revisit condition](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).
+
+Task 3 uses branch bluetooth/firmware-readiness from fresh main 52451d3 and
+[the pre-code plan and implementation record](../development/experiments/bluetooth-firmware-readiness/README.md).
+The loader and specific failure diagnostics compile, but owner mirror URLs and
+USB-node access remain required for image/passthrough validation. Native cold
+power-on and warm reboot are collected as the next owner batch. Task 3 remains
+unchecked until its validation is accounted for; later tasks are unassigned.

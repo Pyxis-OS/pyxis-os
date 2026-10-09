@@ -161,11 +161,16 @@ bundle-userspace: userspace
 bundle-ports: ports
 	./scripts/bundle.sh pack ports
 
+# AX200 firmware is an image dependency; kernel-only compilation stays offline.
+.PHONY: ax200-firmware
+ax200-firmware:
+	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200/metadata.json --output build/firmware/ax200
+
 initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE \
+build/initrd.cpio: userspace ports ax200-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
 	./scripts/assemble-initrd.sh
 

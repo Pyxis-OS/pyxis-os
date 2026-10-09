@@ -21,7 +21,8 @@ is admitted for development; unknown/cold firmware is unavailable without an
 upload or speculative reset. Read Version after Reset must match. Local version,
 commands, LE features, buffer lengths and packet credits are checked before
 mandatory event masks and readiness. This warm profile is development evidence,
-not production firmware qualification. Cold firmware remains task 3.
+not production firmware qualification. Task 3 adds the [pinned firmware readiness flow](../development/experiments/bluetooth-firmware-readiness/README.md);
+its image, warm and native validation remain pending.
 
 ## Authority and messages
 

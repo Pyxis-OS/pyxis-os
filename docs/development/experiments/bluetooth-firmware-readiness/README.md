@@ -1,6 +1,8 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **assigned 2026-10-09; plan posted before implementation.**
+Status: **task 3 implementation compiles; mirror/access and native evidence pending.**
+The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
+at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
 [#552](https://git.internal/PyxisOS/pyxis-os/pulls/552) merged.
 This is task 3 of [the mouse milestone](../../../wip/bluetooth-mouse.md).
@@ -110,3 +112,54 @@ Booting Pyxis takes this session offline.
 QEMU passthrough can qualify warm skip and storage coexistence while Fedora has
 initialized AX200; it does not establish Pyxis cold upload. Native results remain
 owner-reported until supplied. This plan claims no task 3 completion.
+
+
+## Implementation and recoverable status
+
+The private firmware module and HCI integration implement the planned bounded
+flow. Startup uses Intel's combined Read Version selector 0xff, accepting only
+the AX200 legacy 10-byte profile. Cold postboot version must match the selected
+image metadata before standard HCI Reset; the full tuple must remain unchanged
+after Reset. DDC must complete before capabilities/readiness. No production
+qualification is implied by a successful loader.
+
+A confirmed firmware restart (USB retirement plus real boot notification and
+drained partial-event boundaries) begins the same one-command initial HCI startup
+window used at first attachment. It is initialization allowance, not a generated
+Command Complete or an interpretation of the unqualified boot num_cmds field.
+The next real command response establishes advertised credits. Native operation
+of that boundary remains a measurement gate.
+
+Bulk completion sequence continuity is preserved in both framing transitions,
+including zero-length completions before cold identification. Interrupt and
+bulk event reassembly are independent; framing stays fixed for an entire copied
+USB completion. Notifications are armed at actual USB publication, preventing a
+queued but unpublished command from accepting an unrelated boot result. Secure
+success can precede final USB/CC retirement only after the final SFI fragment
+has actually been published. No wait, recovery or allocation is added to the
+xHCI worker.
+
+Read-only inspection of the installed, byte-identical SFI confirms RSA CSS
+version 0x00010000, 3233 bounded HCI container records, 3232 four-byte-aligned
+groups and one seven-byte boot-parameter command with build 193/week 33/year 24.
+This inspects provenance/container metadata; host files are not build inputs
+and no upload or controller observation is implied.
+
+Ordinary kernel builds pass with pinned Clang23.1.3/fork49e2c1a. Independent
+source audit corrected the entering-bootloader bulk sequence boundary and
+confirmed publication/retirement/deadline paths by inspection. No tests,
+fault injection, forced cold transition or new benchmark infrastructure were
+added. The unmodified baseline image/ELF from successful main52451d3 CI run1349
+was saved before code changes; its attached measurements await restored access.
+
+Actual owner cache URLs remain pending in firmware/ax200/metadata.json.
+A missing mirror fails image assembly explicitly. The AX200 is still node
+/dev/bus/usb/004/003, currently not writable after reboot; its owner access
+grant must be restored before attachment. Fedora Bluetooth is inactive/disabled.
+No QEMU, debugger or probe was started.
+
+Baseline bundles, immutable image/ELF, a private npfs fixture and remote-init
+script are prepared in /tmp/pyxis-bluetooth-firmware-readiness. Pending work:
+mirror verification and ordinary image build; baseline/warm passthrough framing,
+DDC/skip and matched storage/idle checks; exact-head CI and final review; the
+owner's cold/warm native batch. Task 3 is incomplete and the PR stays draft.
