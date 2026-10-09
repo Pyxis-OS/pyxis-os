@@ -62,6 +62,50 @@ heap's usual small-allocation pools.
 - **Screen capture** keeps its heap pixel buffer until the snapshot file
   exists, then copies it into pages and frees the buffer.
 
+## Serialization and page lifetime
+
+Moving growth off the BSP does not change what serializes a file:
+- **Exclusive ownership.** Every RAM-file READ, WRITE and RESIZE, and a launch
+  capture, already holds the file's exclusive `busy` ownership for the whole
+  operation (`file_begin_operation` / `file_end_operation`). The BSP queue
+  only ran the buffer replacement inside that ownership. The page index, the
+  size and every frame are touched only by the owner.
+- **Waiting.** A second operation waits in the file's FIFO as an ordinary
+  sleeping task wait, not by spinning.
+- **The spinlock.** The file's short spinlock (IF=0, never held across a wait,
+  an allocation or a copy) guards only the hand-off of `busy` and that FIFO.
+  It stays that way. No new lock is added, and no spinlock is held across a
+  large read.
+
+**Page lifetime.**
+- **Shrinking and holes.** RESIZE down frees frames only while it owns `busy`,
+  so no other operation can be copying from them. Frames are freed after the
+  index entries are cleared.
+- **Final destruction.** It runs from the existing object retirement on the
+  BSP, which asserts that no operation owns the file. An operation in progress
+  keeps the object alive through the caller's own capability: its single task
+  is inside the syscall and cannot close that handle. Other processes closing
+  their handles cannot drop the last reference.
+- **Threads.** Once a process can run several threads, a file call must retain
+  the object for its duration, a rule for the threads work.
+- **Scratch mappings.** A copy's page is mapped only between the calling CPU's
+  own map and unmap, with IF=0, so no other CPU ever holds that translation.
+
+**No other BSP-owned state.** The caller's CPU uses only `pmm_alloc`/`pmm_free`,
+`kmalloc`/`kfree` for the index, and its own scratch slots. Each is already safe
+on any CPU with IF=0 ([SMP](../kernel/smp.md#memory-and-output-boundaries)). No
+VM metadata, kernel VA range or page table outside the scratch window changes,
+so the allocator and VM contracts stay as documented. Only the SMP reference's
+sentence listing RAM-file backing among BSP requests changes.
+
+**Lock order.** Frame and index allocation run with the file owned and its
+spinlock released. Only the existing leaf heap and PMM locks are taken, and the
+memory-pressure notification follows the documented order. A FILE payload is at
+most 4096 bytes, so one READ or WRITE touches at most two pages and allocates at
+most two frames. Each call's interrupts-off work is a few page copies. RESIZE
+down and final destruction are the only steps proportional to file size: they
+free one frame per page, and grow the index rarely and geometrically.
+
 ## Decisions
 
 1. **Allocation on the writing CPU.** Default: yes.
