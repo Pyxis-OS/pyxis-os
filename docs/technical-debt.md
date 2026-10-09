@@ -1112,12 +1112,11 @@ guarantee if a target falls back to it. Host-KVM observations showed lower call 
 unestablished; the direct profiled allocation median was about 2.6% higher, cause not isolated), and the ThinkPad logged the 32-bit path
 and held the clock through a native session of more than 15 minutes on 2026-10-07 ([target notes](targets/t14-gen1-amd/notes.md#native-status)).
 
-**TSC limits (accepted, owner 2026-10-09).** Cross-CPU agreement is checked only at startup (about 2 ms per AP, no shared floor or runtime
-watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on
-every boot whose BSP qualifies with an error bound up to 100 ppm on top of the HPET's crystal error, and CPUID `0x15` is only logged.
-Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm calibration and the development VM exposes no invariant TSC).
-Suspend, resume, migration and native behavior are unqualified until the owner's ThinkPad run
-([measurements](development/experiments/tsc-clock/README.md)). Revisit with a target that shows a warp or needs better accuracy.
+**TSC (accepted limits, owner 2026-10-09; native qualified).** On the ThinkPad two cold boots calibrated 2096.063 and 2096.064 MHz (within ±12 ppm of Linux's 2096.061 MHz), clock reads
+take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
+no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
+qualifies with an error bound up to 100 ppm on top of the HPET's crystal error, and CPUID `0x15` is only logged. Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
+calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. Revisit with a target that shows a warp or needs better accuracy.
 
 ## Doom configuration and save-format limits
 
