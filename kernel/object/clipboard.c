@@ -681,7 +681,7 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   bool output_locked = log_begin();
   if (!output_locked || !tty->selection_valid || tty->selection_dragging) {
     log_end(output_locked);
-    klog("clipboard copy: no completed selection\n");
+    ktrace("clipboard copy: no completed selection\n");
     return;
   }
   geometry = tty->geometry_generation;
@@ -710,12 +710,12 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   }
   log_end(output_locked);
   if (!valid || length > CLIPBOARD_TEXT_MAX) {
-    klog("clipboard copy: unsupported selection or text limit\n");
+    ktrace("clipboard copy: unsupported selection or text limit\n");
     return;
   }
   struct clipboard_item *item = allocate_item(length);
   if (!item) {
-    klog("clipboard copy: storage unavailable\n");
+    ktrace("clipboard copy: storage unavailable\n");
     return;
   }
   output_locked = log_begin();
@@ -745,7 +745,7 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   log_end(output_locked);
   if (!same) {
     object_release(&item->object);
-    klog("clipboard copy: selection changed\n");
+    ktrace("clipboard copy: selection changed\n");
     return;
   }
   lock_clipboard();
@@ -755,7 +755,7 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   if (previous) {
     object_release(&previous->object);
   }
-  klog("clipboard copied %zu bytes (%s)\n", length, store->space ? "local" : "shared");
+  ktrace("clipboard copied %zu bytes (%s)\n", length, store->space ? "local" : "shared");
 }
 
 static void queue_kernel_paste(struct space *space, uint64_t layer)
@@ -788,7 +788,7 @@ static void queue_kernel_paste(struct space *space, uint64_t layer)
   unlock_clipboard();
   unlock_input(&input);
   if (pending || exhausted) {
-    klog("clipboard paste refused: %u\n", (unsigned)(pending ? CALL_BUSY : CALL_LIMIT));
+    ktrace("clipboard paste refused: %u\n", (unsigned)(pending ? CALL_BUSY : CALL_LIMIT));
   }
 }
 
@@ -820,7 +820,7 @@ static void consume_kernel_pastes(bool input_complete)
       status = admit_paste(space, store, &space->console->object, action.receiver_epoch, &transaction_id);
     }
     if (status != CALL_OK) {
-      klog("clipboard paste refused: %u\n", (unsigned)status);
+      ktrace("clipboard paste refused: %u\n", (unsigned)status);
     }
   }
 }
