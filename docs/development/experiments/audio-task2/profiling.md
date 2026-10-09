@@ -192,6 +192,121 @@ scan snapshot cannot cause an additional blocking wait.
 **TSC/cheaper clock sources, general scheduler timer
 rearm caching and broad network optimization belong to separate kernel work.**
 Capacity, queue/DMA tuning and safety-threshold changes require the owner and are
-not proposed as an escape from this overhead. After an accepted fix, repeat
-matched one/eight runs and sustained eight-session qualification before delivery.
-All task-owned guests, clients, debuggers and profilers are stopped.
+not proposed as an escape from this overhead. The repeated matched runs below measure the accepted fixes. Longer uninstrumented
+qualification is separate; #557 remains draft pending owner review.
+
+
+## Repeat after accepted fixes (2026-10-09)
+
+The isolated after probe is `7ff4de02`, the same `cc6af6be` instrumentation plus
+implementation `9026ac89`. It retains the identical initrd hash above, compiler,
+configuration, nine-shell layout, QEMU devices, four CPUs and manual commands.
+The after ELF SHA-256 is
+`8289db1363a0af1c1d11b83dd9c03782fc8af1f7e66a014d37aa012680ad76bd`;
+ISO `f3ee4810f209b0cf6ab73d7a7fc5a16a19cd08006e908b85cff90692f6fda3a9`.
+Only the two accepted runtime changes differ. Counter phases are 32.583/20.194 s
+for one and 42.090/36.061 s for eight, calibrated at 3.187062 GHz. Four independent
+quiet host-accounting windows last 15.000 s each. All producers stopped before
+GDB inspection; all four runs ended with no controller failure, and each eight
+run had exactly eight source loops per mix.
+
+| Counts per 10 ms | One before | One after | Eight before | Eight after |
+| --- | ---: | ---: | ---: | ---: |
+| Accepted PCM writes | 0.470–0.471 | 0.470–0.471 | 3.751 | 3.750 |
+| Request attempts | 0.939–0.941 | 0.939–0.941 | 5.110–5.195 | 7.499 |
+| Audio worker loops | 2.708–2.724 | 2.875–2.904 | 5.362–5.426 | 8.525–8.565 |
+| HDA position observations | 4.711–4.726 | 4.878–4.905 | 7.362–7.426 | 10.525–10.565 |
+| HDA MMIO reads | 25.795–25.810 | 26.742–26.871 | 39.801–40.288 | 55.878–56.003 |
+| Readiness notifications | 1.945 | 0.942–0.944 | 6.111–6.197 | 4.752–4.753 |
+| Readiness waiter wakes | 1.472–1.485 | 0.940–0.941 | 3.373–3.394 | 3.723–3.791 |
+| Network waiter wakes | 1.873–1.906 | 0.939–0.940 | 3.958–3.972 | 3.642–3.758 |
+| Audio waiter wakes | 1.906–1.912 | 1.915–1.920 | 5.020–5.066 | 8.283–8.300 |
+| BSP scheduler loops | 12.941–13.063 | 12.298–12.341 | 23.566–23.878 | 32.174–32.257 |
+| BSP timer re-arms | 22.359–22.535 | 20.746–20.758 | 37.800–38.153 | 50.387–50.517 |
+| BSP clock calls | 130.976–131.592 | 84.854–85.090 | 246.861–249.617 | 217.118–219.090 |
+| BSP physical HPET reads | 392.929–394.778 | 254.561–255.270 | 740.583–748.852 | 651.356–657.269 |
+| Readiness deadline clock calls | 37.109–37.322 | 4.271–4.272 | 84.734–86.153 | 16.018–16.336 |
+
+Fixed output remains one mix, one output loop and approximately one IRQ per
+10 ms; source loops remain one/eight. After mix elapsed is 1.98–2.66 / 5.40–6.22 µs
+per 10 ms. Queue copies remain below 2.1 µs per 10 ms with eight sources.
+Readiness scan clock calls fall about 89% / 81%; their BSP clock share falls from
+28% / 34% to 5% / 7%. Timer arm/expiry/sleeper checks now account for 61% / 54%
+of BSP clock calls, with broader timer/shared helpers 76% / 69–70%. The earlier
+network wake/sleep/HPET comparison still applies; cheaper clocks remain separate.
+
+| Host CPU, % of one CPU | One before | One after | Eight before | Eight after |
+| --- | ---: | ---: | ---: | ---: |
+| BSP guest execution | 23.11–23.44 | 17.93–19.80 | 42.42–42.48 | 41.73–43.40 |
+| BSP QEMU userspace | 11.12–11.19 | 8.33–8.87 | 21.17–21.51 | 19.00–19.73 |
+| BSP host kernel | 19.78–20.24 | 14.20–16.07 | 35.62–35.96 | 33.20–33.27 |
+| BSP total | 54.41–54.47 | 40.47–44.73 | 99.55–99.61 | 93.93–96.40 |
+| All QEMU threads total | 67.72–68.79 | 57.40–63.33 | 125.11–126.51 | 136.26–144.20 |
+
+One-source BSP cost falls visibly. Eight-source BSP cost falls only modestly,
+while whole-VM CPU rises. The change increases retry/wait pacing: nonaccepted
+requests rise from 1.36–1.44 to 3.749 per 10 ms with eight sources. `pcm` submits
+WAIT_MANY after a blocked WRITE; submitting that wait itself notifies readiness
+and networking. These extra submissions offset much of the direct WRITE-notify
+saving. Staggered threshold crossings can also keep the mix notifying each pass.
+That attribution is inferred from source and aggregate counts; crossings and
+individual WOULD_BLOCK outcomes were not counted separately.
+
+Every forwarded audio request wakes its worker. More retries therefore cause
+more worker loops, HDA observations, scheduler dispatches and timer arms. Eight
+IF=0 clock elapsed rises from 4.29–4.32 to 5.81–5.92 ms per 10 ms, while its
+per-call elapsed cost stays about 35–36 µs. Removed readiness reads were IF=1,
+whose elapsed timing is excluded. The nested timings remain non-additive.
+
+**Candidate 3 remains deferred:** a bounded pending-request batch could reduce
+request-driven observations and sleep/rearm churn. Any proposal must retain fresh
+before/after DMA-commit checks, all guards, cleanup/generation handling and request
+fairness. Its count/time budget and actual benefit need owner agreement and new
+measurements; no batching has been implemented.
+
+An unrelated pointer QEMU/debugger was present during these repeats. No task-owned
+build, debugger or sampler ran during the quiet windows. The one-2 helper thread
+exited between host snapshots; BSP accounting is unaffected, while that sample's
+whole-VM figure omits its unobserved runtime. These are nested-QEMU measurements
+on a shared host, not a controlled native comparison or a precise uninstrumented
+speedup. Raw snapshots, counters and derived analysis remain in local `build/`.
+
+
+## Current-main uninstrumented qualification
+
+The ordinary source build uses `c61fe9d7`, main `52451d3a`, published userland
+`50bf2be`, the same compiler and unchanged filesystem/ports/lwIP pins. The
+source-built nine-shell qualification image changes only local `config/live.lua`,
+restored after assembly; production configuration is unchanged. Its hashes are:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| ELF, no probes | `969d503a19e63459b7998b4f3ee6d04f9aedb931b46025c16c2bcf0f66e44a0c` |
+| ISO | `e2ca494758f8dd91e0eeccea86fb3a286982c9ea396f0c0eb5de6c22b0f5e6d0` |
+| Initrd | `d32aaaf860fa3b03f1278e2e977af59deaf6b75fc0ec8addbbe66bc6dc495486` |
+
+Same four-CPU/device configuration and manual `pcm 1000 500 600` commands. The
+planned five-minute eight-session check **failed closed**. WAV contains 112.227 s
+of output from the first RUN; the exact eight-only failure time was not timestamped.
+Frozen reason: `output DMA commit exceeded clock limit`. Maximum HPET-measured
+commit window is **922,780 ns**, below 1 ms, so the rejecting condition was the
+codec WALCLK delta reaching its 1 ms bound. That check includes the post-copy
+position observation, which lies after the recorded HPET endpoint; the exact
+rejecting WALCLK delta was not retained. No guard was relaxed. The early quiet
+15.000 s window cost BSP guest 42.86%, QEMU userspace 19.87%, host kernel 33.93%,
+total 96.66%; it is a separate current-main observation, not the matched probe
+comparison above.
+
+Later Ctrl-C/exit cleanup left all eight slots empty. The controller is stopped,
+failed and shut down; IRQ masking, stream reset, CORB/RIRB stop, link reset and
+BME-off all succeeded, with DMA backing retained. The shell remained serviceable;
+a new producer received UNAVAILABLE as required until reboot. No debugger,
+screenshot or task-owned build ran before the failure. An overly narrow live
+serial filter missed the `hda:` failure wording; capture, complete logs and frozen
+state determine the result, not the absence of a matching live line.
+
+**Sustained eight-session playback remains unqualified.** The owner reviews these
+numbers before deciding on batching or other separately scoped work. AMD/ALC257
+remains unbound; the current branch can provide a ThinkPad availability check,
+not native listening evidence. PR instructions distinguish that gate from the
+later one/eight listening checks. All task-owned guests and debugger jobs stopped.

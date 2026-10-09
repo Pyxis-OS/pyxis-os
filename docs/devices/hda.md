@@ -147,8 +147,12 @@ Eight admitted producers also produced an exact saturated mix segment, but the
 nested-QEMU run subsequently exceeded the 20 ms observation horizon and failed
 closed. Its measured BSP-thread cost was about one full host CPU. The
 [profiling follow-up](../development/experiments/audio-task2/profiling.md)
-separates guest time from host exit/emulation work and identifies deadline/HPET
-amplification. Sustained eight-session qualification remains a delivery gate.
+separates guest time from host exit/emulation work. Accepted notification gating
+and a shared readiness-scan clock snapshot reduce deadline/HPET amplification.
+Both repeated eight-source profiles passed without failure, but whole-VM CPU
+increased with retry/wait traffic while BSP savings were modest. Sustained
+eight-session qualification and owner review remain delivery gates: the longer
+current-main run failed the codec commit-clock guard after 112.227 s of output.
 
 Native AMD `1022:15e3` remains unbound. The supplied ALC257 dump establishes
 advertised topology, format and EAPD state, not native Pyxis cold-init, speaker or

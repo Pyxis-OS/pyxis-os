@@ -3,7 +3,8 @@
 Measurements below belong to their named revisions, before the accepted BSP
 cost follow-up. [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) remains
 draft; sustained eight-session playback and repeat qualification remain delivery
-requirements. The [profiling report](profiling.md) records the later cost analysis.
+requirements. The [profiling report](profiling.md) records the later cost analysis and matched
+remeasurement of the accepted notification/scan fixes.
 This summary claims no results for subsequent fixes and no native qualification.
 
 The [session reference](../../../interfaces/audio.md) and

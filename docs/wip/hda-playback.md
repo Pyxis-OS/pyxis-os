@@ -16,7 +16,10 @@ hidden-space/start-stop/failure defaults, accepted 2026-10-08. Exact PCM and
 saturated mixing were observed, but an eight-admitted nested-QEMU run exceeded
 the service horizon and failed closed. The owner requested
 [measurement and accepted fixes](../development/experiments/audio-task2/profiling.md)
-on 2026-10-09; sustained eight-session playback still needs qualification.
+on 2026-10-09. Both fixes are implemented and repeated short eight-source
+profiles passed. Current-main uninstrumented output later failed the codec
+commit-clock guard after 112.227 s of captured output; sustained eight-session
+playback still needs qualification. Batching remains deferred for owner review.
 The [task 1 report](../development/experiments/audio-task1/README.md) retains
 private engine qualification and matched no-audio/engine-idle observations.
 Native and consumer tasks still require their own assignments.
@@ -224,7 +227,9 @@ controller or all other sessions.
    the [profiling follow-up](../development/experiments/audio-task2/profiling.md)
    identifies wake/deadline/HPET overhead. The owner accepted notification gating and one clock snapshot per readiness
    scan on **2026-10-09**; both are implemented. Batching remains deferred until
-   repeat matched one/eight and sustained-playback measurements are reviewed. Strict absolute DMA progress,
+   repeat matched one/eight and sustained-playback measurements are reviewed.
+   Short repeats passed; the longer current-main run still failed closed, so
+   these delivery gates remain open. Strict absolute DMA progress,
    zero-gap startup and native playback are unqualified. The updated main image
    passed ordinary source builds, a complete five-second producer and quiet
    absent-controller refusal. A later repetition also failed closed before

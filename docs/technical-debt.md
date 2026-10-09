@@ -1207,7 +1207,8 @@ The eight-session overhead/failure finding remains a delivery issue on
 [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), with
 [profiling and accepted fixes](development/experiments/audio-task2/profiling.md)
 recording the owner's accepted 2026-10-09 notification/scan fixes and repeat
-qualification. Batching remains deferred pending those results and owner review.
+qualification. Short repeats passed, but longer current-main output still failed
+the codec commit-clock guard. Batching remains deferred pending owner review.
 This has not been deferred as an accepted capacity limitation.
 
 ## SDL2 port limits
