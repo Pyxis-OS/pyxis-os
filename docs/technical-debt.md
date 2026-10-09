@@ -1460,15 +1460,9 @@ no locale collation; revisit with locale support.
 
 ## Temporary bundle grant policy
 
-The owner assigned the [program-bundle proposal](wip/program-bundles.md) on
-2026-10-09 with a temporary deliver-all-requested policy, bounded by available
-ordinary launcher authority. It is **not implemented yet**. In that first slice,
-available optional grants would also arrive at launch, without consent. This is
-temporary debt, not a permanent security contract: metadata never creates rights
-or obtains system-only authority, and programs inspect their actual startup grants.
-
-Revisit with users and permissions: required grants approved as a whole before
-launch, optional grants requested in context, remembered answers under stable
-application identity, trusted file-selection grants and next-launch revocation.
-The proposal records update reapproval and explicitly withdrawable grants;
-it adds no signing or consent UI.
+The [bundle design](wip/program-bundles.md) accepted on 2026-10-09 temporarily
+delivers every available ordinary grant, including optional grants at launch,
+without consent. It is unimplemented, not a permanent security contract; metadata
+never creates rights or obtains system-only authority, and programs inspect actual
+startup grants. Revisit with users/permissions and the recorded required-grant,
+in-context optional-grant, trusted-picker, stable-identity and revocation model.

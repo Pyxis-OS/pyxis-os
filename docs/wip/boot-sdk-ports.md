@@ -89,8 +89,8 @@ status belong in the milestone document and the PR.
 Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  docs only: per-program app view, manifest stack/grant requests and large-image
-  capture. ZIP `.pxa` and unpacked `.pxb` shapes are proposed; no implementation.
+  design accepted: `.pxa`/`.pxb`, per-program app view, JSON stack/grant requests
+  and shared 128 MiB capture. Implementation awaits plan merge and owner go.
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
   master/per-space gain and the owner's four-icon bar UI; decisions accepted,
   dB floor proposed for final review, implementation unassigned.

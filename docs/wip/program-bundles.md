@@ -1,10 +1,12 @@
 # Program bundles: first slice
 
-Status: owner-assigned proposal only, 2026-10-09. No bundle implementation,
-signing or consent UI is authorized. This develops the
+Status: all three first-slice decisions accepted by the owner on 2026-10-09 in
+[#621](https://git.internal/PyxisOS/pyxis-os/pulls/621). The design is unimplemented;
+task 1 awaits the owner merging this plan and a separate go. No signing or
+consent UI is authorized. This develops the
 [2026-10-07 application-bundle direction](vfs.md#application-bundles) and
 [hosted Clang's admission needs](hosted-clang.md#resources-and-native-limits).
-It follows the pending [capacity revision #617](https://git.internal/PyxisOS/pyxis-os/pulls/617):
+It follows the merged [capacity revision #617](https://git.internal/PyxisOS/pyxis-os/pulls/617):
 high guarded stacks, a 256 MiB image span and a **1 MiB plain-program stack**.
 The owner chose manifests as the route to larger stacks after the fixed 8 MiB
 default's measured cost. Bundles need no new P1F field or compiler-container
@@ -30,13 +32,14 @@ an exported FILE-protocol endpoint is not currently an executable input.
 The existing [zlib port](../development/ports.md#zlib-development-library)
 supplies inflate and CRC32, but no ZIP parser or mounted native directory view.
 
-These are inspected interfaces. Storage, manifest and budgets below are proposed;
-the Linux Clang/LLD sizes are existing proxy measurements, not native qualification.
+These are inspected interfaces. The bundle contract below is accepted but
+unimplemented; ZIP implementation budgets remain draft settings to qualify.
+The Linux Clang/LLD sizes are existing proxy measurements, not native qualification.
 
 ## Bundle unit and per-program view
 
-Evaluate the owner's ZIP idea as one installable application unit, with this
-same logical layout in either form:
+A bundle is one installable application unit, with this same logical layout
+in either form:
 
 ```text
 manifest.json
@@ -47,11 +50,11 @@ app/
   sysroot/...
 ```
 
-The owner's proposed minor names are **`.pxa`** (Pyxis archive) for ZIP and
+The accepted names are **`.pxa`** (Pyxis archive) for ZIP and
 **`.pxb`** (Pyxis bundle) for an unpacked directory. Recognition validates the
 layout/format; an extension alone is not admission or authority. The unpacked
 form preserves Kilo/TCC development without requiring a native ZIP writer.
-Default: accept it through explicitly configured development lookup, with the
+Accept it through explicitly configured development lookup, with the
 same manifest and grant rules; ordinary plain executables continue to work.
 
 The bundle-aware launcher grants the child a read-only directory rooted at
@@ -66,8 +69,8 @@ An installation/lookup catalog maps each exposed `bin://` command to a bundle
 revision and relative entry. The resolver carries that association to the
 bundle-aware launcher, rather than discarding it after opening a raw executable.
 Several command names may select one entry (Clang's argv[0] aliases), or different
-entries such as LLD. There is no executable copy or symlink requirement. Default:
-reject command collisions in an active lookup view; explicit replacement changes
+entries such as LLD. There is no executable copy or symlink requirement. Reject
+command collisions in an active lookup view; explicit replacement changes
 the complete registration, not one entry at a time. Keep existing plain `bin://`
 and rescue `boot://` commands alongside registered bundle commands.
 
@@ -82,7 +85,7 @@ same publication rule; editing a live tree is not a supported snapshot.
 
 ## Manifest and load parameters
 
-Default: bounded UTF-8 **JSON data**, not executable Lua. The proposed schema
+The manifest is bounded UTF-8 **JSON data**. The first-slice schema
 has `format: 1`; reject duplicate keys, unknown fields, invalid types and malformed
 bundles rather than fall back to plain launch. Example values illustrate the
 Clang-shaped unit, not an implemented port:
@@ -108,7 +111,7 @@ Clang-shaped unit, not an implemented port:
 }
 ```
 
-| Field | Proposed first-slice meaning |
+| Field | Accepted first-slice meaning |
 | --- | --- |
 | `id` | Stable application identifier retained across updates; registration controls its association, not a self-asserted string granting trust. Consent identity authentication remains later work. |
 | `entry` | Default native P1F entry, relative to `app/`. |
@@ -175,11 +178,11 @@ ZIP distinguishes stored data, compression methods and size/offset metadata;
 the Pyxis subset is a deliberate packaging restriction, not general ZIP support.
 See [PKWARE's format specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
 Stored entries permit backing-file offset reads. Deflate requires decoding from
-the stream state unless a separate index exists; no such index is proposed.
+the stream state unless a separate index exists; the first slice has no such index.
 Raw inflate also needs an independent ZIP CRC check
 ([zlib manual](https://zlib.net/manual.html)).
 
-Default: require **stored** manifest, executable entries and seek-heavy/large
+Require **stored** manifest, executable entries and seek-heavy/large
 resources. Permit method-8 deflate only for small resources, decoded once into
 bounded backing before exposure. Draft implementation budgets, to qualify before
 shipping: 64 KiB manifest, 16,384 entries, 4 MiB index/metadata, 512 MiB archive
@@ -213,35 +216,27 @@ The view needs native archive-backed directory/file support or explicit provider
 integration. A userspace ZIP parser/provider alone cannot currently supply a
 startup DIRECTORY or launchable FILE. Keep decompression in userspace using the
 existing zlib port; design the native adapter/backing lifetime before coding,
-preserving BSP allocation/VM-mutation ownership. An alternative is validated
-unpacking to an immutable installed directory: simpler native interfaces, but
-duplicate storage and extraction cost, and it is not a direct mounted ZIP view.
+preserving BSP allocation/VM-mutation ownership.
 
 ## Installed executables and the Clang-shaped bundle
 
 A stored archive entry is random-access data, not an executable memory mapping.
-The smaller first loader change is to capture **only the selected executable**
+The first-slice loader captures **only the selected executable**
 from that view, not the whole archive, then use existing eager segment loading.
-Default proposal: captured executables share a **128 MiB** serialized-image
+Captured executables share an accepted **128 MiB** serialized-image
 ceiling, replacing the installed HOST/NPFS limit and covering new bundle entries
 and RAM copies too. This also permits larger ordinary installed programs;
 plain programs still keep the 1 MiB stack. Use one kernel capture policy across
-the relevant workers, not a caller-supplied claim that a file is a bundle.
-Unpacked bundle entries are ordinary files, and today's kernel sees no trusted
-manifest/registration association. Retaining 16 MiB for plain files while allowing
-128 MiB only for bundles would therefore need separate verified admission
-authority; filenames or JSON alone cannot enforce it. Existing immutable boot
+the relevant workers. Unpacked bundle entries are ordinary files; their filenames
+or JSON confer no special admission authority. Existing immutable boot
 archive bytes need no new copy. Neither compression nor outer ZIP size defines mapped span.
 The 256 MiB rounded image-span ceiling remains independently enforced.
 
-These are provisional admission budgets, not native Clang size measurements or
-guarantees of fitting RAM. A load can retain 128 MiB capture plus up to 256 MiB
+These accepted limits are admission ceilings, not native Clang size measurements
+or guarantees of fitting RAM. A load can retain 128 MiB capture plus up to 256 MiB
 eager image backing, requested stack/startup/page tables and other processes;
 batches also retain earlier prepared children. Admission must fail cleanly under
-pressure, with bounded allocations and full rollback. Removing whole-executable
-capture would require a separate reader/segment-loading contract and its failure
-ordering; offset reads alone do not implement it. Retaining the 16 MiB cap would
-leave the Clang-sized executable blocked despite its mounted bundle.
+pressure, with bounded allocations and full rollback.
 
 The first Clang-shaped bundle contains separately stored native Clang and LLD
 entries, declares an 8 MiB stack, and supplies read-only roots for roughly 8 MiB
@@ -250,33 +245,28 @@ of Clang resource headers and the roughly 20 MiB source SDK sysroot. The
 86 MiB Clang and 55 MiB LLD: each motivates larger selected-image capture, not
 capture of their combined archive. Clang receives group-bound launch authority
 for the linker and command lookup, plus explicitly supplied source/cwd/streams
-and output-directory rights outside the bundle. A self-contained sysroot is the
-default; sharing a separately versioned SDK root can follow with its own lifetime
-contract. Resource layout and native path adaptation still need the compiler
-port; installing this bundle does not resolve Clang's runtime/metadata blockers.
+and output-directory rights outside the bundle. The self-contained sysroot belongs
+to the same pinned revision. Resource layout and native path adaptation still
+need the compiler port; installing this bundle does not resolve Clang's
+runtime/metadata blockers.
 
-## Three owner decisions
+## Accepted decisions — 2026-10-09
 
-1. **Storage and view:** default restricted ZIP `.pxa` with stored executable/large
+1. **Storage and view:** restricted ZIP `.pxa` with stored executable/large
    entries and bounded small deflate, plus equivalent unpacked `.pxb` development
-   bundles. Each child gets its own `app://`. Alternative: unpack ZIP at install
-   into native immutable directories, reducing adapter work at storage/copy cost.
-   Extension spelling is the owner's minor choice, not an ABI requirement.
-2. **Manifest and grant contract:** default the JSON fields above, 1 MiB omitted
+   bundles. Each child gets its own `app://`.
+2. **Manifest and grant contract:** the JSON fields above, 1 MiB omitted
    stack and an 8 MiB eager maximum, actual startup grants from day one, and the
    owner's temporary deliver-all-available policy. Record the later consent/picker/
-   identity/revocation direction. A larger stack maximum needs new memory evidence;
-   executable manifests add unnecessary policy execution to this slice.
-3. **Large-image admission:** default selected-entry capture with a proposed
+   identity/revocation direction.
+3. **Large-image admission:** selected-entry capture with a
    shared 128 MiB captured-image ceiling, replacing installed 16 MiB and bounding
-   RAM copies too; mapped span remains 256 MiB. Qualify peak memory/rollback before implementation completion.
-   Alternative: reader-based segment loading, reducing peak copies at a larger
-   loader/interface change. Bundle-only larger capture needs verified admission
-   authority; keeping all capture at 16 MiB defers Clang admission.
+   RAM copies too; mapped span remains 256 MiB. Qualify peak memory/rollback before
+   implementation completion.
 
-After acceptance, the first bounded task should define the manifest/command
-resolution and startup app view using an unpacked development bundle, including
-the bounded stack request and actual grants. ZIP adapter and larger capture then
-need explicit implementation tasks and matched peak/launch/cleanup qualification.
-The native Kilo/TCC workflow remains usable throughout. This proposal assigns
-neither those tasks nor a Clang port and stops for owner review.
+Task 1 is the unpacked development bundle: manifest, command resolution, startup
+`app://` view, bounded stack request and actual grants. It awaits the owner merging
+#621 and a separate go. ZIP adapter and larger capture then need explicit
+implementation tasks and matched peak/launch/cleanup qualification.
+The native Kilo/TCC workflow remains usable throughout. Acceptance of this design
+does not start implementation or assign a Clang port.

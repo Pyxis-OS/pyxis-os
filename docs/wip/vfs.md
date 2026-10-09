@@ -98,42 +98,23 @@ for later.
 
 ## Application bundles
 
-The owner assigned a [first-slice bundle proposal](program-bundles.md) on
-2026-10-09. It evaluates ZIP `.pxa` and unpacked `.pxb` forms exposing the same
-per-program `app://`, manifest stack/resource/grant requests and larger executable
-admission. It records the temporary grant policy and later consent/picker,
-identity and revocation direction; implementation remains unassigned.
+The owner accepted the [first-slice bundle design](program-bundles.md) on
+2026-10-09: restricted ZIP `.pxa` and unpacked `.pxb` forms exposing the same
+private per-program `app://`, with a JSON manifest declaring entries, commands,
+stack requests, resource directories and grants. This supersedes the earlier
+shared application-root and unspecified-format ideas. Implementation awaits
+the plan's merge and a separate owner go.
 
-A future application could be a bundle exposed as a directory under `app://`,
-containing its executable, private libraries, assets and defaults. The current
-use of `app://` for executable lookup could move to `bin://`, separating command
-names from installed application contents. These names remain provisional.
+The launcher supplies a read-only view of the program's pinned bundle revision;
+assets do not depend on installation name or cwd. `bin://` command mappings select
+declared entries without executable copies or symlinks. Writable user data stays
+outside the bundle. Metadata cannot grant itself capabilities: requested grants
+remain bounded by ordinary launcher authority. Until bundles are implemented,
+forwarding launch authority to ordinary commands remains a per-space setting
+(`launch = true` in boot configuration).
 
-For example, `app://editor/program.pxe` and `app://editor/assets/` could belong
-to one bundle, while `bin://editor` selects its declared entry point. A bundle
-could expose several commands. How those command names map to entry points is
-undecided; this does not require Unix symlinks or another executable copy.
-
-“Bundle” describes the application unit, not its storage format. It might be an
-archive, filesystem image or ordinary directory. The format, mounting/exposure
-mechanism and possible manifest remain open. The useful contract is a directory
-view with an identified entry point and application resources kept together.
-
-The launcher could grant the application a directory capability to its own
-bundle, so asset lookup would not depend on its installation name or working
-directory. Writable user data would live outside the read-only bundle view.
-Any manifest resource requests would remain subject to launcher authority;
-package metadata could not grant itself capabilities.
-
-Owner direction (2026-10-07): a bundle will carry a manifest, similar to a macOS
-bundle's `Info.plist`, that declares the grants its program needs, for example
-launch authority for compilers, `make` or `cmake`. Until bundles exist, launch
-authority for ordinary commands is a per-space setting (`launch = true` in the
-boot configuration), planned with the Lua runtime for build scripts.
-
-This is a future direction, not a change to the first-shell milestone. Keep its
-current initrd tree and `boot://` lookup while developing that milestone; no
-bundle format, namespace migration or packaging implementation is assigned here.
+The accepted note records the temporary grant policy and later consent/picker,
+identity and revocation direction. Signing ideas below remain parked.
 
 ### Signing, development spaces and requested grants
 
