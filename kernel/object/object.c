@@ -1,3 +1,4 @@
+#include <abi/clipboard.h>
 #include <abi/namespace.h>
 #include <abi/terminal.h>
 #include <kernel/object/terminal.h>
@@ -45,6 +46,8 @@ static atomic_bool retired_locked;
 uint64_t object_protocol(const struct kernel_object *object)
 {
   switch (object->type) {
+  case OBJECT_CLIPBOARD:
+    return PROTOCOL_CLIPBOARD;
   case OBJECT_EXECUTION_GROUP:
     return PROTOCOL_EXECUTION_GROUP;
   case OBJECT_TERMINAL_SERVICE:
@@ -184,6 +187,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   }
 
   switch (object->type) {
+  case OBJECT_CLIPBOARD:
+    return !(rights & ~CLIPBOARD_RIGHTS);
   case OBJECT_NAMESPACE_SERVICE:
     return !(rights & ~NAMESPACE_SERVICE_RIGHT_CREATE);
   case OBJECT_NAMESPACE:

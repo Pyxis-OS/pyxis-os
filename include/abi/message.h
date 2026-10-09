@@ -51,6 +51,8 @@
 #define PROTOCOL_BLUETOOTH_HCI UINT64_C(44)
 #define PROTOCOL_AUDIO UINT64_C(45)
 
+#define PROTOCOL_CLIPBOARD UINT64_C(46)
+
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
 struct message_header {

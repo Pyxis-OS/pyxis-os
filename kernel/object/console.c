@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <arch/console.h>
 #include <arch/smp.h>
@@ -269,16 +270,16 @@ static void unlock_input(struct console_object *console)
 }
 
 uint64_t console_ready(struct console_object *console, uint64_t events,
-    uint64_t observed_generation)
+    uint64_t observed_generation, struct process *caller)
 {
   uint64_t flags = cpu_save_interrupts();
-  uint64_t ready = 0;
+  uint64_t ready = (events & WAIT_READABLE) ? clipboard_input_ready(&console->object, caller) : 0;
   if (events & WAIT_READABLE) {
     lock_input(console);
     if (console->input_lost || !keyboard_available()) {
       ready |= WAIT_ERROR;
     }
-    if (!console->reader_active && console->input_count) {
+    if (!console->reader_active && console->input_count && clipboard_ordinary_allowed(&console->object)) {
       ready |= WAIT_READABLE;
     }
     unlock_input(console);
@@ -331,6 +332,7 @@ void console_input_lost(struct console_object *console)
   lock_input(console);
   lose_input(console);
   unlock_input(console);
+  clipboard_input_notify(&console->object);
   readiness_notify();
   cpu_restore_interrupts(flags);
 }
@@ -365,6 +367,7 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
   }
   unlock_input(console);
   if (consumed || size) {
+    clipboard_input_notify(&console->object);
     readiness_notify();
   }
   cpu_restore_interrupts(flags);
@@ -372,15 +375,20 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
 
 static void end_read(struct console_object *console);
 
-static enum call_status begin_read(struct console_object *console, bool timed, uint64_t deadline)
+static enum call_status begin_read(struct console_object *console, bool timed, uint64_t deadline, bool paste)
 {
   lock_input(console);
+  if (!paste && !clipboard_ordinary_allowed(&console->object)) {
+    unlock_input(console);
+    return CALL_BUSY;
+  }
   if (task_stop_requested()) {
     unlock_input(console);
     return CALL_ENDPOINT_CLOSED;
   }
   if (!console->reader_active) {
     console->reader_active = true;
+    console->reader_process = process_current();
     unlock_input(console);
     return CALL_OK;
   }
@@ -391,6 +399,7 @@ static enum call_status begin_read(struct console_object *console, bool timed, u
   }
 
   struct task_wait_link *reader = task_wait_link_prepare();
+  reader->reader_process = process_current();
   struct task_wait *wait = reader->wait;
   if (console->last_reader) {
     console->last_reader->next = reader;
@@ -444,11 +453,14 @@ static void end_read(struct console_object *console)
     struct task_wait *wait = reader->wait;
     reader->next = NULL;
     reader->wait = NULL;
+    console->reader_process = reader->reader_process;
     task_wait_wake(wait);
   } else {
     console->reader_active = false;
+    console->reader_process = NULL;
   }
   unlock_input(console);
+  clipboard_input_notify(&console->object);
   readiness_notify();
 }
 
@@ -473,11 +485,16 @@ static struct syscall_result read_console(struct console_object *console,
     if (!keyboard_available()) {
       return (struct syscall_result){CALL_UNAVAILABLE, 0};
     }
-    enum call_status status = begin_read(console, timed, deadline);
+    enum call_status status = begin_read(console, timed, deadline, false);
     if (status != CALL_OK) {
       return (struct syscall_result){status, 0};
     }
     lock_input(console);
+    if (!clipboard_ordinary_allowed(&console->object)) {
+      unlock_input(console);
+      end_read(console);
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
     while (!console->input_count && !console->input_lost) {
       if (timed && task_deadline_expired(deadline)) {
         unlock_input(console);
@@ -508,6 +525,12 @@ static struct syscall_result read_console(struct console_object *console,
       return (struct syscall_result){CALL_INPUT_LOST, 0};
     }
 
+    if (!clipboard_ordinary_allowed(&console->object)) {
+      unlock_input(console);
+      end_read(console);
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
+    clipboard_ordinary_transfer(&console->object);
     char bytes[CONSOLE_READ_CHUNK];
     size_t count = console->input_count;
     if (count > request->capacity) {
@@ -556,6 +579,10 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation >= CONSOLE_PASTE_REGISTER && operation <= CONSOLE_PASTE_RELEASE) {
+    return clipboard_receiver_call(&console->object, rights, operation, request_address,
+        request_size, reply_address, reply_capacity);
+  }
   uint64_t required;
   switch (operation) {
   case CONSOLE_WRITE:
@@ -633,4 +660,14 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+enum call_status console_paste_begin_read(struct console_object *console, bool timed, uint64_t deadline)
+{
+  return begin_read(console, timed, deadline, true);
+}
+
+void console_paste_end_read(struct console_object *console)
+{
+  end_read(console);
 }

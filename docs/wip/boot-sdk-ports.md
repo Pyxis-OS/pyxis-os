@@ -62,6 +62,10 @@ status belong in the milestone document and the PR.
   [checked natively](../development/screenshot-qualification.md#native-thinkpad-check).
 - [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
   first slice, with up to eight equal/BSP panes and colored scrollback.
+- [Program image and initial stack capacity](../kernel/program-loading.md),
+  2026-10-09: 256 MiB image span and high fixed eager 1 MiB guarded stacks;
+  [matched costs and session memory](../development/experiments/program-capacity/README.md).
+  Thread task 1 merged in #612; later thread tasks remain unassigned.
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
   libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
@@ -88,18 +92,23 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
+  design accepted: `.pxa`/`.pxb`, per-program app view, JSON stack/grant requests
+  and shared 128 MiB capture. Implementation awaits plan merge and owner go.
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
   master/per-space gain and the owner's four-icon bar UI; decisions accepted,
   dB floor proposed for final review, implementation unassigned.
-- **Codex epsilon** (2026-10-09): [program image and initial stack capacity](program-stack-capacity.md),
-  priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
-  merged in #612; later thread tasks remain unassigned.
-- **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
-  to the documentation-only proposal; implementation remains unauthorized.
+- **Codex alpha** (2026-10-09): [presentation timing step 2](presentation-timing.md#step-2-read-only-renoir-timing),
+  proposal first for a read-only Renoir OTG observer and measured blank-started
+  copying; its three defaults await owner answers. Clipboard terminal Copy +
+  Paste merged in #619 / userland #180; its later SDL2, FILE and converter tasks
+  remain unassigned.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
-  Doom, Chocolate Quake and EDuke32 without audio, proposal first. Before it,
-  [presentation timing](presentation-timing.md) steps 1 and 2 merged (#610,
-  #618); timing and pacing remain unassigned.
+  Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
+  (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),
+  saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
+  native runs follow its
+  [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are

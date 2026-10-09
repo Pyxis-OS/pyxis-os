@@ -2,19 +2,24 @@
 
 Investigation, 2026-10-09, at Pyxis `f4c5cdbc`, userland `9ea770b9`, ports
 `8b918c46`; the owner reports a tear line with ordinary Quake at about 72 fps on
-the ThinkPad's 60 Hz panel. All three decisions below were accepted as the
-defaults on 2026-10-09.
+the ThinkPad's 60 Hz panel. The three [original owner decisions](#owner-decisions)
+were accepted as the defaults on 2026-10-09.
 
 **Status:**
 - **Step 1, RAM staging for boot and Bochs:** merged in #610, with its
   [measurements and native steps](../development/experiments/presentation-staging/README.md).
-- **Completed-frame handoff:** three decisions accepted 2026-10-09
-  ([below](#completed-frame-handoff)); merged in #618, with its
+- **Completed-frame handoff:** merged in #618, after three decisions accepted
+  2026-10-09 ([below](#completed-frame-handoff)), with its
   [measurements and native steps](../development/experiments/frame-handoff/README.md).
-- **Timing and pacing:** later steps.
+- **Step 2, native timing:** [proposal below](#step-2-read-only-renoir-timing),
+  awaiting the owner's three decisions; no implementation authorized. The read-only
+  [Fedora Renoir reference](../development/experiments/renoir-linux-timing/README.md)
+  records the active OTG, panel blank window, idle/animation counters, disabled
+  PSR/Replay and private WC copy cost. No Pyxis timing probe is implemented.
+- **Step 3, program timing/pacing:** remains a later assignment.
 
 **Recommendation:** stage composition in RAM first, then investigate read-only
-Renoir timing and whether a native copy fits the measured blank interval.
+Renoir timing and whether a blank-started native copy stays ahead of display fetch.
 Neither RAM double buffering nor a 60 Hz sleep alone promises tear-free output.
 Actual AMD page flipping needs a separate native display-engine task.
 
@@ -26,8 +31,8 @@ selection/caret and pointer. There is no kernel damage protocol.
 
 | Backend | Storage and copies | When pixels become visible |
 | --- | --- | --- |
-| ThinkPad boot framebuffer | Limine's GOP-derived front surface is WC. Composed spans go directly through memcpy into live scanout; no complete compositor backbuffer. | The display engine reads that memory while CPU writes it. No blank/flip synchronization. |
-| Bochs | Same direct-copy path into WC BAR0; mode setup fixes offsets at zero. | Device/frontend samples the currently selected aperture page, independently of copying. |
+| ThinkPad boot framebuffer | Compose a complete frame in WB RAM, then copy visible rows top-down to the WC firmware front surface. Allocation failure retains direct composition. | The display engine reads that memory while CPU writes it. No blank/flip synchronization. |
+| Bochs | Same RAM staging and final full-frame copy into WC BAR0; mode setup fixes offsets at zero. | Device/frontend samples the currently selected aperture page, independently of copying. |
 | VirtIO 2D | One guest-RAM resource backing; compose there, full TRANSFER_TO_HOST_2D, initial SET_SCANOUT, then RESOURCE_FLUSH, with fenced control completion. | Transfer populates a host resource; flush requests its display update. Completion is not a monitor timestamp. |
 
 Until the [frame handoff](#completed-frame-handoff), DISPLAY_PRESENT selected a
@@ -97,15 +102,23 @@ would write roughly the changed fraction, but need damage for navigation,
 cursor old/new positions, caret and all source changes; moving Quake usually
 changes most pixels. Introduce that only after correctness and measurement.
 
-**Native copy time is unknown.** Existing [copy qualification](../kernel/display.md#qualification-and-cost)
+**Native Pyxis front-copy time is unknown.** The Linux reference's private full
+WC copy exceeds its computed panel blank window, but a uniform top-down copy
+would outrun scanout by about 19×: row completion near `s + 0.77r` µs versus
+scanout near `465 + 15.0r` µs, with start delay `s` after blank begins and row
+number `r` from the top. This is
+analysis, not measured tear-free output or GOP/Pyxis qualification. The constraint
+is start latency below about 465 µs minus display-fetch lead and wake/interrupt/
+safety margins, with every row remaining ahead of fetch despite stalls; the
+whole copy need not finish in blank. Existing [copy qualification](../kernel/display.md#qualification-and-cost)
 reports 0.640 ms median for an entire 1280×800 presenter in nested KVM, not a
 1920×1080 ThinkPad WC blit. Native evidence is owner-observed improvement after
 rep movsq, not isolated bandwidth. Measure the actual RAM→WC copy including its
 final store fence; a 16.67 ms refresh period is not the available blank window.
 Even 8 GB/s would take about 1.04 ms for the payload alone (illustrative, not
-measured). A blank-timed copy is eligible only when its tail latency plus wake,
-interrupt and safety margins fits the measured remaining blank interval.
-Otherwise it can still tear; retain a labelled unsynchronized fallback.
+measured). Qualify actual copy start latency, per-row write visibility and
+progress against display fetch natively before promising tear-free output;
+retain a labelled unsynchronized fallback until then.
 
 First software task: one allocated WB staging frame for boot/Bochs, compose
 all overlays there, then a complete bounded row/pitch-correct front copy. VirtIO
@@ -133,7 +146,8 @@ width/wake lateness if available, application cadence and input latency. Compare
 idle TTY/cursor and ordinary moving Quake separately from timedemo. Short camera
 clips/owner observations verify visible tearing; FPS or screenshots alone cannot.
 Check QEMU VirtIO/Bochs separately and qualify resize/capture/panic/lifetime paths.
-No native timing measurement, QEMU boot or register access was performed here.
+The original proposal performed no hardware access; the linked Linux reference
+now supplies read-only timing evidence. Native Pyxis qualification remains later work.
 
 ## Owner decisions
 
@@ -160,3 +174,194 @@ Accepted by the owner on 2026-10-09, all three as the defaults:
    moved to SUBMIT in the same change, with userland and ports PRs.
 
 The contract is in [graphics](../interfaces/graphics.md#slots-and-frame-handoff).
+
+## Step 2: read-only Renoir timing
+
+Proposal, 2026-10-09, based on main `f6d82ef9`, including #615. This does not
+reopen #608's read-only observer, conditional timed copies or deferred flips.
+The owner accepted the beam-racing interpretation on 2026-10-09: start latency
+and sustained lead over display fetch matter; the copy need not finish in blank.
+The three defaults below are **proposed, not accepted**. No code, placeholder
+interfaces, program timing ABI or hardware access belongs in this proposal PR.
+
+### Observer and firmware boundary
+
+Keep Renoir register knowledge in its own unit under `arch/x86_64/amd/`, with
+the presenter/backend integration under `kernel/display/`. Consume copied
+`boot_info` framebuffer metadata; Limine response details stay in the adapter.
+Prepare mappings on the BSP before AP startup, then observe from the sole BSP
+presenter, IF=1. Keep the mappings stable until reboot; no new polling service.
+
+The first scope is the firmware boot-framebuffer backend and a unique unclaimed
+AMD `1002:1636` display endpoint in a complete PCI inventory. Require one display
+function, already enabled memory decoding and D0; absence, ambiguity, another
+owner, unusable power/decoding or an unsupported device means unavailable.
+Read the assigned BAR5 address, walking BAR pairs so an upper half cannot be
+mistaken for BAR5. Require its expected non-prefetchable 32-bit memory encoding,
+nonzero aligned base and non-overflowing register extent. Never assume the
+Fedora address, PCI location or active OTG number.
+
+Map only BAR5 pages at offsets `0x13000` and `0x14000`, supervisor-only,
+read-only, NX and UC. Reserve virtual space through VM, map UC, and remove write
+permission before the observer accesses or publishes the mapping. Existing
+`vm_protect` preserves the UC cache bits. Exclude RAM, the rounded GOP framebuffer
+physical extent, WC aliases and other reserved MMIO users; unwind an unpublished
+partial mapping without freeing device frames. Allocation failure loses timing,
+not presentation. No userspace mapping or delegated register authority.
+
+Normal PCI claim/completion, BAR sizing and temporary MMIO wake helpers are
+unsuitable: they can write command, BAR or power registers. Do not use them,
+make configuration writable, enable interrupts, request runtime resume, execute
+ACPI resource methods, or issue firmware commands. Reading an assigned BAR does
+not reveal its length. The two-page span is an audited **Renoir register window**,
+not an independently sized native BAR; #615's 512 KiB is Linux resource evidence.
+Do not publish a guessed BAR size. Extending to unknown GPUs/resource layouts
+needs separate evidence rather than a write-and-restore probe.
+
+Read only aligned 32-bit registers in the documented allowlist. For OTG0–3,
+instance stride is `0x200` bytes. The
+[reference's table](../development/experiments/renoir-linux-timing/README.md#otg-and-panel-self-refresh)
+gives CONTROL, V_TOTAL, V_BLANK_START_END, STATUS_POSITION,
+STATUS_FRAME_COUNT and STATUS. Horizontal geometry additionally needs H_TOTAL
+(`0x13fa8` for OTG0), H_BLANK_START_END (`0x13fac`); INTERLACE_CONTROL
+(`0x14010`) and V_TOTAL_MIN/MAX/CONTROL exclude unsupported variable timing.
+Use AMD's [offsets](https://github.com/torvalds/linux/blob/v6.19/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_offset.h),
+[masks](https://github.com/torvalds/linux/blob/v6.19/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h)
+and [timing implementation](https://github.com/torvalds/linux/blob/v6.19/drivers/gpu/drm/amd/display/dc/optc/dcn10/dcn10_optc.c)
+as the source; no underflow/status-clear or firmware-state registers.
+
+Find exactly one OTG with CONTROL master-enable, then validate stable,
+progressive H/V active dimensions against GOP width/height, totals greater than
+active dimensions, in-range blank endpoints and positions, and consistent
+STATUS.V_BLANK. Active dimensions come from the programmed blank endpoints;
+do not rescale width merely because horizontal DIV_BY2 is set. Reject
+unsupported adaptive totals, multiple enabled OTGs or mismatching geometry.
+This is a sole-output geometry/timing correlation, not independently decoded
+HUBP addressing, tiling or routing. Multi-display/routing discovery remains out.
+
+Use a bounded initial observation, at most 250 ms wall time with coarse sleeps
+between samples rather than a continuous busy loop, requiring at least four
+advancing frame transitions and samples inside/outside blank. Derive period from
+monotonic time and the low 24-bit frame counter; handle modulo rollover and
+missed samples without synthesizing hardware transitions. Bracket non-atomic
+reads and reject samples crossing an edge or inconsistent mode snapshot.
+Check the mode fingerprint and advancement during ordinary presenter sampling.
+Changed mode/enable state, implausible reads or no advance for three measured
+periods (at least 50 ms) invalidate timing. Requalification accumulates samples
+across ordinary cadences, at most one extra read bracket per cadence and one
+250 ms observation attempt per second; it adds no waiting loop to a frame.
+The same checks must pass before restoring availability. Never wake a stalled generator or
+infer PSR from a stall. Linux's advancing counters and unsupported PSR/Replay
+are encouraging evidence; firmware/GOP behavior must be checked independently.
+
+### Starting the staged copy
+
+First qualify observation with existing unsynchronized copies. On the native
+mode, measured period / V_TOTAL gives line time; blank width uses modulo totals.
+The reference blank wraps from vertical count 1108 through zero to 28, so count
+zero is neither blank start nor the top visible row. Use programmed endpoints
+and STATUS together. Edge timestamps have a measured uncertainty interval,
+including at least one scanline when using vertical position alone.
+
+After native margin qualification, use a predicted blank edge to phase the
+presenter's own cadence. Compose before that edge (initial wake lead 2 ms,
+checked against measured composition/wake tails), sleep if early, then start
+polling about 125 µs before the predicted edge. A single fine-poll window is
+bounded to 250 µs elapsed time and 64 read brackets, with interrupts enabled.
+Space bracket starts by at least 4 µs so fast reads cannot exhaust the count
+before the predicted edge; the elapsed bound includes MMIO and clock cost.
+Re-read actual position/status immediately before the first front write; a
+prediction alone never authorizes a timed copy. If already inside blank, accept
+only a conservatively measured remaining start budget. No IRQ is installed:
+an unconfigured interrupt cannot be relied on, and enabling one would violate
+the no-writes boundary. Cadence-only polling can miss the 465 µs window; full
+refresh-period spinning would consume a BSP core and is not proposed.
+
+Propose an initial **eight-line fetch/safety guard**, about 120 µs at the reference
+mode, plus measured timestamp/read/first-write uncertainty. It is a qualification
+guard, not a claimed AMD fetch-depth specification. Admission requires the
+upper bound of copy-start delay plus that guard/uncertainty to be less than
+measured blank width. Measure the first actual front write, not entry to frame
+end. The roughly 0.77 µs/row versus 15.0 µs/row model explains why later rows
+gain lead; native copy stalls and WC visibility still need qualification. Total
+copy/fence P50/P95/max alone do not establish per-row visibility or tear-free
+output. Keep the current top-down, pitch-correct copy and final store fence.
+
+If composition/wake is late, the poll bound expires, timing is unavailable or
+the start guard fails, **copy once immediately, labelled unsynchronized**.
+Do not hold the frame for another blank or build a retry queue. Record the
+reason/missed target and return to the next cadence without catching up. A
+late start does not by itself invalidate an otherwise advancing hardware clock.
+No staging means no timed full-frame copy; ordinary fallback remains available.
+
+No sleep/spin under output locks, allocator locks or IF=0. While waiting, publish
+no direct-front writer: retain the private staged frame, then reacquire the
+existing panic writer/recheck ordering immediately before copying. Panic can
+take its direct target without waiting for a sleeping presenter; abort normal
+work if it claims ownership. Preserve frame leases, newest-pending-frame policy,
+cursor-inclusive captures and their completion rules. Capture completion still
+means composition/copy/fence success, not physical display completion.
+
+At 60.02 Hz, 250 µs of fine polling per frame is at most about 1.5% additional
+BSP busy time before read/deadline-check overshoot; measure actual spin time,
+MMIO/clock cost, coarse wake lateness, composition, copy/fence and input service
+delay. This adds no framebuffer traffic beyond the existing full copy. Sleeping
+must not add a second refresh of latency; phase the next composition deadline,
+and keep the current software cadence on unsupported backends.
+
+### Truthful capability and qualification
+
+Keep a private distinction between a validated hardware timing source and a
+copy admitted within its start guard. Hardware timing means a matching,
+advancing OTG correlated with monotonic time, with a bounded edge estimate; it
+does not mean a page flip, exact scanout-completion timestamp or tear-free copy.
+An unsynchronized fallback can still have a valid hardware timing source. On
+loss of validation, stop attributing timestamps/sequences to hardware and report
+unavailable. Detailed samples are bounded diagnostics, not per-frame normal logs.
+
+Step 3 later can use the accepted geometry/sequence/monotonic period/source
+contract with that capability and its uncertainty. No new program-facing ABI,
+SDL vsync claim, Quake pacing change or unconditional application cap in step 2.
+QEMU boot/Bochs report software cadence; VirtIO fence completion remains command
+completion, never a physical vblank timestamp. They do not gain AMD timing.
+
+Implementation/qualification breakdown, after owner answers:
+
+- [ ] **2a — observer:** PCI/RO-UC mapping, active OTG validation and bounded
+  counter diagnostics. Capture the ordinary-copy baseline before changing its
+  scheduling. QEMU boot, Bochs and VirtIO must exercise unavailable timing with
+  ordinary rendering, input, capture, resize where supported and panic retained.
+- [ ] **2b — native timing/copy gate:** the owner runs the observer-only build
+  on the ThinkPad at native GOP mode, AC power. Capture raw/decoded mode and
+  OTG identity, bracket uncertainty and frame/blank/position advancement during
+  idle TTY/cursor and moving Quake. Compare the same mode/workload/revisions
+  with a candidate timed-copy build; require measured positive start margin
+  under the proposed guard before enabling timed copies by default.
+- [ ] **2c — qualification and references:** record start-delay P50/P95/P99/max,
+  late/fallback counts, spin/read cost, composition and copy/fence distributions,
+  representative copy-progress stalls and input service delay in matched runs.
+  The owner takes matched short camera clips of steady-turning ordinary Quake
+  before/after, with uncapped timedemo kept separate. A screenshot or FPS is not
+  a tearing check. If the margin/visibility/clip evidence is insufficient, close
+  only observer qualification and retain labelled unsynchronized copies; record
+  the missing native evidence and revisit point. Rewrite implemented contracts
+  into the display reference; step 3 and page flips remain unassigned.
+
+### Step 2 owner decisions
+
+All three await an explicit owner answer; recommended defaults:
+
+1. **Observer boundary:** use the single-device/single-enabled-OTG scope and
+   audited two-page Renoir window above, RO/NX/UC, with no BAR-sizing, configuration
+   or power writes. Validate GOP geometry/counters or report unavailable. Accept
+   the explicit native BAR-length/routing evidence limits; broader discovery is
+   later work.
+2. **Copy start and late policy:** after native margin qualification, use the
+   coarse sleep plus 250 µs/64-bracket fine poll, initially an eight-line guard
+   plus measured uncertainty. Copy immediately and label unsynchronized when
+   late/unqualified; do not wait another refresh. Preserve IF=1/input/panic bounds.
+3. **Capability and delivery gate:** hardware timing describes validated counter
+   observation, independently of copy-start success. Deliver observer-first,
+   qualify native starts/progress and before/after camera clips before enabling
+   timed copies; insufficient evidence leaves the unsynchronized path. Program
+   timing APIs and page flips stay later tasks.

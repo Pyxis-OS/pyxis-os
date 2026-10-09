@@ -25,6 +25,55 @@
 #define CONSOLE_TAB_WIDTH_MAX UINT64_C(32)
 #define CONSOLE_ARM_INTERRUPT UINT64_C(6)
 #define CONSOLE_PASSTHROUGH UINT64_C(7)
+
+#define CONSOLE_PASTE_REGISTER UINT64_C(8)
+#define CONSOLE_PASTE_READ UINT64_C(9)
+#define CONSOLE_PASTE_ACK UINT64_C(10)
+#define CONSOLE_PASTE_RELEASE UINT64_C(11)
+
+#define CONSOLE_PASTE_INPUT UINT64_C(1)
+#define CONSOLE_PASTE_BEGIN UINT64_C(2)
+#define CONSOLE_PASTE_DATA UINT64_C(3)
+#define CONSOLE_PASTE_END UINT64_C(4)
+#define CONSOLE_PASTE_CANCEL UINT64_C(5)
+#define CONSOLE_PASTE_BOUNDARY UINT64_C(1)
+
+/* Process-owned opt-in; READ plus matching output WRITE in the same space.
+ * Epochs never transfer with a grant. Ordinary INPUT returns exactly one byte;
+ * DATA may return a short prefix. Framing has no ordinary FIFO dependency.
+ * A read atomically declares its decoder boundary; INPUT closes it before
+ * handing off any byte. ACK follows consumed END/CANCEL, never just receipt. */
+struct console_paste_register_request {
+  struct message_header header;
+  handle_t output;
+};
+
+struct console_paste_register_reply {
+  uint64_t epoch;
+};
+
+struct console_paste_read_request {
+  struct message_header header;
+  uint64_t epoch;
+  uint64_t address, capacity;
+  uint64_t timeout_ms, flags;
+};
+
+struct console_paste_read_reply {
+  uint64_t kind, epoch, transaction_id;
+  uint64_t length, status;
+};
+
+struct console_paste_ack_request {
+  struct message_header header;
+  uint64_t epoch, transaction_id;
+};
+
+struct console_paste_release_request {
+  struct message_header header;
+  uint64_t epoch;
+};
+
 #define CONSOLE_WAIT_FOREVER UINT64_MAX
 
 struct console_write_request {
@@ -108,6 +157,13 @@ struct console_size_reply {
   uint64_t rows;
   uint64_t generation;
 };
+
+_Static_assert(sizeof(struct console_paste_register_request) == 24, "paste register layout");
+_Static_assert(sizeof(struct console_paste_register_reply) == 8, "paste epoch layout");
+_Static_assert(sizeof(struct console_paste_read_request) == 56, "paste read layout");
+_Static_assert(sizeof(struct console_paste_read_reply) == 40, "paste read reply layout");
+_Static_assert(sizeof(struct console_paste_ack_request) == 32, "paste ack layout");
+_Static_assert(sizeof(struct console_paste_release_request) == 24, "paste release layout");
 
 _Static_assert(sizeof(struct console_handle_reply) == 8, "console handle reply layout");
 _Static_assert(sizeof(struct console_read_request) == 24, "console read layout");

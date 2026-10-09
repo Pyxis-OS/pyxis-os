@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
@@ -23,6 +24,8 @@ struct terminal_end {
 
 struct terminal_session {
   atomic_bool locked;
+  struct space *space;
+  struct process *reader_process;
   struct terminal_end input, output, attachment, events;
   size_t live_objects, input_authorities, controllers;
   /* Each output-producing object may retire while the other remains open. */
@@ -76,6 +79,7 @@ static void wake_all(struct task_wait_link **queue)
 
 static void hangup(struct terminal_session *session)
 {
+  clipboard_input_hangup(&session->input.object);
   session->hung_up = true;
   session->input_closed = session->output_closed = true;
   session->input_head = session->input_count = 0;
@@ -160,6 +164,7 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights)
   bool closed = --*counter == 0;
   if (closed) {
     if (object->type == OBJECT_TERMINAL_INPUT) {
+      clipboard_input_hangup(&session->input.object);
       session->input_closed = true;
       session->input_head = session->input_count = 0;
       wake_input(session);
@@ -225,6 +230,9 @@ void terminal_create_execute(struct terminal_create_service_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && request->table);
   struct terminal_session *session = session_create(request->columns, request->rows);
+  if (session) {
+    session->space = request->space;
+  }
   request->result = CALL_NO_MEMORY;
   if (session) {
     struct kernel_object *objects[] = {
@@ -304,6 +312,7 @@ struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
   struct process *process = process_current();
   KASSERT(process);
   request->table = &process->capabilities;
+  request->space = process_current()->space;
   request->columns = input.columns;
   request->rows = input.rows;
   request->reply = (struct terminal_create_reply){0};
@@ -344,15 +353,20 @@ static void ring_copy_in(uint8_t *ring, size_t capacity, size_t head,
 static void end_read(struct terminal_session *session);
 
 static enum call_status begin_read(struct terminal_session *session,
-    bool timed, uint64_t deadline)
+    bool timed, uint64_t deadline, bool paste)
 {
   lock_session(session);
+  if (!paste && !clipboard_ordinary_allowed(&session->input.object)) {
+    unlock_session(session);
+    return CALL_BUSY;
+  }
   if (session->hung_up || task_stop_requested()) {
     unlock_session(session);
     return CALL_ENDPOINT_CLOSED;
   }
   if (!session->reader_active) {
     session->reader_active = true;
+    session->reader_process = process_current();
     unlock_session(session);
     return CALL_OK;
   }
@@ -361,6 +375,7 @@ static enum call_status begin_read(struct terminal_session *session,
     return CALL_TIMED_OUT;
   }
   struct task_wait_link *reader = task_wait_link_prepare();
+  reader->reader_process = process_current();
   struct task_wait *wait = reader->wait;
   if (session->last_reader) {
     session->last_reader->next = reader;
@@ -420,11 +435,14 @@ static void end_read(struct terminal_session *session)
     struct task_wait *wait = reader->wait;
     reader->next = NULL;
     reader->wait = NULL;
+    session->reader_process = reader->reader_process;
     task_wait_wake(wait);
   } else {
     session->reader_active = false;
+    session->reader_process = NULL;
   }
   unlock_session(session);
+  clipboard_input_notify(&session->input.object);
   readiness_notify();
 }
 
@@ -447,11 +465,16 @@ static struct syscall_result application_read(struct terminal_session *session,
   struct console_read_reply reply = {0};
   uint8_t bytes[TERMINAL_TRANSFER_MAX];
   if (capacity) {
-    enum call_status status = begin_read(session, timed, deadline);
+    enum call_status status = begin_read(session, timed, deadline, false);
     if (status != CALL_OK) {
       return (struct syscall_result){status, 0};
     }
     lock_session(session);
+    if (!clipboard_ordinary_allowed(&session->input.object)) {
+      unlock_session(session);
+      end_read(session);
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
     while (!session->hung_up && !session->input_count && !session->input_closed) {
       if (timed && task_deadline_expired(deadline)) {
         unlock_session(session);
@@ -478,6 +501,12 @@ static struct syscall_result application_read(struct terminal_session *session,
       end_read(session);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
+    if (!clipboard_ordinary_allowed(&session->input.object)) {
+      unlock_session(session);
+      end_read(session);
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
+    clipboard_ordinary_transfer(&session->input.object);
     reply.read = session->input_count < capacity ? session->input_count : capacity;
     ring_copy_out(session->input_data, TERMINAL_INPUT_CAPACITY,
         session->input_head, bytes, reply.read);
@@ -590,6 +619,10 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation >= CONSOLE_PASTE_REGISTER && operation <= CONSOLE_PASTE_RELEASE) {
+    return clipboard_receiver_call(object, rights, operation, request_address,
+        request_size, reply_address, reply_capacity);
+  }
   uint64_t required;
   switch (operation) {
   case CONSOLE_READ: required = CONSOLE_RIGHT_READ; break;
@@ -749,6 +782,8 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
     /* A validated no-op does not probe session liveness. */
   } else if (session->hung_up) {
     status = CALL_ENDPOINT_CLOSED;
+  } else if (inject && !clipboard_ordinary_allowed(&session->input.object)) {
+    status = CALL_BUSY;
   } else if (inject) {
     /* A recognized Ctrl+C precedes the capacity check: it discards queued input
      * and its prefix, which count as accepted. */
@@ -793,6 +828,7 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
     status = CALL_WOULD_BLOCK;
   }
   unlock_session(session);
+  clipboard_input_notify(&session->input.object);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -874,6 +910,7 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   if (operation == TERMINAL_HANGUP) {
     hangup(session);
   } else {
+    clipboard_input_hangup(&session->input.object);
     session->input_closed = true;
     wake_input(session);
   }
@@ -883,14 +920,15 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
 }
 
 uint64_t terminal_application_ready(struct kernel_object *object, uint64_t events,
-    uint64_t observed_generation)
+    uint64_t observed_generation, struct process *caller)
 {
   KASSERT(object->type == OBJECT_TERMINAL_INPUT || object->type == OBJECT_TERMINAL_OUTPUT);
   uint64_t flags = cpu_save_interrupts();
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   lock_session(session);
-  uint64_t ready = session->hung_up ? WAIT_ERROR : 0;
-  if ((events & WAIT_READABLE) && !session->reader_active && session->input_count) {
+  uint64_t ready = session->hung_up ? WAIT_ERROR :
+      (events & WAIT_READABLE) ? clipboard_input_ready(object, caller) : 0;
+  if ((events & WAIT_READABLE) && !session->reader_active && session->input_count && clipboard_ordinary_allowed(&session->input.object)) {
     ready |= WAIT_READABLE;
   }
   if ((events & (WAIT_READABLE | WAIT_PEER_FIN)) && session->input_closed) {
@@ -924,7 +962,8 @@ uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events
     ready |= WAIT_PEER_FIN;
   }
   if ((events & WAIT_WRITABLE) && !session->input_closed &&
-      session->input_count < TERMINAL_INPUT_CAPACITY) {
+      session->input_count < TERMINAL_INPUT_CAPACITY &&
+      clipboard_ordinary_allowed(&session->input.object)) {
     ready |= WAIT_WRITABLE;
   }
   if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) && session->input_closed) {
@@ -933,4 +972,31 @@ uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events
   unlock_session(session);
   cpu_restore_interrupts(flags);
   return ready;
+}
+
+bool terminal_clipboard_input(struct kernel_object *object, struct clipboard_input *input)
+{
+  if (!object || (object->type != OBJECT_TERMINAL_INPUT && object->type != OBJECT_TERMINAL_ATTACHMENT)) {
+    return false;
+  }
+  struct terminal_session *session = ((struct terminal_end *)object)->session;
+  *input = (struct clipboard_input){
+    .object = &session->input.object, .output = &session->output.object, .space = session->space,
+    .locked = &session->locked, .bytes = session->input_data, .capacity = TERMINAL_INPUT_CAPACITY,
+    .head = &session->input_head, .count = &session->input_count, .closed = &session->input_closed,
+    .hung_up = &session->hung_up, .reader_active = &session->reader_active,
+    .reader_process = &session->reader_process, .first_reader = &session->first_reader,
+    .input_wait = &session->input_wait, .interrupt = &session->interrupt,
+  };
+  return true;
+}
+
+enum call_status terminal_paste_begin_read(struct kernel_object *object, bool timed, uint64_t deadline)
+{
+  return begin_read(((struct terminal_end *)object)->session, timed, deadline, true);
+}
+
+void terminal_paste_end_read(struct kernel_object *object)
+{
+  end_read(((struct terminal_end *)object)->session);
 }

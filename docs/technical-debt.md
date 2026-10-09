@@ -89,11 +89,12 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 
 ## Fixed userspace stacks
 
-Each process eagerly backs a 1 MiB user stack (960 KiB more than the former 64 KiB budget), giving native parsers room without
-port-specific recursion limits; it is still finite and port stack needs need review. An unmapped guard page catches ordinary
-overruns but a large adjustment can skip it, and neither compiler stack probing nor stack growth exists. Reconsider eager backing
-when process counts or memory pressure justify it; demand-backed stacks must respect BSP ownership of allocation and page-table
-mutation.
+Each plain executable eagerly backs a fixed [1 MiB user stack](kernel/program-loading.md), including boot init and small commands.
+An unmapped guard catches ordinary overruns, but a large adjustment can skip it; neither compiler stack probing nor growth exists.
+The owner retained 1 MiB after the experimental 8 MiB default's [nested-KVM costs](development/experiments/program-capacity/README.md):
+28–42 MiB more session backing and roughly 3.2–3.4 times the complete 1,024-launch session cost.
+Clang's 8 MiB expectation remains unmet; revisit with future [application-bundle manifest](wip/vfs.md#application-bundles)
+requests passed as a bounded loader parameter, without a P1F field or compiler-container rebuild. That path is unimplemented.
 
 ## BSP-only allocation and VM mutation
 
@@ -262,15 +263,14 @@ recording revisions, boot/display/device configuration, behavior and cost sample
 
 
 An additional ThinkPad owner report on 2026-10-09 found that a plain click selected a cell (no boot revision supplied).
-The [click/drag correction](development/system-pointer-qualification.md#click-and-drag-selection) applies to local TTY and mux;
-the correction needs a native recheck in the next owner ThinkPad batch before the click behavior is qualified.
+The owner confirmed the merged [click/drag correction](development/system-pointer-qualification.md#click-and-drag-selection)
+natively in the boot log, raw terminals and mux on 2026-10-09; that correction no longer needs a native recheck.
 
 ## System pointer selection and input limits
 
-Visible-cell selection has no export, clipboard publication or paste, and stored cells are 8-bit glyph indices, so a later text
-snapshot needs an explicit encoding before it can be `text/plain`; clipboard stores, gestures, capability transfer and conversion
-belong to the [clipboard proposal](wip/clipboard.md) (revisit with both kernel-local and mux-owned selections). Mux drag autoscroll
-and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
+[Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as printable ASCII; non-ASCII glyphs,
+original tabs, soft wraps and intentional trailing spaces have the [initial delivery limits](#initial-clipboard-delivery-limits).
+Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
 pointer source, with raw counts and relative-mode Synaptics behavior; Bluetooth aggregation, USB HID, acceleration, absolute-mode
 scrolling, remote pointer transport and multiple-display composition are separate tracks. The current PS/2 reset hook alone does not
 implement the accepted conditional multi-source rules: revisit input routing through the
@@ -689,8 +689,9 @@ proposal without silently changing capacity, queues or safety thresholds.
 ## Initial clipboard delivery limits
 
 Accepted 2026-10-09 in the [clipboard proposal](wip/clipboard.md#first-delivery-limits),
-before implementation. The first delivery is authorized but not yet implemented;
-its code PR must update this entry to match implemented/qualified behavior.
+implemented for local terminal and mux into opted-in stock libterm readers.
+See the [interface](interfaces/clipboard.md) and [qualification record](development/clipboard-first-delivery-qualification.md)
+for behavior, measured/manual evidence and validation limits.
 
 - **Receivers:** Paste is limited to opted-in stock libterm line readers. vi,
   less, Links and other raw-mode programs refuse Paste until they provide their
@@ -1457,3 +1458,12 @@ upstream. Revisit with a stable libc sort or a patch to sort if a consumer
 depends on the retained line, input too large for memory, or reliable `-o`
 errors. Word splitting, character classes and folding use libutf's tables, with
 no locale collation; revisit with locale support.
+
+## Temporary bundle grant policy
+
+The [bundle design](wip/program-bundles.md) accepted on 2026-10-09 temporarily
+delivers every available ordinary grant, including optional grants at launch,
+without consent. It is unimplemented, not a permanent security contract; metadata
+never creates rights or obtains system-only authority, and programs inspect actual
+startup grants. Revisit with users/permissions and the recorded required-grant,
+in-context optional-grant, trusted-picker, stable-identity and revocation model.

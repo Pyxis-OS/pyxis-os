@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
@@ -34,6 +35,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_CLIPBOARD] = {sizeof(struct clipboard_request), alignof(struct clipboard_request),
+      offsetof(struct clipboard_request, request)},
   [BSP_SERVICE_AUDIO] = {sizeof(struct audio_request), alignof(struct audio_request),
       offsetof(struct audio_request, request)},
   [BSP_SERVICE_BLUETOOTH_HCI] = {sizeof(struct bluetooth_hci_request), alignof(struct bluetooth_hci_request),
@@ -152,6 +155,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_POWER:
   case BSP_SERVICE_AUDIO:
+  case BSP_SERVICE_CLIPBOARD:
   case BSP_SERVICE_BLUETOOTH_HCI:
     return false;
   case BSP_SERVICE_POINTER:
@@ -313,6 +317,9 @@ static void service_request(struct bsp_request *request)
   case BSP_SERVICE_SYSTEM_INFO_POWER:
     system_info_power_execute((struct system_info_power_request *)request);
     break;
+  case BSP_SERVICE_CLIPBOARD:
+    clipboard_request_execute((struct clipboard_request *)request);
+    break;
   case BSP_SERVICE_POINTER:
     pointer_request_execute((struct pointer_request *)request);
     break;
@@ -381,5 +388,6 @@ void bsp_requests_init(void)
     panic("cannot create BSP request executor (error %u)", (unsigned)result);
   }
   readiness_init();
+  clipboard_init();
   initialized = true;
 }

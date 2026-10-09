@@ -47,7 +47,7 @@ Independent tasks can proceed together once separately assigned.
 
 | Priority | Gap and concrete evidence | Direction / shared work |
 | --- | --- | --- |
-| 0: admission | SDK linker starts at 0x400000; loader reserves stack guard at 0x7ff000 and a fixed 1 MiB stack at 0x800000. A contiguous mapped image has only 4 MiB minus 4 KiB below the guard; collision rejects and unwinds the load. HOST/NPFS executable staging also has a separate 16 MiB bound. | General large-image/initial-stack capacity contract, before trying to package LLVM. Coordinate with #567 ownership work; its first task does not move stacks or provide threads. |
+| 0: admission | [Program capacity](../kernel/program-loading.md) permits a 256 MiB page-rounded image span and supplies a high fixed eager 1 MiB guarded stack. HOST/NPFS executable capture still has a separate 16 MiB serialized-file bound. | Mapped capacity is qualified with a native fixture, not Clang. Its 8 MiB stack expectation awaits future [application-bundle manifest](vfs.md#application-bundles) requests; raising installed capture remains a separate peak-memory/admission task before packaging LLVM. |
 | 1: build/runtime | Pyxis lacks an LLVM Support platform selection. Generic leaves file_status/getSize, EnvPathSeparator and process types incomplete. Endian selection and the regex include are independent small header fixes. Threads-off still instantiates mutex/recursive_mutex/shared_mutex, condition_variable, shared_future/async; LLD Common/Memory.h:68 uses thread_local. | Follow the [native threads/TLS and runtime plan](threads.md), or explicitly adapt a genuinely serial LLVM source closure. LLVM_ENABLE_THREADS=OFF alone is insufficient; do not export successful fake locks or POSIX threads. Fork changes eventually require a compiler pin/container update. |
 | 1: C++ subset | SDK localization/wide strings/random_device are off. raw_os_ostream and Mustache instantiate streams; Clang PPMacroExpansion.cpp:1734 uses stringstream, locale("C") and put_time for __TIMESTAMP__. ExponentialBackoff uses random_device/sleep_for. | Select the actual runtime/source subset. Exceptions and RTTI already work in the SDK; LLVM itself was built with them off. Iostreams/locale are not needed for C output, but remain compile dependencies of this source closure. Shared with further C++ ports, not resolved by libc open flags. |
 | 2: metadata | Unix Path.inc and independent stat probes lack ino/dev/atime/mtime/ctime, uid/gid/nlink/blksize; native stat exposes kind/size only. Clang FileManager deduplicates files/directories by UniqueID and stores modification time. | Real native identity/time or a separately specified VFS model; never constant IDs/timestamps. Alias roots and pragma-once make identity a correctness issue. Shared with [Git #568](git-on-pyxis.md), even without persistent caches. Mode/owner/execute-bit assumptions require native authority adaptation, not fabricated permissions. |
@@ -102,12 +102,17 @@ make these neither Pyxis binary sizes nor native RAM admission results.
 Native sizes remain estimates of roughly the same order; static libc++, P1F,
 source adaptations and section collection will change them. The decisive loader
 check is page-rounded P1F segment memory extent including BSS, not stripped
-file size. The proxies greatly exceed the present contiguous image window and
-installed-image staging bound. RAM/archive exceptions bypass only staging,
-not an image/stack collision; putting LLVM there is not the installation plan.
+file size. Proxy file sizes are below 256 MiB, but they do not establish native
+mapped spans or required physical backing. They greatly exceed the unchanged
+installed-image staging bound. RAM/archive exceptions
+bypass only staging, not image admission; putting LLVM there is not the installation plan.
 
 Clang requests an 8 MiB stack and its near-exhaustion diagnostic assumes that
-scale. Native initial stacks are 1 MiB, fixed and eagerly backed; threads-off
+scale. Plain native executables retain fixed eager 1 MiB stacks after the owner
+reviewed the 8 MiB default's costs. Clang's expectation remains unmet until future
+[application-bundle manifest](vfs.md#application-bundles) requests can supply a
+bounded initial-stack parameter to the common loader. That path is unimplemented;
+it needs no P1F field or compiler-container rebuild. Threads-off
 RunSafelyOnNewStack runs inline. A trivial host compile does not establish stack
 safety for templates/deep includes or justify automatic stack growth.
 
@@ -122,15 +127,16 @@ remain unqualified; no performance claim or guarantee of fitting a guest follows
 
 ## Suggested first task and owner decisions
 
-**Owner-assigned priority 0, proposal first:** [program image and initial stack
-capacity](program-stack-capacity.md), after merged process-lifetime task 1 (#612).
-Define and qualify general initial-process capacity. Keep placement/size owned by
-the loader, a reserved unmapped guard, eager backing, collision rejection and
-full unpublished-load cleanup.
-Propagate its actual stack top to boot and ordinary launch. Manually qualify a
-native image exceeding the old window and inspect disjoint mappings, exit and
-rejected-load cleanup with QEMU/GDB. No automatic growth, public threads or
-compiler port in that task. Installed-image staging budget is a separate check.
+**Priority-0 mapped capacity is implemented:** [program loading](../kernel/program-loading.md),
+following process-lifetime task 1 (#612), records the capacity decisions accepted
+in [#613](https://git.internal/PyxisOS/pyxis-os/pulls/613) and the owner's return to
+the plain 1 MiB stack default after cost review in
+[#617](https://git.internal/PyxisOS/pyxis-os/pulls/617), both on 2026-10-09.
+[Native qualification](../development/experiments/program-capacity/README.md)
+covers disjoint mappings, boundary rejection and unpublished cleanup, plus the
+material eager-stack launch and session-memory costs. It provides no compiler
+port, automatic growth or public threads. Installed-image staging remains a
+separate task; later Clang work is not assigned by that completion.
 
 These are proposed defaults, not accepted implementation authority:
 
@@ -149,3 +155,14 @@ These are proposed defaults, not accepted implementation authority:
 
 Docs only. No dependency pins, kernel/libc code, toolchain container, tests or
 QEMU changes. Probe branches stay unmerged; stop for owner review.
+
+## Program bundle follow-up
+
+The owner accepted the [program-bundle first-slice design](program-bundles.md)
+on 2026-10-09, after the return to plain 1 MiB stacks in merged
+[#617](https://git.internal/PyxisOS/pyxis-os/pulls/617). It selects ZIP `.pxa` and
+unpacked `.pxb` forms with per-program `app://`, JSON manifest requests for up to
+8 MiB stacks, read-only resource/sysroot roots and linker launch authority, plus
+shared 128 MiB captured-image admission. The temporary grant policy and later
+consent/picker/identity/revocation direction are recorded. The bundle design is
+unimplemented; task 1 awaits plan merge and a separate owner go.

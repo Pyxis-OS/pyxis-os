@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <kernel/object/namespace.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
@@ -279,6 +280,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return pointer_call((struct pointer_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_CLIPBOARD:
+    if (header.protocol != PROTOCOL_CLIPBOARD) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return clipboard_call(object, rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_AUDIO:
     if (header.protocol != PROTOCOL_AUDIO) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
