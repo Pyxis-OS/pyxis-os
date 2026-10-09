@@ -93,10 +93,12 @@ enum mm_result result = user_task_create(process, entry, stack_top);
 ```
 
 Submission may occur before or after scheduling starts, but only on the BSP
-with IF=0 and outside interrupt/fault entry. Success transfers sole ownership of
-the process to the task; failure leaves it with the caller. Do not inspect or
-mutate the process or its address space after transfer. There is one task per
-process.
+with IF=0 and outside interrupt/fault entry. Success transfers the prepared
+process lifetime and task storage to finalization; failure leaves the process
+with the caller. Do not inspect or mutate the process or its address space after
+transfer. There is one task per process. The task borrows its process; the process
+owns its lifetime, terminal result and execution-group member record independently
+of task storage.
 
 ### Placement and migration
 
@@ -168,11 +170,13 @@ transfer. The blocked caller lends its capability table to BSP preparation;
 cross-CPU requests and results live in the shared request allocation, never remote
 stack pointers.
 
-Task metadata occupies 784 bytes. Each user task eagerly owns one 4,928-byte
+Task metadata currently occupies 752 bytes; process metadata occupies 136 bytes.
+Each user task eagerly owns one 4,928-byte
 request allocation, sized for the explicit service catalog's largest typed
 record, HOST, with an 8-byte alignment requirement, and a separate zeroed
-720-byte profiling allocation. Their combined size is 6,432 bytes, excluding heap
-overhead and the unchanged 16 KiB kernel stack. Kernel workers use only the 784-byte task metadata
+720-byte profiling allocation. The task and its two allocations total 6,400 bytes,
+excluding process metadata, heap overhead and the unchanged 16 KiB kernel stack.
+Kernel workers use only the 752-byte task metadata
 and allocate neither user area. Preparation failure, prepared-task discard and
 retirement release each owned allocation exactly once on the BSP with IF=0.
 
@@ -251,9 +255,13 @@ This prevents lost wakeups or resuming a stack still in use. The resource lock
 may nest the queue lock; the reverse order is forbidden. Neither is held across
 a context switch.
 
-Execution-group stop requests mark task metadata under the group and scheduler
-locks, remove timed membership for an interruptible wait, and notify the assigned
-CPU. They leave subsystem registration detachment to the resumed continuation.
+Execution-group membership and process-control objects borrow process links,
+protected by their respective locks. Stop targeting takes the control or group
+lock, then the process lifetime lock, then the scheduler queue lock. The process
+keeps its sole task stop target live until the BSP detaches it before task
+reclamation. A stop request marks task metadata, removes timed membership for
+an interruptible wait, and notifies the assigned CPU. It leaves subsystem
+registration detachment to the resumed continuation.
 The scheduler retires marked runnable userspace at its next safe point. Syscall
 continuations stay runnable until their own unwind returns all loans; their final
 syscall boundary prevents user return. Published BSP/HOST requests remain
@@ -268,13 +276,25 @@ Only an explicit capability-table loan allows the BSP to modify its table.
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
 
-Exit and ordinary user faults return to the local scheduler. After switching
-to its permanent stack and reloading the kernel root, the CPU clears its task
-entry-stack pointer and publishes completion. It must not touch the task afterward.
-The BSP detaches completed tasks under the lock, destroys each user process and
-its private address space, then frees the task's kernel stack, request and profile
-allocations and metadata outside the lock. Kernel tasks have no process or user
-request/profile allocations. If the BSP itself runs userspace,
+Exit, termination and ordinary user faults commit the process's terminal result
+and return to the local scheduler. The sole task writes that result once and
+release-publishes `result_set`; this boundary takes no process lifetime lock,
+including on user fault entry. Stop targeting acquire-reads the marker and
+preserves a committed result. After switching to its permanent stack and
+reloading the kernel root, the CPU clears its task entry-stack pointer and
+publishes the completed task. It must not touch the task afterward.
+
+The BSP takes completed tasks from the queue under its lock. Outside that lock,
+it detaches the process's task stop target, then frees the task's kernel stack,
+request/profile allocations and metadata. `process_task_reclaimed()` ends the
+process's task-storage lifetime, detaches the control and group process links,
+and destroys the process's private address space and remaining owned resources
+under group cleanup attribution. It then publishes and releases process control
+completion and completes the group member. The group member count remains
+positive throughout task and process reclamation; deferred cleanup can keep
+group completion pending afterward. Every loan must already have returned before
+task retirement. Kernel tasks have no process or user request/profile allocations.
+If the BSP itself runs userspace,
 a pending completion makes its next user timer interrupt return to the scheduler
 even when there is no second runnable BSP task.
 
@@ -509,6 +529,11 @@ in the full order:
 4. The queue lock, taken by the pressure lock's wake and by resource and group
    locks.
 
+Process stop targeting separately nests the control or group lock, process
+lifetime lock, then queue lock. Detaching control/group process links happens
+after releasing the process lifetime lock. None of these locks spans allocation,
+user copying or a context switch.
+
 No caller of `kmalloc()` or `pmm_alloc()` may hold the queue or pressure lock.
 
 User-buffer checks are a narrow exception to BSP-only queries: the executing
@@ -660,7 +685,9 @@ and submission calls. Never call them on an AP. Once a task completes, its
 pointer may already have been freed by the BSP.
 
 Execution-group sealing serializes with batch enrollment/publication under a group
-lock before the scheduler queue lock. BSP reaping detaches the stop-request list
-link before freeing task metadata; its member count stays positive until process
-and task reclamation finish. Group completion additionally waits for admitted
+lock. Publication takes the process lifetime lock before enqueueing; stop targeting
+nests group, process lifetime and scheduler queue locks. BSP reaping first detaches
+the process's task stop target and frees task storage, then detaches its process-owned
+group link before process destruction. Its member count stays positive until
+process and task reclamation finish. Group completion additionally waits for admitted
 launches and attributed deferred cleanup. See [execution groups](../interfaces/execution-groups.md).
