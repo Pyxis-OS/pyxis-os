@@ -627,9 +627,11 @@ cannot keep a successor running after that shell exits.
 ## Power-off and restart
 
 `poweroff` and `reboot` are builtins that take no arguments. They need the
-shell's `power` resource, which exists only in spaces whose boot configuration
-sets `power = true` ([boot configuration](init.md#boot-configuration)); elsewhere
-they print `this space has no power authority`.
+shell's `power` resource: local spaces opt in with `power = true`, and remote
+root shells require the separate `remote_power = true`
+([boot configuration](init.md#boot-configuration)). Live/PXE Remote enables it;
+installed defaults do not. Without the grant they print
+`this space has no power authority`.
 
 The kernel stops running user programs without asking them to exit, writes every
 mounted native pool's cached data and empties its journal, then powers off
@@ -649,8 +651,10 @@ REMOVE. Directory grants can be restricted by the launcher; the shell queries
 and preserves their actual rights.
 An optional `power` resource supplies the `poweroff` and `reboot` builtins. The
 shell forwards it only to a `session` successor, never to the programs it runs;
-session passes it on to local successors but not when it starts remote services,
-so remote shells never hold it.
+session passes it on to local successors but not when it starts remote services.
+The separate `remote_power` resource also passes only to session successors;
+the remote supervisor converts it to `power` for its root shell. Ordinary
+commands and service providers receive neither.
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.

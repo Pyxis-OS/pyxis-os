@@ -45,10 +45,6 @@ bool renoir_otg_prepare(const struct boot_info *boot, struct renoir_otg_info *in
  * Failure clears the sample. The caller owns advancement/period qualification,
  * rollover accounting and stall policy; frame-count phase is not assumed. */
 enum renoir_otg_result renoir_otg_read(struct renoir_otg_sample *sample);
-/* Fine polling between full reads: cached mode, FRAME/POSITION/STATUS only.
- * Incoherent or implausible tuples retry; identity/BAR/mode must be fully
- * revalidated once per cadence and immediately before an admitted write. */
-enum renoir_otg_result renoir_otg_read_light(struct renoir_otg_sample *sample);
 const char *renoir_otg_reason(void);
 
 #endif

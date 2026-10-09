@@ -51,8 +51,6 @@ void display_copy(size_t offset, const void *pixels, size_t bytes);
  * after ordinary submission and pointer posting, without panic. Active capture
  * additionally requires matching hardware pointer completion. */
 bool display_end_frame(const struct pointer_frame *frame);
-/* Sole BSP presenter, IF=1; zero retains the software cadence. */
-uint64_t display_next_deadline(void);
 
 /* First panic claimant, any CPU, IF=0, without GS/locks/allocation. Permanently
  * stop normal writes, fence an interrupted local writer or boundedly wait for

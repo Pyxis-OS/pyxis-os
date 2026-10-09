@@ -66,6 +66,34 @@ than throwaway work.
   with only results written to the pool. `make -j` runs separate processes, which
   Pyxis already spreads across CPUs; a single compiler process has one thread.
 
+## Reaching the sources
+
+The source servers, `git.internal` (Forgejo and its `mirrors/` organization)
+and `repo.internal` (proxied release downloads), are reachable only on the
+owner's tailnet. Pyxis machines sit on the home LAN and have no tailnet client.
+
+**Planned direction (owner, 2026-10-09):** a read-only LAN gateway on a machine
+that is on both networks, today the owner's desktop. It forwards only:
+
+- Git smart HTTP reads for the pinned repositories: the `info/refs` service
+  discovery GET and the `git-upload-pack` POST. No push or other Forgejo paths.
+- `repo.internal` release downloads, the byte-stable archives the recipes
+  already pin by SHA-256.
+
+The host firewall admits only the Pyxis machines' reserved LAN addresses. The
+gateway serves HTTPS with a certificate Pyxis trusts through the existing
+explicit CA policy; verification is never disabled. It holds no Pyxis
+credentials, and Pyxis gains no write path to the servers. Integrity does not
+depend on the gateway: Git fetches verify the exact pinned commit and archives
+their pinned SHA-256. Recipe URLs need a configurable mirror base rather than
+the hard-coded upstream URLs they have today.
+
+Until a builder fetches on its own, the host can push pinned sources to Pyxis
+with `xfer` over the remote terminal. Joining the tailnet directly depends on
+[Tailscale on Pyxis](toolchains-and-runtimes.md#homelab-administration-over-tailscale),
+which needs the Go runtime first; a WireGuard tunnel to the gateway machine is
+an option only if a Pyxis machine needs sources away from the home LAN.
+
 ## Updates
 
 System updates keep the binary path for the kernel, rescue set, SDK and

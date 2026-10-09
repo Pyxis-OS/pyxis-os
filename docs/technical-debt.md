@@ -262,16 +262,22 @@ decision and read-only BAR0/pitch evidence, before the write-backend task.
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)
-and guarded blank-start copy path implement presentation step 2, accepted
-2026-10-09. Timed copies stay **off by default**: ordinary boots observe with
-unsynchronized copies, and `display.timing=blank` is an explicit qualification
-opt-in. No native Pyxis execution is claimed. The owner must run the
-[ThinkPad batch](development/experiments/renoir-presentation/README.md#native-thinkpad-batch):
-counter/mode capture, actual first-store start distributions and margins,
-copy/fence and representative prefix progress, plus matched moving-Quake camera
-clips. Revisit default enablement only after those results pass the measured
-eight-line guard and visibility/input/panic checks; insufficient evidence leaves
-unsynchronized presentation. Program timing APIs and page flips remain separate.
+failed native qualification on the owner's ThinkPad batch 2, 2026-10-09, PXE main
+`11d35fa6`, info logging. Period estimates varied from 13.887 to 20.785 ms,
+including a hardware-qualified 40.7 ms uncertainty. Default boot logged sixteen
+observation losses. `blank` admitted only 13 of about 6000 copies yet showed
+worse tearing and a couple of frames of input delay.
+
+The safety follow-up keeps one preparation summary, sends losses to trace,
+rejects bounds outside blank minus eight lines, and uses the same software
+cadence/full observation in both modes. Blank starts are opportunistic: no
+phasing, sleeping or polling. The existing period estimator remains inaccurate;
+EDID anchoring and its overhaul were dropped by the owner. Default remains
+unsynchronized `observe`. Run the
+[two-boot safety recheck](development/experiments/renoir-presentation/README.md#native-safety-recheck)
+before claiming the scheduling/logging regression resolved. Reduced tearing,
+accurate native timing and GPU flip presentation remain unqualified; revisit
+through the owner's separate flip proposal, not default timed-copy enablement.
 
 Register-window identity bounds access without PCI sizing writes; native BAR
 allocation length and GOP/HUBP routing are not independently decoded. Only the
@@ -478,7 +484,9 @@ Execution groups supervise separately; the [remote server](userland/remote-termi
 after five seconds, and can still wait indefinitely on published HOST work while holding a slot. Four idle or blocked sessions can
 exhaust the server, and there is no idle timeout, authentication, encryption, restart or reconnection; host-loopback forwarding limits the
 QEMU entry point, but any process reaching it gets the configured shell privileges, with shared roots, space and CPU and no separate
-principals or quotas. Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
+principals or quotas. Live/PXE Remote explicitly enables power: any reachable LAN peer can reboot or power off the machine, an owner-accepted
+sole-user home-LAN exposure; installed remote defaults omit it. Revisit power delegation with authentication or a broader deployment.
+Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
 cell for non-ASCII bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
 then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
 ([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and
@@ -509,8 +517,8 @@ requests callers expect to restrict access.
 
 ## Non-atomic stdio append
 
-Append streams query the file size before each native write, so concurrent appenders can overwrite each other, and seeking does not make
-the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
+Append streams and `O_APPEND` descriptors query the file size before each native write, so concurrent appenders can overwrite each
+other, and seeking does not make the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
 Formatted output stages the full result with `snprintf` (heap allocation and a second pass when the stack buffer is too small), so large
 formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. All FILE output is unbuffered.
 
