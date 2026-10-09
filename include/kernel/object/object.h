@@ -52,6 +52,7 @@ enum object_type {
   OBJECT_TERMINAL_POINTER = 45,
   OBJECT_BLUETOOTH_HCI = 46,
   OBJECT_AUDIO = 47,
+  OBJECT_CLIPBOARD = 48,
 };
 
 struct execution_group;

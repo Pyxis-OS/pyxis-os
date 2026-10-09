@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -236,6 +237,7 @@ void execution_group_authority_release(struct kernel_object *object, uint64_t ri
   }
   unlock_group(group);
   if (last) {
+    clipboard_stop_notify();
     readiness_notify();
   }
 }
@@ -304,6 +306,7 @@ struct syscall_result execution_group_call(struct execution_group *group,
     complete_locked(group);
   }
   unlock_group(group);
+  clipboard_stop_notify();
   readiness_notify();
   return (struct syscall_result){CALL_OK, 0};
 }

@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <arch/smp.h>
 #include <arch/cpu.h>
 #include <kernel/keyboard.h>
@@ -121,6 +122,7 @@ void keyboard_focus(struct keyboard_object *keyboard, bool selected)
   bool queued = false;
   if (keyboard->selected != selected) {
     bool previous = capture_focused(keyboard);
+    clipboard_space_cancel(keyboard->space);
     keyboard->selected = selected;
     memset(keyboard->down, 0, sizeof(keyboard->down));
     queued = publish_focus(keyboard, previous);
@@ -139,6 +141,7 @@ void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
   bool restore_capture = keyboard->owner && keyboard->terminal_layer && !terminal_layer;
   bool queued = false;
   if (keyboard->terminal_layer != terminal_layer) {
+    clipboard_space_cancel(keyboard->space);
     bool previous = capture_focused(keyboard);
     keyboard->terminal_layer = terminal_layer;
     memset(keyboard->down, 0, sizeof(keyboard->down));
@@ -157,6 +160,7 @@ void keyboard_reset_input(struct keyboard_object *keyboard)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_keyboard(keyboard);
+  clipboard_space_cancel(keyboard->space);
   reset_keys(keyboard);
   bool owned = keyboard->owner != NULL;
   if (keyboard->owner) {

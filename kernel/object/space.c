@@ -157,7 +157,7 @@ static bool reserved_resource(const char *name)
 {
   static const char *const reserved[] = {
     "input", "output", "keyboard", "pointer", "display", "audio", "space",
-    "terminal_pointer",
+    "terminal_pointer", "clipboard_local", "clipboard_shared",
   };
   size_t length = strlen(name);
   for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); ++i) {
@@ -238,7 +238,7 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  if ((request.flags & ~SPACE_CREATE_TERMINAL_CONTROL) ||
+  if ((request.flags & ~SPACE_CREATE_FLAGS) ||
       (request.flags && !request.launch)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -286,6 +286,8 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
     }
   }
   capture->space.terminal_control = request.flags & SPACE_CREATE_TERMINAL_CONTROL;
+  capture->space.clipboard_local = request.flags & SPACE_CREATE_CLIPBOARD_LOCAL;
+  capture->space.clipboard_shared = request.flags & SPACE_CREATE_CLIPBOARD_SHARED;
   memcpy(capture->space.name, name, request.name_length + 1);
   memcpy(capture->space.title, title, request.title_length + 1);
 

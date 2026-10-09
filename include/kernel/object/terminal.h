@@ -7,10 +7,13 @@
 #include <kernel/service/request.h>
 
 struct capability_table;
+struct process;
+struct space;
 
 struct terminal_create_service_request {
   struct bsp_request request;
   struct capability_table *table; /* Exclusive loan through completion. */
+  struct space *space;
   uint64_t columns, rows;
   struct terminal_create_reply reply;
   enum call_status result;
@@ -32,7 +35,7 @@ uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events
 /* Any CPU, preserves IF. Application input/output snapshot; input admission
  * reserves no reader slot. Geometry is independent and stays at generation 1. */
 uint64_t terminal_application_ready(struct kernel_object *object, uint64_t events,
-    uint64_t observed_generation);
+    uint64_t observed_generation, struct process *caller);
 
 struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,

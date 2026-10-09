@@ -2,6 +2,7 @@
 #define KERNEL_WAIT_H
 
 struct task_wait;
+struct process;
 
 /* Shared task metadata, never a private-stack pointer. One resource queue may
  * publish this link at a time. Detach under its lock before wake; after a timed
@@ -10,6 +11,7 @@ struct task_wait;
 struct task_wait_link {
   struct task_wait_link *next;
   struct task_wait *wait;
+  struct process *reader_process; /* Console/session reader handoff only. */
 };
 
 #endif
