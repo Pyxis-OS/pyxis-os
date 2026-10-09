@@ -250,14 +250,15 @@ and 684.7 fps. Acquisition without PRESENT, repeated PRESENT while hidden, captu
 Super and device/queue-loss propagation were source-inspected only; revisit them when changing the session, input or teardown paths or
 when a failure appears.
 
-## Renoir scanout memory ownership
+## Renoir inherited pitch and firmware reservations
 
 [Native flip inventory](development/experiments/renoir-flip-inventory/README.md)
-identifies the 512 MiB UMA range and mono route. BAR0 correlation and inherited
-pitch semantics remain unresolved; pre-OS PSP/SMU reservation completeness is
-unknown. A Linux-derived exclusion standard is proposed for one spare, pending
-owner acceptance. No allocation or flips are implemented. Revisit after that
-decision and read-only BAR0/pitch evidence, before the write-backend task.
+confirms BAR0/GOP correlation and the 512 MiB UMA range. Raw pitch `0x780` remains
+unexplained against GOP 7680 bytes and Linux's pixels-minus-one convention;
+qualify effective row stride before any write-backend layout. The owner accepted
+Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
+reservations if new firmware/client ranges appear; retain the low prefix and
+last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers.
 
 ## Native Renoir presentation qualification
 

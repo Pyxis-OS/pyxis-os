@@ -6,26 +6,27 @@ commands, firmware messages, scanout allocation or flips. Task 2 is not assigned
 
 ## Conclusion and evidence boundary
 
-The first native boot establishes a stable mono route and a 512 MiB UMA
-framebuffer range. ATOM reports no firmware or driver VRAM reservation; that
-is the table's claim, not proof that all firmware clients are absent. The GOP
-address is consistent with a separate BAR0 aperture at VRAM offset zero, but
-BAR0 was not captured in that boot. The revised reader records it without
-sizing writes. The evidence-standard decision below is **pending**, not accepted.
-No spare allocation or flip is authorized by this inventory.
+Two native boots establish the stable mono route, the 512 MiB UMA range and
+BAR0/GOP address correlation at VRAM offset zero. ATOM reports zero firmware
+and driver VRAM usage. The owner accepted the Linux-derived exclusion standard
+and its PSP/SMU residual risk on **2026-10-09**, as recorded below.
 
-The earlier requirement for an explicit firmware allocator handoff was too
-strong as a Linux comparison. Linux initializes a VRAM manager and subtracts
-fixed reservations before further driver allocations; it does not receive an
-exclusive-pool grant from firmware. Whether Pyxis may adopt that exclusion rule
-while preserving the GOP setup is the owner's decision. BAR0 confirmation and
-the pitch discrepancy below remain separate backend prerequisites.
+**Task 1 is complete: read-only inventory and its report.** No scanout allocation
+or GPU writes are implemented. Inherited pitch semantics remain unresolved and
+must be established before a write backend qualifies its buffer layout. Task 2
+requires the owner's separate assignment; acceptance of the memory standard
+alone does not start it.
 
 ## Native ThinkPad evidence, 2026-10-09
 
 Luna's build of `5e342488`, `LOG_LEVEL=info`, PXE with
 `display.inventory=1 display.timing=off`. Local masked log:
 `/shared/present/batch2/inventory-638.log`; raw logs/firmware are not committed.
+The follow-up is Luna's build of `0f6baec6`, with the same inventory/timing-off
+options, in `/shared/present/batch2/inventory-638b.log`. Route, surface, UMA,
+firmware and DMCUB values repeat; the new BAR0 reads are stable:
+`low=6000000c high=8 base=860000000`, a 64-bit prefetchable memory BAR.
+`direct-GOP-correlation=0 BAR0-GOP-correlation=1` confirms the separate CPU views.
 
 | Evidence | Captured value / interpretation |
 | --- | --- |
@@ -40,25 +41,43 @@ Luna's build of `5e342488`, `LOG_LEVEL=info`, PXE with
 
 The old `direct-GOP-correlation=0` had two causes: it required the generic
 INUSE register to equal primary, and it compared only the direct RAM alias.
-Linux's [pending predicate](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn20/dcn20_hubp.c#L925-L950)
+Linux's [pending predicate](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn10/dcn10_hubp.c#L752-L777)
 uses pending plus **earliest** in-use, not generic INUSE. The revised diagnostic
 retains generic INUSE as raw evidence without making its zero a contradiction.
 Its precise latch semantics were not established; no latch-control write is used.
 
 `VRAM_offset = primary - GPU_FB_base = 0`. Direct RAM correlation gives
-`0x810000000 + offset`; the GOP-aperture candidate is `BAR0 + offset`, following
+`0x810000000 + offset`; the GOP aperture is the measured `BAR0 + offset`, following
 [Linux's BAR0 setup](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c#L1726-L1750)
 and [VRAM CPU mapping](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c#L611-L620).
-If the next capture confirms BAR0 `0x860000000`, the observed GOP span correlates
-to VRAM `[0,0x7e9000)`. This is a strong candidate, not a measured BAR0 value yet.
-The BAR0 extent remains unknown; do not extrapolate the GOP span to a full BAR.
+The GOP-advertised span `[0x860000000,0x8607e9000)` correlates to VRAM
+`[0,0x7e9000)`, starting at the same bytes HUBP0 scans at `0xf400000000`.
+The direct-RAM address differs because it is another CPU view, not a failed
+correlation. BAR0 length is still unknown; no sizing write was performed.
 
-Pitch is unresolved: raw `0x780` is 1920, equal to GOP `7680/4`, while Linux
-[programs pitch minus one](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn20/dcn20_hubp.c#L328-L366)
-from [framebuffer byte pitch / cpp](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_plane.c#L860-L870).
-That convention would interpret this raw value as 1921. The source establishes
-Linux's programming convention, not a resolved hardware stride for inherited
-firmware state. Do not certify pitch compatibility or rewrite it on this evidence.
+### Pitch: unresolved backend prerequisite
+
+Both captures have raw `PITCH=0x780` (1920) and GOP byte pitch 7680 (1920 pixels
+at four bytes each). The [DCN2.1 function table](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn21/dcn21_hubp.c#L815-L828)
+uses `hubp1_program_surface_config`, which
+[calls `hubp1_program_size`](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn10/dcn10_hubp.c#L556-L570).
+That helper [writes pixels minus one](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn10/dcn10_hubp.c#L163-L196),
+using [framebuffer byte pitch / cpp](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_plane.c#L860-L870).
+Linux would therefore write `0x77f` for 7680 bytes. The
+[field definition](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h#L9180-L9183)
+has shift zero and mask `0x3fff`; there is no mask/shift adjustment explaining
+this capture. Literal application of Linux's convention gives
+`(0x780 + 1) * 4 = 7684` bytes.
+
+The inspected code establishes Linux's programming convention, but does not
+explain the inherited firmware value's effective row stride or hardware
+rounding/alignment. No controlled fetch-stride observation was made. The question
+is thus stated, not resolved by assuming firmware writes pixel count directly
+or by inventing an ignored low bit. Task 2 must establish effective stride from
+an authoritative DCN2.1 encoding/alignment reference or a controlled observation
+before qualifying a spare's row layout. Preserve raw `0x780`; neither change it
+nor silently certify 7680/7684 from these snapshots. The accepted spare placement
+and rounded size remain an unallocated candidate; layout qualification is separate.
 
 ## Linux pre-initialization reservations on this Renoir
 
@@ -116,31 +135,30 @@ the concern for a low spare; they do not establish absence of an undocumented
 client there. Adopting Linux's exclusion rule without reinitializing those
 clients is an explicit residual risk for the owner to accept.
 
-## One owner decision — pending
+## Evidence standard — accepted 2026-10-09
 
-**Adopt a Linux-derived exclusion rule as sufficient ownership evidence for this
-bounded inherited-GOP backend? Recommended default: yes**, replacing the explicit
-allocator-handoff proof requirement. Treat the validated 512 MiB UMA range as
-kernel-driver-owned except actual GOP/VGA storage, all reported firmware/driver
+The owner accepts the **Linux-derived exclusion rule** as sufficient ownership
+evidence for the bounded inherited-GOP backend, replacing the explicit
+allocator-handoff proof requirement. The validated 512 MiB UMA range belongs to
+the kernel driver except actual GOP/VGA storage, all reported firmware/driver
 and live-client reservations, applicable discovery/training/stolen reservations,
-and an additional conservative last-16-MiB guard `[0x1f000000,V)`. The guard covers
-the expected discovery tail and provides distance from the top; it is a proposed
-cushion, not evidence that PSP/SMU storage is confined there. Any newly identified
-reservation must be excluded in full, even if larger than the guard.
+and the last-16-MiB guard `[0x1f000000,0x20000000)`. The guard covers the expected
+discovery tail and adds distance from the top; it is not evidence that PSP/SMU
+storage is confined there. Exclude any newly identified reservation in full.
+The owner explicitly accepts the remaining pre-OS PSP/SMU risk described above.
 
-For one spare, use `align_up(max(actual_GOP_end, stolen_prefix_end), 64 KiB)`
-provided the entire aligned allocation is below every upper exclusion. With
-BAR0/GOP correlation confirmed and this capture's extents, the candidate starts
-at offset `0x900000`; 8,294,400 payload bytes occupy `[0x900000,0x10e9000)`, with
-64 KiB-rounded backing `[0x900000,0x10f0000)`. Corresponding direct CPU start is
-`0x810900000`, GPU start `0xf400900000`; a BAR0 alias would be `0x860900000` if
-that base is confirmed. Prefer one WC direct-UMA mapping, not simultaneous
-WB/WC aliases. Preserve the original GOP surface and all possible fronts.
+One 64 KiB-aligned spare at offset `0x900000` is the accepted candidate for this
+capture, after the larger of GOP storage and the 9 MiB stolen prefix. Advertised
+payload is 8,294,400 bytes (`[0x900000,0x10e9000)`), with rounded backing
+`[0x900000,0x10f0000)`. Direct CPU start is `0x810900000`, GPU start
+`0xf400900000`; its BAR0 alias address is `0x860900000`. BAR0 length remains
+unknown, so the accepted mapping direction is direct UMA with WC, avoiding
+conflicting WB/WC aliases. Preserve the original GOP surface and possible fronts.
 
-Acceptance would adopt an evidence standard, including the PSP/SMU residual
-uncertainty. It would not allocate this candidate, resolve pitch or BAR0 extent,
-implement flips, or start task 2. Declining keeps GOP copying and requires further
-reservation evidence. Nothing in this round is accepted until the owner answers.
+This records ownership policy and residual-risk acceptance, not an allocation
+or GPU write. Pitch/row layout must still qualify; task 2 needs a separate owner
+go-ahead. The probe's historical `spare-pool=unproven` line denotes its raw
+inventory boundary, not a veto of this accepted policy.
 
 ## What the probe reads
 
@@ -220,8 +238,8 @@ zero. Super+Right and `ls` completed in the opt-in boot with caret/I-beam visibl
 Exact-head CI and sealed artifact checksums are recorded in the PR.
 The BAR0 correction was source-reviewed and the full default image rebuilt after
 merging main `28051508` (#631/#632); changed SDK/userland/ports inputs were rebuilt,
-not substituted by the first-boot bundles. BAR0's positive native path is still
-unmeasured. The follow-up head/build/QEMU/CI evidence is recorded in the PR.
+not substituted by the first-boot bundles. Native BAR0 was then exercised in the
+`0f6baec6` boot recorded above. The follow-up build/QEMU/CI evidence is in the PR.
 QEMU has no DCN and cannot qualify the native
 route, memory ownership or reservation completeness. No new tests/fault injection.
 
@@ -239,11 +257,13 @@ route, memory ownership or reservation completeness. No new tests/fault injectio
 3. On horse, retain the existing UDP log for that one boot through normal startup.
    Give alpha the `renoir-inventory:` lines and revision/checksums. Mask unrelated
    MAC/serial fields before sharing; do not commit raw firmware blocks or logs.
-4. The first boot is recorded above. A BAR0 follow-up, with the same options,
-   must capture stable BAR0 low/high/base plus both correlation results. Confirm
-   or reject the aperture candidate; do not infer a BAR length. Keep allocation
-   and writes deferred pending the owner decision and backend prerequisites.
+4. Both boots are now recorded above; the BAR0 follow-up is complete. Preserve
+   these sets/logs as the task-1 evidence. Further native work belongs to a
+   separately assigned task; no allocation or writes are part of this inventory.
 
 - [x] Read-only diagnostics and source inventory prepared.
 - [x] First owner native boot received and evaluated (`5e342488`).
-- [ ] Native BAR0 follow-up and owner evidence-standard decision; task 1 stays open.
+- [x] Native BAR0 follow-up evaluated (`0f6baec6`).
+- [x] Evidence standard and PSP/SMU residual risk accepted 2026-10-09.
+- [x] Pitch question stated with exact-source arithmetic and retained as a
+      write-backend prerequisite. Task 1 complete; task 2 awaits separate go-ahead.
