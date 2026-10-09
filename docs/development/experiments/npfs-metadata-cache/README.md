@@ -1,5 +1,7 @@
 # npfs metadata cache qualification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 The metadata-read caching item from [review #348](https://git.internal/PyxisOS/pyxis-os/pulls/348)
 was compared against main `b352a1d`, using cache implementation `ce1feaa`.
 The I/O batching and namespace changes are absent from both measured kernels.
@@ -92,8 +94,6 @@ exit
 
 All succeeded, including lookup of the renamed contents and reuse after removal.
 The baseline's extra small creates happened after the matched read command.
-Complete decoded records are [the shared baseline record](../npfs-io-runs/baseline.txt) and
-[metadata.txt](metadata.txt).
 
 ## Results and limits
 

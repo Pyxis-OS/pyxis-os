@@ -1,5 +1,7 @@
 # HOST profiler slowdown investigation
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Task 4 of the [I/O reliability milestone](../../io-reliability-attribution.md)
 used a controlled notification × collection experiment. These patches preserve
 the original experiment against its recorded baseline. The notification proposal
@@ -179,7 +181,7 @@ MEMORY=256M VIRTIO_NET=0` and the daemon socket in `VIRTIO_FS_SOCKET`.
 
 Commands were entered interactively; values were manually transcribed from guest
 log displays. There is no benchmark/boot automation or new test harness. The
-machine-readable [samples](samples.json) retain sample order, native counts,
+sample set recorded sample order, native counts,
 phase sum/max pairs, clock calibration and built ELF/ISO identities. Clock-loop
 values measure userspace calls, not isolated kernel clock cost.
 

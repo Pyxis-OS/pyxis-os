@@ -209,7 +209,7 @@ combines guest/host scheduling, device/daemon/backing work and guest completion
 observation; no host-side component timestamps were collected.
 
 The [controlled slowdown experiment](experiments/host-profile-slowdown/README.md)
-and its [samples](experiments/host-profile-slowdown/samples.json) preserve the
+and its recorded samples cover the
 six-cell notification × off/counts/full study and disposable patches. All six
 warmups and thirty samples verified the fixture. Full-profile prepared-write
 medians fell from 1855.850 to 234.100 ms with notification; off controls were

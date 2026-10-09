@@ -1,5 +1,7 @@
 # Bluetooth HCI transport and controller state probe
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Task 3b completed on 2026-10-08. The real AX200 answered HCI Reset and Intel
 Read Version through Pyxis's EP0/interrupt-IN transport in QEMU passthrough.
 Both replies had checked HCI framing, matching opcodes and successful status.
@@ -96,7 +98,7 @@ requires ten. Received class packets stay in the unmerged consumer.
 
 ## Observed replies and controller state
 
-The [serial capture](serial.txt) records every event from the final probe run:
+The serial capture recorded every event from the final probe run:
 
 | Command | Sequence | Event bytes | Result | Command allowance |
 | --- | ---: | --- | --- | ---: |
@@ -120,7 +122,7 @@ or profiles remain unknown. Thus operational firmware is an interpretation of
 measured bytes using that reference protocol. Pyxis did not load firmware or
 send an Intel firmware reboot/download command.
 
-Post-boot [GDB inspection](gdb.txt), with entered expressions retained, showed
+Post-boot GDB inspection showed
 `finished=true`, `result=USB_OK`, `PROBE_STATE_FIRMWARE`, sequence 2 and credit 1.
 The copied queue was empty, both receive owners remained `INTERRUPT_POSTED`, the
 stream was `USB_OK`, and the controller remained running. Receives and DMA remain

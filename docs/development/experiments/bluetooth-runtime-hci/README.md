@@ -1,5 +1,7 @@
 # Bluetooth mouse task 2: runtime HCI transport
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Status: **task 2 implemented and warm passthrough validated 2026-10-08.**
 This is task 2 of the [mouse milestone](../../../wip/bluetooth-mouse.md),
 separate from the completed investigation's identically numbered source-assessment
@@ -102,9 +104,9 @@ not independent cold-media trials. The controller was running and not failed.
 
 | Boot | Payload read samples (ms) | Complete consumption samples (ms) |
 | --- | --- | --- |
-| [1](baseline-1-storage.txt) | 115.952, 123.140, 123.701 | 117.696, 124.750, 126.093 |
-| [2](baseline-2-storage.txt) | 112.814, 117.644, 120.521 | 114.727, 120.753, 122.258 |
-| [3](baseline-3-storage.txt) | 112.298, 120.415, 118.857 | 114.210, 121.589, 120.299 |
+| 1 | 115.952, 123.140, 123.701 | 117.696, 124.750, 126.093 |
+| 2 | 112.814, 117.644, 120.521 | 114.727, 120.753, 122.258 |
+| 3 | 112.298, 120.415, 118.857 | 114.210, 121.589, 120.299 |
 
 Across nine samples, payload median/range was **118.857 / 112.298–123.701 ms**;
 complete-consumption median/range was **120.753 / 114.210–126.093 ms**. Profiling
@@ -120,9 +122,9 @@ and QEMU background work, and does not isolate the Bluetooth function.
 
 | Boot | Actual interval (s) | QEMU user/system CPU (s) | One-CPU cost | xHCI IRQ/command/event deltas | Timer deltas, BSP/AP1/AP2/AP3 |
 | --- | ---: | --- | ---: | --- | --- |
-| [1](baseline-1-idle.txt) | 30.000514 | 3.75 / 3.93 | 25.60% | 0 / 0 / 0 | 7966 / 3611 / 3612 / 3612 |
-| [2](baseline-2-idle.txt) | 30.000082 | 3.32 / 3.65 | 23.23% | 0 / 0 / 0 | 7080 / 3612 / 3612 / 3612 |
-| [3](baseline-3-idle.txt) | 30.000105 | 3.34 / 4.13 | 24.90% | 0 / 0 / 0 | 8095 / 3612 / 3612 / 3612 |
+| 1 | 30.000514 | 3.75 / 3.93 | 25.60% | 0 / 0 / 0 | 7966 / 3611 / 3612 / 3612 |
+| 2 | 30.000082 | 3.32 / 3.65 | 23.23% | 0 / 0 / 0 | 7080 / 3612 / 3612 / 3612 |
+| 3 | 30.000105 | 3.34 / 4.13 | 24.90% | 0 / 0 / 0 | 8095 / 3612 / 3612 / 3612 |
 
 Idle cost median/range was **24.90 / 23.23–25.60%** of one CPU. All intervals
 observed zero additional xHCI IRQs, commands and events; ordinary guest timer
@@ -145,9 +147,7 @@ p cpus[2]->timer_interrupts
 p cpus[3]->timer_interrupts
 ```
 
-The [kernel](baseline-kernel-provenance.txt), [SDK](baseline-sdk-provenance.txt),
-[userspace](baseline-userspace-provenance.txt) and
-[ports](baseline-ports-provenance.txt) manifests retain matching inputs.
+The kernel, SDK, userspace and ports manifests matched the same inputs.
 Repeat the same workload after implementation, with no compiler/build workload
 during measurement. Real ACL traffic remains task 4's qualification gate. No
 new benchmark or test infrastructure was added.
@@ -206,8 +206,8 @@ bundle verifier accepted all components. No compiler work ran during measurement
 All three guests reached development readiness with the same checked firmware,
 features and credits as the initial warm check. Both receive slots on each
 endpoint remained posted, with no partial HCI frame, copied queue backlog or
-terminal failure. The [parsed firmware/size snapshot](runtime-firmware-scalars.txt)
-records the operational tuple, zero deferred frames and the clean idle state;
+terminal failure. The parsed firmware/size snapshot
+recorded the operational tuple, zero deferred frames and the clean idle state;
 no packet or peer identity was dumped.
 
 All commands, warmups and nine storage samples verified successfully. The three
@@ -215,15 +215,15 @@ private disk copies retained the original hash after each guest exited.
 
 | Boot | Payload read samples (ms) | Complete consumption samples (ms) |
 | --- | --- | --- |
-| [1](runtime-1-storage.txt) | 116.207, 125.406, 125.356 | 118.074, 126.787, 126.836 |
-| [2](runtime-2-storage.txt) | 114.352, 121.789, 122.615 | 116.089, 123.336, 125.407 |
-| [3](runtime-3-storage.txt) | 113.906, 119.625, 122.716 | 115.348, 122.508, 123.667 |
+| 1 | 116.207, 125.406, 125.356 | 118.074, 126.787, 126.836 |
+| 2 | 114.352, 121.789, 122.615 | 116.089, 123.336, 125.407 |
+| 3 | 113.906, 119.625, 122.716 | 115.348, 122.508, 123.667 |
 
 | Boot | Actual interval (s) | QEMU user/system CPU (s) | One-CPU cost | xHCI IRQ/command/event deltas | Timer deltas, BSP/AP1/AP2/AP3 |
 | --- | ---: | --- | ---: | --- | --- |
-| [1](runtime-1-idle.txt) | 30.000446 | 3.90 / 4.07 | 26.57% | 0 / 0 / 0 | 7988 / 3618 / 3618 / 3618 |
-| [2](runtime-2-idle.txt) | 30.000800 | 3.58 / 4.09 | 25.57% | 0 / 0 / 0 | 7800 / 3618 / 3619 / 3619 |
-| [3](runtime-3-idle.txt) | 30.000249 | 3.44 / 3.86 | 24.33% | 0 / 0 / 0 | 6129 / 3618 / 3618 / 3618 |
+| 1 | 30.000446 | 3.90 / 4.07 | 26.57% | 0 / 0 / 0 | 7988 / 3618 / 3618 / 3618 |
+| 2 | 30.000800 | 3.58 / 4.09 | 25.57% | 0 / 0 / 0 | 7800 / 3618 / 3619 / 3619 |
+| 3 | 30.000249 | 3.44 / 3.86 | 24.33% | 0 / 0 / 0 | 6129 / 3618 / 3618 / 3618 |
 
 | Measure | Baseline median / range | Runtime median / range |
 | --- | --- | --- |
@@ -249,10 +249,8 @@ in one shell invocation, keeping debugger pauses outside the CPU window. Timer
 snapshots include the small boundary overhead; they are not an exact timer rate.
 No sample was selected based on its performance value.
 
-The final [kernel](runtime-kernel-provenance.txt), [SDK](runtime-sdk-provenance.txt),
-[userspace](runtime-userspace-provenance.txt) and
-[ports](runtime-ports-provenance.txt) manifests retain revision/configuration and
-unchanged dependency pins. Image assembly used:
+The final kernel, SDK, userspace and ports manifests recorded the
+revision/configuration and unchanged dependency pins. Image assembly used:
 
 ```sh
 make -j16 image PREBUILT="kernel sdk userspace ports" \
@@ -293,20 +291,18 @@ The integrated ordinary kernel build passed. All jobs in
 [CI run 1332](https://git.internal/PyxisOS/pyxis-os/actions/runs/1332) passed;
 its matching bundles passed the existing verifier during image assembly. One
 fresh interactive warm guest repeated the same configuration, remote read
-workload and 30-second idle procedure. [Storage output](integration-storage.txt)
+workload and 30-second idle procedure. The storage output
 verified its warmup and all three samples: payload median/range
 120.977 / 115.190–121.294 ms, complete consumption
 123.359 / 117.086–124.565 ms. The private disk retained its original hash.
-The [idle snapshot](integration-idle.txt) found development-ready stage 11,
+The idle snapshot found development-ready stage 11,
 complete inventory, the same checked features/credits, no partial frames or
 terminal failure, and both receives posted on both endpoints. Whole-QEMU CPU
 was 24.70% of one CPU over 30.000749 seconds; IRQ/command/event deltas were zero.
 This single integration check is separate from the matched comparison: main's
 other kernel/userspace changes cannot be attributed to Bluetooth.
 
-The integrated [kernel](integration-kernel-provenance.txt),
-[SDK](integration-sdk-provenance.txt), [userspace](integration-userspace-provenance.txt)
-and [ports](integration-ports-provenance.txt) manifests retain their exact inputs.
+The integrated kernel, SDK, userspace and ports manifests recorded their exact inputs.
 
 | Integrated artifact | SHA-256 |
 | --- | --- |

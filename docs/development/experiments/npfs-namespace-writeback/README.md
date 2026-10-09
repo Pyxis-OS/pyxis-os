@@ -1,5 +1,7 @@
 # npfs namespace writeback separation
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 This addresses create, rename and shrink flushing unrelated dirty pool data,
 identified in [review #348](https://git.internal/PyxisOS/pyxis-os/pulls/348).
 The owner accepted keeping these operations immediately durable while flushing
@@ -27,7 +29,7 @@ Main `b352a1d` was compared with standalone implementation `5c403ea`.
 Both exclude the other performance changes. The
 [shared baseline/configuration record](../npfs-io-runs/README.md) gives exact
 build, disk creation, QEMU and init commands, pins and
-[baseline output](../npfs-io-runs/baseline.txt). The changed boot substituted
+baseline output. The changed boot substituted
 `namespace` for `io` in QEMU file names. It rebuilt its kernel/image against the
 same verified SDK/userland/ports bundles with `make -j16 image
 PREBUILT="sdk userspace ports"` and the same build overrides. Kernel compilation
@@ -50,8 +52,7 @@ iobench write data://prepared.bin --prepared --buffer 4080 --rounds 5 --sync
 ```
 
 Each verified one untimed warmup and five measured samples, with 258 payload
-writes per sample, no short writes and exit status zero. Complete output is
-[namespace.txt](namespace.txt).
+writes per sample, no short writes and exit status zero.
 
 | Interval | Main median (range), ms | Namespace-only median (range), ms |
 | --- | ---: | ---: |
@@ -163,8 +164,6 @@ partition passed host `fsck.npfs`; extracted `victim.bin` matched the 1 MiB
 fixture, and `victim-copy.bin` matched 31 concatenated fixtures with `cmp`.
 The latter's SHA-256 was
 `f367e0c90c768764a50f7d5bb68fb74b9c2afe1c8fab42f3bdf0578cdc5dc5bd`.
-Complete records are [namespace-long.txt](namespace-long.txt) and
-[namespace-long-reader.txt](namespace-long-reader.txt).
 
 Debugger observations used the matching archived ELF and port 12389, printing
 `opened_pools->volumes->inodes` size/durable/dirty/reference/cleanup fields and
@@ -186,8 +185,7 @@ The PRs are stacked in merge order #382 (I/O runs), #386 (metadata cache),
 followed by `sync data://` and normal remote exit. It used a fresh copy of the
 initial disk, the same default 30-second interval and the same QEMU options,
 substituting `combined` in the file names. Stopped-pool fsck and extracted
-grow/prepared comparisons passed. [combined.txt](combined.txt) retains the output;
-this confirms integration, not attribution of one item's performance to another.
+grow/prepared comparisons passed. This confirms integration, not attribution of one item's performance to another.
 
 Main then advanced through `4b5e256` (USB block registration/GPT integration).
 It was merged into #382 and carried through both dependent branches without
@@ -211,7 +209,6 @@ The warmup/sample verified the persisted grow file. After creating
 live size 1048576 and durable size zero. Rename and sync succeeded, the client
 reported complete draining, and QEMU was quit. Host fsck passed again; extracted
 `integration-renamed.bin` matched the installed fixture with `cmp`.
-[current-main-combined.txt](current-main-combined.txt) is the complete output.
 This is a persistence/integration check, not a new matched performance comparison
 against the changed main or a qualification of its USB backend. All task-owned
 QEMU, debugger and remote-client processes were stopped.
@@ -266,8 +263,7 @@ count=262144` command; host `fsck.npfs --image ... --replay` passed for both.
 fixed `target.txt` size 1048576. The fixed file was extracted and `cmp` matched
 the source fixture exactly. Fixed `unrelated.bin` recovered with size zero, as
 expected for its unsynchronized contents: replacement did not flush it.
-[replacement-crash.txt](replacement-crash.txt) retains every guest command
-completion and both debugger snapshots. The expected remote disconnect occurred
+Every guest command completed and both debugger snapshots were taken. The expected remote disconnect occurred
 because of abrupt VM termination; no complete final drain is claimed.
 
 The 30-second configuration was restored and the ordinary default image rebuilt.

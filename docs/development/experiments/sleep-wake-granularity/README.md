@@ -1,5 +1,7 @@
 # Sleep wake baseline
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Measured on 2026-10-08 before implementing the
 [deadline wake proposal](../../../kernel/timekeeping.md).
 Both workloads used Pyxis `9acf597fec897119256a0c0044785771b19f9132` with
@@ -19,7 +21,7 @@ The published LLVM 23.1.3 / `49e2c1a` builder completed ordinary
 `CONFIG_HPET_MAINTENANCE_TICKS=120`, with ordinary `-O2 -g3` kernel flags.
 The standalone SDL measurement consumer was linked against this image's
 exported SDK and SDL2 archive using the SDK make fragment; it changes no library
-or kernel. Its source is [sdl-delay.c](sdl-delay.c), retained as the requested
+or kernel. Its source is [sdl-delay.c](sdl-delay.c), kept as the requested
 baseline workload rather than a normal application, self-test or CI target.
 
 | Artifact | SHA-256 |
@@ -127,9 +129,7 @@ the hardware breakpoint while the guest runs, interrupt after a manual interval,
 enable it and continue to the next real Quake frame entry. Read both values
 again and calculate completed frames per elapsed guest time. The breakpoint
 was active only at sampling boundaries. The
-[raw transcript](quake-baseline-gdb.txt) records the actual reads and checks.
-Worktree paths in the transcript use `<worktree>` placeholders; numerical
-readings are unchanged.
+debugger transcript (not kept in the tree) recorded the actual reads and checks.
 
 | Window | Completed frames | HPET ticks, 10 ns | Elapsed s | Frames/s |
 | --- | ---: | ---: | ---: | ---: |

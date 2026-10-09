@@ -1,5 +1,0 @@
-hda: QEMU 8086:2668 selection=0; inactive
-Caelum ready: starting preemptive userspace
-boot-init: space development started: boot://init (network owner)
-boot-init: space readonly started: boot://init-readonly
-boot-init: space remote started: boot://init-remote
