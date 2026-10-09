@@ -1451,375 +1451,208 @@ The HTTP-side limits are recorded under [HTTP redirects](#http-redirects) and
 
 ## Virtio-fs runtime resource retention
 
-The first [virtio-fs transport](devices/virtio-fs.md) reserves queue storage and device
-mappings before AP startup. A runtime failure masks interrupts, disables bus
-mastering and attempts reset, but retains the claim, 40 KiB of ring/payload
-allocations, CPU-side queue bookkeeping and their mappings until reboot. Even a
-confirmed reset does not make it safe to change shared kernel mappings without
-a TLB invalidation and
-reader-lifetime contract. No reconnect or repeated allocation occurs.
-
-The display's quiescent TLB-flush helper does not establish this transport's
-reader or DMA lifetime. Revisit reclamation with that ownership contract and a
-defined device teardown/reconnect lifecycle. Never free an outstanding DMA
-buffer solely because a request timed out. Idle daemon disconnection is not necessarily observable
-until the next request or device event; there is no heartbeat.
+The first [virtio-fs transport](devices/virtio-fs.md) reserves queue storage and device mappings before AP startup. A runtime failure masks
+interrupts, disables bus mastering and attempts reset, but keeps the claim, 40 KiB of ring and payload allocations, CPU-side queue
+bookkeeping and mappings until reboot, since even a confirmed reset does not make changing shared kernel mappings safe without a TLB
+invalidation and reader-lifetime contract (the display's quiescent TLB-flush helper does not establish this transport's reader or DMA
+lifetime). There is no reconnect, and never free an outstanding DMA buffer just because a request timed out. Idle daemon disconnection may
+not be visible until the next request, with no heartbeat. Revisit with that ownership contract and a defined teardown and reconnect
+lifecycle.
 
 ## Shared split-queue scaling and validation
 
-The [shared queue helper](devices/virtio-queues.md) supports multiple direct chains and
-allocates storage for the selected queue size. Request-ID uniqueness checks and
-completion validation scan queue-sized bookkeeping arrays. Current filesystem
-and entropy queues are small and remain serialized; no throughput improvement
-or scaling result is established. Revisit these scans if a measured block or
-network workload makes their cost material.
-
-Runtime validation covers the migrated serialized consumers and the block
-driver's eight outstanding writes. Two concurrent block reads also completed
-out of order with correct ticket association and full readback. Allocation and
-malformed-completion/reset failure paths have code inspection only; no fault
-injection was authorized for these tasks. Revisit those failure paths before
-expanding the storage reliability claims.
+The [shared queue helper](devices/virtio-queues.md) supports multiple direct chains and allocates storage for the selected queue size, and its
+request-ID uniqueness and completion validation scan queue-sized arrays. Current filesystem and entropy queues are small and serialized, so no
+scaling result is established; revisit the scans if a measured block or network workload makes them material. Runtime validation covers the
+migrated serialized consumers and the block driver's eight outstanding writes, and two concurrent block reads completed out of order with
+correct ticket association and full readback. Allocation, malformed-completion and reset failure paths have code inspection only (no fault
+injection was authorized); revisit before expanding storage reliability claims.
 
 ## Virtio-blk failure and validation limits
 
-The [block driver](devices/block-storage.md) latches write failure after an ordinary
-write or flush error. Further writes and flushes fail until reboot, while reads
-can continue on a healthy transport. This prevents a later flush from hiding an
-earlier persistence failure, but makes transient backend write errors require a
-reboot before writes can resume. Revisit with a concrete filesystem consumer and
-an explicit error-acknowledgment/recovery contract; never silently retry writes
-that may already have modified storage.
-
-Runtime device failure retains the PCI claim, queue bookkeeping, DMA allocations
-and mappings even after confirmed reset. Each prepared device reserves up to
-512 KiB of payload storage plus control buffers and rings. Retained memory scales
-with the inventory; there is no reconnect or reclamation. Revisit alongside
-shared-mapping TLB invalidation, DMA ownership and a defined device teardown lifecycle. Timeout alone
-cannot release storage still accessible to the device.
-
-Physical hardware and power-loss persistence have no coverage in this milestone.
-Normal QEMU restart/readback cannot establish either. Error, reset-failure and
-malformed-completion behavior require separate validation if fault injection is
-later authorized. Revisit durability evidence before promising filesystem
-recovery or support for production data.
+The [block driver](devices/block-storage.md) latches write failure after an ordinary write or flush error: later writes and flushes fail until
+reboot while reads continue on a healthy transport, so a later flush cannot hide an earlier persistence failure but a transient backend write
+error needs a reboot to resume writes. Revisit with a filesystem consumer and an explicit error-acknowledgment and recovery contract; never
+silently retry writes that may already have modified storage. Runtime device failure retains the PCI claim, queue bookkeeping, DMA allocations and
+mappings even after confirmed reset (each prepared device reserves up to 512 KiB of payload storage plus control buffers and rings, scaling with
+the inventory, with no reconnect or reclamation); revisit with shared-mapping TLB invalidation, DMA ownership and a teardown lifecycle, since a
+timeout alone cannot release storage the device can still reach. Physical hardware and power-loss persistence have no coverage, and normal QEMU
+restart and readback cannot establish either; revisit durability evidence before promising filesystem recovery or production-data support.
 
 ## GPT snapshot and profile limits
 
-[GPT discovery](devices/gpt.md) publishes one snapshot per device. Exclusive
-installer raw claims exclude mounts and refresh the snapshot on release, but
-there is no hotplug, external-mutation detection or automatic repair. Borrowed
-snapshot views last only until the next scheduling point. Health does not track
-later transport failure or changes during raw writes. Revisit generation
-tracking and broader replacement lifetimes when a concrete consumer needs them;
-external host writers remain unsupported.
-
-The supported profile is GPT 1.0 on 512-byte or 4 KiB blocks, at most 256 entries
-and 64 KiB per array. Unsupported revisions, larger layouts, reserved attributes
-and legacy/hybrid MBRs expose no map. One valid copy supplies a read-only degraded
-map only when the other is absent or invalid; I/O errors, timeouts and unsupported
-metadata prevent fallback. These conservative bounds can exclude otherwise usable
-media. Revisit only for a concrete consumer with explicit resource limits and
-recovery policy; no automatic repair is available.
+[GPT discovery](devices/gpt.md) publishes one snapshot per device. Exclusive installer raw claims exclude mounts and refresh the snapshot on
+release, but there is no hotplug, external-mutation detection or automatic repair, borrowed views last only until the next scheduling point,
+and health does not track later transport failure or changes during raw writes; external host writers are unsupported. Revisit generation
+tracking and broader replacement lifetimes with a concrete consumer. The supported profile is GPT 1.0 on 512-byte or 4 KiB blocks, at most 256
+entries and 64 KiB per array; unsupported revisions, larger layouts, reserved attributes and legacy or hybrid MBRs expose no map, and one valid
+copy gives a read-only degraded map only when the other is absent or invalid (I/O errors, timeouts and unsupported metadata prevent fallback).
+These bounds can exclude usable media; revisit only for a consumer with explicit resource limits and a recovery policy.
 
 ## Installer authority and retained pools
 
-The [installer disk service](devices/installer-authority.md) supplies explicit raw
-claims and immutable boot sources. The [native installer](userland/installer.md)
-establishes target consent; the kernel does not interpret `SAFE_TO_WIPE`.
-
-Any retained npfs pool blocks an exclusive raw-write claim on its device, even
-when read-only and after all handles close. Opening a volume to inspect a marker
-therefore cannot be followed by raw formatting of that device in the same boot.
-This is the owner-accepted current direction. There is no pool teardown or
-installer bypass. The installer inspects each volume's root marker through raw
-reads and the format library, overlaying a committed journal in memory without
-writing before consent. Rejected consent leaves the disk untouched; accepted
-targets will be wiped rather than receive a persisted replay. Pool retirement
-is a prerequisite of the later live-install flow, which can inspect through
-normal mounts before installing in the same boot. It needs an explicit
-pool-retirement and ownership contract. Read-only raw handles acquire no claim
-and promise no snapshot against raw writes.
-
-Physical-media, power-loss and uncertain-failure evidence remains separate from
-ordinary emulated operation; revisit reliability claims only with corresponding
-validation.
+The [installer disk service](devices/installer-authority.md) supplies explicit raw claims and immutable boot sources, and the
+[native installer](userland/installer.md) establishes target consent (the kernel does not interpret `SAFE_TO_WIPE`). Any retained npfs pool blocks
+an exclusive raw-write claim on its device, even read-only and after all handles close, so opening a volume to inspect a marker cannot be followed by
+raw formatting of that device in the same boot (owner-accepted direction; no pool teardown or installer bypass). The installer instead inspects each
+volume's root marker through raw reads and the format library, overlaying a committed journal in memory with no write before consent, so rejected
+consent leaves the disk untouched and accepted targets are wiped rather than receiving a persisted replay. Pool retirement with an explicit ownership
+contract is a prerequisite of the later live-install flow, which can inspect through normal mounts and install in the same boot. Read-only raw handles
+acquire no claim and promise no snapshot against raw writes. Physical-media, power-loss and uncertain-failure evidence stays separate from emulated
+operation.
 
 ## Installer inspection and recovery limits
 
-Consent validates GPT, npfs headers and the complete committed journal, then
-checks allocation/mappings encountered on root-marker paths. It does not prove
-whole-filesystem ownership or inspect unrelated files. A large committed log
-requires reading every record before eligibility is known; inspection retains
-descriptors rather than the whole log. Revisit with measured large-log workloads
-or a concrete need for whole-filesystem qualification.
+Consent validates GPT, npfs headers and the complete committed journal, then checks allocation and mappings on root-marker paths; it does not prove
+whole-filesystem ownership or inspect unrelated files, and a large committed log must be read in full before eligibility is known (inspection keeps
+descriptors, not the log). Revisit with large-log measurements or a need for whole-filesystem qualification. [System-update inspection](userland/system-updates.md)
+validates allocation bitmaps, live catalog records and the system inode file, root and cleanup chain against writable-mount admission, with no
+whole-pool ownership check or ordinary file reads; its bounded FAT32 reader follows required paths on the fixed 512 MiB ESP (at most 64 KiB of
+configuration and 64 bytes of revision text) and checks traversed FAT copies and chains only. A healthy GPT and compatible empty-journal pool permit
+rebuilding missing or damaged ESP contents, while readable foreign or invalid disk bindings and raw I/O or allocation failures refuse, the optional
+revision record cannot override binding checks, and a selected committed journal is refused without loading or replaying it. Revisit these bounds with a
+new installed layout or a general FAT service; whole-pool checking is fsck's role.
 
-[System-update inspection](userland/system-updates.md) validates allocation
-bitmaps, live catalog records and the system inode file/root/cleanup chain
-against writable-mount admission. It does not run a whole-pool ownership check
-or read ordinary file contents. Its bounded
-FAT32 reader follows required paths on the fixed 512 MiB ESP, with at most
-64 KiB of configuration and 64 bytes of revision text. It checks traversed FAT
-copies/chains, not every unrelated file. Healthy GPT and a compatible empty-journal
-pool permit rebuilding missing/damaged ESP contents; readable foreign/invalid
-disk bindings and raw I/O/allocation failures still refuse. The optional revision
-record cannot override configuration binding checks. Revisit these bounds when
-supporting a new installed layout or general FAT service; whole-pool checking remains fsck's
-role. A selected committed journal is refused without loading or replaying it.
-
-Installation writes fresh metadata and boot files; it does not securely erase
-free space. Update replaces the whole ESP, discarding unrelated ESP files, with
-no fallback entry. An interrupted ESP replacement can be rebuilt by booting live
-media again and choosing Update while the GPT and pool remain eligible; see the
-[QEMU recovery record](development/experiments/system-updates-task2/README.md).
-Revisit the absence of fallback/atomic replacement with a separately agreed
-in-system update design. An interrupted installation can leave a partial disk,
-without rollback or automatic repair. Ordinary QEMU success/refusal cases and
-host structural checks do not qualify power loss, uncertain I/O, physical USB
-media, NVMe or physical firmware.
-Revisit those limits with the assigned end-to-end hardware task and separately
-authorized recovery validation.
-
-The owner deferred native ThinkPad installation on 2026-10-04 while completing
-[task-5 QEMU
-qualification](development/experiments/native-filesystem-task5/README.md).
-VirtIO and per-device qualified USB now support writable native mounts. USB
-write/cache synchronization is implemented for C.1, and C.3 enables the trusted
-installer's bounded raw authority for retained USB candidates. On 2026-10-05,
-the first native [USB installation](devices/usb-installation.md) wrote one
-expendable stick from PXE live media. Writable mounting, persistence across a
-synced power-off and one Update round trip passed natively; see the
-[owner-reported record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4).
-Power loss during writes, uncertain I/O and other devices, ports or the dock
-path remain unqualified. The internal NVMe remains unsupported.
+Installation writes fresh metadata and boot files without securely erasing free space. Update replaces the whole ESP (discarding unrelated ESP files)
+with no fallback entry; an interrupted replacement is rebuilt by booting live media and choosing Update while the GPT and pool stay eligible
+([recovery record](development/experiments/system-updates-task2/README.md)), and an interrupted installation can leave a partial disk without rollback
+or repair. Revisit fallback and atomic replacement with an agreed in-system update design. VirtIO and per-device qualified USB support writable native
+mounts (USB write and cache synchronization is implemented), and the first native [USB installation](devices/usb-installation.md) on 2026-10-05
+wrote an expendable stick from PXE live media: writable mounting, persistence across a synced power-off and one Update round trip passed
+([owner record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4)). Power loss during writes, uncertain I/O, other
+devices, ports or the dock path, and physical firmware are unqualified, and the internal NVMe is unsupported.
 
 ## Updates from before boot init
 
-Update recognizes only the current installed form of the
-[system layout](userland/system-layout.md), boot init's normal and rescue entries.
-An installation from before boot init, such as 0.0.2, is reported as having
-damaged or missing boot files and an unknown revision, and is rebuilt. The pool
-is unaffected. Because the previous revision is unknown, that Update removes no
-program directories. Revisit if another older form needs a direct Update.
+Update recognizes only the current installed form of the [system layout](userland/system-layout.md) (boot init's normal and rescue entries). An
+installation from before boot init, such as 0.0.2, reports damaged or missing boot files and an unknown revision and is rebuilt; the pool is
+unaffected, and because the previous revision is unknown that Update removes no program directories. Revisit if another older form needs a direct
+Update.
 
 ## RAM volumes
 
-Boot init makes each configured `ram` volume, such as the live `home://`, as a
-subdirectory of one private RAM directory the kernel hands it as the `ram`
-resource. No ABI creates a detached RAM directory, so only boot init can make
-RAM volumes, all share one RAM filesystem, and nothing limits their size apart
-from memory. Add an ABI that creates RAM volumes when a second user, such as a
-per-session scratch volume or a size limit, needs one.
+Boot init makes each configured `ram` volume (such as the live `home://`) as a subdirectory of one private RAM directory the kernel hands it as
+the `ram` resource. No ABI creates a detached RAM directory, so only boot init can make RAM volumes, all share one RAM filesystem, and only
+memory limits their size. Add an ABI for creating RAM volumes when a second user, such as a per-session scratch volume or a size limit, needs one.
 
 ## Boot init and space creation
 
-[Boot init](userland/init.md#boot-configuration) and the
-[space factory](userland/init.md#space-creation) have these limits:
+[Boot init](userland/init.md#boot-configuration) and the [space factory](userland/init.md#space-creation) have these limits:
 
-- Space creation panics on memory exhaustion, as boot-time creation always
-  did. Only boot init can create spaces, early in boot. Make creation fallible
-  before the new-space flow lets users create spaces.
-- A failed launch returns only a status. The caller cannot tell a request
-  rejected before creation from a space that was created and left unstarted;
-  boot init only reports it. Revisit with the space manager.
-- Spaces are never destroyed.
-- There is no limit on how many spaces a configuration creates, though each
-  costs about 8 MiB at 1080p. The owner chose not to add one (2026-10-06):
-  installed hardware has ample memory, and the rescue entry recovers an
-  override that exhausts it.
-- Space inits must be `boot://` archive entries, and they hold no mount
-  authority, so `sync --disk` is unavailable to them; `sync PATH...` works.
-- Every new space's first process receives that space's console, keyboard,
-  pointer, display and space grants, so the installer now holds input,
-  display and title authority it does not use.
-- Configuration errors are Lua messages and call statuses are numbers.
-- Spaces created one after another usually start their inits on the same AP,
-  because earlier inits are blocked and do not count toward load; boot used to
-  place all inits before scheduling, on CPUs 1, 2 and 3. Balancing moves
-  runnable tasks later. Revisit if interactive latency suffers.
+- Space creation panics on memory exhaustion, and only boot init creates spaces, early in boot; make creation fallible before users can create spaces.
+- A failed launch returns only a status, so the caller cannot tell a rejected request from a space created and left unstarted (revisit with the
+  space manager). Spaces are never destroyed.
+- No limit on how many spaces a configuration creates, though each costs about 8 MiB at 1080p; the owner chose not to add one (2026-10-06) because
+  installed hardware has ample memory and the rescue entry recovers an override that exhausts it.
+- Space inits must be `boot://` archive entries and hold no mount authority (`sync --disk` is unavailable, `sync PATH...` works).
+- Every new space's first process receives that space's console, keyboard, pointer, display and space grants, so the installer holds input, display
+  and title authority it does not use. Configuration errors are Lua messages and call statuses are numbers.
+- Spaces created one after another usually start their inits on the same AP, since blocked inits do not count toward load (boot used to place
+  all inits first, on CPUs 1–3); balancing moves runnable tasks later. Revisit if interactive latency suffers.
 
 ## Rescue set programs
 
-Installed systems run ordinary programs from `bin://`, but the boot archive's
-rescue set still carries `textfs` and `httpfs`. The init scripts start those
-providers before any shell, and a launch failure stops a script, so without them
-a system whose `bin` volume is missing would get no shell, not even from the
-rescue entry. Most programs should eventually load from the installed system
-rather than the rescue archive. Revisit once inits can start providers from
-`bin://` with a fallback, or tolerate a missing provider.
-
-Related limits of the [program stage](userland/system-updates.md#program-stage):
-
-- Only executables move. `share/`, `sdk/` and configuration stay in `boot://`,
-  because programs and ports name those paths; moving data needs path changes.
-- Builds without a Git revision share `bin/unknown`, so two such builds cannot
-  keep separate program directories.
-- The installer holds the boot archive twice in memory while filtering it,
-  about 90 MiB for today's archive.
-- Spaces receive `bin://` read-only; only the installer writes it.
+Installed systems run ordinary programs from `bin://`, but the boot archive's rescue set still carries `textfs` and `httpfs`: the init scripts start
+those providers before any shell and a launch failure stops a script, so without them a system whose `bin` volume is missing would get no shell even
+from the rescue entry. Revisit once inits can start providers from `bin://` with a fallback or tolerate a missing provider. Related limits of the
+[program stage](userland/system-updates.md#program-stage): only executables move (`share/`, `sdk/` and configuration stay in `boot://` because programs
+name those paths), builds without a Git revision share `bin/unknown`, the installer holds the boot archive twice in memory while filtering (about
+90 MiB today), and spaces get `bin://` read-only with only the installer writing it.
 
 ## Interim program revision directories
 
-Each Update copies every moved program into a new `bin/REVISION` directory, even
-when a program is unchanged, and the pool keeps two complete revisions. The
-directory is selected by the running kernel's revision, so programs cannot be
-updated without a new kernel and ESP. The [system layout](userland/system-layout.md#programs)
-accepted this as interim. Revisit when a final program update scheme is
-designed.
+Each Update copies every moved program into a new `bin/REVISION` directory even when unchanged, and the pool keeps two complete revisions. The
+directory follows the running kernel's revision, so programs cannot be updated without a new kernel and ESP. The
+[system layout](userland/system-layout.md#programs) accepted this as interim; revisit when a final program update scheme is designed.
 
 ## Archive-only network configuration
 
-Network profiles live only in `boot://config/network.lua`. On an installed
-system, changing them needs an Update, while spaces can change through the
-pool override ([system layout](userland/system-layout.md)). Boot init now exists, so
-this is the next follow-up: move network configuration onto the pool, following
-the same override pattern.
+Network profiles live only in `boot://config/network.lua`, so on an installed system changing them needs an Update, while spaces can change through
+the pool override ([system layout](userland/system-layout.md)). The next follow-up is moving network configuration onto the pool with the same
+override pattern.
 
 ## USB image updates and firmware qualification
 
-The [raw USB image builder](development/usb-image.md) creates fresh images and
-replaces the sample pool and its identities on every rebuild. There is no
-preservation of installed data, rollback or atomic physical update protocol.
-The manual copy procedure relocates backup GPT on larger media but does not
-expand the pool. Installed systems use the [native installer](userland/installer.md)
-and its pool-preserving Update instead; the raw image remains a development
-artifact. Revisit image preservation only if raw images become a delivery format.
-
-Emulated USB boot has reached the shell, but an intermittent
-[pre-kernel Limine file-open failure](development/qemu.md#usb-firmware-file-open-failure-before-kernel-entry)
-remains unexplained. Successful unchanged-image retries do not qualify firmware
-boot reliability or physical-controller behavior. Revisit with firmware/USB I/O
-diagnosis and the separately assigned hardware stage; native reads/writes and
-physical media have no validation claim from Phase A.
+The [raw USB image builder](development/usb-image.md) creates fresh images and replaces the sample pool and its identities on every rebuild, with no
+preservation of installed data, rollback or atomic physical update; the manual copy procedure relocates backup GPT on larger media but does not expand
+the pool. Installed systems use the [native installer](userland/installer.md)'s pool-preserving Update, and the raw image stays a development artifact
+(revisit preservation only if raw images become a delivery format). Emulated USB boot has reached the shell, but an intermittent
+[pre-kernel Limine file-open failure](development/qemu.md#usb-firmware-file-open-failure-before-kernel-entry) remains unexplained, and successful
+retries do not qualify firmware boot reliability or physical-controller behavior; revisit with firmware and USB I/O diagnosis in the assigned
+hardware stage.
 
 ## RTL8111 initial-state support
 
-The [RTL8111 preparation path](devices/rtl8111-hardware.md#controller-preparation)
-rejects D3hot wake without `NoSoftRst`: that transition can discard assigned BARs,
-and the temporary identity probe saves only Command/PMCSR. Such a controller
-remains unavailable while boot continues. Revisit PCI configuration restoration
-if owner-run native qualification encounters this state.
+The [RTL8111 preparation path](devices/rtl8111-hardware.md#controller-preparation) rejects D3hot wake without `NoSoftRst`, since that transition
+can discard assigned BARs and the temporary identity probe saves only Command/PMCSR; such a controller stays unavailable while boot continues.
+Revisit PCI configuration restoration if owner-run native qualification meets this state.
 
 ## RTL8111 runtime limits
 
-The [RTL8111 I/O path](devices/rtl8111-hardware.md#ethernet-io) supports XID `541`
-only. Each prepared controller retains two contiguous 68 KiB ring allocations
-and one page for hardware tally snapshots; unselected hardware stays inactive.
-Runtime failure attempts reset and disables
-DMA/delivery but retains claims, buffers and shared mappings until reboot. The
-first binding has no fallback or controller switching. Revisit reclamation with
-a concrete teardown and SMP invalidation contract.
-
-[Qualification](development/rtl8111-qualification.md) covers sustained VFIO
-traffic and an owner-run native cold/PXE boot with the dock attached, without
-imported firmware. Native unplug, device-owned TX at carrier loss, every PHY
-speed and gigabit line rate remain unqualified. The native wired result and VFIO
-Wi-Fi results have different environments and cannot isolate a throughput
-bottleneck. Revisit those limits with a concrete reproduction or a separately
-assigned measurement task. No jumbo-frame reassembly, offloads, firmware
-interpreter or automatic restart is implemented; a measured firmware requirement
-would need a focused import with provenance and redistribution terms.
-
-Hardware tallies are accessible only through the internal GDB capture helper.
-Revisit that diagnostic interface when a network status command is assigned;
-there is no public statistics ABI or periodic tally polling today.
+The [RTL8111 I/O path](devices/rtl8111-hardware.md#ethernet-io) supports XID `541` only. Each prepared controller retains two contiguous 68 KiB
+rings and one page for hardware tally snapshots, and unselected hardware stays inactive. Runtime failure attempts reset and disables DMA and delivery
+but retains claims, buffers and shared mappings until reboot, and the first binding has no fallback or switching; revisit reclamation with a
+teardown and SMP invalidation contract. [Qualification](development/rtl8111-qualification.md) covers sustained VFIO traffic and an owner-run native
+cold/PXE boot with the dock attached, without imported firmware; native unplug, device-owned TX at carrier loss, every PHY speed and gigabit line rate
+are unqualified, and the native wired and VFIO Wi-Fi results come from different environments and cannot isolate a throughput bottleneck. No jumbo
+reassembly, offloads, firmware interpreter or automatic restart exists (a measured firmware requirement would need a focused import with provenance and
+redistribution terms). Hardware tallies are reachable only through the internal GDB capture helper; revisit when a network status command is assigned,
+as there is no public statistics ABI or tally polling.
 
 ## Initial net0 selection limits
 
-[Automatic selection](devices/net0-selection.md) requires complete discovery and
-reported carrier. VirtIO without STATUS needs an explicit selector; an incomplete
-inventory leaves the setup owner waiting while the shell remains available.
-Selection binds once until reboot, with no controller fallback or lease
-revalidation on link-up. A cable moved to another port therefore requires reboot
-or an explicit future switching design. Revisit with drain/teardown ownership and
-DHCP link-up policy, rather than adding a second binding or lease authority.
+[Automatic selection](devices/net0-selection.md) requires complete discovery and reported carrier; VirtIO without STATUS needs an explicit selector,
+and an incomplete inventory leaves the setup owner waiting while the shell stays available. Selection binds once until reboot, with no controller
+fallback or lease revalidation on link-up, so a cable moved to another port needs a reboot. Revisit with drain and teardown ownership and DHCP link-up
+policy, not a second binding or lease authority.
 
 ## Virtio-net runtime resource retention
 
-The external interface's first unique configuration binding lasts until reboot.
-Address clearing preserves it; controller switching and fallback after failure
-are unsupported. Unselected prepared controllers retain their boot resources
-with DMA/delivery off. Revisit runtime switching with a concrete teardown,
-packet draining and SMP invalidation contract rather than adding implicit fallback.
-
-The [network transport](devices/networking.md#virtio-net-transport) uses two nine-page
-contiguous allocations for rings and packet buffers (72 KiB total). Runtime
-failure attempts reset and disables delivery/DMA, but retains the PCI claim,
-allocations and mappings until reboot, for the same shared-mapping lifetime
-reason as virtio-fs. No reconnect or repeated allocation occurs. Revisit both
-drivers' reclamation with a real teardown and SMP invalidation contract.
+The external interface's first unique configuration binding lasts until reboot: address clearing preserves it and controller switching or fallback
+after failure is unsupported, and unselected prepared controllers keep their boot resources with DMA and delivery off. The
+[network transport](devices/networking.md#virtio-net-transport) uses two nine-page contiguous allocations (72 KiB) for rings and packet buffers, and a
+runtime failure attempts reset and disables delivery and DMA but retains the PCI claim, allocations and mappings until reboot, for the same
+shared-mapping lifetime reason as virtio-fs. Revisit runtime switching and both drivers' reclamation with a teardown, packet draining and SMP
+invalidation contract, not implicit fallback.
 
 ## Host filesystem request storage and enumeration
 
-The [native virtio-fs backend](devices/virtio-fs.md#native-directory-and-file-objects)
-uses the largest record in each user task's reusable 4,928-byte request allocation,
-including a 4 KiB read/write buffer. A separate 720-byte persistent profile
-allocation is also eager. Kernel workers allocate neither area. This avoids
-allocating on APs or exposing private stacks to the worker, but every user task
-pays both costs even if it never accesses HOST or enables profiling. Eager
-provisioning is accepted to keep submission allocation-free and guarantee cleanup
-capacity. Revisit lazy provisioning if user-task counts or memory pressure make
-the cost material, with explicit allocation-failure, BSP handoff and guaranteed
-cleanup ownership; do not add another fixed request registry. The common BSP
-executor forwards these records without waiting for blocking host I/O.
-
-The native enumeration ABI returns one name per call. The backend requests a
-fresh 4 KiB READDIR batch and discards unused entries, so a large listing can
-transfer the same trailing names repeatedly. There is no attribute/data cache
-or directory snapshot. Revisit batching with a concrete consumer and explicit
-host-change semantics. Host executable loading captures at most 16 MiB per
-launch into owned memory; it does not provide a coherent snapshot if a host
-process edits the file in place during capture. Callers must avoid in-place
-changes while loading, and before/after size checks cannot prove snapshot
-consistency. Revisit the per-capture limit only with a bounded staging and
-concurrency design that preserves this lifetime contract.
-
+The [native virtio-fs backend](devices/virtio-fs.md#native-directory-and-file-objects) uses the largest record in each user task's reusable
+4,928-byte request allocation (including a 4 KiB read/write buffer) plus a separate eager 720-byte profile allocation, which kernel workers do not
+allocate. Every user task pays both even if it never uses HOST or profiling; this keeps submission allocation-free and guarantees cleanup capacity.
+Revisit lazy provisioning if task counts or memory pressure make it material, with explicit failure, BSP handoff and cleanup ownership and no extra
+fixed registry. The native enumeration ABI returns one name per call and the backend requests a fresh 4 KiB READDIR batch discarding unused entries,
+so large listings can transfer trailing names repeatedly, with no attribute or data cache or directory snapshot (revisit batching with a consumer and
+host-change semantics). Host executable loading captures at most 16 MiB per launch into owned memory without a coherent snapshot if the host edits
+the file in place meanwhile; callers must avoid in-place changes, and revisit the limit only with a bounded staging and concurrency design.
 
 ## Initial TCP listener limits
 
-Native [TCP listeners](devices/tcp.md#listening-and-admission) bind only the exact
-configured NIC IPv4 address, with no wildcard, loopback listener, ephemeral bind
-or reuse. Four listeners and their pending/accepted connections share 32 global
-transport records; TIME_WAIT can block later admission even below the per-listener
-backlog limit. These development bounds provide no per-space quota or protection
-against exhausting the global budget. Revisit them with concrete concurrent-server
-demand and an explicit authority/accounting policy, not by evicting live records.
-
-The echo consumer serves four clients with bounded output and fair service, but
-has no idle-client or output-drain deadline. Four stalled clients can occupy all
-active slots indefinitely. Readiness also supports terminal attachments and
-execution-group and process completion. The [remote server](userland/remote-terminal.md)
-adds its own session supervision and closing-output deadline; the echo consumer
-retains its simpler semantics. Revisit echo-client expiration only if a concrete
-consumer needs it.
+Native [TCP listeners](devices/tcp.md#listening-and-admission) bind only the exact configured NIC IPv4 address (no wildcard, loopback listener,
+ephemeral bind or reuse). Four listeners and their pending and accepted connections share 32 global transport records, TIME_WAIT can block admission
+below the per-listener backlog, and there is no per-space quota or protection against exhausting the budget; revisit with concurrent-server demand and
+an authority and accounting policy, never by evicting live records. The echo consumer serves four clients with bounded output and fair service but
+has no idle-client or output-drain deadline, so four stalled clients can hold all slots (the [remote server](userland/remote-terminal.md) has its own
+supervision and closing-output deadline); revisit expiration only if a consumer needs it.
 
 ## TCP throughput limits
 
-After the [network throughput](development/network-throughput.md) work, native
-send reaches 70.5 MiB/s with 8 KiB writes and receive 85 MiB/s into a discard
-sink, measured on the ThinkPad on 2026-10-09.
+After the [network throughput](development/network-throughput.md) work, native send reaches 70.5 MiB/s with 8 KiB writes and receive 85 MiB/s into a
+discard sink (ThinkPad, 2026-10-09).
 
-- **Send is bound by per-segment and per-call cost.** At most about 24–26 KiB
-  of the 64 KiB window is in flight, and 2 KiB writes reach 44 MiB/s against
-  70. Each native call moves at most 4 KiB through the single BSP network
-  worker. Revisit with worker batching or a larger call extent, measured
-  against the same runs.
-- **A second loss in one window waits for the retransmission timeout.** One
-  native 2 KiB send in six stalled about 1.09 s: fast retransmit repaired the
-  first missing segment, and lwIP resent the second only on its timeout. Watch
-  for repeats before changing loss recovery.
-- **Receive into a RAM file is consumer-bound.** Into `tmp://` it reaches
-  45–57 MiB/s while Pyxis's advertised window falls close to zero; the program
-  writing the file is the limit, not TCP.
-- **Clock reads per packet.** In QEMU the network worker's wake and sleep
-  cycle read the HPET about 27 times per data segment, nearly all in timer
-  handling, and the audio work in #557 found the same amplification. Timer
-  passes now read the clock at most once, and with a qualifying TSC a read no
-  longer touches the HPET; see
-  [clock-source performance](#wall-clock-time-and-clock-source-performance).
-  Native costs before and after are unmeasured.
-- **Not implemented:** path-MTU discovery, so routed peers get 536-byte
-  segments; window scaling, so windows stop at 65,535; SACK.
+- **Send is bound by per-segment and per-call cost:** at most about 24–26 KiB of the 64 KiB window is in flight, and 2 KiB writes reach 44 MiB/s against
+  70; each native call moves at most 4 KiB through the single BSP network worker. Revisit with worker batching or a larger call extent, measured against
+  the same runs.
+- **A second loss in one window waits for the retransmission timeout:** one native 2 KiB send in six stalled about 1.09 s, because fast retransmit
+  repaired the first missing segment and lwIP resent the second only on its timeout. Watch for repeats before changing loss recovery.
+- **Receive into a RAM file is consumer-bound:** into `tmp://` it reaches 45–57 MiB/s while the advertised window falls close to zero; the writing
+  program is the limit, not TCP.
+- **Measure from the local shell.** `ttcp -r` driven through a concurrent remote-terminal session was erratic (11.8–58.5 MiB/s) against 91.2 MiB/s
+  from the local shell on the same boot, as the network-throughput record already says.
+- **Clock reads per packet:** in QEMU the network worker's wake and sleep cycle read the HPET about 27 times per data segment, nearly all in timer
+  handling (the audio work in #557 saw the same amplification). Timer passes now read the clock at most once and a qualifying TSC avoids the HPET
+  ([clock-source performance](#wall-clock-time-and-clock-source-performance)); native costs before and after are unmeasured.
+- **Not implemented:** path-MTU discovery (routed peers get 536-byte segments), window scaling (windows stop at 65,535) and SACK.
 
 ## DHCP maintainer and client limits
 
