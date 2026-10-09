@@ -1,17 +1,18 @@
 # Claude on Pyxis
 
 Status: owner-authorized docs-only proposal, 2026-10-09. Track 1 is a small
-in-repo Lua harness using the Anthropic Messages API and four native tools.
-Track 2, after the harness, investigates a Hax port. Decisions 1 and 3 remain
-proposed defaults; decision 2 records the owner's development credential policy.
-None authorizes implementation.
+writable HTTPS provider and prepared requests for shell-scripted API testing,
+then an in-repo Lua Messages harness with four native tools. Track 2, after the
+harness, investigates a Hax port. Provider-first file I/O and the development
+key-file policy are owner direction; transaction details and loop budgets below
+remain proposed defaults. This document authorizes no implementation.
 
 Source inspected: Pyxis `28051508528fdd11faf848bb48d41bee80d960eb`, userland
 `74f3e2294c1153ccf00a395b3a451e03d7bbbf68`, ports
 `6d63971dbad8683d89d552c526b68486a53ee09d`. No builds, QEMU runs, credential
 reads or paid API requests were performed for this proposal.
 
-## Track 1: Lua Messages harness
+## Track 1: prepared HTTPS files, then the Lua harness
 
 The [Messages API](https://platform.claude.com/docs/en/api/messages/create)
 accepts a JSON POST at `https://api.anthropic.com/v1/messages`, with a model,
@@ -23,7 +24,11 @@ tools sequentially, retain the assistant content, and return matching
 results; incomplete arguments never execute. End-of-turn, refusal, token limit
 and unknown stop reasons stop the loop instead of silently retrying. See
 [tool-call lifecycle](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls).
-First slice is non-streaming; SSE is a later optional task.
+The harness exchanges bytes through ordinary Lua file I/O on `json+https://`
+URIs and uses the same generic prepare/commit/status controls as the shell. It
+contains no HTTP client or Lua HTTPS binding. TLS stays in the provider process,
+so Lua hashing and libtls do not share crypto ownership. First slice is
+non-streaming; SSE is a later optional task.
 
 ### Inspected support and gaps
 
@@ -32,8 +37,9 @@ First slice is non-streaming; SSE is a later optional task.
 | Files and directories | Lua has real `io` reads/writes, seek, rename/remove and `pyxis.dir`. Directory enumeration accumulates the whole table and reports changed-generation errors. | Project-relative text tools; bounded enumeration/results, explicit errors and same-parent replacement for writes. Flush/close are not durability; explicit sync needs a binding if durable writes are promised. |
 | HTTP POST | [libhttp](../userland/http-fetch.md) sends GET with fixed headers, no request body; successful bodies are limited to 200/204. Other statuses retain no error body; generic response headers are not exposed. | Separate bounded request operation: POST, validated caller headers/body, complete response status/body including errors, selected diagnostic headers. Preserve GET/provider behavior. |
 | Longer deadline | Libhttp clamps even a supplied deadline to 30 s. Native TCP calls independently reject deadlines more than 30 s ahead; TLS passes that deadline through and treats timeout as terminal. | One explicit overall deadline with bounded native-call waits underneath; adapt TLS timeout handling without replaying already sent requests or enlarging kernel TCP limits. |
-| Lua HTTPS | `pyxis` exports `run`, `dir`, `sha256`; no HTTPS binding. Libhttp/libtls are userland application libraries built after ports. | Userland embedding/binding, using the exported Lua core and shared native registration, not a ports-to-userland build cycle. |
-| Crypto ownership | Lua's native module and libtls each define the entropy hook and own PSA initialization, allocator hooks and teardown. | One process-local crypto owner in the embedded application; preserve existing Lua hashing and TLS behavior. Directly linking both owners is invalid. |
+| Writable provider | Current HTTPS publishes read-only snapshots. Provider OPEN returns one FILE; FILE has READ/WRITE, no commit control. | Staged body FILE, separate request control and immutable response FILE over existing exported objects. |
+| Prepared handoff | Endpoint CALL replies already transfer capabilities, but the shell has no prepared-request variables/controls. | Generic libc/Lua request helpers and shell capability bindings; real grants returned to the running caller. |
+| Lua/TLS boundary | The Lua port supplies file I/O and `pyxis`; TLS is already isolated in the HTTPS provider. | Keep that boundary. No Lua HTTPS binding, application HTTP library dependency or crypto-owner integration task. |
 | Command output | `pyxis.run` inherits current streams and waits; changing Lua `io.output` does not redirect child stdout. No capture/deadline option exists. | Native launch with explicit FILE streams, result/deadline observation, capped tool results and cleanup. No `io.popen` or fake `os.execute`. |
 
 Existing [TLS](../userland/https.md) verifies chain, DNS name and dates with
@@ -47,14 +53,12 @@ body are useful diagnostics; request headers and credentials are not logs.
 
 The owner's 2026-09-24 direction for [future writable providers](userspace-scheme-providers.md#future-writes-and-shell-operations)
 and [prepared requests and shell handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
-already describes POST through files: `fopen` with `"w"`/`"w+"` stages a body,
-an explicit commit submits one POST, and reads return its response, without
-automatic retry. Flush/close must not implicitly submit a request.
-Task 1a's bounded libhttp POST operation is the engine that future writable
-provider will use, not a second HTTP implementation. The harness can move onto
-that file path once the provider exists, preserving its credential, deadline
-and no-retry policy. Implementing writable providers or shell handoff is outside
-these harness tasks.
+is now a prerequisite: `cat`/read opens GET; `fopen` with `"w"`/`"w+"` stages a
+POST body, explicit commit submits once, and reads then consume the response.
+`json+https` sets JSON Accept/Content-Type; it does not serialize or validate JSON.
+Task 1a supplies the provider's bounded HTTP engine, used by providers rather
+than applications. The Lua harness starts on this file path, after the provider
+and prepared-request consumer work; it does not migrate from a private client.
 
 Select [dkjson 2.11](https://dkolf.de/dkjson-lua/dkjson-2.11.lua), MIT, pure Lua,
 without optional LPeg. Its versioned source has author-published SHA-256
@@ -66,38 +70,43 @@ tool-input objects must remain objects. Its permissive decoder is not a complete
 strict-JSON validator: bound input/nesting, require complete consumption, validate
 UTF-8 and every tool schema, and never evaluate response text as Lua code.
 
-Task 1c uses the [owner's dkjson mirror](https://repo.internal/repository/raw-dkolf/dkjson-lua/dkjson-2.11.lua),
+The JSON task uses the [owner's dkjson mirror](https://repo.internal/repository/raw-dkolf/dkjson-lua/dkjson-2.11.lua),
 available and SHA-256 verified by the owner at the hash above. Preserve that pin
 and license when vendoring; no upstream fallback. Lua, Mbed TLS and the HTTP
 parser already have pinned recipes; no compiler-container rebuild is proposed.
 
 ## Three owner decisions, with defaults
 
-1. **Where does the native binding live? Default: a first-party userland
-   application embedding the exported Lua core.** The harness logic remains Lua.
-   Run the agent through trusted, dedicated-space startup, with the selected
-   project/work views and supervision launcher; it is not ordinary `lua script`
-   inheriting a general development shell's roots.
-   Share the existing native `pyxis` registration rather than copying its source;
-   make its reusable export and crypto ownership explicit in coordinated
-   userland/ports work. In the embedded process, libtls supplies the one crypto
-   owner; hashing must borrow that state instead of reinstalling global hooks.
-   This respects SDK → ports → userland ordering and keeps HTTP/TLS application
-   libraries out of the base SDK. A separate HTTPS helper process would avoid
-   shared crypto but add request/credential transport and lifetime machinery.
+1. **Who may submit and observe a prepared request? Default: one shared
+   transaction with separate body, control and response grants.** The shell or
+   harness is its coordinator. It retains commit/status/abort authority and gives
+   body producers only WRITE; response consumers receive only READ. Copied
+   controls share the transaction state, not independent submission authority.
+   The first accepted commit freezes the body and starts at most one POST;
+   later commits only report the retained state and never send again. The
+   coordinator waits for all producers to finish successfully before committing.
+   Separate grants keep ordinary FILE rights narrow; adding commit to FILE WRITE
+   would let a producer submit before the coordinator has accepted its result.
+   The contract below is proposed, not an implemented protocol.
 
 2. **Where does the API key live? Owner direction: a saved development key in
    one file, delegated read-only only to the harness.** Trusted startup opens
    that file and passes a dedicated named FILE grant, not its containing
-   directory. The native HTTPS binding performs a bounded read, closes the grant
-   and holds the key in process-private memory, adding it only to the verified
-   Messages endpoint under the
+   directory. Trusted native preparation code in the harness performs a bounded
+   read, closes the FILE and holds the key in process-private memory. It sends
+   the key as a request-scoped `x-api-key` header in copied preparation data for
+   the verified Messages endpoint under the
    [API authentication contract](https://platform.claude.com/docs/en/api/overview).
    The file is never part of the project view, shared `tmp://`, a child's roots
    or resources, the boot image or PXE staging. Do not expose the key or its FILE
    grant as a Lua global, tool input/result, environment variable, argument,
-   log, transcript or request-header dump. No key value belongs in the repository
-   or documentation; a missing or invalid grant stops before any API request.
+   log, transcript or request-header dump. The provider receives header bytes,
+   never the key FILE or its directory. It retains those bytes only for this
+   request, with no header-read operation or cross-request defaults. Subsequent
+   Messages requests each prepare their own header; model-facing URI tools
+   cannot obtain or reuse that credential or the harness's prepared controls.
+   No key value belongs in the repository or documentation; a missing or invalid
+   grant stops before any API request.
 
    On an **installed system**, keep `anthropic-key` in an owner-provisioned,
    dedicated NPFS credential volume, opened as `credentials://anthropic-key` by
@@ -142,15 +151,101 @@ parser already have pinned recipes; no compiler-container rebuild is proposed.
    without hidden retry, silent history truncation or another paid call.
    Streaming, shell-language execution and background tools require later scope.
 
+## Prepared request contract proposed for tasks 1b/1c
+
+PREPARE fixes the URI, POST method, request-scoped headers, byte caps and one
+absolute deadline. It stages no network request. Provider service authority must
+explicitly permit preparation/submission; an OPEN_READ grant permits GET only.
+Headers such as Authorization or x-api-key are attached by the provider for that
+request only. Accept/Content-Type may come from the JSON alias; the provider owns
+framing and rejects duplicate/conflicting or CR/LF-bearing headers. Secret values
+enter through private native preparation, not shell arguments/history or printed
+metadata, and are never readable back. Credential-bearing requests remain bound
+to their prepared endpoint, with no redirects, plaintext downgrade, global header
+store or authenticated response cache. TLS trust remains the existing policy.
+
+| Grant | Permitted operations and phase |
+| --- | --- |
+| Body FILE, WRITE | Bounded write/resize while staging. Copies share one body. No readback, header access or submission; SYNC is unsupported rather than a POST trigger. |
+| Request control, commit/status/abort | Commit freezes the body, reports submission state, and returns response access after completion. Status observes without sending; abort has the limits below. Providers check authenticated protocol rights, not payload claims. |
+| Response FILE, READ | A complete immutable response at independent offset zero, with no request-body or header access. Held readers retain it until retirement. |
+
+The proposed states are staging, submitting, complete, failed, outcome unknown
+and aborted. Commit atomically leaves staging, rejecting further writes/resizes
+through every copied body handle. If a producer races commit, its write is either
+included before that boundary or rejected; use one body producer in the first
+shell slice because independent descriptor offsets do not coordinate writers.
+A repeated/concurrent commit returns the same state; an in-flight request may be
+observed again through status, never resent. A delivered timeout/lost reply leaves
+submission potentially unknown; there is no exactly-once remote guarantee.
+
+Status distinguishes IPC/transport errors, provider operation errors, submission
+certainty and an actual HTTP response status. A complete 4xx/5xx is a completed
+transaction with its status and bounded body, not a missing FILE or automatic
+retry. Expose only selected diagnostic response headers, such as request ID,
+never request headers/credentials. Partial responses are not published. Abort
+before submission discards staging; after submission it may stop local work but
+cannot promise remote rollback or a refund. Flushing or closing a stream never
+submits. With no control invocation queued/in flight, natural retirement of the
+control export abandons staging and rejects subsequent body operations. Explicit
+abort handles live requests; dropping a handle cannot revoke admitted work or
+prevent an already queued commit. After commit, work/state remains until its
+in-flight receipts and retained response/control grants retire; provider exit
+fails held operations, without rebinding or replay.
+
+PREPARE replies with actual control and body capabilities through existing
+[endpoint CALL attachments](../interfaces/endpoints.md); commit/status returns
+the response FILE when complete. Failure closes provisional grants; successful
+handoff closes the provider's provisional client handles so they cannot prevent
+retirement. A native shell builtin calls the provider directly and retains
+capabilities in private shell bindings, never environment strings or numeric
+printed handles. It can
+launch a producer with the body as stdout, commit after real successful completion,
+then grant the response as stdin to `cat` or a JSON consumer. A helper process
+would need an explicitly delegated return channel; ordinary child exit/stdout
+is not capability handoff. No new kernel transport or ownership-moving mechanism
+is proposed.
+
+The generic libc/Lua adapter maps `"w"` to a staged writer and `"w+"` to staged
+writing followed by response reading after explicit commit. Support bounded
+staging resize so `fopen("w")` truncation does not submit. Keep the body and
+response as separate native FILEs: the adapter adopts the response with position
+zero instead of reinterpreting a descriptor still positioned at the body length.
+Explicit prepare/commit/status are native resource controls shared by shell and
+Lua; byte I/O remains ordinary file I/O. They are not an HTTP client binding.
+Existing FILE_SYNC retains storage-sync semantics; current single-FILE OPEN
+replies cannot encode this multi-grant preparation contract, so add a dedicated
+provider operation/adapter rather than silently changing those meanings.
+
+Bound metadata to endpoint copied-payload limits, stage under an explicit body
+cap, and account staged bodies, response snapshots and request-private headers
+within the provider's existing shared 64 MiB storage budget. Respect its 64-export
+receiver ceiling, including body/control/response exports and existing GETs.
+Start with one active POST per provider and reject unavailable admission rather
+than adding threads or unlimited staging. The harness's 64 KiB request/1 MiB
+response settings can be narrower than provider limits. Partial preparation,
+reply failure, abandonment and retirement must reclaim buffers and credential
+copies; an IPC cancellation alone does not reclaim already delivered work.
+
 ## Authority, capture and validation
 
 The harness gains only its space's explicitly supplied grants. Data authority
 must be a project directory view, not an entire HOST/home tree selected merely
 by a string prefix; supply that view through native launcher startup.
-File tools accept only project-relative components, rejecting parent traversal,
-absolute/scheme paths and NULs. Child cwd starts at the same project boundary.
+Native file tools accept project-relative components, rejecting parent traversal,
+absolute native paths and NULs. Explicit URI reads/writes are file operations
+through delegated scheme providers; a readable binding never grants POST. URI
+writes stage a body and explicitly commit through the generic request adapter.
+They do not gain the trusted loop's secret headers or prepared request controls.
+Directory listing remains limited to supplied native directory views; provider
+directory enumeration is not promised. Child cwd starts at the project boundary.
 Auxiliary memory, clock, random, console, launch and read-only runtime roots remain
-explicit. It receives no raw-disk, mount, power or space-factory authority.
+explicit. Networking can be supplied as scheme-provider authority; the provider
+uses its own explicitly delegated TCP/DNS/clock/random grants. No raw TCP grant
+is required just to read/write web URIs. It receives no raw-disk, mount, power or
+space-factory authority. Trusted dedicated-space startup supplies the project,
+private work views and supervision launcher, rather than inheriting a general
+development shell's roots.
 Trusted startup creates/delegates a private RAM work-volume root for capture
 storage only to the harness; it is not the shared `tmp://` tree and is not
 delegated to child roots, cwd or resources. Create then unlink captures there
@@ -185,7 +280,11 @@ the first Lua harness or simulate POSIX process/signals.
 
 Qualification uses manual local HTTP/HTTPS fixtures first: header/body framing,
 error bodies, rejection/partial transfers, a response beyond 30 s, timeout without
-replay, denial, allocation cleanup and unchanged GET behavior. Test JSON, tools
+replay, denial, allocation cleanup and unchanged GET behavior. Qualify prepared
+shell requests locally: returned capabilities outlive preparation, producer
+failure abandons without sending, copied handles cannot submit twice, late writes
+fail, response status/offsets are correct, headers cannot be read back, and timeout,
+provider death and retirement preserve outcome/cleanup rules. Test JSON, tools
 and loop transitions against local recorded responses; CI and automatic tests
 never spend API credit. The owner manually starts a small real Messages/tool
 exchange using the existing small credit after local qualification. No key is
@@ -196,28 +295,35 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
 ## Track 1 delivery tasks after approval
 
 - **1a, small first task: bounded libhttp POST and overall deadlines.** Add the
-  request operation, response/error ownership and required TLS/native-wait deadline
-  adaptation. This is also the future writable provider's HTTP engine; provider
-  integration is deferred. Use local fixtures; Lua, credentials and Anthropic
-  calls stay out.
-  **After this task, the owner can:** send a bounded native C POST and inspect its response, including slow/error cases.
-- **1b: shared Lua/native HTTPS integration.** Wire the userland embedding,
-  reusable `pyxis` registration, one crypto owner, verified HTTPS and private
-  credential-file delegation/loading with the installed, QEMU and live/PXE
-  provisioning paths above. Preserve ordinary Lua `run`/`dir`/hash behavior.
-  **After this task, the owner can:** make an explicitly authorized HTTPS request from the embedded Lua application.
-- **1c: pinned pure-Lua JSON.** Vendor dkjson 2.11 from the owner's mirror above
-  at the recorded SHA-256, with license/provenance,
-  object/null handling, bounded response parsing and schema validation.
+  provider engine, complete error responses and required TLS/native-wait deadline
+  adaptation. Use local fixtures; no application HTTP client, Lua, credentials
+  or Anthropic calls.
+  **After this task, the owner can:** qualify the provider's HTTP engine against local slow/error POST fixtures.
+- **1b: writable HTTPS and prepared request objects.** Implement staging,
+  explicit one-shot commit, narrow rights, request-private headers, response
+  status/read access and retirement under the proposed contract. Register
+  `json+https`; keep TLS wholly in the provider. Qualify with local endpoints.
+  **After this task, the owner can:** prepare and exercise native provider transactions with real body/control/response grants.
+- **1c: prepared requests through shell and generic file adapters.** Add running
+  shell capability bindings, producer/response stream delegation, commit/status/
+  abort controls and libc/Lua `"w"`/`"w+"` staging/response adapters. Use the
+  existing Lua port and `pyxis` module; only generic resource helpers, no HTTPS
+  binding or embedded libtls. Wire private key-file provisioning and native
+  request-header preparation, excluding secrets from tools and shell arguments.
+  **After this task, the owner can:** script web API tests with prepared requests, ordinary body writers and `cat` response readers.
+- **1d: pinned pure-Lua JSON.** Vendor dkjson 2.11 from the owner's mirror above
+  at the recorded SHA-256, with license/provenance, object/null handling,
+  bounded parsing and schema validation.
   **After this task, the owner can:** construct and decode Messages/tool data locally without API spending.
-- **1d: native command capture.** Add explicit stream/grant selection, per-command
-  groups, deadlines, output triggers, result caps and retirement; exercise silent, failing,
-  noisy and denied commands in QEMU/GDB, with no provider calls.
+- **1e: native command capture.** Add explicit stream/grant selection, per-command
+  groups, deadlines, output triggers, result caps and retirement; exercise silent,
+  failing, noisy and denied commands in QEMU/GDB, with no provider calls.
   **After this task, the owner can:** capture a native command's stdout/stderr and real completion for a tool result.
-- **1e: Lua harness loop.** Implement the four tools and validated tool-use/result
-  exchange, bounded context, explicit per-run settings, end-of-run per-request
-  and total input/output token usage, status reporting and deliberate stop behavior.
-  A manual small live exchange follows local qualification; no automatic spending.
+- **1f: Lua harness loop over provider files.** Implement the four tools and
+  validated tool-use/result exchange using file I/O and prepared request controls,
+  bounded context, explicit per-run settings, end-of-run per-request and total
+  token usage, status reporting and deliberate stop behavior. A manual small
+  live exchange follows local qualification; no automatic spending.
   **After this task, the owner can:** ask Claude to inspect/edit a small project and run a direct native command on Pyxis.
 
 Each task needs a separate owner go. Optional streaming follows as its own task;
