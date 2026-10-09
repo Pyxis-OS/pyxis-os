@@ -1,4 +1,0 @@
-Line 37 of "arch/x86_64/clock.c" starts at address 0xffffffff800030a0 <arch_monotonic_ns+96> and ends at 0xffffffff800030a5 <arch_monotonic_ns+101>.
-Line 37 of "arch/x86_64/clock.c" starts at address 0xffffffff800030a3 <arch_monotonic_ns+99> and ends at 0xffffffff800030a5 <arch_monotonic_ns+101>.
-Line 147 of "arch/x86_64/clock.c" starts at address 0xffffffff800030a5 <arch_monotonic_ns+101> and ends at 0xffffffff800030a8 <arch_monotonic_ns+104>.
-Line 147 of "arch/x86_64/clock.c" starts at address 0xffffffff800030a8 <arch_monotonic_ns+104> and ends at 0xffffffff800030aa <arch_monotonic_ns+106>.
