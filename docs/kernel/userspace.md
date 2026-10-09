@@ -208,6 +208,11 @@ security. `strcat` appends to an existing NUL-terminated string.
 stack use, no allocation or recursion. Comparators receive pointers to array
 elements and return a negative, zero or positive result.
 
+`bsearch` is an iterative binary search over an array sorted by the same
+comparator. The key is the comparator's first argument and an element the
+second. With several equal elements it returns any one of them, and it returns a
+null pointer when none matches.
+
 `assert` evaluates its expression once and writes the expression, file, line
 and function to stderr before calling `abort` on failure. Defining `NDEBUG`
 disables evaluation; re-including `<assert.h>` honors its current setting.

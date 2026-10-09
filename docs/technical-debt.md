@@ -2732,3 +2732,20 @@ radio cleanup or automatic service recovery.
 Revisit with the service/connection tasks when they can establish and qualify
 explicit radio-procedure termination, receive continuity and independent USB
 accounting. The accepted handle-reuse boundary is also required for reconnect.
+
+## sbase tail follow and sort limits
+
+The sbase [`tail`](userland/wc-tail-sort.md#tail) refuses `-f` and `-F`, because
+Pyxis has no operation that waits for a file to grow and a polling loop would
+not follow one honestly. A log or growing file cannot be followed. Revisit when a
+native change-notification or wait-for-growth operation exists for the relevant
+providers, and implement following on it; do not add polling or a fake success.
+
+[`sort`](userland/wc-tail-sort.md#sort) uses libc `qsort`, an unstable heapsort,
+so under `-u` the line kept from several that compare equal under the selected
+keys can differ from a stable sort. It also holds all input in memory, accepts
+`-m` without streaming a merge, and does not check writes to its `-o` file, as
+upstream. Revisit with a stable libc sort or a patch to sort if a consumer
+depends on the retained line, input too large for memory, or reliable `-o`
+errors. Word splitting, character classes and folding use libutf's tables, with
+no locale collation; revisit with locale support.
