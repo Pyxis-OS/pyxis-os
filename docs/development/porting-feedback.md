@@ -26,8 +26,8 @@ do not change [AGENTS.md](../../AGENTS.md) or authorize implementation.
   [Console line input](../technical-debt.md#console-line-input) remains per byte.
 - Sticky-error handling in fgets, deliberately outside the uniq task, was fixed
   in the same libc milestone.
-- [Duplicated port output lists](../technical-debt.md#duplicated-port-output-lists)
-  can drift when a recipe gains another executable.
+- Port output lists could drift when a recipe gained another executable; the Make
+  dependencies are now derived from each recipe's `metadata.lua` outputs.
 - Setup friction observed during the uniq work, with the actual errors:
   - `make run` with a current `build/pyxis.iso` but no target compiler on PATH
     failed in `check-toolchain` with `Missing x86_64-unknown-pyxis-gcc: add the
