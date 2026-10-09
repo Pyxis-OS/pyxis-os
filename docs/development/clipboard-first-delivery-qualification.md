@@ -126,3 +126,21 @@ logs and captures of held-Enter Paste, fresh Enter, non-ASCII output, mux Paste
 and prefix refusal. These final checks do not expand the source-reviewed cases
 listed above into runtime qualification, nor establish native latency. All
 task-owned QEMU, QMP and debugger processes were stopped afterward.
+
+## Main frame-handoff integration
+
+Main's display frame-handoff work merged during submission. Userland `2fc6badb`
+merges its main `223c31a7`; Pyxis `2bff779b` merges main `da867b24` and pins that
+published userland commit plus main's ports `0f0aa443`. The ordinary default
+image build passed with the same compiler image. Exact-head CI workflow #1527
+passed changes, pins, filesystem and image/bundle build. Initial submitted head
+`bd818b64` had failed pins after dependency main advanced; it is superseded.
+
+A cold QEMU boot repeated local and mux Copy/Paste on that integrated source,
+with the same matched configuration. Both retained the exact seven bytes
+`home://` and inserted them as editable text without submission. Read-only GDB
+saw completed transactions and 14 retained bytes across the two independent
+local stores. Captures, default/matched images and the serial log are under
+`build/clipboard-integration`. This was a smoke check after integration, not a
+new timing series. The shipped default image/configuration was restored and all
+task-owned processes stopped.
