@@ -13,6 +13,8 @@
 #define LAUNCH_BATCH_MAX 8
 #define LAUNCH_NO_STAGE UINT64_MAX
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
+#define LAUNCH_INITIAL_STACK_MIN_SIZE (UINT64_C(1) * 1024 * 1024)
+#define LAUNCH_INITIAL_STACK_MAX_SIZE (UINT64_C(8) * 1024 * 1024)
 /* HOST and native filesystem executables are copied before loading; this bounds
  * staging bytes, not the child's mapped memory. RAM executables are copied
  * without this bound; archive executables need no copy. */
@@ -74,6 +76,11 @@ struct launch_request {
   uint64_t argv, argc;
   struct launch_stream streams[STARTUP_STREAM_COUNT];
   uint64_t namespace_grant; /* Zero = absent; otherwise grant-list index + 1. */
+  /* Zero selects 1 MiB. Explicit sizes must be page-aligned, 1..8 MiB inclusive;
+   * invalid requests fail with BAD_REQUEST before image capture. Eager backing
+   * ends at the fixed high stack top, with one unmapped guard page directly
+   * below the backing. */
+  uint64_t initial_stack_bytes;
 };
 
 struct launch_message {
@@ -109,8 +116,8 @@ _Static_assert(sizeof(struct launch_grant) == 24, "launch grant layout");
 _Static_assert(sizeof(struct execution_group_create_reply) == 16, "group creation reply layout");
 _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
 _Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
-_Static_assert(sizeof(struct launch_request) == 168, "launch request layout");
-_Static_assert(sizeof(struct launch_message) == 184, "launch message layout");
+_Static_assert(sizeof(struct launch_request) == 176, "launch request layout");
+_Static_assert(sizeof(struct launch_message) == 192, "launch message layout");
 _Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
 _Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
 _Static_assert(sizeof(struct launch_batch_reply) == 72, "launch batch reply layout");
