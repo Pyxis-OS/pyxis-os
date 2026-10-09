@@ -232,6 +232,12 @@ controller or all other sessions.
    and eight sessions, speaker/headphone selection, normal load, stop/reset and
    latency in the owner's ThinkPad batch. Keep fail-closed until reboot; native
    evidence determines whether reset recovery needs a separate proposal.
+
+   - [x] Implement the accepted controller/codec binding and native refill profile;
+     retain PCI wake refusal and record matched QEMU/integration evidence.
+   - [ ] Run the owner's native one/eight-session speaker/headphone batch and
+     qualify actual boot state, coherence, FIFO/progress and commit timing.
+
 6. [ ] **Documentation closure.** Requires native eight-session playback.
    Record implemented contracts and measured limits, move this milestone into
    its subsystem reference and update links. Carry remaining accepted limitations

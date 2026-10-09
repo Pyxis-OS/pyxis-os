@@ -101,6 +101,31 @@ completed, debugger inspection showed five starts/stops, 970 refills,
 max commit 502,530 ns, no failure, command/stream DMA parked and all session
 slots released. No debugger halted active playback.
 
+## Current-main integration
+
+The ordinary source image build passed after integrating main `5cf60bc3`;
+clean kernel revision `b7148af1` adds only the native FIFO trace and explanatory
+comment after that integration. Userland is `ff278aec`, ports `f2da003d`,
+filesystem/lwIP unchanged. The same compiler/configuration is used. Main's
+timer-read optimizations and new userland/ports pins make this an integration
+check, separate from the matched performance comparison above.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| ELF | `9b90d73b7d1786012252db0d4227be3e835130a7190455417db75f1e230e8025` |
+| ISO | `45bb4b384d0df11ba0468882dc9e1bce7ece1d4562d11bb39307356c68822ca2` |
+| Initrd | `73a9be50f99d0d8e994cb86c3fed01938141c485ea612167eb9172979fe3e2d6` |
+
+Same four-CPU/8 GiB Q35 nested KVM devices, with `hda-duplex` for playback only:
+`pcm 1000 500 2` completed successfully, starvation 2, discontinuity 0, READY
+before release. WAV contained all **96,000 PCM frames without content mismatch**
+after removing silence. Stopped-state inspection showed one start/stop, max
+commit 341,920 ns, no failure, rings/stream parked and all slots released.
+QEMU's missing `adc` backend warning is expected; recording is not supported.
+Booting the same image without HDA devices kept absence quiet, rejected PCM
+ACQUIRE with CALL_UNAVAILABLE (status 6), and left ordinary shell commands
+serviceable. All owned QEMU, debugger and remote-client jobs were stopped.
+
 ## Native implementation and remaining checks
 
 Controller matching/snoop constraints, ALC257 shared-DAC output selection and
