@@ -26,6 +26,19 @@ remains independent. There is no authentication or encryption: host processes
 able to connect receive the configured shell privileges. The guest listener
 binds its exact assigned address, not wildcard or loopback.
 
+Live/PXE Remote sets `remote_power = true`, allowing the remote root shell's
+`reboot` and `poweroff` builtins. Any LAN peer reaching that unauthenticated
+terminal can reboot or power off the machine; the owner accepts this exposure
+for a sole-user home LAN. Installed defaults omit this grant while retaining
+local power in `pyxis`. Ordinary programs and service providers do not inherit
+power. See [boot authority](init.md#boot-configuration).
+
+A successful power command does not return or send a final terminal
+acknowledgment; `pyxis-remote` disconnects and can report the missing
+acknowledgment. For a test loop, confirm the new boot before reconnecting after
+`reboot`, or confirm shutdown after `poweroff`. A reported native power failure
+keeps the guest running.
+
 Remote init opens optional `host://` with read-write grants, using the same
 [virtiofs setup](../devices/virtio-fs.md) as Development. Missing hardware leaves
 HOST absent; operational mount errors stop that init. Host daemon restrictions
