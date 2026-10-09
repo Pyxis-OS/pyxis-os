@@ -14,6 +14,7 @@ struct execution_group;
 enum launcher_action {
   LAUNCH_CREATE_EXECUTION_GROUP,
   LAUNCH_ALLOCATE,
+  LAUNCH_CAPTURE_RAM,
   LAUNCH_DISCARD,
   LAUNCH_START,
   LAUNCH_BATCH_CREATE,
@@ -27,7 +28,9 @@ enum launcher_action {
  * BATCH_PREPARE lend the parent table and stable image operation; every loan
  * is cleared before completion. CREATE_EXECUTION_GROUP also lends the parent
  * table for atomic handle installation. Allocation results transfer to the caller
- * before release, while START/CREATE_SPACE/DISCARD/PREPARE consume their capture and
+ * before release. CAPTURE_RAM borrows its capture and ends the lent RAM file
+ * operation after copying; only BSP code accesses the resulting page backing.
+ * START/CREATE_SPACE/DISCARD/PREPARE consume their capture and
  * PUBLISH/DISCARD consume their batch. No caller private mappings are mutated. */
 struct launcher_request {
   struct bsp_request request;

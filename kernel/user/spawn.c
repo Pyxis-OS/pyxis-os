@@ -236,8 +236,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
   uintptr_t entry, stack_top;
   /* Only boot-archive images are read in place; the others were copied. */
   bool external = capture->image->backing != FILE_INITRD;
-  const void *bytes = external ? capture->external_image : capture->image->data;
-  size_t size = external ? capture->external_image_size : capture->image->size;
+  const void *bytes = external ? (void *)capture->captured_image.address : capture->image->data;
+  size_t size = external ? capture->captured_image.size : capture->image->size;
   enum call_status status = execution_group_check(execution_group, space);
   if (status != CALL_OK) {
     if (!external) {

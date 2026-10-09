@@ -8,6 +8,7 @@
 #include <kernel/block.h>
 #include <kernel/gpt.h>
 #include <kernel/service/request.h>
+#include <kernel/user/image_capture.h>
 #include <pyxis_fs/npfs.h>
 
 #define NPFS_REQUEST_LIMIT 32u
@@ -41,8 +42,8 @@ enum npfs_job_state {
  * Other operations derive children only from the held node and the calling
  * capability's actual rights. Inputs are borrowed until detached completion;
  * successful ROOT/LOOKUP transfers one object reference, failure transfers none.
- * CAPTURE transfers owned launch staging (count bytes) on success, none on
- * failure; its allocation is outside the native wrapper cap. FILESYSTEM_INFO
+ * CAPTURE transfers an owned BSP-only image_capture; captured.size is its byte
+ * count. Failure leaves it empty; backing is outside the native wrapper cap. FILESYSTEM_INFO
  * copies retained metadata without disk reads. READ/ENUMERATE publish data
  * only on success. CREATE_VOLUME takes the device, partition, name and a
  * caller-generated volume ID in data. Format/backing diagnostics belong to this
@@ -74,7 +75,7 @@ struct npfs_job {
   enum npfs_status format_status;
   enum block_result backing_error;
   struct kernel_object *object;
-  void *captured;
+  struct image_capture captured;
   /* Internal queue/completion ownership. */
   struct npfs_job *next;
   struct npfs_request *user_request;

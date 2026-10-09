@@ -1006,8 +1006,9 @@ allocate. Every user task pays both even if it never uses HOST or profiling; thi
 Revisit lazy provisioning if task counts or memory pressure make it material, with explicit failure, BSP handoff and cleanup ownership and no extra
 fixed registry. The native enumeration ABI returns one name per call and the backend requests a fresh 4 KiB READDIR batch discarding unused entries,
 so large listings can transfer trailing names repeatedly, with no attribute or data cache or directory snapshot (revisit batching with a consumer and
-host-change semantics). Host executable loading captures at most 16 MiB per launch into owned memory without a coherent snapshot if the host edits
-the file in place meanwhile; callers must avoid in-place changes, and revisit the limit only with a bounded staging and concurrency design.
+host-change semantics). Host executable loading captures at most 128 MiB per selected image into reclaimable BSP-owned pages, without a coherent
+snapshot if the host edits the file in place meanwhile; callers must avoid in-place changes. There is no aggregate concurrent-capture budget;
+physical exhaustion rejects. Revisit snapshot semantics or aggregate admission with a measured consumer need.
 
 ## Initial TCP listener limits
 
@@ -1181,7 +1182,7 @@ wrappers; per pool up to 4 MiB of cached file payload plus entry metadata, a 512
 images and encoding buffers; a retained allocation bitmap of one bit per block rounded to 4 KiB (32 KiB for 1 GiB, about 8 MiB for 256 GiB) read and validated at
 mount and never evicted; mount scans the selected volume's inode file to build a free list whose reclaimed slots keep their inode allocation as a list node until
 reuse, so large inode files can exhaust memory or mount slowly (revisit compact free-slot storage or a pool budget, preserving NO_MEMORY/LIMIT versus corrupt-image
-reporting); executable capture of one image up to 16 MiB per caller outside the wrapper and cache limits with no aggregate staging budget; userspace root selection
+reporting); executable capture of one image up to 128 MiB per selected executable into reclaimable pages outside the wrapper and cache limits, with no aggregate staging budget; userspace root selection
 bounded to 16 entries within 64 KiB of startup and capture storage. Memory pressure wakes the filesystem worker after allocator work to flush dirty data and return
 whole clean cache chunks to VM (failed writeback preserves dirty chunks, the allocating call is not retried, and kernel heap backing stays mapped); revisit
 reclaim granularity and admission with measured pressure workloads and BSP ownership intact.
