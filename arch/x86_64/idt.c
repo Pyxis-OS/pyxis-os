@@ -93,6 +93,16 @@ void idt_enable_debug_nmi(void)
     .offset_mid = address >> 16,
     .offset_high = address >> 32,
   };
+  const unsigned vectors[] = { EXCEPTION_PAGE_FAULT,
+                               EXCEPTION_GENERAL_PROTECTION };
+  void (*const entries[])(void) = { arch_debug_page_fault_entry,
+                                    arch_debug_general_protection_entry };
+  for (size_t i = 0; i < sizeof(vectors) / sizeof(vectors[0]); ++i) {
+    address = (uintptr_t)entries[i];
+    prepared[vectors[i]].offset_low = address;
+    prepared[vectors[i]].offset_mid = address >> 16;
+    prepared[vectors[i]].offset_high = address >> 32;
+  }
   loaded_idt = prepared;
   idt_load();
 }

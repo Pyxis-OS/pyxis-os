@@ -24,11 +24,12 @@ static uint64_t deadline_after(uint64_t interval)
   return interval > UINT64_MAX - now ? UINT64_MAX : now + interval;
 }
 
-void arch_debug_enable(void)
+void arch_debug_enable(const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !arch_cpu_count());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   arch_debug_enabled = true;
+  arch_debug_inspect_prepare(boot);
 }
 
 void arch_debug_prepare_cpu(struct cpu_local *cpu)
@@ -139,6 +140,7 @@ static void service_stop(void)
         arch_monotonic_ns() >= arch_debug_stop.expiry) {
       break;
     }
+    arch_debug_inspect_service();
     __asm__ volatile("pause");
   }
   atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_RELEASED,

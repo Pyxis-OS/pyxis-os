@@ -2,6 +2,7 @@
 #include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <arch/debug.h>
 #include <arch/io_apic.h>
 #include <arch/clock.h>
 #include <arch/layout.h>
@@ -12,6 +13,8 @@
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/pmm.h>
+#include <kernel/mm/heap.h>
+#include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 
 #define PTE_PRESENT UINT64_C(1)
@@ -19,6 +22,10 @@
 #define PTE_USER (UINT64_C(1) << 2)
 #define PTE_WRITE_THROUGH (UINT64_C(1) << 3)
 #define PTE_CACHE_DISABLE (UINT64_C(1) << 4)
+#define PTE_ACCESSED (UINT64_C(1) << 5)
+#define PTE_DIRTY (UINT64_C(1) << 6)
+#define PTE_GLOBAL (UINT64_C(1) << 8)
+#define PTE_SOFTWARE_LOW (UINT64_C(7) << 9)
 #define PTE_LARGE (UINT64_C(1) << 7)
 /* Bit 7 selects PAT in a 4 KiB leaf; in higher-level entries it means large. */
 #define PTE_PAT_4K (UINT64_C(1) << 7)
@@ -525,6 +532,269 @@ void *arch_frame_map(phys_addr_t physical)
 void arch_frame_unmap(void)
 {
   unmap_scratch(SCRATCH_DATA);
+}
+
+#define CPUID_FEATURE_MTRR (1u << 12)
+#define IA32_MTRRCAP 0xfe
+#define IA32_MTRR_PHYSBASE0 0x200
+#define IA32_MTRR_DEF_TYPE 0x2ff
+#define IA32_MTRR_FIX64K_00000 0x250
+#define IA32_MTRR_FIX16K_80000 0x258
+#define IA32_MTRR_FIX16K_A0000 0x259
+#define IA32_MTRR_FIX4K_C0000 0x268
+#define MTRR_FIXED_SUPPORTED (UINT64_C(1) << 8)
+#define MTRR_ENABLE (UINT64_C(1) << 11)
+#define MTRR_FIXED_ENABLE (UINT64_C(1) << 10)
+#define MTRR_VALID (UINT64_C(1) << 11)
+#define MTRR_COUNT_MASK 0xff
+#define CACHE_WRITE_BACK 6
+#define CR0_CACHE_DISABLE (UINT64_C(1) << 30)
+#define CR0_NOT_WRITE_THROUGH (UINT64_C(1) << 29)
+#define FIXED_MTRR_END UINT64_C(0x100000)
+
+struct debug_mtrr {
+  uint64_t base, mask;
+};
+
+static const struct boot_info *debug_boot;
+static uintptr_t debug_windows[SCRATCH_SLOT_COUNT];
+static volatile uint64_t *debug_leaves[SCRATCH_SLOT_COUNT];
+static struct debug_mtrr *debug_mtrrs;
+static unsigned debug_mtrr_count;
+static uint64_t debug_mtrr_default;
+static uint64_t debug_fixed_mtrrs[11];
+static bool debug_cache_ready;
+
+void arch_debug_inspect_prepare(const struct boot_info *boot)
+{
+  KASSERT(active && arch_debug_enabled);
+  debug_boot = boot;
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  if ((edx & (CPUID_FEATURE_MTRR | CPUID_FEATURE_PAT)) ==
+        (CPUID_FEATURE_MTRR | CPUID_FEATURE_PAT) &&
+      !(read_cr0() & (CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH)) &&
+      (read_msr(IA32_PAT) & PAT_TYPE_MASK) == CACHE_WRITE_BACK) {
+    debug_mtrr_default = read_msr(IA32_MTRR_DEF_TYPE);
+    uint64_t capability = read_msr(IA32_MTRRCAP);
+    debug_mtrr_count = capability & MTRR_COUNT_MASK;
+    if (!(capability & MTRR_FIXED_SUPPORTED)) {
+      debug_mtrr_default &= ~MTRR_FIXED_ENABLE;
+    }
+    if (debug_mtrr_default & MTRR_FIXED_ENABLE) {
+      debug_fixed_mtrrs[0] = read_msr(IA32_MTRR_FIX64K_00000);
+      debug_fixed_mtrrs[1] = read_msr(IA32_MTRR_FIX16K_80000);
+      debug_fixed_mtrrs[2] = read_msr(IA32_MTRR_FIX16K_A0000);
+      for (unsigned i = 0; i < 8; ++i) {
+        debug_fixed_mtrrs[3 + i] = read_msr(IA32_MTRR_FIX4K_C0000 + i);
+      }
+    }
+    if (debug_mtrr_count) {
+      debug_mtrrs = kmalloc(debug_mtrr_count * sizeof(*debug_mtrrs));
+      if (!debug_mtrrs) {
+        panic("cannot allocate debugger cache metadata");
+      }
+      for (unsigned i = 0; i < debug_mtrr_count; ++i) {
+        debug_mtrrs[i].base = read_msr(IA32_MTRR_PHYSBASE0 + 2 * i);
+        debug_mtrrs[i].mask = read_msr(IA32_MTRR_PHYSBASE0 + 2 * i + 1);
+      }
+    }
+    debug_cache_ready = (debug_mtrr_default & MTRR_ENABLE) != 0;
+  }
+  uintptr_t base;
+  if (vm_reserve(vm_kernel_space(), SCRATCH_SLOT_COUNT * PAGE_SIZE,
+                 PAGE_SIZE, &base) != MM_OK) {
+    panic("cannot reserve debugger windows");
+  }
+  phys_addr_t temporary = pmm_alloc(1);
+  if (!temporary) {
+    panic("cannot prepare debugger windows");
+  }
+  for (unsigned i = 0; i < SCRATCH_SLOT_COUNT; ++i) {
+    debug_windows[i] = base + i * PAGE_SIZE;
+    phys_addr_t removed;
+    if (vm_map(vm_kernel_space(), debug_windows[i], temporary, 0) != MM_OK ||
+        vm_unmap(vm_kernel_space(), debug_windows[i], &removed) != MM_OK ||
+        removed != temporary) {
+      panic("cannot prepare debugger window tables");
+    }
+    debug_leaves[i] = &active_table(debug_windows[i], LEVEL_PT)
+                                    [index_at(debug_windows[i], LEVEL_PT)];
+  }
+  pmm_free(temporary, 1);
+}
+
+static bool debug_wb_frame(phys_addr_t physical)
+{
+  if (!debug_cache_ready || !physical_valid(physical) ||
+      physical_limit - physical < PAGE_SIZE ||
+      paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
+    return false;
+  }
+  bool covered = false;
+  for (size_t i = 0; i < debug_boot->region_count; ++i) {
+    const struct boot_region *region = &debug_boot->regions[i];
+    if (region->length > UINT64_MAX - region->base) {
+      return false;
+    }
+    uint64_t end = region->base + region->length;
+    if (physical < end && region->base < physical + PAGE_SIZE) {
+      if (region->type != BOOT_USABLE && region->type != BOOT_LOADER &&
+          region->type != BOOT_KERNEL) {
+        return false;
+      }
+      if (region->base <= physical && end >= physical + PAGE_SIZE) {
+        covered = true;
+      }
+    }
+  }
+  if (!covered) {
+    return false;
+  }
+  if ((debug_mtrr_default & MTRR_FIXED_ENABLE) && physical < FIXED_MTRR_END) {
+    unsigned bank, index;
+    if (physical < UINT64_C(0x80000)) {
+      bank = 0;
+      index = physical / UINT64_C(0x10000);
+    } else if (physical < UINT64_C(0xc0000)) {
+      bank = 1 + (physical - UINT64_C(0x80000)) / UINT64_C(0x20000);
+      index = (physical % UINT64_C(0x20000)) / UINT64_C(0x4000);
+    } else {
+      bank = 3 + (physical - UINT64_C(0xc0000)) / UINT64_C(0x8000);
+      index = (physical % UINT64_C(0x8000)) / PAGE_SIZE;
+    }
+    return ((debug_fixed_mtrrs[bank] >> (index * PAT_ENTRY_BITS)) &
+            PAT_TYPE_MASK) == CACHE_WRITE_BACK;
+  }
+  uint64_t address_mask = (physical_limit - 1) & PTE_ADDRESS_MASK;
+  bool matched = false;
+  for (unsigned i = 0; i < debug_mtrr_count; ++i) {
+    uint64_t mask = debug_mtrrs[i].mask;
+    if (!(mask & MTRR_VALID)) {
+      continue;
+    }
+    uint64_t base = debug_mtrrs[i].base;
+    if ((mask & ~(address_mask | MTRR_VALID)) ||
+        (base & ~(address_mask | PAT_TYPE_MASK))) {
+      return false;
+    }
+    uint64_t range_mask = mask & address_mask;
+    /* Reject malformed non-contiguous masks instead of inventing a range. */
+    uint64_t inverse = (~range_mask & (physical_limit - 1)) | (PAGE_SIZE - 1);
+    if (inverse & (inverse + 1)) {
+      return false;
+    }
+    if ((physical & range_mask) == (base & range_mask)) {
+      if ((base & PAT_TYPE_MASK) != CACHE_WRITE_BACK) {
+        return false;
+      }
+      matched = true;
+    }
+  }
+  return matched || (debug_mtrr_default & PAT_TYPE_MASK) == CACHE_WRITE_BACK;
+}
+
+static void debug_clear_window(unsigned slot)
+{
+  __asm__ volatile("" : : : "memory");
+  *debug_leaves[slot] = 0;
+  invlpg(debug_windows[slot]);
+}
+
+static bool debug_load(uintptr_t address, uint8_t *output)
+{
+  arch_debug_probe.address = address;
+  arch_debug_probe.generation = arch_debug_stop.generation;
+  arch_debug_probe.active = true;
+  __asm__ volatile("" : : : "memory");
+  bool success = arch_debug_load8(address, output, &arch_debug_probe);
+  __asm__ volatile("" : : : "memory");
+  arch_debug_probe.active = false;
+  return success;
+}
+
+static bool debug_table_entry(phys_addr_t table, unsigned index, uint64_t *entry)
+{
+  *debug_leaves[SCRATCH_TABLE] = table | PTE_PRESENT | PTE_NX;
+  invlpg(debug_windows[SCRATCH_TABLE]);
+  uint8_t *bytes = (uint8_t *)entry;
+  bool success = true;
+  for (size_t i = 0; i < sizeof(*entry); ++i) {
+    if (!debug_load(debug_windows[SCRATCH_TABLE] + index * sizeof(*entry) + i,
+                    &bytes[i])) {
+      success = false;
+      break;
+    }
+  }
+  debug_clear_window(SCRATCH_TABLE);
+  return success;
+}
+
+static enum debug_inspect_status debug_translate(uint64_t root,
+    uintptr_t address, phys_addr_t *physical)
+{
+  if (root & ~PTE_ADDRESS_MASK) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  phys_addr_t table = root;
+  for (unsigned level = LEVEL_PML4; level >= LEVEL_PT; --level) {
+    if (!debug_wb_frame(table)) {
+      return DEBUG_INSPECT_BAD_ADDRESS;
+    }
+    uint64_t entry;
+    if (!debug_table_entry(table, index_at(address, level), &entry)) {
+      return DEBUG_INSPECT_FAULT;
+    }
+    /* Native paging uses 4 KiB leaves and PAT index zero for RAM. Refuse
+     * unsupported cache/large-page encodings and hardware reserved bits. */
+    uint64_t allowed = PTE_ADDRESS_MASK | PTE_NX | PTE_PRESENT | PTE_WRITE |
+      PTE_USER | PTE_ACCESSED | PTE_DIRTY | PTE_GLOBAL | PTE_SOFTWARE_LOW;
+    if (!(entry & PTE_PRESENT) || (entry & ~allowed) ||
+        (entry & (PTE_WRITE_THROUGH | PTE_CACHE_DISABLE | PTE_LARGE))) {
+      return DEBUG_INSPECT_BAD_ADDRESS;
+    }
+    table = entry & PTE_ADDRESS_MASK;
+  }
+  if (!debug_wb_frame(table)) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  *physical = table + (address & (PAGE_SIZE - 1));
+  return DEBUG_INSPECT_OK;
+}
+
+enum debug_inspect_status arch_debug_read_ram(uint64_t root, uintptr_t address,
+                                              uint8_t *output, size_t bytes)
+{
+  if (!bytes || bytes > DEBUG_READ_BYTES || bytes - 1 > UINTPTR_MAX - address ||
+      !canonical(address) || !canonical(address + bytes - 1) ||
+      (address <= LOWER_HALF_MAX && address + bytes - 1 > LOWER_HALF_MAX)) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  while (bytes) {
+    phys_addr_t physical;
+    enum debug_inspect_status status = debug_translate(root, address, &physical);
+    if (status != DEBUG_INSPECT_OK) {
+      return status;
+    }
+    size_t offset = physical & (PAGE_SIZE - 1);
+    size_t count = PAGE_SIZE - offset;
+    if (count > bytes) {
+      count = bytes;
+    }
+    *debug_leaves[SCRATCH_DATA] = (physical - offset) | PTE_PRESENT | PTE_NX;
+    invlpg(debug_windows[SCRATCH_DATA]);
+    for (size_t i = 0; i < count; ++i) {
+      if (!debug_load(debug_windows[SCRATCH_DATA] + offset + i, output + i)) {
+        debug_clear_window(SCRATCH_DATA);
+        return DEBUG_INSPECT_FAULT;
+      }
+    }
+    debug_clear_window(SCRATCH_DATA);
+    address += count;
+    output += count;
+    bytes -= count;
+  }
+  return DEBUG_INSPECT_OK;
 }
 
 static uint64_t read_table_entry(phys_addr_t physical, unsigned index)
