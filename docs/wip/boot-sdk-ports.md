@@ -96,11 +96,10 @@ Chosen by the owner, each starting with a proposal:
   merged in #612; later thread tasks remain unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
-- **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
-  RAM staging (#610), is merged; the completed-frame handoff is delivered for
-  review with userland and ports PRs. Saved shell history (#609) and
-  xfer pipelining (#600) are merged; xfer's native runs follow its
-  [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
+- **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
+  Doom, Chocolate Quake and EDuke32 without audio, proposal first. Before it,
+  [presentation timing](presentation-timing.md) steps 1 and 2 merged (#610,
+  #618); timing and pacing remain unassigned.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are

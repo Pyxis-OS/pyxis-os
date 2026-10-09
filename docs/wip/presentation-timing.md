@@ -9,7 +9,7 @@ defaults on 2026-10-09.
 - **Step 1, RAM staging for boot and Bochs:** merged in #610, with its
   [measurements and native steps](../development/experiments/presentation-staging/README.md).
 - **Completed-frame handoff:** three decisions accepted 2026-10-09
-  ([below](#completed-frame-handoff)); implemented for review, with its
+  ([below](#completed-frame-handoff)); merged in #618, with its
   [measurements and native steps](../development/experiments/frame-handoff/README.md).
 - **Timing and pacing:** later steps.
 
