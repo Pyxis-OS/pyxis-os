@@ -299,10 +299,9 @@ bool display_end_frame(const struct pointer_frame *frame)
 {
   bool ready = available;
   if (staging && available && !display_is_panicking()) {
-    /* Staging is private RAM. Panic must not wait on a sleeping presenter.
-     * Publish/recheck again before any direct write, just as at frame begin. */
+    /* Publish/recheck before any direct write, just as at frame begin. */
     atomic_store(&writer, DISPLAY_NO_WRITER);
-    display_timing_wait();
+    display_timing_begin_copy();
     atomic_store(&writer, cpu_initial_apic_id());
     if (!display_is_panicking()) {
       copy_staging();
@@ -321,11 +320,6 @@ bool display_end_frame(const struct pointer_frame *frame)
     set_availability(ready);
   }
   return ready && !display_is_panicking();
-}
-
-uint64_t display_next_deadline(void)
-{
-  return staging && driver == DISPLAY_BOOT ? display_timing_next_deadline() : 0;
 }
 
 const struct framebuffer *display_panic_target(void)

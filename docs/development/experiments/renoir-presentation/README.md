@@ -3,7 +3,8 @@
 Presentation step 2, accepted 2026-10-09 after #622. The source implementation
 is at Pyxis `20bf9f8f`, based on main `31af2224`; the
 [display reference](../../../kernel/display.md#read-only-renoir-firmware-timing)
-describes its contracts. Native Pyxis qualification is **pending**. Timed copies
+describes its current contracts. Native Pyxis qualification **failed** in batch 2;
+the safety follow-up below awaits its native recheck. Timed copies
 are off by default; neither the Linux reference nor QEMU establishes tear-free
 native output.
 
@@ -117,109 +118,110 @@ observer unprepared and hardware capability zero. Serial retained one
 unavailable summary and no register/periodic dumps. The native reporting path
 is source-reviewed, not exercised by this QEMU check.
 
+## Native batch 2 failure
+
+Owner-reported ThinkPad T14 Gen 1 AMD results, 2026-10-09, PXE main `11d35fa6`,
+`LOG_LEVEL=info`. Boots were default observe without metrics, off, observe with
+metrics, then blank with metrics. Local evidence is
+`/shared/present/batch2/caelum-batch2.log` and `results.md`; raw captures are not
+committed here.
+
+Measured estimates included 13.887, 16.663, 15.647, 20.785 and 16.650 ms versus
+Linux's 16.661 ms. A 40.7 ms bound still qualified hardware. Default boot printed
+sixteen observation losses and an unsupported `%02x` corrupted the device/BAR
+summary. Observe's start-upper included 4–37 ms. Blank admitted 13 of about
+6000 copies, yet the owner saw tearing apparently lasting 2–3 frames and a
+couple of frames of input delay. Copy/fence P50 was about 1.17 ms.
+
+Source inspection found that a hardware deadline overwrote the software cadence
+accumulator, and post-composition requalification could sleep toward a second
+blank. The safety fix removes all per-frame phasing/sleep/poll paths and uses
+the same full observation in both modes, with opportunistic blank classification
+only.
+It fixes the format, traces repeated losses and rejects uncertainty exceeding
+blank minus the existing eight-line guard before publishing hardware capability.
+A live widened bound revokes qualification. Rejected counts/max width join the
+existing metrics-gated summary, without adding default log lines. The unused
+light-read helper and obsolete poll-expiry, spin and wake-lateness metrics are
+removed; they no longer describe work performed by this path.
+
+The estimator remains unchanged. EDID anchoring and estimator overhaul were
+explicitly dropped by the owner. Narrow uncertainty does not establish correct
+period or tear-free output. Start-upper is age since an estimated preceding
+blank, not proof of a within-blank start; active-scanout copies can have
+millisecond ages. No native safety-fix result is claimed yet.
+
 ## Native ThinkPad batch
 
-Use the reviewed implementation revision, wired AC power, one internal panel
-and the unchanged native GOP mode. Record revision, ELF/image hashes, BIOS/panel
-configuration, clock source and the source/dependency/compiler identities above.
-Do not set `DISPLAY_SIZE`, attach another display, change power/mode/clock
-settings, or run a debugger during latency samples. Firmware timing may differ
-from Fedora's 1920x1080 / 60.0204 Hz / 31-line reference; qualify the actual boot.
+Batch 2 failed qualification. The current owner-requested two-boot recheck is
+below; the original three-mode qualification procedure is superseded.
 
-Build three measurement images from the **same source revision and private Quake
-data**, in the usual compiler environment. Keep the default `LOG_LEVEL=info`
-(explicit below) and request `DISPLAY_TIMING_METRICS=1` only for observation and
-blank qualification. This enables register dumps and bounded summaries without
-unrelated kernel traces. Ordinary boots omit the flag, retaining one preparation
-summary and rare observation-loss reports, with no periodic logging or metric
-sorting. Record the qualification summaries' overhead and keep reporting
-outliers. Set `QUAKE_DATA` to the local id1 directory:
+### Native safety recheck
+
+Two boots only, the same reviewed revision and private Quake data, wired AC,
+unchanged GOP mode and peripherals. Use the default info log level; global
+trace was ruled out because it floods the console and skews timing. Build and
+save each kernel/initrd/generated boot configuration together using the existing
+compiler environment:
 
 ```sh
-mkdir -p build/renoir-native
-make -j16 image LOG_LEVEL=info DISPLAY_TIMING=off QUAKE_DATA=/path/to/id1
-cp build/pyxis.iso build/renoir-native/off.iso
-cp build/caelum.elf build/renoir-native/off.elf
-cp build/initrd.cpio build/renoir-native/off.cpio
-cp build/limine.conf build/renoir-native/off.conf
+mkdir -p build/renoir-safety
 make -j16 image LOG_LEVEL=info DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1 QUAKE_DATA=/path/to/id1
-cp build/pyxis.iso build/renoir-native/observe.iso
-cp build/caelum.elf build/renoir-native/observe.elf
-cp build/initrd.cpio build/renoir-native/observe.cpio
-cp build/limine.conf build/renoir-native/observe.conf
+cp build/pyxis.iso build/renoir-safety/observe.iso
+cp build/caelum.elf build/renoir-safety/observe.elf
+cp build/initrd.cpio build/renoir-safety/observe.cpio
+cp build/limine.conf build/renoir-safety/observe.conf
 make -j16 image LOG_LEVEL=info DISPLAY_TIMING=blank DISPLAY_TIMING_METRICS=1 QUAKE_DATA=/path/to/id1
-cp build/pyxis.iso build/renoir-native/blank.iso
-cp build/caelum.elf build/renoir-native/blank.elf
-cp build/initrd.cpio build/renoir-native/blank.cpio
-cp build/limine.conf build/renoir-native/blank.conf
-sha256sum build/renoir-native/*
+cp build/pyxis.iso build/renoir-safety/blank.iso
+cp build/caelum.elf build/renoir-safety/blank.elf
+cp build/initrd.cpio build/renoir-safety/blank.cpio
+cp build/limine.conf build/renoir-safety/blank.conf
+sha256sum build/renoir-safety/*
 ```
 
-Use the owner's existing PXE staging procedure with the
-[generated boot configuration](../../configuration.md#boot-menu-timeout)
-to select each variant, retaining its kernel, initrd and generated
-`build/limine.conf` together. `DISPLAY_TIMING` writes the boot option into normal,
-rescue and installer entries; changing a runtime shell environment cannot change
-the kernel policy. `DISPLAY_TIMING_METRICS=1` adds `display.timing.metrics=1`
-to the same entries; omission or `0` disables reports and sorting without
-changing copy admission. Generated values other than `0`/`1` are refused;
-a manually supplied metrics flag accepts only `1`. An omitted timing policy
-defaults to `observe`; invalid generated
-values are refused, and an invalid manually supplied kernel value falls back to
-observation. Duplicate kernel options retain the parser's existing fatal rule.
+Use the owner's existing PXE staging procedure. Record revision, hashes, clock
+source, mode and workload for both boots.
 
-1. **Off baseline:** boot `off`, idle at the prompt for 40 seconds, then run
-   ordinary `quake` for 40 seconds. Take a short fixed-angle camera clip while
-   turning steadily in the same scene; note visible tear lines and input feel.
-   This is the existing staged unsynchronized copy, with no observer mapping.
-2. **Observer/counter capture:** boot `observe`. Save `log` output after startup
-   and after the same idle and Quake intervals. Collect `renoir-otg` identity,
-   raw H/V timing/control fields, decoded active/total/blank, frame and vertical
-   positions, STATUS, advancing transition count and bracket width. Save the
-   `display-timing: hardware` period/line/blank/uncertainty line, or the complete
-   unavailable/unqualified reason. Check four observed transitions, both blank
-   states, advancing idle and animation counters, no stalls or mode changes.
-   Static blank bits on disabled OTGs are not timing. No PSR wake/disable occurs.
-3. **Unsynchronized start distribution:** from the `observe` logs retain three
-   complete 600-copy summaries after warmup for idle and moving Quake. They give
-   start upper-bound, copy/fence, read bracket, spin and wake P50/P95/P99/max,
-   admitted/unsynchronized/invalid counts, missed-start late/poll-expired/
-   unqualified reasons, frame/position/status and prefix gaps.
-   Observe always counts copies unsynchronized. A start outside blank is useful
-   baseline phase data, not an admission. Unqualified samples are excluded from
-   start quantiles, with their count explicit.
-4. **Qualification opt-in:** only then boot the labelled experimental `blank`
-   image. Repeat the same idle/Quake intervals and collect three complete
-   summaries. Admission needs remaining blank after an eight-line guard and
-   timestamp/period uncertainty; late/expired/unqualified starts copy immediately
-   once. Check the start P99/max and fallback counts against the measured window,
-   not the nominal 16.67 ms refresh. Hardware timing can remain valid during an
-   unsynchronized fallback. Conservative sparse requalification may leave phase
-   unavailable even while counters advance.
-5. **Visible result and correctness:** take the same camera clip during steady
-   Quake turning, preferably with a high-frame-rate camera, and compare with
-   `off`. Keep timedemo separate (it remains uncapped). Check mouse-look,
-   Super+Esc/relock, space/layer changes, TTY selection and screenshots with a
-   visible cursor; report input responsiveness alongside the distributions.
-   A screenshot/FPS is not a tearing check. Stop each workload before the next.
+1. **Observe + metrics:** idle for 40 seconds, then ordinary moving `quake` for
+   40 seconds. Save three complete 600-copy summaries after warmup and a short
+   camera clip of steady turning. Check the PCI/BAR preparation line renders
+   correctly and repeated losses do not appear in the info log. `source=hardware`
+   must have uncertainty below `(blank_lines - 8) * period / V_total` (about
+   345 µs for this panel); record `rejected-bounds` and `reject-max`. Tens-of-ms
+   bounds must remain unqualified. Keep outliers and invalid sample counts.
+2. **Blank + metrics:** repeat the same intervals, scene and camera angle.
+   Software cadence, full observation and copying are identical to observe;
+   no blank phasing/sleep/poll executes. Opportunistic admissions may be rare
+   and never delay a fallback copy. Compare tear persistence and input feel,
+   including mouse-look, Super+Esc/relock, typing and space/layer changes.
+   Return to observe if unexplained additional tearing or delay remains.
 
-Repeat the `off`/`blank` camera comparison with `DISPLAY_TIMING_METRICS=0`
-images from the same revision, still at `LOG_LEVEL=info`, to check the visible
-result without periodic qualification-output overhead.
+This recheck qualifies the safety/fallback correction only. It does not accept
+period accuracy, blank-copy tear-free output, or a default timing-policy change.
+Screenshots/FPS are not tearing checks. Existing prepared RO/NX/UC mappings,
+panic ownership, actual first-store marker, copy fences and capture contracts
+remain. No EDID, modeset, clocks, power, firmware or GPU register writes are added.
 
-The start marker timestamps one actual four-byte front store with IRQs saved,
-then restores IF before remaining copying/accounting. GPU observation and waits
-are never performed in that section; its clock can read HPET and has measured
-access cost. NMI/device-fetch timing is not inferred from this CPU timestamp.
-Copy completion timing includes MFENCE/LFENCE after the ordinary store fence.
-Once per 60 copies, representative chunk/row-prefix timestamps report CPU-issued
-progress gaps and guard overruns. They add clock cost on sampled frames and do
-not prove WC visibility for every row. Every 600 copies, bounded summaries sort
-after direct-writer release; keep outliers, reporting samples and invalid counts.
+## Safety-fix QEMU checks
 
-Accept native timed-copy qualification only with positive measured start margin,
-no unexplained counter/mode loss or prefix guard overruns under the workload,
-and camera/correctness evidence. The eight-line guard is a qualification policy,
-not a measured AMD fetch depth. If these fail or evidence is missing, retain
-default `observe`, record the failed condition and revisit before enablement.
-There is no automatic opt-in, register-write fallback, page flip or program API.
+Pre-code baseline `b0a050b7` ISO/ELF/initrd/configuration was archived. Code
+`c51122ba` built default, observe+metrics and blank+metrics images using the
+existing LLVM23.1.3/49e2c1a builder and verified unchanged SDK/userland/ports
+bundles. Observe and blank kernel ELF and initrd were byte-identical; only
+boot policy differed.
+
+Fresh QEMU10.2.2/Q35/nested-KVM/four-core/2-GiB standard-VGA boots used fresh
+OVMF variables, VirtIO-SCSI CD and RNG, relative PS/2, no network/disk/audio/USB,
+and a disabled host window. Read-only GDB confirmed DISPLAY_BOOT, the respective
+mode, an unprepared observer and zero hardware capability/period/timestamp.
+Both retained one unavailable summary, tab switching, keyboard input and `ls`
+completion; the pointer/caret and screen were visually checked. PNGs after
+the same command were identical (SHA-256
+`830a8fd53863ea0a5de544b8b6f09009c1e0ff1a9f48b56e723835a2ce9f3295`).
+
+Cadence parity, qualification publication, guarded rejection and supported
+formatting were independently source-reviewed. QEMU cannot exercise native
+Renoir registers, period estimation, rejected hardware bounds or visible tearing;
+no native or performance pass is claimed. No new tests, device emulation, fault
+injection or boot/input automation were added. Task-owned QEMU/GDB/build jobs
+stopped; artifacts and captures remain local and ignored.
