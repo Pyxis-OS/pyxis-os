@@ -185,7 +185,8 @@ static bool stop_output(void)
 }
 
 /* IF=0; caller restores IF before failure shutdown. WALCLK is a wrapping
- * device clock, not an absolute consumption counter. HPET bounds its delta. */
+ * device clock, not an absolute consumption counter. Monotonic time bounds
+ * its delta independently of the selected kernel clock source. */
 static bool observe_progress(const struct hda_stream_position *position,
     const struct hda_irq_event *event, uint64_t now)
 {

@@ -139,8 +139,9 @@ Within the same IF=0 phase it consumes the completion hint with that position;
 a QEMU completion without the expected boundary advance is refused. Native BCIS
 can occur when descriptor data enters the FIFO, before link consumption, and is
 only a wake hint. The RUN epoch
-begins with HPET and WALCLK captured immediately before RUN, allowing legitimate
-progress before the first observation. Monotonic HPET and wrapping WALCLK bound
+begins with monotonic time and WALCLK captured immediately before RUN, allowing
+legitimate progress before the first observation. The selected kernel clock
+and wrapping WALCLK bound
 observation and progress gaps. While running, a **5 ms watchdog** supplements
 IRQ wakeups; it is absent while parked. A gap reaching **20 ms**, lack of observed
 progress for that interval, stale completion notification, alignment error or
@@ -152,13 +153,14 @@ Before a reclaimed period is mixed directly into DMA, the worker takes a fresh
 position/time observation with IF=0. QEMU requires more than **8,192 bytes plus
 one frame** of headroom before that period's next consumption. A DMA barrier
 follows copying. A second observation rejects a commit taking **1 ms or more**
-in HPET or WALCLK, or progress reaching the target. Commit duration is retained
+in monotonic time or WALCLK, or progress reaching the target. Commit duration is retained
 for measurement. These bounds are runtime guards and accepted starting tuning;
 they are not hard real-time guarantees or an absolute hardware consumption
 counter.
 
-`QEMU_CODEC_BURST_BYTES` (8192) and the 1 ms HPET commit/WALCLK bounds
-are QEMU-derived and remain unchanged for QEMU.
+`QEMU_CODEC_BURST_BYTES` (8192) and the 1 ms commit/WALCLK bounds are
+QEMU-derived and remain unchanged for QEMU. The original measurements used
+HPET; newer kernels can select TSC through [timekeeping](../kernel/timekeeping.md).
 
 The owner accepted a separate native profile on **2026-10-09**. After stopped
 format programming, `F = round_up(FIFOS + 1, 4)` overestimates both literal-byte
