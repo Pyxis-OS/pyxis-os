@@ -1,7 +1,7 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Task 1 is implemented; task 2 is assigned on 2026-10-09. Tasks 3–4 remain
+Tasks 1–2 are implemented; task 2 was assigned on 2026-10-09. Tasks 3–4 remain
 unimplemented and unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
@@ -281,7 +281,7 @@ continue
 ```
 
 Keep the exact image ELF. The scaffold has no NIC/RSP, arbitrary break-in,
-panic interception, guarded target memory operations, breakpoints or stepping.
+panic interception, target writes, breakpoints or stepping.
 Qualification: ordinary kernel/image builds with verified unchanged SDK/userland/
 ports bundles, then interactive Q35/KVM/GDB with one and four CPUs. Complete
 snapshots, IST use, unmapped guards, mismatched/matching release, original BSP
@@ -296,9 +296,62 @@ baseline/option-off medians 0.52/0.49 s, both ranges 0.49–0.52 s. No measurabl
 option-off slowdown was reproduced in that run; the timing gate is closed.
 No isolated IPI-latency, speedup or native debugger result is claimed.
 
+## Implemented guarded inspection
+
+While COMPLETE, the parked BSP services `arch_debug_inspect`: captured integer
+registers/return frame, CR3 and both GS bases, or 1–1024 bytes of virtual RAM
+through the selected CPU's captured root. All other CPUs must have acknowledged
+the generation. No function injection, target writes, allocation, ordinary VM
+scratch, locks or logging. Each request is bounded; it never refreshes the fixed
+30-second expiry. Results precede release publication of `completion`.
+
+Two permanent reserved kernel pages provide dedicated translation/data windows;
+boot establishes their ancestors and retains their shared leaf pointers. Only
+the parked BSP remaps these read-only/NX aliases, invalidating its local TLB and
+clearing both leaves before returning. Every page-table level and destination
+frame must be wholly covered by known boot RAM (usable, loader or kernel), with
+no excluded overlap. Canonicality, overflow, presence, physical width, reserved
+bits and cache encodings are checked. Native 4 KiB leaves and PAT index zero
+only; large pages and other cache encodings are refused. A boot-time BSP
+PAT/CR0/MTRR snapshot requires effective WB, including fixed and variable ranges;
+unsupported or mixed cache classes are refused. Current code does not change
+that cache setup. Page tables, DMA and debugger storage may be read; DMA and the
+debugger's own working storage are not frozen snapshots. Reads return no
+successful byte count on failure and clear partial output.
+
+Only the opt-in IDT intercepts #PF/#GP. The GS-independent fixup recognizes the
+exact guarded load, owned active probe, BSP/generation, source and saved call
+stack. It preserves selectors/GPRs and returns through that call stack without
+IRET, retaining outer-NMI blocking until checkpoint release. POPFQ clears RF;
+the failed load is not retried. Other faults enter the original ISR with their
+original hardware frame. This does not protect against machine checks/poisoned
+RAM or qualify arbitrary interrupted contexts.
+
+Use the exact staged ELF with QEMU GDB and `set may-call-functions off`. Stop
+at `hbreak arch_debug_inspect_service`, after COMPLETE, then submit fields before
+a new nonzero sequence (do not reuse a sequence or modify an outstanding request):
+
+```gdb
+set var arch_debug_inspect.generation = arch_debug_stop.generation
+set var arch_debug_inspect.cpu = 0
+set var arch_debug_inspect.operation = DEBUG_INSPECT_RAM
+set var arch_debug_inspect.address = (unsigned long)&arch_debug_enabled
+set var arch_debug_inspect.length = 1
+set var arch_debug_inspect.request = 1
+continue
+p arch_debug_inspect.completion
+p arch_debug_inspect.status
+p arch_debug_inspect.bytes
+x/1bx arch_debug_inspect.data
+```
+
+Use `DEBUG_INSPECT_REGISTERS` for `arch_debug_inspect.registers`; unavailable
+FP/SIMD state is not synthesized. Requests outside COMPLETE are not serviced.
+This mailbox is temporary task 1–2 scaffolding, replaced by task 3 transport.
+
 ## Accepted task split and qualification
 
-Task 1 is complete; task 2 is assigned. Tasks 3–4 await assignment. Accepted task 1 control:
+Tasks 1–2 are complete; tasks 3–4 await assignment. Accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
 QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
@@ -315,7 +368,7 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    snapshot/generation/ack/release, bounded incomplete-stop handling, idle clock
    maintenance and unmodified continue. No NIC/RSP, memory mutation or breakpoints.
 
-2. [ ] **Guarded inspection.**
+2. [x] **Guarded inspection.**
 
    Accepted task 2 contracts (2026-10-09): opt-in #PF/#GP fixups recognize only
    the guarded probe and recover without IRET; other faults retain existing

@@ -92,8 +92,11 @@ void arch_debug_load8_unsafe(void);
 void arch_debug_page_fault_entry(void);
 void arch_debug_general_protection_entry(void);
 bool arch_debug_fixup(const struct exception_frame *frame);
+/* Parked BSP only, COMPLETE generation; exclusive windows, no GS or services. */
 void arch_debug_inspect_service(void);
+/* Boot BSP, IF=0, before roots/CPUs share the prepared kernel window tables. */
 void arch_debug_inspect_prepare(const struct boot_info *boot);
+/* Parked BSP only, COMPLETE generation, owned mapped output <= READ_BYTES. */
 enum debug_inspect_status arch_debug_read_ram(uint64_t root, uintptr_t address,
                                               uint8_t *output, size_t bytes);
 
