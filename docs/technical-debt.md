@@ -827,9 +827,15 @@ Revisit if more ports need a working directory or whole reads. Pyxis displays re
 
 ## SDL game ports native qualification
 
-The [SDL game ports](development/sdl-game-ports.md) were measured in QEMU only. The owner's native check on the ThinkPad (PXE build of
-#646's head with `DUKE3D_DATA`, AC, native panel mode) is pending: Doom and Quake timedemos against their Chocolate ports, and EDuke32 play,
-frame rate, save, load and quit. Revisit with those results.
+The owner checked the [SDL game ports](development/sdl-game-ports.md) on the ThinkPad on 2026-10-09 (PXE build of #646's head `0bb9731f`
+with `DUKE3D_DATA`, info logging, wired, AC, 1920x1080). The SDL path cost about 2.0 ms per frame in Chocolate Quake's timedemo (about 1.2 ms in
+QEMU) and about 1.6 ms in Chocolate Doom's, from an earlier batch ([Quake](development/experiments/chocolate-quake/README.md#native-results),
+[Doom](development/experiments/chocolate-doom/README.md#native-results)). Chocolate Quake played, with clearly more tearing than native Quake:
+about three drifting tear lines at once, an input to the [Renoir flip qualification](wip/renoir-flip-presentation.md#tasks-and-native-qualification).
+EDuke32 played smoothly at the native resolution with smooth pointer motion; its SDL cursor showed through the system pointer, some tearing
+appeared, and a mouse suits it better than the trackpad. Still pending natively: Chocolate Doom's matched configuration and a play
+check, and EDuke32's level load time, frame rates capped and uncapped, and save, load and quit. Revisit when the owner
+next batches native checks.
 
 ## Quake port limits
 

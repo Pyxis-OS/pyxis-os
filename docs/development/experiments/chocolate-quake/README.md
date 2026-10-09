@@ -78,22 +78,28 @@ the frame sleep is a local scratch build, never committed.
 - **Memory:** about 288 MiB above idle while running, as the
   [port README](../../../../ports/chocolate-quake/README.md#memory) records.
 
-## Native steps for the owner
+## Native results
 
-On the ThinkPad, wired and on AC, at the panel's native mode, with this
-branch's PXE build:
+The owner ran the native steps on 2026-10-09 on the ThinkPad: wired, on AC,
+at the panel's native mode, PXE build of `0bb9731f` (#646's head) with
+default info logging. Values are approximate, one summary per configuration:
 
-1. **Native:** run `quake +timedemo demo1` three times and note each report.
-2. **Chocolate default:** run `chocolate-quake +timedemo demo1` three times.
-   After each report, open the console with the key under Escape and type
-   `quit`, then press a key at the end screen.
-3. **Chocolate matched:** run
-   `chocolate-quake +vid_forcemode 4 +timedemo demo1` three times.
-4. **Play:** run `chocolate-quake`, start a new game, play a little of E1M1
-   with the mouse, and quit through the menu.
+| Configuration | fps | Per frame |
+| --- | --- | --- |
+| Native | about 630 | 1.59 ms |
+| Chocolate default | about 275 | 3.64 ms |
+| Chocolate matched | about 277 | 3.61 ms |
 
-**What to expect.** The gap should narrow natively, where memory copies and
-the SUBMIT round trip are cheaper.
+- **The SDL path:** about 2.0 ms per frame natively, against about 1.2 ms in
+  QEMU. The expected narrowing didn't happen: the ratio is about 2.3 natively
+  against about 2.4 in QEMU. The panel's 1920x1080 mode presents larger
+  pictures than QEMU's 1280x800, so the figures aren't matched to QEMU's.
+- **Play:** worked. Tearing was clearly worse than native Quake's: about three
+  tear lines at once, one about a third of the way down and another 100–150
+  lines lower, drifting noticeably. This is an observation, not a diagnosis; a
+  beat between the 72 Hz frame pacing and the 60 Hz panel, with unsynchronized
+  copies, is one possibility. It is an input to the
+  [Renoir flip qualification](../../../wip/renoir-flip-presentation.md#tasks-and-native-qualification).
 
 ## Limits
 

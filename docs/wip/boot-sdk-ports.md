@@ -20,8 +20,8 @@ status belong in the milestone document and the PR.
 - [SDL game ports](../development/sdl-game-ports.md), 2026-10-09: Chocolate
   Doom and Chocolate Quake in ordinary images and EDuke32 as an opt-in
   personal build, all without sound (#623, #634, #646); QEMU comparisons
-  recorded, [native qualification](../technical-debt.md#sdl-game-ports-native-qualification)
-  pending.
+  recorded, native timedemos and play checked, with
+  [remaining native checks](../technical-debt.md#sdl-game-ports-native-qualification).
 - [Volume controls](../userland/audio-volume.md), 2026-10-09: master/per-space
   gain and bar widgets; native listening, mute and reboot default checked.
   [Remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).

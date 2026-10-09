@@ -56,8 +56,11 @@ In QEMU (nested KVM, 4 CPUs, 1280x800):
   about 1,400 standing in EDuke32's E1L1, against about 2,700. The shell alone
   used about 300.
 
-Native ThinkPad results are in the
-[native qualification](../technical-debt.md#sdl-game-ports-native-qualification).
+On the ThinkPad (1920x1080, a larger picture than QEMU's), the SDL path cost
+about 2.0 ms per frame in Chocolate Quake and about 1.6 ms in Chocolate Doom.
+All three games played; Chocolate Quake tore visibly more than native Quake.
+The [native qualification](../technical-debt.md#sdl-game-ports-native-qualification)
+lists what was observed and what is still unchecked.
 
 ## Limits
 
