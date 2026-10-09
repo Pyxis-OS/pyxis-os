@@ -98,9 +98,9 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-09): [SDL2 clipboard](clipboard.md#graphics-activation),
   accepted graphics authority/activation, SDL adapter and opt-in manual qualification tool.
-- **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  shared 128 MiB selected-image capture ceiling and failure rollback qualification,
-  using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
+- **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
+  prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
+  Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   task 1 read-only inventory complete; exclusion standard and PSP/SMU risk accepted.
   Inherited pitch remains a backend prerequisite; task 2 awaits separate owner go.
