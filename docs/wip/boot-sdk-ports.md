@@ -112,6 +112,9 @@ Chosen by the owner, each starting with a proposal:
   [baseline and warm qualification](../development/experiments/bluetooth-runtime-hci/README.md).
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
+- **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)
+  accepted 2026-10-09: fewer clock reads per timer event (task A, merged in
+  #571), then TSC with extended-HPET fallback (task B, in progress).
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
