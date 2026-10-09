@@ -129,8 +129,13 @@ reboot and existing UDP capture on horse.
    7680, correct addresses and many matching confirmations with no timeout/loss.
    Refusal is a safe negative result: retain its numeric metrics dump, do not
    force-enable. Timeout/unavailable is not qualification success; restore off.
-4. In Development, run the same moving Quake scene/demo on both boots. Owner
-   takes matched camera clips and judges tearing by eye. Compare info-level
+4. In Development, run the same moving native Quake scene/demo on both boots,
+   then play `chocolate-quake` with its unchanged72Hz frame-sleep pacing on both.
+   The owner reports about three simultaneous drifting tear lines in Chocolate
+   Quake with current unsynchronized copies, versus native Quake's single tear;
+   this is a baseline observation, not a flip result. Keep the workload/pacing
+   matched, take camera clips of both games, and judge tearing by eye.
+   Compare info-level
    compose/copy costs, flip pending duration, validation costs and poll counts.
    Check ordinary keys/motion, tabs, text selection, space/layer changes,
    Quake lock, Super+Esc and fresh-click relock for perceived delay/regression.

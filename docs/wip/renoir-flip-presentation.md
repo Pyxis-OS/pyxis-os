@@ -281,7 +281,7 @@ task 2 adds the narrowly allowed mono write path, default off.
    unchanged mode, info logging, opt-in disabled/enabled paired boots. Record
    source/reservation evidence, register snapshots before/after, requested versus
    confirmed addresses, pending durations/timeouts, CPU compose/copy costs and
-   BSP poll/wakeup cost and service of input. Take matched moving-Quake camera clips; check cursor/selection,
+   BSP poll/wakeup cost and service of input. Take matched native Quake and Chocolate Quake72Hz play camera clips; check cursor/selection,
    lock/unlock, spaces/layers, screenshots and ordinary shutdown. A framebuffer
    screenshot or FPS does not establish a tear-free panel. Keep optional blank
    and timeout recovery unqualified until actually exercised and recorded.
