@@ -1,5 +1,7 @@
 # SMP task 7: PMM word search
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Matched before/after record for the PMM follow-up between SMP tasks
 [7a](../smp-task7a/README.md) and 7b, recorded on 2026-10-05. The owner chose it
 after 7a measured page clients serializing on the PMM's bit-by-bit scan. These
@@ -63,13 +65,10 @@ The mixed set is unchanged at 4 CPUs because its P client was already a small
 part of it. On 1 CPU the mixed set took 2.515 s (2.510–2.537), against 2.823 s
 (2.820–2.827) before.
 
-Full output: `pre4-output.txt`, `post4-output.txt`, `pre1-output.txt` and
-`post1-output.txt`.
-
 ### PMM lock
 
 The same counter build as in 7a, ported to the new code
-([pmm-counters.patch](pmm-counters.patch); [checks.txt](checks.txt)):
+(a throwaway patch, not kept in the tree):
 
 - **Two P together:** 133,548 lock calls spent about 150 cycles each waiting.
   That is negligible next to the 4.5 G wait cycles in 7a.
@@ -81,7 +80,7 @@ The lock no longer serializes the clients.
 ## Remaining concurrency cost: scratch-slot false sharing
 
 Two P clients still each took about 290 ms against 156 ms alone, so something
-else is shared. Sizes isolate it ([size-and-stride.txt](size-and-stride.txt)):
+else is shared. Sizes isolate it:
 
 | Workload | Alone | Two together | Two together, slots spread |
 | --- | ---: | ---: | ---: |
@@ -98,8 +97,7 @@ Values are ms; each cell holds the two repetitions, or both clients' range.
   times, for zeroing and for each page-table level read. Every CPU's slot PTEs
   share one 64-byte cache line of the scratch page table, and the `scratch_busy`
   flags share another.
-- **Experiment:** a throwaway build ([scratch-stride.patch](scratch-stride.patch),
-  64 CPUs at most) gave each CPU's PTEs and flags their own line. That removed
+- **Experiment:** a throwaway build (64 CPUs at most) gave each CPU's PTEs and flags their own line. That removed
   roughly half of the paired slowdown.
 - **What remains:** after that, two clients still take about 1.4 times as long as
   one. The remaining shared state is the PMM and heap locks, their counters, and
@@ -112,7 +110,7 @@ records the options.
 
 ## Correctness
 
-The [task-5 stress patch](../smp-task5/stress.patch) ran on this PR at 4 and 12
+The task-5 stress patch ran on this PR at 4 and 12
 CPUs. Every AP allocated, zeroed, pattern-checked and freed frames, built and
 walked private roots, and made oversized requests that scan the whole bitmap
 and fail. All APs reported no failures and no mismatches. Each AP's bitmap

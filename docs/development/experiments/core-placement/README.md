@@ -1,5 +1,7 @@
 # Core-placement checks
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Recorded 2026-10-07 for the [topology-aware tie-break](../../../kernel/smp.md#placement-and-migration).
 Kernel base: main `ebe6cdf`; changed code adds CPUID core records and the accepted
 idle-siblings tie-break. SDK, userspace, ports, filesystem and lwIP inputs match.
@@ -52,7 +54,7 @@ No diagnostic code, GDB command files or traces are committed.
 
 ## Matched allocation batches
 
-The existing [smp8-check.py](../smp-task8/smp8-check.py) ran unmodified. Each series
+The existing `smp8-check.py` from the SMP task 8 record ran unmodified. Each series
 warms up pages once, then starts the recorded background batches in fresh remote
 sessions. Heap uses 262144 rounds, pages uses 2048. Every series reported zero
 failures. Values below are aggregate wall seconds, including launch/completion
@@ -102,7 +104,7 @@ code and kernel configuration match the measured QEMU build above.
 - [x] Run the unchanged task-8 checker from the desktop against the native server.
 - [x] Return the results; compare heap ×4, ×8 and ×11 and confirm zero failures.
 
-The [owner-returned capture](native-t14.txt) includes all eight batches and boot
+The owner-returned capture included all eight batches and boot
 topology lines. Twelve logical CPUs were online, with SMT shift 1 throughout:
 
 | Pyxis CPU pair | APIC IDs | Core key |

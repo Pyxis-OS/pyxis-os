@@ -1,5 +1,7 @@
 # SMP task 8a: final validation
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Final matched record for the [runtime SMP milestone](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-06. It compares main `7748db5` (SMP tasks 1–7) with main
 `83c08d6`, the pre-milestone revision of the [task-1 baseline](../smp-task1-baseline/README.md).
@@ -22,9 +24,8 @@ with `make image` and the default configuration:
 | Baseline | main `83c08d6` | `d0d0fde7…603f3406` (the task-1 baseline kernel) |
 | Final | main `7748db5` | `e4427b95…fecb4c` |
 
-[smp8-check.py](smp8-check.py) ran from the desktop. Each batch opened one remote
-session, started N background clients and waited for all of them. Results are in
-[native-base.txt](native-base.txt) and [native-final.txt](native-final.txt).
+A check script ran from the desktop. Each batch opened one remote
+session, started N background clients and waited for all of them.
 
 | Batch | Baseline: wall, each client (s) | Final: wall, each client (s) |
 | --- | --- | --- |
@@ -65,7 +66,7 @@ session, started N background clients and waited for all of them. Results are in
 Both revisions ran the [task-1 workload set](../smp-task1-baseline/README.md#configuration)
 in one session on the same host:
 
-- **Init:** the task-1 baseline init, [init-baseline.sh](init-baseline.sh),
+- **Init:** the task-1 baseline init,
   written in each revision's grammar.
   - `83c08d6`: `INIT_PRIMARY=app://init INIT_CPUS=`
   - `7748db5`: `SPACES=baseline=app://init`
@@ -131,8 +132,7 @@ from the milestone.
 
 ## QEMU: lifetime scenarios
 
-[lifetime.sh](lifetime.sh) ran on the default final image at 2, 4 and 12 CPUs.
-Output is in [lifetime.txt](lifetime.txt).
+A lifetime script ran on the default final image at 2, 4 and 12 CPUs.
 
 | Scenario | Result at 2, 4 and 12 CPUs |
 | --- | --- |
@@ -148,7 +148,7 @@ only grow. lwIP's PCBs come from the kernel heap (`MEMP_MEM_MALLOC`), and closed
 connections linger in TIME_WAIT for 120 s, so remote sessions opened shortly
 before a read show up there.
 
-A 2-CPU rerun (`life2c` in [lifetime.txt](lifetime.txt)) also read the heap 30 s
+A 2-CPU rerun (`life2c`) also read the heap 30 s
 and 130 s after the last session closed. The count matched the idle value right
 after the scenarios, 2196. It was 2195 at both later reads: one fewer than the
 idle read, which itself came shortly after a warm-up session. That is consistent
@@ -158,10 +158,9 @@ logged a panic.
 ## QEMU: preemption push
 
 The #417 review asked to see the push itself: a task preempted in user mode moving
-to a CPU at least two tasks lighter. [push.patch](push.patch), a throwaway patch,
+to a CPU at least two tasks lighter. A throwaway patch
 counts these moves (not affinity relocations) and logs the first eight. A 4-CPU
-boot of the default image ran the loaded sets from 7b and four compute clients
-([push-serial.txt](push-serial.txt)):
+boot of the default image ran the loaded sets from 7b and four compute clients:
 
 ```text
 push 1: task 0xffff8010002a2ef0 CPU 3 (load 2) -> CPU 1 (load 0)

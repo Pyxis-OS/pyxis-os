@@ -1,5 +1,7 @@
 # Bluetooth warm-firmware verification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Task 4 completed on 2026-10-08 for the owner's accepted warm-host scope:
 accept already operational firmware, skip loading, and verify the running version
 remains unchanged. The owner explicitly deferred cold bootloader/upload support
@@ -57,7 +59,7 @@ inactive/disabled and rfkill unblocked; the invoking user had device-node access
 
 ## Measured warm state
 
-The [serial capture](serial.txt) records all three HCI events:
+The serial capture recorded all three HCI events:
 
 | Command | Sequence | Event bytes | Status / command allowance |
 | --- | ---: | --- | --- |
@@ -71,14 +73,14 @@ year 24, patch 0. Variant
 `0x23` is interpreted as operational firmware using the
 [Linux legacy protocol](https://github.com/torvalds/linux/blob/v6.18/drivers/bluetooth/btintel.c).
 
-[GDB](gdb.txt), with entered expressions retained, showed
+GDB showed
 `firmware_load_skipped=true`, `firmware_verified=true`, `finished=true` and
 `result=USB_OK`. The original and confirmation arrays matched. The sequence was
 3, copied queue empty, both receives still `INTERRUPT_POSTED`, stream `USB_OK`
 and controller running. Guest `lsusb -n` exited 0 with complete AX200 inventory
 and both interfaces; the remote shell exited with a complete final drain.
 
-The [host initialization excerpt](host-initialization.txt) comes from Fedora's
+The host initialization evidence is an excerpt from Fedora's
 kernel journal for this host boot. It reports a bootloader initially, then
 loading `intel/ibt-20-1-3.sfi`, applying `intel/ibt-20-1-3.ddc`, and running build
 193/week 33/year 2024. Together with the unchanged guest replies, this supports

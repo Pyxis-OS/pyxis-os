@@ -1,5 +1,7 @@
 # npfs contiguous write runs
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 This addresses the serial single-block write paths identified in
 [review #348](https://git.internal/PyxisOS/pyxis-os/pulls/348).
 The comparison is current main `b352a1d` against implementation `007be3e`;
@@ -109,8 +111,7 @@ exit
 ```
 
 The client was `build/tools/pyxis-remote --machine --no-shell-echo --columns 120
---rows 40 127.0.0.1 23389`. Full decoded outputs are [baseline.txt](baseline.txt)
-and [io.txt](io.txt). The baseline additionally exercised reads and small creates
+--rows 40 127.0.0.1 23389`. The baseline additionally exercised reads and small creates
 after the measured writes; those commands are outside these timing/counter windows.
 
 ## Results

@@ -1,5 +1,7 @@
 # SMP task 6: concurrent kernel heap growth
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Matched before/after record for [SMP task 6](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-05. These are nested-VM measurements: the development host is
 itself a KVM guest (Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized i9-12900K), and
@@ -107,17 +109,14 @@ and 75 records and 1,060 pages after it. The difference is the five boot pools
 (2,539,520 bytes, 620 pages) moving to the arena, which reported
 `arena used=2539520 retired=0`.
 
-Full output: `pre4-output.txt`, `post4-output.txt`, `pre1-output.txt`,
-`post1-output.txt`, `pre1b-output.txt`, `post1b-output.txt`,
-`post4b-output.txt` and `post4c-output.txt`. Each starts with the GDB reads. Before `2c41360`, the
+Each output started with the GDB reads. Before `2c41360`, the
 `arena_bytes` field read 0 there; only the boot log and snapshots carried it.
 
 ## Stress run (not committed)
 
-[stress.patch](stress.patch) is a throwaway patch; it applies to this PR's code
+The stress patch is a throwaway patch; it applied to this PR's code
 with `git apply` and is not part of the tree. The runs in this section used an
-earlier version on `60114aa`. The file here is the version for `35fbc29`, which
-adds the injected failure described [below](#after-the-review-fix). When the
+earlier version on `60114aa`; the later version, for `35fbc29`, adds the injected failure described [below](#after-the-review-fix). When the
 scheduler starts, every AP spends six seconds on rounds over 64 slots. Meanwhile the BSP continues booting:
 USB enumeration, display start and network setup all allocate. Each round:
 
@@ -132,8 +131,7 @@ At the end, each AP checks and frees its remaining blocks and runs TLSF's own
 Twenty seconds after start, when boot has finished, CPU 1 asks for 512 MiB. That
 is more than the 256 MiB guest has, so growth maps frames until the PMM runs out,
 then fails. CPU 1 then allocates 1 MiB. Afterwards, a remote session ran
-`iobench write home://after.bin` and `allocbench growth`. Output is in
-[stress-serial.txt](stress-serial.txt).
+`iobench write home://after.bin` and `allocbench growth`.
 
 | CPUs | Rounds per AP | Pools after the six seconds | Failures | Pattern mismatches | `tlsf_check()` |
 | ---: | --- | ---: | ---: | ---: | --- |

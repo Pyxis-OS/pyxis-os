@@ -1,5 +1,7 @@
 # Raw-source random_read baseline
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Measured 2026-10-08 on unchanged Pyxis
 `92762b107e813be5b6c5f4600e205049630dd3c6`, before the
 [generator implementation](../../../devices/random-generator.md). The kernel bundle
@@ -22,7 +24,7 @@ The existing independent bundle targets produced those clean bundles at
 kernel/SDK ABI identity were verified by ordinary image assembly. No toolchain
 rebuild. Effective default Kconfig includes xHCI and 120-tick HPET maintenance.
 
-The single [measurement consumer](random-read.c) was compiled with the exported
+The single measurement consumer was compiled with the exported
 SDK's `share/pyxis.mk`, ordinary `-O2 -g3` flags and native library order. It is
 not a normal packaged application, generator implementation or benchmark
 framework. Add its P1F as `random-baseline.pxe` to a copy of `build/initrd-root`,
@@ -92,8 +94,8 @@ session FINAL confirmed shell exit and complete drain.
 
 ## Observations
 
-Raw integer samples, including each run's total, min/max and loop time:
-[VirtIO](virtio-samples.txt), [CPU](cpu-samples.txt). Each nonzero extent has
+The raw integer samples (each run's total, min/max and loop time) are in Git
+history, not the tree. Each nonzero extent has
 2560 measured reads per source, all successful. Zero-length control bypasses
 hardware/worker but still validates authority/deadline.
 

@@ -13,7 +13,7 @@ for the behaviour. Main here is `e34b9ce`, which already includes
 | Development VM, main `e34b9ce` | HPET | measured |
 | Development VM, task B | HPET, `clock: HPET kept: CPU 0 has no invariant TSC` | measured: the fallback path |
 | Development VM, task B with a local forced patch | TSC, 3187.062 MHz (+/-250 ppm), RDTSCP+LFENCE | measured, not a supported configuration |
-| Desktop host QEMU, `-cpu host,+invtsc` | expected TSC | [to run](#desktop-host-runs) |
+| Desktop host QEMU, `-cpu host,+invtsc` | TSC, 3187.061 MHz (+/-66 ppm), RDTSCP+LFENCE | [measured](#desktop-host-runs) by luna |
 | ThinkPad, native | expected TSC | [owner's batch](#native-steps-for-the-owner) |
 
 **Development VM.** QEMU 10.2.2 with the local AHCI fix, nested KVM on the
@@ -90,20 +90,27 @@ No sleep ended early.
 
 ## Desktop host runs
 
-To be run on the desktop host (i9-12900K; Linux reports `constant_tsc` and
-`nonstop_tsc` on all 24 CPUs and uses the TSC), by luna or the owner, with
-ordinary builds of main `e34b9ce` and of this branch. These runs replace the
-forced patch as the QEMU evidence for the TSC path.
+Run by luna on 2026-10-09 on the desktop host. Configuration:
+- **Host:** i9-12900K, whose Linux uses the TSC.
+- **QEMU:** 11.1.1 directly under KVM; q35, 4 vCPUs, 8 GiB, VirtIO net with
+  user networking.
+- **CPU model:** a wrapper appended `-cpu host,+invtsc`.
+- **Builds:** clean, of main `e34b9ce` and of this branch at `cc9d0e3`. The
+  committed code was used, with no forced patch.
+- **Host load:** the owner's two other VMs kept running, and CPUs were not
+  pinned.
 
-1. Boot each build with KVM and 4 CPUs, adding `-cpu host,+invtsc` after the
-   run script's `-cpu max`, for example through a wrapper given as `QEMU=`.
-   QEMU applies the last `-cpu`. Keep VirtIO net with a forwarded remote port.
-2. Record the `clock:` lines. Expected with this branch: `clock: TSC selected
-   on 4 CPUs`, a frequency close to the host TSC, and an error bound under
-   100 ppm. A "calibration too uncertain" line would mean the host's HPET
-   exits are also too slow, which is worth reporting with its ppm.
-3. Run the workloads above: send, receive and the clock loops three times each.
-   Optionally run `perf kvm stat` HPET counts.
+| Measure | Main `e34b9ce` | Task B `cc9d0e3` |
+| --- | --- | --- |
+| Clock line | HPET, direct | `TSC selected on 4 CPUs, 3187.061 MHz calibrated against HPET (+/-66 ppm), RDTSCP+LFENCE` |
+| Send, MiB/s | 18.696, 19.050, 18.648 | 84.834, 87.729, 96.059 |
+| Receive, MiB/s | 29.882, 29.902, 28.554 | 123.865, 169.448, 148.149 |
+| `iobench` clock loop, ns per call | 11,206, 7,240, 7,263 | 103, 104, 103 |
+| `allocbench` clock loop, ns per call | 7,280, 7,239, 7,266 | 107, 110, 113 |
+
+Single-level KVM HPET exits fit the 100 ppm calibration bound. The
+frequency agrees with the forced nested runs and with #557's measurement.
+These are host-KVM results, not native ones.
 
 ## Native steps for the owner
 
@@ -146,7 +153,7 @@ builds of main `e34b9ce` and of this branch, in the same order for both.
 
 ## Limits
 
-These are nested-VM measurements, and the TSC numbers come from an
-unsupported local patch. The supported TSC path awaits the desktop host and
-ThinkPad runs above. The warp check and the switch ran on four vCPUs of one
+The development-VM TSC numbers come from an unsupported local patch. The
+committed code selected the TSC on the desktop host; native behaviour awaits
+the ThinkPad run. The warp check and the switch ran on four vCPUs of one
 VM; twelve CPUs on real hardware are the owner's run.
