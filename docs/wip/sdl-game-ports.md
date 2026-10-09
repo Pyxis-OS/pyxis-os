@@ -1,6 +1,6 @@
 # SDL game ports
 
-Proposal, 2026-10-09; the owner's three decisions below are open. Three games
+Accepted by the owner on 2026-10-09, all three decisions as proposed. Three games
 through the [SDL2 port](../development/sdl2.md), smallest first, each compared
 with what Pyxis already has:
 1. **Chocolate Doom,** against the native [Doom](../userland/doom.md).
@@ -118,35 +118,25 @@ equalize.
 
 ## Owner decisions
 
-1. **How EDuke32 ships.**
-   - **Default:** opt-in like DevilutionX.
-     - `DUKE3D_DATA=DIR` builds EDuke32 and stages that directory's
-       `duke3d.grp` alone, 44 MB, as `boot://share/duke3d/duke3d.grp`.
-     - Images built that way are personal use only and never shared. CI,
-       ordinary images and bundles never contain EDuke32.
-     - The Megaton Edition's other files (high-resolution packs and the
-       Polymost definitions) aren't used by the classic renderer and aren't
-       staged.
-     - Licences and `BUILDLIC.TXT` ship with a notice, as DevilutionX's do.
-   - **Alternative:** build the engine into ordinary images without data.
-     That relies on the informal understanding that the GPL game code may
-     link the Build engine.
-2. **Chocolate ports beside the native ones.**
-   - **Default:** ordinary images carry `chocolate-doom` and
-     `chocolate-quake` beside the native `doom` and `quake`, sharing the same
-     staged data. Whether one later replaces the other is decided after the
-     comparisons.
-   - **Alternative:** opt-in builds only, keeping ordinary images unchanged.
-3. **Chocolate Doom's default scaling.**
-   - **Default:** upstream's 4:3 aspect correction, drawn with
-     `force_software_renderer`: a single nearest-neighbour stretch from
-     320x200 to 1024x768 in a 1280x768 area.
-   - **Alternative:** upstream's two-stage scaling, which renders a 1280x800
-     integer upscale and then a linear pass on the CPU every frame. It looks
-     smoother and costs more; task 1 measures both before the default is
-     final.
-   - **Alternative:** integer scaling without aspect correction, matching
-     native Doom's picture.
+Accepted 2026-10-09:
+1. **EDuke32 is opt-in, like DevilutionX.**
+   - `DUKE3D_DATA=DIR` builds EDuke32 and stages that directory's `duke3d.grp`
+     alone, 44 MB, as `boot://share/duke3d/duke3d.grp`.
+   - Images built that way are personal use only and never shared. CI,
+     ordinary images and bundles never contain EDuke32.
+   - The Megaton Edition's other files (high-resolution packs and the
+     Polymost definitions) aren't used by the classic renderer and aren't
+     staged.
+   - Licences and `BUILDLIC.TXT` ship with a notice, as DevilutionX's do.
+2. **The Chocolate ports join ordinary images:** `chocolate-doom` and
+   `chocolate-quake` sit beside the native `doom` and `quake`, sharing their
+   staged data. Whether one later replaces the other is decided after the
+   comparisons.
+3. **Chocolate Doom keeps upstream's 4:3 aspect correction,** drawn with
+   `force_software_renderer`: one nearest-neighbour stretch from 320x200 to
+   1024x768 in a 1280x768 area. Task 1 also measures upstream's two-stage
+   scaling (an integer upscale, then a linear pass, both on the CPU) before
+   the default is final.
 
 ## Out of scope
 
