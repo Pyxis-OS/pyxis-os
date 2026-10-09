@@ -89,12 +89,11 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 
 ## Fixed userspace stacks
 
-Each plain executable eagerly backs a fixed [1 MiB user stack](kernel/program-loading.md), including boot init and small commands.
-An unmapped guard catches ordinary overruns, but a large adjustment can skip it; neither compiler stack probing nor growth exists.
-The owner retained 1 MiB after the experimental 8 MiB default's [nested-KVM costs](development/experiments/program-capacity/README.md):
-28–42 MiB more session backing and roughly 3.2–3.4 times the complete 1,024-launch session cost.
-Clang's 8 MiB expectation remains unmet; revisit with future [application-bundle manifest](wip/vfs.md#application-bundles)
-requests passed as a bounded loader parameter, without a P1F field or compiler-container rebuild. That path is unimplemented.
+Plain programs eagerly back [1 MiB stacks](kernel/program-loading.md); validated
+[bundles](wip/program-bundles.md) may request up to 8 MiB. The reserved guard
+catches ordinary overruns, but a large adjustment can skip it; compiler stack
+probing and automatic growth remain absent. Revisit with compiler/runtime and
+thread-stack work, retaining the owner's small plain-program default.
 
 ## BSP-only allocation and VM mutation
 
@@ -1490,7 +1489,15 @@ no locale collation; revisit with locale support.
 
 The [bundle design](wip/program-bundles.md) accepted on 2026-10-09 temporarily
 delivers every available ordinary grant, including optional grants at launch,
-without consent. It is unimplemented, not a permanent security contract; metadata
-never creates rights or obtains system-only authority, and programs inspect actual
+without consent in the unpacked development path. This is not a permanent security
+contract; metadata never creates rights or obtains system-only authority, and programs inspect actual
 startup grants. Revisit with users/permissions and the recorded required-grant,
 in-context optional-grant, trusted-picker, stable-identity and revocation model.
+
+## Published development bundle revisions
+
+Unpacked [bundles](wip/program-bundles.md#app-views-grants-and-lifetime) rely on the
+publisher leaving a selected revision unchanged and retained. Read-only app/root
+grants and held native handles do not freeze writable aliases or protect unopened
+assets from deletion. Revisit with installation/update lifetime and revision GC;
+editing or deleting a live revision is unsupported.

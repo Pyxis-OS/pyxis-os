@@ -14,7 +14,7 @@ the pool, without rebuilding boot media.
 | `system://` | The pool's `system` volume, read-write for the default space. | Not bound. |
 | `home://` | The pool's `home` volume, shared by the spaces that name it. | A RAM volume, lost at reboot. |
 | `tmp://` | A RAM directory shared by every space, lost at reboot. | The same. |
-| `app://` | Reserved for [application bundles](../wip/vfs.md#application-bundles); not bound. | The same. |
+| `app://` | A launched [bundle](../wip/program-bundles.md) receives its own read-only `app/` directory. Plain programs have no implicit binding. | The same. |
 
 Spaces receive `boot://`, `tmp://` and `bin://` from boot init, plus the roots
 their configuration names. They start in `home://` unless their configuration's
@@ -47,7 +47,10 @@ executable lives in `bin/REVISION`, one directory per kernel revision. Boot
 init binds the running kernel's directory. When that directory is missing it
 binds the archive instead, which on an installed system holds only the rescue
 set, and says so. The shell resolves bare command names through `bin://`, then
-`boot://`.
+`boot://`. An explicitly configured development catalog adds bundle command
+resolution after an absent ordinary `bin://NAME.pxe`; `bin://NAME` selects a
+registered logical alias. This is launcher resolution, not a new filesystem
+directory backend. See [development bundle lookup](../wip/program-bundles.md#unpacked-development-lookup).
 
 One directory per revision is interim, until a final program update scheme
 replaces it.

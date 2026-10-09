@@ -1,272 +1,264 @@
-# Program bundles: first slice
+# Program bundles
 
-Status: all three first-slice decisions accepted by the owner on 2026-10-09 in
-[#621](https://git.internal/PyxisOS/pyxis-os/pulls/621). The design is unimplemented;
-task 1 awaits the owner merging this plan and a separate go. No signing or
-consent UI is authorized. This develops the
-[2026-10-07 application-bundle direction](vfs.md#application-bundles) and
-[hosted Clang's admission needs](hosted-clang.md#resources-and-native-limits).
-It follows the merged [capacity revision #617](https://git.internal/PyxisOS/pyxis-os/pulls/617):
-high guarded stacks, a 256 MiB image span and a **1 MiB plain-program stack**.
-The owner chose manifests as the route to larger stacks after the fixed 8 MiB
-default's measured cost. Bundles need no new P1F field or compiler-container
-rebuild; their load parameters do need coordinated kernel ABI, SDK and libc work.
+Status: the owner merged [#621](https://git.internal/PyxisOS/pyxis-os/pulls/621)
+and separately authorized task 1. Unpacked development bundles are implemented;
+review remains pending. The [qualification record](../development/experiments/program-bundles-task1/README.md)
+reports manual QEMU/GDB checks and matched plain-launch costs. ZIP and the
+accepted larger capture ceiling require separate tasks. Signing, consent UI and a Clang port
+are outside this task.
 
-## Inspected starting point
+## Unpacked development lookup
 
-[`app://` is reserved and unbound](../userland/system-layout.md#roots).
-`bin://` currently exposes ordinary executable files from the running revision;
-bare commands search it, then `boot://`. The
-[native launch request](../../include/abi/launcher.h) takes an already-open native
-FILE, explicit attenuated grants, roots, streams and startup context. It has no
-manifest parser, stack request or bundle policy. HOST and NPFS capture at most
-16 MiB of the whole serialized executable before loading. The loader needs
-contiguous stable bytes, so a mounted archive does not by itself remove capture.
+A `.pxb` is a native directory containing `manifest.json` and `app/`. Its
+manifest selects native executable entries and read-only resource directories
+inside `app/`. Recognition validates the layout and metadata; the suffix alone
+confers no authority. Ordinary plain programs continue to use their existing
+launch path and receive no implicit `app://`.
 
-Startup already enumerates actual named resources/roots; handle information
-reports their rights and transport. Its snapshot is immutable, not a requested-
-grant checklist or runtime grant broker. Launch capture and child startup each
-have a 64 KiB budget; libc's launch profile permits 16 roots. Startup roots
-require native DIRECTORY objects and image launch requires native FILE objects:
-an exported FILE-protocol endpoint is not currently an executable input.
-The existing [zlib port](../development/ports.md#zlib-development-library)
-supplies inflate and CRC32, but no ZIP parser or mounted native directory view.
+Shell and Lua launch lookup read the explicit `PYXIS_BUNDLE_CATALOG` environment
+variable. Its value is a native FILE URI containing UTF-8 JSON data:
 
-These are inspected interfaces. The bundle contract below is accepted but
-unimplemented; ZIP implementation budgets remain draft settings to qualify.
-The Linux Clang/LLD sizes are existing proxy measurements, not native qualification.
-
-## Bundle unit and per-program view
-
-A bundle is one installable application unit, with this same logical layout
-in either form:
-
-```text
-manifest.json
-app/
-  bin/clang.pxe
-  bin/lld.pxe
-  lib/clang/23/include/...
-  sysroot/...
+```json
+{"format":1,"bundles":["boot://bundles/sample.pxb"]}
 ```
 
-The accepted names are **`.pxa`** (Pyxis archive) for ZIP and
-**`.pxb`** (Pyxis bundle) for an unpacked directory. Recognition validates the
-layout/format; an extension alone is not admission or authority. The unpacked
-form preserves Kilo/TCC development without requiring a native ZIP writer.
-Accept it through explicitly configured development lookup, with the
-same manifest and grant rules; ordinary plain executables continue to work.
+The catalog has exactly these fields, accepts at most eight explicit bundle
+URIs, and does not enumerate an installation directory. Bare commands retain
+the ordinary plain `bin://NAME.pxe` fast path. After that file is missing,
+bundle lookup may select a registered command before ordinary rescue lookup.
+Explicit logical `bin://` aliases use the same catalog. An explicit `.pxb`
+path selects its default entry without requiring a catalog; a trailing directory
+slash is accepted. Selected command names remain available as `argv[0]`.
+There is no filesystem directory adapter, executable copy or symlink behind
+these logical aliases.
 
-The bundle-aware launcher grants the child a read-only directory rooted at
-`app/`, bound as **that program's `app://`**. It receives LOOKUP, ENUMERATE and
-READ_FILES, without mutation rights or a parent-navigation escape. Each program
-sees its own files; there is no shared `app://` listing of installed applications.
-Plain programs without bundles receive no implicit app root. Named resource
-directories are additional read-only views inside that same revision. Writable
-user data, source and output remain outside it and require ordinary grants.
+Each catalog lookup opens and validates the complete view before selecting a
+program. Reject duplicate bundle IDs, command names, malformed manifests,
+unusable registered defaults/commands/resource directories, and collisions with
+plain `NAME.pxe` files through the retained caller `bin://` root. Collision
+inspection needs only directory LOOKUP and opens zero-right FILE handles.
+A broken registered source rejects the lookup; `NOT_FOUND` from catalog lookup
+means only that a valid view has no requested command. No singleton cache or
+partial registration survives an error.
 
-An installation/lookup catalog maps each exposed `bin://` command to a bundle
-revision and relative entry. The resolver carries that association to the
-bundle-aware launcher, rather than discarding it after opening a raw executable.
-Several command names may select one entry (Clang's argv[0] aliases), or different
-entries such as LLD. There is no executable copy or symlink requirement. Reject
-command collisions in an active lookup view; explicit replacement changes
-the complete registration, not one entry at a time. Keep existing plain `bin://`
-and rescue `boot://` commands alongside registered bundle commands.
+The resolver retains the selected revision, image, app directory and resource
+directories until its owning program view closes. It does not reopen the selected
+bundle URI after choosing it. The default and every command entry must be native
+FILE objects whose prefix matches `P1F_MAGIC`; scripts are rejected. Remaining
+P1F validation and executable capture belong to the kernel.
 
-Publish a complete revision before activating its manifest/command registration.
-Never mutate a published revision in place. Launch pins one revision for the
-manifest, executable and all later app/resource lookups; updates switch new
-launches while existing handles retain old backing. A read-only child grant
-alone does not provide that immutability against the updater. Archive backing
-and decoded resource ownership must survive the launching process and remain
-until dependent handles close. Unpacked development revisions must follow the
-same publication rule; editing a live tree is not a supported snapshot.
+## Manifest and stack
 
-## Manifest and load parameters
-
-The manifest is bounded UTF-8 **JSON data**. The first-slice schema
-has `format: 1`; reject duplicate keys, unknown fields, invalid types and malformed
-bundles rather than fall back to plain launch. Example values illustrate the
-Clang-shaped unit, not an implemented port:
+The schema requires `format: 1`, `id`, `entry`, `commands`, `resource_dirs` and
+`grants`; only `stack_bytes` is optional. Empty command/resource maps and an empty
+grant array are allowed. Duplicate JSON keys, unknown fields, invalid types,
+invalid UTF-8 and embedded NUL strings reject the manifest. Metadata contains
+no arguments, executable code or arbitrary handle numbers.
 
 ```json
 {
   "format": 1,
-  "id": "org.pyxis.clang",
-  "entry": "bin/clang.pxe",
-  "commands": {
-    "clang": "bin/clang.pxe",
-    "clang++": "bin/clang.pxe",
-    "ld.lld": "bin/lld.pxe"
-  },
+  "id": "org.pyxis.sample",
+  "entry": "bin/sample.pxe",
+  "commands": {"sample": "bin/sample.pxe", "sample-alias": "bin/sample.pxe"},
   "stack_bytes": 8388608,
-  "resource_dirs": {
-    "clang-resource": "lib/clang/23",
-    "sysroot": "sysroot"
-  },
+  "resource_dirs": {"sample-data": "data"},
   "grants": [
-    { "name": "launcher", "resource": "launcher", "rights": ["launch"], "required": true }
+    {"name": "memory", "resource": "memory", "rights": ["manage"], "required": true},
+    {"name": "clock", "resource": "clock", "rights": ["read"], "required": false}
   ]
 }
 ```
 
-| Field | Accepted first-slice meaning |
+| Field | Implemented meaning |
 | --- | --- |
-| `id` | Stable application identifier retained across updates; registration controls its association, not a self-asserted string granting trust. Consent identity authentication remains later work. |
-| `entry` | Default native P1F entry, relative to `app/`. |
-| `commands` | Flat command-name to relative native-entry mapping; argv[0] preserves the selected command. No arguments or executable code in metadata. |
-| `stack_bytes` | Omitted means 1 MiB. Explicit integer, page-aligned, 1–8 MiB inclusive; invalid/over-cap requests reject, never silently clamp. One request applies to this bundle's entries; per-command sizing is deferred. |
-| `resource_dirs` | Startup root-name to relative directory mapping, all read-only. Names must not collide with app or existing startup bindings. |
-| `grants` | Named requests for recognized ordinary service classes, scoped rights and required/optional status. Types/scopes come from a system-owned catalog, never arbitrary handle numbers. |
+| `id` | Stable registration identifier; a self-asserted ID does not authenticate an application or grant trust. |
+| `entry` | Default native P1F path relative to `app/`. |
+| `commands` | Flat command-name to relative native-entry map; several aliases may select the same entry. |
+| `stack_bytes` | Optional integer, page-aligned, 1–8 MiB inclusive. Omission leaves the API parameter zero, which selects the kernel's 1 MiB default. Invalid requests reject without clamping. |
+| `resource_dirs` | Additional startup root-name to relative directory map, with read-only grants. Names must not collide with `app`, other manifest roots/grants or existing startup bindings. |
+| `grants` | Named ordinary resource requests with recognized rights and explicit required/optional status. |
 
-Entries/resource paths stay within the app view: no absolute paths, schemes,
-empty components, `.` or `..`. Requests and startup must fit their existing
-budgets. The kernel bounds the initial-stack parameter for single and batch
-loads, places its guard directly below the requested eager backing, and returns
-the actual top. Plain launch and boot init omit it and keep 1 MiB. No automatic
-growth, public threads or TLS follows. All validation/preparation precedes child
-publication, with complete unpublished cleanup on failure. A manifest is launch
-policy metadata, not a universal restriction on independently delegated native
-FILE/launcher capabilities.
+Entry and resource paths remain inside `app/`: reject absolute paths, schemes,
+empty components, `.` and `..`. Names reject `/` and `:`; path/name limits below
+are implementation budgets. Each bundle entry uses the same stack request.
+The kernel validates it for single and batch loads before image capture, eagerly
+backs the requested high stack, and places one unmapped guard page directly
+below it. Plain programs and boot init omit the parameter and retain 1 MiB.
+There is no automatic stack growth or per-command stack setting.
 
-## Grant delivery now, consent later
+## App views, grants and lifetime
 
-**Owner policy now (2026-10-09): deliver every requested grant** that is a valid
-ordinary resource available within the bundle launcher's delegated authority.
-This policy lives in the bundle-aware userspace launcher/system policy layer;
-the kernel still prevents gaining rights or transport the supplier does not hold.
-Metadata cannot obtain system-only mount/setup, space-factory or raw-device
-authority. Such requests reject as invalid. Existing space ceilings and group-
-bound launch delegation remain in force; a compiler gets LAUNCH, not authority
-to create privileged spaces or administer mounts.
+Each bundle program receives its own `app://` rooted at the selected `app/`
+directory, replacing an inherited app binding. App and named resource directories
+receive exactly LOOKUP, ENUMERATE and READ_FILES, with no mutation rights or
+parent-navigation escape from those views. Source, output and writable user data
+remain outside the bundle and use explicitly delegated ordinary capabilities.
 
-If a required request cannot be supplied, launch none of the program: admission
-is all-or-nothing for that required set. An unavailable optional request is absent;
-available optional requests are delivered at launch under this temporary policy.
-From day one the program enumerates **what it actually received** through startup
-resources/roots and queries actual handle rights. Never synthesize a successful
-grant or infer receipt from the manifest. Normal streams, cwd and input/output
-grants remain explicit launch context; the manifest does not confer access to
-arbitrary documents. “Grant everything available” is
-[temporary technical debt](../technical-debt.md#temporary-bundle-grant-policy),
-not a permanent security contract.
+The launcher preserves explicit streams, cwd, environment, namespace and other
+directory roots. Named ordinary resources come from the manifest's requests;
+unused source resource grants are omitted. Caller-selected authority supplies
+requests, and a shell supplies its delegated child launcher rather than its own
+supervision launcher. The kernel still prevents increasing the supplier's rights
+or transport authority.
 
-**Owner's later direction, recorded but not implemented:**
+Recognized request classes and rights are:
 
-- Required grants are requested at first launch and approved or denied as a
-  whole; denial means no launch. The answer is remembered for the user/application.
-- Optional grants are requested **in context when their feature is first used**,
-  individually approved/denied and remembered. They are not all requested at
-  first launch; programs handle absence at runtime.
-- A trusted file picker's selection is itself the grant to that selected file,
-  instead of broad document-access authority.
-- An update adding a required grant asks again, including increased scope/rights.
-  This depends on stable application identity across revisions; merely reusing
-  a manifest ID or installation pathname does not establish that identity.
-- Revocation applies at the next launch unless a grant explicitly supports
-  withdrawal while running, including its delegated copies.
+| Resource | Rights |
+| --- | --- |
+| `memory` | `manage` |
+| `clock` | `read`, `sleep` |
+| `launcher` | `launch` |
+| `random`, `system_info` | `read` |
+| `echo` | `send` |
+| `tcp` | `connect`, `listen` |
+| `udp` | `open` |
+| `display` | `draw` |
+| `audio` | `create` (native playback authority) |
+| `screen_capture` | `capture` |
+| `input` | `read` (console authority) |
+| `output` | `write` (console authority) |
+| `profile` | `memory`, `host` |
 
-Startup describes the initial granted set. Later optional/picker delivery needs
-an explicit broker result that the program can inspect; it cannot rewrite an
-immutable startup snapshot. This note records that future need without defining
-a broker API, signing scheme, consent UI or runtime-revocation mechanism.
+Programs using libc allocation request `memory/manage` under its documented
+`memory` startup name; declaring an alias does not rewrite libc service lookups.
 
-## ZIP profile and resource budgets
+Unknown classes/rights and system-only mount/setup, space-factory or raw-device
+requests reject even when marked optional. Under the accepted temporary policy,
+deliver every requested grant available within the launcher's selected delegated
+authority, including optional requests. An unavailable optional request is absent;
+an unsatisfied required request fails the whole admission. Preparation failures
+unwind unpublished storage and preserve source handles. The program enumerates
+its actual startup resources/roots and queries actual handle rights; a manifest
+request never synthesizes a successful grant. This policy is
+[temporary technical debt](../technical-debt.md#temporary-bundle-grant-policy).
 
-ZIP distinguishes stored data, compression methods and size/offset metadata;
-the Pyxis subset is a deliberate packaging restriction, not general ZIP support.
-See [PKWARE's format specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
-Stored entries permit backing-file offset reads. Deflate requires decoding from
-the stream state unless a separate index exists; the first slice has no such index.
-Raw inflate also needs an independent ZIP CRC check
-([zlib manual](https://zlib.net/manual.html)).
+Publish a complete revision before activating its catalog registration. Do not
+mutate or delete a published development tree. Retained native handles keep their
+backing alive but do not freeze a writable tree or establish a snapshot; normal
+caller roots may include writable aliases. Publisher discipline supplies
+revision immutability in this slice. There is no revision garbage collector or
+archive adapter. App/resource handles delegated to a child retain backing after
+the launching process closes its own view. The manifest is launch policy metadata,
+not a universal restriction on independently delegated FILE/launcher capabilities.
 
-Require **stored** manifest, executable entries and seek-heavy/large
-resources. Permit method-8 deflate only for small resources, decoded once into
-bounded backing before exposure. Draft implementation budgets, to qualify before
-shipping: 64 KiB manifest, 16,384 entries, 4 MiB index/metadata, 512 MiB archive
-and total declared expanded contents; at most 1 MiB output per deflated entry,
-8 MiB aggregate live decoded backing and expansion ratio at most 100:1.
-Budget exhaustion is an explicit error, not truncated output or unlimited cache.
-Absolute output/allocation caps remain necessary even with a ratio check.
+## Implemented budgets and qualification
 
-Require UTF-8 names (ASCII is valid), with no code-page fallback. Validate local
-and central records consistently, with overflow-safe offsets and
-all data/metadata inside the file. Reject duplicate names, file/directory or
-inferred-parent collisions, absolute/drive paths, NULs, backslashes, `.`/`..`,
-encryption, unknown methods/flags, overlapping ranges, split archives and
-symlink/special-file types expressed by attributes. Ignore ordinary Unix
-ownership/permission/execute attributes: they confer no authority. Explicit
-directory records may match inferred parents; conflicting types or duplicate
-actual records reject. Treat entries only as regular files or directories. The first subset rejects
-data descriptors and ZIP64: the stated sizes/counts need neither; add ZIP64 only
-if a later admitted size requires it. Packaging instructions must name this
-subset; a generic ZIP tool's defaults are not guaranteed to match.
+| Input or preparation | Budget |
+| --- | --- |
+| Manifest / catalog JSON | 64 KiB each |
+| Catalog bundles | 8 |
+| Commands per bundle | 32 |
+| Named resource directories per bundle | 8, plus `app` |
+| Grant requests per bundle | 16 |
+| JSON nesting | 16 |
+| Name/path component | 255 bytes |
+| Relative entry/resource path | 1024 bytes |
+| Final userspace launch roots | 16 total |
+| Launch capture / child startup | 64 KiB each, independently enforced by the kernel |
 
-Check the stored manifest's CRC before interpreting policy, and executable CRC
-during capture before loading. Check stored resource CRC
-by a bounded streaming scan before its first exposure, retaining the result only
-for that immutable revision; no full-entry allocation is needed. Deflated files
-must complete exactly within the declared input/output sizes and pass CRC before
-exposure. CRC detects corruption, not provenance or authority. A single archive
-keeps room for later whole-file signing; no signature layout is designed here.
+All final capture/startup validation occurs before child publication. The parser
+allocates a bounded node array from the JSON byte count and releases each
+manifest parse tree after retaining its decoded strings. Code inspection gives
+about 5 MiB of overlapping catalog/manifest parse-tree heap at maximum JSON sizes;
+this is an allocation bound, not a measured peak. No whole-bundle capture or
+capture-limit increase is implemented. Existing installed HOST/NPFS executable
+capture remains 16 MiB; the 256 MiB mapped-image span remains independently
+bounded.
 
-The view needs native archive-backed directory/file support or explicit provider
-integration. A userspace ZIP parser/provider alone cannot currently supply a
-startup DIRECTORY or launchable FILE. Keep decompression in userspace using the
-existing zlib port; design the native adapter/backing lifetime before coding,
-preserving BSP allocation/VM-mutation ownership.
+Ordinary kernel/SDK/ports/userland builds and interactive four-CPU QEMU passed
+for a two-command sample with a larger stack, read-only roots and actual grants.
+GDB inspected stack/guard permissions, normal retirement and unpublished batch
+rollback. Matched one-/four-CPU plain launches show no observed regression;
+see the [qualification record](../development/experiments/program-bundles-task1/README.md)
+for exact inputs, samples and limits. No physical-hardware result is claimed.
 
-## Installed executables and the Clang-shaped bundle
+## Future consent policy
 
-A stored archive entry is random-access data, not an executable memory mapping.
-The first-slice loader captures **only the selected executable**
-from that view, not the whole archive, then use existing eager segment loading.
-Captured executables share an accepted **128 MiB** serialized-image
-ceiling, replacing the installed HOST/NPFS limit and covering new bundle entries
-and RAM copies too. This also permits larger ordinary installed programs;
-plain programs still keep the 1 MiB stack. Use one kernel capture policy across
-the relevant workers. Unpacked bundle entries are ordinary files; their filenames
-or JSON confer no special admission authority. Existing immutable boot
-archive bytes need no new copy. Neither compression nor outer ZIP size defines mapped span.
-The 256 MiB rounded image-span ceiling remains independently enforced.
+The owner has recorded this direction, without authorizing its implementation:
 
-These accepted limits are admission ceilings, not native Clang size measurements
-or guarantees of fitting RAM. A load can retain 128 MiB capture plus up to 256 MiB
-eager image backing, requested stack/startup/page tables and other processes;
-batches also retain earlier prepared children. Admission must fail cleanly under
-pressure, with bounded allocations and full rollback.
+- Required grants are approved or denied together at first launch, with the
+  answer remembered for the user/application; denial means no launch.
+- Optional grants are requested individually when their feature is first used,
+  approved or denied and remembered; programs handle absence at runtime.
+- A trusted file picker grants the selected file, rather than broad document
+  authority.
+- Updates adding a required grant, including more rights or scope, ask again.
+  Reusing a manifest ID or pathname does not authenticate the update's identity.
+- Revocation applies at the next launch unless a capability explicitly supports
+  withdrawal while running, including delegated copies.
 
-The first Clang-shaped bundle contains separately stored native Clang and LLD
-entries, declares an 8 MiB stack, and supplies read-only roots for roughly 8 MiB
-of Clang resource headers and the roughly 20 MiB source SDK sysroot. The
-[existing Linux proxies](hosted-clang.md#resources-and-native-limits) are about
-86 MiB Clang and 55 MiB LLD: each motivates larger selected-image capture, not
-capture of their combined archive. Clang receives group-bound launch authority
-for the linker and command lookup, plus explicitly supplied source/cwd/streams
-and output-directory rights outside the bundle. The self-contained sysroot belongs
-to the same pinned revision. Resource layout and native path adaptation still
-need the compiler port; installing this bundle does not resolve Clang's
-runtime/metadata blockers.
+Startup describes the immutable initial granted set. Later picker/optional
+delivery requires an explicit broker result a program can inspect. Signing,
+identity authentication, consent UI and runtime revocation remain undesigned.
 
-## Accepted decisions — 2026-10-09
+## Future ZIP profile
 
-1. **Storage and view:** restricted ZIP `.pxa` with stored executable/large
-   entries and bounded small deflate, plus equivalent unpacked `.pxb` development
-   bundles. Each child gets its own `app://`.
-2. **Manifest and grant contract:** the JSON fields above, 1 MiB omitted
-   stack and an 8 MiB eager maximum, actual startup grants from day one, and the
-   owner's temporary deliver-all-available policy. Record the later consent/picker/
-   identity/revocation direction.
-3. **Large-image admission:** selected-entry capture with a
-   shared 128 MiB captured-image ceiling, replacing installed 16 MiB and bounding
-   RAM copies too; mapped span remains 256 MiB. Qualify peak memory/rollback before
-   implementation completion.
+The accepted `.pxa` form uses restricted ZIP with the same manifest and `app/`
+layout. A native archive-backed directory/file adapter or explicit provider
+integration must establish backing lifetime before implementation. A userspace
+provider alone cannot currently supply startup DIRECTORY or launchable FILE
+objects. Keep decompression in userspace using the existing
+[zlib port](../development/ports.md#zlib-development-library), preserving BSP
+allocation/VM-mutation ownership.
 
-Task 1 is the unpacked development bundle: manifest, command resolution, startup
-`app://` view, bounded stack request and actual grants. It awaits the owner merging
-#621 and a separate go. ZIP adapter and larger capture then need explicit
-implementation tasks and matched peak/launch/cleanup qualification.
-The native Kilo/TCC workflow remains usable throughout. Acceptance of this design
-does not start implementation or assign a Clang port.
+Require stored manifest, executable entries and seek-heavy/large resources.
+Permit method-8 deflate only for small resources, decoded once into bounded
+backing before exposure. Draft budgets to qualify: 16,384 entries, 4 MiB
+index/metadata, 512 MiB archive and total expanded contents; 1 MiB per deflated
+entry, 8 MiB aggregate decoded backing and expansion ratio at most 100:1.
+Budget exhaustion is an explicit error. Deflate needs an independent ZIP CRC
+check; see [PKWARE's specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT)
+and the [zlib manual](https://zlib.net/manual.html).
+
+Require UTF-8 names with no code-page fallback. Validate local and central
+records consistently, with overflow-safe offsets and all ranges inside the file.
+Reject duplicate names; file/directory or inferred-parent collisions;
+absolute/drive paths, NULs, backslashes, `.` and `..`; encryption; unknown
+methods/flags; overlapping ranges; split archives; and symlink/special-file
+attributes. Explicit directory records may match inferred parents; duplicate
+actual records or conflicting types reject. Ignore ordinary Unix owner,
+permission and executable attributes: they confer no authority. The first
+profile rejects data descriptors and ZIP64. Packaging must name this subset;
+generic ZIP tool defaults are not guaranteed to comply.
+
+Check stored manifest CRC before interpreting policy and executable CRC during
+capture. Before exposing a stored resource, check CRC by a bounded streaming
+scan and retain that result only for the immutable revision. Deflated files must
+finish exactly within declared input/output sizes and pass CRC before exposure.
+CRC detects corruption, not provenance. Archive and decoded backing must survive
+the launching process until dependent handles close. The first profile has no
+random-access deflate index or signature layout.
+
+## Future larger-image admission
+
+The accepted next direction captures only the selected executable, retains
+existing eager segment loading, and shares a 128 MiB serialized-image ceiling
+across installed HOST/NPFS and RAM capture. It must replace the current installed
+16 MiB ceiling and bound RAM copies together in a separately authorized task.
+Existing immutable boot archive bytes need no new copy. Outer archive size,
+compression and serialized bytes do not define mapped span; its 256 MiB ceiling
+remains independent. Peak memory and failure rollback require qualification:
+capture, eager image backing, requested stack, startup/page tables and other
+processes coexist, and batches retain earlier prepared children.
+
+A future Clang-shaped bundle would keep Clang, LLD, resource headers and a SDK
+sysroot in one revision, request an 8 MiB stack and receive group-bound linker
+launch authority plus explicit source/cwd/streams/output grants. The
+[Linux proxy sizes](hosted-clang.md#resources-and-native-limits), about 86 MiB
+Clang and 55 MiB LLD, motivate selected-entry capture; they are not native
+qualification. This bundle work does not resolve the compiler port's remaining
+runtime or metadata blockers.
+
+## Task status
+
+- [x] Task 1 implementation: unpacked development manifests/catalog, command
+  selection, per-program app/resource views, stack requests and actual grant
+  preparation. Qualified in QEMU; owner review is pending.
+- [ ] Separate task: native ZIP adapter/backing lifetime and restricted archive
+  profile, with matched peak/launch/cleanup qualification.
+- [ ] Separate task: shared 128 MiB captured-image ceiling and failure rollback
+  qualification.
+
+Later tasks require explicit owner authorization. The native Kilo/TCC workflow
+remains usable throughout.

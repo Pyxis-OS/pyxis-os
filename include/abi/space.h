@@ -62,6 +62,7 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  *
  * With LAUNCH, the address of a launch_request, CPUS uses SET_AFFINITY's
  * encoding and becomes the space's ceiling: nonempty, every index a boot CPU.
+ * initial_stack_bytes obeys the same bounds and default as LAUNCHER_LAUNCH.
  * The request's streams must be NONE, and its resources must not use the names
  * the kernel adds: input, output, keyboard, pointer, display, space and terminal_pointer. The
  * kernel gives the child the new space's console as input (READ|INTERRUPT),

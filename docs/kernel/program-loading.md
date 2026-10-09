@@ -36,12 +36,20 @@ The caller's active address space does not change during loading.
 ## Initial stack and ownership
 
 [Common process loading](../../kernel/user/load.c) owns the stack placement and
-size. Each process, including boot init and small commands, receives:
+size. An omitted `launch_request.initial_stack_bytes` (zero) selects 1 MiB,
+including boot init and ordinary small commands. An explicit request must be
+page-aligned and between 1 and 8 MiB inclusive; invalid requests fail before
+image capture, without clamping. The default layout is:
 
 | Region | Addresses and backing |
 | --- | --- |
 | Initial stack | `[0x7fffffeff000, 0x7ffffffff000)`, 1 MiB eager zeroed backing, user RW, non-executable |
 | Lower guard | `[0x7fffffefe000, 0x7fffffeff000)`, one reserved unmapped page |
+
+A bundle may request larger eager backing through its validated manifest; the
+base becomes `0x7ffffffff000 - initial_stack_bytes`, with the reserved guard one
+page below it. The top stays fixed. Single, batch and space-creation launches
+use the same admission and common loader; boot passes zero.
 
 The initial one-past stack top, `0x7ffffffff000`, is canonical and 16-byte
 aligned. The common loader returns that actual top with the process and entry;
@@ -60,7 +68,7 @@ reservations before publishing the final process-control result. See
 [process lifetime](../interfaces/processes.md) and [BSP ownership](smp.md).
 
 The guard catches accesses into its page, but a large stack adjustment can skip
-it. There is no stack growth, demand paging or per-image size declaration.
+it. There is no stack growth or demand paging. P1F contains no stack-size field.
 Later [threads](../wip/threads.md) need their own disjoint guarded stack ranges;
 this layout reserves no thread stack arena and adds no public thread or TLS API.
 
@@ -72,7 +80,7 @@ that capture budget, not image admission or stack collision checks. A small
 serialized file with large BSS can fit capture while using much more image
 backing. Captured bytes coexist with backing and stacks, and a batch retains
 earlier prepared children while capturing its next image. Raising this separate
-budget needs its own peak-memory/admission decision; hosted Clang remains unported.
+budget remains deferred to the separate bundle capture task; hosted Clang remains unported.
 
 The experimental 8 MiB eager stack added 7 MiB per live process relative to
 1 MiB, plus page-table costs. Matched nested-KVM qualification measured an exact
@@ -82,11 +90,10 @@ pipeline children. Complete 1,024-launch sessions increased from median 3.06 to
 include session startup, transport and final drain, not isolated loader latency.
 Those costs prompted the owner's return to the implemented 1 MiB default.
 
-No P1F, public ABI, SDK linker or dependency change is needed for this policy;
-the existing compiler container remains usable. Larger initial stacks belong
-to a future [application-bundle manifest](../wip/vfs.md#application-bundles)
-request passed to the common loader as a bounded parameter. That path is
-unimplemented and requires neither a P1F field nor a compiler-container rebuild.
-Clang's 8 MiB expectation remains unmet until it exists. The
-[fixed-stack debt](../technical-debt.md#fixed-userspace-stacks) records the limit
-and revisit condition.
+The [unpacked bundle path](../wip/program-bundles.md) now carries a bounded
+initial-stack parameter in the launch ABI. Kernel, SDK and in-tree launchers
+must use the coordinated layout; this changes no P1F field, SDK link address
+or compiler container. Plain programs keep 1 MiB. An 8 MiB bundle stack meets
+that capacity request only; it does not port Clang or increase installed capture.
+The [bundle qualification](../development/experiments/program-bundles-task1/README.md)
+records the matched plain-launch comparison and manual admission/cleanup checks.
