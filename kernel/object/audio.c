@@ -242,7 +242,6 @@ void audio_session_request_execute(struct audio_request *request)
     flags = cpu_save_interrupts();
     lock_audio(audio);
     bool release = false;
-    bool changed = false;
     if (task_wait_stop_requested(request->request.wait)) {
       status = CALL_ENDPOINT_CLOSED;
     } else if (audio->owner != request->process || audio->generation != request->generation) {
@@ -260,7 +259,7 @@ void audio_session_request_execute(struct audio_request *request)
         ++audio->generation;
       }
       audio->free_frames = 0;
-      release = changed = true;
+      release = true;
     } else if (audio->failed) {
       status = CALL_UNAVAILABLE;
     } else if (request->length / AUDIO_FRAME_BYTES > audio->free_frames) {
@@ -276,16 +275,13 @@ void audio_session_request_execute(struct audio_request *request)
       audio->count += frames;
       audio->free_frames -= frames;
       request->reply.written = request->length;
-      changed = frames != 0;
-      if (changed) {
+      if (frames) {
         audio->starved = false;
       }
     }
     unlock_audio(audio);
     if (release) {
       release_storage(audio);
-    }
-    if (changed) {
       readiness_notify();
     }
     cpu_restore_interrupts(flags);
@@ -318,6 +314,7 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   int32_t mixed[AUDIO_PERIOD_FRAMES * AUDIO_CHANNELS] = {0};
   size_t consumed = 0;
+  bool writable = false;
   for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
     struct audio_object *audio = sessions[i];
     if (!audio) {
@@ -340,7 +337,10 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
     audio->head = (audio->head + count) % AUDIO_QUEUE_FRAMES;
     audio->count -= count;
     lock_audio(audio);
+    size_t free_before = audio->free_frames;
     audio->free_frames += count;
+    writable |= free_before < AUDIO_WRITE_MAX / AUDIO_FRAME_BYTES &&
+        audio->free_frames >= AUDIO_WRITE_MAX / AUDIO_FRAME_BYTES;
     if (count < frames && !audio->starved && audio->starvations != UINT64_MAX) {
       ++audio->starvations;
     }
@@ -354,7 +354,7 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
     int32_t value = mixed[i];
     output[i] = value > INT16_MAX ? INT16_MAX : value < INT16_MIN ? INT16_MIN : value;
   }
-  if (consumed) {
+  if (writable) {
     readiness_notify();
   }
   return consumed;

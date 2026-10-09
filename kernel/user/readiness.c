@@ -87,6 +87,8 @@ static uint64_t display_ready(struct display_object *display,
 bool readiness_service(struct bsp_request **active_list)
 {
   bool worked = false;
+  uint64_t now = 0;
+  bool have_now = false;
   struct bsp_request **link = active_list;
   while (*link) {
     struct readiness_request *request = (struct readiness_request *)*link;
@@ -141,7 +143,14 @@ bool readiness_service(struct bsp_request **active_list)
     }
     /* Current readiness wins over an expired deadline, including after worker
      * queueing delay. Polling is a successful empty observation, not timeout. */
-    bool expired = request->deadline && arch_monotonic_ns() >= request->deadline;
+    bool expired = false;
+    if (!stopped && !ready && request->deadline) {
+      if (!have_now) {
+        now = arch_monotonic_ns();
+        have_now = true;
+      }
+      expired = now >= request->deadline;
+    }
     if (stopped || ready || !request->deadline || expired) {
       *link = request->request.next;
       request->request.next = NULL;
