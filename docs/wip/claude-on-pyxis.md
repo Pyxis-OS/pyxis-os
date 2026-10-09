@@ -2,8 +2,9 @@
 
 Status: owner-authorized docs-only proposal, 2026-10-09. Track 1 is a small
 in-repo Lua harness using the Anthropic Messages API and four native tools.
-Track 2, after the harness, investigates a Hax port. Decisions below are
-proposed defaults, not accepted contracts or implementation authorization.
+Track 2, after the harness, investigates a Hax port. Decisions 1 and 3 remain
+proposed defaults; decision 2 records the owner's development credential policy.
+None authorizes implementation.
 
 Source inspected: Pyxis `28051508528fdd11faf848bb48d41bee80d960eb`, userland
 `74f3e2294c1153ccf00a395b3a451e03d7bbbf68`, ports
@@ -73,20 +74,42 @@ already have pinned recipes; no compiler-container rebuild is proposed.
    libraries out of the base SDK. A separate HTTPS helper process would avoid
    shared crypto but add request/credential transport and lifetime machinery.
 
-2. **Where does the API key live? Default: prompt without echo for each run,
-   keep it only in the harness process's private RAM.** Use the existing native
-   quiet line reader on the local console, without history. No echo does not
-   encrypt the remote terminal; remote credential entry is outside this default.
-   The HTTPS binding owns the credential and
-   adds it only to the verified Messages endpoint under the
+2. **Where does the API key live? Owner direction: a saved development key in
+   one file, delegated read-only only to the harness.** Trusted startup opens
+   that file and passes a dedicated named FILE grant, not its containing
+   directory. The native HTTPS binding performs a bounded read, closes the grant
+   and holds the key in process-private memory, adding it only to the verified
+   Messages endpoint under the
    [API authentication contract](https://platform.claude.com/docs/en/api/overview).
-   Do not expose it as a Lua global, child environment/argument, file, transcript,
-   request-header dump or tool result. No key value belongs in the repository,
-   documentation or logs. Live/PXE `home://` is RAM, so a file there would also
-   disappear at reboot and could be read through other spaces' shared roots.
-   Persistent credential storage is deferred until its private authority and
-   permissions are specified. This protects against ordinary child tools, not
-   arbitrary compromised code inside the trusted harness process.
+   The file is never part of the project view, shared `tmp://`, a child's roots
+   or resources, the boot image or PXE staging. Do not expose the key or its FILE
+   grant as a Lua global, tool input/result, environment variable, argument,
+   log, transcript or request-header dump. No key value belongs in the repository
+   or documentation; a missing or invalid grant stops before any API request.
+
+   On an **installed system**, keep `anthropic-key` in an owner-provisioned,
+   dedicated NPFS credential volume, opened as `credentials://anthropic-key` by
+   trusted provisioning/startup only. Do not mount that volume in ordinary
+   spaces or use the shared home volume; a hidden filename or Unix mode is not
+   an authority boundary. The file persists across boots, outside image updates.
+   In **QEMU**, use `host://credentials/anthropic-key` in a private virtio-fs
+   export outside the checkout, project and image/PXE staging directories.
+   Bind that export only to trusted provisioning/startup, not the default
+   Development/Remote profiles; pass only the selected FILE to the harness.
+
+   On **live/PXE**, `home://` is RAM: bind a separate private RAM directory as
+   the trusted provisioning process's `home://` and upload `anthropic-key` once
+   per boot with [xfer](remote-file-transfer.md), before starting the harness.
+   End the provisioning transfer, then delegate only the read-only FILE; no
+   ordinary shared-home view may reach that directory. Never bake the key into
+   an init script, archive or staged image. The remote transfer is not encrypted;
+   this development workflow uses the owner's trusted LAN and a revocable key.
+   The owner prefers revoking this development key to typing it each run: revoke
+   it when exposed or no longer needed, and replace/remove the saved file.
+   Provider-side revocation governs later API use; deletion does not invalidate
+   copies already held in memory. This protects against ordinary child tools,
+   not arbitrary compromised code inside the trusted harness process. A general
+   credential store and user-permission policy remain later work.
 
 3. **What may the first agent loop do? Default: automatic execution of the four
    declared tools within one explicitly delegated project, in a finite run.**
@@ -166,7 +189,8 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
   **After this task, the owner can:** send a bounded native C POST and inspect its response, including slow/error cases.
 - **1b: shared Lua/native HTTPS integration.** Wire the userland embedding,
   reusable `pyxis` registration, one crypto owner, verified HTTPS and private
-  non-echoed credential input. Preserve ordinary Lua `run`/`dir`/hash behavior.
+  credential-file delegation/loading with the installed, QEMU and live/PXE
+  provisioning paths above. Preserve ordinary Lua `run`/`dir`/hash behavior.
   **After this task, the owner can:** make an explicitly authorized HTTPS request from the embedded Lua application.
 - **1c: pinned pure-Lua JSON.** Vendor mirrored dkjson with license/provenance,
   object/null handling, bounded response parsing and schema validation.
