@@ -111,6 +111,10 @@ wire negotiation and host-window resize remain separate work.
 
 END_INPUT is idempotent. Previously injected bytes drain before application
 reads return zero-byte EOF; later nonempty injection fails ENDPOINT_CLOSED.
+Safe-paste receiver registration and reads remain usable across END_INPUT so
+stock line readers can consume the same queued bytes and EOF. New paste
+admission still refuses closed input. Existing receiver epochs retain their
+ordinary lifetime until release, process stop/exit or terminal hangup.
 Output remains usable. Zero-capacity application reads and zero-length application
 writes/injections remain validated no-ops, including after hangup; they do not
 probe closure. SIZE still reports the current dimensions. Closing the last

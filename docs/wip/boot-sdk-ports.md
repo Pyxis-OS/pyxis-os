@@ -98,13 +98,11 @@ Chosen by the owner, each starting with a proposal:
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
   master/per-space gain and the owner's four-icon bar UI; delivery steps 1–3
   assigned after #616, with native listening by the owner afterward.
-- **Codex alpha** (2026-10-09): [presentation timing step 2](presentation-timing.md#step-2-read-only-renoir-timing),
-  all three defaults accepted; read-only Renoir observation and guarded
-  blank-start copies implemented for review. Timed copies remain off by default;
-  the [native batch](../development/experiments/renoir-presentation/README.md#native-thinkpad-batch)
-  still gates qualification. Clipboard terminal Copy +
-  Paste merged in #619 / userland #180; its later SDL2, FILE and converter tasks
-  remain unassigned.
+- **Codex alpha** (2026-10-09): [remote-script immediate EOF](../development/experiments/remote-immediate-eof/README.md),
+  restore queued command input and graceful EOF through kernel terminal receivers.
+  Presentation step 2 merged in #626; its
+  [native batch](../development/experiments/renoir-presentation/README.md#native-thinkpad-batch)
+  still gates timed-copy qualification.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
   Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
   (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),
