@@ -160,8 +160,9 @@ decisions and measurements.
 
 `build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
 port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
-base and guest SDK. [Chocolate Doom](../userland/chocolate-doom.md) links it
-into ordinary images, with SDL2's licence beside its own;
+base and guest SDK. [Chocolate Doom](../userland/chocolate-doom.md) and
+[Chocolate Quake](../userland/chocolate-quake.md) link it into ordinary images,
+with SDL2's licence beside their own;
 [DevilutionX](../userland/devilutionx.md) is an opt-in consumer.
 
 ## TLS development libraries

@@ -82,7 +82,9 @@ It creates no FILE wrapper and grants no additional authority. Descriptor
 storage and path workspace are reserved before exclusive creation or truncation,
 with no fallible descriptor publication afterward. Read/write requests require
 both native rights. lseek uses the same private descriptor position as stdio;
-public append and descriptor duplication remain absent.
+descriptor duplication remains absent. O_APPEND moves each write() to the
+current end of the file, through the same non-atomic SIZE then WRITE as
+fopen's "a".
 
 With O_CREAT, the third argument has type mode_t (unsigned int in sys/types.h).
 Only 0666 is accepted, meaning native creation policy rather than Unix permission
@@ -117,7 +119,7 @@ Pread does not consume or refill read-ahead. Nonempty pwrite discards it before
 dispatch, including an uncertain mutation outcome; later reads refetch at the
 same private position. Short progress and EOF retain the read/write contract,
 without altering FILE indicators or pushback. Internal FILE append policy does
-not override pwrite's offset; public O_APPEND remains absent. See
+not override pwrite's offset, and neither does O_APPEND. See
 [positioned-I/O qualification](libc-portability.md#positioned-file-io-and-qualification).
 
 Successful zero reads report EOF, including independent terminal input;

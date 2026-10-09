@@ -500,8 +500,8 @@ requests callers expect to restrict access.
 
 ## Non-atomic stdio append
 
-Append streams query the file size before each native write, so concurrent appenders can overwrite each other, and seeking does not make
-the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
+Append streams and `O_APPEND` descriptors query the file size before each native write, so concurrent appenders can overwrite each
+other, and seeking does not make the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
 Formatted output stages the full result with `snprintf` (heap allocation and a second pass when the stack buffer is too small), so large
 formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. All FILE output is unbuffered.
 
