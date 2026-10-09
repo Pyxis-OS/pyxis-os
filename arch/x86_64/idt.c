@@ -2,11 +2,14 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
+#include <arch/debug.h>
 #include <arch/ps2.h>
 #include <arch/smp.h>
 #include <kernel/acpi.h>
 #include <kernel/audio.h>
 #include <kernel/log.h>
+#include <kernel/memory.h>
+#include <kernel/mm/heap.h>
 #include <kernel/net/rtl8111.h>
 #include <kernel/panic.h>
 #include <kernel/user.h>
@@ -38,6 +41,7 @@ struct idt_gate {
 } __attribute__((packed));
 
 static struct idt_gate idt[IDT_VECTOR_COUNT] __attribute__((aligned(16)));
+static struct idt_gate *loaded_idt = idt;
 extern void (*const isr_table[IDT_VECTOR_COUNT])(void);
 
 void idt_init(void)
@@ -66,9 +70,31 @@ void idt_load(void)
 {
   const struct descriptor_table_pointer idtr = {
     .limit = sizeof(idt) - 1,
-    .base = (uintptr_t)idt,
+    .base = (uintptr_t)loaded_idt,
   };
   __asm__ volatile("lidt %0" : : "m"(idtr) : "memory");
+}
+
+void idt_enable_debug_nmi(void)
+{
+  /* IF=0 does not exclude NMI. Prepare an inactive complete table, then load
+   * it; never edit the live gate while the CPU can enter through it. */
+  struct idt_gate *prepared = kmalloc(sizeof(idt));
+  if (!prepared) {
+    panic("cannot allocate debugger IDT");
+  }
+  memcpy(prepared, idt, sizeof(idt));
+  uintptr_t address = (uintptr_t)arch_debug_nmi_entry;
+  prepared[EXCEPTION_NMI] = (struct idt_gate){
+    .offset_low = address,
+    .selector = GDT_KERNEL_CODE_SELECTOR,
+    .ist = DEBUG_NMI_IST,
+    .attributes = IDT_GATE_PRESENT | IDT_GATE_INTERRUPT64,
+    .offset_mid = address >> 16,
+    .offset_high = address >> 32,
+  };
+  loaded_idt = prepared;
+  idt_load();
 }
 
 static void report_page_fault(uint64_t error, uint64_t address)

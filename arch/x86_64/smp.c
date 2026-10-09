@@ -2,6 +2,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <arch/debug.h>
 #include <arch/paging.h>
 #include <arch/smp.h>
 #include <arch/syscall.h>
@@ -124,6 +125,9 @@ void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
   cpus[0]->lapic_id = bsp_lapic_id;
   detect_topology(cpus[0]);
   atomic_store_explicit(&cpus[0]->online, true, memory_order_release);
+  if (arch_debug_enabled) {
+    arch_debug_prepare(count);
+  }
   ktrace("SMP: BSP APIC %u; %zu CPU(s) reported\n", bsp_lapic_id, count);
   log_topology(cpus[0]);
 }
@@ -155,6 +159,9 @@ struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
   cpu->index = cpu_count;
   cpu->stack_top = stacks + AP_STACK_BYTES;
   cpu->double_fault_stack_top = stacks + 2 * AP_STACK_BYTES;
+  if (arch_debug_enabled) {
+    arch_debug_prepare_cpu(cpu);
+  }
   cpus[cpu_count++] = cpu;
 
   handoff = (struct ap_boot){
