@@ -367,11 +367,20 @@ admission, and has no effect when observation is off or unavailable. Native
 batches keep `LOG_LEVEL=info`; global trace output was ruled out on the ThinkPad
 because it floods the console and skews timing.
 
-The observer/guarded-copy source and QEMU unavailable path are implemented;
-the native checkboxes above remain open for the owner's ThinkPad batch. The
-record explains dense startup versus conservative sparse requalification,
-the IRQ-atomic first pixel, diagnostic overhead and source-reviewed limits.
-Step 3 remains unassigned.
+Native qualification failed on the ThinkPad in batch 2 (2026-10-09, main
+`11d35fa6`): incorrect period estimates, repeated loss, excessively wide bounds,
+and worse tearing/input delay in `blank` despite almost no admitted copies.
+The owner redirected this step to cheap observer safety fixes: supported log
+formats, trace-only loss messages, guarded uncertainty, and identical software
+cadence/observation in `observe` and `blank`. Blank admission is opportunistic;
+there is no phased deadline, sleep or fine poll. The estimator is unchanged.
+EDID anchoring and an estimator overhaul are not part of this delivery.
+
+The [two-boot native recheck](../development/experiments/renoir-presentation/README.md#native-safety-recheck)
+checks safety and fallback behavior, not tear-free qualification. GPU surface
+flips require a separate proposal and an explicit change to the read-only
+boundary. Step 3 remains unassigned. The decisions below record the original
+accepted plan; the owner's safety redirect supersedes its copy-wait policy.
 
 ### Step 2 owner decisions
 
