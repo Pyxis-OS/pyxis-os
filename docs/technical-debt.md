@@ -12,16 +12,13 @@ stream with constant memory and no fixed size limit (owner decision,
 2026-10-08). Unverified bytes reach the disk, but only under the private staging
 name, and are published after the size and SHA-256 match. Senders read the source
 twice because the digest is announced before data. The framing keeps one 2 KiB
-chunk in flight. On the ThinkPad over wired LAN, 15 MiB took about 6 s up
-(about 2.5 MiB/s) and 45 s down (about 0.33 MiB/s), owner stopwatch timings on
-2026-10-08; nested QEMU is slower in both directions. Uploading 692 MB natively
-takes about 4½ minutes, which the owner accepts. Downloads were about eight
-times slower because `xfer send` read each reply one byte at a time; reading
-in blocks cut a QEMU download by about 40%, and the native rate awaits the
-owner's re-timing. The remaining per-chunk cost is the guest TCP path; see
-[transfer throughput](wip/remote-file-transfer.md#transfer-throughput). Revisit
-there, and keep several chunks in flight only by owner decision, since it
-changes the framing and the guest's 4 KiB typeahead allowance. Guest names are
+chunk in flight. On the ThinkPad over wired LAN, 15 MiB took 6.5 s up and
+7.5 s down on 2026-10-09, about 2–2.3 MiB/s, owner timings after the
+[transfer throughput](wip/remote-file-transfer.md#native-re-timing-2026-10-09)
+and [network throughput](development/network-throughput.md) work; nested QEMU
+is slower in both directions. Uploading 692 MB natively takes about 4½ minutes,
+which the owner accepts. Keeping several chunks in flight is an owner decision,
+since it changes the framing and the guest's 4 KiB typeahead allowance. Guest names are
 limited to 200 UTF-8 bytes and host query/resolved paths to 1024 bytes.
 
 The mandatory negotiated SHA-256 extension intentionally excludes stock kitty
@@ -1125,6 +1122,8 @@ independent source or an explicitly scoped stronger progress guarantee. The
 accepted future direction is TSC with extended-HPET fallback, with frequency
 discovery and cross-CPU qualification, preserving the clock protocol. Revisit performance after native
 bring-up when the TSC stage is assigned; it is not part of the first HPET task.
+Per-packet network work and audio refill both pay several clock reads per
+event; see [TCP throughput limits](#tcp-throughput-limits).
 The VirtIO RTC driver remains deferred.
 
 ## Doom configuration and save-format limits
@@ -1678,6 +1677,32 @@ execution-group and process completion. The [remote server](userland/remote-term
 adds its own session supervision and closing-output deadline; the echo consumer
 retains its simpler semantics. Revisit echo-client expiration only if a concrete
 consumer needs it.
+
+## TCP throughput limits
+
+After the [network throughput](development/network-throughput.md) work, native
+send reaches 70.5 MiB/s with 8 KiB writes and receive 85 MiB/s into a discard
+sink, measured on the ThinkPad on 2026-10-09.
+
+- **Send is bound by per-segment and per-call cost.** At most about 24–26 KiB
+  of the 64 KiB window is in flight, and 2 KiB writes reach 44 MiB/s against
+  70. Each native call moves at most 4 KiB through the single BSP network
+  worker. Revisit with worker batching or a larger call extent, measured
+  against the same runs.
+- **A second loss in one window waits for the retransmission timeout.** One
+  native 2 KiB send in six stalled about 1.09 s: fast retransmit repaired the
+  first missing segment, and lwIP resent the second only on its timeout. Watch
+  for repeats before changing loss recovery.
+- **Receive into a RAM file is consumer-bound.** Into `tmp://` it reaches
+  45–57 MiB/s while Pyxis's advertised window falls close to zero; the program
+  writing the file is the limit, not TCP.
+- **Clock reads per packet.** In QEMU the network worker's wake and sleep
+  cycle reads the HPET about 27 times per data segment, nearly all in timer
+  handling. The audio work in #557 found the same amplification. Their native
+  cost is unmeasured; cheaper timekeeping is separate kernel work under
+  [clock-source performance](#wall-clock-time-and-clock-source-performance).
+- **Not implemented:** path-MTU discovery, so routed peers get 536-byte
+  segments; window scaling, so windows stop at 65,535; SACK.
 
 ## DHCP maintainer and client limits
 
