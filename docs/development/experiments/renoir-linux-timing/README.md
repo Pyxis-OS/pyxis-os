@@ -136,12 +136,20 @@ ordering. No display animation ran during these copy samples.
 | rep movsq | 859.967 / 860.217 / 860.006 | 947.551 / 947.931 / 950.456 | 1002.204 |
 
 Even the faster method's P50 is **1.74×** the computed blank window; its worst
-P95 is **1.85×**. rep movsq's worst P95 is **2.04×**. This Linux reference full
-copy does not fit the panel's vertical blank, before wake/interrupt/safety
-margins. It is a private-buffer copy reference, not Pyxis front-buffer performance,
-composition time, scanout completion or proof of visible tearing. It does not
-justify blank-timed full-frame copies; the accepted Pyxis observer still needs
-its own counter/firmware handoff qualification.
+P95 is **1.85×**. rep movsq's worst P95 is **2.04×**. The full copy cannot finish
+within vertical blank. Tear-free copying requires each row to become visible
+before the display engine fetches it, rather than the whole copy to fit in blank.
+
+**Analysis, not a measured tear-free result:** a roughly 830 µs top-down copy
+averages 0.77 µs per row, about **19×** faster than scanout's 15.0 µs per row.
+With start delay `s` after blank begins and row number `r` from the top, uniform
+copy progress gives row completion near `s + 0.77r` µs versus scanout near
+`465 + 15.0r` µs. This model stays ahead of scanout when `s < 465` µs. The actual
+start budget is smaller by the display engine's fetch lead and wake/interrupt/
+safety margins; copy stalls must also preserve that lead. Per-row write visibility,
+fetch lead and visible tearing were not measured. This private-buffer Linux
+reference supports investigating blank-started copies; actual Pyxis front-copy
+progress and firmware/GOP timing still need native qualification.
 
 Local source/captures: `/tmp/pyxis-renoir-reference`; no raw dumps or helper code
 in this PR. Counter/metadata collector source SHA-256

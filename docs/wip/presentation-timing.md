@@ -17,7 +17,7 @@ defaults on 2026-10-09.
   PSR/Replay and private WC copy cost. No Pyxis timing probe is implemented.
 
 **Recommendation:** stage composition in RAM first, then investigate read-only
-Renoir timing and whether a native copy fits the measured blank interval.
+Renoir timing and whether a blank-started native copy stays ahead of display fetch.
 Neither RAM double buffering nor a 60 Hz sleep alone promises tear-free output.
 Actual AMD page flipping needs a separate native display-engine task.
 
@@ -101,16 +101,22 @@ cursor old/new positions, caret and all source changes; moving Quake usually
 changes most pixels. Introduce that only after correctness and measurement.
 
 **Native Pyxis front-copy time is unknown.** The Linux reference's private full
-WC copy exceeds its computed panel blank window; it does not establish GOP
-handoff or Pyxis copy performance. Existing [copy qualification](../kernel/display.md#qualification-and-cost)
+WC copy exceeds its computed panel blank window, but a uniform top-down copy
+would outrun scanout by about 19×: row completion near `s + 0.77r` µs versus
+scanout near `465 + 15.0r` µs, with start delay `s` after blank begins and row
+number `r` from the top. This is
+analysis, not measured tear-free output or GOP/Pyxis qualification. The constraint
+is start latency below about 465 µs minus display-fetch lead and wake/interrupt/
+safety margins, with every row remaining ahead of fetch despite stalls; the
+whole copy need not finish in blank. Existing [copy qualification](../kernel/display.md#qualification-and-cost)
 reports 0.640 ms median for an entire 1280×800 presenter in nested KVM, not a
 1920×1080 ThinkPad WC blit. Native evidence is owner-observed improvement after
 rep movsq, not isolated bandwidth. Measure the actual RAM→WC copy including its
 final store fence; a 16.67 ms refresh period is not the available blank window.
 Even 8 GB/s would take about 1.04 ms for the payload alone (illustrative, not
-measured). A blank-timed copy is eligible only when its tail latency plus wake,
-interrupt and safety margins fits the measured remaining blank interval.
-Otherwise it can still tear; retain a labelled unsynchronized fallback.
+measured). Qualify actual copy start latency, per-row write visibility and
+progress against display fetch natively before promising tear-free output;
+retain a labelled unsynchronized fallback until then.
 
 First software task: one allocated WB staging frame for boot/Bochs, compose
 all overlays there, then a complete bounded row/pitch-correct front copy. VirtIO
