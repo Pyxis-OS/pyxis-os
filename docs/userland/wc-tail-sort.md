@@ -114,7 +114,8 @@ kernel interface or compiler change was needed.
 ## Validation evidence
 
 The image was built from Pyxis main `2b67e61a` plus this change (userland
-`8744371`, ports `de9966c`) with the pinned Clang 23.1.3 toolchain. It ran in QEMU
+`8744371`, ports `b57b97e`; the build used the same ports tree before its commit was
+rebased onto ports main) with the pinned Clang 23.1.3 toolchain. It ran in QEMU
 10.2.2 on q35 with KVM, four CPUs, 2 GiB, virtio-fs (virtiofsd 1.14.0) and
 virtio-net on the development host. The Remote session's host client in machine
 mode ran 159 commands with the working directory on `host://`, redirecting stdout
