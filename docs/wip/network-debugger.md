@@ -1,8 +1,8 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Task 1 is implemented and qualified for review on 2026-10-09. Tasks 2–4
-remain unimplemented and unassigned. Goal: GDB on the
+Task 1 is implemented; task 2 is assigned on 2026-10-09. Tasks 3–4 remain
+unimplemented and unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
 
@@ -172,7 +172,7 @@ features using [qSupported and target XML](https://sourceware.org/gdb/current/on
 | Feature | Bounded contract |
 | --- | --- |
 | Registers/threads | `?`, stop replies, thread selection/enumeration, `g/p`, controlled `G/P`; publish an AMD64 description and captured integer/segment registers. Uncaptured FP/SIMD registers are unavailable, never invented. CR3/GS, privilege selectors and protected return state are inspection-only; reject unsafe edits. |
-| Virtual RAM | `m/M` and optional `X`, through the selected CPU's captured CR3. Debug-only page-table/data windows, checked canonicality, overflow, reserved bits, every level/page and known RAM/cache class; no ordinary scratch allocator. Guarded-copy #PF/#GP fixups return errors rather than panic. Reject holes/MMIO and protected stub/DMA/page-table storage. Preflight whole writes; an unexpected partial write returns error, with no transactional claim. No guarantee against machine check/poisoned RAM. |
+| Virtual RAM | `m/M` and optional `X`, through the selected CPU's captured CR3. Debug-only page-table/data windows, checked canonicality, overflow, reserved bits, every level/page and known RAM/cache class; no ordinary scratch allocator. Guarded-copy #PF/#GP fixups return errors rather than panic. Reject holes/MMIO and unknown/incompatible cache classes. Read-only known WB RAM may include debugger, DMA and page-table storage; mutation exclusions apply to writes. Preflight whole writes; an unexpected partial write returns error, with no transactional claim. No guarantee against machine check/poisoned RAM. |
 | Software breakpoints | bounded owned `Z0/z0` one-byte int3 table, original byte plus physical identity. Kernel text is read-only: use a dedicated RAM alias, never disable global write protection. Correct owned-trap RIP, restore/step/reinstall while peers remain parked, and serialize instruction visibility before release. Protect stub/clock/NIC entry code. |
 | Step/continue | `vCont` and compatible `s/c`: TF/#DB ownership, DR6 interpretation and original flag restoration; suppress ordinary IRQ/scheduler entry while stepping, then restore original IF. Step one CPU with peers parked, continue all. Initial step scope is ordinary kernel code; syscall/iret/NMI/HLT boundaries and lock-dependent progress require explicit refusal or later qualification. The debugger's own NMI return must still release a selected CPU into an ordinary-code step. |
 | Detach/kill | normal detach restores all owned breakpoint bytes and tracing state before acknowledged resume; restoration failure stays stopped. Transport loss uses the accepted idle-timeout restoration/release path; panic/fault stops never resume. Bare-metal `k` resets into the boot/PXE loop through a stopped-safe architecture path, not lock-taking power services. No extended-remote inferior creation, register coercion or fake success. |
@@ -298,7 +298,7 @@ No isolated IPI-latency, speedup or native debugger result is claimed.
 
 ## Accepted task split and qualification
 
-Task 1 is complete for review; tasks 2–4 await assignment. Accepted task 1 control:
+Task 1 is complete; task 2 is assigned. Tasks 3–4 await assignment. Accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
 QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
@@ -315,7 +315,15 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    snapshot/generation/ack/release, bounded incomplete-stop handling, idle clock
    maintenance and unmodified continue. No NIC/RSP, memory mutation or breakpoints.
 
-2. **Guarded inspection.**
+2. [ ] **Guarded inspection.**
+
+   Accepted task 2 contracts (2026-10-09): opt-in #PF/#GP fixups recognize only
+   the guarded probe and recover without IRET; other faults retain existing
+   handling. A bounded owned request/result mailbox is serviced only while
+   COMPLETE, through QEMU's GDB without injected calls. Keep fixed 30-second
+   expiry. Read-only known WB RAM includes page tables, DMA and debugger storage;
+   reject unknown/reserved/firmware/ACPI/framebuffer/MMIO/cache classes. DMA may
+   change during reads; target-memory mutation exclusions remain for task 4.
 
    Owner can then inspect the guarded RAM/register machinery through QEMU's
    existing debugger, including refusal of invalid addresses.
