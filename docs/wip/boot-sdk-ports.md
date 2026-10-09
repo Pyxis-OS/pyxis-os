@@ -86,11 +86,8 @@ Chosen by the owner, each starting with a proposal:
   ownership from task retirement while keeping one user task per process;
   no thread syscall, TLS, device behavior or dependency pin. Later tasks remain
   unassigned.
-- **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
-  keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
-  delivered together, ports first. See [SDL2](../development/sdl2.md) and the
-  [matched qualification](../development/sdl2-event-wait-qualification.md).
-
+- **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
+  to the documentation-only proposal; implementation remains unauthorized.
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
@@ -137,8 +134,6 @@ Other candidates; current assignments are listed above.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
-- [Clipboard](clipboard.md): typed objects with a text form, local and shared
-  across spaces.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
