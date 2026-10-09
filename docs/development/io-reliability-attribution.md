@@ -177,9 +177,9 @@ receives an END attempt on error. MEMORY, FILE and HOST collections are independ
 
 The measurements below predate common-FIFO HOST forwarding. The original ten
 off/on controls verified all 60 passes. Each used 1 MiB, one warmup and five
-samples, prepared destinations and sync off. Raw intervals,
-counts, clock calibration and profile sum/max pairs remain in
-[HOST samples](io-host-profile-samples.json). The command keys are `hr` (read),
+samples, prepared destinations and sync off. The raw
+intervals, counts and clock calibration are not kept in the tree (Git history keeps them
+at `d6733033` as `docs/development/io-host-profile-samples.json`). The command keys are `hr` (read),
 `hw` (write), `hc` (HOST → RAM), `ac` (archive → HOST) and `ac8` (4088-byte copy).
 Use `iobench read host://iobench.bin`, `iobench write host://NAME --prepared`,
 `iobench copy host://iobench.bin home://NAME --prepared`, or
@@ -243,8 +243,8 @@ The prior correction repeated all ten HOST controls on four CPUs and the first s
 on one CPU, with unchanged preparation, sizes and timing boundaries. All 16
 warmups and 80 measured passes verified length, contents and EOF. All 40 profiled
 samples matched the counts above with no failure, short native transfer,
-in-window EOF or saturation. Raw readings and built ELF/ISO hashes remain in
-[notification samples](io-host-notification-samples.json).
+in-window EOF or saturation. The raw readings are not kept in the tree (Git history keeps them at `d6733033` as
+`docs/development/io-host-notification-samples.json`).
 
 Payload/transfer medians in milliseconds; read uses payload elapsed:
 
