@@ -332,7 +332,7 @@ completion, never a physical vblank timestamp. They do not gain AMD timing.
 
 Implementation/qualification breakdown:
 
-- [ ] **2a — observer:** PCI/RO-UC mapping, active OTG validation and bounded
+- [x] **2a — observer:** PCI/RO-UC mapping, active OTG validation and bounded
   counter diagnostics. Capture the ordinary-copy baseline before changing its
   scheduling. QEMU boot, Bochs and VirtIO must exercise unavailable timing with
   ordinary rendering, input, capture, resize where supported and panic retained.
