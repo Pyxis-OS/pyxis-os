@@ -76,6 +76,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
+  investigation and proposal only. Kernel ownership, VM/copy safety, native
+  lifecycle and TLS/runtime prerequisites; three owner decisions remain open.
+  No implementation task is assigned by this investigation.
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
@@ -130,8 +134,8 @@ Other candidates; current assignments are listed above.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
-- [Threads and SMP follow-ups](scheduling-and-threads.md), including serial
-  services off the BSP.
+- [Multiple threads per process](threads.md) and
+  [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 - Physical GPU drivers, after the [display milestone](../kernel/display.md);
   the owner prepares the hardware.
 - [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
