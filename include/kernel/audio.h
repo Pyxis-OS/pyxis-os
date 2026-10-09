@@ -9,6 +9,28 @@
 
 struct boot_info;
 struct audio_request;
+struct space;
+
+enum audio_volume_action {
+  AUDIO_VOLUME_SET_PERCENT,
+  AUDIO_VOLUME_ADJUST_PERCENT,
+  AUDIO_VOLUME_TOGGLE_MUTE,
+};
+
+struct audio_volume_snapshot {
+  uint64_t volume_generation;
+  unsigned master_percent, space_percent;
+  bool master_muted, space_muted, available;
+};
+
+/* Trusted bar input/presentation only, BSP with either interrupt state.
+ * NULL selects master. Control composes ordered inputs into a pending target;
+ * snapshot reports only worker-confirmed state. Playback grants cannot set it. */
+bool audio_volume_control(struct space *space, enum audio_volume_action action, int value);
+bool audio_volume_snapshot(struct space *space, struct audio_volume_snapshot *snapshot);
+/* Sole BSP worker, IF=1: publish readiness and consume coalesced controls. */
+void audio_volume_available(bool available);
+void audio_volume_apply(void);
 
 /* Optional HDA engine; QEMU controller/codec bring-up only. BSP/IF=0 preparation
  * precedes AP startup; start creates the sole DMA owner after task_init(). */

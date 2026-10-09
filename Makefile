@@ -76,6 +76,11 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/random
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
+build/kernel/volume_icons.h: assets/ui/volume/pyxis-icons.png scripts/volume-icons.py
+	$(PYTHON) scripts/volume-icons.py $< $@
+
+build/kernel/volume_ui.o: build/kernel/volume_icons.h
+
 .DEFAULT_GOAL := all
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk

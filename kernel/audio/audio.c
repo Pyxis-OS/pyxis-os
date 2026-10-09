@@ -118,6 +118,7 @@ static void fail_engine(const char *reason)
 {
   audio_require_worker();
   available = false;
+  audio_volume_available(false);
   audio_sessions_fail();
   hda_fail(&controller, reason);
 }
@@ -145,6 +146,7 @@ static bool start_output(void)
         HDA_WALLCLOCK_TICKS_PER_MS * NATIVE_COMMIT_MS);
   }
   audio_sessions_cleanup();
+  audio_volume_apply();
   if (!audio_sessions_pending()) {
     return codec_stop();
   }
@@ -336,6 +338,7 @@ static void audio_worker(void *argument)
       hda_fail(&controller, "initialization failed");
     } else {
       available = true;
+      audio_volume_available(true);
       if (controller.model == HDA_MODEL_AMD) {
         klog("audio: ready codec=%x cad=%u speaker=%u headphone=%u DAC=%u rate=%u format=%x; output idle\n",
             route.vendor, (unsigned)route.codec, (unsigned)route.pin,
@@ -353,6 +356,7 @@ static void audio_worker(void *argument)
     uint64_t observed_notifications = notifications;
     cpu_restore_interrupts(flags);
     audio_sessions_cleanup();
+    audio_volume_apply();
     if (available && controller.stream_running && !refill_output()) {
       fail_engine(refill_fault);
     }
