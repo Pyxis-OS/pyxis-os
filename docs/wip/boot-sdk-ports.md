@@ -62,6 +62,10 @@ status belong in the milestone document and the PR.
   [checked natively](../development/screenshot-qualification.md#native-thinkpad-check).
 - [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
   first slice, with up to eight equal/BSP panes and colored scrollback.
+- [Program image and initial stack capacity](../kernel/program-loading.md),
+  2026-10-09: 256 MiB image span and high fixed eager 1 MiB guarded stacks;
+  [matched costs and session memory](../development/experiments/program-capacity/README.md).
+  Thread task 1 merged in #612; later thread tasks remain unassigned.
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
   libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
@@ -88,20 +92,20 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
+  design accepted: `.pxa`/`.pxb`, per-program app view, JSON stack/grant requests
+  and shared 128 MiB capture. Implementation awaits plan merge and owner go.
 - **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
   master/per-space gain and the owner's four-icon bar UI; delivery steps 1–3
   assigned after #616, with native listening by the owner afterward.
-- **Codex epsilon** (2026-10-09): [program image and initial stack capacity](program-stack-capacity.md),
-  priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
-  merged in #612; later thread tasks remain unassigned.
-- **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
-  first terminal Copy + Paste delivery implemented for owner review under the
-  accepted rounds one and two. SDL2, FILE representations and converters remain
-  unassigned; [contracts](../interfaces/clipboard.md) and
-  [qualification](../development/clipboard-first-delivery-qualification.md) describe this delivery.
+- **Codex alpha** (2026-10-09): [presentation timing step 2](presentation-timing.md#step-2-read-only-renoir-timing),
+  proposal first for a read-only Renoir OTG observer and measured blank-started
+  copying; its three defaults await owner answers. Clipboard terminal Copy +
+  Paste merged in #619 / userland #180; its later SDL2, FILE and converter tasks
+  remain unassigned.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
-  RAM staging (#610), is merged; the completed-frame handoff is delivered for
-  review with userland and ports PRs. Saved shell history (#609) and
+  RAM staging (#610) and completed-frame handoff (#618) are merged.
+  Saved shell history (#609) and
   xfer pipelining (#600) are merged; xfer's native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),

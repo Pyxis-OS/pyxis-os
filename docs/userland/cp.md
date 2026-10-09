@@ -53,7 +53,7 @@ With `-r` a directory source is copied as a new tree. File operands behave as ab
   symbolic links, special and unknown entries (reported, never followed or skipped), so
   these failures normally leave nothing behind; the copy pass checks again because
   enumeration is live. Traversal is iterative over a fixed stack of about 10 KiB with
-  no per-entry heap, so the 1 MiB stack is not used for recursion.
+  no per-entry heap; traversal does not recurse on the native stack.
 - **Authority:** unchanged. Source directories need LOOKUP, ENUMERATE and READ_FILES;
   the destination needs the rights below, which created directories request again.
 - **Interruption:** killing cp during the pre-copy walk leaves the new empty root

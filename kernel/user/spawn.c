@@ -233,7 +233,7 @@ static enum call_status prepare_child(struct launch_preparation *group,
   group->parent = parent;
   group->execution_group = execution_group;
   struct process *child;
-  uintptr_t entry;
+  uintptr_t entry, stack_top;
   /* Only boot-archive images are read in place; the others were copied. */
   bool external = capture->image->backing != FILE_INITRD;
   const void *bytes = external ? capture->external_image : capture->image->data;
@@ -245,7 +245,7 @@ static enum call_status prepare_child(struct launch_preparation *group,
     }
     return status;
   }
-  enum mm_result loaded = user_process_load(space, bytes, size, &child, &entry);
+  enum mm_result loaded = user_process_load(space, bytes, size, &child, &entry, &stack_top);
   if (!external) {
     file_end_operation(capture->image);
   }
@@ -281,8 +281,7 @@ static enum call_status prepare_child(struct launch_preparation *group,
 
   struct task *task;
   /* Publication places the child; equal loads favour the preferred CPU. */
-  enum mm_result submitted = user_task_prepare(child, entry,
-      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, preferred_cpu, &task);
+  enum mm_result submitted = user_task_prepare(child, entry, stack_top, preferred_cpu, &task);
   if (submitted != MM_OK) {
     status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;

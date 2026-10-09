@@ -4,6 +4,8 @@
 #include <kernel/panic.h>
 #include <pxe/p1f.h>
 
+#define IMAGE_MAX_SPAN (UINT64_C(256) * 1024 * 1024)
+
 /* P1F is little-endian, as is the supported x86_64 kernel. Copying into local
  * structures also avoids unaligned access and trusting a typed input pointer. */
 static struct p1f_segment read_segment(const uint8_t *bytes, size_t index)
@@ -15,7 +17,8 @@ static struct p1f_segment read_segment(const uint8_t *bytes, size_t index)
 }
 
 static bool validate_image(const uint8_t *bytes, size_t size,
-                            struct p1f_header *header, size_t *payload)
+    uintptr_t reserved_base, uintptr_t reserved_end,
+    struct p1f_header *header, size_t *payload)
 {
   if (!bytes || size < sizeof(*header)) {
     return false;
@@ -29,6 +32,7 @@ static bool validate_image(const uint8_t *bytes, size_t size,
   *payload = sizeof(*header) + header->segment_count * sizeof(struct p1f_segment);
   size_t remaining = size - *payload;
   uint64_t previous_end = P1F_PAGE_SIZE;
+  uint64_t image_base = read_segment(bytes, 0).virtual_address;
   bool executable_entry = false;
 
   for (size_t i = 0; i < header->segment_count; ++i) {
@@ -45,6 +49,10 @@ static bool validate_image(const uint8_t *bytes, size_t size,
 
     uint64_t end = segment.virtual_address + segment.memory_size;
     previous_end = (end + P1F_PAGE_SIZE - 1) & ~(P1F_PAGE_SIZE - 1);
+    if (previous_end - image_base > IMAGE_MAX_SPAN ||
+        (segment.virtual_address < reserved_end && previous_end > reserved_base)) {
+      return false;
+    }
     remaining -= segment.file_size;
     if ((segment.flags & P1F_EXECUTE) && header->entry >= segment.virtual_address &&
         header->entry < end) {
@@ -103,7 +111,8 @@ static enum mm_result load_segment(struct vm_space *space, uintptr_t scratch,
 }
 
 enum image_result image_load(const void *bytes, size_t size,
-                             struct vm_space **space, uintptr_t *entry)
+    uintptr_t reserved_base, uintptr_t reserved_end,
+    struct vm_space **space, uintptr_t *entry)
 {
   _Static_assert(P1F_PAGE_SIZE == PAGE_SIZE, "P1F page granularity");
 
@@ -113,13 +122,15 @@ enum image_result image_load(const void *bytes, size_t size,
   if (entry) {
     *entry = 0;
   }
-  if (!space || !entry) {
+  if (!space || !entry || reserved_base < P1F_PAGE_SIZE ||
+      reserved_base >= reserved_end || reserved_end > P1F_USER_LIMIT ||
+      ((reserved_base | reserved_end) & (P1F_PAGE_SIZE - 1))) {
     return IMAGE_INVALID;
   }
 
   struct p1f_header header;
   size_t payload;
-  if (!validate_image(bytes, size, &header, &payload)) {
+  if (!validate_image(bytes, size, reserved_base, reserved_end, &header, &payload)) {
     return IMAGE_INVALID;
   }
 
