@@ -1,6 +1,6 @@
 # Development milestone index
 
-Status: the current state of planned work, updated 2026-10-08. Nothing here
+Status: the current state of planned work, updated 2026-10-09. Nothing here
 authorizes implementation: each milestone settles its decisions in its own
 document before code work starts. Milestone order is flexible; the owner's
 current choice wins. Everyday use for simple tasks guides the order; website
@@ -16,6 +16,15 @@ Implemented behavior lives in the subsystem references listed in the
   1460-byte segments on-link, 64 KiB windows and Nagle off; natively send went
   from 35.8 to 70.5 MiB/s and receive reaches 85 MiB/s with `ttcp -r`, with
   [remaining limits](../technical-debt.md#tcp-throughput-limits) recorded.
+- [A system pointer](../interfaces/pointer.md), 2026-10-09: ordinary surface
+  input, program cursors, relative lock and user escape, terminal selection and
+  mux wheel browsing, and VirtIO hardware cursors. Tasks 1–4 are merged in
+  #545/#550/#560; task 5's reference closure and default-cursor redraw are
+  delivered for review, not merged. The
+  [qualification report](../development/system-pointer-qualification.md) records
+  matched QEMU checks and partial native evidence;
+  [remaining native checks](../technical-debt.md#native-system-pointer-qualification)
+  stay open. Clipboard and additional input sources remain separate milestones.
 - [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
   unmerged QEMU probes established controller/codec commands and known PCM
   playback; the Fedora dump identifies ALC257, but native Pyxis audio
@@ -87,22 +96,6 @@ Chosen by the owner, each starting with a proposal:
   [baseline and warm qualification](../development/experiments/bluetooth-runtime-hci/README.md).
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
-- **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
-  Tasks 1–3 are merged: Pyxis #545/#550, userland #164/#166, ports #65/#66.
-  Task 4, the VirtIO hardware cursor, is delivered for review on
-  `pointer/virtio-cursor` in [#560](https://git.internal/PyxisOS/pyxis-os/pulls/560).
-  The [pre-code software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
-  and [hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
-  record matched cost samples, cursor-inclusive capture, DevilutionX, resize
-  and boot/Bochs regression checks, including the deferred ordinary-completion
-  review fix. Task 4 is parked in #560 for morning review.
-  Both [task-specific defaults](pointer.md#task-4-planning) are accepted
-  2026-10-08. No dependency pins or public ABI change. The later SDL
-  blocking-event adapter fix remains beta's work. Task 5 needs separate authorization. Matched QEMU checks suffice
-  for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
-  to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
-  clipboard and USB HID implementation remain separate. Bluetooth's accepted
-  conditional source-loss rule remains future integration, without a second source.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
