@@ -808,6 +808,17 @@ over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurem
 deferred it (the shareware result is enough, and 692 MB at the measured native 2.5 MiB/s is roughly 4½ minutes). Revisit when the owner
 wants to play the retail data.
 
+## EDuke32 port limits
+
+[EDuke32](userland/eduke32.md) is personal-use only, an opt-in build that images, CI and bundles never contain. It has no sound, network
+play, controllers or OpenGL renderers. Its [recipe](../ports/eduke32/README.md) patches threaded code to run in Pyxis's one thread:
+loguru without its flush thread or signal handlers, smmalloc's per-thread cache and the audio library's lock flag as globals, its async
+tasks left out, and minicoro without multithreading (decision 7 of the [milestone](wip/sdl-game-ports.md#owner-decisions)). Revisit with
+userspace threads, together with sound. The port also works around [libc gaps](../ports/eduke32/README.md#libc-gaps) that need decisions
+first: it keeps its own working directory (no `chdir` or `getcwd`), loops reads because libc `read` returns one native transfer, under
+4 KiB, where POSIX code expects whole reads from files, and matches its data cache on size because `stat` has no modification time.
+Revisit if more ports need a working directory or whole reads. Pyxis displays report no refresh rate, so its frame limiter assumes 60 Hz.
+
 ## Quake port limits
 
 The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240; a resolution switcher would need a video driver with a mode

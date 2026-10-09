@@ -98,15 +98,16 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-09): [machine settings, task 1](machine-settings.md#task-1-contract),
   hostname store/validation, boot selection, native query and print-only command.
-- **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  shared 128 MiB selected-image capture ceiling and failure rollback qualification,
-  using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
+- **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
+  prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
+  Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   task 1 read-only inventory complete; exclusion standard and PSP/SMU risk accepted.
   Inherited pitch remains a backend prerequisite; task 2 awaits separate owner go.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
-  Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
-  (Chocolate Doom) merged in #623, task 2 (Chocolate Quake) in progress. Presentation timing steps 1 and 2 (#610, #618),
+  Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, tasks 1
+  (Chocolate Doom, #623) and 2 (Chocolate Quake, #634) merged, task 3 (EDuke32)
+  in review. Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).

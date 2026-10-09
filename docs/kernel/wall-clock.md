@@ -36,6 +36,13 @@ failures set errno rather than inventing a date. `time` returns `-1` on failure,
 which is also a valid pre-epoch timestamp. `timespec_get` avoids that ambiguity
 and leaves its destination unchanged on failure.
 
+`clock_gettime` reads `CLOCK_REALTIME` and `CLOCK_MONOTONIC` as
+`timespec_get`'s `TIME_UTC` and `TIME_MONOTONIC`; other clocks fail with
+`EINVAL`. `nanosleep` sleeps on the startup clock until the duration has
+passed. With no signals it never returns early and never writes the remaining
+time; a duration past the clock's range sleeps until its end, and a negative
+or malformed one fails with `EINVAL`.
+
 `gmtime_r` and `gmtime` convert Unix seconds using the proleptic Gregorian
 calendar, including dates before 1970. They require no capability or allocation.
 Years outside the range of the integer `tm_year` produce `EOVERFLOW`.

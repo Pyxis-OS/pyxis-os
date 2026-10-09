@@ -63,7 +63,10 @@ QUAKE_DATA ?=
 # Opt-in: a directory with the Diablo shareware spawn.mpq builds DevilutionX
 # into this image, for personal use only; see ports/devilutionx/PORT-NOTICE.
 DIABLO_DATA ?=
-export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA
+# Opt-in: a directory with the owner's duke3d.grp builds EDuke32 into this
+# image, for personal use only; see ports/eduke32/PORT-NOTICE.
+DUKE3D_DATA ?=
+export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
 
 LOG_LEVEL ?= info
 ifeq ($(LOG_LEVEL),trace)
