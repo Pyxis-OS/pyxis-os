@@ -44,6 +44,7 @@
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/memory.h>
+#include <kernel/string.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
@@ -60,6 +61,7 @@ static struct directory_object *boot_root;
 static struct directory_object *tmp_root;
 /* Boot init's private RAM directory, from which it makes configured RAM volumes. */
 static struct directory_object *ram_root;
+static const char stock_boot_init_uri[] = "boot://boot-init.pxe";
 
 /* Boot exposes only the immutable archive. Match its exact entry names;
  * userspace path walking and its wider namespace policy stay in libpyxis. */
@@ -162,6 +164,11 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
+  uint64_t system_info_rights = SYSTEM_INFO_RIGHT_READ;
+  if (!install && strlen(image_uri) == sizeof(stock_boot_init_uri) - 1 &&
+      !memcmp(image_uri, stock_boot_init_uri, sizeof(stock_boot_init_uri))) {
+    system_info_rights |= SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE;
+  }
   if (capability_install(&process->capabilities, terminal_service, TERMINAL_SERVICE_RIGHT_CREATE, 0, &terminal_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
@@ -182,7 +189,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
           UDP_SERVICE_RIGHT_OPEN | UDP_SERVICE_RIGHT_BROADCAST, 0, &udp_handle) != CAP_OK ||
       capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
-      capability_install(&process->capabilities, system_info, SYSTEM_INFO_RIGHT_READ, 0, &system_info_handle) != CAP_OK ||
+      capability_install(&process->capabilities, system_info, system_info_rights, 0, &system_info_handle) != CAP_OK ||
       capability_install(&process->capabilities, log, LOG_RIGHT_READ, 0, &log_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher,
           LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK) {

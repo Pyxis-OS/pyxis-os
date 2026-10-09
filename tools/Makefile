@@ -2,12 +2,18 @@ HOSTCC ?= cc
 CPPFLAGS := -I../include
 CFLAGS := -std=gnu23 -O2 -g -Wall -Wextra -Wshadow -Wstrict-prototypes
 
-.PHONY: all remote log clean
+.PHONY: all remote log machine-hostname clean
 all: remote log
 
 remote: ../build/tools/pyxis-remote
 
 log: ../build/tools/pyxis-log
+
+machine-hostname: ../build/tools/machine-hostname
+
+../build/tools/machine-hostname: machine-hostname.c ../build/sdk/share/pyxis/machine_settings/machine_settings.h ../build/sdk/share/pyxis/machine_settings/machine_settings.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -I../build/sdk/share/pyxis/machine_settings $(CFLAGS) $< ../build/sdk/share/pyxis/machine_settings/machine_settings.c -o $@
 
 ../build/tools/pyxis-log: log.c ../include/remote/log.h
 	@mkdir -p $(@D)

@@ -48,10 +48,17 @@ if [ -n "${DUKE3D_DATA:-}" ]; then
     exit 1
   }
 fi
+live_config=
+if [ "${PYXIS_IMAGE_HOSTNAME_SET:-}" = 1 ]; then
+  build/tools/machine-hostname build/userspace-root/config/live.lua "$PYXIS_IMAGE_HOSTNAME" > build/live.lua.tmp
+  mv build/live.lua.tmp build/live.lua
+  live_config=build/live.lua
+fi
 cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifest.txt
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
+  "live_config=$live_config" \
   "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
   "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1" \
   "diablo_spawn=$diablo_spawn" devilutionx=build/ports/devilutionx/stage \

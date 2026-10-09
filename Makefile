@@ -31,6 +31,17 @@ export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK
 export VFIO_PCI
 INIT ?=
 NETWORK_CONFIG ?=
+# HOSTNAME commonly comes from the build host's environment. Only an explicit
+# command-line value selects the live image's name, including an empty value.
+ifeq ($(origin HOSTNAME),command line)
+override PYXIS_IMAGE_HOSTNAME := $(HOSTNAME)
+override PYXIS_IMAGE_HOSTNAME_SET := 1
+IMAGE_HOSTNAME_TOOL := build/tools/machine-hostname
+else
+override PYXIS_IMAGE_HOSTNAME :=
+override PYXIS_IMAGE_HOSTNAME_SET :=
+endif
+export PYXIS_IMAGE_HOSTNAME PYXIS_IMAGE_HOSTNAME_SET
 MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
 REMOTE_BEACON ?=
@@ -124,6 +135,9 @@ endif
 tools:
 	$(MAKE) -C tools
 
+build/tools/machine-hostname: FORCE | sdk
+	$(MAKE) -C tools machine-hostname
+
 fs-tools:
 	@test -f fs/Makefile || { \
 	  echo 'Missing filesystem submodule: run git submodule update --init fs.' >&2; \
@@ -190,7 +204,7 @@ initrd: build/initrd.cpio
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
 build/initrd.cpio: userspace ports ax200-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE \
-                   boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
+                   boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 
 check-toolchain: build/toolchain

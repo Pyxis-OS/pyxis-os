@@ -21,6 +21,7 @@ there is no extra link library. See
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis.cmake` | Relocatable [CMake toolchain file](#cmake) |
 | `share/cmake/Platform/Pyxis.cmake` | The CMake platform description `pyxis.cmake` loads |
+| `share/pyxis/machine_settings` | The shared userspace hostname validator/header for host image assembly, also compiled into libpyxis |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/pyxis/key_layout.c` | The US key layout shared with the kernel's terminal text, compiled into libpyxis as `key_layout_character` (`pxe/key_layout.h`) |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |

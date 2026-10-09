@@ -1,178 +1,107 @@
 # Machine settings and the system hostname
 
-Status: **owner decisions accepted 2026-10-09; nothing implemented.** The
-first task waits for the owner's explicit go. It develops the "machine settings that survive updates"
-entry in [later directions](later-os-directions.md), with the hostname as the
-first setting.
+Status: **task 1 implemented and qualified in QEMU**. The
+owner accepted this direction and task 1 details on 2026-10-09. Tasks 2–7 need
+separate assignment. The [implemented store/hostname reference](../userland/machine-settings.md)
+and [native query](../interfaces/system-information.md#hostname) own task 1's
+interfaces and limits.
 
-Pyxis has no per-machine settings and no system name. The only name is the
-`remote.beacon=NAME` kernel option, which selects a host for
-[reverse connections](../userland/remote-terminal.md#reverse-connections). The
-[UDP kernel log](../interfaces/kernel-log.md#udp-capture) identifies a machine
-only by its network hardware address, and ports that call `gethostname()` have
-nothing to call. The installed boot configuration lives in the boot archive on
-the ESP, which every [system update](../userland/system-updates.md) replaces
-and only a rebuild can change, so a per-machine value cannot live there.
+## Accepted direction
 
-## The store
+1. **Plain store plus validating writer.** Machine settings are ordinary npfs
+   files under `system://config/machine/`, outside the boot archive. A directory
+   is a subtree and a file is a key. Values have a schema-defined type; the first
+   entry is `network/hostname`. Later entries may be booleans, integers or enums.
+   The writer is task 2; there is no provider or notification service now.
+2. **One kernel hostname per boot.** Boot init selects the persistent override
+   or archive default, sets it once, and programs read `SYSTEM_INFO_HOSTNAME`
+   through explicit READ authority. Ports get libc `gethostname()`; first-party
+   tools use the native query. Task 5 will use the same name in the UDP log.
+3. **Beacon retirement in task 4.** Replace `remote.beacon=NAME` and
+   `make image REMOTE_BEACON=` with a remote-space boolean selecting reverse
+   connection under the hostname. Remove the old forms together; task 1 keeps
+   them working as they do today.
 
-The owner wants what is good in the Windows registry, kept inside the
-filesystem. The store is a directory tree on the system pool, outside the boot
-archive, so updates leave it alone.
+The default is `pyxis`; no random machine name is invented. Machines left with
+that name can collide when later log, DHCP or mDNS consumers use it. That cost
+is accepted. User settings would be a separate `home://` tree, not this store.
 
-- **Location.** `system://config/machine/`, beside `boot.lua`. User settings
-  would be a separate tree under `home://` later. This document covers only the
-  machine tree.
-- **Keys.** A subtree is a directory and a key is a small file, so the registry's
-  named hierarchy is `machine/network/hostname`, and `ls` and `cat` work.
-  Nothing is packed into one opaque file.
-- **Values.** A key's bytes are its value as text, with one trailing newline.
-  The type is defined by the key's schema entry, not stored in the file: the
-  first schema entry is `network/hostname`, one RFC 1123 label (1–63 ASCII
-  letters, digits and hyphens, not starting or ending with a hyphen, no dots,
-  compared case-insensitively and stored as written). Later entries may be
-  booleans, integers or enumerations.
-- **One validator.** The schema is shared userspace source, used by the writer
-  and by boot init, so there is a single authority for what a key may hold.
-- **Defaults.** The archive's boot configuration keeps the declarative
-  defaults, `hostname = "pyxis"` in `live.lua` and `installed.lua`. The store
-  holds only per-machine overrides; a missing key means the default.
-- **Atomic writes.** The writer creates a temporary file in the key's
-  directory, writes and syncs it, then renames it over the key, so the pool
-  journal commits either the old value or the new one. The libc
-  [directory-sync limit](../technical-debt.md#atomic-save-limits) applies: a
-  crash can lose the new name, and can leave a stray temporary file that
-  readers ignore because they open exact key names.
-- **Live and PXE images.** A live boot has no pool, so there is no store. The
-  value is the default in `live.lua`, and `make image HOSTNAME=NAME` writes that
-  name into the `live.lua` it packages. A differently named live machine is a
-  different image.
-- **The boot override stays separate.** `system://config/boot.lua` sets inits and
-  grants and is ignored whole when invalid. A syntax error there must not rename
-  the machine, and the rescue entry, which ignores the override, still reads the
-  store and boots with the real name.
+## Task 1 contract
 
-### Validation and authority
+Accepted 2026-10-09:
 
-Validation happens in two places for different reasons. The writer rejects a bad
-value before it reaches the pool, which is the useful part for the person
-typing. Every reader also validates, because anything holding write access to
-the system volume can create a file by hand. A bad value is reported and the
-default applies.
+- One RFC 1123 label, case preserved. The reader accepts one trailing LF or
+  none, and rejects CR/CRLF, whitespace, NUL and extra bytes. Missing, unreadable
+  or invalid keys use the archive default with one report. A shared userspace
+  validator owns the grammar for boot and host image assembly.
+- `SYSTEM_INFO_HOSTNAME`: header-only READ returns a 64-byte record; a fixed
+  64-byte payload needs the independent SET_HOSTNAME_ONCE right. Only stock boot
+  init receives it, publishes before any space, and forwards READ alone. A
+  second set refuses. The kernel checks only length and printable ASCII.
+- `gethostname()` needs the full name plus NUL; otherwise it returns
+  `-1`/`ENAMETOOLONG` with the buffer unchanged. Missing authority is an error.
+  The print-only `hostname` command uses the native query.
 
-Authority is capabilities. A reader needs a read-only directory grant to the
-subtree it uses, attenuated from the system root with the existing directory
-rights, such as `machine/network` for a DHCP client. Only the config tool and the
-installer get write access, to the part of the tree they own. Today the `pyxis`
-space holds the system volume read-write for every program it runs, so write
-access is limited by convention, not enforced. Narrowing it, so that only the
-tool holds a write grant to `machine/` from trusted init, is a later task.
+## Later writer and authority
 
-### How it is exposed
+Task 2's writer validates through the same shared schema, creates a temporary
+file beside the key, writes and syncs it, then renames it over the key. The
+[directory-sync limit](../technical-debt.md#atomic-save-limits) still applies:
+a crash can lose the new name or leave a temporary file, which readers ignore
+by opening exact key names. The writer emits one trailing LF.
 
-**Accepted:** a plain directory with conventions and a validating writer. The
-tree is ordinary npfs files. The `config` tool validates and writes; everything
-else reads files. Boot init needs nothing new, because it already mounts `system`
-and reads `boot.lua` from it, and it can read a key before any service runs.
-There is no running code to keep alive. A `settings://` provider could front
-the same files later without changing them.
+Read authority is a directory grant attenuated from the relevant system subtree;
+no general machine-settings API is added. Today the installed `pyxis` space
+holds the whole system root read-write, so write restriction is convention.
+Narrowing it to the config tool and installer is a separate task. The store
+survives system updates; reinstall formats it away. Task 6 will ask for a name
+and may offer the old readable value before reinstall.
 
-### Change notification
-
-Registry-style notification maps to Pyxis's readiness waits: a reader would
-wait on its subtree grant until the directory's generation differs from the one
-it supplies. The generation counter exists, but `wait_many` accepts no directory
-objects today, so this needs a new readiness bit on directory grants. No setting
-needs a live change yet, since the hostname applies at boot, so it is not built
-until a consumer such as DHCP re-announcing a rename needs it.
-
-## The hostname
-
-- **Where the installed value lives.** `machine/network/hostname` in the store.
-  Boot init reads it after mounting `system`, falls back to the archive default
-  when it is missing or invalid, and says so on the Caelum tab. An invalid
-  `hostname` in `live.lua` or `installed.lua` stops that configuration like any
-  other invalid field.
-- **Not a kernel option.** The name is machine configuration, and the command
-  line is for boot switches.
-- **Reading it.** A new `SYSTEM_INFO_HOSTNAME` query on the existing
-  [system information](../interfaces/system-information.md) READ right returns
-  the name as a fixed-size NUL-terminated string. The kernel stores the name,
-  checking only length and printable ASCII. Boot init sets it once per boot,
-  before it creates any space, through a separate set-once right that only boot
-  init holds. A second set fails. Every program sees a name from its first
-  instruction and none can change it. Programs read the name through this query,
-  not the files, so they need no store grant.
-- **libc.** `gethostname()` is built on that query through the `system_info`
-  grant, like other libc functions that use named startup grants. A launch
-  without the grant gets an error, not an invented name. There is no
-  `sethostname()`.
-- **When a change takes effect.** At the next boot. No running program sees a
-  different name.
-- **Who may change it.** The image build for live images, the installer for a
-  new system, and the `config` tool on an installed one.
-- **Reinstall.** Reinstall formats the pool, so the store is lost. The installer
-  asks for the name and may offer the old store's name as the default when the
-  old pool is readable.
-
-## Consumers
-
-Each is a later task, in the order below, and reads the name through the query.
-
-- **Shell prompt and Fastfetch.** The prompt would read `NAME tmp://notes> `
-  and Fastfetch would gain a hostname line.
-- **Remote beacon.** The beacon name defaults to the hostname, so
-  `pyxis-remote --listen NAME` and the machine agree without a second setting.
-- **UDP log.** The log's wire header carries the name beside the hardware
-  address, and `pyxis-log` prints it. Packets sent before boot init sets the
-  name carry an empty one; the receiver keeps the last non-empty name per
-  machine. The header is shared with a host tool in the same repository, so
-  both change together.
-- **DHCP option 12.** The userspace DHCP policy offers the name to the server.
-  Whether the server registers it is up to the network.
-- **mDNS.** Answering `NAME.local` needs a multicast responder, which does not
-  exist yet. It would use this name unchanged.
-- **Tailscale.** A later, Go-dependent direction. Its node name would default to
-  the hostname.
-
-## Accepted decisions
-
-1. **Exposure.** The plain directory with a validating writer, above.
-2. **Read path.** The kernel stores the name. Boot init sets it once per boot
-   and programs read it through `SYSTEM_INFO_HOSTNAME`. The kernel copy also
-   serves the UDP log, and a program cannot alter it.
-3. **`remote.beacon`.** The kernel option is retired. The `remote` space sets a
-   boolean in its configuration to take the reverse connection, named by the
-   hostname, and `make image REMOTE_BEACON=` goes away. Nothing keeps the old
-   form working.
-
-The unset name is the fixed `pyxis`, which the installer prompts to change. Two
-machines left at the default collide in the UDP log, DHCP and mDNS; that is
-accepted rather than inventing a random name the owner did not choose.
+Directory generations exist, but directory objects are not waitable today.
+No setting currently needs live notification. Add it only with a concrete
+consumer such as DHCP re-announcing a rename; do not silently add polling.
 
 ## Tasks
 
-1. **Store and hostname.** The store convention and the hostname schema entry,
-   shared validation, boot init reading the key (validated on read) with the
-   archive default as fallback, `HOSTNAME=` image assembly, the set-once right
-   and `SYSTEM_INFO_HOSTNAME`, libc `gethostname()`, and a print-only `hostname`
-   command. No writer yet. The owner can write the key by hand on an installed
-   system, reboot, run `hostname`, then update the system and see the name kept,
-   or build a live image with `HOSTNAME=t14`.
-2. **The `config` tool.** `config get`, `set` and `list` with schema validation
-   and atomic writes. The owner can run `config set machine/network/hostname t14`,
-   see a bad name rejected, and have the new one apply at the next boot.
-3. **Prompt and Fastfetch.** The owner can see which machine a terminal belongs
-   to from its prompt.
-4. **Remote beacon.** The owner can run `make image HOSTNAME=t14` and
-   `pyxis-remote --listen t14` with no separate beacon setting.
-5. **UDP log.** The owner can read the machine's name in `pyxis-log` output.
-6. **Installer.** The owner can choose a name at install, and keep the old one
-   when reinstalling.
-7. **DHCP option 12.** The owner can find the machine by name in the router's
-   lease list.
+1. [x] **Store and hostname.** Implemented reference above. No writer, beacon,
+   log, prompt, Fastfetch or DHCP changes.
+2. [ ] **Config tool.** `config get`, `set` and `list`, shared validation and
+   atomic writes. The owner sets the key, sees invalid input refused and the
+   new value apply on the next boot.
+3. [ ] **Prompt and Fastfetch.** Read the native name; show `NAME tmp://notes> `
+   in the prompt and a hostname line in Fastfetch.
+4. [ ] **Remote beacon.** Retire the old option/build setting together; a
+   remote-space flag uses the hostname for `pyxis-remote --listen NAME`.
+5. [ ] **UDP log.** Carry the name beside the hardware address; early packets
+   carry an empty name and the receiver retains the last nonempty one. Update
+   kernel/header/host receiver together.
+6. [ ] **Installer.** Choose a name on install and preserve/offer the old name
+   on reinstall when readable.
+7. [ ] **DHCP option 12.** Offer the hostname through userspace policy; server
+   registration remains the network's choice.
 
-Narrowing write access to the tool, directory change notification, a user
-settings tree under `home://`, `config validate` as the validation half of
-Polaris (see the [boot configuration checker](boot-configuration-checker.md)),
-mDNS and Tailscale wait for their own proposals.
+Narrow writer grants, directory notification, user settings,
+`config validate` as Polaris's [configuration checker](boot-configuration-checker.md),
+mDNS `NAME.local` and Tailscale naming await their own proposals/assignment.
+
+## Task 1 qualification — 2026-10-09
+
+Ordinary `make -j16 image` built the kernel, SDK, runtime, ports and applications
+at Pyxis `c5c5beb8e964`, userland `8cbd9f87bdc7` and ports `19fb10b05549`, with
+the existing `pyxis-llvm23.1.3-49e2c1a` builder. No compiler rebuild was needed.
+Interactive QEMU 10.2.2 used Q35, nested KVM, four host CPUs, 8 GiB, OVMF and
+VirtIO block/RNG/network devices; the installed fixture was a separate 2 GiB disk.
+
+Installed runs at the earlier kernel `ad9d0a897008` / userland `8fbe2ccc4202`
+confirmed missing-key fallback with one hostname report, `ThinkPad-7` with LF,
+`NoLf-7` without LF, preserved case and CRLF rejection with one report. Writes
+were explicitly synced and changed the running name only after reboot. Updating
+that disk to `c5c5beb8e964` / `8cbd9f87bdc7` completed the installer's byte checks;
+after reboot, both `hostname` and the retained key read `ThinkPad-7`, without a
+hostname fallback report.
+
+The earlier live image built with `HOSTNAME=T14-Live` printed that name without
+a store warning. `HOSTNAME=bad.name` failed assembly through the shared validator;
+omitting the option ignored the container's environment hostname. Source review
+covered set-once/child authority and libc short-buffer/error behavior; those
+failure paths were not forced at runtime. No native or power-loss checks ran.

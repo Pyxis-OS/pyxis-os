@@ -101,8 +101,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-09): [SDL2 clipboard](clipboard.md#graphics-activation),
-  accepted graphics authority/activation, SDL adapter and opt-in manual qualification tool.
+- **Codex** (2026-10-09): [machine settings, task 1](machine-settings.md#task-1-contract),
+  hostname store/validation, boot selection, native query and print-only command.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.

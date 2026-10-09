@@ -262,7 +262,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_ECHO:
     return !(rights & ~ECHO_RIGHT_SEND);
   case OBJECT_SYSTEM_INFO:
-    return !(rights & ~SYSTEM_INFO_RIGHT_READ);
+    return !(rights & ~(SYSTEM_INFO_RIGHT_READ | SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE));
   case OBJECT_LOG:
     return !(rights & ~LOG_RIGHT_READ);
   case OBJECT_CLOCK:

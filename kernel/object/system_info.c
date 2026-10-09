@@ -10,6 +10,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/user_memory.h>
+#include <stdatomic.h>
 #include "../usb/core.h"
 
 static const struct system_info_identity identity = {
@@ -20,6 +21,11 @@ static const struct system_info_identity identity = {
 };
 /* Published through scheduler startup; no CPU hotplug is supported. */
 static struct system_info_cpu cpu;
+static const struct system_info_hostname default_hostname = {.name = "pyxis"};
+/* Only BSP writes hostname, before release publication. Readers use the separate
+ * default until acquire observes publication, then the record is immutable. */
+static struct system_info_hostname hostname;
+static atomic_bool hostname_published;
 
 void
 system_info_init(void)
@@ -77,6 +83,56 @@ system_info_power_execute(struct system_info_power_request *request)
   }
 }
 
+void
+system_info_hostname_execute(struct system_info_hostname_request *request)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (atomic_load_explicit(&hostname_published, memory_order_relaxed)) {
+    request->status = CALL_DENIED;
+    return;
+  }
+  size_t length = 0;
+  while (length < sizeof(request->value.name) && request->value.name[length]) {
+    unsigned char character = request->value.name[length];
+    if (character < 0x20 || character > 0x7e) {
+      request->status = CALL_BAD_REQUEST;
+      return;
+    }
+    ++length;
+  }
+  if (!length || length == sizeof(request->value.name)) {
+    request->status = CALL_BAD_REQUEST;
+    return;
+  }
+  hostname = (struct system_info_hostname){0};
+  memcpy(hostname.name, request->value.name, length);
+  atomic_store_explicit(&hostname_published, true, memory_order_release);
+  request->status = CALL_OK;
+}
+
+static struct syscall_result
+set_hostname(uint64_t rights, uintptr_t request_address, size_t request_size)
+{
+  if (!(rights & SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (request_size != sizeof(struct system_info_hostname)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct system_info_hostname value;
+  if (!copy_from_user(&value, request_address, sizeof(value))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct system_info_hostname_request *request = (void *)
+      bsp_request_prepare(BSP_SERVICE_SYSTEM_INFO_HOSTNAME);
+  request->value = value;
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->status;
+  bsp_request_release(&request->request);
+  return (struct syscall_result){status, 0};
+}
+
 static uint64_t
 pci_state(void)
 {
@@ -95,6 +151,9 @@ struct syscall_result
 system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == SYSTEM_INFO_HOSTNAME && request_size) {
+    return set_hostname(rights, request_address, request_size);
+  }
   size_t size;
   size_t payload_size = 0;
   const void *reply;
@@ -108,6 +167,11 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
   struct system_info_pci_function_request function_request = {0};
   uint64_t battery_index = 0;
   switch (operation) {
+  case SYSTEM_INFO_HOSTNAME:
+    size = sizeof(hostname);
+    reply = atomic_load_explicit(&hostname_published, memory_order_acquire) ?
+        &hostname : &default_hostname;
+    break;
   case SYSTEM_INFO_IDENTITY:
     size = sizeof(identity);
     reply = &identity;
