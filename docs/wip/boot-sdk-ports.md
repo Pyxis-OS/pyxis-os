@@ -85,11 +85,9 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
-  three defaults accepted in merged #567. Task 1 splits process ownership from
-  task retirement, with [matched qualification](../development/experiments/threads-task1/README.md),
-  delivered for review. One user task per process remains; no thread syscall,
-  TLS, device behavior or dependency pin changed. Later tasks remain unassigned.
+- **Codex epsilon** (2026-10-09): [program image and initial stack capacity](program-stack-capacity.md),
+  priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
+  merged in #612; later thread tasks remain unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,

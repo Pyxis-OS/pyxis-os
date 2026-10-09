@@ -122,10 +122,11 @@ remain unqualified; no performance claim or guarantee of fitting a guest follows
 
 ## Suggested first task and owner decisions
 
-**First concrete task, if assigned:** define and qualify general initial-process
-image/stack capacity after #567's assigned ownership task, avoiding overlapping
-process changes. Keep placement/size owned by the loader, a reserved unmapped
-guard, eager backing, collision rejection and full unpublished-load cleanup.
+**Owner-assigned priority 0, proposal first:** [program image and initial stack
+capacity](program-stack-capacity.md), after merged process-lifetime task 1 (#612).
+Define and qualify general initial-process capacity. Keep placement/size owned by
+the loader, a reserved unmapped guard, eager backing, collision rejection and
+full unpublished-load cleanup.
 Propagate its actual stack top to boot and ordinary launch. Manually qualify a
 native image exceeding the old window and inspect disjoint mappings, exit and
 rejected-load cleanup with QEMU/GDB. No automatic growth, public threads or
