@@ -1,7 +1,7 @@
 # Machine settings and the system hostname
 
-Status: **proposal, 2026-10-09, awaiting owner decisions.** Nothing here
-authorizes code. It develops the "machine settings that survive updates"
+Status: **owner decisions accepted 2026-10-09; nothing implemented.** The
+first task waits for the owner's explicit go. It develops the "machine settings that survive updates"
 entry in [later directions](later-os-directions.md), with the hostname as the
 first setting.
 
@@ -21,7 +21,7 @@ filesystem. The store is a directory tree on the system pool, outside the boot
 archive, so updates leave it alone.
 
 - **Location.** `system://config/machine/`, beside `boot.lua`. User settings
-  would be a separate tree under `home://` later. This proposal covers only the
+  would be a separate tree under `home://` later. This document covers only the
   machine tree.
 - **Keys.** A subtree is a directory and a key is a small file, so the registry's
   named hierarchy is `machine/network/hostname`, and `ls` and `cat` work.
@@ -70,20 +70,12 @@ tool holds a write grant to `machine/` from trusted init, is a later task.
 
 ### How it is exposed
 
-Two shapes give validation and atomicity:
-
-- **Plain directory with conventions and a validating writer.** The tree is
-  ordinary npfs files. The `config` tool validates and writes; everything else
-  reads files. Boot init needs nothing new, because it already mounts `system`
-  and reads `boot.lua` from it, and it can read a key before any service runs.
-  There is no running code to keep alive.
-- **A `settings://` provider.** A userspace service owns the directory, so
-  writes cannot bypass validation, and it can implement change notification. It
-  must be running before readers use it, boot init still has to read the files
-  directly, and it adds a process, a namespace binding and a failure mode.
-
-The recommendation is the plain directory. The provider can front the same
-files later without changing them.
+**Accepted:** a plain directory with conventions and a validating writer. The
+tree is ordinary npfs files. The `config` tool validates and writes; everything
+else reads files. Boot init needs nothing new, because it already mounts `system`
+and reads `boot.lua` from it, and it can read a key before any service runs.
+There is no running code to keep alive. A `settings://` provider could front
+the same files later without changing them.
 
 ### Change notification
 
@@ -143,24 +135,16 @@ Each is a later task, in the order below, and reads the name through the query.
 - **Tailscale.** A later, Go-dependent direction. Its node name would default to
   the hostname.
 
-## Owner decisions
+## Accepted decisions
 
-1. **Exposure.** Default: the plain directory with conventions and a validating
-   writer, as above. The alternative is the `settings://` provider, which
-   enforces validation on writes and can notify, at the cost of a running
-   service that boot init cannot depend on.
-2. **Read path.** Default: the kernel-stored name read through `system_info`. The
-   kernel copy is needed anyway for the UDP log, and a program cannot alter it.
-   The alternative is a startup environment variable such as `TZ` and
-   `DNS_SERVER`, set by the session launcher. It needs no kernel or ABI change,
-   but the kernel log could not use it, and launches outside session would lack
-   it.
-3. **`remote.beacon`.** Default: retire the kernel option. The `remote` space
-   instead sets a boolean in its configuration to take the reverse connection,
-   named by the hostname, and `make image REMOTE_BEACON=` goes away. Nothing
-   keeps the old form working. The alternative keeps `remote.beacon=NAME` as the
-   switch with an explicit name that overrides the hostname, so one machine can
-   have two names.
+1. **Exposure.** The plain directory with a validating writer, above.
+2. **Read path.** The kernel stores the name. Boot init sets it once per boot
+   and programs read it through `SYSTEM_INFO_HOSTNAME`. The kernel copy also
+   serves the UDP log, and a program cannot alter it.
+3. **`remote.beacon`.** The kernel option is retired. The `remote` space sets a
+   boolean in its configuration to take the reverse connection, named by the
+   hostname, and `make image REMOTE_BEACON=` goes away. Nothing keeps the old
+   form working.
 
 The unset name is the fixed `pyxis`, which the installer prompts to change. Two
 machines left at the default collide in the UDP log, DHCP and mDNS; that is
