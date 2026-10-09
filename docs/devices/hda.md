@@ -119,8 +119,29 @@ Frames already mixed into DMA can remain audible. After the last queued PCM,
 the worker lets one ring of zeros follow the last observed mixed data before
 stopping. This accounts for QEMU's backend tail internally; it exports no audible
 drain promise. Acquired sessions survive a normal stop and can restart on later
-writes. Stop verifies RUN clear/reset and codec detach/mute, then command-ring
-stop and BME clear. The worker parks without idle IRQs or periodic watchdog work.
+writes. Stop verifies RUN clear/reset; QEMU and the native speaker then mute,
+detach/disable the route and stop command rings with BME clear.
+
+Accepted **2026-10-09**: the ALC257 headphone route instead verifies amplifier
+mute, settles for at least **75 ms**, disables both pins/EAPD and detaches the
+converter, then settles for at least **75 ms**. Command rings and BME are off
+during both waits. Fully parked idle remains muted/disabled with EAPD off, in D0,
+without idle IRQs or periodic watchdog work. This independently implemented
+sequence follows the mute/pin-disable settling steps in Linux's GPL-2.0
+[`alc256_shutup()`](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/hda/codecs/realtek/alc269.c#L505),
+used for ALC257 suspend; no Linux code or vendor coefficients are imported.
+Pyxis retains its existing EAPD-off idle policy rather than importing the full
+Linux suspend implementation.
+
+The BSP worker owns absolute settle deadlines and continues servicing requests,
+volume changes and exit cleanup. Codec work requires IF enabled; settle waits
+use the ordinary task-wait handoff, never IRQ, exit or IF=0 mix/commit paths.
+Queued PCM cancels either settle before its next phase. A restart samples jack
+presence afresh: during the first settle it preserves the selected pin's bias
+if the route still matches; during the second it performs ordinary activation.
+Neither restart waits out the remaining settle. The software gain, 5 ms ramp,
+mute and zero-tail contracts are unchanged. Acoustic verification of this stop
+sequence is pending the [native recheck](../development/experiments/audio-headphone-pop/README.md).
 
 QEMU's two measured codec IDs ignore pin-control writes and retain OUT=0x40.
 That exception is explicit and narrowly matched. Codec detach and supported mute
