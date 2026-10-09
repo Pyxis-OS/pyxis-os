@@ -288,511 +288,285 @@ alpha and resize checks.
 
 ## Unselected graphical applications
 
-The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without
-input focus. An unattended game in an unselected space or a hidden graphics layer
-can use a CPU indefinitely and continues writing its mapped pixels even though
-the presenter copies only the chosen surface of the selected space. Programs
-may still pause themselves explicitly; completing
-a Mandelbrot render returns it to its ordinary input/resize wait.
-
-Revisit resource budgets or application-specific idle behavior when concurrent
-graphical workloads make this cost a practical problem. Selecting a space does
-not establish a scheduler budget or suspend other spaces.
+The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without input focus. An unattended game in an unselected space
+or hidden graphics layer can use a CPU indefinitely and keeps writing its mapped pixels although the presenter copies only the selected
+space's chosen surface; programs may pause themselves explicitly. Selecting a space sets no scheduler budget and suspends nothing.
+Revisit resource budgets or application-specific idle behavior when concurrent graphical workloads make this a practical problem.
 
 ## VirtIO GPU resize limits and runtime retention
 
-The [2D display driver](interfaces/graphics.md#live-destination-geometry)
-handles selected-output size changes and uses full-frame transfer/flush.
-Boot and Bochs geometry remains fixed. Acquired application mappings retain
-their original layout; presentation clips them and fills exposed margins.
-Geometry wakeups and explicit mapping replacement support libterm, Kilo,
-Mandelbrot and Doom. Other applications retain their acquired geometry until
-they query or explicitly adapt. Kilo keeps its two-column, three-row minimum;
-support for smaller terminals is deferred. Adaptive libterm reads require clock
-READ authority; without it line helpers retain ordinary input behavior and
-their initial dimensions. Revisit these limits with concrete additional
-consumers. There is no vblank guarantee, 3D or
-recovery after driver failure. Graphics acquisition, presentation and size
-queries then return unavailable, while release remains usable; the last screen
-may stay stale or blank. A selected VirtIO GPU's failure does not try a separate
-VGA firmware framebuffer even in a
-hand-built mixed-device VM. Revisit failover only with an explicit multi-device
-policy. Revisit full-frame idle cost with measurements at the new geometries.
+The [2D driver](interfaces/graphics.md#live-destination-geometry) handles selected-output size changes with full-frame transfer and
+flush. Boot and Bochs geometry is fixed. Acquired application mappings keep their layout (presentation clips them and fills exposed
+margins); geometry wakeups and explicit mapping replacement support libterm, Kilo, Mandelbrot and Doom, while other applications keep
+their acquired geometry until they adapt. Kilo keeps a two-column, three-row minimum, and adaptive libterm reads need clock READ
+authority. There is no vblank guarantee or 3D. Revisit with concrete consumers and with full-frame idle-cost measurements at the new
+geometries.
 
-Successful resize reclaims old GPU backing only after confirmed fenced detach
-and resource unreference. Runtime failure retains uncertain backing,
-queue/control storage and PCI mappings until reboot, even after confirmed reset.
-An uncertain bootstrap shutdown retains temporary storage too; a
-PCI claim that ever enabled DMA stays retained even after successful bootstrap
-reset. Revisit failure recovery only with a device teardown/reconnect ownership
-contract. VirtIO panic reporting remains serial-only without GPU operations.
+After a runtime driver failure, acquisition, presentation and size queries return unavailable (release still works) and the last screen
+may stay stale or blank; a selected VirtIO GPU's failure does not fall back to a separate VGA framebuffer, and VirtIO panic output
+stays serial-only. A successful resize frees old GPU backing only after confirmed fenced detach and unreference, whereas runtime failure,
+an uncertain bootstrap shutdown, or a PCI claim that ever enabled DMA retains backing, queue and control storage and mappings until
+reboot. Revisit failover only with a multi-device policy, and recovery only with a device teardown and reconnect ownership contract.
 
-Old AP-visible TTY buffers use
-[quiescent acknowledged TLB retirement](kernel/smp.md#memory-and-output-boundaries).
-A missing acknowledgement retains one mapped old TTY/navigation/cursor batch
-until reboot and disables further resizing; the newly committed display keeps
-working. The implementation uses one one-second deadline, not an ABI latency
-guarantee. Revisit retention only with a defined recovery protocol; an eventual
-acknowledgement alone does not free that batch. Preparing and copying every
-space's pixels also costs a whole old/new pair during resize. Every CPU's
-console and kernel-log writes wait on the global output lock during the copy;
-four-TTY nested-KVM measurements ranged from 0.45 to 4.39 ms. Revisit with
-measured copy durations and concrete output-latency needs.
+Old AP-visible TTY buffers use [quiescent acknowledged TLB retirement](kernel/smp.md#memory-and-output-boundaries). A missing
+acknowledgement (one one-second deadline, not an ABI guarantee) retains one mapped old TTY/navigation/cursor batch until reboot and
+disables further resizing, though the new display keeps working; an eventual acknowledgement alone does not free it. Resize also costs a
+whole old/new pixel pair per space, and every CPU's console and kernel-log writes wait on the global output lock during the copy
+(0.45–4.39 ms in four-TTY nested-KVM measurements). Revisit with a recovery protocol and measured copy durations.
 
 ## Screen capture memory and consistency limits
 
-[Screen capture](interfaces/screen-capture.md) admits one pending/in-flight
-request, but completed immutable FILEs have ordinary reference lifetimes and no
-separate quota. Each retained snapshot costs `4 * width * height` bytes, and
-callers can exhaust available memory by retaining several. Revisit admission and
-retained-image policy with concrete pressure workloads and an explicit authority
-and lifetime contract; the one in-flight slot does not bound retained storage.
-
-Capture backing starts uninitialized and relies on the presenter's full repaint
-to fill every visible pixel before publication. Revisit this invariant before
-adding damage tracking: a pending capture must force full composition to avoid
-exposing unwritten or stale allocation bytes. See the authoritative
-[frame contract](interfaces/screen-capture.md#frame-boundary-and-lifetime).
-
-The captured bytes freeze one presenter composition and preserve tearing from
-concurrent single-buffer application or TTY writes. No atomic application frame,
-vblank or physical scanout timing is promised. A stuck presenter/scheduler or
-panic cannot complete a capture. Revisit stronger consistency or bounded recovery
-only with a separate presenter/backing ownership contract. The
-[qualification report](development/screenshot-qualification.md) records QEMU
-boot-framebuffer, Bochs and VirtIO PNG/monitor comparisons, shown-layer and
-resize coverage, retained snapshot checks and BUSY admission. Failure cleanup
-remains source-reviewed without injected failures.
+[Screen capture](interfaces/screen-capture.md) admits one pending request, but completed immutable FILEs have ordinary reference
+lifetimes and no quota: each retained snapshot costs `4 * width * height` bytes, so a caller can exhaust memory by retaining several.
+Revisit admission and retained-image policy with a concrete pressure workload and an authority and lifetime contract. Capture backing
+starts uninitialized and relies on the presenter's full repaint to fill every visible pixel, so damage tracking must force full
+composition for a pending capture ([frame contract](interfaces/screen-capture.md#frame-boundary-and-lifetime)). Captured bytes freeze one
+composition and keep tearing from concurrent single-buffer writes; no atomic frame, vblank or scanout timing is promised, and a stuck
+presenter or panic cannot complete a capture. Revisit stronger consistency or bounded recovery with a separate presenter and backing
+ownership contract. The [qualification report](development/screenshot-qualification.md) covers QEMU boot-framebuffer, Bochs and VirtIO
+comparisons, shown-layer and resize coverage, retained snapshots and BUSY admission; failure cleanup is source-reviewed only.
 
 ## Bochs boot-mode scope and aperture retention
 
-The [Bochs driver](kernel/display.md#bochs)
-supports QEMU's modern register interface with an already enabled firmware DISPI
-mode. It cannot restore legacy VGA state from DISPI registers, so disabled modes,
-GETCAPS state and older register interfaces keep firmware output without mode
-writes. The supplied boot framebuffer must start at BAR0; nonzero placement
-refuses mode setting rather than rebasing a published direct mapping. Revisit
-these limits only with a concrete device/firmware profile that needs them.
-
-A prepared WC aperture and PCI register mapping/claim remain until reboot,
-including after mode refusal. The WC aperture borrows boot leaves and extends
-them before AP startup; it is outside generic PCI/VM release ownership. Retention
-prevents aliasing or invalidating panic/fallback targets. Any reclamation needs
-an explicit shared-mapping lifetime contract. A failed mode with unverified
-firmware restoration stops boot with a serial panic, as agreed for task 4.
+The [Bochs driver](kernel/display.md#bochs) supports QEMU's modern register interface with an already enabled firmware DISPI mode. It
+cannot restore legacy VGA state from DISPI registers, so disabled modes, GETCAPS state and older interfaces keep firmware output without
+mode writes, and a boot framebuffer not starting at BAR0 refuses mode setting rather than rebasing a published mapping. Revisit only
+with a concrete device or firmware profile. The prepared WC aperture and PCI register mapping and claim stay until reboot (even after
+mode refusal) because they borrow boot leaves outside generic PCI/VM release ownership and protect panic and fallback targets;
+reclamation needs a shared-mapping lifetime contract. A failed mode with unverified firmware restoration stops boot with a serial panic.
 
 ## Reverse remote terminal discovery
 
-[Reverse connections](userland/remote-terminal.md#reverse-connections) remain
-unauthenticated and unencrypted. A matching non-secret name selects a host,
-which then receives the configured shell's authority. The owner accepted this
-for a trusted development LAN; revisit when Pyxis gains authentication or is
-used on untrusted networks.
-
-Discovery owns UDP port 2324 on net0 exclusively while waiting; a conflicting
-binding stops that daemon with a diagnostic. One reverse session runs at a time,
-and the host tool accepts one session per invocation. Beacon cadence adds up
-to approximately one second after discovery opens, plus network, scheduling
-and connection/cleanup delays. Reverse discovery and log following passed the
-owner's ThinkPad PXE check; macOS listener behavior remains unqualified. See
-[remote-debugging qualification](development/remote-debugging.md#qualification).
-Revisit these limits if a concrete multi-host
-or unattended development workflow needs more.
+[Reverse connections](userland/remote-terminal.md#reverse-connections) are unauthenticated and unencrypted: a matching non-secret name
+selects a host, which then receives the configured shell's authority. The owner accepted this for a trusted development LAN; revisit
+with authentication or untrusted networks. Discovery owns UDP port 2324 on net0 exclusively while waiting (a conflicting binding stops
+that daemon with a diagnostic), one reverse session runs at a time, and the host tool accepts one per invocation. Beacon cadence adds up
+to about a second after discovery opens plus network, scheduling and cleanup delays. Reverse discovery and log following passed the
+owner's ThinkPad PXE check; macOS listener behavior is unqualified ([qualification](development/remote-debugging.md#qualification)).
+Revisit if a multi-host or unattended workflow needs more.
 
 ## Kernel log retention and LAN visibility
 
-The [kernel log](interfaces/kernel-log.md) retains 256 KiB in static storage,
-evicting whole oldest lines. Oversized lines are discarded through their
-newline. It is volatile, and following polls every 100 ms. Revisit capacity,
-event-driven following or durable capture with measured native driver workloads.
-Reads locate both cursors by walking retained length headers under the ring
-lock with interrupts disabled; logging on other CPUs waits for that walk.
-Revisit a cached line/index position if measured following workloads show
-material writer latency, especially with many short retained lines.
+The [kernel log](interfaces/kernel-log.md) keeps 256 KiB in static storage, evicting whole oldest lines and discarding oversized ones;
+it is volatile and following polls every 100 ms. Reads locate both cursors by walking retained length headers under the ring lock with
+interrupts disabled, so logging on other CPUs waits for the walk. Revisit capacity, event-driven following, durable capture or a cached
+line index with measured native workloads.
 
-Every configured space receives read-only log authority, including remote
-shells. Kernel addresses in log text are therefore readable through the
-unauthenticated remote terminal on the trusted development LAN. The owner
-accepted this exposure for bring-up. Revisit the default grants and disclosure
-policy when Pyxis gains authentication or runs on an untrusted network.
+Exposure, accepted by the owner for bring-up on the trusted development LAN: every configured space (including remote shells) gets
+read-only log authority, so kernel addresses are readable through the unauthenticated remote terminal; and the packaged
+[capture policy](userland/init.md#boot-configuration) gives live Development, installed `pyxis` and Remote whole-screen CAPTURE, so any
+program in a granted space, and anyone reaching the remote terminal, can read what any space shows ([screen capture](interfaces/screen-capture.md)).
+Revisit default grants, disclosure and capture delegation with user isolation and authentication, or an untrusted network.
 
-The packaged [capture policy](userland/init.md#boot-configuration) opts live
-Development, installed `pyxis` and Remote into whole-screen CAPTURE. Any program
-in a granted space can observe whatever any space currently shows; anyone
-reaching the unauthenticated remote terminal on the development LAN can read the
-whole local screen, including all spaces as they are shown. The owner accepted
-this authority breadth for bring-up. Revisit it with user isolation,
-authentication and capture delegation policy when Pyxis gains users or runs on
-an untrusted network. See [screen capture](interfaces/screen-capture.md).
-
-Panic ring capture is best effort: a fatal interruption of a ring lock owner
-skips retention without waiting. Userspace readers also require a functioning
-scheduler. Opt-in kernel UDP capture bypasses those locks, but remains best
-effort: early panics without an active selected NIC, interrupted activation or
-reset, failed bounded CPU handoff, carrier loss and stalled DMA can lose fatal
-text. Failed completion retains buffers permanently until reboot. There is no
-retransmission or persistence; a receiver started late loses earlier datagrams.
-Enabled logging broadcasts kernel addresses across the trusted LAN and reduces
-ordinary TX capacity to 15/16 VirtIO descriptors or 30/32 RTL8111 descriptors.
-The ThinkPad's panic and disabled checks passed in
-[PR #476](https://git.internal/PyxisOS/pyxis-os/pulls/476). Normal replay waits
-for an IPv4 address, and a plain enabled boot then delivered the whole boot log
-natively (main `fcf142e`, 2026-10-07;
-[PR #480](https://git.internal/PyxisOS/pyxis-os/pulls/480)). RTL's ambiguous-slot
-duplication and stalled-NIC abandonment remain code-inspected rather than
-hardware-qualified. Revisit those paths, polling budgets, capacity and disclosure
-with concrete recovery/authentication requirements; checked NIC completion
-alone cannot guarantee host delivery.
+Capture is best effort. A fatal interruption of a ring lock owner skips retention, and userspace readers need a working scheduler. Opt-in
+kernel UDP capture bypasses those locks but can lose fatal text on early panics without an active NIC, interrupted activation or reset,
+failed bounded CPU handoff, carrier loss or stalled DMA; failed completion retains buffers until reboot, there is no retransmission or
+persistence, a late receiver misses earlier datagrams, and enabled logging broadcasts kernel addresses and cuts ordinary TX capacity to
+15/16 VirtIO or 30/32 RTL8111 descriptors. The ThinkPad's panic and disabled checks passed ([#476](https://git.internal/PyxisOS/pyxis-os/pulls/476))
+and a plain enabled boot delivered the whole boot log natively (main `fcf142e`, 2026-10-07, [#480](https://git.internal/PyxisOS/pyxis-os/pulls/480));
+RTL's ambiguous-slot duplication and stalled-NIC abandonment are code-inspected only. Revisit those paths, polling budgets and capacity
+with recovery or authentication requirements; checked NIC completion cannot guarantee host delivery.
 
 ## PS/2 scan-set query compatibility
 
-The ThinkPad ACKs set-2 selection and its query but supplies no set-ID byte.
-[Keyboard setup](devices/keyboard.md) therefore accepts an absent ID after a
-short monotonic wait, keeps wrong observed IDs and controller errors fatal,
-and drains queued output before enabling scanning. The fallback relies on the
-ACKed selection producing untranslated set 2; native character/modifier/extended
-key qualification remains required. A drain cannot identify arbitrary firmware
-replies delayed until after scanning starts, although the expected late `02`
-has no key mapping. Revisit this policy if native input disproves the selection
-or another controller supplies delayed contradictory output. A translated set-1
-decoder is a separate compatibility decision, not part of this fallback.
+The ThinkPad ACKs set-2 selection and its query but supplies no set-ID byte, so [keyboard setup](devices/keyboard.md) accepts an absent
+ID after a short monotonic wait, keeps wrong IDs and controller errors fatal, and drains queued output before enabling scanning. This
+relies on the ACKed selection producing untranslated set 2, native character, modifier and extended-key qualification remains
+required, and a drain cannot identify firmware replies delayed past scan start (the expected late `02` maps to no key). Revisit if
+native input disproves the selection or a controller supplies delayed contradictory output; a translated set-1 decoder is a separate
+compatibility decision.
 
 ## Process termination and Ctrl-C
 
-Process handles are non-owning observers; closing one does not stop execution.
-Launch grants their holder WAIT and TERMINATE, and TERMINATE stops just that
-process through the per-task safe stop. [Execution-group CONTROL](interfaces/execution-groups.md) permits
-whole-group termination, including blocked-operation unwind.
+Process handles are non-owning observers. Launch grants WAIT and TERMINATE, TERMINATE stops just that process through the per-task safe
+stop, and [execution-group CONTROL](interfaces/execution-groups.md) permits whole-group termination including blocked-operation unwind.
+The [shell terminates its foreground job on Ctrl+C](userland/shell.md#interrupting-foreground-commands) stage by stage, immediately and
+without a cooperative interrupt ([design](userland/foreground-interruption.md)). Accepted limits of this first slice:
 
-The [shell terminates its foreground job on Ctrl+C](userland/shell.md#interrupting-foreground-commands),
-stage by stage, with immediate termination and no cooperative interrupt.
-Accepted limits of this first slice:
-- **Descendants.** Only the shell's direct children are terminated. Processes a
-  stage launched itself keep running. Opted-in spaces now delegate LAUNCH to
-  ordinary foreground commands, so `pyxis.run` children can outlive interrupted
-  Lua. Revisit with an explicit descendant lifetime design; remote execution
-  groups already provide their separate group-wide lifetime policy.
-- **Background jobs** cannot be interrupted, and there is no job control.
-- **Passthrough holders** cannot be interrupted while passthrough is held.
-  Locally that leaves no recovery short of ending the session.
-- **A nested interactive shell** cannot arm, so Ctrl+C in the outer shell ends
-  the whole inner shell.
-- **Remote typeahead.** After more than 4 KiB of typeahead that the command does
-  not read, the remote server stops reading frames until its pending injection
-  drains. A later Ctrl+C never reaches the kernel; Ctrl+] remains the fallback.
-- **Startup scripts.** A startup script holds the right, so Ctrl+C can terminate
-  its foreground command. The script then stops before starting its session,
-  which leaves that space with no shell until reboot. No current startup script
-  runs a foreground command. Revisit if one gains one, for example by not
-  arming scripts or by continuing past an interrupted command.
+- **Descendants:** only the shell's direct children die; processes a stage launched keep running (opted-in spaces delegate LAUNCH to
+  foreground commands, so `pyxis.run` children can outlive interrupted Lua). Remote execution groups have their own group-wide policy.
+- **Background jobs** cannot be interrupted and there is no job control; **passthrough holders** cannot be interrupted while held (locally
+  only ending the session recovers); a **nested interactive shell** cannot arm, so the outer Ctrl+C ends the whole inner shell.
+- **Remote typeahead:** after more than 4 KiB the command does not read, the server stops reading frames until its injection drains, so a
+  later Ctrl+C never reaches the kernel (Ctrl+] remains). An out-of-band interrupt from the server would be needed.
+- **Startup scripts** hold the right, so Ctrl+C can terminate their foreground command and the script then never starts its session,
+  leaving the space without a shell until reboot; no current script runs a foreground command.
 
-[Foreground interruption](userland/foreground-interruption.md) records the
-design and validation. Revisit with cooperative interrupts or job control, or if pasting into
-hung remote commands matters. The remote case would need an out-of-band
-interrupt from the server. Native cancellation need not require general POSIX
+Revisit with cooperative interrupts, job control or an explicit descendant lifetime design; native cancellation need not require POSIX
 signals.
 
 ## Console input completion
 
-Framebuffer console input still provides no EOF operation. EOF-driven consumers
-such as cksum and tee need finite file/pipe input or an
-[independent terminal session](userland/terminal-sessions.md), whose attachment
-can explicitly end input. Libc accepts that session's zero-byte read as EOF.
-Ctrl-D remains an application-interpreted byte and does not close either backend.
-
-Revisit console input completion and its interaction with line editing when
-interactive EOF-driven tools are explicitly in scope. The cksum port preserves
-upstream behavior; neither cksum nor restricted tee adds terminal controls or
-signal handling.
+Framebuffer console input has no EOF operation. EOF-driven consumers (cksum, tee, wc, sort, tail) need finite file or pipe input or an
+[independent terminal session](userland/terminal-sessions.md), whose attachment can end input and whose zero-byte read libc accepts as
+EOF; Ctrl-D remains an application-interpreted byte. Revisit completion and its interaction with line editing when interactive
+EOF-driven tools are explicitly in scope; ports keep upstream behavior and add no terminal controls or signal handling.
 
 ## Readiness scaling
 
-`wait_many` has a general 32-interest bound, with per-call copies and reference
-retention, about 40 bytes of kernel-stack arrays per interest and interests in
-the task's existing reserved request area. The readiness worker rescans the
-interests on notification. Large connection sets can make these costs material.
-
-A persistent wait-set object is a proposed later direction: register interests
-once, allocate/fail at registration, and return ready entries without a new
-per-call input array, in the style of epoll/kqueue. A haven web server with many
-connections is one possible consumer. Authority, lifetime, capacity and failure
-rules remain open; this is neither agreed nor scheduled, and no API is added.
+`wait_many` has a general 32-interest bound, with per-call copies and reference retention, about 40 bytes of kernel-stack arrays per
+interest, and interests kept in the task's reserved request area; the readiness worker rescans all interests on notification, so large
+connection sets make these costs material. A persistent wait-set object (register once, fail at registration, return ready entries
+without a per-call input array, epoll/kqueue style) is a proposed later direction, for example for a many-connection web server;
+authority, lifetime, capacity and failure rules are open and nothing is agreed, scheduled or added.
 
 ## Initial terminal multiplexer limits
 
-The [multiplexer](userland/multiplexer.md) has one window and up to eight panes.
-Its native terminal subset has no alternate screen, Unicode widths or detach;
-full-screen applications reuse the shell's screen. History retains 1,024
-scrolled-off rows, with no reflow or erased-screen archive. Rows cropped by
-resize are not inserted into history, so growing the view cannot recover them;
-retaining those rows is a proposed follow-up, not part of this slice. Presentation crops
-at the terminal-session maximum; history storage retains the largest width seen.
-Maximum steady text storage is about 2.5 MiB per pane; resize can temporarily
-double this for one pane. There is no per-group CPU/memory quota.
+The [multiplexer](userland/multiplexer.md) has one window and up to eight panes. Its native terminal subset has no alternate screen,
+Unicode widths or detach, and full-screen applications reuse the shell's screen. History keeps 1,024 scrolled-off rows with no reflow or
+erased-screen archive; rows cropped by resize are not inserted into history (retaining them is a proposed follow-up), presentation crops
+at the session maximum and history storage keeps the largest width seen. Steady text storage is about 2.5 MiB per pane (resize can
+briefly double one pane's), with no per-group CPU or memory quota.
 
-A full pane input queue can hold a prefix behind already staged ordinary input;
-bounded, lossless storage cannot bypass an arbitrary pending paste. Confirmed
-closure waits for group cleanup and output EOF, and published HOST work can
-delay cleanup indefinitely. Output producer grants explicitly delegated outside
-a pane group can delay EOF even after its cleanup completes. Mux exit/fault
-requests termination through final
-controlling-grant closure without waiting for all cleanup. Local keyboard and
-graphics grants remain shared space facilities, so graphical launches share
-the existing one-session ownership rather than acquiring pane-local devices.
-
-Live pane resize depends on the consumer. Shell and Kilo observe RESIZED;
-Links currently reads geometry once in its native adapter. Existing vi/less
-behavior is preserved. Revisit these consumers with a focused port change;
-revisit windows, ratio adjustment, input recovery and quotas when those
-interactions are selected, rather than expanding the first slice.
+A full pane input queue can hold a prefix behind already staged input, since bounded lossless storage cannot bypass a pending paste.
+Confirmed closure waits for group cleanup and output EOF, so published HOST work can delay cleanup indefinitely and output grants
+delegated outside the group can delay EOF; mux exit or fault requests termination through final controlling-grant closure without
+waiting for cleanup. Local keyboard and graphics grants are shared space facilities, so graphical launches share the existing
+one-session ownership. Live pane resize depends on the consumer: shell and Kilo observe RESIZED, Links reads geometry once, and vi and
+less keep their behavior (revisit with a focused port change). Revisit windows, ratio adjustment, input recovery and quotas when
+selected.
 
 ## Initial independent terminal limits
 
-[Terminal sessions](userland/terminal-sessions.md) have explicit resize, 4 KiB
-input and 64 KiB output queues, and one attachment. Creation has no per-space
-quota; a trusted creator can allocate multiple bounded sessions until allocation
-fails. Output backpressure has no deadline. A controller that stops draining can
-block application writers; hangup wakes terminal calls but does not stop CPU-bound
-code or operations in other subsystems. Execution groups provide separate supervision;
-the [remote server](userland/remote-terminal.md) bounds admission at four and
-abandons closing output after five seconds. Cleanup can still wait indefinitely
-for published HOST work, retaining its admission slot. Four idle or blocked
-sessions can exhaust the server; there is no idle timeout, authentication,
-encryption, restart or reconnection. Host-loopback forwarding limits the QEMU
-host entry point, but every process able to reach it receives the configured
-shell privileges. Sessions share granted filesystem roots, space and CPU; there
-are no separate principals, private files or per-session execution quotas.
-Address changes invalidate the listener and are not automatically rebound.
-The interactive host renderer uses one `?` cell for
-non-ASCII bytes; machine mode preserves the original data. A full client input
-queue delays reading Ctrl+] behind a paste; once read, its close acknowledgment
-is bounded at five seconds. A full guest input queue likewise holds back a
-later Ctrl+C (see [process termination and Ctrl-C](#process-termination-and-ctrl-c)). Host SIGINT/SIGTERM forces disconnect even under
-backpressure. Revisit admission
-policy, authentication and presentation breadth with a concrete non-development
-deployment or text consumer. Remote resize negotiation and reconnect remain
-separate work.
+[Terminal sessions](userland/terminal-sessions.md) have explicit resize, 4 KiB input and 64 KiB output queues and one attachment.
+Creation has no per-space quota (a trusted creator can allocate bounded sessions until allocation fails), and output backpressure has no
+deadline, so a controller that stops draining can block writers (hangup wakes terminal calls but does not stop CPU-bound code).
+Execution groups supervise separately; the [remote server](userland/remote-terminal.md) bounds admission at four, abandons closing output
+after five seconds, and can still wait indefinitely on published HOST work while holding a slot. Four idle or blocked sessions can
+exhaust the server, and there is no idle timeout, authentication, encryption, restart or reconnection; host-loopback forwarding limits the
+QEMU entry point, but any process reaching it gets the configured shell privileges, with shared roots, space and CPU and no separate
+principals or quotas. Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
+cell for non-ASCII bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
+then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
+([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and
+presentation breadth with a non-development deployment or text consumer; remote resize negotiation and reconnect are separate work.
 
 ## Libc compatibility gaps
 
-The completed [descriptor portability slice](userland/libc-portability.md) supplies
-open/read/write/close for cksum and restricted tee, and `lseek` for files.
-Public O_RDWR and exclusive O_CREAT|O_EXCL use existing native constructs, as
-qualified in [libc portability](userland/libc-portability.md#readwrite-and-exclusive-create-qualification).
-fdopen and duplication remain absent. Consumers requiring those interfaces need
-a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
-[SDL2 port](development/sdl2.md); it exposes the stream's existing descriptor and adds
-no new aliasing. Revisit them against a pinned consumer's actual
-needs; duplication must settle shared open-state/cursor ownership before adding
-new descriptor aliases. Descriptor inheritance and cross-process shared offsets
-are not supplied by the existing dedicated startup-stream grants.
+The [descriptor portability slice](userland/libc-portability.md) supplies open/read/write/close and `lseek`; public O_RDWR and
+exclusive O_CREAT|O_EXCL use native constructs ([qualification](userland/libc-portability.md#readwrite-and-exclusive-create-qualification)),
+and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [SDL2 port](development/sdl2.md)). `fdopen` and duplication
+are absent: a consumer needs a separately agreed extension, and duplication must first settle shared open-state and cursor ownership.
+Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
-Signals are absent, so tee rejects -i and broken pipes report EPIPE without
-SIGPIPE. Revisit signal disposition, delivery and lifetime when a selected
-consumer needs them; a successful no-op handler would misrepresent support.
-Public O_APPEND is also absent, so tee rejects -a; the
-[stdio append limitation](#non-atomic-stdio-append) needs a native atomic operation
-before an atomic append contract can be offered.
-
-Polling/nonblocking descriptor I/O, fork/exec-style process semantics and buffered
-stdio are outside this slice. Current streams are unbuffered and supply no
-buffering controls or wide I/O. Pushback is one byte per FILE, and scanning
-covers narrow conversions only; fixed-width inttypes input (SCN) macros are absent. Revisit these gaps
-only for a concrete consumer, defining native blocking/lifetime behavior or the
-library semantics it actually requires. No successful placeholder APIs exist
-for the missing operations.
+Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
+support). Public O_APPEND is absent, so tee rejects -a, and atomic append needs a native operation
+([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics, buffered output,
+buffering controls and wide I/O are outside the slice; pushback is one byte per FILE, scanning covers narrow conversions only and
+fixed-width inttypes input (SCN) macros are absent. Revisit only for a concrete consumer, defining the native blocking and lifetime
+behavior it needs; no successful placeholder APIs exist.
 
 ## Public open creation mode
 
-O_CREAT accepts only mode 0666 as a request for native creation policy. It does
-not install Unix permissions, change ownership or create authority. Other modes
-fail with ENOTSUP before lookup/mutation, including restrictive requests such as
-0600 and opens of existing files. Virtio-fs retains its current 0644 creation
-request under the host-service identity and host restrictions still apply.
-
-This is the accepted compatibility policy for the first writable public opens,
-used by tee. Revisit it when a file permission system, users and ownership are
-introduced; define mode enforcement and umask behavior together rather than
-silently discarding requests callers expect to restrict access.
+O_CREAT accepts only mode 0666 as a request for native creation policy; it installs no Unix permissions, ownership or authority, and
+other modes (including restrictive ones such as 0600, and opens of existing files) fail with ENOTSUP before lookup. Virtio-fs keeps its
+0644 creation request under the host-service identity. This is the accepted policy for the first writable public opens (used by tee).
+Revisit with a file permission system, users and ownership, defining mode enforcement and umask together rather than silently discarding
+requests callers expect to restrict access.
 
 ## Non-atomic stdio append
 
-Append streams query the current file size before each native write. Another
-writer can change the file between those calls, so concurrent appenders can
-overwrite one another. Seeking does not disable the append policy, but it cannot
-make the pair atomic. Keep this limitation until concurrent appending needs a
-native operation that chooses the end and writes under one file operation.
-
-Formatted stream output currently stages the full result using snprintf, with
-heap allocation and a second formatting pass when the small stack buffer is
-insufficient. This avoids a second formatter or a generic output callback layer,
-but large formatted output requires temporary memory. Revisit bounded streaming
-when real consumers make that cost material. All FILE output is unbuffered;
-there are no pending writes to flush yet.
+Append streams query the file size before each native write, so concurrent appenders can overwrite each other, and seeking does not make
+the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
+Formatted output stages the full result with `snprintf` (heap allocation and a second pass when the stack buffer is too small), so large
+formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. All FILE output is unbuffered.
 
 ## Console line input
 
-Consoles are never read ahead: their input is shared with the parent shell, and
-ISO C treats them as interactive. Line input from console-backed stdin through
-`fgetc`, `fgets` or `getline` therefore remains one native read per byte,
-including a large paste into such a program. File and pipe input is fetched in
-BUFSIZ blocks by [input read-ahead](userland/stdio.md#input-read-ahead).
-Revisit only with a terminal input design that can return unread console bytes
-to their next owner; do not work around it in individual ports.
+Consoles are never read ahead (their input is shared with the parent shell and ISO C treats them as interactive), so line input from
+console-backed stdin through `fgetc`, `fgets` or `getline` costs one native read per byte, including a large paste; file and pipe input is
+fetched in BUFSIZ blocks by [input read-ahead](userland/stdio.md#input-read-ahead). Revisit only with a terminal input design that can
+return unread console bytes to their next owner, not with per-port workarounds.
 
 ## Input read-ahead limits
 
-Buffered file bytes are a private copy. If another descriptor or process
-writes the same file, a stream can return stale bytes until `fseek`, `rewind`
-or input `fflush` refetches them. `setvbuf` and `setbuf` remain absent, so
-programs cannot size or disable the buffer. One-byte `ungetc` is implemented.
-Revisit together with output buffering in a later stdio completeness task. See
-[input read-ahead](userland/stdio.md#input-read-ahead).
+Buffered file bytes are a private copy: if another descriptor or process writes the same file, a stream can return stale bytes until
+`fseek`, `rewind` or input `fflush` refetches. `setvbuf` and `setbuf` are absent, so programs cannot size or disable the buffer;
+one-byte `ungetc` works. Revisit together with output buffering in a later stdio completeness task
+([input read-ahead](userland/stdio.md#input-read-ahead)).
 
 ## Duplicated port output lists
 
-`scripts/ports.mk` repeats staged output paths already declared in each recipe's
-`metadata.lua`, including the sbase executables and notices. Adding an output
-requires coordinated edits; drift can leave Make unaware of a missing staged
-file. Revisit the build integration to derive output dependencies from one
-authoritative list without growing a new build framework. Until then, review
-both lists when updating a recipe's outputs.
+`scripts/ports.mk` repeats the staged output paths each recipe already declares in `metadata.lua` (the sbase executables and notices
+among them), so adding an output needs coordinated edits and drift can leave Make unaware of a missing staged file. Derive the
+dependencies from one authoritative list without growing a build framework; until then review both lists when changing a recipe's
+outputs.
 
 ## zlib core profile and qualification
 
-The [zlib development library](development/ports.md#zlib-development-library)
-retains unmodified public headers but omits `gz*` file helpers, as accepted for
-the screenshot milestone on 2026-10-08. Those declarations therefore have no
-linkable definitions in this profile. Revisit the file helpers with a concrete
-consumer that needs them, auditing its actual libc and file-authority needs.
-In-memory gzip framing remains available through the core stream APIs.
-
-Archive builds, symbol inspection and staging checks do not establish runtime
-compression correctness on Pyxis. The [screenshot consumer](userland/screenshot.md)
-now supplies observed deflate-to-PNG output that decoded on the host. Other
-compression/decompression profiles remain unqualified.
+The [zlib development library](development/ports.md#zlib-development-library) keeps unmodified public headers but omits the `gz*` file
+helpers (accepted for the screenshot milestone, 2026-10-08), so their declarations have no definitions; in-memory gzip framing works
+through the core stream APIs. Revisit the helpers with a consumer, auditing its libc and file-authority needs. Archive and symbol checks
+show no runtime correctness; the [screenshot consumer](userland/screenshot.md) observed deflate-to-PNG output that decoded on the host, and
+other profiles stay unqualified.
 
 ## libpng profile and runtime qualification
 
-The [libpng development library](development/ports.md#libpng-development-library)
-keeps conventional read/write APIs and generates its matching public
-configuration, while omitting the simplified API and architecture acceleration.
-Those omissions are accepted for the screenshot milestone. Revisit them with a
-concrete consumer or measured cost that needs the omitted API or acceleration.
-
-Archive/configuration/symbol inspection and image staging provide build
-evidence only. The [screenshot consumer](userland/screenshot.md) now qualifies
-the conventional RGB8 non-interlaced write path through host-decoded captures.
-Target PNG decoding and other write profiles remain unqualified.
+The [libpng development library](development/ports.md#libpng-development-library) keeps the conventional read/write APIs with matching
+generated configuration and omits the simplified API and architecture acceleration (accepted for the screenshot milestone); revisit with
+a consumer or measured cost that needs them. Build evidence is not runtime evidence: the [screenshot consumer](userland/screenshot.md)
+qualifies the conventional RGB8 non-interlaced write path through host-decoded captures, while PNG decoding and other write profiles
+are unqualified.
 
 ## Unexpected native close failures
 
-Libc invalidates a descriptor and its FILE association before one native CLOSE
-attempt. Today's native success/BAD_HANDLE outcomes leave no owned capability
-entry. If a future native failure or malformed reply makes release uncertain,
-libc reports the error and discards its metadata without retrying. Any residual
-native capability survives until kernel process teardown and can delay pipe EOF
-or EPIPE until then. Normal exit does not retry previously invalidated entries;
-open rollback applies the same policy while retaining the original open errno.
-
-This limit is accepted for unexpected failures, not ordinary deferred release.
-Revisit it if CLOSE gains additional outcomes or asynchronous release semantics;
-define whether ownership remains before introducing retries or pending-close
-storage. The [close contract](userland/libc-portability.md#close-failure-and-cleanup)
-records the current status and errno rules.
+Libc invalidates a descriptor and its FILE association before one native CLOSE attempt. Today's native outcomes (success or BAD_HANDLE)
+leave no owned capability entry; if a future failure or malformed reply makes release uncertain, libc reports the error, discards its
+metadata without retrying, and any residual capability survives until process teardown (delaying pipe EOF or EPIPE until then). Open
+rollback applies the same policy. Accepted for unexpected failures only, not deferred release. Revisit if CLOSE gains outcomes or
+asynchronous release, deciding who owns the capability before adding retries or pending-close storage
+([close contract](userland/libc-portability.md#close-failure-and-cleanup)).
 
 ## Narrow libc file metadata
 
-Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`lstat`/`fstat` for
-ports such as [Links](userland/links.md). Native objects report only a kind and,
-for files, a size, so `struct stat` has only `st_mode` file-type bits and
-`st_size`. There are no permission, owner, link-count, identity or time fields,
-and code that reads one fails to compile instead of seeing invented values.
+Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`lstat`/`fstat` for ports such as [Links](userland/links.md), but native
+objects report only a kind and (for files) a size, so `struct stat` has only `st_mode` type bits and `st_size`; code reading other fields
+fails to compile rather than seeing invented values.
 
-- **Sizing opens the file.** `stat` opens a file with READ, or WRITE if READ is
-  denied, so a file with neither right cannot be sized. On a provider URI it
-  performs the request, so a port that calls `stat` before `fopen` fetches
-  twice. Links sends provider URIs straight to `fopen`.
-- **Symlinks.** Lookup never follows a symlink, so `stat` and `lstat` of a host
-  symlink entry fail with ENOTSUP; `readdir` reports it as `DT_LNK`. Native
-  filesystems have no symlinks. Lstat currently equals stat; revisit that
-  implementation if following or symlink metadata is added. Readlink is absent.
-- **Access checks.** `access` checks current native grants, not mode bits or
-  backing I/O success. Directory R_OK requires ENUMERATE and W_OK CREATE|REMOVE.
-  X_OK and provider routes return ENOTSUP. Revisit only with a concrete need for
-  launch checks or provider existence/request semantics; do not infer these from
-  a URI binding. See the [accepted contract](userland/libc-portability.md#native-path-checks-and-removal).
-- **Listings.** `readdir` returns no `.` or `..` entries. A detected
-  concurrent change ends the listing with EAGAIN rather than restarting it.
-- **Native utilities.** The first ls and mkdir still use libpyxis helpers.
+- **Sizing opens the file** with READ (or WRITE if READ is denied), so a file with neither right cannot be sized, and on a provider URI
+  it performs the request (Links sends provider URIs straight to `fopen`). Review proposed failing with ENODEV there, as `opendir` does.
+- **Symlinks:** lookup never follows one, so `stat` and `lstat` of a host symlink fail with ENOTSUP and `readdir` reports `DT_LNK`;
+  native filesystems have none, `lstat` equals `stat`, and `readlink` is absent.
+- **Access checks:** `access` tests current native grants, not mode bits or backing I/O (directory R_OK needs ENUMERATE, W_OK
+  CREATE|REMOVE; X_OK and provider routes return ENOTSUP), per the
+  [accepted contract](userland/libc-portability.md#native-path-checks-and-removal).
+- **Listings** omit `.` and `..`, and a detected concurrent change ends one with EAGAIN. The first ls and mkdir still use libpyxis helpers.
 
-Revisit when native objects gain timestamps or other metadata, when a port
-needs `readlink` or when a port calls `stat` on provider
-URIs. Review of the Links port proposed failing there with ENODEV, as
-`opendir` does, without issuing the request. Add fields only for values
-the native layer reports.
+Revisit when native objects gain timestamps or other metadata, a port needs `readlink`, or a port calls `stat` on provider URIs; add
+fields only for values the native layer reports.
 
 ## File identity across capability paths
 
-The filesystem protocol has no operation for determining whether two opened
-file handles refer to the same underlying file. Path strings cannot provide
-that identity: different capability roots and directory paths can reach the
-same object, and a descriptive path is not authority or a canonical name.
-
-This blocks reliable `#pragma once` handling in native TCC. The port rejects
-that directive explicitly for now; ordinary include guards remain usable.
-Revisit an identity operation when adding this facility. Define its comparison
-scope, lifetime and behavior across mounts and file replacement before exposing
-it; do not substitute normalized path strings or add `realpath` just for TCC.
-See [the TCC contract](userland/tcc.md#remaining-limits).
+The filesystem protocol cannot tell whether two opened file handles name the same file, and path strings cannot (different roots and
+directory paths can reach one object, and a descriptive path is not authority). This blocks reliable `#pragma once` in native TCC, which
+rejects the directive for now ([TCC contract](userland/tcc.md#remaining-limits)); include guards work. Revisit an identity operation when
+needed, defining comparison scope, lifetime and behavior across mounts and replacement, rather than normalizing paths or adding
+`realpath` for TCC.
 
 ## Program location
 
-A process cannot find where its own executable came from. `argv[0]` is whatever
-the launcher passes, and the shell passes the command word as typed, so a
-program started as `devilutionx` sees only that name. Even a full URI would be
-descriptive: a path is not authority, and the process holds no lookup right to
-the directory its executable came from. The [startup record](interfaces/processes.md#startup-record)
-carries no program location, and libpyxis has no equivalent of `/proc/self/exe`
-or `GetModuleFileName`. The [SDL2 port](development/ports.md#sdl2-development-library)
-therefore reports `SDL_GetBasePath` as unsupported.
-
-Ports that keep files beside their executable need a fixed location instead.
-DevilutionX's recipe hard-codes its assets to `boot://share/devilutionx/`, so
-running it as a self-contained bundle from another directory needs its own
-fallback patch. Every such port carries a similar per-port path patch, and a
-program cannot simply be copied with its files into another directory and run.
-
-Revisit when another port needs files beside its executable, or when
-self-contained bundles become a supported way to add programs. Options to weigh
-then, none decided: a read-only directory grant for the program's own directory
-at launch, given like the other startup resources; or a descriptive location in
-the startup record, which confers no access and has `argv[0]`'s weaknesses. Do
-not infer the location from `argv[0]` or add path normalization for one port.
+A process cannot find where its executable came from: `argv[0]` is the command word as typed, a path is not authority, the process
+holds no lookup right to its executable's directory, and the [startup record](interfaces/processes.md#startup-record) carries no
+program location, so there is no `/proc/self/exe` equivalent and the [SDL2 port](development/ports.md#sdl2-development-library) reports
+`SDL_GetBasePath` unsupported. Ports keeping files beside their executable use fixed locations (DevilutionX hard-codes
+`boot://share/devilutionx/`), each with its own path patch, and a program cannot be copied with its files into another directory and run.
+Revisit when another port needs this or self-contained bundles become supported. Options, none decided: a read-only directory grant for
+the program's own directory at launch, or a descriptive location in the startup record (no access, with `argv[0]`'s weaknesses). Do
+not infer the location from `argv[0]` or normalize paths for one port.
 
 ## Sleep wake granularity
 
-Per-CPU one-shot LAPIC timers now target local deadlines while retaining nominal
-120 Hz preemption and HPET timekeeping. The owner accepted this scope on
-2026-10-08. The [matched qualification](development/experiments/sleep-wake-granularity/timer.md)
-records SDL mean-frame medians of 25.565 ms before, 24.243 ms with expiry IPIs
-alone and 17.415 ms with local deadlines; Quake capped-loop medians were
-49.223, 59.595 and 70.291 FPS. These are nested-KVM observations, not native
-or maximum-latency guarantees. See [timekeeping](kernel/timekeeping.md).
+Per-CPU one-shot LAPIC timers target local deadlines while nominal 120 Hz preemption and HPET timekeeping remain (owner-accepted
+2026-10-08; [timekeeping](kernel/timekeeping.md)). The [matched qualification](development/experiments/sleep-wake-granularity/timer.md)
+shows SDL mean-frame medians of 25.565 ms before, 24.243 ms with expiry IPIs and 17.415 ms with local deadlines, and Quake capped-loop
+medians of 49.223, 59.595 and 70.291 FPS (nested KVM, not native or maximum-latency guarantees). The owner saw capped Quake play much
+smoother on the ThinkPad (2026-10-08, main `4332801`; tear line in the top third, consistent with 72 FPS on an unsynchronized 60 Hz
+presenter; `timedemo demo1` unchanged at about 684 fps), an observation, not a measured latency. Native sleep and cap latency, LAPIC
+power-state behavior and long-running 32-bit HPET extension are unmeasured.
 
-Natively, the owner observed on 2026-10-08 on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC) that capped Quake
-play was much smoother than before. Its tear line stayed in about the top third
-of the screen, consistent with a 72 FPS game on an unsynchronized 60 Hz
-presenter, and `timedemo demo1` was unchanged at about 684 fps. That is an owner
-observation, not a measured native sleep or cap latency. Precise native
-latency, LAPIC power-state behaviour and long-running 32-bit HPET extension
-remain unmeasured; revisit them with a consumer that needs tighter bounds.
-
-Nanosecond units remain a representation, not a precision promise. Interrupt-
-disabled intervals, runnable load, firmware/host stalls and large due batches
-still delay execution. Sorted-list insertion/cancellation remains linear, with
-no separate timer quota. Revisit stronger bounds or another data structure only
-with a measured consumer need; tickless scheduling is outside this task.
+Nanosecond units are a representation, not a precision promise: interrupt-disabled intervals, runnable load, firmware or host stalls and
+large due batches still delay execution, and sorted-list insertion and cancellation stay linear with no timer quota. Revisit stronger
+bounds or another data structure with a measured consumer; tickless scheduling is out of scope.
 
 ## Wall-clock time and clock-source performance
 
