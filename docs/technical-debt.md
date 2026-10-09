@@ -1637,21 +1637,15 @@ supervision and closing-output deadline); revisit expiration only if a consumer 
 
 ## TCP throughput limits
 
-After the [network throughput](development/network-throughput.md) work, native send reaches 70.5 MiB/s with 8 KiB writes and receive 85 MiB/s into a
-discard sink (ThinkPad, 2026-10-09).
+After the [network throughput](development/network-throughput.md) work and the TSC clock, native send reaches 101.4 MiB/s with 8 KiB writes and 98.7 MiB/s with 2 KiB writes,
+and receive 91.2 MiB/s into a discard sink when `ttcp -r` runs from the local shell (ThinkPad, 2026-10-09, main `86b36e5` plus TSC). The earlier per-call bound (2 KiB writes at
+44 MiB/s against 70) has essentially disappeared, along with most of the clock-read cost per packet. Remaining limits:
 
-- **Send is bound by per-segment and per-call cost:** at most about 24–26 KiB of the 64 KiB window is in flight, and 2 KiB writes reach 44 MiB/s against
-  70; each native call moves at most 4 KiB through the single BSP network worker. Revisit with worker batching or a larger call extent, measured against
-  the same runs.
-- **A second loss in one window waits for the retransmission timeout:** one native 2 KiB send in six stalled about 1.09 s, because fast retransmit
-  repaired the first missing segment and lwIP resent the second only on its timeout. Watch for repeats before changing loss recovery.
-- **Receive into a RAM file is consumer-bound:** into `tmp://` it reaches 45–57 MiB/s while the advertised window falls close to zero; the writing
-  program is the limit, not TCP.
-- **Measure from the local shell.** `ttcp -r` driven through a concurrent remote-terminal session was erratic (11.8–58.5 MiB/s) against 91.2 MiB/s
-  from the local shell on the same boot, as the network-throughput record already says.
-- **Clock reads per packet:** in QEMU the network worker's wake and sleep cycle read the HPET about 27 times per data segment, nearly all in timer
-  handling (the audio work in #557 saw the same amplification). Timer passes now read the clock at most once and a qualifying TSC avoids the HPET
-  ([clock-source performance](#wall-clock-time-and-clock-source-performance)); native costs before and after are unmeasured.
+- **Measure from the local shell.** `ttcp -r` driven through a concurrent remote-terminal session was erratic (11.8–58.5 MiB/s) against 91.2 MiB/s from the local shell on the
+  same boot, as the network-throughput record already says.
+- **A second loss in one window waits for the retransmission timeout:** one native 2 KiB send in six stalled about 1.09 s, because fast retransmit repaired the first missing
+  segment and lwIP resent the second only on its timeout. Watch for repeats before changing loss recovery.
+- **Receive into a RAM file is consumer-bound:** into `tmp://` it reaches 45–57 MiB/s while the advertised window falls close to zero; the writing program is the limit, not TCP.
 - **Not implemented:** path-MTU discovery (routed peers get 536-byte segments), window scaling (windows stop at 65,535) and SACK.
 
 ## DHCP maintainer and client limits
