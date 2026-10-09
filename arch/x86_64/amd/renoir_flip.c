@@ -103,7 +103,7 @@ struct layout_state {
   uint32_t scaler_mode[RENOIR_PIPES], scaler_autocal[RENOIR_PIPES];
   uint32_t recout_start[RENOIR_PIPES], recout_size[RENOIR_PIPES], mpc_size[RENOIR_PIPES];
   uint32_t stereo[RENOIR_PIPES], lock[RENOIR_PIPES], gsl[RENOIR_PIPES];
-  uint32_t mpcc_stereo[RENOIR_MPCCS];
+  uint32_t mpcc_stereo[RENOIR_MPCCS], flip_interrupt[RENOIR_PIPES];
 };
 static struct {
   enum renoir_flip_state state;
@@ -126,6 +126,7 @@ static void snapshot_layout(struct layout_state *s)
   renoir_snapshot(&s->registers);
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
     unsigned d = i * DSCL_STRIDE, t = i * OTG_STRIDE;
+    s->flip_interrupt[i] = renoir_read_register(HUBP_FLIP_INTERRUPT + i * HUBP_STRIDE);
     s->scaler_mode[i] = renoir_read_register(DSCL_MODE + d);
     s->scaler_autocal[i] = renoir_read_register(DSCL_AUTOCAL + d);
     s->recout_start[i] = renoir_read_register(DSCL_RECOUT_START + d);
@@ -184,7 +185,9 @@ static int qualified_route(const struct layout_state *s)
   unsigned hubp = m->top & SELECTOR_MASK, bottom = m->bottom & SELECTOR_MASK;
   if (hubp >= RENOIR_PIPES || (m->opp & SELECTOR_MASK) != opp ||
       (bottom != SELECTOR_NONE && bottom != mpcc) ||
-      (m->control & MPCC_MODE_MASK) != MPCC_TOP_PASSTHROUGH || (s->mpcc_stereo[mpcc] & MPCC_STEREO_ENABLE)) {
+      (m->control & MPCC_MODE_MASK) != MPCC_TOP_PASSTHROUGH ||
+      (m->control & MPCC_ALPHA_MODE_MASK) != MPCC_OPAQUE_GLOBAL_ALPHA ||
+      (m->control & MPCC_GLOBAL_ALPHA_GAIN_MASK) != MPCC_GLOBAL_ALPHA_GAIN_MASK || (s->mpcc_stereo[mpcc] & MPCC_STEREO_ENABLE)) {
     return -1;
   }
   const struct hubp_state *h = &r->hubp[hubp];
@@ -198,6 +201,7 @@ static int qualified_route(const struct layout_state *s)
       (h->crossbar & CROSSBAR_MASK) != RENOIR_NATIVE_CROSSBAR ||
       (h->flip & (FLIP_LOCK | FLIP_MASTER_LOCK | FLIP_STEREO)) ||
       (h->flip2 & (FLIP_GSL | FLIP_TRIPLE)) ||
+      (s->flip_interrupt[hubp] & HUBP_FLIP_INTERRUPT_ENABLE) ||
       (s->scaler_mode[hubp] & SCALER_MODE_MASK) || (s->scaler_autocal[hubp] & SCALER_AUTOCAL_MASK) ||
       (s->recout_start[hubp] & RECOUT_ORIGIN_MASK) ||
       !dimensions(s->recout_size[hubp], RENOIR_NATIVE_WIDTH, RENOIR_NATIVE_HEIGHT) ||
@@ -239,6 +243,7 @@ static void static_layout(struct layout_state *s)
     s->registers.hubp[i].control &= ~HUBP_REQUEST_STATUS;
     s->registers.hubp[i].clock &= ~HUBP_CLOCK_STATUS;
     s->scaler_mode[i] &= ~SCALER_CURRENT_BANK;
+    s->flip_interrupt[i] &= ~HUBP_FLIP_INTERRUPT_STATUS;
   }
   for (unsigned i = 0; i < RENOIR_MPCCS; ++i) {
     s->registers.mpcc[i].status = 0;
@@ -407,6 +412,7 @@ refuse:
       klog("renoir-flip: refusal pipe=%u OTG=%x HUBP=%x clock=%x primary=%lx earliest=%lx flip=%x/%x\n",
           i, state->otg[i].control, plane->control, plane->clock,
           plane->primary, plane->earliest, plane->flip, plane->flip2);
+      klog("renoir-flip: refusal pipe=%u flip-interrupt=%x\n", i, second.flip_interrupt[i]);
       klog("renoir-flip: refusal pipe=%u scaler=%x autocal=%x start=%x recout=%x mpc=%x pitch=%x format=%x\n",
           i, second.scaler_mode[i], second.scaler_autocal[i], second.recout_start[i],
           second.recout_size[i], second.mpc_size[i], plane->pitch, plane->config);

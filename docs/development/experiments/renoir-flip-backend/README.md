@@ -16,7 +16,8 @@ Before AP startup, numeric VFCT/ATOM metadata is copied by the bootstrap adapter
 Require one unique already-D0/memory-enabled Renoir display, no other display,
 one enabled progressive 1920x1080 OTG and one unsplit mono OPP/MPCC/HUBP path.
 Require actual active dimensions, current master enable, scaler bypass and
-matching recout/MPC/viewport, no stereo/update lock/GSL/triple buffering,
+matching recout/MPC/viewport, no stereo/update lock/GSL/triple buffering, disabled flip/flip-away interrupt
+enables (read only, never changed), opaque MPCC global alpha/gain,
 linear ARGB8888 with matching crossbar, no DCC/TMZ/VM translation, and stable
 BAR/MC/DCN/GOP correspondence. Mask live request/clock/coefficient-bank status
 from immutable comparisons. Generic INUSE is not the completion address.
@@ -49,6 +50,8 @@ BAR, power, interrupt or firmware writes. Map only audited UC register pages,
 initially RO. Make the qualified HUBP page writable only after all prerequisites;
 the write helper asserts exactly its flip control, primary high and primary low.
 No full-BAR map, reset, blank, mode, clock, power, VM or firmware command occurs.
+The [pinned IRQ table](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/irq/dcn21/irq_service_dcn21.c#L180-L237)
+identifies the enable-mask semantics; no IRQ sequence is imported or executed.
 
 ## Presentation, failure, capture and panic
 
