@@ -6,7 +6,7 @@
 # Samples: 2K of event 'cpu-clock'
 # Event count (approx.): 13100500875
 #
-# Overhead  Command          Shared Object            Symbol                                        
+# Overhead  Command          Shared Object            Symbol
 # ........  ...............  .......................  ..............................................
 #
     16.46%  qemu-system-x86  libc.so.6                [.] __GI___ioctl

@@ -6,7 +6,7 @@
 # Samples: 1K of event 'cpu-clock'
 # Event count (approx.): 7683416125
 #
-# Overhead  Command          Shared Object            Symbol                                        
+# Overhead  Command          Shared Object            Symbol
 # ........  ...............  .......................  ..............................................
 #
     16.29%  qemu-system-x86  [kernel.kallsyms]        [k] native_write_msr_safe

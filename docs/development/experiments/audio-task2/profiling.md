@@ -12,7 +12,9 @@ issue to resolve, rather than an accepted capacity limitation.
 Implementation under review: `62a63e4bd972229858490b354a4fcfd39c355539`, userland
 `052ac5ea0c1b045924aee439470f66e7f3382c1c`. The unmerged local measurement branch
 `probe/audio-task2-cost`, `cc6af6be548cb5887f4ec33029122e3099e7a8f9`, adds only
-[temporary counters](profiling/instrumentation.patch). Its ordinary image build
+[temporary counters](profiling/instrumentation.patch). The zero-context diff
+requires `git apply --unidiff-zero` in a disposable checkout; it changes no accepted
+tuning. Its ordinary image build
 passed using LLVM 23.1.3/49e2c1a and verified SDK/userspace/ports inputs.
 
 Both repeats use the same ELF/ISO/initrd: QEMU 10.2.2, Q35, **nested KVM**,
