@@ -127,7 +127,7 @@ establish the relevant sequence:
 the process to one OS thread (M). `haveSysmon` is false for wasm, not for amd64.
 Disabling asynchronous preemption does not remove monitor-thread creation either.
 Go's internal goroutine stacks are separate from the process's initial OS stack;
-increasing Pyxis's existing 1 MiB initial stack does not solve these requirements.
+increasing Pyxis's [initial stack](../kernel/program-loading.md) does not solve these requirements.
 
 Wasm/WASI has a deliberately single-threaded runtime path, demonstrating that
 such a design is possible. Reusing that idea for amd64 would require deliberate

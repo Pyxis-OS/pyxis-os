@@ -59,6 +59,10 @@ status belong in the milestone document and the PR.
   [checked natively](../development/screenshot-qualification.md#native-thinkpad-check).
 - [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: the accepted
   first slice, with up to eight equal/BSP panes and colored scrollback.
+- [Program image and initial stack capacity](../kernel/program-loading.md),
+  2026-10-09: 256 MiB image span and fixed eager 8 MiB guarded stacks;
+  [matched costs and session memory](../development/experiments/program-capacity/README.md).
+  Thread task 1 merged in #612; later thread tasks remain unassigned.
 - [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++,
   libc++abi and libunwind in the SDK, with fmt as the first C++ port.
 - [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
@@ -85,9 +89,6 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex epsilon** (2026-10-09): [program image and initial stack capacity](program-stack-capacity.md),
-  priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
-  merged in #612; later thread tasks remain unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,

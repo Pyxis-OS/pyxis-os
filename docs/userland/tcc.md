@@ -99,7 +99,7 @@ Clang's private headers. `-print-search-dirs` displays the configured paths.
   to synchronize and verify them. An optional writable `host://` export is
   another persistence path; see its
   [walkthrough](../devices/virtio-fs.md#persistent-development-walkthrough).
-- Each process has a fixed 1 MiB stack without growth and an unmapped guard
+- Each process has a fixed [8 MiB stack](../kernel/program-loading.md) without growth and an unmapped guard
   page below it. Recursive parsing and larger inputs can exceed it. The largest fixed compiler frame observed in the
   Clang 23 build was 2,824 bytes, not a bound on total stack use or source complexity.
   Heap backing grows through private-memory requests and is reclaimed at exit;

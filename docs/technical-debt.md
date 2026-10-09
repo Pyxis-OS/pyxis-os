@@ -89,11 +89,13 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 
 ## Fixed userspace stacks
 
-Each process eagerly backs a 1 MiB user stack (960 KiB more than the former 64 KiB budget), giving native parsers room without
-port-specific recursion limits; it is still finite and port stack needs need review. An unmapped guard page catches ordinary
-overruns but a large adjustment can skip it, and neither compiler stack probing nor stack growth exists. Reconsider eager backing
-when process counts or memory pressure justify it; demand-backed stacks must respect BSP ownership of allocation and page-table
-mutation.
+Each process eagerly backs a fixed [8 MiB user stack](kernel/program-loading.md), including boot init and small commands.
+An unmapped guard catches ordinary overruns, but a large adjustment can skip it; neither compiler stack probing nor growth exists.
+[Matched nested-KVM qualification](development/experiments/program-capacity/README.md) measured 28 MiB more owned backing for
+mux plus three shells, 42 MiB more with two pipeline children, and roughly 3.2–3.4 times the complete 1,024-launch session cost
+relative to the former 1 MiB stacks. Revisit per-image stack sizing when those session/process-count costs justify coordinated
+P1F/LLD/TCC changes and an owner-built compiler container. Demand backing would separately need a fault/allocation contract
+respecting BSP VM-mutation ownership; it is not part of the accepted eager policy.
 
 ## BSP-only allocation and VM mutation
 
