@@ -36,9 +36,10 @@
 #define LWIP_HOOK_TCP_OUTPUT caelum_lwip_output
 #define LWIP_HOOK_TCP_ISN caelum_lwip_isn
 
-/* Conservative IPv4 send ceiling until path-MTU discovery exists. lwIP also
- * respects the peer MSS and local interface MTU; this is not a path guarantee. */
-#define TCP_MSS 536
+/* Advertised and on-link send ceiling for the 1500-byte interface MTU. Without
+ * path-MTU discovery, connections to routed peers are clamped to
+ * TCP_ROUTED_MSS once established; see tcp_connection_established(). */
+#define TCP_MSS 1460
 #define TCP_CALCULATE_EFF_SEND_MSS 1
 #define TCP_WND NET_TCP_RECEIVE_BYTES
 #define TCP_SND_BUF NET_TCP_SEND_BYTES

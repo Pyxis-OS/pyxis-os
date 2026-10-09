@@ -874,8 +874,8 @@ transfer buffer with no fixed file-size limit, but all sending precedes reading.
 A protocol requiring concurrent progress in both directions can stall and time
 out. This request/response mode has no stdin pump or total-runtime limit. Normal completion
 means response EOF, not proof that a remote application processed the request.
-See [outbound TCP](tcp.md) for transport limits and the transmit-only
-[`ttcp` utility](tcp.md#transmit-only-ttcp).
+See [outbound TCP](tcp.md) for transport limits and the
+[`ttcp` utility](tcp.md#ttcp).
 Trusted init can separately delegate a bound listener to the
 [concurrent `tcp --serve` consumer](tcp.md#concurrent-echo-server).
 

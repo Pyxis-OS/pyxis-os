@@ -7,8 +7,9 @@
 #include <abi/tcp.h>
 
 #define NET_TCP_CONNECTION_LIMIT 32
-#define NET_TCP_RECEIVE_BYTES (16 * 1024)
-#define NET_TCP_SEND_BYTES (16 * 1024)
+/* The largest windows lwIP can advertise without window scaling. */
+#define NET_TCP_RECEIVE_BYTES 65535
+#define NET_TCP_SEND_BYTES 65535
 #define NET_TCP_MAX_WAIT_NS TCP_CONNECT_MAX_WAIT_NS
 
 struct tcp_connection;

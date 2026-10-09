@@ -99,10 +99,12 @@ Chosen by the owner, each starting with a proposal:
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
   clipboard and USB HID implementation remain separate. Bluetooth's accepted
   conditional source-loss rule remains future integration, without a second source.
-- **Claude** (2026-10-08): [remote file transfer](remote-file-transfer.md)
-  throughput, downloads first. Streaming replaced the 16 MiB `xfer` limit
-  (#551). The measured reply-read fix is in review; TCP-path changes wait for
-  the owner's native re-timing.
+- **Claude** (2026-10-08): [network throughput](network-throughput.md), TCP
+  toward the owner's gigabit LAN. Five decisions are accepted and implemented
+  in #559 and userland #169, held unmerged until the owner's native baseline
+  on main. The
+  [remote transfer](remote-file-transfer.md#transfer-throughput) reply-read
+  fix merged in #554; its native re-timing is pending.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
