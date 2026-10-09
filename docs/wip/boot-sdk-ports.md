@@ -88,9 +88,9 @@ Chosen by the owner, each starting with a proposal:
   unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
-- **Claude** (2026-10-09, debt paydown): [xfer pipelining](xfer-pipelining.md),
-  three decisions accepted 2026-10-09; implementation in progress. Page-backed RAM
-  files merged in #582 ([measurements](../development/experiments/ram-file-pages/README.md)).
+- **Claude** (2026-10-09, debt paydown): xfer pipelining, three decisions
+  accepted 2026-10-09; delivered for review with its
+  [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight

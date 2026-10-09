@@ -11,15 +11,12 @@ when the underlying tradeoff changes.
 stream with constant memory and no fixed size limit (owner decision,
 2026-10-08). Unverified bytes reach the disk, but only under the private staging
 name, and are published after the size and SHA-256 match. Senders read the source
-twice because the digest is announced before data. The framing keeps one 2 KiB
-chunk in flight. On the ThinkPad over wired LAN, 15 MiB took 6.5 s up and
-7.5 s down on 2026-10-09, about 2–2.3 MiB/s, owner timings after the
-[transfer throughput](wip/remote-file-transfer.md#native-re-timing-2026-10-09)
-and [network throughput](development/network-throughput.md) work; nested QEMU
-is slower in both directions. Uploading 692 MB natively takes about 4½ minutes,
-which the owner accepts. Several chunks in flight are
-[proposed](wip/xfer-pipelining.md). Guest names are
-limited to 200 UTF-8 bytes and host query/resolved paths to 1024 bytes.
+twice because the digest is announced before data. Data moves in a 64 KiB
+window of 2 KiB chunks ([measurements](development/experiments/xfer-pipelining/README.md));
+native rates after windowing await the owner's batch. Before it, 15 MiB took
+6.5 s up and 7.5 s down natively. In nested QEMU both directions are bound by
+BSP work per frame. Guest names are limited to 200 UTF-8 bytes and host
+query/resolved paths to 1024 bytes.
 
 The mandatory negotiated SHA-256 extension intentionally excludes stock kitty
 peers. Reconsider interoperability only if a peer can supply the same verification
