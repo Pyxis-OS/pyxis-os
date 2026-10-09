@@ -1,0 +1,38 @@
+code_revision=9b75b3a
+'kernel/bluetooth/hci.c'::adapter.initialization: HCI_INIT_READY
+'kernel/bluetooth/hci.c'::adapter.terminal: false
+'kernel/bluetooth/hci.c'::adapter.sealed: true
+'kernel/bluetooth/hci.c'::adapter.complete: true
+'kernel/bluetooth/hci.c'::adapter.attachments: 1
+'kernel/bluetooth/hci.c'::adapter.firmware.phase: BLUETOOTH_FIRMWARE_READY
+'kernel/bluetooth/hci.c'::adapter.firmware.cold: false
+'kernel/bluetooth/hci.c'::adapter.firmware.bulk_events: false
+'kernel/bluetooth/hci.c'::adapter.firmware.pending: false
+'kernel/bluetooth/hci.c'::adapter.firmware.upload_commands: 0
+'kernel/bluetooth/hci.c'::adapter.firmware.upload_bytes: 0
+'kernel/bluetooth/hci.c'::adapter.firmware.ddc_commands: 2
+'kernel/bluetooth/hci.c'::adapter.firmware.ddc.size: 9
+'kernel/bluetooth/hci.c'::adapter.firmware.version[6]: 193 '\301'
+'kernel/bluetooth/hci.c'::adapter.firmware.version[7]: 33 '!'
+'kernel/bluetooth/hci.c'::adapter.firmware.version[8]: 24 '\030'
+'kernel/bluetooth/hci.c'::adapter.command_credits: 1
+'kernel/bluetooth/hci.c'::adapter.acl_credits: 3
+'kernel/bluetooth/hci.c'::adapter.acl_total: 3
+'kernel/bluetooth/hci.c'::adapter.acl_packet_length: 251
+'kernel/bluetooth/hci.c'::adapter.event_stream.sequence: 12
+'kernel/bluetooth/hci.c'::adapter.event_stream.used: 0
+'kernel/bluetooth/hci.c'::adapter.acl_stream.sequence: 0
+'kernel/bluetooth/hci.c'::adapter.acl_stream.used: 0
+'kernel/bluetooth/hci.c'::adapter.receive_count: 0
+'kernel/usb/xhci.c'::controllers->interrupt_streams[4].configured: true
+'kernel/usb/xhci.c'::controllers->interrupt_streams[4].started: true
+'kernel/usb/xhci.c'::controllers->interrupt_streams[4].result: USB_OK
+'kernel/usb/xhci.c'::controllers->interrupt_streams[4].queue_count: 0
+'kernel/usb/xhci.c'::controllers->interrupt_streams[4].receive[0].state: INTERRUPT_POSTED
+'kernel/usb/xhci.c'::controllers->interrupt_streams[4].receive[1].state: INTERRUPT_POSTED
+'kernel/usb/xhci.c'::controllers->async_bulk_streams[0].configured: true
+'kernel/usb/xhci.c'::controllers->async_bulk_streams[0].started: true
+'kernel/usb/xhci.c'::controllers->async_bulk_streams[0].result: USB_OK
+'kernel/usb/xhci.c'::controllers->async_bulk_streams[0].queue_count: 0
+'kernel/usb/xhci.c'::controllers->async_bulk_streams[0].receive[0].state: ASYNC_BULK_POSTED
+'kernel/usb/xhci.c'::controllers->async_bulk_streams[0].receive[1].state: ASYNC_BULK_POSTED

@@ -1,0 +1,17 @@
+code_revision=9b75b3a
+phase=read version
+failure=receive continuity lost
+call_status=16
+parsed_event=Command Complete
+completed_opcode=0x100e
+completed_status=0
+pending_pyxis_opcode=0xfc05
+pending_pyxis_command_published=true
+SFI_commands=0
+DDC_commands=0
+interrupt_receive_slots=POSTED,POSTED
+bulk_receive_slots=POSTED,POSTED
+storage_commands_succeeded=true
+storage_payload_median_ms=123.033
+idle_QEMU_one_cpu_percent=25.77
+Excluded from warm-readiness comparison; retained as fail-closed handoff evidence.

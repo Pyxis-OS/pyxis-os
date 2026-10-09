@@ -23,8 +23,8 @@ Operational version is checked before and after Reset, and pinned DDC must
 complete successfully. Local version, commands, LE features, buffer lengths and
 packet credits are checked before mandatory event masks and readiness. The
 [task 3 record](../development/experiments/bluetooth-firmware-readiness/README.md)
-distinguishes this implementation from its pending image, warm and native
-validation. Neither path establishes production firmware qualification.
+records passing image/warm checks and pending native cold validation.
+Neither path establishes production firmware qualification.
 
 ## Authority and messages
 

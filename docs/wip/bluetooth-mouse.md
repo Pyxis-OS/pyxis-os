@@ -418,7 +418,7 @@ reconnect or native closure. See the
 
 Task 3 uses branch bluetooth/firmware-readiness from fresh main 52451d3 and
 [the pre-code plan and implementation record](../development/experiments/bluetooth-firmware-readiness/README.md).
-The mirrored assets verify and the image builds; warm passthrough qualification
-is in progress after correcting the initial version-query format. Native cold
+The mirrored assets verify, the image builds and corrected warm passthrough
+passed three fresh guests, including DDC, storage and idle reception. Native cold
 power-on and warm reboot are collected as the next owner batch. Task 3 remains
 unchecked until its validation is accounted for; later tasks are unassigned.

@@ -75,18 +75,10 @@ Chosen by the owner, each starting with a proposal:
   native playback remains unqualified. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
-- **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
-  task 1 complete for documentation/contracts after native batch #547. All owner
-  [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
-  accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
-  remain prerequisites. Task 2 runtime HCI transport is complete in #552, with
-  [baseline and warm qualification](../development/experiments/bluetooth-runtime-hci/README.md).
-  Task 3 firmware readiness is assigned 2026-10-09 on
-  [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564); its
-  [asset plan and native batch](../development/experiments/bluetooth-firmware-readiness/README.md)
-  record implementation, ongoing warm qualification and unmeasured cold initialization.
-  Actual service/connection traffic remains task 4's qualification gate; later
-  tasks need explicit assignment.
+- **Codex** (2026-10-09): [MX Master 3S milestone](bluetooth-mouse.md), tasks 1–2
+  complete; task 3 firmware readiness assigned in
+  [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564). Later tasks need explicit
+  assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   Tasks 1–3 are merged: Pyxis #545/#550, userland #164/#166, ports #65/#66.
   Task 4, the VirtIO hardware cursor, is delivered for review on

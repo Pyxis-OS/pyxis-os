@@ -1,0 +1,23 @@
+code_revision=52451d3
+elapsed_seconds 30.000371
+clock_ticks_per_second 100
+user_seconds 4.07
+system_seconds 4.04
+one_cpu_percent 27.03
+xhci_running: before=true after=true
+xhci_failed: before=false after=false
+xhci_interrupts: before=893 after=893 delta=0
+xhci_commands: before=8 after=8 delta=0
+xhci_events: before=899 after=899 delta=0
+bsp_timers: before=5834 after=13607 delta=7773
+ap1_timers: before=2760 after=6376 delta=3616
+ap2_timers: before=2759 after=6375 delta=3616
+ap3_timers: before=2758 after=6374 delta=3616
+hci_stage: before=HCI_INIT_READY after=HCI_INIT_READY
+hci_terminal: before=false after=false
+command_credits: before=1 after=1
+acl_credits: before=3 after=3
+event_sequence: before=10 after=10
+event_partial_bytes: before=0 after=0
+acl_sequence: before=0 after=0
+acl_partial_bytes: before=0 after=0

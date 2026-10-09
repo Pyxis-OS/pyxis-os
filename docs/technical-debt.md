@@ -2270,11 +2270,15 @@ its real vendor notification, rather than a fabricated Command Complete. Any
 reset that re-enumerates USB must account for the existing controller quarantine
 and retained DMA policy.
 
-The owner must mirror exact `.sfi`/`.ddc` files, alias targets, provenance and
-license before a committed build uses them. Capture cold version/boot parameters,
-qualify secure download and boot, apply DDC after boot, and re-read the version.
-Comparing another OS's running build with a future Pyxis pin needs an explicit
-policy decision; the investigation's warm acceptance does not settle it.
+The [mouse milestone](wip/bluetooth-mouse.md#proposed-firmware-integration)
+subsequently accepted pinned cold assets and reuse only of qualified compatible
+warm builds, with provisional development evidence explicitly assigned. Task 3's
+[firmware readiness record](development/experiments/bluetooth-firmware-readiness/README.md)
+documents mirrored, licensed assets, bounded secure upload, real boot events and
+mandatory DDC. Warm skip/DDC is measured; native cold upload remains unqualified.
+Capture cold version/boot parameters and qualify upload, boot and version on the
+owner's next native batch. Successful loading alone does not satisfy the accepted
+full transport, encrypted bond/reconnect and HID/pointer compatibility rule.
 
 ### USB interrupt-IN initial profile and failure retention
 
