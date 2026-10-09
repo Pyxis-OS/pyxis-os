@@ -133,8 +133,10 @@ Recognized #BP/#DB and the readiness checkpoint enter the recoverable path.
 Panic/kernel-fault entry must be intercepted before irreversible log/NIC panic
 handoff, capture what is safe and serve **read-only terminal inspection**.
 Fault/panic continue, step and mutation are rejected; detach leaves it stopped.
-Fatal recursion or unsafe transport falls back to existing best-effort fatal
-reporting, with one transport owner, not concurrent log/stub ring users.
+Fatal recursion or unsafe transport retains uncertain storage and falls back
+to best-effort reporting. Once debug mode owns the NIC, fatal text must use that
+owner or serial only; never invoke the old fatal TX takeover against stale
+ordinary queue state. There is one transport owner, not concurrent ring users.
 
 ## First usable debugger features
 
