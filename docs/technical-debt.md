@@ -1242,57 +1242,25 @@ with a concrete native use case and contract, never inferred used/free arithmeti
 
 ## xHCI hardware profile and runtime retention
 
-Native xHCI initialization is [enabled by default](devices/usb-xhci.md), as the
-owner requested on 2026-10-05. Broader controller and recovery qualification
-remain pending; this default change does not expand the supported hardware
-profile. `CONFIG_XHCI=n` remains available for images that must skip native
-controller preparation and workers.
+Native xHCI initialization is [enabled by default](devices/usb-xhci.md) (owner request, 2026-10-05); broader controller and recovery qualification are pending and the default
+expands no supported profile. `CONFIG_XHCI=n` skips native controller preparation and workers. The [initial controller](devices/usb-xhci.md) has QEMU coverage and limited
+owner-reported ThinkPad evidence, with independently discovered controllers, and requires firmware memory decoding for a page-aligned BAR0 prefix, interpreted extended
+capabilities within that 4 KiB prefix, 64-bit DMA, 4 KiB pages and MSI-X; other profiles, power management and insertion after the startup snapshot are unsupported. QEMU
+advertises zero scratchpads and 32-byte contexts while the [ThinkPad run](targets/t14-gen1-amd/usb-bringup.md) saw nonzero scratchpads and 64-byte contexts and traversed the
+dock's USB 3 hub with root and descendant storage probes; nondefault PSI mappings and BIOS ownership handoff are unmeasured and recovery is unexecuted. The first native
+installation mounted one qualified stick writable from a built-in port, which qualifies no other controller, port or device.
 
-The [initial controller](devices/usb-xhci.md) has agent-run QEMU coverage and
-limited owner-reported ThinkPad evidence, with independently discovered
-controllers. It requires firmware memory decoding enabled for a
-page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
-prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles,
-power management and insertion after the startup snapshot are unsupported.
-QEMU advertises zero scratchpads and 32-byte contexts. An
-[owner-reported ThinkPad run](targets/t14-gen1-amd/usb-bringup.md) observed
-nonzero scratchpads and 64-byte contexts; nondefault PSI mappings and BIOS
-ownership handoff remain unmeasured paths. This first native snapshot does not
-establish broad controller qualification. The later owner-reported run also
-traversed the dock's USB 3 hub and completed root/descendant storage probes.
-Recovery remains unexecuted. The first native installation then mounted one
-qualified stick writable from a built-in port; that single profile does not
-qualify other controllers, ports or devices.
+USB 2 root-port reset has no explicit connect-debounce interval: the startup snapshot waits 20 ms only after the driver powers a port, with no link-settling wait when power was
+already on or port power control is absent, so a USB 3 link still initializing after controller reset can be missed and stay unreserved until reboot (a vendor reset-delay quirk
+also needs evidence). Revisit debounce and bounded settling with physical evidence. A legacy handoff timeout leaves the OS-owned request asserted and firmware may release BIOS
+ownership later, but Pyxis neither retries nor reclaims the controller that boot; settle the timeout rollback policy with firmware ownership evidence. BAR sizing saves and
+restores the assignment but is not compared with the original bootstrap base (revisit with PCI mapping and profile validation, keeping one authority for mapping identity).
 
-USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
-waits 20 ms only after the driver powers a port; it has no separate link-settling
-wait when power was already on or the controller lacks port power control. It can
-miss a physical USB 3 link still initializing after controller reset, leaving that
-device unreserved until reboot. Revisit debounce and bounded startup settling with
-physical firmware/device evidence before claiming hardware qualification. A vendor
-reset-delay quirk also needs evidence from the selected controller.
-
-Legacy handoff timeout leaves the OS-owned request asserted. Firmware may release
-BIOS ownership asynchronously after preparation has failed; Pyxis does not retry
-or reclaim the controller during that boot. Settle the timeout rollback policy
-with firmware ownership evidence before changing the semaphore behavior. Revisit
-topology and the bootstrap profile with the ThinkPad before expanding support.
-BAR sizing saves/restores the assignment, but there is no explicit comparison
-with the original bootstrap physical base. Revisit that consistency check when
-extending PCI mapping/profile validation, keeping one authority for mapping identity.
-
-Each controller worker admits its own commands serially and checks notifications/health at
-a ten-millisecond interval even when idle, scheduling up to 100 polling
-opportunities per second. The shared MSI-X vector notifies every active controller per delivery, so unrelated
-workers may wake. Actual CPU wakeups and laptop power cost are unmeasured.
-Rings and polling/deadline budgets are initial choices, not machine/image
-requirements. Revisit event-driven waiting and health-poll costs when descriptor
-transfers and actual USB storage reads provide a workload; controller startup is
-not a storage benchmark.
-Runtime stop retains claims, mappings, slot/command records and DMA backing until
-reboot, even after confirmed halt. This follows current shared-VM ownership and
-prevents reuse while device ownership is uncertain. Runtime reclamation belongs
-with the VM/device lifetime work, not a local allocator-lock workaround.
+Each controller worker admits its own commands serially and checks notifications and health every ten milliseconds even when idle (up to 100 polling opportunities per second),
+and the shared MSI-X vector notifies every active controller per delivery, so unrelated workers may wake; CPU wakeups and laptop power cost are unmeasured, and rings, polling
+and deadline budgets are initial choices (revisit event-driven waiting and health-poll costs once transfers provide a workload). Runtime stop retains claims, mappings,
+slot and command records and DMA backing until reboot, even after confirmed halt, following shared-VM ownership; reclamation belongs with the VM/device lifetime work, not an
+allocator-lock workaround.
 
 ### Bluetooth cold firmware upload and running-version policy
 
@@ -1319,327 +1287,151 @@ policy decision; the investigation's warm acceptance does not settle it.
 
 ### USB interrupt-IN initial profile and failure retention
 
-The implemented private [interrupt-IN path](devices/usb-interrupt-in.md) follows
-the owner's narrower initial profile for
-[Bluetooth task 3a](devices/ax200-bluetooth.md#accepted-interrupt-in-decisions): boot-present,
-root-connected full-speed endpoints, with other profiles explicitly unsupported.
-This leaves behind-hub periodic endpoints and other speeds unavailable to the
-initial shared receive path, including HID consumers on those paths. Revisit
-admission and periodic/TT handling when a selected device needs another profile,
-with its descriptors and hardware evidence. Qualification currently covers
-AX200 passthrough behind emulated xHCI, not native periodic transfers.
-
-For the internal AX200 investigation, active removal may quarantine the whole
-controller and stop unrelated storage, retaining backing until reboot. A STALL
-is accepted as terminal interrupt-stream failure, with DMA backing and ring
-identity retained until reboot and no automatic recovery. Thus a stalled stream
-cannot resume during that boot, and a persistent receive makes controller-wide
-active-removal handling the usual case. Revisit these accepted limits with
-separately scoped endpoint/device retirement and periodic recovery before
-expanding hotplug or recovery guarantees for HID consumers; confirmed halt alone
-does not change the current retention contract.
+The private [interrupt-IN path](devices/usb-interrupt-in.md) follows the owner's initial profile for
+[Bluetooth task 3a](devices/ax200-bluetooth.md#accepted-interrupt-in-decisions): boot-present, root-connected full-speed endpoints only, so behind-hub periodic endpoints and
+other speeds (including HID consumers on them) are unavailable; revisit admission and periodic/TT handling when a device needs another profile, with its descriptors and
+hardware evidence. Qualification covers AX200 passthrough behind emulated xHCI, not native periodic transfers. For the internal AX200, active removal may quarantine the whole
+controller and stop unrelated storage, retaining backing until reboot, and a STALL is a terminal stream failure with DMA backing and ring identity retained until reboot and
+no automatic recovery, so a stalled stream cannot resume that boot and controller-wide removal handling is the usual case for a persistent receive. Revisit with separately
+scoped endpoint and device retirement and periodic recovery before widening hotplug or recovery guarantees; confirmed halt alone does not change the retention contract.
 
 ## USB descriptor bounds and per-port preparation
 
-[Enumeration](devices/usb-enumeration.md) inspects every advertised configuration
-using an initial 4 KiB descriptor/control budget. A larger configuration makes
-inventory incomplete. The initial arena retains up to 512 validated interface
-records per controller; overflow is partial. Unknown/vendor classes are valid
-unbound observations. Revisit these bounds with concrete descriptor/topology requirements. Storage
-probing, kernel block registration and configured mount authority now use
-accepted per-device support across controllers. Qualified disks support explicit
-writable mounts; broader physical qualification remains separate work.
+[Enumeration](devices/usb-enumeration.md) inspects every advertised configuration with an initial 4 KiB descriptor and control budget (a larger configuration makes
+inventory incomplete) and retains up to 512 validated interface records per controller (overflow is partial); unknown or vendor classes are valid unbound
+observations. Storage probing, kernel block registration and configured mount authority use per-device support across controllers, and qualified disks mount
+writable. Revisit the bounds with concrete descriptor or topology requirements.
 
-All advertised ports receive input/output contexts and an EP0 ring/control buffer
-before AP startup. With the current 4 KiB buffer and 4 KiB allocations, this adds
-four pages/range records per port even when empty. The unused two bulk-ring pages
-per port, BOT matcher and endpoint setup were removed from the inventory slice.
-This fits QEMU's eight-port profile but consumes the shared VM range budget and
-can fail preparation on larger controllers. Revisit boot inventory/resource
-preparation with physical port-count evidence; runtime allocation/reclamation
-requires the VM ownership work rather than allocator locks. The first BOT consumer
-now reserves a separate four-device bulk pool per controller in one 528 KiB DMA
-arena, plus a 64 KiB non-DMA read scratch buffer. Exhaustion is an explicit
-per-device unsupported result. Unused storage backing remains until reboot.
-Revisit these bounds with concrete multi-device workload/resource evidence.
+All advertised ports get input and output contexts and an EP0 ring and control buffer before AP startup, four pages and range records per port even when empty.
+That fits QEMU's eight ports but uses the shared VM range budget and can fail preparation on larger controllers; revisit with physical port-count evidence (runtime
+allocation and reclamation need the VM ownership work, not allocator locks). The BOT consumer reserves a four-device bulk pool per controller in one 528 KiB DMA
+arena plus a 64 KiB non-DMA read scratch buffer, exhaustion is an explicit per-device unsupported result, and unused storage backing stays until reboot. Two captured
+I/O slots per supported disk and snapshot capacity are reserved before AP startup and GPT USB scans share one scratch buffer. Hub discovery uses a pre-AP descendant
+pool (32 per controller, capped by Slot capacity after reserving roots) in one owned DMA arena that keeps all backing, 512 KiB per controller, even with no hub, and
+allocation failure can fail that controller's preparation. Revisit these budgets and the root reservation policy with topology and resource evidence, without runtime
+mapping outside the VM contract.
 
-Hub discovery uses a pre-AP descendant pool, initially 32 per controller,
-capped by advertised Slot capacity after reserving possible roots. One owned DMA
-arena avoids multiplying VM range records but retains all reserved backing even
-when no hub is attached; the current 32-entry/4 KiB profile adds 512 KiB per
-controller. Pool allocation failure can fail that controller's preparation.
-Revisit the budget and root reservation policy with actual topology/resource
-requirements, without runtime mapping or allocation outside the VM contract.
-The shared startup deadline can expire on large trees; exhausted branches are
-partial. Low-speed hardware paths remain unqualified. The first owner-reported
-ThinkPad snapshot exercised full-speed descendants behind high-speed hubs;
-recovery and broader TT qualification remain pending. QEMU's built-in hub
-exercises full-speed descendants only. SuperSpeedPlus root recognition uses
-discovered protocol metadata; QEMU does not exercise that profile. The subsequent
-[owner-reported native run](targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)
-identified the dock's SuperSpeedPlus USB 3 hub and completed reads from its
-SuperSpeed storage descendant. Additional link/firmware profiles and recovery
-remain unqualified; revisit them with further native evidence.
-Only standard symmetric Gen1/Gen2 one/two-lane downstream links are attached.
-Absent/ambiguous controller profiles remain partial; revisit with actual profile
-evidence rather than picking a speed ID. Categorical inventory
-omits directional rates and lane counts; SSP isochronous byte budgets remain
-uninterpreted until actual non-control endpoint scheduling needs them.
-Hub descendants are not monitored after publication; idle downstream removal
-retains their slots/backing until reboot. Revisit this with separately scoped
-hotplug/lifetime work. Root removal still retires the retained subtree, and
-active request errors quarantine the controller.
+Topology and profile limits: the shared startup deadline can expire on large trees (exhausted branches are partial); low-speed paths are unqualified; QEMU's hub
+exercises full-speed descendants only and its SuperSpeedPlus profile is not exercised. The owner-reported ThinkPad runs exercised full-speed descendants behind
+high-speed hubs and the dock's SuperSpeedPlus USB 3 hub with reads from its SuperSpeed storage descendant
+([native run](targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)); recovery, other link or firmware profiles and broader TT
+qualification are pending. Only standard symmetric Gen1/Gen2 one- and two-lane downstream links attach (absent or ambiguous controller profiles stay partial; do not
+pick a speed ID), and categorical inventory omits directional rates and lane counts, with SSP isochronous byte budgets uninterpreted until non-control scheduling
+needs them. Hub descendants are not monitored after publication, so idle downstream removal retains slots and backing until reboot (root removal retires the subtree
+and active request errors quarantine the controller); revisit with hotplug and lifetime work. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
+inventory is not full USB 3 conformance (revisit with path-latency accounting before power management or non-control scheduling, never sending zero placeholders), and
+USB 3 traversal keeps the conservative USB 2 stability and recovery delays with no explicit warm-reset retry.
 
-Each device admits one active control request; each admitted BOT device also
-serializes private bulk exchanges. Owned stalls have bounded endpoint recovery,
-including TT cleanup and safe dequeue retirement. Other early errors, deadlines
-or removal during active work stop the whole controller and retain unresolved
-DMA until reboot. BOT probes and registered kernel block reads execute 512/4096-byte media reads
-and large-LBA SCSI commands in QEMU, including hub descendants and multiple
-controllers. GPT waits for terminal USB discovery and scans retained candidates
-without treating partial discovery as a global I/O failure.
-Stall/TT/reset recovery, active abandonment, ring wrap and nonzero alternate
-selection remain source/spec-reviewed without forced-error validation. Revisit
-with natural device evidence; physical USB qualification remains separate.
+Each device admits one active control request and each admitted BOT device serializes private bulk exchanges. Owned stalls have bounded endpoint recovery (including TT
+cleanup and safe dequeue retirement), while other early errors, deadlines or removal during active work stop the whole controller and retain unresolved DMA until
+reboot. BOT probes and kernel block reads ran 512/4096-byte reads and large-LBA SCSI commands in QEMU, including hub descendants and several controllers; GPT waits for
+terminal USB discovery and scans retained candidates without treating partial discovery as a global failure. Stall, TT and reset recovery, active abandonment, ring
+wrap and nonzero alternate selection are source-reviewed without forced-error validation (revisit with natural device evidence).
 
-The [BOT/SCSI probe](devices/usb-storage.md) accepts one non-composite BOT
-interface, no streams, and one LUN. Multiple LUNs, other interface shapes and
-observed READ CAPACITY (16) protection-enabled geometry remain unsupported.
-Terminal candidates now register kernel block devices and support GPT
-discovery. Configured native GUID authority supports USB mounts after sealed
-discovery and terminal GPT scans, including explicitly writable mounts on
-qualified media. Observed uniqueness is accepted under partial discovery;
-unseen disks may conceal another matching GUID. Duplicate observed matches
-fail, and selected-disk errors never fall back. Installer raw authority now
-accepts retained USB candidates after observed discovery is sealed. It permits
-partial USB coverage while refusing lost registry records or incomplete VirtIO
-bookkeeping. Unseen disks may conceal additional eligible targets; the existing
-sole-eligible selection and typed consent apply only to observed disks. Normal
-boots grant no raw service, and qualified write claims still exclude mounted or
-claimed devices and latched write failure. The native C.4 installation listed
-its stick while unsupported EHCI kept coverage partial. Revisit inventory coverage
-and target selection with further native topology evidence rather than inferring
-a complete machine inventory from a successful installer list. Two captured I/O slots per
-supported disk and snapshot capacity are
-reserved before AP startup; GPT USB scans share one scratch buffer. Revisit the
-pre-AP reservation cost with measured topology/resource requirements and later
-native qualification. Revisit those limits in their focused
-integration/qualification tasks. Runtime READ rejection with valid sense now
-fails only its ticket; healthy transport remains READY. Failed sense, real
-transport failure, timeout and unsafe host states remain terminal. These
-rejection/failure paths have source review only; revisit with natural media
-errors rather than forced-error validation. NOT READY media retain sense and
-fail immediately, including NOT READY / 04h/01h (becoming ready); bounded UNIT
-ATTENTION retries do not implement a spin-up policy. Revisit a bounded wait only
-if natural device evidence requires it, within the existing media deadline.
-
-USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, which the specification
-requires during full enumeration. EP0 routing/descriptor inspection does not
-consume their power-exit or isochronous scheduling values, but complete inventory
-is not full USB 3 conformance. Revisit with actual path-latency accounting before
-adding power management or non-control scheduling; do not send successful zero
-placeholders. USB 3 boot traversal retains the existing conservative USB 2
-stability/recovery delays and adds no explicit warm-reset recovery retry.
+The [BOT/SCSI probe](devices/usb-storage.md) accepts one non-composite BOT interface, no streams and one LUN; multiple LUNs, other interface shapes and READ CAPACITY (16)
+protection-enabled geometry are unsupported. Configured native GUID authority supports USB mounts after sealed discovery and terminal GPT scans (observed uniqueness is
+accepted under partial discovery, so unseen disks may hide another matching GUID; duplicate observed matches fail and selected-disk errors never fall back), and installer
+raw authority accepts retained USB candidates after discovery is sealed, permitting partial USB coverage while refusing lost registry records or incomplete VirtIO
+bookkeeping, with sole-eligible selection and typed consent applying only to observed disks (the native C.4 installation listed its stick while unsupported EHCI kept
+coverage partial). Normal boots grant no raw service, and write claims exclude mounted or claimed devices and latched write failure. Revisit inventory coverage and
+target selection with further native evidence, never inferring a complete inventory from a successful installer list. A runtime READ rejection with valid sense fails only
+its ticket (transport stays READY), whereas failed sense, real transport failure, timeout and unsafe host states are terminal; these paths are source-reviewed only. NOT
+READY media (including 04h/01h becoming ready) fail immediately, and bounded UNIT ATTENTION retries implement no spin-up policy; revisit a bounded wait only with natural
+device evidence within the media deadline.
 
 ## USB writable-media qualification limits
 
-C.1 requires known WP-clear protection and a successful real blocking
-SYNCHRONIZE CACHE (10) before enabling writes and flushes. MODE SENSE (6) captures
-only its four-byte header; fallback to the eight-byte MODE SENSE (10) header is
-limited to current ILLEGAL REQUEST / invalid-opcode or invalid-field rejection.
-Unknown protection, unusable optional headers and clean qualification rejection
-leave healthy media readable but not writable. No MODE SELECT or write-cache
-mode change is attempted. Revisit compatibility only with natural device
-responses that need a concrete bounded extension; do not infer writable or
-flush support from vendor IDs or successful reads.
+C.1 requires known WP-clear protection and a successful real blocking SYNCHRONIZE CACHE (10) before enabling writes and flushes. MODE SENSE (6) captures only its four-byte
+header, with fallback to the eight-byte MODE SENSE (10) header only on current ILLEGAL REQUEST invalid-opcode or invalid-field rejection; unknown protection, unusable
+optional headers and clean qualification rejection leave healthy media readable but not writable, and no MODE SELECT or write-cache change is attempted. Do not infer
+writable or flush support from vendor IDs or successful reads; revisit compatibility only with natural device responses needing a bounded extension.
 
-Two hardware compatibility watchpoints from merged
-[PR #395](https://git.internal/PyxisOS/pyxis-os/pulls/395) remain deferred.
-The first natively qualified stick, the C.4 install target, triggered neither.
-A device that cleanly rejects SYNCHRONIZE CACHE stays read-only, including a
-device whose firmware might not use a volatile write cache. Querying its caching
-mode page and reported Write Cache Enable (WCE) state is a possible extension
-guided by device evidence, not an accepted alternative qualification or proof of
-physical durability. Revisit only
-after observing an affected expendable device and settling the write/flush policy.
+Two compatibility watchpoints from merged [PR #395](https://git.internal/PyxisOS/pyxis-os/pulls/395) stay deferred (the first natively qualified stick, the C.4 install
+target, triggered neither). A device that cleanly rejects SYNCHRONIZE CACHE stays read-only even if its firmware has no volatile write cache; querying the caching mode
+page and Write Cache Enable state is a possible extension guided by device evidence, not an accepted alternative or proof of durability. And an optional MODE SENSE or
+qualification synchronization exchange that breaks transport fails the whole media probe even if earlier reads succeeded (returning to read-only after a successful reset
+is only a proposal needing a recovery policy and verified transfer ownership). Revisit both after observing an affected expendable device.
 
-An optional MODE SENSE or qualification synchronization exchange that breaks
-transport currently fails the whole media probe, even when earlier reads
-succeeded. Returning to read-only service after a successful reset is a proposal;
-it requires an explicit recovery policy and verified healthy transfer ownership
-and reads. Prior read success alone does not establish those conditions. Revisit
-with natural physical-device evidence rather than weakening failure handling now.
-
-The five-second exchange deadline and shared boot-media deadline also bound
-synchronization. A slow genuine flush can retire the device even when the medium
-is capable of persisting data. Revisit those bounds with measured physical
-flush latency. QEMU command completion and restart checks do not qualify device
-firmware, physical cache behavior or power loss. One physical stick has
-qualified natively; other devices remain unqualified.
-
-A failed runtime write/flush or abandoned published mutation permanently latches
-write failure for this boot. Healthy transport can still admit reads, but the
-filesystem may separately retain its own writeback error. No mutation replay or
-later successful flush clears either backend uncertainty. Revisit any recovery
-only with an explicit error-acknowledgment and ownership contract. Mutation
-failure/abandonment, MODE SENSE fallback, unsupported flush and malformed
-qualification responses have source review, without forced-error validation;
-revisit with natural device evidence.
+The five-second exchange deadline and shared boot-media deadline also bound synchronization, so a slow genuine flush can retire a capable device; revisit with measured
+physical flush latency. QEMU completion and restart checks qualify no firmware, cache behavior or power loss, and only one physical stick has qualified. A failed runtime
+write or flush, or an abandoned published mutation, latches write failure for the boot (reads stay admitted on healthy transport and the filesystem may keep its own
+writeback error), with no replay or later successful flush clearing either uncertainty; revisit recovery only with an error-acknowledgment and ownership contract. Mutation
+failure and abandonment, MODE SENSE fallback, unsupported flush and malformed qualification responses are source-reviewed only.
 
 ## USB controller and transport coverage
 
-xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers,
-such as the ThinkPad's Realtek DASH EHCI, remain unsupported inventory records.
-`lsusb` then reports partial coverage, and disks behind those controllers are
-invisible to configured mounts and the installer. [USB storage](devices/usb-storage.md)
-uses Bulk-Only Transport only. A device offering UAS as an alternate is used
-through BOT; a UAS-only device is unsupported, and any BOT throughput cost is
-unmeasured. Classes other than hubs and storage, including HID, remain unbound.
-Revisit when a target device or workflow needs another controller type, UAS or
-a USB input class; add each through the existing [layer
-boundaries](devices/usb-installation.md#layers-and-ownership).
+xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers (such as the ThinkPad's Realtek DASH EHCI) remain unsupported inventory records, `lsusb`
+reports partial coverage, and disks behind them are invisible to configured mounts and the installer. [USB storage](devices/usb-storage.md) uses Bulk-Only Transport only: a
+device offering UAS as an alternate is used through BOT (throughput cost unmeasured), a UAS-only device is unsupported, and classes other than hubs and storage, including
+HID, stay unbound. Revisit when a target device or workflow needs another controller type, UAS or a USB input class, adding each through the existing
+[layer boundaries](devices/usb-installation.md#layers-and-ownership).
 
 ## Random generator trust and availability
 
-The [BSP-owned ChaCha20 generator](devices/random-generator.md) now seeds and
-reseeds from the selected VirtIO or CPU source. The owner accepted the global
-construction, demand-driven 40-byte seed/reseed policy and unchanged grant on
-2026-10-08. The [matched qualification](development/experiments/random-generator/generator.md)
-records the RFC vector, erasure observations, both natural reseed triggers,
-TLS/cancellation and nested-KVM latency/throughput; native generator performance
-and CPU seed supply under heavy load remain unmeasured.
-
-Hardware/hypervisor trust remains. CPU boot/runtime checks detect specific
-obvious failures, not arbitrary bias or malicious hardware; mixing one selected
-source creates no independence or entropy certification. A required reseed that
-cannot complete stops random reads and TLS operations needing new material until
-a later full attempt succeeds. Permanent source failure disables them until
-reboot. This accepted availability trade-off includes carry-clear exhaustion
-under load; no stale-seed or predictable fallback is provided.
-
-Request service still pays BSP scheduling and shares eight slots, including
-unconsumed completions. State compromise exposes buffered/future output until a
-successful independent reseed; completed slots and caller memory may retain
-delivered bytes. Whole-VM snapshots/clones can duplicate initialized state.
-Revisit independent source mixing, snapshot recovery, persistent seed or per-CPU
-state only with a concrete threat model or measured consumer need. Revisit native
-seed/performance qualification when owner hardware is available; keep trust
-claims separate from the observed health and RFC checks.
+The [BSP-owned ChaCha20 generator](devices/random-generator.md) seeds and reseeds from the selected VirtIO or CPU source (global construction, demand-driven 40-byte
+seed and reseed policy and unchanged grant accepted 2026-10-08). The [qualification](development/experiments/random-generator/generator.md) covers the RFC vector, erasure,
+both natural reseed triggers, TLS and cancellation, and nested-KVM latency and throughput; native performance and CPU seed supply under heavy load are unmeasured.
+Hardware and hypervisor trust remains: CPU boot and runtime checks catch specific obvious failures, not bias or malicious hardware, and mixing one selected source gives
+no independence or entropy certification. A required reseed that cannot complete stops random reads and TLS operations needing new material until a later full attempt
+succeeds, and permanent source failure disables them until reboot (an accepted availability trade-off including carry-clear exhaustion under load, with no stale-seed or
+predictable fallback). Requests pay BSP scheduling and share eight slots (unconsumed completions included); state compromise exposes buffered and future output until an
+independent reseed, completed slots and caller memory may retain delivered bytes, and whole-VM snapshots or clones can duplicate initialized state. Revisit independent
+source mixing, snapshot recovery, a persistent seed or per-CPU state only with a threat model or measured need, and native seed and performance qualification when owner
+hardware is available, keeping trust claims separate from the health and RFC checks.
 
 ## PS/2 mouse synchronization and routing
 
-The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's
-always-set bit. A byte lost inside the device can yield wrong motion or buttons
-for a few packets before a misaligned first byte is rejected. Its IRQ 12 route
-must share the keyboard's I/O APIC; firmware that places it elsewhere leaves the
-mouse unavailable. Reconsider these when native packets show drift that a short
-inter-byte timeout would catch, or a target routes IRQ 12 to another I/O APIC.
-
-Only that PS/2 stream is supported. On the ThinkPad the touchpad stays in its
-firmware relative mode, with no scrolling or multi-finger input, and TrackPoint
-motion arrives mixed into the same stream. USB HID mice need configured
-interrupt endpoints, which xHCI does not set up yet, plus a HID boot-protocol
-driver; they fit best after USB storage's endpoint work. Pointer sessions are
-relative only: there is no on-screen cursor or absolute positioning. Doom has no
-mouse support yet, although pointer sessions would allow it. Revisit Synaptics
-absolute mode when gestures or scrolling are wanted, and USB mice after bulk
-endpoints exist.
+The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
+packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
+would catch, or a target routes IRQ 12 elsewhere. Only that stream is supported: the ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger
+input and TrackPoint motion arrives mixed into the same stream; Synaptics absolute mode is a revisit for gestures or scrolling. USB HID mice need a HID boot-protocol driver
+on the private interrupt-IN path (root-connected full-speed only, see [USB interrupt-IN](#usb-interrupt-in-initial-profile-and-failure-retention)), and Doom has no mouse
+support.
 
 ## Lua build runtime limits
 
-[Lua](userland/lua.md) supplies io/os, pure-Lua modules and native build helpers.
-`file:setvbuf`, `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, debug, full
-math and dynamic modules remain absent. `os.time` accepts wall time only;
-calendar-table conversion needs an explicit `mktime` policy for ambiguous and
-nonexistent local input. Revisit each missing interface for a concrete consumer.
-
-`os.tmpname` reserves a real exclusive empty file; callers must remove it.
-`io.tmpfile` creates and immediately unlinks a real file, but abrupt death
-between those operations, or a failed unlink, can leave a recognizable named
-file. No stale-name cleanup runs. Revisit atomic anonymous creation only if a
-concrete lifecycle need warrants a native operation; reserved names are not
-ISO C `tmpnam`.
-
-`pyxis.run` inherits live C streams, omitting closed ones. Cursors, append mode,
-pushback and read-ahead belong to the parent runtime, not its delegated native
-handle. Child file streams begin at zero, and unread buffered pipe bytes remain
-in Lua. Lua `io.input`/`io.output` rebinding is local. Revisit shared stream state
-only with a native ownership design, rather than silently forwarding private
-buffer contents or copying stale startup bindings.
-
-C-locale `strftime` supports standard conversions and E/O forms, but no width
-or flag extensions. `%z` loses historical offset seconds by its standard minute
-precision; `tm_gmtoff` retains them. A `tm_zone` designation is borrowed until
-successful timezone-cache replacement or process exit. Locale selection and
-reverse calendar conversion remain deferred.
+[Lua](userland/lua.md) supplies io/os, pure-Lua modules and native build helpers; `file:setvbuf`, `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, debug, full math and
+dynamic modules are absent, and `os.time` accepts wall time only (calendar-table conversion needs a `mktime` policy for ambiguous and nonexistent local input). Revisit each
+for a concrete consumer. `os.tmpname` reserves a real exclusive empty file that callers must remove, and `io.tmpfile` creates then immediately unlinks one, so abrupt death
+between those operations or a failed unlink can leave a named file with no stale-name cleanup (revisit atomic anonymous creation only for a lifecycle need; reserved names
+are not ISO C `tmpnam`). `pyxis.run` inherits live C streams, omitting closed ones, but cursors, append mode, pushback and read-ahead belong to the parent runtime, so child
+streams begin at zero, unread buffered pipe bytes stay in Lua and `io.input`/`io.output` rebinding is local; revisit shared stream state only with a native ownership design.
+C-locale `strftime` supports standard conversions and E/O forms without width or flag extensions, `%z` loses historical offset seconds at minute precision (`tm_gmtoff` keeps
+them), a `tm_zone` designation is borrowed until timezone-cache replacement or exit, and locale selection and reverse calendar conversion are deferred.
 
 ## Sorted ls memory and live file details
 
-Native [ls](userland/ls.md) collects all names for one directory before sorting.
-Memory grows with the entry count and total name bytes; exhaustion reports
-failure without a truncated listing. Terminal colors may add one file lookup
-and at most two content bytes per non-program file; long format also queries
-sizes. These later observations do not form a snapshot with enumeration and
-can fail after names were collected. Unknown sizes remain explicit; script
-classification falls back to regular-file color when its prefix is unreadable.
-
-Terminal names use one printable ASCII cell per byte, replacing control and
-non-ASCII bytes with `?`; plain file/pipe output preserves the original bytes.
-Revisit memory or lookup costs when real directory workloads exhaust memory or
-show unacceptable listing latency, and Unicode presentation when the terminal
-has an agreed character-width contract. Owner-run ThinkPad and disk-backed
-listing qualification remain unperformed; current evidence is nested QEMU with
-archive, RAM and HOST directories.
+Native [ls](userland/ls.md) collects all names of a directory before sorting, so memory grows with entry count and name bytes and exhaustion reports failure without a
+truncated listing. Terminal colors may add one file lookup and up to two content bytes per non-program file and long format queries sizes, none forming a snapshot with
+enumeration, so they can fail after names were collected (unknown sizes stay explicit; unreadable script prefixes fall back to the regular-file color). Terminal names show
+one printable ASCII cell per byte with `?` for control and non-ASCII bytes (plain output preserves bytes). Revisit memory and lookup costs with directory workloads that
+exhaust memory or list slowly, and Unicode presentation with an agreed character-width contract; ThinkPad and disk-backed listing qualification is unperformed (evidence is
+nested QEMU with archive, RAM and HOST directories).
 
 ## Native cp staging and recovery limits
 
-[cp](userland/cp.md) uses exclusive sibling temporary files and held-directory
-rename/removal. Accepted 2026-10-07: other writers must leave the temporary
-file/name untouched until completion; native mutation APIs do not bind a name
-to the held file identity. Source data remains live, copying its initial size;
-concurrent overwrites can mix contents, and same-file aliases replace the object.
-Staging requires destination CREATE/WRITE_FILES/REMOVE rather than permission to
-write an existing file alone. It has no direct-truncation fallback.
-
-Recursive directory copying remains deferred; cp currently accepts files only.
-Revisit it with a bounded directory-tree copying contract when ordinary use
-needs it.
-
-Interruption can leave a named temporary file. Unconfirmed creation/publication
-is reported without retry or name removal; failed cleanup can leave partial
-storage. No stale-file sweeper or crash-durability guarantee is provided, and
-operator cleanup must establish which names currently exist before removing
-anything. Revisit reservation/publication primitives if cp must tolerate another
-writer changing its temporary file/name, and cleanup policy when persistent
-operational use needs recovery from interrupted copies. Provider sources,
-native disk copies, durability and owner-run ThinkPad usage remain unqualified;
-current measured evidence covers archive/RAM/HOST copying in nested QEMU.
+[cp](userland/cp.md) uses exclusive sibling temporary files and held-directory rename and removal. Accepted 2026-10-07: other writers must leave the temporary file and name
+untouched until completion because native mutation APIs do not bind a name to the held file identity. Source data stays live (copying its initial size), so concurrent
+overwrites can mix contents and same-file aliases replace the object. Staging needs destination CREATE/WRITE_FILES/REMOVE, not permission to write an existing file alone, and
+has no direct-truncation fallback. Recursive directory copying is deferred (files only; revisit with a bounded tree-copy contract). Interruption can leave a named temporary
+file, unconfirmed creation or publication is reported without retry or removal, failed cleanup can leave partial storage, and there is no stale-file sweeper or crash-durability
+guarantee, so operators must establish which names exist before removing anything. Revisit reservation and publication primitives if cp must tolerate another writer changing
+its temporary, and cleanup policy when persistent use needs recovery from interrupted copies. Provider sources, native disk copies, durability and ThinkPad usage are
+unqualified (evidence covers archive, RAM and HOST copies in nested QEMU).
 
 ## Bluetooth HCI connection handle reuse boundary
 
-Accepted 2026-10-08 for [runtime HCI task 2](devices/bluetooth-hci.md): fail closed
-if the controller reuses a previously disconnected connection handle. Independent
-event and ACL endpoint ordering cannot establish which link delayed bytes belong
-to; a new generation alone is insufficient. Known retired-link ACL is discarded
-without hiding the disconnect event or independently disabling storage.
-
-This restricts repeated connections during one controller lifetime. Establish
-and measure a safe retirement/reuse boundary in the connection/reconnect tasks
-before durable bonded reconnect can qualify. It does not relax native closure.
+Accepted 2026-10-08 for [runtime HCI task 2](devices/bluetooth-hci.md): fail closed if the controller reuses a previously disconnected connection handle, because independent event
+and ACL endpoint ordering cannot establish which link delayed bytes belong to and a new generation alone is insufficient. Known retired-link ACL is discarded without hiding the
+disconnect event or disabling storage. This restricts repeated connections within one controller lifetime; establish and measure a safe retirement and reuse boundary in the
+connection and reconnect tasks before durable bonded reconnect can qualify (it does not relax native closure).
 
 ## Bluetooth runtime re-grant after radio work
 
-The current [HCI adapter](devices/bluetooth-hci.md#progress-and-failure) sets a
-sticky dirty flag on non-read-only command publication, connection admission or
-ACL publication. Release/exit then leaves Bluetooth unavailable until reboot,
-even when links and credits later settle. Only fully accounted read-only
-sessions have a confirmed clean re-grant path. This implements conservative
-cleanup under the accepted exclusive controller lifetime; it is not measured
-radio cleanup or automatic service recovery.
-
-Revisit with the service/connection tasks when they can establish and qualify
-explicit radio-procedure termination, receive continuity and independent USB
-accounting. The accepted handle-reuse boundary is also required for reconnect.
+The [HCI adapter](devices/bluetooth-hci.md#progress-and-failure) sets a sticky dirty flag on non-read-only command publication, connection admission or ACL publication, so release
+or exit then leaves Bluetooth unavailable until reboot even if links and credits later settle; only fully accounted read-only sessions have a confirmed clean re-grant path. This is
+conservative cleanup under the accepted exclusive controller lifetime, not measured radio cleanup or automatic service recovery. Revisit with the service and connection tasks once
+they can establish explicit radio-procedure termination, receive continuity and independent USB accounting (the handle-reuse boundary is also required for reconnect).
 
 ## HD Audio jack routing at playback start
 
