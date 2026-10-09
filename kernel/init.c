@@ -2,6 +2,7 @@
 #include <arch/amd/renoir_inventory.h>
 #include <arch/clock.h>
 #include <arch/smp.h>
+#include <arch/debug.h>
 #include <kernel/init.h>
 #include <kernel/acpi.h>
 #include <kernel/user/launch.h>
@@ -82,6 +83,9 @@
   if (options->display_inventory) {
     renoir_inventory(boot);
   }
+  if (options->debug_checkpoint) {
+    arch_debug_enable();
+  }
   display_init(boot, options->display_size, options->display_timing,
       options->display_timing_metrics);
 
@@ -138,6 +142,9 @@
        heap.retired_bytes);
 
   user_launch_initial(options);
+  if (options->debug_checkpoint) {
+    arch_debug_checkpoint();
+  }
   arch_clock_maintain();
   klog("Caelum ready: starting preemptive userspace\n");
   task_schedule();

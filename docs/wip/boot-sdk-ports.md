@@ -96,6 +96,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-09): [SDL2 clipboard](clipboard.md#graphics-activation),
+  accepted graphics authority/activation, SDL adapter and opt-in manual qualification tool.
 - **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
   shared 128 MiB selected-image capture ceiling and failure rollback qualification,
   using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
@@ -146,8 +148,8 @@ Other candidates; current assignments are listed above.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
 - [Network kernel debugger](network-debugger.md): owner-requested planning for
-  opt-in LAN GDB during native PXE bring-up; accepted stop/transport plan awaits
-  task assignment.
+  opt-in LAN GDB during native PXE bring-up; checkpoint foundation assigned,
+  transport and later tasks await assignment.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after

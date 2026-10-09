@@ -7,6 +7,11 @@ case "$BOOT_MENU_TIMEOUT" in
   ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;
 esac
 command_line="init=$boot_init"
+case "${DEBUG_CHECKPOINT:-0}" in
+  0) ;;
+  1) command_line="$command_line debug.checkpoint=1" ;;
+  *) echo 'DEBUG_CHECKPOINT must be 0 or 1.' >&2; exit 1 ;;
+esac
 case "${LOG_UDP:-0}" in
   0) ;;
   1) command_line="$command_line log.udp=1" ;;

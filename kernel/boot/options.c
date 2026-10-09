@@ -102,6 +102,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
   const char *remote_beacon = NULL, *log_udp = NULL, *display_size = NULL;
   const char *display_timing = NULL, *display_timing_metrics = NULL, *display_inventory = NULL;
+  const char *debug_checkpoint = NULL;
 
   char *cursor = command_line_storage;
   while (*cursor) {
@@ -138,6 +139,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&remote_beacon, key, value);
     } else if (same_text(key, "log.udp")) {
       take_option(&log_udp, key, value);
+    } else if (same_text(key, "debug.checkpoint")) {
+      take_option(&debug_checkpoint, key, value);
     } else if (same_text(key, "display.size")) {
       take_option(&display_size, key, value);
     } else if (same_text(key, "display.timing")) {
@@ -154,6 +157,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
     panic("kernel command line must name init");
   }
   options.log_udp = log_udp && flag_option("log.udp", log_udp);
+  options.debug_checkpoint = debug_checkpoint &&
+    flag_option("debug.checkpoint", debug_checkpoint);
   if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
     panic("remote.beacon must name 1..%u printable ASCII bytes without spaces",
         REMOTE_BEACON_NAME_MAX);

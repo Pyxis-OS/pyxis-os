@@ -44,5 +44,7 @@ void apic_end_interrupt(void);
 void apic_send_reschedule(uint32_t destination);
 /* IF=0. Does not wait: false leaves the command unsent if ICR is busy. */
 bool apic_try_send_tlb_flush(uint32_t destination);
+/* IF=0. Nonblocking physical NMI delivery; no vector or APIC EOI. */
+bool apic_try_send_nmi(uint32_t destination);
 
 #endif

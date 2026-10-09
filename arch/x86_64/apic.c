@@ -24,6 +24,7 @@
 #define APIC_ICR_HIGH 0x310
 #define APIC_ICR_DESTINATION_SHIFT 24
 #define APIC_ICR_SEND_PENDING (1u << 12)
+#define APIC_ICR_DELIVERY_NMI (4u << 8)
 #define APIC_ICR_POLL_LIMIT 1000000u
 #define APIC_LVT_CMCI 0x2f0
 #define APIC_LVT_TIMER 0x320
@@ -310,5 +311,17 @@ bool apic_try_send_tlb_flush(uint32_t destination)
   }
   apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
   apic_write(APIC_ICR_LOW, APIC_TLB_FLUSH_VECTOR);
+  return true;
+}
+
+bool apic_try_send_nmi(uint32_t destination)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(destination <= XAPIC_MAX_ID);
+  if (apic_read(APIC_ICR_LOW) & APIC_ICR_SEND_PENDING) {
+    return false;
+  }
+  apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
+  apic_write(APIC_ICR_LOW, APIC_ICR_DELIVERY_NMI);
   return true;
 }

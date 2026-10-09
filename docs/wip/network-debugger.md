@@ -1,8 +1,8 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Accepted decisions and task order below are not implemented. No implementation
-is assigned; task 1 requires an explicit owner assignment. Goal: GDB on the
+Task 1 is implemented and qualified for review on 2026-10-09. Tasks 2–4
+remain unimplemented and unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
 
@@ -29,8 +29,9 @@ Read [remote debugging](../development/remote-debugging.md),
   gate is not proof all buffers are free. New reversible handoff must account
   for device-owned, completed, borrowed and reposted slots, interrupted publication,
   pending TX, queue indices and interrupt masks with one authority.
-- NMI currently follows fatal exception handling; only #DF has an IST stack.
-  There is no resumable NMI stop, #BP/#DB interception or debug-register owner.
+- Default-off NMI retains fatal exception handling and only #DF uses IST.
+  Task 1 adds the opt-in checkpoint NMI/IST path below; #BP/#DB interception
+  and debug-register ownership remain absent.
   Existing TLB-flush IPIs acknowledge translation retirement, not CPU quiescence.
 - Ordinary VM query/scratch helpers are forbidden in interrupt/fault entry and
   can be busy when interrupted; malformed page tables can panic their walker.
@@ -230,18 +231,82 @@ info threads
 All-stop stops CPUs, **not DMA or device clocks**. Timers/sleeps/deadlines age;
 keep monotonic elapsed time, do not silently rebase deadlines. The polling loop
 must maintain the software-extended 32-bit HPET below its wrap interval even with
-no packets; losing wraps requires reboot. Audio's 5 ms watchdog/20 ms observation
+no packets; losing wraps requires reboot. Before tasks 3/4 enable arbitrary entry,
+qualify clock-read/maintenance reentry or defer past an unsafe update; the task 1
+known checkpoint does not qualify arbitrary interrupted clock contexts. Audio's 5 ms watchdog/20 ms observation
 horizon cannot survive a normal debugger pause: use an inactive-audio bring-up
 profile, not a promise to pause playback. Long stops can expire outstanding
 five-second network/block deadlines; drain confirmed completions on return,
 then honor existing failure/retention rules for still-owned requests. Stopping
 inside an interrupted mutation is not a coherent snapshot of device state.
 
+## Implemented checkpoint foundation
+
+`make debug DEBUG_CHECKPOINT=1 CPUS=4` opts into the one-shot BSP checkpoint;
+normal images omit the option. The stop occurs after initial task publication,
+before BSP scheduling. Each CPU has a permanent caller-owned 16 KiB RW/NX IST
+stack with an unmapped guard on each side. An inactive IDT copy is prepared before
+AP startup; only opted-in CPUs load its NMI gate. Disabled boots allocate no
+checkpoint state/stacks/IDT and add no timer, scheduler or ordinary IPI polling.
+No new normal log lines are emitted. Unexpected NMIs retain fatal reporting.
+
+A self-NMI captures the BSP's real frame and moves service onto its IST. The
+GS-independent entry/handler never swaps or writes GS bases, captures all integer
+registers/return state, actual CR3 and both GS bases, and leaves that state unchanged
+on IRET. The BSP sends one NMI per peer. Snapshots precede release-published
+acknowledgements; COMPLETE requires every online CPU. The one-second acquisition
+budget covers dispatch and acknowledgement. INCOMPLETE freezes missing-CPU flags,
+keeps resources and captured peers parked, ignores release/expiry even after late ACKs,
+and maintains the clock until physical/QEMU reset. NMI source attribution while
+armed has the limitation described above. The parked path executes no IRET,
+so further NMIs stay blocked until its return
+([AMD64 Volume 2, §8.1.4](https://docs.amd.com/v/u/en-US/24593_3.44_APM_Vol2)).
+
+At COMPLETE, release requests are cleared and the fixed 30-second monotonic
+expiry starts. A matching generation request or expiry releases all peers;
+a mismatched request does not. QEMU's GDB inspects owned snapshots and sets only
+the control field; this is not a kernel memory-write/debugger protocol feature:
+
+```gdb
+set may-call-functions off
+target remote 127.0.0.1:1234
+watch arch_debug_stop.phase
+continue
+# Repeat continue through PREPARED/ACQUIRING until COMPLETE, then inspect:
+p arch_debug_stop
+p *arch_debug_stop.cpus@4
+set var arch_debug_stop.release_generation = arch_debug_stop.generation
+delete breakpoints
+continue
+```
+
+Keep the exact image ELF. The scaffold has no NIC/RSP, arbitrary break-in,
+panic interception, guarded target memory operations, breakpoints or stepping.
+Qualification: ordinary kernel/image builds with verified unchanged SDK/userland/
+ports bundles, then interactive Q35/KVM/GDB with one and four CPUs. Complete
+snapshots, IST use, unmapped guards, mismatched/matching release, original BSP
+register restoration and 30-second expiry were inspected. Holding APs with GDB
+reached INCOMPLETE; late ACKs and a matching release still left all CPUs parked
+past 30 seconds. Normal network/remote echo worked after complete release.
+QEMU used a direct 64-bit HPET; native 32-bit wrap maintenance and syscall-window
+entry were inspected in code, not physically exercised. Performance qualification
+is recorded in [matched checkpoint qualification](../development/experiments/debug-checkpoint/README.md).
+The review's interleaved five-boot-per-image follow-up met its acceptance criterion:
+baseline/option-off medians 0.52/0.49 s, both ranges 0.49–0.52 s. No measurable
+option-off slowdown was reproduced in that run; the timing gate is closed.
+No isolated IPI-latency, speedup or native debugger result is claimed.
+
 ## Accepted task split and qualification
 
-All tasks are unimplemented and await assignment.
+Task 1 is complete for review; tasks 2–4 await assignment. Accepted task 1 control:
+`debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
+and before BSP scheduling. A complete stop resumes on whichever comes first:
+QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
+expiry. This is checkpoint expiry, not transport-loss detection. Incomplete stops
+remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
+`debug.wait` when task 3 provides transport; keep no compatibility option.
 
-1. **Small first task: resumable stop foundation.**
+1. [x] **Small first task: resumable stop foundation.**
 
    Owner can then inspect captured CPU frames and resume a known checkpoint using
    QEMU's existing debugger; native network GDB is not available yet.
@@ -305,7 +370,7 @@ ordinary breakpoint before any GPU register write. No native result is claimed
 here. Early boot/IF-clear hangs and a failed NIC remain outside this initial
 coverage; keep physical reset available.
 
-## Accepted owner decisions (2026-10-09; not implemented)
+## Accepted owner decisions (2026-10-09; transport/features not implemented)
 
 1. **Transport/availability:** polled UDP plus localhost TCP bridge,
    one opt-in named/MAC-selected same-LAN peer after active net0/IPv4. Defer
@@ -331,6 +396,6 @@ it is 32-bit and does not provide these ownership/stop contracts. No example
 code is copied here; protocol implementation does not import GDB itself. Any later import needs a pinned owner mirror/cache source,
 per-file licence/provenance and preserved notices; audit other GDB files separately.
 
-Only docs/wip changes in this PR. No stub, bridge, boot option, hardware access,
-probe branch or qualification infrastructure added. Accepted plan only; stop
-for review and await the owner's explicit task 1 assignment.
+Task 1 adds the checkpoint foundation only. No network stub, bridge, hardware
+monitor access or qualification infrastructure is added; later tasks require
+separate owner assignment.
