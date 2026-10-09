@@ -252,12 +252,12 @@ when a failure appears.
 
 ## Renoir scanout memory ownership
 
-[Read-only flip inventory](development/experiments/renoir-flip-inventory/README.md)
-has not proved a firmware/boot-delegated spare pool. Pre-OS PSP/SMU reservations
-remain unknown; visible ATOM/DMCUB exclusions do not prove their complement free.
-No spare allocation or flips are permitted without complete ownership and
-translation evidence. Revisit after the owner's native inventory boot and an
-explicit pool handoff, before any write-backend task.
+[Native flip inventory](development/experiments/renoir-flip-inventory/README.md)
+identifies the 512 MiB UMA range and mono route. BAR0 correlation and inherited
+pitch semantics remain unresolved; pre-OS PSP/SMU reservation completeness is
+unknown. A Linux-derived exclusion standard is proposed for one spare, pending
+owner acceptance. No allocation or flips are implemented. Revisit after that
+decision and read-only BAR0/pitch evidence, before the write-backend task.
 
 ## Native Renoir presentation qualification
 
