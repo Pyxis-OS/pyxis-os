@@ -146,6 +146,9 @@ Other candidates; current assignments are listed above.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
+- [Network kernel debugger](network-debugger.md): owner-requested planning for
+  opt-in LAN GDB during native PXE bring-up; proposed stop/transport tasks await
+  owner review and assignment.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after
