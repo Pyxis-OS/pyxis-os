@@ -40,4 +40,22 @@ Accepted 2026-10-08:
 - **Converters run code on paste.** Which converters exist, what authority they
   receive and how a failed or slow conversion is reported belong to the
   proposal.
-- **Selections** come from the [system pointer](pointer.md) in terminals.
+- **Selections** come from the [system pointer](../interfaces/pointer.md) in
+  local terminals and mux. Highlighting a selection does not publish clipboard
+  data or supply a Copy/Paste operation.
+
+## Proposed terminal selection handoff
+
+On an eventual explicit Copy action, the local terminal or mux selection owner
+would freeze selected text into an owned snapshot that survives source exit,
+then publish it to the chosen per-space or shared store. Both sources should
+converge on the accepted typed-object/text-form/converter direction above.
+The export interface, Copy/Paste gestures, store choice and cross-space authority
+remain proposal decisions; the pointer milestone supplies none of those operations.
+
+Proposed text extraction joins selected physical rows with line feeds, omits
+unselected cells and styling, and trims terminal padding at row ends. It does
+not infer soft wraps or expand the terminal to Unicode widths. Retained cells
+currently hold 8-bit glyph indices, not decoded UTF-8. The proposal must settle
+the glyph encoding and its text representation before labeling a snapshot
+`text/plain`; arbitrary terminal bytes must not be advertised as UTF-8.

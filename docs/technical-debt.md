@@ -535,27 +535,69 @@ source inspection into measured coverage.
 
 ## Native system pointer qualification
 
-For the [system pointer milestone](wip/pointer.md), the owner accepted native
-PS/2 validation deferral on 2026-10-08 because the ThinkPad is occupied by the
-[Bluetooth investigation](development/bluetooth-investigation.md). Matched QEMU checks on boot,
-Bochs and VirtIO displays may close the milestone without a native run. This
-records an accepted qualification limit, not a completed native check.
+The owner accepted native PS/2 deferral on 2026-10-08 while the ThinkPad was
+occupied by the [Bluetooth investigation](development/bluetooth-investigation.md).
+Matched QEMU checks on boot, Bochs and VirtIO displays suffice to close the
+[system pointer](interfaces/pointer.md); this native entry remains open.
 
-The consequence is that PS/2 touchpad/TrackPoint routing, held-button behavior,
-lock escape/relock, local selection/mux wheel behavior, and cursor composition/cost
-on the ThinkPad boot framebuffer
-remain unqualified on physical hardware even after successful QEMU checks.
-Nested-VM results do not establish native input latency or display performance.
+Owner-reported boot 1, 2026-10-09: ThinkPad, PXE main `114f2ac`, PS/2 touchpad
+and TrackPoint, 1920x1080 boot framebuffer.
 
-Revisit when the Bluetooth investigation finishes: the owner will run a batch
-of native ThinkPad checks, including this deferred PS/2 check.
+- Checked and working: ordinary motion and buttons, tab clicks, and **text
+  selection**. The owner did not specify local terminal, multiplexer or both.
+  A `screenshot` taken from the remote terminal while the local I-beam was
+  showing contained the cursor.
+- Not checked: multiplexer wheel; Quake lock/Super+Esc/click-to-relock; space and
+  layer changes with the cursor shown; program cursor image/hotspot/show/hide
+  and bounded warp; cursor cost samples.
+- The default arrow looked wrong natively. The task 5 redraw addresses its
+  shape; its updated native appearance remains to be judged by the owner.
 
-- [ ] Owner native ThinkPad pointer check: ordinary motion/buttons, tab clicks,
-  program cursor image/hotspot/show/hide and bounded warp, local-terminal/mux
-  selection, Quake lock/Super+Esc/click-to-relock, space/layer changes and capture.
-  Record kernel, userland and ports revisions, boot/display/device configuration,
-  behavior and matched cursor cost samples when the batch runs. Update this
-  entry with the results; QEMU milestone closure does not mark it complete.
+Owner-reported boot 2, 2026-10-09: ThinkPad, PXE main `183f793`, PS/2,
+1920x1080 boot framebuffer.
+
+- Checked and working: Super+Esc unlocks the cursor in Quake; switching spaces
+  with the cursor shown; text selection in the local terminal.
+- Multiplexer selection and wheel were not checked. The image had no space
+  with `multiplexer = true`; launching `mux` by hand printed its documented
+  "missing terminal, clock, session creation or launcher authority" diagnostic.
+  This is expected authority refusal, not a failure.
+- Still not checked: click-to-relock after Super+Esc; layer changes
+  (Super+Up/Down) with the cursor; program cursor image/hotspot/show/hide and
+  bounded warp; cursor cost samples.
+
+The consequence is that the remaining behavior and native cursor cost remain
+unqualified. Boot 2 establishes local-terminal selection, while multiplexer
+selection and wheel still lack a native check. Nested-VM results do not
+establish native input latency or display performance.
+
+- [ ] Finish the unchecked native items in a later owner ThinkPad batch and
+  judge the redrawn default cursor. Record revisions, boot/display/device
+  configuration, behavior and cursor cost samples. Update this entry with
+  the reported results; neither partial native coverage nor QEMU milestone
+  closure marks it complete.
+
+## System pointer selection and input limits
+
+Visible-cell selection has no export, clipboard publication or paste operation.
+Stored cells are 8-bit glyph indices, so a later owned text snapshot also needs
+an explicit encoding before it can be advertised as `text/plain`. Clipboard
+stores, gestures, capability transfer and conversion remain in the separate
+[clipboard proposal](wip/clipboard.md); revisit this boundary when that milestone
+is assigned, using both kernel-local and mux-owned selections.
+
+Mux drag autoscroll and selection across off-view history are absent; users must
+first browse the desired history into view. Kernel terminals retain visible
+cells without scrollback. Revisit these interaction limits with a concrete
+terminal-history extension. PS/2 remains the sole implemented pointer source,
+with raw counts and relative-mode Synaptics behavior. Bluetooth aggregation and
+conditional source loss, USB HID, acceleration, absolute-mode scrolling, remote
+pointer transport and multiple-display/window composition remain separate
+tracks. Revisit input routing through the
+[pointer source boundary](interfaces/pointer.md#input-source-coordination) when
+another trusted source is integrated; independent masks must not release a
+surviving source's held buttons. The current PS/2 reset hook alone does not
+implement the accepted conditional multi-source rules.
 
 ## VirtIO cursor frontend limits
 
@@ -1274,10 +1316,10 @@ and preference paths. Missing pieces:
   [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
   Revisit a blocking wait on the input and display handles when a consumer
   waits for events.
-- **Windows and cursor:** one fullscreen window; no system cursor,
-  `SDL_ShowCursor` or hardware cursor. The pointer position is SDL's, built
-  from relative counts. The [system pointer](wip/pointer.md) milestone replaces
-  that translation after the SDL2 milestone.
+- **Windows:** one fullscreen window; multiple windows remain outside the
+  current display contract. System pointer positions, program images,
+  show/hide, bounded warp and relative lock now use the
+  [native pointer contract](interfaces/pointer.md).
 - **Text:** US layout only, from the shared kernel table.
 - **Not covered by validation:** key repeat, because QEMU's injected PS/2 input
   has no typematic repeat.

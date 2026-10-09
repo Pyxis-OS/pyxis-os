@@ -113,7 +113,7 @@ The running-only 5 ms watchdog remains; steady playback has no codec polling.
 This is the **same wake/sleep → timer handling → HPET traffic pattern** as
 [#559's send measurements](https://git.internal/PyxisOS/pyxis-os/src/branch/net/throughput-baseline/docs/wip/network-throughput.md#send),
 which found about 27 physical counter reads per TCP segment. That work is now
-merged; its [send investigation](../../network-throughput.md#send)
+merged; its [send investigation](../../network-throughput.md#qemu-results-2026-10-08)
 retains the measurements. Audio's strict
 timer group accounts for about **158–160 / 256–259 HPET reads per 10 ms** with
 one/eight sessions; the broader group is **205–207 / 338–342 reads**. Readiness

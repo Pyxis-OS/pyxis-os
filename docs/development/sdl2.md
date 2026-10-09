@@ -2,10 +2,9 @@
 
 Pyxis carries upstream SDL 2.32.10 with a native backend, as a development
 library for graphical ports. Its first consumer is
-[DevilutionX](../userland/devilutionx.md), an opt-in build. The milestone
-completed on 2026-10-08, and its
-[native ThinkPad check](../technical-debt.md#sdl2-and-devilutionx-native-qualification)
-passed the same day.
+[DevilutionX](../userland/devilutionx.md), an opt-in build. Its
+[native ThinkPad qualification](../technical-debt.md#sdl2-and-devilutionx-native-qualification)
+is recorded separately from the QEMU measurements below.
 
 The [recipe README](../../ports/sdl2/README.md) documents the backend file by
 file; this page is the overview.
@@ -48,7 +47,7 @@ optional: without it, or without a mouse, the program runs from the keyboard.
 - **Keyboard.** Pyxis key positions map to SDL scancodes. Text input comes from
   the US layout shared with the kernel's terminal (`pxe/key_layout.h`). Control,
   Alt and Super suppress text.
-- **Pointer.** The [native protocol](../devices/mouse.md#userspace-pointer-sessions)
+- **Pointer.** The [native protocol](../interfaces/pointer.md#userspace-pointer-sessions)
   provides 56-byte events with surface-local positions and geometry/mapping
   identities. Ordinary SDL motion follows those positions; native locked input
   supplies relative `dx`/`dy`. `SDL_WarpMouseInWindow` requests bounded owner
@@ -65,8 +64,9 @@ optional: without it, or without a mouse, the program runs from the keyboard.
   1 through 64 pixels per dimension, with straight-alpha BGRA and an in-image
   hotspot. The default is the kernel arrow; `SDL_ShowCursor` changes native saved
   visibility, allowing a program to draw its own cursor. Lock forces hiding and
-  restores the saved preference on unlock. The kernel currently composes these
-  images in software on every display backend.
+  restores the saved preference on unlock. Boot and Bochs compose images in
+  software; VirtIO uses its hardware cursor and blends into active captures
+  separately. See [display presentation](../kernel/display.md#software-pointer).
 - **Focus.** Focus changes and input resets release every held key and button.
 - **Timer.** Ticks and the performance counter come from `clock_now` in
   nanoseconds, and `SDL_Delay` from `clock_sleep_for`.
@@ -90,7 +90,7 @@ time, and native pointer position/lock authority in SDL mouse core. The last
 patch prevents synthetic warp updates and relative-mode fallback after native
 refusal; it retains other video drivers' behavior.
 
-## What the milestone added elsewhere
+## Related development interfaces
 
 - **libc:** `fileno` (the stream's existing descriptor, or -1 with `EBADF`),
   `fseeko`/`ftello`, a "C"-only `setlocale`, `roundf`, `sqrtf` and `wcslen`. See
@@ -104,9 +104,7 @@ refusal; it retains other video drivers' behavior.
   main source, documented in the [ports README](../../ports/README.md).
 - **CMake packages** for fmt (`fmt::fmt`) and SDL2.
 
-## Accepted decisions
-
-The owner accepted these on 2026-10-08:
+## Integration choices
 
 1. **First consumer:** DevilutionX, with the game data as a local build
    input.
@@ -155,7 +153,7 @@ DevilutionX's frame rates in town, at 1280x768 on standard VGA, are in its
 [reference](../userland/devilutionx.md#measurements): 56.4–60.8 FPS with the
 Pyxis default "Limit FPS", and 419–427 FPS uncapped.
 
-The later [pointer tasks 1 and 2 qualification](system-pointer-qualification.md#task-2-and-joint-integration)
+The separate [pointer qualification](system-pointer-qualification.md#task-2-and-joint-integration)
 records native ordinary motion, warp, lock refusal/revocation, game relock and
 cursor choices. DevilutionX's supplied 33x28 cursor included 86 intermediate
 alpha levels; its own software-cursor option hid the system cursor while
