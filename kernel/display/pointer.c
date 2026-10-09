@@ -1,3 +1,4 @@
+#include <kernel/display.h>
 #include <kernel/display_capture.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
@@ -38,8 +39,17 @@ void pointer_present_copy(const struct framebuffer *layout,
 {
   KASSERT(offset <= layout->size && bytes <= layout->size - offset);
   KASSERT(!(offset % sizeof(uint32_t)) && !(bytes % sizeof(uint32_t)));
-  if (!frame->visible || !bytes) {
+  bool hardware = display_pointer_hardware();
+  if (hardware) {
     screen_capture_copy(offset, pixels, bytes);
+    if (!screen_capture_active()) {
+      return;
+    }
+  }
+  if (!frame->visible || !bytes) {
+    if (!hardware) {
+      screen_capture_copy(offset, pixels, bytes);
+    }
     return;
   }
   KASSERT(frame->pixels && frame->width && frame->width <= POINTER_IMAGE_MAX &&
@@ -55,7 +65,9 @@ void pointer_present_copy(const struct framebuffer *layout,
   int64_t bottom = top + frame->height;
   if (right <= 0 || bottom <= 0 || left >= (int64_t)layout->width ||
       top >= (int64_t)layout->height) {
-    screen_capture_copy(offset, pixels, bytes);
+    if (!hardware) {
+      screen_capture_copy(offset, pixels, bytes);
+    }
     return;
   }
 
@@ -78,7 +90,9 @@ void pointer_present_copy(const struct framebuffer *layout,
     }
     if (offset < row_start) {
       size_t prefix = row_start - offset;
-      screen_capture_copy(offset, source, prefix);
+      if (!hardware) {
+        screen_capture_copy(offset, source, prefix);
+      }
       source += prefix;
       offset += prefix;
     }
@@ -90,14 +104,24 @@ void pointer_present_copy(const struct framebuffer *layout,
     size_t image_y = (size_t)((int64_t)y - top);
     const uint8_t *image = frame->pixels +
         (image_y * frame->width + image_x) * sizeof(uint32_t);
-    memcpy(staged, source, count);
+    if (hardware) {
+      screen_capture_read(offset, staged, count);
+    } else {
+      memcpy(staged, source, count);
+    }
     for (size_t x = 0; x < columns; ++x) {
       staged[x] = blend_pixel(layout, staged[x], image + x * sizeof(uint32_t));
     }
-    screen_capture_copy(offset, staged, count);
+    if (hardware) {
+      screen_capture_copy_only(offset, staged, count);
+    } else {
+      screen_capture_copy(offset, staged, count);
+    }
     source += count;
     offset += count;
   }
   /* This also forwards device row padding without blending or compacting it. */
-  screen_capture_copy(offset, source, end - offset);
+  if (!hardware) {
+    screen_capture_copy(offset, source, end - offset);
+  }
 }

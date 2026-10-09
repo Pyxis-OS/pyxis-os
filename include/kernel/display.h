@@ -4,6 +4,8 @@
 #include <kernel/boot.h>
 #include <kernel/fb/fb.h>
 
+struct pointer_frame;
+
 /* Physical screen, distinct from a space's graphics capability. BSP, before
  * AP startup: retain the boot mapping and prepare the first supported device. */
 void display_init(const struct boot_info *boot, const char *size);
@@ -38,9 +40,13 @@ void display_resize_disable(void);
  * pair with end, including cancelled frames. Copy checks panic ownership in
  * bounded chunks; end submits/drains the frame before relinquishing the target. */
 bool display_begin_frame(void);
+/* Stable backend selection; boot and Bochs use software composition. */
+bool display_pointer_hardware(void);
 void display_copy(size_t offset, const void *pixels, size_t bytes);
-/* True only after successful ordinary submission/drain and no panic takeover. */
-bool display_end_frame(void);
+/* FRAME is the leased pointer snapshot, or NULL for cancelled begin. True only
+ * after ordinary submission and pointer posting, without panic. Active capture
+ * additionally requires matching hardware pointer completion. */
+bool display_end_frame(const struct pointer_frame *frame);
 
 /* First panic claimant, any CPU, IF=0, without GS/locks/allocation. Permanently
  * stop normal writes, fence an interrupted local writer or boundedly wait for

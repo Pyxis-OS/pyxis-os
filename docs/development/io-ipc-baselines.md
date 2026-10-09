@@ -11,7 +11,7 @@ The observations below are warmed nested-KVM measurements from 2026-09-28.
 Owner-host and physical-hardware results are unavailable. No performance target,
 optimization, kernel tracing or CI performance gate is part of this baseline.
 Existing [allocation profiling](allocation-profiling.md) and
-[transmit-only ttcp](../devices/tcp.md#transmit-only-ttcp) remain separate context: their
+[`ttcp`](../devices/tcp.md#ttcp) remain separate context: their
 workload, direction and completion boundaries differ from these results.
 
 ## Measurement contract
