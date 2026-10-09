@@ -232,7 +232,7 @@ ThinkPad AX200 USB function (`8087:0029`). The
 LE scan on warm-host passthrough. The [mouse proposal](bluetooth-mouse.md) records
 kernel USB/Intel/HCI ownership and a trusted userspace upper stack, Secure
 Connections enrollment, and cold initialization/durable bonds/native pointer
-use required for closure. HID over GATT feeds the accepted [system pointer](pointer.md)
+use required for closure. HID over GATT feeds the [system pointer](../interfaces/pointer.md#input-source-coordination)
 with kernel-owned positions. Later policy rounds remain open; no implementation
 task or USB HID work is authorized by this direction.
 
