@@ -219,9 +219,8 @@ larger-line viewports are not implemented ([terminal contract](userland/terminal
 buffering when interactive workloads make the cost material.
 
 [Shell history](userland/shell.md#commands-and-quoting) lives in memory, at most 100 lines per shell process, so it is lost on exit or
-reboot and new sessions start empty. The accepted follow-up (owner, 2026-10-09) saves it per space in `home://`; since one space can
-run several shells and spaces can share a home, that task must first decide how concurrent shells write the history. Ctrl+R search is
-deferred too.
+reboot and new sessions start empty. The accepted follow-up (owner, 2026-10-09) saves it in `home://`; how concurrent shells write it
+is [proposed](wip/shell-history-persistence.md). Ctrl+R search is deferred too.
 
 ## Presenter-drawn block cursor
 
