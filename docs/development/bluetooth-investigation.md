@@ -71,10 +71,13 @@ report preserves that distinction and the tree-verification provenance.
 
 ## Implemented boundary and remaining qualification
 
-Only [private kernel interrupt-IN support](../devices/usb-interrupt-in.md) is
-merged as reusable code. HCI/state, firmware-skip and LE-scan consumers remain
-on the unmerged probe branches identified by their reports. There is no
-production Bluetooth class binder, raw-USB ABI or mouse stack on main.
+When the investigation completed, only [private kernel interrupt-IN
+support](../devices/usb-interrupt-in.md) was merged as reusable code. HCI/state,
+firmware-skip and LE-scan consumers remained on the unmerged probe branches
+identified by their reports, and those branches are still unmerged. The runtime
+HCI transport has since merged in #552 and is documented in
+[AX200 runtime HCI transport](../devices/bluetooth-hci.md). Main still has no
+raw-USB ABI, pairing, HID input, Bluetooth service or mouse stack.
 
 The shared implementation admits boot-present, root-connected full-speed
 devices, with one stream per device, two receives up to 257 bytes and eight
