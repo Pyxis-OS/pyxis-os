@@ -13,6 +13,10 @@ struct key_event {
 };
 
 bool keyboard_available(void);
+/* BSP, IF=0, outside the decoder. One bounded physical-controller pump. */
+bool keyboard_sync_device(void);
+/* BSP, IF=0, after decoding: includes raw loss/bytes and partial scan sequences. */
+bool keyboard_input_complete(void);
 
 /* One consumer on the BSP, outside interrupt entry. Nonblocking; false means
  * no complete event is available and leaves *event unchanged. Preserves IF.

@@ -14,6 +14,19 @@
 #define TERMINAL_POINTER_DEFAULT_IMAGE POINTER_DEFAULT_IMAGE
 #define TERMINAL_POINTER_STATE POINTER_STATE
 #define TERMINAL_POINTER_VIEW_CHANGED UINT64_C(12)
+#define TERMINAL_POINTER_CLIPBOARD_REFUSE UINT64_C(13)
+#define TERMINAL_POINTER_CANCEL_CLIPBOARD UINT64_C(14)
+
+/* CONTROL may discard its native action even when the selected layer grant
+ * was withheld. This operation confers no store access. */
+struct terminal_pointer_clipboard_refuse_request {
+  struct message_header header;
+  uint64_t action_id, generation, mapping_identity, operation;
+};
+
+/* Header-only, acquired CONTROL owner only: cancels active clipboard framing
+ * and unused activation for a focus change within the same pane layout. Spatial
+ * identity, queued pointer reports and accepted button state remain intact. */
 
 /* Exclusive process ownership of the local outer terminal. Handle closure or
  * copies never release or transfer it; release/exit restores kernel handling.

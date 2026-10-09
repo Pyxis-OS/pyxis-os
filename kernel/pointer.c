@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <arch/smp.h>
 #include <kernel/display.h>
 #include <kernel/mm/heap.h>
@@ -292,6 +293,7 @@ void pointer_geometry_changed(struct space *space)
 
 void pointer_terminal_view_changed(struct pointer_object *pointer)
 {
+  clipboard_space_cancel(pointer->space);
   KASSERT(arch_cpu_index() == 0 && pointer_is_terminal(pointer));
   if (drag.space == pointer->space && drag.kind == DESTINATION_TERMINAL) {
     drag = (struct pointer_destination){0};

@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
@@ -51,6 +52,7 @@ static enum mm_result destroy_process(struct process *process)
   KASSERT(process->lifetime != PROCESS_SUBMITTED && !process->task &&
       !process->task_storage);
 
+  clipboard_process_exit(process);
   keyboard_process_exit(process);
   pointer_process_exit(process);
   bluetooth_hci_process_exit(process);

@@ -15,6 +15,7 @@ struct display_object;
 struct keyboard_object;
 struct pointer_object;
 struct audio_object;
+struct clipboard_space;
 
 struct space
 {
@@ -27,9 +28,11 @@ struct space
   struct pointer_object *pointer; /* Space retains the initial reference. */
   struct audio_object *audio; /* Space retains the initial reference. */
   struct pointer_object *terminal_pointer; /* Separate outer-terminal control. */
+  bool clipboard_local_enabled, clipboard_shared_enabled;
   bool terminal_control_enabled; /* Trusted first-process startup opt-in. */
   bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
+  struct clipboard_space *clipboard; /* Kernel-owned volatile local store/state. */
   struct console_object *console; /* Space retains the initial reference. */
   /* Bitmaps over boot CPU indices, space_cpu_words() words each. The ceiling
    * is fixed at creation (empty when init did not start). The effective set starts
@@ -83,6 +86,9 @@ bool space_pointer_input_available(void);
 uint32_t space_pointer_suppressed_buttons(void);
 /* BSP, preserves IF: apply physical reports before a terminal view boundary. */
 void space_pointer_sync_input(void);
+/* BSP, IF=0, outside input decoding. Bounded controller pump plus decoder drain;
+ * false means hardware or a partial physical scan sequence remains pending. */
+bool space_keyboard_sync_input(void);
 size_t space_pointer_content_y(void);
 struct space *space_pointer_tab(int64_t x, int64_t y);
 void space_pointer_select(struct space *space);

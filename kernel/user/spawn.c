@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <abi/display.h>
 #include <abi/keyboard.h>
@@ -116,7 +117,7 @@ struct launch_preparation *launcher_batch_create(void)
 }
 
 /* Kernel-added resources for a new space's first process. */
-#define SPACE_DEVICE_RESOURCES 8
+#define SPACE_DEVICE_RESOURCES 10
 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
@@ -126,6 +127,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
   struct kernel_object *console = &space->console->object;
   handle_t input, output, keyboard, pointer, display, audio, control;
   handle_t terminal_pointer = HANDLE_INVALID;
+  handle_t local_clipboard = HANDLE_INVALID, shared_clipboard = HANDLE_INVALID;
   handle_t streams[STARTUP_STREAM_COUNT];
   enum capability_result result = capability_install(&child->capabilities, console,
       CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, 0, &input);
@@ -173,6 +175,14 @@ static enum call_status install_space_devices(struct process *child, struct spac
     result = capability_install(&child->capabilities, &space->terminal_pointer->object,
         TERMINAL_POINTER_RIGHT_CONTROL, 0, &terminal_pointer);
   }
+  if (result == CAP_OK && space->clipboard_local_enabled) {
+    result = capability_install(&child->capabilities, clipboard_local(space), CLIPBOARD_RIGHTS, 0,
+        &local_clipboard);
+  }
+  if (result == CAP_OK && space->clipboard_shared_enabled) {
+    result = capability_install(&child->capabilities, clipboard_shared(), CLIPBOARD_RIGHTS, 0,
+        &shared_clipboard);
+  }
   if (result != CAP_OK) {
     return capability_status(result);
   }
@@ -195,6 +205,12 @@ static enum call_status install_space_devices(struct process *child, struct spac
   resources[count++] = (struct process_binding){"space", control};
   if (terminal_pointer != HANDLE_INVALID) {
     resources[count++] = (struct process_binding){"terminal_pointer", terminal_pointer};
+  }
+  if (local_clipboard != HANDLE_INVALID) {
+    resources[count++] = (struct process_binding){"clipboard_local", local_clipboard};
+  }
+  if (shared_clipboard != HANDLE_INVALID) {
+    resources[count++] = (struct process_binding){"clipboard_shared", shared_clipboard};
   }
   startup->resources = resources;
   startup->resource_count = count;
@@ -367,6 +383,8 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
   }
   struct space *space = space_create(request->name, request->title, ceiling);
   space->terminal_control_enabled = request->terminal_control;
+  space->clipboard_local_enabled = request->clipboard_local;
+  space->clipboard_shared_enabled = request->clipboard_shared;
   if (!capture->image) {
     space_report_unstarted(space, request->reason);
     return CALL_OK;

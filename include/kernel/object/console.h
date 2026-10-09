@@ -22,6 +22,7 @@ struct console_interrupt {
 struct console_object {
   struct kernel_object object;
   struct tty *tty;
+  struct space *space; /* Set before the owning space is published. */
   /* Caelum's log console: writes are also copied to serial, as klog is. */
   bool serial;
   struct console_interrupt interrupt;
@@ -30,6 +31,7 @@ struct console_object {
   size_t input_head, input_count;
   /* A reader keeps ownership while sleeping; queued readers cannot overtake. */
   bool input_lost, reader_active;
+  struct process *reader_process;
   struct task_wait_link *first_reader, *last_reader;
   struct task_wait *input_wait;
 };
@@ -63,7 +65,7 @@ uint64_t console_interrupt_ready(struct console_interrupt *interrupt);
 /* Any CPU, preserves IF. Input admission and geometry are separate snapshots;
  * no reader slot is reserved. RESIZED observes under the output lock. */
 uint64_t console_ready(struct console_object *console, uint64_t events,
-    uint64_t observed_generation);
+    uint64_t observed_generation, struct process *caller);
 
 /* IF=0, under the owner's input lock. While armed without passthrough, returns
  * the length of the prefix ending at the last byte 3 and sets the latch; the

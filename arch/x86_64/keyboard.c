@@ -265,3 +265,18 @@ bool keyboard_read_event(struct key_event *event)
     }
   }
 }
+
+bool keyboard_sync_device(void)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  return available && ps2_sync_input();
+}
+
+bool keyboard_input_complete(void)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  return available && !raw_count && !input_lost && !extended && !released &&
+      !pause_index && !pause_release && ps2_input_empty();
+}

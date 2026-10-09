@@ -196,11 +196,11 @@ and invalidation. Highlighting changes presented pixels rather than retained
 text/raster; capture receives the displayed result. Stored cells are 8-bit glyph
 indices, with no kernel scrollback or Unicode decoding.
 
-Selection has no Copy/publication operation and exports no text. A later
-[clipboard milestone](../wip/clipboard.md) must define an owned snapshot and its
-encoding before calling it `text/plain`. Publication, paste, converters and
-cross-space authority remain separate decisions; arbitrary glyph bytes are not
-advertised as UTF-8.
+Selection itself does not publish. Explicit [terminal clipboard](clipboard.md)
+Copy freezes an owned printable-ASCII snapshot, with LF-joined physical rows and
+trimmed trailing spaces. Non-ASCII glyphs refuse export rather than being labeled
+UTF-8. Clipboard grants, operation-specific activation and scoped paste receivers
+remain separate from pointer INPUT and terminal CONTROL authority.
 
 ## Input-source coordination
 

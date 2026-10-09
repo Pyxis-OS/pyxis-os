@@ -10,6 +10,11 @@ void ps2_init(void);
 /* Entry for both PS/2 vectors. Routes each byte to the keyboard or mouse by
  * the controller status register. Caller acknowledges the local APIC afterward. */
 void ps2_interrupt(void);
+/* BSP, IF=0. Pump the same bounded byte batch, without acknowledging an IRQ.
+ * True means the controller output buffer was empty at the final observation. */
+bool ps2_sync_input(void);
+/* BSP, IF=0. Non-consuming final controller observation after decoder drain. */
+bool ps2_input_empty(void);
 
 /* Controller access shared by the keyboard and mouse drivers. Setup runs on
  * the BSP with IF=0 and records its last step, status and reply for diagnostics. */

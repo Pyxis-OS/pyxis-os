@@ -265,6 +265,28 @@ under the output lock.
 This applies to Caelum's kernel-log terminal too. An acquired mux controller
 instead owns its spatial queue and selects from its own pane cells/history.
 Ordinary local TTY wheel input does not scroll: there is no kernel scrollback.
-No selection publishes clipboard data or provides a Copy/Paste command. The
-later [clipboard contract](../wip/clipboard.md) must define an owned-text
-snapshot and its encoding; arbitrary 8-bit glyphs are not advertised as UTF-8 text.
+Selection alone does not copy. [Terminal clipboard](../interfaces/clipboard.md)
+Copy freezes a completed selection as owned printable-ASCII text, LF-joins
+physical rows and trims trailing spaces. Selected non-ASCII glyphs refuse the
+entire operation. Ctrl+Shift+C/V uses the space-local layer; Super+Shift+C/V uses
+the shared layer. Caelum's log supports Copy without an application paste target.
+
+## Clipboard paste in line readers
+
+Stock libterm line readers opt into an exclusive process-owned receiver for their
+editing lifetime, using matching input READ/output WRITE. They release it on
+every return before a child/input handoff. Other/raw readers receive no paste
+fallback; an unavailable registration leaves ordinary line editing intact.
+Native reads atomically declare the key decoder's boundary, and native READABLE
+readiness wakes only the registered process for BEGIN/DATA/END/CANCEL records.
+These records do not enter the ordinary FIFO or key/history parser.
+
+LF/Tab become spaces at the editing cursor. Capacity exhaustion keeps the
+existing `limit_reached` cue while consuming framing. Completion/cancellation
+must be consumed and acknowledged before ordinary typing resumes, and submission
+requires a fresh physical Enter. Cancellation retains an editable inserted prefix;
+physical Ctrl+C still follows its normal line-cancel/interrupt path. Result fields
+report inserted bytes, cancellation and native status, with a notice in nonquiet
+editors. Pending older input refuses Paste rather than being flushed or deferred.
+See the [receiver contract](../interfaces/clipboard.md#safe-receiver) and
+[delivery limits](../technical-debt.md#initial-clipboard-delivery-limits).
