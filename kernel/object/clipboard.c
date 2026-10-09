@@ -703,6 +703,12 @@ void clipboard_graphics_key_event(struct space *space, struct process *owner,
   unsigned modifiers = physical->modifiers & command_modifiers;
   bool local = modifiers == KEY_MOD_CONTROL || modifiers == (KEY_MOD_CONTROL | KEY_MOD_SHIFT);
   bool shared_command = modifiers == (KEY_MOD_SUPER | KEY_MOD_SHIFT);
+  if (shared_command && physical->action == KEY_PRESS &&
+      (physical->key == KEY_C || physical->key == KEY_V)) {
+    /* Preserve system-command consumption even when held modifiers cannot arm. */
+    event->clipboard_operation = physical->key == KEY_C ? CLIPBOARD_PUBLISH : CLIPBOARD_PASTE;
+    event->clipboard_layer = CLIPBOARD_LAYER_SHARED;
+  }
   struct display_object *display = space->display;
   if (physical->action != KEY_PRESS || (physical->key != KEY_C && physical->key != KEY_V) ||
       (!local && !shared_command) || (event->modifiers & command_modifiers) != modifiers ||

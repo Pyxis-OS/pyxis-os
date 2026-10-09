@@ -47,8 +47,10 @@ struct keyboard_event {
   uint32_t action;
   uint32_t modifiers;
   uint32_t flags;
-  /* Only a fresh physical Copy/Paste press carries metadata. Public key fields
-   * never supply authority; the kernel checks this opaque action identity. */
+  /* Only a fresh physical Copy/Paste press carries metadata. A shared command
+   * retains its operation/layer when refused, with a zero action ID, so adapters
+   * still consume it. Public fields never supply authority; the kernel checks
+   * the opaque nonzero action identity. */
   uint64_t clipboard_action_id;
   uint64_t clipboard_operation;
   uint64_t clipboard_layer;
