@@ -1,11 +1,10 @@
 # Claude on Pyxis
 
-Status: owner-authorized docs-only proposal, 2026-10-09. Track 1 is a small
-writable HTTPS provider and prepared requests for shell-scripted API testing,
+Status: design accepted by the owner, 2026-10-09; **not implemented**. Track 1 is
+a small writable HTTPS provider and prepared requests for shell-scripted API testing,
 then an in-repo Lua Messages harness with four native tools. Track 2, after the
-harness, investigates a Hax port. Provider-first file I/O and the development
-key-file policy are owner direction; transaction details and loop budgets below
-remain proposed defaults. This document authorizes no implementation.
+harness, investigates a Hax port. All three decisions below are accepted.
+Each implementation task still requires a separate owner go.
 
 Source inspected: Pyxis `28051508528fdd11faf848bb48d41bee80d960eb`, userland
 `74f3e2294c1153ccf00a395b3a451e03d7bbbf68`, ports
@@ -75,23 +74,24 @@ available and SHA-256 verified by the owner at the hash above. Preserve that pin
 and license when vendoring; no upstream fallback. Lua, Mbed TLS and the HTTP
 parser already have pinned recipes; no compiler-container rebuild is proposed.
 
-## Three owner decisions, with defaults
+## Three accepted owner decisions
 
-1. **Who may submit and observe a prepared request? Default: one shared
-   transaction with separate body, control and response grants.** The shell or
-   harness is its coordinator. It retains commit/status/abort authority and gives
+Accepted 2026-10-09; not implemented.
+
+1. **One shared prepared-request transaction with separate body, control and
+   response grants.** The shell or harness is its coordinator. It retains
+   commit/status/abort authority and gives
    body producers only WRITE; response consumers receive only READ. Copied
    controls share the transaction state, not independent submission authority.
    The first accepted commit freezes the body and starts at most one POST;
    later commits only report the retained state and never send again. The
    coordinator waits for all producers to finish successfully before committing.
-   Separate grants keep ordinary FILE rights narrow; adding commit to FILE WRITE
-   would let a producer submit before the coordinator has accepted its result.
-   The contract below is proposed, not an implemented protocol.
+   Separate grants keep ordinary FILE rights narrow. The accepted contract below
+   is not an implemented protocol.
 
-2. **Where does the API key live? Owner direction: a saved development key in
-   one file, delegated read-only only to the harness.** Trusted startup opens
-   that file and passes a dedicated named FILE grant, not its containing
+2. **A saved development key in one file, delegated read-only only to the
+   harness, with the environment-specific provisioning below.** Trusted startup
+   opens that file and passes a dedicated named FILE grant, not its containing
    directory. Trusted native preparation code in the harness performs a bounded
    read, closes the FILE and holds the key in process-private memory. It sends
    the key as a request-scoped `x-api-key` header in copied preparation data for
@@ -132,26 +132,26 @@ parser already have pinned recipes; no compiler-container rebuild is proposed.
    not arbitrary compromised code inside the trusted harness process. A general
    credential store and user-permission policy remain later work.
 
-3. **What may the first agent loop do? Default: automatic execution of the four
-   declared tools within one explicitly delegated project, in a finite run.**
+3. **Automatic execution of the four declared tools within one explicitly
+   delegated project, in a finite run.**
    Command input is a native argv array, not Bash syntax. Child tools receive
    selected project/runtime/network grants, no descendant launcher, administrative
    grants or credential. Trusted startup explicitly supplies a same-space
    CREATE_GROUP launcher to the harness, which stays outside each command group;
    ordinary foreground Lua's LAUNCH-only grant is insufficient for this role.
-   Make the model and budgets explicit per-run settings. Proposed defaults are
-   20 Messages requests, `max_tokens` 4096 per request, 64 KiB serialized request,
+   Make the model and budgets explicit per-run settings. Accepted working
+   defaults are 20 Messages requests, `max_tokens` 4096 per request, 64 KiB serialized request,
    1 MiB response, 16 KiB returned file/output chunks, a 300 s overall request
    deadline and a 60 s command deadline. The owner selects the model and starts
    each live run manually; keep the first live exchange small. At the end of
    every run, including a stopped or failed run, report API-reported input/output
    tokens per request and their run totals. Mark missing usage as unknown rather
    than counting it as zero; totals cover only requests with reported usage.
-   These are draft working budgets, not exact billing limits; stop when exceeded
+   These are working budgets, not exact billing limits; stop when exceeded
    without hidden retry, silent history truncation or another paid call.
    Streaming, shell-language execution and background tools require later scope.
 
-## Prepared request contract proposed for tasks 1b/1c
+## Accepted prepared request contract for tasks 1b/1c
 
 PREPARE fixes the URI, POST method, request-scoped headers, byte caps and one
 absolute deadline. It stages no network request. Provider service authority must
@@ -170,7 +170,7 @@ store or authenticated response cache. TLS trust remains the existing policy.
 | Request control, commit/status/abort | Commit freezes the body, reports submission state, and returns response access after completion. Status observes without sending; abort has the limits below. Providers check authenticated protocol rights, not payload claims. |
 | Response FILE, READ | A complete immutable response at independent offset zero, with no request-body or header access. Held readers retain it until retirement. |
 
-The proposed states are staging, submitting, complete, failed, outcome unknown
+The states are staging, submitting, complete, failed, outcome unknown
 and aborted. Commit atomically leaves staging, rejecting further writes/resizes
 through every copied body handle. If a producer races commit, its write is either
 included before that boundary or rejected; use one body producer in the first
@@ -203,8 +203,8 @@ printed handles. It can
 launch a producer with the body as stdout, commit after real successful completion,
 then grant the response as stdin to `cat` or a JSON consumer. A helper process
 would need an explicitly delegated return channel; ordinary child exit/stdout
-is not capability handoff. No new kernel transport or ownership-moving mechanism
-is proposed.
+is not capability handoff. The plan uses existing kernel transport and copied
+capability transfers.
 
 The generic libc/Lua adapter maps `"w"` to a staged writer and `"w+"` to staged
 writing followed by response reading after explicit commit. Support bounded
@@ -301,7 +301,7 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
   **After this task, the owner can:** qualify the provider's HTTP engine against local slow/error POST fixtures.
 - **1b: writable HTTPS and prepared request objects.** Implement staging,
   explicit one-shot commit, narrow rights, request-private headers, response
-  status/read access and retirement under the proposed contract. Register
+  status/read access and retirement under the accepted contract. Register
   `json+https`; keep TLS wholly in the provider. Qualify with local endpoints.
   **After this task, the owner can:** prepare and exercise native provider transactions with real body/control/response grants.
 - **1c: prepared requests through shell and generic file adapters.** Add running
