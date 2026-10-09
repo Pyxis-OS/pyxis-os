@@ -10,6 +10,16 @@
 #define HDA_CHANNELS 2
 #define QEMU_CODEC_OUTPUT 0x1af40012u
 #define QEMU_CODEC_DUPLEX 0x1af40022u
+#define ALC257_VENDOR 0x10ec0257u
+#define ALC257_SUBSYSTEM 0x17aa5081u
+#define ALC257_CODEC 0
+#define ALC257_GROUP 0x01
+#define ALC257_DAC 0x02
+#define ALC257_SPEAKER 0x14
+#define ALC257_HEADPHONE 0x21
+#define ALC257_SPEAKER_CONFIG 0x90170110u
+#define ALC257_HEADPHONE_CONFIG 0x04211020u
+#define HDA_SUBSYSTEM_READY_MS 7
 
 #define VERB_PARAMETER 0xf0000u
 #define VERB_CONNECTION_LIST 0xf0200u
@@ -19,9 +29,11 @@
 #define VERB_SET_POWER 0x70500u
 #define VERB_GET_PIN_CONTROL 0xf0700u
 #define VERB_SET_PIN_CONTROL 0x70700u
+#define VERB_GET_PIN_SENSE 0xf0900u
 #define VERB_GET_EAPD 0xf0c00u
 #define VERB_SET_EAPD 0x70c00u
 #define VERB_DEFAULT_CONFIG 0xf1c00u
+#define VERB_GET_SUBSYSTEM 0xf2000u
 #define VERB_GET_FORMAT 0xa0000u
 #define VERB_SET_FORMAT 0x20000u
 #define VERB_GET_STREAM 0xf0600u
@@ -64,9 +76,11 @@
 #define STREAM_PCM (1u << 0)
 #define PIN_OUTPUT (1u << 4)
 #define PIN_HEADPHONE (1u << 3)
+#define PIN_PRESENCE (1u << 2)
 #define PIN_EAPD (1u << 16)
 #define PIN_CONTROL_OUTPUT (1u << 6)
 #define PIN_CONTROL_HEADPHONE (1u << 7)
+#define PIN_SENSE_PRESENT (1u << 31)
 #define EAPD_ENABLE (1u << 1)
 #define DEFAULT_DEVICE_SHIFT 20
 #define DEFAULT_DEVICE_MASK 0x0f
@@ -341,8 +355,10 @@ route_matches(struct hda_controller *controller, const struct hda_route *route)
 {
   return route && route_controller == controller && selected_route.length &&
          route->vendor == selected_route.vendor && route->revision == selected_route.revision &&
+         route->subsystem == selected_route.subsystem &&
          route->codec == selected_route.codec && route->group == selected_route.group &&
          route->pin == selected_route.pin && route->converter == selected_route.converter &&
+         route->headphone_pin == selected_route.headphone_pin &&
          route->length == selected_route.length;
 }
 
@@ -389,6 +405,185 @@ set_amp(struct hda_controller *controller, uint8_t codec, uint8_t node,
   return true;
 }
 
+static bool
+native_subsystem(struct hda_controller *controller, uint64_t deadline, uint32_t *subsystem)
+{
+  if (task_deadline_expired(deadline))
+    return false;
+  uint64_t ready = task_deadline_after_ms(HDA_SUBSYSTEM_READY_MS);
+  if (ready > deadline)
+    ready = deadline;
+  for (;;) {
+    if (!command(controller, ALC257_CODEC, ALC257_GROUP, VERB_GET_SUBSYSTEM, subsystem))
+      return false;
+    if (*subsystem != UINT32_MAX)
+      return true;
+    if (task_deadline_expired(ready))
+      return false;
+    uint64_t next = task_deadline_after_ms(HDA_POWER_POLL_MS);
+    kernel_task_sleep_until(next < ready ? next : ready);
+  }
+}
+
+static bool
+native_pair_supported(void)
+{
+  const struct hda_widget *speaker = &widgets[ALC257_SPEAKER];
+  const struct hda_widget *headphone = &widgets[ALC257_HEADPHONE];
+  if (!(group_power & POWER_D0) ||
+      !supported_widget(ALC257_CODEC, ALC257_DAC, false) ||
+      widget_type(&widgets[ALC257_DAC]) != WIDGET_DAC ||
+      !supported_widget(ALC257_CODEC, ALC257_SPEAKER, true) ||
+      !supported_widget(ALC257_CODEC, ALC257_HEADPHONE, true) ||
+      speaker->config != ALC257_SPEAKER_CONFIG ||
+      headphone->config != ALC257_HEADPHONE_CONFIG ||
+      speaker->connection_count != 1 || speaker->connections[0] != ALC257_DAC ||
+      headphone->connection_count != 2 || headphone->connections[0] != ALC257_DAC ||
+      (speaker->pin_caps & (PIN_OUTPUT | PIN_EAPD)) != (PIN_OUTPUT | PIN_EAPD) ||
+      (headphone->pin_caps & (PIN_OUTPUT | PIN_HEADPHONE | PIN_EAPD | PIN_PRESENCE)) !=
+          (PIN_OUTPUT | PIN_HEADPHONE | PIN_EAPD | PIN_PRESENCE))
+    return false;
+  const uint8_t nodes[] = {ALC257_DAC, ALC257_SPEAKER, ALC257_HEADPHONE};
+  for (unsigned i = 0; i < sizeof(nodes) / sizeof(nodes[0]); ++i) {
+    const struct hda_widget *widget = &widgets[nodes[i]];
+    if ((widget->caps & (WIDGET_POWER | WIDGET_OUTPUT_AMP)) !=
+        (WIDGET_POWER | WIDGET_OUTPUT_AMP) || !(widget->power & POWER_D0) ||
+        (i && !(widget->output_amp & AMP_MUTE_SUPPORTED)))
+      return false;
+  }
+  return true;
+}
+
+static bool
+native_power(struct hda_controller *controller, const struct hda_route *route,
+             uint64_t deadline)
+{
+  return power_d0(controller, route->codec, route->group, group_power, deadline) &&
+         power_d0(controller, route->codec, route->converter,
+                  widgets[route->converter].power, deadline) &&
+         power_d0(controller, route->codec, route->pin, widgets[route->pin].power, deadline) &&
+         power_d0(controller, route->codec, route->headphone_pin,
+                  widgets[route->headphone_pin].power, deadline);
+}
+
+static bool
+native_pin_control(struct hda_controller *controller, uint8_t codec, uint8_t pin,
+                   uint32_t control, uint32_t eapd)
+{
+  uint32_t response;
+  return command(controller, codec, pin, VERB_SET_PIN_CONTROL | control, &response) &&
+         command(controller, codec, pin, VERB_GET_PIN_CONTROL, &response) &&
+         (response & 0xff) == control &&
+         command(controller, codec, pin, VERB_SET_EAPD | eapd, &response) &&
+         command(controller, codec, pin, VERB_GET_EAPD, &response) &&
+         (response & 7) == eapd;
+}
+
+static bool
+native_idle(struct hda_controller *controller, const struct hda_route *route)
+{
+  uint32_t response;
+  /* Silence both outputs before changing controls or the shared converter. */
+  return set_amp(controller, route->codec, route->pin,
+                 widgets[route->pin].output_amp, true, 0, true) &&
+         set_amp(controller, route->codec, route->headphone_pin,
+                 widgets[route->headphone_pin].output_amp, true, 0, true) &&
+         native_pin_control(controller, route->codec, route->pin, 0, 0) &&
+         native_pin_control(controller, route->codec, route->headphone_pin, 0, 0) &&
+         command(controller, route->codec, route->converter, VERB_SET_STREAM, &response) &&
+         command(controller, route->codec, route->converter, VERB_GET_STREAM, &response) &&
+         (response & 0xff) == 0;
+}
+
+static bool
+discover_native(struct hda_controller *controller, struct hda_route *route)
+{
+  uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
+  uint32_t vendor, revision, subnodes, type, subsystem;
+  if (!(controller->codec_mask & (1u << ALC257_CODEC)) ||
+      !parameter(controller, ALC257_CODEC, 0, PARAM_VENDOR, &vendor) ||
+      !parameter(controller, ALC257_CODEC, 0, PARAM_REVISION, &revision) ||
+      !parameter(controller, ALC257_CODEC, 0, PARAM_SUBNODES, &subnodes))
+    goto failed;
+  unsigned first, end;
+  if (vendor != ALC257_VENDOR || !node_range(subnodes, &first, &end) ||
+      first != ALC257_GROUP ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_FUNCTION_TYPE, &type) ||
+      (type & 0xff) != FUNCTION_AUDIO ||
+      !native_subsystem(controller, deadline, &subsystem) || subsystem != ALC257_SUBSYSTEM)
+    goto failed;
+  ktrace("hda-codec: native cad=%u afg=%u vendor=%x revision=%x subsystem=%x\n",
+         ALC257_CODEC, ALC257_GROUP, vendor, revision, subsystem);
+  uint32_t caps, pcm, formats, input_amp, output_amp;
+  if (!parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_FUNCTION_CAPS, &caps) ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_PCM, &pcm) ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_STREAM_FORMATS, &formats) ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_INPUT_AMP, &input_amp) ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_OUTPUT_AMP, &output_amp) ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_POWER, &group_power) ||
+      !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_SUBNODES, &subnodes))
+    goto failed;
+  unsigned widget_first, widget_end;
+  if (!node_range(subnodes, &widget_first, &widget_end) || widget_first < end ||
+      !power_d0(controller, ALC257_CODEC, ALC257_GROUP, group_power, deadline) ||
+      !enumerate_widgets(controller, ALC257_CODEC, widget_first, widget_end,
+                         pcm, formats, input_amp, output_amp) || !native_pair_supported())
+    goto failed;
+  struct hda_route candidate = {
+    .vendor = vendor, .revision = revision, .subsystem = subsystem,
+    .codec = ALC257_CODEC, .group = ALC257_GROUP, .pin = ALC257_SPEAKER,
+    .converter = ALC257_DAC, .headphone_pin = ALC257_HEADPHONE, .length = 2,
+  };
+  if (!native_power(controller, &candidate, deadline) || !native_idle(controller, &candidate))
+    goto failed;
+  selected_route = candidate;
+  route_controller = controller;
+  *route = candidate;
+  ktrace("hda-codec: native speaker=%u headphone=%u shared-dac=%u; both outputs idle\n",
+         route->pin, route->headphone_pin, route->converter);
+  return true;
+
+failed:
+  hda_fail(controller, "native codec identity/graph/idle setup failed");
+  return false;
+}
+
+static bool
+enable_native(struct hda_controller *controller, const struct hda_route *route)
+{
+  uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
+  uint32_t response, sense;
+  if (!native_power(controller, route, deadline) || !native_idle(controller, route) ||
+      !command(controller, route->codec, route->headphone_pin, VERB_GET_PIN_SENSE, &sense))
+    goto failed;
+  bool present = (sense & PIN_SENSE_PRESENT) != 0;
+  uint8_t pin = present ? route->headphone_pin : route->pin;
+  uint32_t control = PIN_CONTROL_OUTPUT | (present ? PIN_CONTROL_HEADPHONE : 0);
+  uint32_t stream = HDA_STREAM_TAG << 4;
+  if (!command(controller, route->codec, route->headphone_pin, VERB_SET_CONNECTION, &response) ||
+      !command(controller, route->codec, route->headphone_pin, VERB_GET_CONNECTION, &response) ||
+      (response & 0xff) != 0 ||
+      !set_amp(controller, route->codec, route->converter,
+               widgets[route->converter].output_amp, true, 0, false) ||
+      !command(controller, route->codec, route->converter,
+               VERB_SET_FORMAT | HDA_STREAM_FORMAT, &response) ||
+      !command(controller, route->codec, route->converter, VERB_GET_FORMAT, &response) ||
+      (response & 0xffff) != HDA_STREAM_FORMAT ||
+      !command(controller, route->codec, route->converter, VERB_SET_STREAM | stream, &response) ||
+      !command(controller, route->codec, route->converter, VERB_GET_STREAM, &response) ||
+      (response & 0xff) != stream ||
+      !native_pin_control(controller, route->codec, pin, control, EAPD_ENABLE) ||
+      !set_amp(controller, route->codec, pin, widgets[pin].output_amp, true, 0, false))
+    goto failed;
+  ktrace("hda-codec: native presence=%u sense=%x active-pin=%u shared-dac=%u\n",
+         (unsigned)present, sense, pin, route->converter);
+  return true;
+
+failed:
+  hda_fail(controller, "native codec route activation failed");
+  return false;
+}
+
 bool
 hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
 {
@@ -402,6 +597,8 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
     *route = selected_route;
     return true;
   }
+  if (controller->model == HDA_MODEL_AMD)
+    return discover_native(controller, route);
   for (unsigned codec = 0; codec < HDA_CODEC_COUNT; ++codec) {
     if (!(controller->codec_mask & (1u << codec)))
       continue;
@@ -474,8 +671,11 @@ bool
 hda_codec_enable(struct hda_controller *controller, const struct hda_route *route)
 {
   audio_require_worker();
-  if (!route_matches(controller, route) || controller->failed || !controller->command_ready)
+  if (!route_matches(controller, route) || controller->failed || !controller->command_ready ||
+      controller->stream_running)
     return false;
+  if (controller->model == HDA_MODEL_AMD)
+    return enable_native(controller, route);
   uint8_t codec = route->codec;
   uint32_t response;
   uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
@@ -545,8 +745,15 @@ bool
 hda_codec_disable(struct hda_controller *controller, const struct hda_route *route)
 {
   audio_require_worker();
-  if (!route_matches(controller, route) || controller->failed || !controller->command_ready)
+  if (!route_matches(controller, route) || controller->failed || !controller->command_ready ||
+      controller->stream_running)
     return false;
+  if (controller->model == HDA_MODEL_AMD) {
+    uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
+    if (!native_power(controller, route, deadline) || !native_idle(controller, route))
+      goto failed;
+    return true;
+  }
   uint8_t codec = route->codec;
   uint32_t response;
   if (!command(controller, codec, route->converter, VERB_SET_STREAM, &response) ||
