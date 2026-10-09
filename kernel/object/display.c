@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <arch/smp.h>
 #include <arch/cpu.h>
 #include <kernel/mm/heap.h>
@@ -194,6 +195,7 @@ static enum call_status acquire_display(struct display_object *display,
     return status;
   }
   display->pending = DISPLAY_SLOT_COUNT;
+  clipboard_space_cancel(display->space);
   ++display->mapping_identity;
   display->owner = process;
   display->user_address = reply->address;
@@ -235,6 +237,7 @@ static void retire_slots(struct display_object *display, struct process *process
 
 static void release_display(struct display_object *display)
 {
+  clipboard_space_cancel(display->space);
   pointer_surface_ended(display->space);
   struct display_frame *current = display->current;
   display->current = NULL;
@@ -255,6 +258,7 @@ void display_select_layer(struct display_object *display, bool graphics)
   if (!display->presented || display->visible == graphics) {
     return;
   }
+  clipboard_space_cancel(display->space);
   display->visible = graphics;
   space_display_changed(display->space, graphics);
 }
@@ -286,6 +290,7 @@ static enum call_status replace_display(struct display_object *display,
     display->slots[i] = slots[i];
   }
   display->user_address = reply->address;
+  clipboard_space_cancel(display->space);
   ++display->mapping_identity;
   pointer_geometry_changed(display->space);
   return CALL_OK;

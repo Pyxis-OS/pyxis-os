@@ -8,6 +8,7 @@
 #define KEYBOARD_ACQUIRE UINT64_C(1)
 #define KEYBOARD_READ UINT64_C(2)
 #define KEYBOARD_RELEASE UINT64_C(3)
+#define KEYBOARD_CLIPBOARD_REFUSE UINT64_C(4)
 #define KEYBOARD_READ_POLL (UINT64_C(1) << 0)
 #define KEYBOARD_EVENT_FOCUSED (UINT32_C(1) << 0)
 
@@ -18,6 +19,16 @@
 struct keyboard_read_request {
   struct message_header header;
   uint64_t flags; /* Zero blocks; POLL returns TIMED_OUT when empty. */
+};
+
+/* INPUT and the acquired keyboard owner may refuse one matching graphics
+ * action without a clipboard grant. This consumes only that action and grants
+ * no clipboard read or publication authority. No reply; operation identifies
+ * the CLIPBOARD_PUBLISH or CLIPBOARD_PASTE command being refused. */
+struct keyboard_clipboard_refuse_request {
+  struct message_header header;
+  uint64_t action_id;
+  uint64_t operation;
 };
 
 /* READ returns one event. Key/action/modifiers use abi/key.h; flags reports
@@ -36,9 +47,17 @@ struct keyboard_event {
   uint32_t action;
   uint32_t modifiers;
   uint32_t flags;
+  /* Only a fresh physical Copy/Paste press carries metadata. A shared command
+   * retains its operation/layer when refused, with a zero action ID, so adapters
+   * still consume it. Public fields never supply authority; the kernel checks
+   * the opaque nonzero action identity. */
+  uint64_t clipboard_action_id;
+  uint64_t clipboard_operation;
+  uint64_t clipboard_layer;
 };
 
 _Static_assert(sizeof(struct keyboard_read_request) == 24, "keyboard read layout");
-_Static_assert(sizeof(struct keyboard_event) == 16, "keyboard event layout");
+_Static_assert(sizeof(struct keyboard_clipboard_refuse_request) == 32, "keyboard clipboard refuse layout");
+_Static_assert(sizeof(struct keyboard_event) == 40, "keyboard event layout");
 
 #endif

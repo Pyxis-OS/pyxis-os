@@ -117,6 +117,13 @@ return {
   service setup, the session launcher selects `bin://mux.pxe`, giving it
   terminal CREATE and launcher CREATE_GROUP. It does not grant either resource
   to ordinary shell commands. See the [multiplexer guide](multiplexer.md).
+- **Clipboard.** `clipboard_local` and `clipboard_shared` independently request
+  the [store grants](../interfaces/clipboard.md). Stock local interactive spaces
+  set both true; remote startup receives neither. If omitted, each setting
+  retains the existing `multiplexer` default; explicit false withholds that layer.
+  Local session/shell and mux pane handoffs forward each on foreground startup;
+  background commands and services receive neither. Grants alone authorize no
+  read: graphics calls require display/keyboard ownership and physical activation.
 - **Power.** A space that sets `power = true` receives the kernel's `power`
   resource, with power-off and restart rights, for the shell's
   [`poweroff` and `reboot`](shell.md#power-off-and-restart). Any number of spaces

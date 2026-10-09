@@ -40,6 +40,26 @@ bool keyboard_owned(struct keyboard_object *keyboard, struct process *process)
   return owned;
 }
 
+bool keyboard_acquired(struct keyboard_object *keyboard, struct process *process,
+    uint64_t acquisition)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_keyboard(keyboard);
+  bool acquired = keyboard->owner == process && keyboard->acquisition == acquisition;
+  unlock_keyboard(keyboard);
+  return acquired;
+}
+
+bool keyboard_clipboard_owner(struct keyboard_object *keyboard, struct process *process,
+    uint64_t acquisition)
+{
+  lock_keyboard(keyboard);
+  bool eligible = keyboard->owner == process && capture_focused(keyboard) &&
+      keyboard->acquisition == acquisition;
+  unlock_keyboard(keyboard);
+  return eligible;
+}
+
 uint64_t keyboard_ready(struct keyboard_object *keyboard, struct process *process)
 {
   uint64_t flags = cpu_save_interrupts();
@@ -161,6 +181,9 @@ void keyboard_set_overlay(struct keyboard_object *keyboard, bool overlay_focused
   KASSERT(arch_cpu_index() == 0);
   lock_keyboard(keyboard);
   bool previous = capture_focused(keyboard);
+  if (keyboard->overlay_focused != overlay_focused) {
+    clipboard_space_cancel(keyboard->space);
+  }
   keyboard->overlay_focused = overlay_focused;
   bool queued = publish_focus(keyboard, previous);
   memset(keyboard->down, 0, sizeof(keyboard->down));
@@ -224,12 +247,16 @@ void keyboard_route_event(struct keyboard_object *keyboard, const struct key_eve
     if (keyboard->count == KEYBOARD_EVENT_CAPACITY) {
       /* Losing a release invalidates every held key. Drop this event too and
        * require fresh presses after the reset instead of forwarding repeats. */
+      clipboard_space_cancel(keyboard->space);
       reset_keys(keyboard);
       queue_event(keyboard, (struct keyboard_event){.action = KEY_STATE_RESET});
     } else {
-      queue_event(keyboard, (struct keyboard_event){
+      struct keyboard_event output = {
         .key = event->key, .action = event->action, .modifiers = modifiers,
-      });
+      };
+      clipboard_graphics_key_event(keyboard->space, keyboard->owner,
+          keyboard->acquisition, event, &output);
+      queue_event(keyboard, output);
     }
   } else {
     char bytes[KEY_TEXT_MAX];
@@ -261,6 +288,7 @@ static void release_keyboard(struct keyboard_object *keyboard)
 {
   /* One task per process: the owner cannot release/exit while its READ sleeps. */
   KASSERT(!keyboard->reader);
+  clipboard_space_cancel(keyboard->space);
   keyboard->owner = NULL;
   reset_capture(keyboard);
 }
@@ -284,12 +312,16 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != KEYBOARD_ACQUIRE && operation != KEYBOARD_READ && operation != KEYBOARD_RELEASE) {
+  if (operation != KEYBOARD_ACQUIRE && operation != KEYBOARD_READ &&
+      operation != KEYBOARD_RELEASE && operation != KEYBOARD_CLIPBOARD_REFUSE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   struct process *process = process_current();
   if (!(rights & KEYBOARD_RIGHT_INPUT) || process->space != keyboard->space) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == KEYBOARD_CLIPBOARD_REFUSE) {
+    return clipboard_keyboard_refuse_call(keyboard, request_address, request_size);
   }
   uint64_t flags = 0;
   struct keyboard_event reply;
@@ -315,7 +347,11 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
       status = CALL_UNAVAILABLE;
     } else if (keyboard->owner) {
       status = CALL_BUSY;
+    } else if (keyboard->acquisition == UINT64_MAX) {
+      status = CALL_LIMIT;
     } else {
+      clipboard_space_cancel(keyboard->space);
+      ++keyboard->acquisition;
       keyboard->owner = process;
       reset_capture(keyboard);
       queue_event(keyboard, (struct keyboard_event){

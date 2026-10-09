@@ -20,6 +20,7 @@ struct keyboard_object {
   struct task_wait *reader; /* Task metadata, never a private-stack pointer. */
   struct keyboard_event events[KEYBOARD_EVENT_CAPACITY];
   size_t head, count;
+  uint64_t acquisition; /* Never reused, including release/reacquisition. */
   bool selected;
   bool overlay_focused; /* Trusted popup suspends delivery, retaining capture. */
   bool terminal_layer; /* Under lock: hidden graphics overrides capture. */
@@ -37,6 +38,11 @@ void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
                         bool discard_input);
 void keyboard_set_overlay(struct keyboard_object *keyboard, bool overlay_focused);
 void keyboard_reset_input(struct keyboard_object *keyboard);
+/* BSP, IF=0: acquired ownership; clipboard admission additionally checks focus. */
+bool keyboard_acquired(struct keyboard_object *keyboard, struct process *process,
+    uint64_t acquisition);
+bool keyboard_clipboard_owner(struct keyboard_object *keyboard, struct process *process,
+    uint64_t acquisition);
 /* Any CPU, preserves IF. INPUT and same-space authority are checked by caller;
  * ownership validation and event observation use the keyboard lock. */
 bool keyboard_owned(struct keyboard_object *keyboard, struct process *process);
