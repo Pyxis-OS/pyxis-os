@@ -25,7 +25,10 @@ struct hda_irq_event {
   bool completed;
 };
 
+enum hda_model { HDA_MODEL_QEMU, HDA_MODEL_AMD };
+
 struct hda_controller {
+  enum hda_model model;
   struct pci_claim claim;
   struct pci_mapping registers;
   struct pci_probe_state firmware;
@@ -36,13 +39,14 @@ struct hda_controller {
   uint64_t commands, responses, unsolicited;
   uint64_t run_time;
   uint32_t run_wallclock;
+  uint32_t fifo_bytes;
   struct hda_irq_event irq;
   bool prepared, link_ready, command_ready, stream_prepared, stream_running, failed, shutdown;
 };
 
 struct hda_route {
-  uint32_t vendor, revision;
-  uint8_t codec, group, pin, converter;
+  uint32_t vendor, revision, subsystem;
+  uint8_t codec, group, pin, converter, headphone_pin;
   unsigned length;
 };
 
