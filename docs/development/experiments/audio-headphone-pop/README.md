@@ -1,4 +1,4 @@
-# ALC257 headphone stop recheck
+# ALC257 headphone stop
 
 Owner baseline, **2026-10-09**: ThinkPad main `11d35fa6`, AMD `1022:15e3`,
 Realtek `10ec0257`, headphone pin 33, speaker pin 20. `pcm 1000 500 2` ended
@@ -24,23 +24,15 @@ the implementation `make -j16 image` build passed in the same builder.
 Build results do not establish an acoustic fix. QEMU has no HDA here; no
 playback, capture, native timing or pop reduction has been measured locally.
 
-## Owner native recheck
+## Owner native result
 
-1. Record the PR revision. Plug in the planar headphones before starting;
-   leave the space unmuted at 100%. Set master to **1%, unmuted**. Run
-   `pcm 1000 500 2` ten separate times, allowing each stop to finish. Count
-   start and end pops separately out of ten, and note their severity.
-2. If the low-level check is comfortable, set master to **about 70%** and
-   repeat ten runs with the same counts. A very loud analog pop at 1% is
-   reason to stop before this level.
-3. Unplug headphones before a fresh start. Repeat through the speaker, first
-   at 1%, then a comfortable level, counting pops out of ten at each level.
-4. Check quick restart with `pcm --repeat 3 --gap-ms 0 1000 500 2` on the
-   headphones at 1%. Listen for an added gap, new start pop or missing audio;
-   restart must not wait for a pending settle. This does not prove which phase
-   overlapped without debugger inspection. Keep PCM's final STATUS and the
-   log; report failed state/discontinuities and whether later playback works.
+On **2026-10-09**, main `11d35fa6` plus #628: no end-of-tone headphone pops
+across many runs after the change, against about 80% beforehand. The speaker
+never popped. No exact post-fix run count was supplied; this is owner listening
+evidence, not a measured electrical transient. Only the planar headphones and
+speaker were available. [Volume listening](../../../userland/audio-volume.md#native-qualification)
+was comfortable at 70–80% on headphones and 70% on the speaker (80% was loud).
 
-Only the planar headphones and speaker are available. Native results remain
-pending; the transducer's faithful transient response does not establish the
-electrical cause by itself.
+This supports the staged stop fix without proving the analog cause. Rapid
+restart overlapping either settle was not separately reported; retain it in the
+[next native regression](../../../technical-debt.md#hd-audio-volume-native-regression).

@@ -88,7 +88,8 @@ Two long baseline commands tripped the existing1ms commit/WALCLK guard, so
 retained active windows are five seconds inside healthy `pcm 1000 500 8` runs.
 This is short-run nested-QEMU evidence, not sustained eight-session qualification
 or native cost. The accepted guard/ring/capacity remain unchanged. Native safe
-speaker/headphone listening remains the owner's [step4](../../../wip/audio-volume.md).
+speaker/headphone listening is recorded separately in the
+[native qualification](../../../userland/audio-volume.md#native-qualification).
 
 ## Integration and UI
 
@@ -121,7 +122,8 @@ UNAVAILABLE, **not CALL_LIMIT**. No eight-source cost window or new ninth-sessio
 capacity pass is claimed. Saturation-before-master and the full S16 settled bound
 are source-inspected; those captures did not reach saturation. All slots cleaned
 up, shutdown retained backing and controls became disabled. Do not infer that
-volume fixes the QEMU guard; native listening/8-session regression remains step4.
+volume fixes the QEMU guard; the later native eight-session regression remains
+[open](../../../technical-debt.md#hd-audio-volume-native-regression).
 
 Final main integration (`2a9e1a80`, userland `b8d542e`) passed ordinary source
 kernel/SDK/runtime/ports/userspace/image build with the restored default layout.
