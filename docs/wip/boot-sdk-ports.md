@@ -76,6 +76,11 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
+  three defaults accepted; task 1 assigned after #567 merges. Split process
+  ownership from task retirement while keeping one user task per process;
+  no thread syscall, TLS, device behavior or dependency pin. Later tasks remain
+  unassigned.
 - **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
   keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
   delivered together, ports first. See [SDL2](../development/sdl2.md) and the
@@ -139,8 +144,8 @@ Other candidates; current assignments are listed above.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
-- [Threads and SMP follow-ups](scheduling-and-threads.md), including serial
-  services off the BSP.
+- [Multiple threads per process](threads.md) and
+  [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 - Physical GPU drivers, after the [display milestone](../kernel/display.md);
   the owner prepares the hardware.
 - [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
