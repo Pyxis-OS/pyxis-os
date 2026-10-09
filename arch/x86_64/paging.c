@@ -517,6 +517,16 @@ void arch_frame_zero(phys_addr_t physical)
   unmap_scratch(SCRATCH_DATA);
 }
 
+void *arch_frame_map(phys_addr_t physical)
+{
+  return map_scratch(physical, SCRATCH_DATA);
+}
+
+void arch_frame_unmap(void)
+{
+  unmap_scratch(SCRATCH_DATA);
+}
+
 static uint64_t read_table_entry(phys_addr_t physical, unsigned index)
 {
   volatile uint64_t *table = map_scratch(physical, SCRATCH_TABLE);

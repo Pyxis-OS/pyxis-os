@@ -212,9 +212,9 @@ rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
 self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
 display queue checks. No remote allocation or new interrupt handler is added.
 
-Capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
-allocation and discard, and RAM FILE backing replacement publish to that same
-FIFO before the caller sleeps. Their typed records use the caller's reusable
+Capability growth, namespace creation, endpoint creation/export and RAMFS
+entry/name allocation and discard publish to that same FIFO before the caller
+sleeps. Their typed records use the caller's reusable
 shared request allocation.
 Capability/endpoint operations lend the capability table exclusively until
 completion; endpoint creation also lends the process's receiver owner list. FILE
@@ -387,7 +387,7 @@ The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, display, screen capture and audio admission,
 capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
-allocation and discard, RAM FILE backing replacement, launch preparation/publication and HOST
+allocation and discard, launch preparation/publication and HOST
 forwarding. Preparation zeroes the selected typed record in the caller's reusable
 request area. One reservation spans preparation, publication, completion and
 result consumption; it does not allocate. Task adapters expose reservation,
@@ -457,7 +457,9 @@ requires explicit quiescence and acknowledged TLB invalidation. Ordinary VM
 mutation invalidates only the caller's translations. A kernel task must
 save/disable interrupts around these calls and restore them afterward; being pinned to the BSP alone does
 not prevent same-CPU reentry. Other heap allocation by syscalls, such as
-capability growth or RAM-file backing, still goes through BSP requests.
+capability growth, still goes through BSP requests. RAM-file pages and their
+index are allocated on the writing CPU, using only the layers below and its own
+scratch slots ([file contract](../interfaces/processes.md#implemented-file-calls)).
 
 Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:
@@ -599,7 +601,7 @@ These stay on the BSP:
 
 - the request executor and every service in its catalog: pipe and terminal
   creation, capability growth, namespace creation, endpoint creation and export,
-  RAMFS entries, RAM-file replacement, launch preparation, display, audio, HOST and
+  RAMFS entries, launch preparation, display, audio, HOST and
   native filesystem admission, readiness waits and system-info memory;
 - the network, native filesystem, HOST transport, virtio-blk, USB, ACPI, audio
   and presentation workers;

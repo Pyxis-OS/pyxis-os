@@ -247,8 +247,8 @@ libgit2 transaction nor an on-Pyxis TLS/network result, nor a promise for all mi
 - [x] Task 2: public **`pread` and `pwrite` in userland libc**, implemented and
   manually qualified; userland #172 and Pyxis #576 merged.
 - [x] Task 3: **`lstat`, `access`, `rmdir` and byte-order helpers in userland
-  libc**, implemented and manually qualified; pending owner review and
-  dependency merge.
+  libc**, implemented and manually qualified; userland #174 merged,
+  Pyxis #585 approved and awaiting integration.
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171) publishes
 `ff278aec50adfaf6af8d8c15062084a8594642e3`, integrated by merged
@@ -280,12 +280,13 @@ The [positioned-I/O contract and evidence](../userland/libc-portability.md#posit
 record configurations and unexercised cases. No kernel/protocol change or new
 test infrastructure was needed.
 
-Task 3, [userland PR #174](https://git.internal/PyxisOS/pyxis-userland/pulls/174),
-publishes `7add29afabcba078a7e344dfd627fb451ef3a575`. This integration pins that
-published commit, which includes current userland origin/main (`352963d`, with
-the merged bsearch change). `git merge-base --is-ancestor origin/main <pin>`
-passed after fetching and before pinning. Merge userland first, then this Pyxis
-gitlink/docs PR. No later task starts as part of this delivery.
+Task 3, merged [userland PR #174](https://git.internal/PyxisOS/pyxis-userland/pulls/174),
+publishes `7add29afabcba078a7e344dfd627fb451ef3a575`. After merging Pyxis main
+(including #582), this integration pins published userland main
+`b32da949ae1a0d12bc8b1e3ae2c58c4f1684c11b`, containing both #174 and #175.
+`git merge-base --is-ancestor origin/main <pin>` passed after fetching and before
+pinning. Userland is merged; this Pyxis gitlink/docs PR follows. No later task
+starts as part of this delivery.
 
 The owner accepted access profile 1 on 2026-10-09: F_OK requests no child rights;
 files R_OK/W_OK request READ/WRITE; directories R_OK checks ENUMERATE and W_OK

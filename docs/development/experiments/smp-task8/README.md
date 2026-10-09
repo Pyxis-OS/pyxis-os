@@ -6,12 +6,9 @@ Final matched record for the [runtime SMP milestone](../../../wip/scheduling-and
 recorded on 2026-10-06. It compares main `7748db5` (SMP tasks 1–7) with main
 `83c08d6`, the pre-milestone revision of the [task-1 baseline](../smp-task1-baseline/README.md).
 
-There are two parts:
-
-- **Owner-run native check:** on the ThinkPad T14 Gen 1, by PXE.
-- **QEMU runs:** in the nested VM. The development host is itself a KVM guest
-  (Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized i9-12900K), and its own KVM
-  has `halt_poll_ns=200000`.
+There are two parts: an owner-run native check on the ThinkPad T14 Gen 1 by PXE, and QEMU runs in the
+nested VM (the development host is itself a KVM guest: Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized
+i9-12900K, with `halt_poll_ns=200000`).
 
 ## Native ThinkPad check (owner-run)
 
@@ -19,10 +16,10 @@ The ThinkPad is a T14 Gen 1 with a Ryzen 5 PRO 4650U: 6 cores and 12 threads,
 with SMT siblings adjacent as Pyxis CPUs. The owner booted two PXE entries built
 with `make image` and the default configuration:
 
-| Entry | Source | Kernel SHA-256 |
-| --- | --- | --- |
-| Baseline | main `83c08d6` | `d0d0fde7…603f3406` (the task-1 baseline kernel) |
-| Final | main `7748db5` | `e4427b95…fecb4c` |
+| Entry | Source |
+| --- | --- |
+| Baseline | main `83c08d6` (the task-1 baseline kernel) |
+| Final | main `7748db5` |
 
 A check script ran from the desktop. Each batch opened one remote
 session, started N background clients and waited for all of them.
@@ -53,7 +50,7 @@ session, started N background clients and waited for all of them.
   about 1.9 times one alone, so the
   [scratch-slot false sharing](../../../technical-debt.md#scratch-slot-false-sharing)
   costs little on this machine.
-- **Feel under load.** While `smp8-check.py --load 120` kept 11 compute and
+- **Feel under load.** While the check script's `--load 120` mode kept 11 compute and
   4 page clients running, the owner ran Quake's `timedemo demo1`, switched tabs
   and typed:
   - Quake reported 261.0 fps under load, against 622.5 fps idle.
@@ -66,17 +63,12 @@ session, started N background clients and waited for all of them.
 Both revisions ran the [task-1 workload set](../smp-task1-baseline/README.md#configuration)
 in one session on the same host:
 
-- **Init:** the task-1 baseline init,
-  written in each revision's grammar.
-  - `83c08d6`: `INIT_PRIMARY=app://init INIT_CPUS=`
-  - `7748db5`: `SPACES=baseline=app://init`
-- **Devices:** the task-1 set: a 128 MiB native pool on a GPT disk, virtio-fs,
-  network, RNG and a blank USB stick on `qemu-xhci`. QEMU 10.2.2 with KVM,
-  256 MiB, 4 and 1 CPUs.
+- **Init:** the task-1 baseline init in each revision's grammar (`83c08d6`:
+  `INIT_PRIMARY=app://init INIT_CPUS=`; `7748db5`: `SPACES=baseline=app://init`).
+- **Devices:** the task-1 set: a 128 MiB native pool on a GPT disk, virtio-fs, network, RNG and a blank USB
+  stick on `qemu-xhci`. QEMU 10.2.2 with KVM, 256 MiB, 4 and 1 CPUs.
 
-The kernels are the same ones staged for the ThinkPad, and the 1-CPU pair was
-repeated in reverse order. Full output is in the `qemu-*-output.txt` files:
-`b`/`f` for baseline/final, `4`/`1` for the CPU count, and `r` for the repeat.
+The kernels are the same ones staged for the ThinkPad, and the 1-CPU pair was repeated in reverse order.
 Every workload exited 0 and verified every sample, and every pool passed
 `fsck.npfs`.
 
@@ -148,7 +140,7 @@ only grow. lwIP's PCBs come from the kernel heap (`MEMP_MEM_MALLOC`), and closed
 connections linger in TIME_WAIT for 120 s, so remote sessions opened shortly
 before a read show up there.
 
-A 2-CPU rerun (`life2c`) also read the heap 30 s
+A 2-CPU rerun also read the heap 30 s
 and 130 s after the last session closed. The count matched the idle value right
 after the scenarios, 2196. It was 2195 at both later reads: one fewer than the
 idle read, which itself came shortly after a warm-up session. That is consistent

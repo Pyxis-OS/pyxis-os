@@ -24,4 +24,19 @@ void arch_clock_tick(void);
  * after violating that bound; missed wraps cannot be detected or recovered. */
 uint64_t arch_monotonic_ns(void);
 
+/* TSC selection. arch_clock_init calibrates the TSC against the HPET on the
+ * BSP; boot keeps reading the HPET until arch_clock_select. Startup is
+ * serialized, one AP at a time, all with IF=0:
+ * - the AP calls arch_clock_ap_prepare before publishing itself online, then
+ *   arch_clock_ap_check;
+ * - the BSP calls arch_clock_bsp_check once it sees that AP online.
+ * The two checks run together, comparing the CPUs' TSCs for about 2 ms. */
+void arch_clock_ap_prepare(void);
+void arch_clock_ap_check(void);
+void arch_clock_bsp_check(size_t ap_index);
+/* BSP, after the last AP's check and before the scheduler starts. Switch every
+ * CPU to the TSC if all checks passed, keeping the epoch, or keep the HPET.
+ * Logs the choice. */
+void arch_clock_select(void);
+
 #endif

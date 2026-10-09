@@ -2,114 +2,52 @@
 
 Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
 
-On 2026-10-08, QEMU attached the ThinkPad's Intel AX200 Bluetooth USB function
-`8087:0029` as the ordinary Fedora user. Pyxis main `078c9759b2803e57368201f4ecd3b44b59bb3af9`
-then enumerated it with complete inventory, both interfaces and all alternate
-settings. Guest configuration bytes establish the endpoint addresses below.
-This completes [investigation task 1](../../../devices/ax200-bluetooth.md#qualified-scope).
-
-No kernel, ABI, launcher or target-userland code changed. Interrupt transfers,
-HCI commands, controller firmware state, firmware loading and LE scanning remain
-unmeasured. In particular, USB enumeration does not establish whether the device
-is running bootloader or operational firmware after attachment or reset.
+On 2026-10-08, QEMU attached the ThinkPad's Intel AX200 Bluetooth USB function `8087:0029` as the ordinary Fedora user,
+and Pyxis main `078c9759b2803e57368201f4ecd3b44b59bb3af9` enumerated it with complete inventory, both interfaces and all
+alternate settings; guest configuration bytes establish the endpoint addresses below. This completes
+[investigation task 1](../../../devices/ax200-bluetooth.md#qualified-scope). No kernel, ABI, launcher or target-userland
+code changed. Interrupt transfers, HCI commands, controller firmware state, firmware loading and LE scanning remain
+unmeasured: USB enumeration does not show whether the device runs bootloader or operational firmware after attachment or
+reset.
 
 ## Host preparation and attachment
 
-The physical T14 Gen 1 AMD ran Fedora with QEMU `10.2.2-1.fc44` and KVM;
-`systemd-detect-virt` reported `none`. These are host KVM checks, not nested-VM
-measurements. Linux identified the device at AMD xHCI `0000:07:00.4`, root port 4,
-bus 4 address 3, full speed (12 Mb/s).
+The physical T14 Gen 1 AMD ran Fedora with QEMU `10.2.2-1.fc44` and KVM (`systemd-detect-virt` reported `none`), so these
+are host KVM checks, not nested-VM measurements. Linux identified the device at AMD xHCI `0000:07:00.4`, root port 4, bus 4
+address 3, full speed (12 Mb/s). After the owner ran `sudo systemctl disable --now bluetooth`, `bluetooth.service` was
+`inactive`/`dead`/`disabled` and Bluetooth was neither soft nor hard blocked; `/dev/bus/usb/004/003` belonged to the
+invoking user (group `root`) and was readable and writable by that user, with both interfaces initially bound to
+`btusb`.
 
-The owner's initial stop had not left `bluetooth.service` inactive. After the
-owner used `sudo systemctl disable --now bluetooth`, inspection reported
-`ActiveState=inactive`, `SubState=dead`, `UnitFileState=disabled`. Bluetooth was
-neither soft nor hard blocked. `/dev/bus/usb/004/003` belonged to the invoking
-user (group `root`) and was readable and writable by that user. Both interfaces
-initially remained bound to `btusb`.
-
-The initial attachment check used:
-
-```sh
-qemu-system-x86_64 -machine q35,accel=kvm -m 256M \
-  -nodefaults -display none -serial none -monitor stdio -S \
-  -device qemu-xhci,id=xhci \
-  -device usb-host,id=bluetooth,bus=xhci.0,vendorid=0x8087,productid=0x0029
-```
-
-While paused, `info usb` showed a generic `USB Host Device` at 1.5 Mb/s; that
-alone did not establish attachment. After `cont`, it showed:
-
-```text
-Device 0.1, Port 1, Speed 12 Mb/s, Product host:4.3, ID: bluetooth
-```
-
-Both interface driver links in sysfs were absent while QEMU owned the device.
-There were no libusb permission or detach errors. After `quit`, both interfaces
-were bound to `btusb` again. No manual driver unbind or root QEMU was needed.
+The initial attachment check ran paused QEMU (`-machine q35,accel=kvm -m 256M -nodefaults -display none -serial none
+-monitor stdio -S`) with `qemu-xhci` and `usb-host,vendorid=0x8087,productid=0x0029`. While paused, `info usb` showed only a
+generic 1.5 Mb/s `USB Host Device`, which does not establish attachment; after `cont` it showed `Device 0.1, Port 1,
+Speed 12 Mb/s, Product host:4.3, ID: bluetooth`. Both interface driver links in sysfs were absent while QEMU owned the
+device, there were no libusb permission or detach errors, and both interfaces rebound to `btusb` after `quit`. No manual
+unbind or root QEMU was needed.
 
 ## Matching image and guest run
 
-The local build artifacts were from an older modified GCC revision, so they
-were not used. The `pyxis-image` artifact (ID 6220) from successful
-[main CI run 1177](https://git.internal/PyxisOS/pyxis-os/actions/runs/1177)
-provided both `pyxis.iso` and its matching `caelum.elf` symbols. The CLI reported
-both existing `build` and `filesystem` jobs successful for `078c9759b2`.
+Local artifacts came from an older modified GCC revision and were not used; the `pyxis-image` artifact (ID 6220) from
+successful [main CI run 1177](https://git.internal/PyxisOS/pyxis-os/actions/runs/1177) supplied `pyxis.iso` and the matching
+`caelum.elf` symbols, with the existing `build` and `filesystem` jobs successful for `078c9759b2`. No target compiler was
+built locally; only the host remote client was rebuilt (`make -C tools remote`). Pins: userspace
+`47308da28c04c2e71a460bacec5767471479a3dd`, ports `1064c452a0236040c7d673ab51dbea3a5b81ff80`, lwIP
+`a1aadb91a50360ff5b52864f7cec810b8162ee85`, filesystem `b427df29f865bc361b8da92bcd74e114581e9a32`.
 
-Pinned dependencies were unchanged:
-
-| Repository | Revision |
-| --- | --- |
-| userspace | `47308da28c04c2e71a460bacec5767471479a3dd` |
-| ports | `1064c452a0236040c7d673ab51dbea3a5b81ff80` |
-| lwIP | `a1aadb91a50360ff5b52864f7cec810b8162ee85` |
-| filesystem | `b427df29f865bc361b8da92bcd74e114581e9a32` |
-
-Image SHA-256 was
-`2735be8241986c02375f73fa031c0182a6b794d1141f432d4eb242a5ffe41448`;
-ELF SHA-256 was
-`4f710e43042c48085864b4bf06c4045995dba0a5a21a9fdd63f77e724c855a7b`.
-No target compiler was built locally; only the current host remote client was
-rebuilt with `make -C tools remote`.
-
-The guest used one CPU, 2 GiB RAM, Q35/KVM, standard VGA with no display window,
-the raw Fedora OVMF pair and fresh copied variables. The exact invocation was:
-
-```sh
-qemu-system-x86_64 -machine q35 -accel kvm -cpu max -rtc base=utc \
-  -smp 1 -m 2G \
-  -drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/edk2/ovmf/OVMF_CODE.fd \
-  -drive if=pflash,format=raw,unit=1,file=/tmp/pyxis-bluetooth-task1/OVMF_VARS.fd \
-  -cdrom /tmp/pyxis-bluetooth-task1/image/pyxis.iso -boot d -display none \
-  -serial file:/tmp/pyxis-bluetooth-task1/serial.log -monitor stdio \
-  -netdev user,id=pyxis_net,hostfwd=tcp:127.0.0.1:2323-10.0.2.15:2323 \
-  -device virtio-net-pci,netdev=pyxis_net,disable-legacy=on \
-  -object rng-random,id=pyxis_rng,filename=/dev/urandom \
-  -device virtio-rng-pci,rng=pyxis_rng,disable-legacy=on \
-  -device qemu-xhci,id=xhci \
-  -device usb-host,id=bluetooth,bus=xhci.0,vendorid=0x8087,productid=0x0029 \
-  -S -gdb tcp:127.0.0.1:1234
-```
-
-GDB with the matching ELF stopped at `parse_configuration`, conditional on
-`device->info.vendor_id == 0x8087 && device->info.product_id == 0x0029`.
-The recorded `total` was 200. Inspection and `dump binary memory` read
-`device->owner->descriptors` through `device->owner->descriptors + total`;
-no kernel functions were called. This is per-controller scratch, so it was
-captured before continuing.
-
-After detaching GDB, the ordinary remote client ran `lsusb -n`. Its
-output reported controller `0000:00:04.0` (`1b36:000d`),
-complete inventory and device `8087:0029` at full speed on root port 5.
-The command-complete event reported `exit_status=0`. QEMU's USB monitor port 1
-and Pyxis's xHCI root port 5 are separate numbering domains; neither is the
-physical host port 4.
+The guest used one CPU, 2 GiB, Q35/KVM, `-cpu max`, standard VGA with no display window, the Fedora OVMF pair with fresh
+variables, ISO boot, a loopback-forwarded VirtIO NIC, VirtIO RNG, `qemu-xhci` with the same `usb-host` device, and
+`-S -gdb tcp:127.0.0.1:1234`. GDB with the matching ELF stopped at `parse_configuration`, conditional on
+`device->info.vendor_id == 0x8087 && device->info.product_id == 0x0029`; the recorded `total` was 200, and `dump binary
+memory` read `device->owner->descriptors` through `+ total` without calling kernel functions (per-controller scratch, so
+captured before continuing). After detaching GDB, the remote client ran `lsusb -n`: it reported controller `0000:00:04.0`
+(`1b36:000d`), complete inventory and device `8087:0029` at full speed on root port 5, with `exit_status=0`. QEMU's USB
+monitor port 1 and Pyxis's xHCI root port 5 are separate numbering domains, and neither is the physical host port 4.
 
 ## Descriptors and endpoints
 
-Guest device observations were class/subclass/protocol `e0/01/01`, one
-configuration and full speed. Configuration 1 contains 200 bytes, two interfaces,
-self-powered attributes `0xc0`, and maximum power 100 mA.
-Every interface alternate uses class/subclass/protocol `e0/01/01`.
+The guest saw class/subclass/protocol `e0/01/01`, one configuration at full speed. Configuration 1 has 200 bytes, two
+interfaces, self-powered attributes `0xc0` and maximum power 100 mA, and every interface alternate uses `e0/01/01`.
 
 | Interface / alternate | Endpoint | Transfer type | Maximum packet bytes | bInterval |
 | --- | --- | --- | ---: | ---: |
@@ -124,28 +62,18 @@ Every interface alternate uses class/subclass/protocol `e0/01/01`.
 | 1 / 5 | `0x03` OUT, `0x83` IN | Isochronous (SCO) | 49 | 1 |
 | 1 / 6 | `0x03` OUT, `0x83` IN | Isochronous (SCO) | 63 | 1 |
 
-The live Fedora descriptor capture, taken after guest cleanup,
-reports the same interface alternates, endpoint addresses, types, packet sizes
-and intervals. Its device descriptor also reports USB 2.01 and EP0 maximum packet
-size 64. The host configuration attributes are `0xe0` (remote wakeup advertised),
-whereas the captured guest configuration advertises `0xc0`. This observed
-descriptor difference does not establish guest remote-wakeup behavior.
+A live Fedora descriptor capture after guest cleanup reports the same alternates, endpoint addresses, types, packet sizes
+and intervals, USB 2.01 and EP0 maximum packet size 64. The host configuration attributes are `0xe0` (remote wakeup
+advertised) while the guest-captured ones are `0xc0`; this difference does not establish guest remote-wakeup behavior.
 
 ## Native confirmation and limits
 
-The existing owner-supplied
-[native Pyxis inventory](../../../targets/t14-gen1-amd/usb-bringup.md#2026-10-03-inventory-snapshot)
-at `d04c6a65a9fe` records the same full-speed device on `07:00.4`, port 4,
-with wireless interfaces. It does not retain individual interface numbers,
-alternates or endpoint addresses. The checked-in
-[Linux inventory](../../../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt)
-explicitly records interfaces 0 and 1 at that host path. Today's live Fedora
-capture supplies their detailed descriptors; no new native Pyxis boot was run.
-
-This single guest boot establishes successful boot-time inventory on the
-qualified host setup. It does not qualify hotplug, repeated resets, automatic
-permission restoration after re-enumeration, HCI transport or firmware state.
-No `USB_HOST` launcher option was added. The remote session ended normally with
-complete drain; GDB detached and both QEMU processes exited. Bluetooth remained
-inactive and disabled, with `btusb` rebound. Task 2 awaits assignment and its
-interrupt-transfer ownership decisions.
+The owner-supplied [native Pyxis inventory](../../../targets/t14-gen1-amd/usb-bringup.md#2026-10-03-inventory-snapshot) at
+`d04c6a65a9fe` records the same full-speed device on `07:00.4`, port 4, with wireless interfaces but not individual
+interface numbers, alternates or endpoint addresses; the checked-in
+[Linux inventory](../../../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt) records interfaces 0 and 1 at that host
+path, and the live Fedora capture supplies the detailed descriptors. No new native Pyxis boot was run. This single guest
+boot establishes successful boot-time inventory on the qualified host setup; it does not qualify hotplug, repeated resets,
+permission restoration after re-enumeration, HCI transport or firmware state. No `USB_HOST` launcher option was added. The
+remote session ended normally with complete drain, GDB detached, both QEMU processes exited, Bluetooth stayed inactive and
+disabled and `btusb` rebound.

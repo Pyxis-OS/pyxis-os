@@ -174,9 +174,8 @@ in the Pyxis directory for uploads, in the download directory for downloads.
 Stale names are never automatically removed. Pyxis `ls` lists them; the host
 needs `ls -a`. One is safe to delete by hand once no transfer into that
 directory is running. A large upload into a RAM-backed directory, such as
-`tmp://` or a live boot's `home://`, costs several times its size in kernel
-memory for the rest of the boot; see
-[contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing). Atomic rename commits the complete destination, which
+`tmp://` or a live boot's `home://`, holds its size in memory until the file is
+removed. Atomic rename commits the complete destination, which
 survives a later cancellation, synchronization failure or lost acknowledgement.
 Host publication uses Linux `renameat2(RENAME_NOREPLACE)` or macOS
 `renameatx_np(RENAME_EXCL)`; other host platforms fail publication explicitly.
