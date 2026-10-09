@@ -26,7 +26,7 @@ static void unlock_keyboard(struct keyboard_object *keyboard)
 
 static bool capture_focused(const struct keyboard_object *keyboard)
 {
-  return keyboard->selected && !keyboard->terminal_layer;
+  return keyboard->selected && !keyboard->terminal_layer && !keyboard->overlay_focused;
 }
 
 bool keyboard_owned(struct keyboard_object *keyboard, struct process *process)
@@ -153,6 +153,20 @@ void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
   }
 }
 
+void keyboard_set_overlay(struct keyboard_object *keyboard, bool overlay_focused)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_keyboard(keyboard);
+  bool previous = capture_focused(keyboard);
+  keyboard->overlay_focused = overlay_focused;
+  bool queued = publish_focus(keyboard, previous);
+  memset(keyboard->down, 0, sizeof(keyboard->down));
+  unlock_keyboard(keyboard);
+  if (queued) {
+    readiness_notify();
+  }
+}
+
 void keyboard_reset_input(struct keyboard_object *keyboard)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -194,7 +208,7 @@ void keyboard_route_event(struct keyboard_object *keyboard, const struct key_eve
   KASSERT(arch_cpu_index() == 0 && event->key > KEY_NONE && event->key < KEY_COUNT);
   KASSERT(event->action <= KEY_REPEAT);
   lock_keyboard(keyboard);
-  if (!keyboard->selected ||
+  if (!keyboard->selected || keyboard->overlay_focused ||
       (event->action != KEY_PRESS && !keyboard->down[event->key])) {
     unlock_keyboard(keyboard);
     return;

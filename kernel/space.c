@@ -34,6 +34,7 @@
 #include <kernel/pointer.h>
 #include <kernel/pointer_present.h>
 #include <kernel/display_capture.h>
+#include <kernel/volume_ui.h>
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
 
@@ -396,6 +397,7 @@ struct nav_layout {
   size_t count;
   size_t visible;
   size_t tab_width;
+  bool master_icon, space_icons;
 };
 
 static struct nav_layout drawn_nav_layout;
@@ -418,7 +420,14 @@ static struct nav_layout nav_layout(void)
     chevrons += BATTERY_WIDGET_CELLS * bizcat.width;
   }
   size_t available = spaces_nav_fb->width > chevrons ? spaces_nav_fb->width - chevrons : 0;
-  size_t minimum = (widest + 2 * SPACES_NAV_TITLE_PADDING_CELLS) * bizcat.width;
+  size_t control_minimum = (1 + 2 * SPACES_NAV_TITLE_PADDING_CELLS) * bizcat.width;
+  layout.master_icon = available >= VOLUME_ICON_WIDTH + control_minimum;
+  if (layout.master_icon) {
+    available -= VOLUME_ICON_WIDTH;
+  }
+  layout.space_icons = available >= VOLUME_ICON_WIDTH + control_minimum;
+  size_t minimum = (widest + 2 * SPACES_NAV_TITLE_PADDING_CELLS) * bizcat.width +
+      (layout.space_icons ? VOLUME_ICON_WIDTH : 0);
   layout.visible = MIN(layout.count, MAX(available / minimum, 1));
   layout.tab_width = available / layout.visible;
   return layout;
@@ -507,10 +516,15 @@ static void draw_layer_marker(struct space *space, size_t x, size_t width)
   }
 }
 
-static void draw_tab(struct space *space, size_t x, size_t width)
+static void draw_tab(struct space *space, size_t x, size_t width, bool volume_icon)
 {
-  draw_layer_marker(space, x, width);
   fb_rect(spaces_nav_fb, x, 0, width, SPACES_NAV_HEIGHT, aardvark_scheme.palette[8]);
+  if (volume_icon) {
+    volume_ui_draw_icon(spaces_nav_fb, space, x + width - VOLUME_ICON_WIDTH,
+        space != caelum_space);
+    width -= VOLUME_ICON_WIDTH;
+  }
+  draw_layer_marker(space, x, width);
 
   char title[SPACE_TITLE_MAX + 1];
   snapshot_title(space, title);
@@ -627,12 +641,25 @@ static struct nav_layout draw_spaces_nav(void)
         battery.percent);
   }
 
+  size_t master_x = spaces_nav_fb->width - chevron_width -
+      (battery_shown ? BATTERY_WIDGET_CELLS * bizcat.width : 0) -
+      (layout.master_icon ? VOLUME_ICON_WIDTH : 0);
+  if (layout.master_icon) {
+    volume_ui_draw_icon(spaces_nav_fb, NULL, master_x, true);
+  }
+
   struct space *space = caelum_space;
   for (size_t i = 0; i < viewport_first; ++i) {
     space = space->next;
   }
+  struct volume_ui_layout volume_layout = {.first_space = space, .tab_x = chevron_width,
+    .tab_width = layout.tab_width, .tab_count = layout.visible, .master_x = master_x,
+    .screen_width = screen->width, .screen_height = screen->height,
+    .master_shown = layout.master_icon, .spaces_shown = layout.space_icons};
+  volume_ui_begin_frame(&volume_layout, spaces_nav_fb);
   for (size_t i = 0; i < layout.visible; ++i) {
-    draw_tab(space, chevron_width + i * layout.tab_width, layout.tab_width);
+    draw_tab(space, chevron_width + i * layout.tab_width, layout.tab_width,
+        layout.space_icons);
     space = space->next;
   }
   return layout;
@@ -831,6 +858,8 @@ static void resize_display(void)
   uint64_t elapsed = arch_monotonic_ns() - started;
   log_end(locked);
   drawn_nav_valid = false;
+  volume_ui_cancel();
+  volume_ui_end_frame(false);
   for (struct space *space = caelum_space; space; space = space->next) {
     pointer_geometry_changed(space);
     pointer_terminal_geometry_changed(space);
@@ -864,7 +893,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
   size_t height = screen->height - SPACES_NAV_HEIGHT;
   if (source->width == screen->width && source->height == height &&
       source->pitch == screen->pitch) {
-    pointer_present_copy(screen, pointer, SPACES_NAV_HEIGHT * screen->pitch,
+    volume_ui_present_copy(screen, pointer, SPACES_NAV_HEIGHT * screen->pitch,
         (const void *)source->address, source->size);
     return;
   }
@@ -874,7 +903,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
   for (size_t y = 0; y < height; ++y) {
     if (y < source->height && columns == screen->width &&
         source->pitch >= screen->pitch) {
-      pointer_present_copy(screen, pointer, (SPACES_NAV_HEIGHT + y) * screen->pitch,
+      volume_ui_present_copy(screen, pointer, (SPACES_NAV_HEIGHT + y) * screen->pitch,
           (const void *)(source->address + y * source->pitch), screen->pitch);
       continue;
     }
@@ -884,7 +913,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
     } else if (y == source->height) {
       fb_fill_rect(cursor_row_fb, 0, 0, cursor_row_fb->width, 1, background);
     }
-    pointer_present_copy(screen, pointer, (SPACES_NAV_HEIGHT + y) * screen->pitch,
+    volume_ui_present_copy(screen, pointer, (SPACES_NAV_HEIGHT + y) * screen->pitch,
         (const void *)cursor_row_fb->address, screen->pitch);
   }
 }
@@ -903,6 +932,7 @@ void space_present()
 
   if (!display_begin_frame()) {
     drawn_nav_valid = false;
+    volume_ui_end_frame(false);
     screen_capture_finish(false);
     return;
   }
@@ -913,7 +943,7 @@ void space_present()
   pointer_frame_snapshot(&pointer_snapshot);
   const struct pointer_frame *pointer = &pointer_snapshot;
   cpu_restore_interrupts(flags);
-  pointer_present_copy(screen, pointer, 0,
+  volume_ui_present_copy(screen, pointer, 0,
       (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
   const struct framebuffer *source = frame ? &frame->fb : space->fb;
 
@@ -965,7 +995,7 @@ void space_present()
         continue;
       }
       size_t row_start = row * row_bytes;
-      pointer_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
+      volume_ui_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
           row_start - copied);
       if (selected) {
         for (size_t column = first; column <= last; ++column) {
@@ -976,11 +1006,11 @@ void space_present()
       if (caret) {
         draw_block_cursor(cursor_row_fb, x * font->width, font, scheme);
       }
-      pointer_present_copy(screen, pointer, dst_offset + row_start,
+      volume_ui_present_copy(screen, pointer, dst_offset + row_start,
           (const void *)cursor_row_fb->address, row_bytes);
       copied = row_start + row_bytes;
     }
-    pointer_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
+    volume_ui_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
         source->size - copied);
   }
 
@@ -993,6 +1023,7 @@ frame_done:
     drawn_nav_width = nav_width;
   }
   drawn_nav_valid = presented;
+  volume_ui_end_frame(presented);
   cpu_restore_interrupts(flags);
   if (frame) {
     flags = cpu_save_interrupts();
@@ -1019,6 +1050,7 @@ static void switch_space(struct space *next)
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
   if (next != active_space) {
+    volume_ui_cancel();
     keyboard_focus(active_space->keyboard, false);
     struct space *previous = active_space;
     active_space = next;
@@ -1053,6 +1085,7 @@ static void handle_space_input(void)
 {
   struct key_event event;
   static bool navigation_held[KEY_COUNT];
+  static bool volume_held[KEY_COUNT];
   static bool escape_held;
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
@@ -1060,7 +1093,9 @@ static void handle_space_input(void)
   while (keyboard_read_event(&event)) {
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
+      memset(volume_held, 0, sizeof(volume_held));
       uint64_t flags = cpu_save_interrupts();
+      volume_ui_cancel();
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
       for (struct space *space = caelum_space->next; space; space = space->next) {
@@ -1104,6 +1139,23 @@ static void handle_space_input(void)
         }
         continue;
       }
+    }
+    if (volume_held[event.key]) {
+      if (event.action == KEY_RELEASE) {
+        volume_held[event.key] = false;
+      } else if (volume_ui_keyboard_focused()) {
+        uint64_t flags = cpu_save_interrupts();
+        volume_ui_keyboard_input(&event);
+        cpu_restore_interrupts(flags);
+      }
+      continue;
+    }
+    uint64_t volume_flags = cpu_save_interrupts();
+    bool volume_consumed = volume_ui_keyboard_input(&event);
+    cpu_restore_interrupts(volume_flags);
+    if (volume_consumed) {
+      volume_held[event.key] = event.action != KEY_RELEASE;
+      continue;
     }
     /* Caelum's space has no input reader. */
     if (active_space == caelum_space) {
@@ -1201,6 +1253,10 @@ void space_present_task(void *argument)
       }
       space_present();
     } else {
+      uint64_t flags = cpu_save_interrupts();
+      volume_ui_cancel();
+      volume_ui_end_frame(false);
+      cpu_restore_interrupts(flags);
       screen_capture_finish(false);
     }
     deadline += PRESENT_INTERVAL_NS;
