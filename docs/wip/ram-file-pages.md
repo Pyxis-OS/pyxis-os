@@ -1,10 +1,10 @@
 # Page-backed RAM files
 
-Status: **proposal, 2026-10-09,** assigned to Claude as technical-debt paydown.
+Status: **accepted, 2026-10-09,** assigned to Claude as technical-debt paydown.
 It fixes [contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing)
 and the RAM-file part of the
 [never-reused kernel heap arena](../technical-debt.md#never-reused-kernel-heap-arena).
-Three [decisions](#decisions) need the owner before code.
+The owner accepted all three [decisions](#decisions) as proposed.
 
 ## Problem
 
@@ -108,7 +108,9 @@ free one frame per page, and grow the index rarely and geometrically.
 
 ## Decisions
 
-1. **Allocation on the writing CPU.** Default: yes.
+Accepted by the owner 2026-10-09.
+
+1. **Allocation on the writing CPU.**
    - RAM-file growth today is a BSP request, and the SMP reference lists it as
      one.
    - With pages, appending writes need new frames on almost every call. A BSP
@@ -117,7 +119,7 @@ free one frame per page, and grow the index rarely and geometrically.
      interrupts off. Private memory allocation already works this way.
    - **Alternative:** keep growth on the BSP, reserving frames geometrically
      to limit round trips. That holds spare frames and keeps the queue delay.
-2. **Retire the RAM FILE profile.** Default: yes.
+2. **Retire the RAM FILE profile.**
    - `PROFILE_RIGHT_FILE` and `profile_file_begin/snapshot/end` count BSP buffer
      replacements: their capacity, copied bytes, queue and service times.
      Under decision 1 none of these exist.
@@ -127,7 +129,7 @@ free one frame per page, and grow the index rarely and geometrically.
    - **Alternative:** keep the layout and redefine the fields for page
      allocation on the caller. That keeps a protocol that no longer describes
      anything worth measuring.
-3. **Holes instead of reservation.** Default: holes.
+3. **Holes instead of reservation.**
    - RESIZE up and a write past the end leave unwritten pages as holes, so
      memory follows written data and a large RESIZE is cheap.
    - **Consequence:** RESIZE no longer reserves memory, so a later write inside

@@ -89,7 +89,7 @@ Chosen by the owner, each starting with a proposal:
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
 - **Claude** (2026-10-09, debt paydown): [page-backed RAM files](ram-file-pages.md),
-  proposal with three decisions for the owner.
+  three decisions accepted 2026-10-09; implementation in progress.
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
