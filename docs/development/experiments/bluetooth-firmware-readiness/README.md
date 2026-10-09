@@ -488,3 +488,35 @@ The next owner batch uses the default info level for one cold power-on and direc
 warm reboot of the reviewed image. Native cold readiness and operational bulk
 reuse remain qualification gates; this code inspection is not a native pass.
 Task 3 stays open and #564 draft. Task 4 is not assigned.
+
+
+### Warm QEMU regression of the transaction-error fix
+
+Measured code/image revision: 82a6fe85, default `LOG_LEVEL=info`, ThinkPad Fedora
+KVM/Q35, four CPUs/2 GiB, real warm AX200, private USB storage and unsupported
+EHCI as above. The actual node remained `/dev/bus/usb/004/003` with read/write
+access; Fedora Bluetooth stayed inactive. Hosting xHCI COMPLETE, EHCI UNSUPPORTED
+and `lsusb -n` status 1 preserved the accepted inventory behavior. The single
+Bluetooth klog summary was warm skip/DDC/development READY. Read-only GDB found
+one candidate, zero upload commands, two DDC commands, command credit 1, ACL
+credits 3/payload 251, no partial frame/terminal failure and no boot-transition
+exception used. Both receive pairs were POSTED, queues empty, IN not halted and
+boot state NONE. Across a separate 30-second quiet wait all those scalars and
+xHCI IRQ/command/event counts were unchanged (895/8/903).
+
+Text retrieval and the existing three-sample 1-MiB storage workload verified.
+Payload median/range was 145.111 ms / 137.711–146.172 ms; complete consumption
+146.844 ms / 139.435–147.282 ms. These are unprofiled warm fixture observations,
+not native radio throughput or a comparison with the earlier trace-level run.
+Info/trace kernel builds and the default-level image build passed, using matching
+SDK/userspace/ports bundles and the current kernel. CI 1482 passed all existing
+jobs for 82a6fe85. Independent source re-review resolved the framing-sequence and
+notification-origin findings and found no remaining blocking issue.
+
+QEMU's warm controller did not exercise the expected code-4 transition or its
+reset/dequeue fence; no fault injection was performed. Native default-level
+cold/warm qualification remains required. Raw captures are local in
+`/tmp/pyxis-bluetooth-boot-transition`; no raw evidence files were added. QEMU,
+GDB and remote clients are stopped; the ThinkPad is free. Fedora Bluetooth is
+still inactive. Re-enable it when Bluetooth work is finished. Task 4 remains
+unassigned; stopping for review of #564.
