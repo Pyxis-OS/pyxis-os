@@ -87,7 +87,7 @@ struct xhci_interrupt {
   uint64_t sequence;
   unsigned enqueue, dci, queue_head, queue_count;
   enum usb_result result;
-  bool cycle, configured, started;
+  bool cycle, configured, started, successful_short_traced;
 };
 enum async_bulk_receive_state { ASYNC_BULK_FREE, ASYNC_BULK_POSTED, ASYNC_BULK_HELD };
 struct xhci_async_bulk_receive {
@@ -108,7 +108,7 @@ struct xhci_async_bulk {
   uint64_t sequence;
   unsigned queue_head, queue_count;
   enum usb_result result;
-  bool configured, started;
+  bool configured, started, successful_short_traced;
   struct {
     uintptr_t data_address;
     phys_addr_t data_physical, trb;
@@ -1164,8 +1164,26 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct xhc
   }
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
-  if ((completion == XHCI_EVENT_SUCCESS && !residue) ||
-      (completion == XHCI_EVENT_SHORT_PACKET && residue <= interrupt->receive_bytes)) {
+  bool successful_short = completion == XHCI_EVENT_SUCCESS && residue &&
+      residue <= interrupt->receive_bytes;
+  if ((completion != XHCI_EVENT_SUCCESS && completion != XHCI_EVENT_SHORT_PACKET) ||
+      residue > interrupt->receive_bytes ||
+      (successful_short && !interrupt->successful_short_traced)) {
+    ktrace("xHCI %x:%x.%u: interrupt IN completion code %u residue %zu requested %zu "
+        "slot %u dci %u receive %u ring index %llu control %x\n",
+        controller->address.bus, controller->address.device, controller->address.function,
+        completion, residue, interrupt->receive_bytes, interrupt->device->slot,
+        interrupt->dci, (unsigned)(receive - interrupt->receive),
+        (unsigned long long)((receive->trb - interrupt->ring.physical) / XHCI_TRB_BYTES),
+        event->control);
+    if (KLOG_TRACE_ENABLED && successful_short) {
+      interrupt->successful_short_traced = true;
+    }
+  }
+  /* Some controllers report successful short IN transfers as SUCCESS.
+   * Ownership and the bounded residual establish the retired byte count. */
+  if ((completion == XHCI_EVENT_SUCCESS || completion == XHCI_EVENT_SHORT_PACKET) &&
+      residue <= interrupt->receive_bytes) {
     size_t actual = interrupt->receive_bytes - residue;
     receive->state = INTERRUPT_FREE;
     /* Terminal failure stops rearm, but other posted TDs still have owners. */
@@ -1329,8 +1347,25 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
     controller->failure = "unowned async bulk IN transfer event";
     return false;
   }
-  if ((completion == XHCI_EVENT_SUCCESS && !residue) ||
-      (completion == XHCI_EVENT_SHORT_PACKET && residue <= bulk->receive_bytes)) {
+  bool successful_short = completion == XHCI_EVENT_SUCCESS && residue &&
+      residue <= bulk->receive_bytes;
+  if ((completion != XHCI_EVENT_SUCCESS && completion != XHCI_EVENT_SHORT_PACKET) ||
+      residue > bulk->receive_bytes || (successful_short && !bulk->successful_short_traced)) {
+    ktrace("xHCI %x:%x.%u: async bulk IN completion code %u residue %zu requested %zu "
+        "slot %u dci %u receive %u ring index %llu control %x queued bulk/interrupt %u/%u\n",
+        controller->address.bus, controller->address.device, controller->address.function,
+        completion, residue, bulk->receive_bytes, bulk->device->slot, endpoint,
+        (unsigned)(receive - bulk->receive),
+        (unsigned long long)((receive->trb - bulk->in.ring.physical) / XHCI_TRB_BYTES),
+        event->control, bulk->queue_count,
+        bulk->device->interrupt ? bulk->device->interrupt->queue_count : 0);
+    if (KLOG_TRACE_ENABLED && successful_short) {
+      bulk->successful_short_traced = true;
+    }
+  }
+  /* Match the retained interrupt path's successful short-transfer handling. */
+  if ((completion == XHCI_EVENT_SUCCESS || completion == XHCI_EVENT_SHORT_PACKET) &&
+      residue <= bulk->receive_bytes) {
     size_t actual = bulk->receive_bytes - residue;
     /* Terminal failure stops rearm, but other posted TDs still have owners. */
     if (bulk->result != USB_OK) {

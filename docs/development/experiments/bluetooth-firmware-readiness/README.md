@@ -1,6 +1,6 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **hosting-inventory correction warm-validated; native cold/warm rerun pending.**
+Status: **owned-IN compatibility correction and BOOT diagnostics; native trace rerun pending.**
 The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
 at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
@@ -109,7 +109,11 @@ recorded. Fresh native cold power-on and warm reboot are required after the fix.
 
 ## Owner's next native batch
 
-Collect after implementation is ready; no single native boot is requested now.
+After review, collect one diagnostic cold boot and a warm reboot. Build the
+kernel/image with `make -j16 image LOG_LEVEL=trace LOG_UDP=1`; for PXE, verify
+`log.udp=1` is on the kernel command line. Use the existing UDP listener before
+power-on and preserve the compiled trace ELF/image identity. An info-level kernel
+compiles ktrace out: UDP enablement alone cannot expose these diagnostics.
 Booting Pyxis takes this session offline.
 
 1. Record reviewed revision and image/ELF identity. Fully power off, then cold
@@ -123,9 +127,12 @@ Booting Pyxis takes this session offline.
 2. Warm reboot Pyxis into that same image. Record warm skip or specific failure;
    distinguish reboot from cold power-on. The expected skip summary is
    “AX200 USB ready (warm skip, DDC, development firmware)”.
-3. If necessary repeat with LOG_LEVEL=trace, retaining only parsed firmware,
-   boot/security/build fields, progress counts and inventory state. Remove
-   addresses before recording; no packet or memory dumps.
+3. Retain the unusual/rejected interrupt/async bulk IN completion code, residual,
+   requested length, slot/DCI and receive/ring indices; BOOT publication and USB
+   collection; transport-failure flags; and the parsed vendor boot notification.
+   Successful-short examples are limited to one per stream. Record whether real
+   notification and USB retirement were both observed. Remove addresses before
+   recording; no packet or memory dumps.
 4. Return to Fedora. **Re-enable Fedora Bluetooth when Bluetooth work is done**
    with sudo systemctl enable --now bluetooth.service. Reload the Codex SSH key
    after reboot as usual.
@@ -371,3 +378,43 @@ No new performance comparison or runtime incomplete-host injection was performed
 Raw captures remain local in /tmp/pyxis-bluetooth-host-inventory. QEMU/debugger
 jobs are stopped. The owner must repeat native cold power-on and warm reboot
 with a fresh image; #564 remains draft and task 4 remains unassigned.
+
+## Native BOOT completion follow-up
+
+Owner-reported 2026-10-09 image: main 51cbec9 plus #564 at a1d97dc5 and #578.
+Hosting inventory passed; SFI validation/secure upload completed, then BOOT
+failed with call status 19 and “failed or invalid async bulk IN transfer
+completion”, halting xHCI 07:00.4. A direct warm reboot from Pyxis into the same
+image reached warm skip/DDC READY. This establishes that the uploaded firmware
+became operational; cold BOOT retirement/readiness still failed.
+
+Source inspection narrows the reported rejection to completion semantics after
+matching a posted receive TD and IN endpoint. SHORT_PACKET with a bounded
+residual, including zero bytes, was already accepted; bounded STALL retained DMA
+and stopped rearm without this immediate controller-halt message. HCI frames
+split across successful transfers were already reassembled. The old path rejected
+SUCCESS with nonzero residual, oversized residuals and all other error codes.
+The native code/residual is unknown; phase BOOT alone does not prove reset
+publication or receipt of its real notification.
+
+[Linux v6.18 xHCI](https://github.com/torvalds/linux/blob/v6.18/drivers/usb/host/xhci-ring.c#L2535-L2541)
+normalizes SUCCESS with nonzero residual to short transfer. The bounded correction
+applies to retained interrupt and async bulk IN only: require the owned TD and
+SUCCESS/SHORT_PACKET, require residual <= requested, copy exactly requested minus
+residual and use existing FIFO/sequence retirement. It adds no BOOT-only exception.
+OUT/control, malformed bounds, STALL, other error and DMA retention are unchanged.
+This fixes a concrete compatibility rejection; it is not yet the proven native
+cause. New parsed traces identify remaining errors and BOOT publication/retirement
+without logging addresses, payloads or keys.
+
+[btintel_boot](https://github.com/torvalds/linux/blob/v6.18/drivers/bluetooth/btintel.c#L1782-L1823)
+arms booting, sends reset and waits five seconds for the real boot notification;
+it does not restart receive URBs specially for successful boot.
+[btusb](https://github.com/torvalds/linux/blob/v6.18/drivers/bluetooth/btusb.c#L1310-L1465)
+parses successful receives and resubmits non-unlink errors while running, using
+Linux's endpoint recovery/retirement machinery. Pyxis cannot safely copy that
+resubmission alone. Transaction/babble/stopped or malformed completions remain
+fail-closed; a trace showing them needs a reviewed ownership-safe recovery design.
+Real boot notification, USB completion, clean frame boundaries and operational
+version confirmation remain mandatory. The single trace batch above determines
+whether this correction resolves the native failure. #564 stays draft.

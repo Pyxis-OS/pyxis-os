@@ -57,7 +57,12 @@ logged. Applications are not supplied this privileged packet interface.
 
 ## Progress and failure
 
-Independent endpoint sequences and bounded framing detect discontinuity. A first
+Independent endpoint sequences and bounded framing detect discontinuity. An
+owned IN completion with SUCCESS and a bounded nonzero residual is treated as a
+short transfer, copying only requested minus residual bytes. SHORT_PACKET and
+zero-length reception use the same retirement path. Ownership mismatch,
+oversized residual, STALL or other error retains the existing terminal limits;
+there is no BOOT-specific error exemption or endpoint recovery. A first
 ACL frame can precede its connection event across drains. Up to eight whole
 frames are retained in endpoint order for at most five seconds from their first
 byte, then replayed only after connection admission in the captured session.

@@ -437,4 +437,9 @@ unsupported Realtek DASH EHCI function. The owner accepted hosting-controller
 completeness on #564; fresh cold power-on and warm reboot must be repeated after
 that correction. Its warm QEMU check retained an unsupported EHCI and global
 incompleteness while Bluetooth and storage worked on the complete hosting xHCI.
-Native upload remains unqualified; task 3 stays open and #564 draft.
+The next owner batch (main 51cbec9 plus #564/#578) completed the secure upload,
+then failed at BOOT's async bulk IN completion; a direct Pyxis warm reboot reached
+warm skip/DDC readiness. The firmware booted, but cold readiness is unqualified.
+The bounded owned-IN SUCCESS/residual compatibility correction and BOOT trace
+points are on #564 for review. One trace-enabled cold/warm batch remains required;
+task 3 stays open, #564 draft and task 4 unassigned.

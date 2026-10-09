@@ -97,7 +97,9 @@ void usb_host_notify(struct usb_host_controller *controller);
  * of the endpoint's packet size. No caller destination survives a call.
  * Wait expiry leaves receives posted. Rejected take preserves the queue head.
  * Terminal stream failure takes precedence over queued data and stops rearm;
- * posted/stalled DMA remains retained. There is no cancellation or recovery. */
+ * posted/stalled DMA remains retained. Owned SUCCESS or SHORT_PACKET with a
+ * bounded residual retires exactly requested minus residual bytes, including
+ * zero. There is no cancellation or recovery. */
 size_t usb_host_interrupt_capacity(void);
 enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
                                                 const struct usb_interrupt_endpoint *endpoint,

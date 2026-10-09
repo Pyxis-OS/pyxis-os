@@ -1216,6 +1216,13 @@ static void collect_usb_commands(void)
     flags = cpu_save_interrupts();
     if (result == USB_OK) {
       command->usb_done = true;
+      if (command->kernel && command->boot) {
+        ktrace("Bluetooth HCI: BOOT USB collected, ticket %llu result %u bytes %zu "
+            "expected %zu hci-done %u notification %u\n",
+            (unsigned long long)ticket.generation, (unsigned)completion.result,
+            completion.bytes, command->length, command->hci_done,
+            adapter.firmware.boot_notified);
+      }
       if (completion.result != USB_OK || completion.bytes != command->length) {
         fail_adapter(usb_failure(completion.result, true));
       }
@@ -1447,6 +1454,13 @@ static void publish_command(void)
         !bluetooth_firmware_published(&adapter.firmware, arch_monotonic_ns())) {
       fail_adapter_reason(CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
     }
+    if (selected->kernel && selected->boot) {
+      ktrace("Bluetooth HCI: BOOT published, opcode %x route %s ticket %llu "
+          "usb-done %u hci-done %u notification %u\n",
+          selected->opcode, selected->bulk ? "bulk" : "control",
+          (unsigned long long)ticket.generation, selected->usb_done, selected->hci_done,
+          adapter.firmware.boot_notified);
+    }
     if (!selected->kernel && !read_only_command(selected->opcode)) {
       adapter.dirty = true;
     }
@@ -1605,6 +1619,14 @@ void bluetooth_hci_transport_failed(struct usb_host_controller *host)
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
   if (adapter.host == host) {
+    if (!adapter.terminal) {
+      const struct hci_command *command = &adapter.commands[0];
+      ktrace("Bluetooth HCI: transport failed, phase %s boot %u published %u "
+          "usb-done %u hci-done %u notification %u partial interrupt/bulk %zu/%zu\n",
+          initialization_phase(), command->boot, command->published, command->usb_done,
+          command->hci_done, adapter.firmware.boot_notified, adapter.event_stream.used,
+          adapter.boot_event_stream.used);
+    }
     fail_adapter(CALL_IO);
   }
   cpu_restore_interrupts(flags);
