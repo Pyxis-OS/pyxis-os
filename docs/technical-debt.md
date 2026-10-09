@@ -218,10 +218,10 @@ use of the space's terminal, accepts only one-cell ASCII and keeps the prompt, l
 larger-line viewports are not implemented ([terminal contract](userland/terminal.md)). Revisit changed-span rendering or input
 buffering when interactive workloads make the cost material.
 
-[Shell history](userland/shell.md#commands-and-quoting) lives in memory, at most 100 lines per shell process, so it is lost on exit or
-reboot and new sessions start empty. The accepted follow-up (owner, 2026-10-09) saves it per space in `home://`; since one space can
-run several shells and spaces can share a home, that task must first decide how concurrent shells write the history. Ctrl+R search is
-deferred too.
+[Saved shell history](userland/shell.md#commands-and-quoting) rewrites `home://.history` (up to 64 KiB) on every recorded line. Two
+shells saving within milliseconds can lose a line, a killed save can leave a `.history.HEX` file that nothing removes, running shells
+don't see each other's new lines, and the file is shared by every space on that home. Revisit if a line loss is noticed in use or the
+per-command cost shows natively ([measurements](development/experiments/shell-history/README.md)). Ctrl+R search is deferred.
 
 ## Presenter-drawn block cursor
 
