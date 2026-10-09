@@ -72,6 +72,21 @@ automation were added.
 | Actual interactive host client | Typing, Backspace correction and echoed command output worked; prompt Ctrl+C cancelled a line |
 | Ctrl+C during foreground `cat` | Reported Process terminated; a following echo worked and ordinary `exit` returned host status 0 |
 
+## Current-main integration
+
+Main advanced during qualification. Integration kernel `3cfc617a` merges main
+`11d35fa6`, retaining its published userland `0c690289` and ports `8bff5dcd`
+pins; no dependency PR or independent gitlink change is added. The ordinary
+default `make -j16 image` passed from source with the same builder. On a fresh
+boot in the configuration above, immediate two-command EOF, raw `cat` data/EOF,
+held FIFO commands/exit, interactive typing/Backspace, prompt cancellation,
+foreground `cat` Ctrl+C, subsequent echo and ordinary exit all passed again.
+Machine sessions returned FINAL exit 0 with complete draining. Integration
+kernel SHA-256 is `e248f1a70ae41a526d1c55a17b2d45537708a54dca493c29c230895d22badad7`;
+initrd SHA-256 is `008bb37dec586d98081f052fd55d1cd60da0a5be1531cce9f0a1150c00099e97`.
+
+## Limits
+
 The blocking receiver wait-slot notification, hung-up registration refusal,
 new-paste refusal after EOF and existing admitted-paste framing/deadline were
 source-reviewed. No direct no-clock/infinite receiver-read or active-paste-at-EOF
