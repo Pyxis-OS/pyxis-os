@@ -96,9 +96,9 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  shared 128 MiB selected-image capture ceiling and failure rollback qualification,
-  using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
+- **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
+  Lua Messages harness first, Hax after; docs only. ZIP bundle defaults are
+  accepted in #639; delivery tasks still need separate owner go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   design accepted after failed native step 2 qualification, alongside the
   small observer safety follow-up. Read-only task 1 assigned separately.
