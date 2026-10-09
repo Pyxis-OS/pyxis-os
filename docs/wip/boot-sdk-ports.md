@@ -76,6 +76,11 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
+  keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
+  delivered together, ports first. See [SDL2](../development/sdl2.md) and the
+  [matched qualification](../development/sdl2-event-wait-qualification.md).
+
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
