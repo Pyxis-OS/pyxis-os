@@ -96,6 +96,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-09): [SDL2 clipboard](clipboard.md#proposed-graphics-activation),
+  graphics authority/activation proposal before implementation.
 - **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
   shared 128 MiB selected-image capture ceiling and failure rollback qualification,
   using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
