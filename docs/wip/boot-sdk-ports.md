@@ -77,9 +77,10 @@ Implemented behavior lives in the subsystem references listed in the
 Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
-  investigation and proposal only. Kernel ownership, VM/copy safety, native
-  lifecycle and TLS/runtime prerequisites; three owner decisions remain open.
-  No implementation task is assigned by this investigation.
+  three defaults accepted; task 1 assigned after #567 merges. Split process
+  ownership from task retirement while keeping one user task per process;
+  no thread syscall, TLS, device behavior or dependency pin. Later tasks remain
+  unassigned.
 - **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
   keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
   delivered together, ports first. See [SDL2](../development/sdl2.md) and the

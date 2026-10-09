@@ -43,9 +43,10 @@ pinned probe:
    runtime/library subset Clang requires, and useful native file, process,
    memory, synchronization and thread contracts, established through bounded
    consumers. The [shared-process thread investigation](threads.md) records VM,
-   lifetime, TLS and libc/C++ prerequisites and proposed native contracts;
-   implementation remains unassigned. Do not bury missing OS behavior in
-   compiler-specific stubs.
+   lifetime, TLS and libc/C++ prerequisites and accepted native direction;
+   task 1 assigns only process ownership/retirement, after #567 merges. Public
+   threads and runtime integration remain later tasks. Do not bury missing OS
+   behavior in compiler-specific stubs.
 3. **Clang hosted on Pyxis.** Cross-build the selected compiler, linker and tools
    to run in the guest. First completion: compile, link and run one small C program
    entirely inside Pyxis. Rebuilding LLVM itself in the guest is a later result,

@@ -1,8 +1,10 @@
 # Multiple threads in one process
 
-Status: investigation and proposal, 2026-10-09. No thread implementation or
-owner decision is accepted by this document. A merged proposal does not assign
-its first task. This is separate from moving kernel services off the BSP in
+Status: the owner accepted all three defaults on 2026-10-09. No thread
+implementation is delivered. Task 1 is assigned to Codex epsilon after
+[#567](https://git.internal/PyxisOS/pyxis-os/pulls/567) merges; later tasks remain
+unassigned. Detailed interfaces below remain proposals to refine within those
+accepted boundaries. This is separate from moving kernel services off the BSP in
 [SMP follow-ups](scheduling-and-threads.md).
 
 ## Evidence and scope
@@ -66,7 +68,7 @@ Three VM approaches have different scope:
 | Process-wide quiescence for mapping mutation | Keeps BSP mutation of an inactive shared root and simple page-table ownership | Pauses siblings for mutation; needs dispatch/admission exclusion and safe draining of kernel borrowers |
 | Concurrent mapping mutation plus per-range leases/pins and targeted shootdown | Can preserve unrelated sibling execution | Larger initial protocol: active-CPU membership, activation races, partial mutation, pins, reclamation and permission changes |
 
-Proposed starting point: parallel user execution, with **process-wide quiescence
+Accepted starting point: parallel user execution, with **process-wide quiescence
 for VM mutation**. Preserve the BSP as the mutation owner while bringing up the
 protocol; local shared-VM mutation can be reconsidered with evidence later.
 This revisits the existing local private-memory fast path deliberately.
@@ -259,7 +261,7 @@ retain process-wide termination; ordinary exception handling remains per thread.
 | Process-private wait on an aligned atomic word, plus wake | Cheap uncontended userspace locks; one small kernel park protocol can support mutexes, conditions, once and runtime guards. Requires atomic check/enqueue and VM/key lifetime coordination |
 | Waitable synchronization object handles | Explicit object lifetime and authority; avoids an address-key registry. More handles, allocation and calls for many runtime locks |
 
-Default proposal: process-private address wait/wake, not a general Linux futex
+Accepted direction: process-private address wait/wake, not a general Linux futex
 ABI. Key it by process identity and virtual address plus mapping lifetime; a reused
 address must not inherit waiters. WAIT compares an aligned word against the
 expected value under the same wait-bucket synchronization as registration, with
@@ -411,7 +413,11 @@ of them into a supposedly small create syscall would hide the actual work.
   their APIs. Enable SDL worker/timer callbacks as a bounded consumer afterward;
   audio callbacks remain an independent device consumer task.
 
-Each task needs assignment and its own focused PR. Before task 1, capture existing
+The owner assigned task 1 to Codex epsilon on 2026-10-09, to start only after
+#567 merges, on a fresh branch from main in its own worktree. Keep exactly one
+user task per process; add no thread syscall, TLS, device behavior or dependency
+pin. Deliver focused commits and a PR, then stop for review. Later tasks need
+separate assignment and their own focused PRs. Before task 1, capture existing
 launch/exit and BSP cleanup workloads on the exact baseline. Repeat matched
 single/four-CPU workloads after lifetime changes; later compare uncontended locks,
 creation/join, VM mutation pauses and parallel work with repeated samples and
@@ -419,21 +425,24 @@ variation. Use existing programs/probes and interactive QEMU/debugger inspection
 not new test or boot automation. Inspect normal/fault/group retirement and
 unpublished failure paths; later observe two distinct task stacks/FS bases sharing
 CR3, safe retirement while another sibling runs, and buffer/table loans during
-stop. These are proposed validation obligations, not completed checks.
+stop. Task 1's baseline, matched single/four-CPU workloads and retirement/failure
+inspection are assigned validation requirements; later checks remain proposed.
+None is completed by this documentation PR.
 
 ## Owner decisions
 
-All three are proposals; defaults are recommendations, not accepted requirements.
+The owner accepted all three defaults on 2026-10-09. Alternatives below remain
+unselected; acceptance establishes direction, not implemented behavior.
 
-1. **Execution and VM scope:** default parallel siblings with process-wide
+1. **Execution and VM scope:** accepted parallel siblings with process-wide
    quiescence and BSP-owned mapping mutation initially. Serial process execution
    is smaller for CPU activity but still requires the table/copy/loan audit;
    concurrent mutation with targeted shootdown is a larger alternative.
-2. **Lifetime and interruption:** default thread-local ordinary exit, process-wide
+2. **Lifetime and interruption:** accepted thread-local ordinary exit, process-wide
    explicit exit/fatal fault, and existing foreground Ctrl+C termination; process
    completion after final reclamation. Per-thread fault isolation or arbitrary
    asynchronous cancellation would require a different recovery contract.
-3. **Runtime parking:** default a process-private address wait/wake with deadlines,
+3. **Runtime parking:** accepted a process-private address wait/wake with deadlines,
    mapping-lifetime keys and ordinary stop unwinding. Handle-based synchronization
    is the alternative when explicit kernel object lifetime outweighs uncontended
    lock cost; full pthread/Linux futex semantics are outside this proposal.
