@@ -393,6 +393,10 @@ external source or mirror entry is introduced by this docs PR.
 
 ## First task and later gates
 
+The separate [program image and initial stack capacity proposal](program-stack-capacity.md)
+coordinates initial stack placement with later disjoint thread stacks; it adds
+no public threads. The owner assigned that priority-0 proposal after task 1.
+
 The smallest useful first task is **split process ownership from task retirement**,
 while retaining exactly one submitted user task per process, including blocked
 tasks. CREATE/EXIT/JOIN is
