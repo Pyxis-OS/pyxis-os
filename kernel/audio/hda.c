@@ -771,7 +771,11 @@ static bool enable_native_snoop(struct hda_controller *controller)
   uint8_t control = pci_read8(address, HDA_AMD_SNOOP_CONTROL);
   uint8_t expected = (control & ~HDA_AMD_SNOOP_MASK) | HDA_AMD_SNOOP_ENABLE;
   pci_write8(&controller->claim, HDA_AMD_SNOOP_CONTROL, expected);
-  return pci_read8(address, HDA_AMD_SNOOP_CONTROL) == expected;
+  uint8_t observed = pci_read8(address, HDA_AMD_SNOOP_CONTROL);
+  ktrace("hda: native PCI 42 snoop before=%x requested=%x after=%x mask=%x enabled=%x\n",
+      (unsigned)control, (unsigned)expected, (unsigned)observed,
+      HDA_AMD_SNOOP_MASK, HDA_AMD_SNOOP_ENABLE);
+  return observed == expected;
 }
 
 static struct hda_boot_state capture_boot_state(const struct pci_device *device)
