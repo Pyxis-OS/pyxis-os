@@ -532,7 +532,7 @@ bool hda_stream_prepare(struct hda_controller *controller)
     if (!encoded || encoded == UINT16_MAX) {
       return fail_controller(controller, "native output FIFO size unavailable");
     }
-    /* FIFOS encodes bytes minus one; reclaim guards use complete frames. */
+    /* Overestimate both byte-count and size-minus-one FIFO encodings. */
     uint32_t bytes = (uint32_t)encoded + 1;
     bytes = (bytes + HDA_FRAME_BYTES - 1) / HDA_FRAME_BYTES * HDA_FRAME_BYTES;
     if (bytes >= HDA_BUFFER_BYTES) {

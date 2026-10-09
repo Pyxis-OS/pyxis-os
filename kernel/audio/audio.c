@@ -301,9 +301,16 @@ static void audio_worker(void *argument)
       hda_fail(&controller, "initialization failed");
     } else {
       available = true;
-      klog("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",
-          route.vendor, (unsigned)route.codec, (unsigned)route.pin,
-          (unsigned)route.converter, HDA_RATE, HDA_STREAM_FORMAT);
+      if (controller.model == HDA_MODEL_AMD) {
+        klog("audio: ready codec=%x cad=%u speaker=%u headphone=%u DAC=%u rate=%u format=%x; output idle\n",
+            route.vendor, (unsigned)route.codec, (unsigned)route.pin,
+            (unsigned)route.headphone_pin, (unsigned)route.converter,
+            HDA_RATE, HDA_STREAM_FORMAT);
+      } else {
+        klog("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",
+            route.vendor, (unsigned)route.codec, (unsigned)route.pin,
+            (unsigned)route.converter, HDA_RATE, HDA_STREAM_FORMAT);
+      }
     }
   }
   for (;;) {
