@@ -1,9 +1,9 @@
 # MX Master 3S on Pyxis
 
-Status: **tasks 1–2 complete; task 3 firmware readiness assigned 2026-10-09.**
+Status: **tasks 1–3 complete; tasks 4–8 unassigned.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
-remain. Task 3 is assigned; tasks 4–8 still need explicit owner assignment.
+remain. Tasks 4–8 still need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -339,11 +339,13 @@ first and state merge order. Probe branches remain historical evidence.
   reception and matched storage/CPU checks are recorded; qualify real ACL traffic and storage coexistence with task 4's
   connection consumer. Do not block the xHCI worker for a 30-second userspace
   scan as the investigation probe did.
-- [ ] **3. Firmware readiness.** Choose/mirror/license the exact assets, implement
-  cold bootloader upload/DDC and real boot-event handling, then verify warm skip
-  and cold initialization. Address re-enumeration ownership only if required.
-  QEMU passthrough may remain warm; cold qualification needs owner-run native
-  evidence rather than forcing the controller into a guessed state.
+- [x] **3. Firmware readiness.** Complete 2026-10-09: pinned/mirrored/licensed
+  AX200 SFI/DDC, bounded cold upload and real boot-event retirement. Owner-reported
+  native cold upload/DDC READY and direct warm reboot/skip passed on main 6752bac
+  plus #564 at 8ae58f0f, default log level and production config.
+  [Evidence and limits](../development/experiments/bluetooth-firmware-readiness/README.md#native-confirmation-2026-10-09).
+  Production firmware compatibility still requires later encrypted bond/HID/input
+  evidence; task 4 is unassigned.
 - [ ] **4. LE connection and discovery.** Bounded authorized scan/selection,
   connection/disconnection, ACL/L2CAP framing and signaling, and minimal public
   ATT/GATT discovery. At the start, measure SMP Pairing Request/Response fields
@@ -424,27 +426,8 @@ before bonded reconnect is ready. This limit does not relax required durable
 reconnect or native closure. See the
 [revisit condition](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).
 
-Task 3 uses branch bluetooth/firmware-readiness from fresh main 52451d3 and
-[the pre-code plan and implementation record](../development/experiments/bluetooth-firmware-readiness/README.md).
-The mirrored assets verify, the image builds and corrected warm passthrough
-passed three fresh guests, including DDC, storage and idle reception. Native cold
-power-on and warm reboot are collected as the next owner batch. Task 3 remains
-unchecked until its validation is accounted for; later tasks are unassigned.
-
-The owner-reported 2026-10-09 integration cold boot stopped at global USB
-inventory sealing, before firmware initialization, because of the built-in
-unsupported Realtek DASH EHCI function. The owner accepted hosting-controller
-completeness on #564; fresh cold power-on and warm reboot must be repeated after
-that correction. Its warm QEMU check retained an unsupported EHCI and global
-incompleteness while Bluetooth and storage worked on the complete hosting xHCI.
-The next owner batch (main 51cbec9 plus #564/#578) completed the secure upload,
-then failed at BOOT's async bulk IN completion; a direct Pyxis warm reboot reached
-warm skip/DDC readiness. The firmware booted, but cold readiness is unqualified.
-The trace batch (main e6cc8a3 plus #564 de83ce0c) identified a zero-byte USB
-Transaction Error on bootloader bulk IN after BOOT USB retirement. The earlier
-SUCCESS/residual correction was not its cause. #564 now admits that error only
-once during published BOOT, fences both boot TDs with Reset Endpoint/Set TR
-Dequeue, then requires real interrupt boot notification before operational IN
-rearm and BOOT retirement. All other errors remain fail-closed. One default-level
-cold/warm batch remains required; task 3 stays open, #564 draft and task 4
-unassigned.
+Task 3 is complete: [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
+records the pinned assets, warm QEMU/storage/idle checks and owner-reported native
+cold upload/DDC readiness and warm skip on 2026-10-09. The
+[implementation/evidence record](../development/experiments/bluetooth-firmware-readiness/README.md)
+retains the inventory and BOOT transition fixes. Tasks 4–8 remain unassigned.

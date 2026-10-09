@@ -1,12 +1,23 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **bounded BOOT bulk-IN retirement implemented; native default-level rerun pending.**
+Status: **task 3 complete; native cold upload and warm skip confirmed 2026-10-09.**
 The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
 at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
 [#552](https://git.internal/PyxisOS/pyxis-os/pulls/552) merged.
 This is task 3 of [the mouse milestone](../../../wip/bluetooth-mouse.md).
 Connections, pairing, bonds and input remain later assignments.
+
+## Native confirmation, 2026-10-09
+
+[Owner-reported confirmation on #564](https://git.internal/PyxisOS/pyxis-os/pulls/564):
+main 6752bac plus #564 at 8ae58f0f, default log level, production config and UDP
+log on horse. Cold power-on reached `AX200 USB ready (cold upload, DDC,
+development firmware)`; direct warm reboot reached `AX200 USB ready (warm skip,
+DDC, development firmware)`. Both task 3 native gates passed; #564 is ready for
+the owner's merge. This qualifies firmware readiness, not encrypted ACL/bond/HID
+or production firmware compatibility. Task 4 remains unassigned. Re-enable Fedora
+Bluetooth when Bluetooth work is finished.
 
 ## Exact asset and packaging plan
 
@@ -107,9 +118,9 @@ Success remains one upload/warm-skip summary, failures one specific phase/reason
 with parsed detail in ktrace. No Bluetooth addresses, raw packets or keys are
 recorded. Fresh native cold power-on and warm reboot are required after the fix.
 
-## Owner's next native batch
+## Native batch procedure (completed)
 
-After review, collect one default-level cold boot and a warm reboot. Build the
+The owner completed this cold/warm batch, recorded above. Build the
 kernel/image with `make -j16 image LOG_LEVEL=info LOG_UDP=1`; for PXE, verify
 `log.udp=1` is on the kernel command line. Use the existing UDP listener before
 power-on and preserve the actual ELF/image identity. The diagnostic trace batch
@@ -142,7 +153,7 @@ Booting Pyxis takes this session offline.
 
 QEMU passthrough can qualify warm skip and storage coexistence while Fedora has
 initialized AX200; it does not establish Pyxis cold upload. Native results remain
-owner-reported until supplied. This plan claims no task 3 completion.
+owner-reported. The confirmation above closes task 3; later radio/input gates remain.
 
 
 ## Implementation and recoverable status
@@ -195,9 +206,9 @@ inactive/disabled during passthrough.
 
 Baseline bundles, immutable image/ELF, a private npfs fixture and remote-init
 script are prepared in /tmp/pyxis-bluetooth-firmware-readiness. Matched warm checks
-are recorded below, with passing corrected-code CI run 1389. Pending work is
-review and the owner's cold/warm native batch. Task 3 remains unchecked for
-that native evidence; the PR stays draft. No later task is assigned or started.
+are recorded below, with passing corrected-code CI run 1389. The native
+confirmation above closes task 3; #564 is ready for the owner's merge. No later
+task is assigned or started.
 All QEMU, debugger and remote-client jobs are stopped.
 
 The earlier 0x21 request was measured warm-only. Linux uses 0x20 for the AX200
@@ -484,10 +495,9 @@ hardware commands run in the outer worker while their waits drain other events.
 A second/data-bearing error, unknown owner, queued/partial prefix, missed deadline
 or failed host command remains fail-closed. No runtime retry policy was added.
 
-The next owner batch uses the default info level for one cold power-on and direct
-warm reboot of the reviewed image. Native cold readiness and operational bulk
-reuse remain qualification gates; this code inspection is not a native pass.
-Task 3 stays open and #564 draft. Task 4 is not assigned.
+The subsequent default-info native cold/warm confirmation above closes the
+firmware-readiness gate. This code inspection does not qualify real ACL traffic;
+that remains task 4's gate, and task 4 is not assigned.
 
 
 ### Warm QEMU regression of the transaction-error fix
@@ -514,9 +524,9 @@ jobs for 82a6fe85. Independent source re-review resolved the framing-sequence an
 notification-origin findings and found no remaining blocking issue.
 
 QEMU's warm controller did not exercise the expected code-4 transition or its
-reset/dequeue fence; no fault injection was performed. Native default-level
-cold/warm qualification remains required. Raw captures are local in
+reset/dequeue fence; no fault injection was performed. The native confirmation
+above subsequently passed cold/warm readiness with the same code. Raw captures are local in
 `/tmp/pyxis-bluetooth-boot-transition`; no raw evidence files were added. QEMU,
 GDB and remote clients are stopped; the ThinkPad is free. Fedora Bluetooth is
 still inactive. Re-enable it when Bluetooth work is finished. Task 4 remains
-unassigned; stopping for review of #564.
+unassigned; #564 is ready for the owner to merge.
