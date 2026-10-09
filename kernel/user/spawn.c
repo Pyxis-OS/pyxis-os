@@ -219,8 +219,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
   group->execution_group = execution_group;
   struct process *child;
   uintptr_t entry;
-  bool external = capture->image->backing == FILE_HOST ||
-      capture->image->backing == FILE_NPFS;
+  /* Only boot-archive images are read in place; the others were copied. */
+  bool external = capture->image->backing != FILE_INITRD;
   const void *bytes = external ? capture->external_image : capture->image->data;
   size_t size = external ? capture->external_image_size : capture->image->size;
   enum call_status status = execution_group_check(execution_group, space);
@@ -349,8 +349,8 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
   KASSERT(arch_cpu_index() == 0);
   *result = HANDLE_INVALID;
   struct launch_space *request = &capture->space;
-  bool in_memory = capture->image && capture->image->backing != FILE_HOST &&
-      capture->image->backing != FILE_NPFS;
+  /* Only a boot-archive image still holds its file's operation ownership. */
+  bool in_memory = capture->image && capture->image->backing == FILE_INITRD;
   enum call_status status = space_name_taken(request->name) ? CALL_BAD_REQUEST : CALL_OK;
   size_t words = space_cpu_words();
   uint64_t *ceiling = NULL;

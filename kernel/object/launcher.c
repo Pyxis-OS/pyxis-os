@@ -539,9 +539,21 @@ enum call_status launcher_capture_request(const struct launch_request *request,
   } else if (!file_begin_operation(capture->image)) {
     discard_launch_capture(capture);
     return CALL_ENDPOINT_CLOSED;
+  } else if (capture->image->backing == FILE_RAM) {
+    /* RAM pages are not contiguous; the loader reads one copied image. */
+    void *bytes;
+    size_t size;
+    enum call_status status = file_ram_capture(capture->image, &bytes, &size);
+    file_end_operation(capture->image);
+    if (status != CALL_OK) {
+      discard_launch_capture(capture);
+      return status;
+    }
+    capture->external_image = bytes;
+    capture->external_image_size = size;
   }
   if (task_stop_requested()) {
-    if (capture->image->backing == FILE_INITRD || capture->image->backing == FILE_RAM) {
+    if (capture->image->backing == FILE_INITRD) {
       file_end_operation(capture->image);
     }
     discard_launch_capture(capture);
@@ -559,8 +571,7 @@ struct launch_capture *launcher_capture_empty(void)
 
 void launcher_capture_discard(struct launch_capture *capture)
 {
-  if (capture->image && (capture->image->backing == FILE_INITRD ||
-      capture->image->backing == FILE_RAM)) {
+  if (capture->image && capture->image->backing == FILE_INITRD) {
     file_end_operation(capture->image);
   }
   discard_launch_capture(capture);

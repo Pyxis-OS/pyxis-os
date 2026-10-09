@@ -71,5 +71,11 @@ bool arch_user_buffer_accessible(const struct arch_address_space *space,
 /* Any CPU with IF=0, outside interrupt/fault entry. Uses that CPU's own
  * pre-established scratch slot, no allocations; never exposes a lasting pointer. */
 void arch_frame_zero(phys_addr_t physical);
+/* Any CPU with IF=0, outside interrupt/fault entry. Maps one frame at the
+ * calling CPU's data scratch slot until arch_frame_unmap. In between, the
+ * caller may copy to or from the frame, including user copies, but must not
+ * zero frames, allocate, or walk or change page tables: those reuse the slots. */
+void *arch_frame_map(phys_addr_t physical);
+void arch_frame_unmap(void);
 
 #endif
