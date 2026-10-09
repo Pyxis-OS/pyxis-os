@@ -12,8 +12,7 @@ investigation's own probe code, including its warm-firmware verification and
 scan consumers, remains on unmerged branches. The investigation did not qualify
 connections, pairing, bonds, GATT or pointer delivery, and main has no pairing,
 HID input or Bluetooth service support. The [mouse milestone](../wip/bluetooth-mouse.md)
-retains pending policy decisions and unassigned implementation tasks; its task 2,
-the runtime transport, is complete.
+tracks the remaining tasks; task 2, the runtime transport, is complete.
 
 ## Hardware and passthrough
 
