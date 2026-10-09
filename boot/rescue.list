@@ -8,6 +8,7 @@ httpfs.pxe
 cat.pxe
 cp.pxe
 echo.pxe
+hostname.pxe
 ls.pxe
 mkdir.pxe
 rm.pxe
