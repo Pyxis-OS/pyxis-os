@@ -15,6 +15,11 @@
 #include <unistd.h>
 
 #define TRANSFER_CHUNK 2048u
+/* Protocol px_xfer=2, matching xfer: a sender may have TRANSFER_WINDOW file
+ * bytes unacknowledged, and a receiver replies with its cumulative offset once
+ * TRANSFER_REPLY_INTERVAL bytes arrive unacknowledged. */
+#define TRANSFER_WINDOW 65536u
+#define TRANSFER_REPLY_INTERVAL 16384u
 #define HASH_STEP 65536u
 #define TRANSFER_WAIT_MS 120000
 #define CANCEL_WAIT_MS 5000
@@ -27,7 +32,7 @@
 enum phase {
   IDLE, UPLOAD_QUERY, CONFIRM_UPLOAD, CONFIRM_DOWNLOAD,
   DOWNLOAD_FILE, DOWNLOAD_DATA, DOWNLOAD_SYNC, DOWNLOAD_RENAME, DOWNLOAD_FINISH,
-  UPLOAD_HASH, UPLOAD_REQUEST, UPLOAD_READY, UPLOAD_ACK, UPLOAD_FINISH,
+  UPLOAD_HASH, UPLOAD_REQUEST, UPLOAD_READY, UPLOAD_FINISH,
   CANCELING, FAILED
 };
 
@@ -42,6 +47,8 @@ struct file_transfer {
   char authorized_path[1025];
   bool automatic_upload;
   size_t size, position;
+  /* Last cumulative offset acknowledged: by Pyxis for uploads, by us for downloads. */
+  size_t acknowledged;
   struct sha256 hash;
   char digest[65];
   int64_t deadline;
@@ -53,7 +60,7 @@ struct file_transfer {
 };
 
 struct command {
-  char *action, *id, *file_id, *name, *status, *data, *hash, *sha_mode;
+  char *action, *id, *file_id, *name, *status, *data, *hash, *protocol;
   char *size, *file_type, *compression, *transmission, *quiet;
 };
 
@@ -281,7 +288,7 @@ static bool status_packet(struct file_transfer *transfer, struct byte_buffer *ou
   encode(status, strlen(status), encoded);
   return packet(outgoing, "ac=status;id=%s%s%s;st=%s;sz=%zu%s",
       transfer->id, file_id ? ";fid=" : "", file_id ? file_id : "",
-      encoded, size, negotiation ? ";px_sha256=1" : "");
+      encoded, size, negotiation ? ";px_xfer=2" : "");
 }
 
 static void cleanup(struct file_transfer *transfer)
@@ -308,7 +315,7 @@ static void reset(struct file_transfer *transfer)
 {
   cleanup(transfer);
   transfer->phase = IDLE;
-  transfer->size = transfer->position = 0;
+  transfer->size = transfer->position = transfer->acknowledged = 0;
   transfer->deadline = 0;
   transfer->authorized_path[0] = '\0';
   transfer->automatic_upload = false;
@@ -347,7 +354,7 @@ static bool parse(char *body, struct command *command)
     else if (!strcmp(field, "st")) { slot = &command->status; }
     else if (!strcmp(field, "d")) { slot = &command->data; }
     else if (!strcmp(field, "sha256")) { slot = &command->hash; }
-    else if (!strcmp(field, "px_sha256")) { slot = &command->sha_mode; }
+    else if (!strcmp(field, "px_xfer")) { slot = &command->protocol; }
     else if (!strcmp(field, "sz")) { slot = &command->size; }
     else if (!strcmp(field, "ft")) { slot = &command->file_type; }
     else if (!strcmp(field, "zip")) { slot = &command->compression; }
@@ -553,9 +560,10 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
     transfer->file_id[0] = '\0';
     transfer->query_id[0] = '\0';
     transfer->deadline = now + TRANSFER_WAIT_MS;
-    if (!frame.sha_mode || strcmp(frame.sha_mode, "1") ||
+    if (!frame.protocol || strcmp(frame.protocol, "2") ||
         (frame.quiet && strcmp(frame.quiet, "0")) || !regular_metadata(&frame)) {
-      fail(transfer, outgoing, "ENOTSUP:Negotiated SHA-256 is required", now);
+      fail(transfer, outgoing, "ENOTSUP:Transfer protocol px_xfer=2 is required; "
+          "build pyxis-remote from the same revision as the Pyxis system", now);
       return;
     }
     if (!strcmp(frame.action, "receive")) {
@@ -613,10 +621,12 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
       return;
     }
     size_t received;
-    if (transfer->phase == UPLOAD_ACK && !strcmp(status, "PROGRESS") &&
-        frame.file_id && !strcmp(frame.file_id, transfer->file_id) &&
-        number(frame.size, &received) && received == transfer->position) {
-      transfer->phase = UPLOAD_READY;
+    /* Replies sent before Pyxis read end_data can arrive after it was queued. */
+    if ((transfer->phase == UPLOAD_READY || transfer->phase == UPLOAD_FINISH) &&
+        !strcmp(status, "PROGRESS") && frame.file_id && !strcmp(frame.file_id, transfer->file_id) &&
+        number(frame.size, &received) && received > transfer->acknowledged &&
+        received <= transfer->position) {
+      transfer->acknowledged = received;
       return;
     }
     char safe[2049];
@@ -666,6 +676,7 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
       return;
     }
     transfer->phase = DOWNLOAD_DATA;
+    transfer->acknowledged = 0;
     status_packet(transfer, outgoing, transfer->file_id, "STARTED", 0, false);
     return;
   }
@@ -700,7 +711,10 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
     sha256_update(&transfer->hash, data, count);
     transfer->position += count;
     if (!strcmp(frame.action, "data")) {
-      status_packet(transfer, outgoing, transfer->file_id, "PROGRESS", transfer->position, false);
+      if (transfer->position - transfer->acknowledged >= TRANSFER_REPLY_INTERVAL) {
+        status_packet(transfer, outgoing, transfer->file_id, "PROGRESS", transfer->position, false);
+        transfer->acknowledged = transfer->position;
+      }
       return;
     }
     char digest[65];
@@ -877,6 +891,18 @@ bool transfer_input(struct file_transfer *transfer, struct presentation *screen,
   return true;
 }
 
+static size_t upload_chunk(const struct file_transfer *transfer)
+{
+  size_t count = transfer->size - transfer->position;
+  return count > TRANSFER_CHUNK ? TRANSFER_CHUNK : count;
+}
+
+static bool upload_credit(const struct file_transfer *transfer)
+{
+  return transfer->phase == UPLOAD_READY &&
+      transfer->position - transfer->acknowledged + upload_chunk(transfer) <= TRANSFER_WINDOW;
+}
+
 void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
     struct byte_buffer *outgoing, int64_t now)
 {
@@ -931,7 +957,7 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
     if (transfer->position == transfer->size) {
       digest_text(&transfer->hash, transfer->digest);
       sha256_init(&transfer->hash);
-      transfer->position = 0;
+      transfer->position = transfer->acknowledged = 0;
       strcpy(transfer->file_id, "f1");
       char name[5465], status[89];
       encode(transfer->path, strlen(transfer->path), name);
@@ -983,12 +1009,9 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
       fail(transfer, outgoing, message, now);
     }
   }
-  if (transfer->phase == UPLOAD_READY &&
+  while (upload_credit(transfer) &&
       buffer_space(outgoing) >= REMOTE_PAYLOAD_MAX + REMOTE_HEADER_SIZE) {
-    size_t count = transfer->size - transfer->position;
-    if (count > TRANSFER_CHUNK) {
-      count = TRANSFER_CHUNK;
-    }
+    size_t count = upload_chunk(transfer);
     bool last = transfer->position + count == transfer->size;
     unsigned char bytes[TRANSFER_CHUNK];
     if (!read_source(transfer, bytes, count, transfer->position) ||
@@ -1017,8 +1040,10 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
         last ? "end_data" : "data", transfer->id, transfer->file_id, data)) {
       transfer->hash = hash;
       transfer->position += count;
-      transfer->phase = last ? UPLOAD_FINISH : UPLOAD_ACK;
+      transfer->phase = last ? UPLOAD_FINISH : UPLOAD_READY;
       transfer->deadline = now + TRANSFER_WAIT_MS;
+    } else {
+      return;
     }
   }
 }
@@ -1031,7 +1056,7 @@ bool transfer_failed(const struct file_transfer *transfer)
 int transfer_timeout(const struct file_transfer *transfer, int64_t now, bool can_present, bool can_reply)
 {
   if ((can_present && transfer->notice_position < transfer->notice_length) ||
-      (can_reply && (transfer->automatic_upload || transfer->phase == UPLOAD_READY ||
+      (can_reply && (transfer->automatic_upload || upload_credit(transfer) ||
        transfer->phase == UPLOAD_HASH ||
        (transfer->phase >= DOWNLOAD_SYNC && transfer->phase <= DOWNLOAD_RENAME)))) {
     return 0;

@@ -507,14 +507,14 @@ static enum call_status enqueue_output(struct terminal_session *session,
       unlock_session(session);
       return CALL_LIMIT;
     }
+    /* A write waits until its whole record fits. Admitting the space a drain
+     * just freed would split a continuous writer into tiny records, and the
+     * drainer then pays one round per fragment. Writes are at most
+     * TERMINAL_TRANSFER_MAX bytes, a small part of the queue. */
     size_t available = TERMINAL_OUTPUT_CAPACITY - session->output_count;
-    size_t required = sizeof(struct terminal_record) +
-        (type == TERMINAL_RECORD_DATA ? 1 : length);
+    size_t required = sizeof(struct terminal_record) + length;
     if (available >= required) {
       size_t count = length;
-      if (type == TERMINAL_RECORD_DATA && count > available - sizeof(struct terminal_record)) {
-        count = available - sizeof(struct terminal_record);
-      }
       struct terminal_record record = {.type = type, .length = count};
       size_t tail = (session->output_head + session->output_count) % TERMINAL_OUTPUT_CAPACITY;
       ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, &record, sizeof(record));

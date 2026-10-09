@@ -159,8 +159,10 @@ late transfer bytes to the shell. Machine mode preserves OSC bytes in its normal
 base64 output events and provides no transfer interception; `--download-dir` is
 an interactive option.
 
-Both sides stream with constant memory and require negotiated SHA-256 before
-data. There is no fixed size limit: a transfer is bounded by its declared size,
+Both sides stream with constant memory and require the negotiated `px_xfer=2`
+protocol, with SHA-256, before data. A sender keeps up to 64 KiB of file data
+unacknowledged, and the receiver acknowledges at least every 16 KiB;
+`pyxis-remote` and the image must come from the same revision. There is no fixed size limit: a transfer is bounded by its declared size,
 the destination's free space and the reply deadlines. The sender hashes the
 source in a first pass, because the digest is announced before data, then reads
 it again to send; a source that changes in between fails before publication.

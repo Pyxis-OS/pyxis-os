@@ -8,12 +8,10 @@ when the underlying tradeoff changes.
 ## Remote transfer memory and staging limits
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
-(owner decision, 2026-10-08), but keep one 2 KiB chunk in flight and read the source twice because the digest is announced
-first. On the ThinkPad over wired LAN, 15 MiB took 6.5 s up and 7.5 s down (about 2–2.3 MiB/s, owner timings 2026-10-09; see
-[transfer throughput](wip/remote-file-transfer.md#native-re-timing-2026-10-09) and [network throughput](development/network-throughput.md)),
-and nested QEMU is slower; a 692 MB upload takes about 4½ minutes, which the owner accepts. Several chunks in flight would change
-the framing and the guest's 4 KiB typeahead allowance, so it is an owner decision. Guest names are limited to 200 UTF-8 bytes and
-host paths to 1024.
+(owner decision, 2026-10-08) and read the source twice because the digest is announced first. Data moves in a 64 KiB window of
+2 KiB chunks ([measurements](development/experiments/xfer-pipelining/README.md)); native rates after windowing await the owner's
+batch. Before it, 15 MiB took 6.5 s up and 7.5 s down natively. In nested QEMU both directions are bound by BSP work per frame.
+Guest names are limited to 200 UTF-8 bytes and host paths to 1024.
 
 The mandatory SHA-256 extension excludes stock kitty peers, and transfers are single regular files without resume, compression or
 deltas. Exclusive `.NAME.xfer-partial-ID` siblings can survive abrupt death and hold a partial file of any size, which matters on a
