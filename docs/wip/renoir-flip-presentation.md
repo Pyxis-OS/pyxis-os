@@ -276,7 +276,10 @@ the write path is not implemented.
    confirmed addresses, pending durations/timeouts, CPU compose/copy costs and
    BSP poll/wakeup cost and service of input. Take matched moving-Quake camera clips; check cursor/selection,
    lock/unlock, spaces/layers, screenshots and ordinary shutdown. A framebuffer
-   screenshot or FPS does not establish a tear-free panel. Keep optional blank
+   screenshot or FPS does not establish a tear-free panel. Include Chocolate
+   Quake: on GOP copy it showed about three drifting tear lines at once, more
+   than native Quake ([SDL game ports](../technical-debt.md#sdl-game-ports-native-qualification)).
+   Keep optional blank
    and timeout recovery unqualified until actually exercised and recorded.
    **What the owner sees:** matched native completion/camera/input/cost results,
    an explicit qualification outcome and references documenting remaining limits.

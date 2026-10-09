@@ -1,7 +1,7 @@
 # Chocolate Doom against native Doom
 
 Measured on 2026-10-09 for task 1 of the
-[SDL game ports](../../../wip/sdl-game-ports.md) milestone: the cost of the SDL2
+[SDL game ports](../../sdl-game-ports.md) milestone: the cost of the SDL2
 path, comparing [Chocolate Doom](../../../userland/chocolate-doom.md) with the
 native [Doom](../../../userland/doom.md) on the same demo.
 
@@ -80,23 +80,27 @@ never committed, run interleaved with the shipped build on std VGA:
   `I_Error`, so they exit with status -1, and Chocolate Doom saves no
   configuration on that path.
 
-## Native steps for the owner
+## Native results
 
-On the ThinkPad, wired and on AC, at the panel's native mode, with this
-branch's PXE build:
+The owner ran `doom -timedemo demo1` and
+`chocolate-doom -nosound -nomusic -timedemo demo1` on the ThinkPad in an
+earlier native batch (wired, on AC, at the panel's native mode; the revision
+and Chocolate configuration weren't restated, and the steps' Chocolate run was
+the default):
 
-1. **Native:** run `doom -timedemo demo1` three times and note each report.
-2. **Chocolate default:** run `chocolate-doom -nosound -nomusic -timedemo demo1`
-   three times.
-3. **Chocolate matched:** put `integer_scaling 1` and `aspect_ratio_correct 0`
-   in a file, say `home://matched.cfg`, and run
-   `chocolate-doom -nosound -nomusic -extraconfig home://matched.cfg -timedemo demo1`
-   three times.
-4. **Play:** run `chocolate-doom`, play a little of E1M1, and quit through the
-   menu.
+| Configuration | Runs (fps) | Per frame |
+| --- | --- | --- |
+| Native | 523.5, 522.0, 531.5 | 1.90 ms |
+| Chocolate | 281.0, 285.1, 281.0 | 3.54 ms |
 
-**What to expect.** The ratio between native and Chocolate Doom should
-narrow natively, where memory copies and the SUBMIT round trip are cheaper.
+- **The SDL path:** about 1.64 ms per frame natively, close to QEMU's 1.68 ms
+  between native Doom and Chocolate Doom's default.
+- **Ratio:** native runs about 1.9 times Chocolate's rate, against about 2.6
+  times in QEMU. The ratio narrowed because native Doom's own frame took
+  longer (1.90 ms against 1.06 ms), not because the SDL path got cheaper.
+  The panel's 1920x1080 mode gives both sides a larger picture than QEMU's
+  1280x800, so the figures aren't matched to QEMU's.
+- **Not run natively:** the matched configuration and a play check.
 
 ## Limits
 
