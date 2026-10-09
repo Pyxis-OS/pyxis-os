@@ -135,13 +135,15 @@ couple of frames of input delay. Copy/fence P50 was about 1.17 ms.
 
 Source inspection found that a hardware deadline overwrote the software cadence
 accumulator, and post-composition requalification could sleep toward a second
-blank. Zero spin/wake-lateness metrics did not include those sleeps. The safety
-fix removes all per-frame phasing/sleep/poll paths and uses the same full
-observation in both modes, with opportunistic blank classification only.
+blank. The safety fix removes all per-frame phasing/sleep/poll paths and uses
+the same full observation in both modes, with opportunistic blank classification
+only.
 It fixes the format, traces repeated losses and rejects uncertainty exceeding
 blank minus the existing eight-line guard before publishing hardware capability.
 A live widened bound revokes qualification. Rejected counts/max width join the
-existing metrics-gated summary, without adding default log lines.
+existing metrics-gated summary, without adding default log lines. The unused
+light-read helper and obsolete poll-expiry, spin and wake-lateness metrics are
+removed; they no longer describe work performed by this path.
 
 The estimator remains unchanged. EDID anchoring and estimator overhaul were
 explicitly dropped by the owner. Narrow uncertainty does not establish correct

@@ -24,7 +24,7 @@
 
 enum timing_mode { TIMING_OFF, TIMING_OBSERVE, TIMING_BLANK };
 enum timing_result { TIMING_OBSERVED, TIMING_ADMITTED, TIMING_LATE,
-                     TIMING_POLL_EXPIRED, TIMING_UNAVAILABLE };
+                     TIMING_UNAVAILABLE };
 
 static enum timing_mode mode;
 static bool prepared, permanent_loss, qualification_metrics;
@@ -42,21 +42,21 @@ static uint64_t edge_lower_ns, edge_upper_ns;
 static struct {
   enum timing_result result;
   bool written, sample_valid, progress;
-  uint64_t start_ns, start_upper_ns, spin_ns, coarse_late_ns, bracket_ns;
+  uint64_t start_ns, start_upper_ns, bracket_ns;
   uint64_t last_progress_ns, max_progress_gap_ns;
   uint64_t copy_edge_ns, copy_line_ns, copy_blank_ns;
   bool progress_late;
 } copy;
 
 struct timing_record {
-  uint64_t start_ns, copy_ns, spin_ns, bracket_ns, wake_ns, progress_ns;
+  uint64_t start_ns, copy_ns, bracket_ns, progress_ns;
   bool start_valid, progress_sample;
 };
 static struct timing_record records[TIMING_RECORDS];
 static uint64_t sorted[TIMING_RECORDS];
 static size_t record_count;
 static uint64_t admitted_count, unsynchronized_count, invalid_count, progress_late_count;
-static uint64_t late_count, expired_count, unavailable_count;
+static uint64_t late_count, unavailable_count;
 static uint64_t total_written;
 static uint64_t rejected_bounds, widest_rejected_ns;
 
@@ -401,17 +401,14 @@ void display_timing_progress(size_t rows)
   }
 }
 
-enum timing_metric { METRIC_START, METRIC_COPY, METRIC_SPIN,
-                     METRIC_BRACKET, METRIC_WAKE, METRIC_PROGRESS };
+enum timing_metric { METRIC_START, METRIC_COPY, METRIC_BRACKET, METRIC_PROGRESS };
 
 static uint64_t metric_value(const struct timing_record *record, enum timing_metric metric)
 {
   switch (metric) {
     case METRIC_START: return record->start_ns;
     case METRIC_COPY: return record->copy_ns;
-    case METRIC_SPIN: return record->spin_ns;
     case METRIC_BRACKET: return record->bracket_ns;
-    case METRIC_WAKE: return record->wake_ns;
     case METRIC_PROGRESS: return record->progress_ns;
   }
   return 0;
@@ -464,7 +461,6 @@ void display_timing_finish(void)
     ++unsynchronized_count;
   }
   late_count += copy.result == TIMING_LATE;
-  expired_count += copy.result == TIMING_POLL_EXPIRED;
   unavailable_count += copy.result == TIMING_UNAVAILABLE;
   progress_late_count += copy.progress_late;
   if (!copy.sample_valid) {
@@ -472,8 +468,7 @@ void display_timing_finish(void)
   }
   records[record_count++] = (struct timing_record){
     .start_ns = copy.start_upper_ns, .copy_ns = done - copy.start_ns,
-    .spin_ns = copy.spin_ns, .bracket_ns = copy.bracket_ns,
-    .wake_ns = copy.coarse_late_ns, .progress_ns = copy.max_progress_gap_ns,
+    .bracket_ns = copy.bracket_ns, .progress_ns = copy.max_progress_gap_ns,
     .start_valid = copy.sample_valid, .progress_sample = copy.progress,
   };
   if (record_count != TIMING_RECORDS) {
@@ -485,18 +480,16 @@ void display_timing_finish(void)
         record_count, admitted_count, unsynchronized_count, invalid_count, progress_late_count,
         previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status,
         capability.uncertainty_ns, rejected_bounds, widest_rejected_ns);
-    klog("display-timing: missed-starts late=%lu poll-expired=%lu unqualified=%lu\n",
-        late_count, expired_count, unavailable_count);
+    klog("display-timing: missed-starts late=%lu unqualified=%lu\n",
+        late_count, unavailable_count);
     print_metric("start-upper", METRIC_START);
     print_metric("copy-fence", METRIC_COPY);
-    print_metric("spin", METRIC_SPIN);
     print_metric("read-bracket", METRIC_BRACKET);
-    print_metric("wake-late", METRIC_WAKE);
     print_metric("issued-prefix-gap", METRIC_PROGRESS);
   }
   record_count = 0;
   admitted_count = unsynchronized_count = invalid_count = progress_late_count = 0;
-  late_count = expired_count = unavailable_count = 0;
+  late_count = unavailable_count = 0;
   rejected_bounds = widest_rejected_ns = 0;
 }
 
