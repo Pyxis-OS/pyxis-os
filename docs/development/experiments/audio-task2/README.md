@@ -1,10 +1,11 @@
 # Audio task 2: historical baseline and runtime evidence
 
 Measurements below belong to their named revisions, before the accepted BSP
-cost follow-up. [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) remains
-draft; sustained eight-session playback and repeat qualification remain delivery
-requirements. The [profiling report](profiling.md) records the later cost analysis and matched
-remeasurement of the accepted notification/scan fixes.
+cost follow-up. The owner accepted [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557)
+delivery with the recorded nested-QEMU eight-session limitation on **2026-10-09**.
+The [profiling report](profiling.md) records the later cost analysis and matched
+remeasurement of the accepted notification/scan fixes. Native eight-session
+playback remains required for milestone closure.
 This summary claims no results for subsequent fixes and no native qualification.
 
 The [session reference](../../../interfaces/audio.md) and

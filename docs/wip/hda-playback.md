@@ -3,8 +3,8 @@
 Status: **three defaults accepted 2026-10-08; first controller/codec task
 merged in [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553); sessions,
 mixing and IRQ refill implemented in
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), with qualification open
-and merge blocked pending the owner's performance-fix decision**.
+[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), delivered for review with the nested-QEMU eight-session limitation
+accepted 2026-10-09**.
 Prepared from main `67e14be` and
 the completed [QEMU investigation](../development/audio-investigation.md).
 The investigation probes stay unmerged. The owner assigned task 2 on
@@ -19,7 +19,9 @@ the service horizon and failed closed. The owner requested
 on 2026-10-09. Both fixes are implemented and repeated short eight-source
 profiles passed. Current-main uninstrumented output later failed the codec
 commit-clock guard after 112.227 s of captured output; sustained eight-session
-playback still needs qualification. Batching remains deferred for owner review.
+playback remains limited in nested QEMU. The owner accepts delivery with this
+recorded debt and defers batching; milestone closure requires native eight-session
+playback, with fail-closed until reboot retained.
 The [task 1 report](../development/experiments/audio-task1/README.md) retains
 private engine qualification and matched no-audio/engine-idle observations.
 Native and consumer tasks still require their own assignments.
@@ -62,21 +64,19 @@ and refill failure/stop policy are accepted in the task 2 report. Numeric ABI en
 and rights bits are implementation choices; native route preference and jack
 switching remain later task-specific review items. Proposed details below are distinct from the accepted decisions.
 
-## Closure alternative and owner confirmation
+## Accepted delivery and closure policy
 
-The owner's established practice, conveyed on **2026-10-08**, is **QEMU closure
-with native checks in a later ThinkPad batch**. Carry this forward as the closure
-alternative: after the production tasks pass QEMU qualification, retain native
-AMD/ALC257 playback, speaker/headphone switching, stop/underrun behavior and
-usable latency as explicit technical debt for the later owner batch. The
-ThinkPad remains reserved for Bluetooth work until available.
+On **2026-10-09** the owner accepted task 2 delivery in #557 with the
+[recorded nested-QEMU eight-session limit](../technical-debt.md#hd-audio-sustained-eight-session-playback).
+Tasks 3–4 below are delivered with that limit; PR review/merge remains owner-led.
+Batching is deferred. A single guard trip continues to disable audio until reboot;
+native evidence decides whether controller-reset recovery needs a later proposal.
 
-**Confirm this choice with the owner at milestone closure.** It is not a current
-request for another decision or permission to close early. At that gate, present
-the QEMU evidence and remaining native checks; the owner confirms QEMU closure
-with retained debt or requires native qualification before closure. QEMU closure
-must not claim native sound, and the supplied Fedora codec dump is inventory
-and state evidence, not native Pyxis playback qualification.
+**Milestone closure requires native eight-session playback.** This supersedes
+the 2026-10-08 QEMU-closure/native-later alternative. Task 5 is now assigned for
+a separate documentation proposal first; speaker/headphone/jack choices need
+acceptance before code. The supplied Fedora dump remains inventory, not native
+Pyxis playback evidence. Coordinate the ThinkPad batch with its current owner.
 
 ## Accepted session call contract
 
@@ -206,51 +206,35 @@ controller or all other sessions.
    independent left/right signals, command wrap and stop ownership with normal
    builds, interactive boots and debugger inspection. Polling may be a bounded
    bring-up step, not the completed runtime implementation.
-3. [ ] **Periodic output and refill.** Add owned interrupt delivery, BDL/position
-   accounting, silence on starvation and explicit discontinuity. Review recovery
-   thresholds; exercise sustained playback, ordinary producer pauses, close/reopen
-   and normal concurrent guest activity. Measure position/clock agreement and
-   queue-to-output behavior. Revisit the proposed period before freezing policy.
-4. [ ] **Per-space sessions and bounded mixing.** Review exact reply packing,
-   protocol/right constants, validation precedence, priming and hidden-space
-   policy before implementing the public calls. Implement only the reviewed
-   grant/calls and BSP request bridge, with copied queues and generation-aware
-   cancellation/exit. Qualify two distinct simultaneous signals, silent/active
-   spaces, denied authority, exclusive acquisition and capacity admission.
-   Measure BSP cost and refill margin with one and multiple CPUs. Add only the
-   concrete native PCM producer needed to exercise the accepted interface.
-   Task 2's code implements steps 3–4 together; their delivery gates remain open.
-   The [qualification report](../development/experiments/audio-task2/README.md)
-   records exact single-producer and eight-source saturated PCM, pause/exit and
-   reacquisition, eight admissions/ninth refusal, and matched idle/BSP costs.
-   Eight admitted producers later exceeded the service horizon and failed closed;
-   the [profiling follow-up](../development/experiments/audio-task2/profiling.md)
-   identifies wake/deadline/HPET overhead. The owner accepted notification gating and one clock snapshot per readiness
-   scan on **2026-10-09**; both are implemented. Batching remains deferred until
-   repeat matched one/eight and sustained-playback measurements are reviewed.
-   Short repeats passed; the longer current-main run still failed closed, so
-   these delivery gates remain open. Strict absolute DMA progress,
-   zero-gap startup and native playback are unqualified. The updated main image
-   passed ordinary source builds, a complete five-second producer and quiet
-   absent-controller refusal. A later repetition also failed closed before
-   debugger attachment. The PR records CI for the exact submitted revision.
-5. [ ] **Native AMD analog qualification.** Propose speaker/headphone route
-   and jack policy from the supplied ALC257 graph before native binding.
-   Bind `1022:15e3` after verifying
-   capabilities and the actual codec route. Inspect licensed/pinned fixups where
-   needed; require owner speaker/headphone evidence, sustained output under load,
-   underrun/recovery, stop/reset and usable latency. No physical-host access
-   while another agent owns it. If the owner confirms the native-batch alternative
-   at closure, explicitly defer this task, record the outstanding checks in
-   technical debt and leave native qualification open for the later owner batch.
-   If blocked by hardware-specific behavior, report it and return scope decisions
-   to the owner.
-6. [ ] **Documentation closure.** Record implemented contracts and measured
-   limits, move this milestone to the appropriate subsystem reference and update
-   links. Confirm the closure choice with the owner: QEMU closure with explicit
-   native debt for the later ThinkPad batch, or native qualification before
-   closure. Carry only owner-confirmed deferred work into technical debt. Publish
-   no success claim for SDL2, Quake, recording or other devices.
+3. [x] **Periodic output and refill, delivered with the accepted limit.**
+   IRQ delivery, owned BDL/position accounting, starvation silence, discontinuity
+   and stop/failure behavior are implemented in #557. QEMU qualification includes
+   exact PCM, pause/repeat and cleanup, with conservative progress/commit guards.
+   Sustained eight-session nested-QEMU output still fails closed; the owner
+   accepted this limit as technical debt on **2026-10-09**, not an open task 2 gate.
+4. [x] **Per-space sessions and bounded mixing, delivered with the accepted limit.**
+   The audio grant/calls, BSP request bridge, process/generation lifetime, copied
+   queues, saturating mixer, writable waits and eight-session/ninth-refusal
+   semantics are implemented and reviewed. The
+   [qualification summary](../development/experiments/audio-task2/README.md) and
+   [before/after profile](../development/experiments/audio-task2/profiling.md)
+   distinguish exact PCM/mixing and short healthy repeats from longer failures.
+   Notification gating and one clock snapshot per readiness scan are implemented;
+   bounded request batching remains deferred. Current nested-QEMU limitations
+   are recorded in [technical debt](../technical-debt.md#hd-audio-sustained-eight-session-playback).
+   No strict absolute DMA-progress or zero-gap startup guarantee is claimed.
+5. [ ] **Native AMD analog qualification.** Assigned **2026-10-09**, starting
+   with a separate proposal for speaker/headphone route and jack policy from the
+   ALC257 graph. After owner acceptance, bind `1022:15e3` with checked PCI/codec
+   capabilities, DMA coherence and licensed/pinned fixups if needed. Re-derive
+   QEMU-specific burst and commit-clock bounds for native hardware. Qualify one
+   and eight sessions, speaker/headphone selection, normal load, stop/reset and
+   latency in the owner's ThinkPad batch. Keep fail-closed until reboot; native
+   evidence determines whether reset recovery needs a separate proposal.
+6. [ ] **Documentation closure.** Requires native eight-session playback.
+   Record implemented contracts and measured limits, move this milestone into
+   its subsystem reference and update links. Carry remaining accepted limitations
+   into technical debt without implying success for SDL2, Quake or other devices.
 
 The owner's first implementation assignment combined the contract review and
 private controller/codec engine steps above. The [engine reference](../devices/hda.md)
@@ -288,8 +272,7 @@ The supplied Fedora dump identifies Realtek ALC257 `0x10ec0257`, subsystem
 `0x21`, both advertising EAPD and analog DACs supporting 48 kHz S16 stereo.
 It records advertised topology and Fedora state, not a qualified Pyxis cold-init
 sequence, amplifier/power quirks, interrupt/position reliability or physical
-latency. QEMU closure with a later native batch follows the owner's established
-practice and is carried forward for owner confirmation at closure; native
-checks remain open until measured. Recording/HDMI/USB/ACP/suspend remain separate directions.
+latency. The 2026-10-09 decision supersedes QEMU-only closure: native
+eight-session playback is required, and native checks remain open until measured. Recording/HDMI/USB/ACP/suspend remain separate directions.
 See the [full report and evidence](../development/audio-investigation.md) for
 exact measured revisions and source references.

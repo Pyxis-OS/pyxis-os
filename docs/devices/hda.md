@@ -107,6 +107,11 @@ for measurement. These bounds are runtime guards and accepted starting tuning;
 they are not hard real-time guarantees or an absolute hardware consumption
 counter.
 
+`QEMU_CODEC_BURST_BYTES` (8192) and the 1 ms HPET commit/WALCLK bounds
+are QEMU-derived. Task 5 must re-derive or replace them for the native AMD
+controller from its FIFO/DMA progress and timing evidence. They remain unchanged
+for this delivered QEMU path; adding a PCI match does not qualify native bounds.
+
 QEMU's codec can request an 8,192-byte burst, coalesce completions and adjust its
 timer origin. The 8,192-byte per-callback bound applies to QEMU's default timer-driven codec;
 its callback-driven compatibility mode is not qualified. Multiple catch-up
@@ -150,14 +155,20 @@ closed. Its measured BSP-thread cost was about one full host CPU. The
 separates guest time from host exit/emulation work. Accepted notification gating
 and a shared readiness-scan clock snapshot reduce deadline/HPET amplification.
 Both repeated eight-source profiles passed without failure, but whole-VM CPU
-increased with retry/wait traffic while BSP savings were modest. Sustained
-eight-session qualification and owner review remain delivery gates: the longer
-current-main run failed the codec commit-clock guard after 112.227 s of output.
+increased with retry/wait traffic while BSP savings were modest. The owner accepted delivery with this limitation on **2026-10-09**:
+the longer current-main run failed the codec commit-clock guard after 112.227 s
+of output. The most likely cause is a transient nested-host scheduling/VM-exit
+delay during one IF=0 mix/MMIO/HPET commit window, made permanent by fail-closed,
+rather than insufficient mixer throughput. The mix costs about 5–6 µs; the
+recorded HPET maximum was 922,780 ns, with rejection at the later 1 ms WALCLK
+check. Exact host descheduling and the rejecting codec-clock delta were not
+captured. See the [accepted debt](../technical-debt.md#hd-audio-sustained-eight-session-playback).
 
 Native AMD `1022:15e3` remains unbound. The supplied ALC257 dump establishes
 advertised topology, format and EAPD state, not native Pyxis cold-init, speaker or
 headphone playback. Eight periods are starting tuning to revisit during native
 latency/refill qualification. The owner's later ThinkPad batch remains the
-qualification direction; confirm QEMU closure with retained native checks at
-milestone closure. SDL2, Quake, recording, HDMI/DP, USB/dock audio and suspend
+qualification direction. The owner requires native eight-session playback
+for milestone closure. Native evidence decides whether controller-reset recovery
+needs a separate proposal; fail-closed until reboot remains accepted. SDL2, Quake, recording, HDMI/DP, USB/dock audio and suspend
 remain outside this implementation.

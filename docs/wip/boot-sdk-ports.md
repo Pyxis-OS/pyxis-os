@@ -75,15 +75,12 @@ Chosen by the owner, each starting with a proposal:
   Sessions/mixing and IRQ refill implemented as task 2 on 2026-10-08;
   [baseline, accepted policies and qualification](../development/experiments/audio-task2/README.md)
   record exact PCM/saturated mixing, eight admissions/ninth refusal and measured
-  BSP cost. An eight-admitted nested-QEMU run failed closed at its service horizon;
-  the current integration image also passed basic/absent checks, then failed closed
-  in a later paused repetition. #557 remains draft: the
-  [profiling report](../development/experiments/audio-task2/profiling.md) identifies
-  wake/deadline/HPET overhead and proposes bounded fixes. No fix is implemented;
-  sustained eight-session qualification remains required before delivery.
-  QEMU closure with
-  a later ThinkPad native batch is carried forward for confirmation at closure;
-  native playback remains unqualified. Quake can produce sound
+  BSP cost. The owner accepted task 2 delivery with recorded nested-QEMU
+  [eight-session debt](../technical-debt.md#hd-audio-sustained-eight-session-playback)
+  on 2026-10-09. Two notification/clock-scan fixes are implemented; batching is
+  deferred. Task 5 is assigned as a separate native AMD/ALC257 proposal before
+  code. HDA closure requires native eight-session playback; one guard trip still
+  disables audio until reboot, with recovery revisited from native evidence. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),

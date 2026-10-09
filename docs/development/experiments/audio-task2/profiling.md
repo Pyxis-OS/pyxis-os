@@ -1,12 +1,12 @@
 # Audio BSP cost: measurement follow-up
 
 Measured **2026-10-09**, following the [early review of #557](https://git.internal/PyxisOS/pyxis-os/pulls/557).
-**Candidates 1 and 2 accepted 2026-10-09 and implemented; #557 stays draft
-for owner review.** Candidate 3 (request batching) remains deferred until the
-owner reviews the repeat measurements. Eight sessions, eight 10 ms
+**Candidates 1 and 2 accepted 2026-10-09 and implemented. The owner accepts
+task 2 delivery with the recorded nested-QEMU limit.** Candidate 3 (request
+batching) remains deferred. Eight sessions, eight 10 ms
 DMA periods, 80 ms session queues, 4096-byte writes and the existing safety
-thresholds remain unchanged. Earlier eight-session failures remain a delivery
-issue to resolve, rather than an accepted capacity limitation.
+thresholds remain unchanged. The nested-QEMU eight-session limitation is accepted for task 2 delivery;
+native eight-session playback remains mandatory for milestone closure.
 
 ## Matched inputs and method
 
@@ -113,7 +113,7 @@ The running-only 5 ms watchdog remains; steady playback has no codec polling.
 This is the **same wake/sleep → timer handling → HPET traffic pattern** as
 [#559's send measurements](https://git.internal/PyxisOS/pyxis-os/src/branch/net/throughput-baseline/docs/wip/network-throughput.md#send),
 which found about 27 physical counter reads per TCP segment. That work is now
-merged; its [send investigation](../../../wip/network-throughput.md#send)
+merged; its [send investigation](../../network-throughput.md#send)
 retains the measurements. Audio's strict
 timer group accounts for about **158–160 / 256–259 HPET reads per 10 ms** with
 one/eight sessions; the broader group is **205–207 / 338–342 reads**. Readiness
@@ -193,7 +193,7 @@ scan snapshot cannot cause an additional blocking wait.
 rearm caching and broad network optimization belong to separate kernel work.**
 Capacity, queue/DMA tuning and safety-threshold changes require the owner and are
 not proposed as an escape from this overhead. The repeated matched runs below measure the accepted fixes. Longer uninstrumented
-qualification is separate; #557 remains draft pending owner review.
+qualification is separate; task 2 is delivered with the owner-accepted limit.
 
 
 ## Repeat after accepted fixes (2026-10-09)
@@ -305,8 +305,12 @@ screenshot or task-owned build ran before the failure. An overly narrow live
 serial filter missed the `hda:` failure wording; capture, complete logs and frozen
 state determine the result, not the absence of a matching live line.
 
-**Sustained eight-session playback remains unqualified.** The owner reviews these
-numbers before deciding on batching or other separately scoped work. AMD/ALC257
+**Sustained eight-session playback remains unqualified in nested QEMU.** On
+2026-10-09 the owner accepted task 2 delivery with this recorded limitation;
+see [technical debt](../../../technical-debt.md#hd-audio-sustained-eight-session-playback).
+Batching stays deferred; milestone closure requires native eight-session playback.
+The likely trigger was a transient nested-host scheduling/VM-exit delay rather
+than mixer throughput, but no coincident host trace proves that attribution. AMD/ALC257
 remains unbound; the current branch can provide a ThinkPad availability check,
 not native listening evidence. PR instructions distinguish that gate from the
 later one/eight listening checks. All task-owned guests and debugger jobs stopped.

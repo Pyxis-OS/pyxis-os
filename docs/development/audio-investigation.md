@@ -161,10 +161,10 @@ refill and underrun observations under normal load, and measured usable latency.
 Speaker/headphone selection and jack events need policy before implementation.
 Do not bind the GPU, coprocessor or USB dock as an analog fallback. Suspend/resume,
 recording and HDMI/DP remain separate scopes. Native qualification remains open.
-The owner's established practice is QEMU closure with native checks in a later
-ThinkPad batch. The milestone carries that closure alternative forward and must
-confirm it with the owner at closure, recording retained native checks as debt
-if confirmed. No native completion is implied by the accepted tuning defaults.
+The initial QEMU-closure/native-later alternative was superseded by the owner
+on **2026-10-09**: milestone closure requires native eight-session playback.
+Task 2 is delivered with the accepted nested-QEMU limitation; native checks and
+any future controller-reset recovery are decided from task 5 evidence.
 
 All task-owned guests, debugger connections, clients and builds are stopped.
 

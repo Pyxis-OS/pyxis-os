@@ -1106,7 +1106,12 @@ deadlines and profiling still pay the clock cost. The current source requires
 a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
 the owner chose
 [software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
-with TSC as the [later direction](wip/later-os-directions.md#clock-source).
+with TSC as the [later direction](wip/later-os-directions.md#clock-source). The running HDA
+worker also uses a 5 ms watchdog (about 200 timed wake opportunities per second),
+with timer re-arms and HPET reads; it is absent while playback is parked.
+Its measured wake/deadline amplification is in the
+[audio profile](development/experiments/audio-task2/profiling.md). Cheaper
+clock sources remain separate kernel work.
 The implementation preserves direct 64-bit reads and extends 32-bit counters
 with a shared CAS accumulator. Each advancing extension read publishes to one
 cache line and may retry under contention. BSP maintenance is configurable in
@@ -1210,13 +1215,46 @@ guards cannot establish safe progress. Immediate, unprimed start produced a
 startup latency and service margins during native qualification and separately
 assigned audio-consumer work. The [task 2 report](development/experiments/audio-task2/README.md)
 records the evidence and limits; native and milestone closure checks remain open.
-The eight-session overhead/failure finding remains a delivery issue on
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), with
-[profiling and accepted fixes](development/experiments/audio-task2/profiling.md)
-recording the owner's accepted 2026-10-09 notification/scan fixes and repeat
-qualification. Short repeats passed, but longer current-main output still failed
-the codec commit-clock guard. Batching remains deferred pending owner review.
-This has not been deferred as an accepted capacity limitation.
+
+## HD Audio sustained eight-session playback
+
+Accepted by the owner **2026-10-09**: deliver the session/mixer/refill work in
+[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) with this recorded limit.
+Sustained eight-session playback fails closed in **nested QEMU**: the longer
+uninstrumented run produced **112.227 s of output from first RUN** before the
+codec WALCLK commit guard rejected progress. The exact eight-only failure time
+was not timestamped. Matched four-CPU BSP host-thread CPU was **99.55–99.61%**
+before notification gating/one-clock-per-readiness-scan fixes and
+**93.93–96.40%** afterward (of one host CPU). One-session BSP cost fell
+**54.41–54.47% → 40.47–44.73%**. Linux-accounted eight-session guest BSP time was
+**42.42–42.48% → 41.73–43.40%**. Eight-source whole-QEMU CPU increased
+**125.11–126.51% → 136.26–144.20%** as retry/wait traffic increased. The
+[profiling report](development/experiments/audio-task2/profiling.md) records
+revisions, configuration, ranges and shared-host/probe limits; these are not
+native performance figures. Bounded request batching remains deferred.
+
+The most likely trigger is a transient nested-host scheduling/VM-exit delay
+inside one IF=0 commit window, which includes mixing and MMIO/HPET observations,
+turned into permanent unavailability by fail-closed. The mixer itself costs
+about **5–6 µs** per period; this failure does not establish inadequate mixing
+throughput. Maximum recorded HPET commit time was **922,780 ns**, so the rejecting
+condition was the later WALCLK check reaching 1 ms. The exact codec-clock delta
+and a coincident host descheduling event were not captured; the attribution is
+an inference, not a proven host trace.
+
+`QEMU_CODEC_BURST_BYTES` (**8192**) and the **1 ms HPET commit/WALCLK bounds**
+are derived from QEMU's timer-driven codec, not native HDA guarantees. Task 5
+must re-derive or replace these values for AMD `1022:15e3` using controller/FIFO,
+DMA progress and native timing evidence, rather than inherit them as universal
+limits. The current values are unchanged in #557.
+
+One guard trip continues to disable all audio until reboot; STATUS/RELEASE and
+cleanup remain serviceable, with DMA retained. Native evidence decides whether
+a separately reviewed controller-reset recovery path is needed; no recovery
+path is accepted or implemented yet. **HDA milestone closure requires native
+eight-session playback**, not QEMU closure. This supersedes the earlier
+QEMU-closure/native-later alternative. Revisit batching, native bounds and
+recovery with task 5's owner-run ThinkPad speaker/headphone batch.
 
 ## SDL2 port limits
 
