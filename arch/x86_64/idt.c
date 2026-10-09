@@ -5,6 +5,7 @@
 #include <arch/ps2.h>
 #include <arch/smp.h>
 #include <kernel/acpi.h>
+#include <kernel/audio.h>
 #include <kernel/log.h>
 #include <kernel/net/rtl8111.h>
 #include <kernel/panic.h>
@@ -92,6 +93,11 @@ static void finish_interrupt(const struct exception_frame *frame)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == APIC_HDA_VECTOR) {
+    audio_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
   if (frame->vector == APIC_TLB_FLUSH_VECTOR) {
     arch_tlb_flush_interrupt();
     apic_end_interrupt();
@@ -144,13 +150,12 @@ void interrupt_handler(struct exception_frame *frame)
   }
   if (frame->vector == APIC_TIMER_VECTOR) {
     atomic_fetch_add_explicit(&cpu_current()->timer_interrupts, 1, memory_order_relaxed);
-    arch_timer_interrupt();
-    task_timer_interrupt();
+    task_timer_interrupt(arch_timer_interrupt());
     finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_RESCHEDULE_VECTOR) {
-    task_timer_interrupt();
+    task_timer_service();
     finish_interrupt(frame);
     return;
   }

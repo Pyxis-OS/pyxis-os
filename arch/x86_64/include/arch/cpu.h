@@ -28,14 +28,22 @@ uint32_t arch_timer_frequency(void);
 /* Local CPU, IF=0, after scheduler startup. Boot keeps its periodic timer
  * until this transition; in particular, AP startup polls the BSP countdown. */
 void arch_timer_deadline_start(void);
-/* Local CPU, IF=0. Arm the earlier of this absolute HPET deadline and the next
- * nominal preemption occasion. UINT64_MAX means no task deadline. Before the
+/* Local CPU, IF=0. Whether arming this absolute deadline would target an
+ * earlier time than the pending countdown, or none is pending. A later target
+ * keeps the earlier interrupt, which rearms when it finds nothing due. Always
+ * false before the transition. */
+bool arch_timer_arm_needed(uint64_t deadline);
+/* Local CPU, IF=0. Arm the earlier of this absolute deadline and the next
+ * nominal preemption occasion. UINT64_MAX means no task deadline. now is a
+ * monotonic reading the caller took on this CPU; the interrupt arrives that
+ * much later than the target for however old the reading is. Before the
  * transition this leaves the bootstrap periodic timer unchanged. */
-void arch_timer_arm(uint64_t deadline);
-/* Local timer entry, IF=0. Advance the nominal preemption phase when due and
- * service BSP HPET maintenance. The scheduler must then expire and rearm before
- * interrupt acknowledgement or any context switch. */
-void arch_timer_interrupt(void);
+void arch_timer_arm(uint64_t deadline, uint64_t now);
+/* Local timer entry, IF=0. Read the clock once, advance the nominal preemption
+ * phase when due and service BSP HPET maintenance; return the reading for the
+ * scheduler's expiry and rearm, which must follow before interrupt
+ * acknowledgement or any context switch. */
+uint64_t arch_timer_interrupt(void);
 
 static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
                          uint32_t *ecx, uint32_t *edx)

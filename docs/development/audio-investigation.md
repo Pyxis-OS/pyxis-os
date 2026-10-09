@@ -10,7 +10,8 @@ ThinkPad sound, production audio interface or SDL2 audio backend is established.
 The [experiment record](experiments/audio-investigation/README.md) identifies
 exact revisions, build inputs, commands, captures and limitations. The
 [playback milestone](../wip/hda-playback.md) records three defaults accepted by the
-owner on **2026-10-08**. No implementation task is assigned. QEMU closure with
+owner on **2026-10-08**. At the time of this investigation, no implementation
+task was assigned; the milestone records current status. QEMU closure with
 a later native batch is carried forward for owner confirmation at closure.
 Probe code stays on unmerged branches and is excluded from this documentation PR.
 
@@ -63,8 +64,9 @@ Probe code stays on unmerged branches and is excluded from this documentation PR
    The proposed production tasks separate controller ownership, codec routing,
    refill/underrun behavior, per-space authority, consumers and native closure.
    The owner accepted worker/session ownership, format and starting buffer tuning
-   on 2026-10-08. Exact interface/lifetime policies still need task-specific review;
-   no implementation task is assigned.
+   on 2026-10-08. Exact interface/lifetime policies still needed task-specific review;
+   at the time of this report no implementation task was assigned (see the
+   [playback milestone](../wip/hda-playback.md) for current status).
 
 ## QEMU measurements and interpretation
 
@@ -161,10 +163,10 @@ refill and underrun observations under normal load, and measured usable latency.
 Speaker/headphone selection and jack events need policy before implementation.
 Do not bind the GPU, coprocessor or USB dock as an analog fallback. Suspend/resume,
 recording and HDMI/DP remain separate scopes. Native qualification remains open.
-The owner's established practice is QEMU closure with native checks in a later
-ThinkPad batch. The milestone carries that closure alternative forward and must
-confirm it with the owner at closure, recording retained native checks as debt
-if confirmed. No native completion is implied by the accepted tuning defaults.
+The initial QEMU-closure/native-later alternative was superseded by the owner
+on **2026-10-09**: milestone closure requires native eight-session playback.
+Task 2 is delivered with the accepted nested-QEMU limitation; native checks and
+any future controller-reset recovery are decided from task 5 evidence.
 
 All task-owned guests, debugger connections, clients and builds are stopped.
 

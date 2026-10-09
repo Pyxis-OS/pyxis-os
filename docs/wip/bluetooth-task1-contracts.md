@@ -8,7 +8,8 @@ All three task 1 rounds are accepted 2026-10-08, including the source-loss
 adjustment. Alpha's agreement is recorded, and pointer tasks 1+2 merged in #545.
 The branch is rebased onto main `abbeded`. No owner policy questions remain for
 task 1. Implementation and later measurement gates require explicit assignment;
-task 2 is not authorized or started.
+at the time of this report, task 2 was not authorized or started. It has since
+been completed (see the [mouse milestone](bluetooth-mouse.md)).
 
 ## Accepted first task 1 round
 

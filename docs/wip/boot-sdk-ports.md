@@ -1,6 +1,6 @@
 # Development milestone index
 
-Status: the current state of planned work, updated 2026-10-09. Nothing here
+Status: the current state of planned work. Nothing here
 authorizes implementation: each milestone settles its decisions in its own
 document before code work starts. Milestone order is flexible; the owner's
 current choice wins. Everyday use for simple tasks guides the order; website
@@ -9,6 +9,11 @@ problems found on the ThinkPad remain allowed in any track.
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document.
+
+Each entry names the milestone, who it is assigned to and its current task, in
+a sentence or two. Change an entry only when work is assigned, a milestone
+completes or the owner changes the plan. Progress, measurements and review
+status belong in the milestone document and the PR.
 
 ## Recently completed
 
@@ -76,16 +81,30 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
+  three defaults accepted; task 1 assigned after #567 merges. Split process
+  ownership from task retirement while keeping one user task per process;
+  no thread syscall, TLS, device behavior or dependency pin. Later tasks remain
+  unassigned.
+- **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
+  keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
+  delivered together, ports first. See [SDL2](../development/sdl2.md) and the
+  [matched qualification](../development/sdl2-event-wait-qualification.md).
+
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
-  exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
-  queues as starting tuning. First controller/codec bring-up task assigned
-  2026-10-08; [private engine and matched qualification delivered for review](../development/experiments/audio-task1/README.md).
-  Public sessions/mixing and IRQ/refill remain later tasks.
-  QEMU closure with
-  a later ThinkPad native batch is carried forward for confirmation at closure;
-  native playback remains unqualified. Quake can produce sound
+  exclusive per-space sessions, 48 kHz S16LE stereo, and 8 × 10 ms DMA/80 ms
+  queues as starting tuning. Controller/codec bring-up merged in #553.
+  Sessions/mixing and IRQ refill implemented as task 2 on 2026-10-08;
+  [baseline, accepted policies and qualification](../development/experiments/audio-task2/README.md)
+  record exact PCM/saturated mixing, eight admissions/ninth refusal and measured
+  BSP cost. The owner accepted task 2 delivery with recorded nested-QEMU
+  [eight-session debt](../technical-debt.md#hd-audio-sustained-eight-session-playback)
+  on 2026-10-09. Two notification/clock-scan fixes are implemented; batching is
+  deferred. Task 5 is assigned as a separate native AMD/ALC257 proposal before
+  code. HDA closure requires native eight-session playback; one guard trip still
+  disables audio until reboot, with recovery revisited from native evidence. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
@@ -133,8 +152,8 @@ Other candidates; current assignments are listed above.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
-- [Threads and SMP follow-ups](scheduling-and-threads.md), including serial
-  services off the BSP.
+- [Multiple threads per process](threads.md) and
+  [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 - Physical GPU drivers, after the [display milestone](../kernel/display.md);
   the owner prepares the hardware.
 - [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).

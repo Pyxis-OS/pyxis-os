@@ -34,7 +34,11 @@ together.
 ## Multiple user threads
 
 User threads are a separate milestone, needed by native consumers including
-[Neovim/libuv](neovim-libuv.md) and [Go](go-runtime.md). It must specify:
+[Neovim/libuv](neovim-libuv.md) and [Go](go-runtime.md). The
+[multiple-threads investigation](threads.md) audits current source and proposes
+the native contract, safety prerequisites and first task. Its three defaults
+are accepted; task 1 is assigned after #567 merges, with later tasks unassigned.
+It must specify:
 
 - thread creation, join and exit;
 - TLS and errno;

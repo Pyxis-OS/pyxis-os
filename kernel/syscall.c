@@ -10,6 +10,7 @@
 #include <kernel/object/net_config.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/audio.h>
 #include <kernel/object/bluetooth_hci.h>
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
@@ -277,6 +278,12 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return pointer_call((struct pointer_object *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_AUDIO:
+    if (header.protocol != PROTOCOL_AUDIO) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return audio_call((struct audio_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   case OBJECT_DISKS:
     if (header.protocol != PROTOCOL_DISKS) {
