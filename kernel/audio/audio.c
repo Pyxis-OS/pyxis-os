@@ -254,7 +254,7 @@ static bool refill_output(void)
     uint64_t before = arch_monotonic_ns();
     uint32_t before_wallclock = native ? hda_stream_wallclock_locked(&controller) : 0;
     safe = hda_stream_position_locked(&controller, &position, &event) &&
-        observe_progress(&position, &event, before);
+        observe_progress(&position, &event, native ? arch_monotonic_ns() : before);
     uint64_t target = (refilled_periods + HDA_PERIOD_COUNT) * HDA_PERIOD_BYTES;
     uint32_t margin = native ? controller.fifo_bytes + HDA_FRAME_BYTES +
         NATIVE_COMMIT_PROGRESS_BYTES : QEMU_CODEC_BURST_BYTES + HDA_FRAME_BYTES;
