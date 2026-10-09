@@ -245,7 +245,11 @@ lock and published through the ordinary readiness notification.
 
 Local framebuffer terminals retain their visible 8-bit glyphs alongside the
 raster. The [system pointer](../interfaces/pointer.md#terminal-control-and-selection)
-routes a fresh left drag to a linear inclusive range; release finalizes it.
+routes a left press to a pending anchor. It clears the previous selection, but
+selects nothing until the pointer enters a different cell while left is held.
+Motion within the starting cell does not count; release without such movement
+leaves no selection. A one-cell displacement selects the two inclusive endpoint
+cells; longer drags span physical rows, and release finalizes the range.
 Only complete cells can start selection; an anchored endpoint clamps to the
 grid edges. A new selection replaces the old one. Selected glyph mutation, scroll
 or committed resize clears selection. Unrelated output and same-glyph colour

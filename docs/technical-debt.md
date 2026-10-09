@@ -262,6 +262,11 @@ I-beam all working. **Still unchecked natively:** program cursor image, hotspot,
 Nested-VM results do not establish native input latency or display performance. Check those items in a later owner ThinkPad batch,
 recording revisions, boot/display/device configuration, behavior and cost samples.
 
+
+An additional ThinkPad owner report on 2026-10-09 found that a plain click selected a cell (no boot revision supplied).
+The [click/drag correction](development/system-pointer-qualification.md#click-and-drag-selection) applies to local TTY and mux;
+the correction needs a native recheck in the next owner ThinkPad batch before the click behavior is qualified.
+
 ## System pointer selection and input limits
 
 Visible-cell selection has no export, clipboard publication or paste, and stored cells are 8-bit glyph indices, so a later text
