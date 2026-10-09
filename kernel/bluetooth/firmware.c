@@ -294,11 +294,6 @@ enum bluetooth_firmware_progress bluetooth_firmware_prepare(struct bluetooth_fir
   };
   state->pending_bytes = 0;
   switch (state->phase) {
-  case BLUETOOTH_FIRMWARE_VERSION:
-    opcode = INTEL_OP_VERSION;
-    parameters = 1;
-    wire[HCI_COMMAND_HEADER] = 0xff;
-    break;
   case BLUETOOTH_FIRMWARE_BOOT_PARAMETERS:
     opcode = INTEL_OP_BOOT_PARAMETERS;
     break;
@@ -340,8 +335,11 @@ enum bluetooth_firmware_progress bluetooth_firmware_prepare(struct bluetooth_fir
   case BLUETOOTH_FIRMWARE_RESET:
     opcode = HCI_OP_RESET;
     break;
+  case BLUETOOTH_FIRMWARE_VERSION:
   case BLUETOOTH_FIRMWARE_VERSION_BOOTED:
   case BLUETOOTH_FIRMWARE_VERSION_AFTER:
+    /* AX200 operational firmware also supports a TLV selector. This profile
+     * uses the legacy zero-parameter query in both controller states. */
     opcode = INTEL_OP_VERSION;
     break;
   case BLUETOOTH_FIRMWARE_DDC:

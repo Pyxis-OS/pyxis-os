@@ -84,7 +84,7 @@ Chosen by the owner, each starting with a proposal:
   Task 3 firmware readiness is assigned 2026-10-09 on
   [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564); its
   [asset plan and native batch](../development/experiments/bluetooth-firmware-readiness/README.md)
-  record implementation, pending cached binaries/access and unmeasured cold initialization.
+  record implementation, ongoing warm qualification and unmeasured cold initialization.
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).

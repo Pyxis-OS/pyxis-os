@@ -1,6 +1,6 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **task 3 implementation compiles; mirror/access and native evidence pending.**
+Status: **image build passes; warm qualification in progress, native evidence pending.**
 The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
 at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
@@ -120,7 +120,7 @@ owner-reported until supplied. This plan claims no task 3 completion.
 
 The private firmware module and HCI integration implement the planned bounded
 flow. Startup uses the canonical device-recipient HCI USB request type 0x20/index 0
-and Intel's combined Read Version selector 0xff, accepting only
+and the zero-parameter Intel Read Version command, accepting only
 the AX200 legacy 10-byte profile. Cold postboot version must match the selected
 image metadata before standard HCI Reset; the full tuple must remain unchanged
 after Reset. DDC must complete before capabilities/readiness. No production
@@ -155,26 +155,24 @@ fault injection, forced cold transition or new benchmark infrastructure were
 added. The unmodified baseline image/ELF from successful main52451d3 CI run1349
 was saved before code changes; its attached measurements await restored access.
 
-The owner cache URL is now recorded in firmware/ax200/metadata.json. An ordinary
-fetch through it failed closed with HTTP 404 for intel/ibt-20-1-3.sfi. Claude
-reports the DDC also returned 404, while LICENCE.ibt_firmware and WHENCE matched
-the manifest's sizes and hashes. Cache content-type validation is a suspected
-cause reported by Claude, not established by Pyxis measurement. The owner is
-correcting binary availability; no upstream or host-file fallback is used.
-The AX200 is still node
-/dev/bus/usb/004/003, currently not writable after reboot; its owner access
-grant must be restored before attachment. Fedora Bluetooth is inactive/disabled.
-No QEMU, debugger or probe was started.
+The owner cache URL is recorded in firmware/ax200/metadata.json. An initial fetch
+failed closed with SFI HTTP 404; after the owner's cache correction all four
+downloads matched their sizes/hashes. The ordinary local image build and
+[CI run 1380 at c631a90](https://git.internal/PyxisOS/pyxis-os/actions/runs/1380)
+passed. Extraction from the built boot archive independently matched all four
+packaged assets. No upstream or host-file fallback was used. The AX200 remains
+/dev/bus/usb/004/003; the owner restored access, and Fedora Bluetooth remains
+inactive/disabled during passthrough.
 
 Baseline bundles, immutable image/ELF, a private npfs fixture and remote-init
 script are prepared in /tmp/pyxis-bluetooth-firmware-readiness. Pending work:
-mirror verification and ordinary image build; baseline/warm passthrough framing,
-DDC/skip and matched storage/idle checks; exact-head CI and final review; the
+warm passthrough framing, DDC/skip and matched storage/idle checks; exact-head CI
+after the version-query correction and final review; the
 owner's cold/warm native batch. Task 3 is incomplete and the PR stays draft.
 
 The earlier 0x21 request was measured warm-only. Linux uses 0x20 for the AX200
 combined path in both states (secure-send alone uses bulk OUT). The canonical
-request and selector still require warm passthrough qualification before the
+request and legacy query still require warm passthrough qualification before the
 native batch; no cold outcome is inferred from the old warm-only shape.
 
 Known unexpected firmware boot/secure-result notifications after initialization
@@ -187,4 +185,14 @@ independent source inspection. This is not controller validation. Exact-head
 CI run [1373](https://git.internal/PyxisOS/pyxis-os/actions/runs/1373) passed
 change detection and filesystem checks, but image build failed explicitly with
 “AX200 owner mirror_root is missing in the metadata”. The published source
-therefore remains a draft awaiting cached binaries and USB access.
+remained a draft awaiting cached binaries and USB access; those dependencies
+are now supplied.
+
+The first task 3 warm boot at c631a90 failed closed with “invalid Intel version
+length (phase read version, call status 6)”. No SFI upload or DDC command was sent;
+both receive streams remained posted and the storage workload passed. The
+initial query incorrectly supplied TLV selector 0xff while expecting a legacy
+reply. Linux's AX200 combined path explains that operational firmware supports
+both formats and selects the zero-parameter legacy command for its legacy
+bootloader setup. This implementation now uses that query throughout. The
+failure establishes neither an unknown firmware build nor a cold-upload result.
