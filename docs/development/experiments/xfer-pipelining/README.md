@@ -1,11 +1,13 @@
 # xfer pipelining
 
-Measured on 2026-10-09 for the xfer debt paydown. The owner accepted three
-decisions on 2026-10-09 (#592):
+Measured on 2026-10-09 for the xfer debt paydown. The owner accepted four
+decisions on 2026-10-09: three from #592 and the terminal change below.
 - a 64 KiB window of file data in 2 KiB chunks, with cumulative PROGRESS
   replies at least every 16 KiB;
 - today's cancellation contract, discarding at most one window;
-- `px_xfer=2` replacing `px_sha256=1`, with no fallback.
+- `px_xfer=2` replacing `px_sha256=1`, with no fallback;
+- terminal output admitting a write only as a whole record, found during
+  implementation.
 
 The protocol is described in the [`xfer` notes](../../../../userspace/xfer/README.md)
 and the [remote terminal guide](../../../userland/remote-terminal.md#explicit-file-transfer).
@@ -23,12 +25,12 @@ The window alone made QEMU downloads slower: 15 MiB took about 40 s instead of
 
 Before the window, `xfer` never had more than one frame queued.
 
-Output writes are at most 4 KiB, so a write now waits until its whole record
-fits ([terminal sessions](../../../userland/terminal-sessions.md#queues-and-operations)).
+Accepted by the owner on 2026-10-09: output writes are at most 4 KiB, so a
+write now waits until its whole record fits ([terminal sessions](../../../userland/terminal-sessions.md#queues-and-operations)).
 That stays within the documented contract: output was allowed, not required,
-to accept a short prefix. An alternative is for the remote server to coalesce
-data records into one frame, leaving the kernel as it was. It would also have
-to hold back non-data records.
+to accept a short prefix. The alternative not taken was for the remote server
+to coalesce data records into one frame, which would also have had to hold
+back non-data records.
 
 ## QEMU results
 
