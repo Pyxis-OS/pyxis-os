@@ -68,16 +68,16 @@ follow the [ports conventions](../../ports/README.md): pinned sources with
 mirrors, recorded patches and licences, and outputs derived from
 `metadata.lua`.
 
-- [ ] **Task 1, Chocolate Doom.**
-  - **Recipe:** Chocolate Doom 3.1.1 through the SDK's CMake file, with
-    SDL2_mixer and SDL2_net off. It is staged as `chocolate-doom`, reading the
-    staged IWAD and keeping its configuration in `home://chocolate-doom/`.
-    `chocolate-setup` and the other games built from the same tree (Heretic,
-    Hexen, Strife) are left out.
-  - **Native Doom timedemo:** native Doom refuses `-timedemo` today, so this
-    task adds its timedemo report; it is the comparison's baseline.
-  - **Stale text:** the ports READMEs for Doom and Quake still say their
-    output is single-buffered and can tear, which the frame handoff changed.
+- [x] **Task 1, Chocolate Doom.** Delivered for review: the recipe, native
+  Doom's `-timedemo` report and the matched comparison, in the
+  [reference](../userland/chocolate-doom.md) and its
+  [measurements](../development/experiments/chocolate-doom/README.md).
+  - **Scaling:** the measurement kept decision 3's default. Upstream's
+    two-stage scaling cost about 1.5 ms more per frame than the single
+    stretch.
+  - **Built without:** SDL2_mixer and SDL2_net through upstream's options,
+    plus three patches: the SDL2 static target, Pyxis platform gaps and the
+    software-scaling default.
 - [ ] **Task 2, Chocolate Quake.** Chocolate Quake 2.1.0 with the local
   patch above, staged as `chocolate-quake`, reading the staged Quake data and
   saving to `home://chocolate-quake/`.
