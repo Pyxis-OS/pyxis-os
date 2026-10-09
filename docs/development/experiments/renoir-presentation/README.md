@@ -10,7 +10,10 @@ native output.
 ## Builds and QEMU method
 
 Before production code edits, baseline `31af2224` ordinary ISO/ELF, component
-bundles and profiled images were saved with hashes. Pinned userland `2fc6badb`,
+bundles, profiled kernel and initial profiled ISO were saved with hashes.
+Cost sampling continued afterward from those unchanged inputs; the corrected
+true-boot ISO was assembled later from the same archived profiled kernel.
+Pinned userland `2fc6badb`,
 ports `0f0aa443`, fs `b427df29` and lwIP `a1aadb91` are unchanged. Builder:
 LLVM23.1.3/`49e2c1a`, digest
 `50bfb587f2e73d6478ae1c91e86984ccb8223baa4367fe27fa227808e87bc038`.
@@ -69,7 +72,8 @@ Manual monitor input and read-only GDB (`set may-call-functions off`) checked:
   and truthful unavailable timing. Default mode was observe; the observer was
   unprepared and no hardware sequence/timestamp/period was fabricated.
 - Existing `screenshot s.png`: native completed frame, visible I-beam included,
-  successful PNG publication and SHA-256 afterward on boot, Bochs and VirtIO.
+  and return without error on boot, Bochs and VirtIO; SHA-256 was obtained
+  afterward for Bochs and VirtIO. Boot had no hash measurement.
   GDB raw-frame dumps were visually checked; guest functions/memory were not
   mutated. Monitor screendumps alone omit the VirtIO host cursor.
 - Explicit blank boot: ordinary presentation/input continued; hardware
@@ -80,10 +84,9 @@ Manual monitor input and read-only GDB (`set may-call-functions off`) checked:
   generation three, with observation still unavailable. Post-resize capture
   completed at 800x573 with the I-beam and successful PNG publication.
 
-PNG hashes for boot, Bochs, VirtIO and post-resize respectively:
+Measured PNG hashes for Bochs, VirtIO and post-resize respectively:
 
 ```text
-boot: recorded in the local candidate-std capture log
 bochs: c1208b425907004ce8fa0b7a73ddd5879b6aa0ceaf08c2cbee91fc0e07a4bf330
 virtio: 3270010e0a0074ef766924d4c46cd95a7765f5c38ac17d0f20b220b5628647bb
 resized: 47e89a0563cf790ad62f8820cedf19a649e3390e1329c6b93a1a980479373109
