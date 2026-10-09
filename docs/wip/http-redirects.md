@@ -1,26 +1,23 @@
 # HTTP redirects proposal
 
-Assigned **2026-10-09**, docs only; decisions pending, implementation unassigned.
+**All three defaults accepted 2026-10-09; implementation assigned.**
 Deferred 2026-10-04 (“wanted, not yet”); [Links](../userland/links.md) hits redirects
 on ordinary sites.
 
-## Three owner decisions
+## Accepted decisions (2026-10-09)
 
-1. **Follow policy — default: 301/302/303/307/308, at most ten redirects**
+1. **Follow policy: 301/302/303/307/308, at most ten redirects**
    (eleven requests including the original), with visited-URL detection. This
    covers ordinary moves without choosing a 300 representation or inventing a
-   304 cache. Alternative: five redirects, a smaller compatibility allowance.
-2. **Transport/trust — default: allow HTTP→HTTPS and public-root cross-origin
+   304 cache.
+2. **Transport/trust: allow HTTP→HTTPS and public-root cross-origin
    redirects; reject HTTPS→HTTP and origin changes involving custom trust.**
    Use only delegated scheme providers, rebuild request headers for each hop,
-   and never transfer custom roots or credentials. Alternative: same-origin only,
-   also refusing upgrades; simpler, but misses ordinary HTTP landing pages.
-3. **Ownership/consumer contract — default: shared userspace open bridge owns
+   and never transfer custom roots or credentials.
+3. **Ownership/consumer contract: shared userspace open bridge owns
    the chain, with copied response metadata available from FILE.** Preserve one
    30 s deadline and a 16 MiB body budget across hops; Links consumes the final
-   URL before interpreting the page. Alternative: provider-owned chains with
-   newly delegated cross-scheme authority; more service/trust coupling and still
-   requires final-URL delivery. Defaults below form one bounded implementation.
+   URL before interpreting the page. The contract below governs implementation.
 
 ## Following and resolving
 
@@ -116,7 +113,7 @@ refusal CALL_DENIED; body/header excess CALL_FILE_TOO_LARGE. Existing transport,
 binding and final-status errors retain their mapping.
 
 Retain final absolute URL (including fragment), redirect count, final status
-and media type with the descriptor/FILE. Proposed copy-out
+and media type with the descriptor/FILE. The copy-out
 `pyxis_stdio_response(FILE *, struct pyxis_response_info *)` in `<pyxis/stdio.h>`
 returns presence flags, status/count, a 2,049-byte URL and 128-byte media type.
 Valid local/inherited streams report absence; invalid/closed streams fail.
@@ -144,5 +141,5 @@ cookies and async browsing remain separate.
    Links base/history/Back. Use controlled HTTP/TLS peers and ordinary QEMU;
    no new test/CI infrastructure. Close into the references when delivered.
 
-This PR contains no runtime changes, new build inputs or measurements. Acceptance
-settles the contract; implementation still requires the owner's assignment.
+The proposal PR records acceptance; implementation and qualification are delivered
+in separate userland, ports and Pyxis integration PRs. The owner reviews/merges.

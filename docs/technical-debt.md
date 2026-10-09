@@ -1087,7 +1087,8 @@ bodies.
 The [HTTP/HTTPS providers](userland/http-fetch.md) reject 3xx, so ordinary browsing
 in Links fails at redirects. Deferred 2026-10-04 (wanted, not yet); the assigned
 [proposal](wip/http-redirects.md) now covers follow/loop limits, transport/trust,
-final URLs and snapshot bounds. Its three decisions are pending; behavior is unchanged.
+final URLs and snapshot bounds, accepted 2026-10-09; implementation is assigned,
+but providers still reject redirects until that delivery.
 
 ## Response metadata through fopen
 
@@ -1095,7 +1096,7 @@ A program reading a provider URI through libc `fopen` gets only bytes: no media 
 reply already carries an optional media type and the providers keep the final status. The [Links port](userland/links.md) therefore sniffs HTML by content or
 extension and shows a rejected status only as an open error. Revisit with a way to expose response metadata that fits Pyxis, alongside
 [discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations); the assigned
-[redirects proposal](wip/http-redirects.md) includes the final-URL accessor for Links, with decisions pending.
+[redirects proposal](wip/http-redirects.md) includes the final-URL accessor for Links, accepted 2026-10-09.
 
 ## HTTPS trust and platform limits
 
