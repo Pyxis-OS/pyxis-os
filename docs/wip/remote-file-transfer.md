@@ -8,10 +8,10 @@ revised later by the owner. Each task starts only when the owner says so.
 See [streaming transfers](#streaming-transfers) and its
 [validation](#streaming-validation-2026-10-08).
 
-**Transfer throughput: first fix merged, 2026-10-08** (#554, userland #167).
-See [transfer throughput](#transfer-throughput). Further changes wait for the
-owner's native re-timing; TCP itself is now the
-[network throughput](network-throughput.md) work.
+**Transfer throughput: done, 2026-10-09.** The reply-read fix (#554, userland
+#167) and the [network throughput](../development/network-throughput.md) work
+brought a native 15 MiB download from about 45 s to 7.5 s; see
+[transfer throughput](#transfer-throughput).
 
 ## Goal
 
@@ -506,44 +506,36 @@ The hypotheses came out as follows:
 ### Reply-read fix
 
 `xfer send` now reads PROGRESS replies in blocks during the data phase and
-returns to exact reads before `finish`, as receiving does (userland `{u}`).
+returns to exact reads before `finish`, as receiving does (userland `dc0533d`).
 Matched 15 MiB downloads in QEMU on the same day, with other agents loading the
 host (load average about 1.7):
 
 | Build | Times |
 | --- | --- |
 | Before, userland `a5a48b4` | 90.6, 97.8, 91.7 s |
-| After, userland `{u}` | 52.6, 52.2, 56.9 s |
+| After, userland `dc0533d` | 52.6, 52.2, 56.9 s |
 
 All downloads matched the source's SHA-256. A cancelled download left no
 staging file, a command typed after a download ran normally, and a 1 MiB
 upload still matched.
 
-### Remaining guest network cost
+### Native re-timing (2026-10-09)
 
-With the fix, a chunk takes about 6.5–7 ms in QEMU. The remote-terminal server
-spends most of it in TCP calls, each handed to the BSP network worker:
+The owner timed 15 MiB transfers between the ThinkPad, wired and on AC, and
+the desktop's `pyxis-remote`, built from the same revision as the PXE image:
 
-| Server step per chunk | Calls | Time |
+| Main | To Pyxis | To the desktop |
 | --- | --- | --- |
-| `tcp_try_read` | 4.2 | 2.2 ms |
-| `tcp_try_write` of the 2.8 KB frame | 1.0 | 1.8 ms |
-| Blocked in `wait_many` | 1.45 | 1.9 ms |
-| `xfer`'s turn, reply injected → next frame drained | – | 1.2 ms |
+| Before the reply-read fix (2026-10-08) | about 6 s | about 45 s |
+| `114f2ac`, with the fix | about 6 s | about 32 s |
+| `183f793`, with [network throughput](../development/network-throughput.md) | 6.5 s | 7.5 s |
 
-Uploads pay the same costs and take 0.8 ms per chunk natively, so these are
-likely much smaller on the ThinkPad. Candidates if the native re-timing still
-falls short, neither changed yet:
-
-- **Server reads.** Only the header and payload reads per INPUT frame carry
-  data; the others return WOULD_BLOCK after readiness, each costing a worker
-  handoff.
-- **Segment size.** lwIP's `TCP_MSS` is 536 in
-  `kernel/net/lwip/include/lwipopts.h`, so each 2.8 KB frame leaves as six
-  segments. That likely limits TCP throughput generally, not only transfers.
-
-Several chunks in flight would change the framing and, for uploads, the guest's
-4 KiB typeahead allowance; that would come back to the owner as a decision.
+The reply-read fix took about 30% off downloads. The network throughput work
+took the rest down to 7.5 s; in QEMU the remaining stall was Nagle holding each
+frame's tail until the peer's delayed ACK, but natively its three changes were
+not timed separately. Both directions now run at about 2–2.3 MiB/s with one
+2 KiB chunk in flight; several chunks in flight remain an owner decision,
+since it changes the framing and the guest's 4 KiB typeahead allowance.
 
 ## Out of scope
 

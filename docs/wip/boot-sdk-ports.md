@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [Network throughput](../development/network-throughput.md), 2026-10-09:
+  1460-byte segments on-link, 64 KiB windows and Nagle off; natively send went
+  from 35.8 to 70.5 MiB/s and receive reaches 85 MiB/s with `ttcp -r`, with
+  [remaining limits](../technical-debt.md#tcp-throughput-limits) recorded.
 - [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
   unmerged QEMU probes established controller/codec commands and known PCM
   playback; the Fedora dump identifies ALC257, but native Pyxis audio
@@ -99,12 +103,6 @@ Chosen by the owner, each starting with a proposal:
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
   clipboard and USB HID implementation remain separate. Bluetooth's accepted
   conditional source-loss rule remains future integration, without a second source.
-- **Claude** (2026-10-08): [network throughput](network-throughput.md), TCP
-  toward the owner's gigabit LAN. Five decisions are accepted and implemented
-  in #559 and userland #169, held unmerged until the owner's native baseline
-  on main. The
-  [remote transfer](remote-file-transfer.md#transfer-throughput) reply-read
-  fix merged in #554; its native re-timing is pending.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
