@@ -95,13 +95,17 @@ already have pinned recipes; no compiler-container rebuild is proposed.
    grants or credential. Trusted startup explicitly supplies a same-space
    CREATE_GROUP launcher to the harness, which stays outside each command group;
    ordinary foreground Lua's LAUNCH-only grant is insufficient for this role.
-   Start with three Messages requests per manually started
-   live run, explicit owner-selected model, `max_tokens` 1024, 64 KiB serialized
-   request, 1 MiB response and 16 KiB returned file/output chunks. Use a 300 s
-   overall request deadline and 60 s command deadline. These are draft working
-   budgets, not exact billing limits; stop when exceeded without hidden retry,
-   silent history truncation or another paid call. Streaming, shell-language
-   execution, background tools and longer runs require later scope.
+   Make the model and budgets explicit per-run settings. Proposed defaults are
+   20 Messages requests, `max_tokens` 4096 per request, 64 KiB serialized request,
+   1 MiB response, 16 KiB returned file/output chunks, a 300 s overall request
+   deadline and a 60 s command deadline. The owner selects the model and starts
+   each live run manually; keep the first live exchange small. At the end of
+   every run, including a stopped or failed run, report API-reported input/output
+   tokens per request and their run totals. Mark missing usage as unknown rather
+   than counting it as zero; totals cover only requests with reported usage.
+   These are draft working budgets, not exact billing limits; stop when exceeded
+   without hidden retry, silent history truncation or another paid call.
+   Streaming, shell-language execution and background tools require later scope.
 
 ## Authority, capture and validation
 
@@ -172,7 +176,8 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
   noisy and denied commands in QEMU/GDB, with no provider calls.
   **After this task, the owner can:** capture a native command's stdout/stderr and real completion for a tool result.
 - **1e: Lua harness loop.** Implement the four tools and validated tool-use/result
-  exchange, bounded context, status/usage reporting and deliberate stop behavior.
+  exchange, bounded context, explicit per-run settings, end-of-run per-request
+  and total input/output token usage, status reporting and deliberate stop behavior.
   A manual small live exchange follows local qualification; no automatic spending.
   **After this task, the owner can:** ask Claude to inspect/edit a small project and run a direct native command on Pyxis.
 
