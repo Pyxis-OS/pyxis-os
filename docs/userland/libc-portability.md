@@ -154,16 +154,23 @@ x86-64 LP64 interface is:
 
 | Header | Supported interface |
 | --- | --- |
-| `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_CREAT = 0x100, O_TRUNC = 0x200 |
-| `unistd.h` | read, write, close; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
-| `sys/types.h` | ssize_t as signed long; mode_t as unsigned int |
+| `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x100, O_TRUNC = 0x200, O_EXCL = 0x400 |
+| `unistd.h` | read, write, close, lseek, ftruncate, fsync, unlink; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
+| `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
 | `inttypes.h` | PRId/PRIi/PRIo/PRIu/PRIx/PRIX output macros for fixed-width 8/16/32/64-bit, pointer and greatest-width types |
 
-Open accepts read-only access or write-only access with optional create/truncate.
-Unknown flags and read-only mutation combinations fail with EINVAL before
-lookup or examining the variadic argument. With O_CREAT, open consumes mode_t
+Open selects exactly one of read-only, write-only or read/write access. Create
+and truncate require writable access. O_EXCL requires O_CREAT and uses native
+exclusive creation: after authority checks, an existing name fails with EEXIST,
+without opening or truncating it, even with O_TRUNC. It never falls back to
+opening a concurrent creator's file. O_RDWR requires both native READ and WRITE
+rights; denied access is not attenuated to one direction.
+
+Unknown flags, combined O_WRONLY|O_RDWR, read-only mutation and O_EXCL without
+O_CREAT fail with EINVAL before lookup or examining the variadic argument.
+With O_CREAT, open consumes mode_t
 and accepts only 0666 as native creation policy; other modes fail with ENOTSUP
 before lookup, even for existing files. No mode argument is read otherwise.
 This creates no permission system or additional rights; virtio-fs retains its
@@ -178,7 +185,51 @@ Descriptor calls neither inspect nor update FILE indicators.
 
 The [descriptor I/O reference](stdio.md#descriptor-io) and
 [native errno mapping](stdio.md#native-error-translation) give the detailed
-contract. O_RDWR, O_APPEND, public seek, fdopen, fileno and duplication are absent.
+contract. lseek uses the descriptor's existing private position; it is not
+pread/pwrite or a shared cursor. O_APPEND, fdopen and duplication remain absent.
+fileno exposes an existing FILE descriptor without adding an alias.
+
+### Read/write and exclusive-create qualification
+
+[Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171), commit
+`ff278aec50adfaf6af8d8c15062084a8594642e3`, implements the first
+[Git source-acquisition task](../wip/git-on-pyxis.md#first-task-status-and-accepted-decisions).
+The ordinary `make -j16 image` build used parent `32ee113d`, userland `f5c4de2`
+plus the exact two-file change subsequently committed above, ports `f2da003d`
+and filesystem `b427df29`. Clang/LLD 23.1.3 came from the existing
+`pyxis-builder:pyxis-llvm23.1.3-49e2c1a` container; no compiler rebuild was needed.
+The libc build had no warnings. The full image retained vendor warnings and
+exposed a macro redefinition in Links' existing unsupported O_EXCL sentinel;
+Links' private-mode/configuration-save refusal is unchanged by this task.
+
+Manual qualification used nested-KVM Q35, two vCPUs, 256 MiB, VirtIO networking,
+RNG and virtio-fs, with the matching raw OVMF pair. A disposable observation
+program launched from `host://` performed file operations in RAM `tmp://` and
+denied creation in read-only `boot://`. It was not packaged or committed.
+
+| Observation | Result |
+| --- | --- |
+| `O_RDWR\|O_CREAT\|O_EXCL`, mode 0666 | Descriptor 3 opened with both access directions; wrote six bytes `abcdef` |
+| Duplicate name with O_EXCL and O_TRUNC | -1/EEXIST; the held file and its six bytes remained unchanged |
+| lseek to 2, write `XY`, seek to 0, read | `abXYef`, six bytes; close and O_RDWR reopen retained the same bytes |
+| Repeated denied exclusive creates | -1/EACCES; subsequent authorized creation reused descriptor 3 |
+| Invalid access, read-only create, unknown bit, O_EXCL without O_CREAT | -1/EINVAL; invalid create flags were exercised without a mode argument |
+| Mode 0600 on an existing name | -1/ENOTSUP before lookup |
+
+Read-only GDB inspection at descriptor_open, path_create_file and the probe's
+observation points confirmed reservation before path work, requested native
+rights READ|WRITE, CALL_DENIED with no returned child handle, invalidation of the
+copied path handle and a free failed-open slot. The duplicate attempt freed
+descriptor 4 and left descriptor 3's handle, position and access intact.
+Descriptor capacity retained normal growth to six slots; cleanup promises live
+ownership release, not shrinking its allocation. No debugger function calls,
+fault injection, new tests or boot/output automation were used. Task-owned QEMU,
+debugger, remote client and virtiofsd processes were stopped.
+
+This qualifies the selected RAM-file operations and ordinary denied-create
+unwind. Racing writers, forced allocation failure, malformed close replies,
+NPFS/host mutation and power-loss durability were not exercised. Their unchanged
+preflight and uncertain-close rules were inspected in source.
 
 ## Close failure and cleanup
 

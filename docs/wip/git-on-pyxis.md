@@ -1,14 +1,19 @@
 # Git source acquisition on Pyxis
 
-Investigation and proposal, 2026-10-09. Nothing below authorizes implementation.
+Investigation, accepted direction and task status, 2026-10-09. The original
+compile evidence below records the investigation snapshot. The owner accepted
+the three decisions and assigned only the first libc task; later work remains
+unassigned. Its [status](#first-task-status-and-accepted-decisions) supersedes the
+historical O_RDWR/O_EXCL gap entries.
 This supports [source builds](source-builds.md) after hosted Clang. The question
 is obtaining pinned source, separately from providing a developer's Git CLI.
 
-**Recommendation:** pursue a native source-fetch command using a restricted
+**Accepted route:** a native source-fetch command using a restricted
 libgit2 port, with a bare object store and explicit tree export. It removes the
 process/shell dependency and avoids a working-tree index. It still needs libc,
-path, object-store and transport work; neither route currently builds against
-the SDK. A complete Git CLI is a larger, separate proposal.
+path, object-store and transport work; neither route built against the SDK in
+the recorded probes. The owner also wants a complete Git CLI eventually, with
+its larger process and worktree contracts handled separately.
 
 ## Evidence and probe boundary
 
@@ -57,6 +62,11 @@ Git is GPL-2.0; libgit2 is GPL-2.0 with its linking exception. Source was not
 downloaded directly from upstream. SSH queries for `mirrors/git` and
 `mirrors/libgit2` returned “Cannot find repository”; those repositories are not
 prerequisites if a future recipe uses the existing checksum-pinned cache entries.
+After accepting the direction, the owner created `git.internal/mirrors/libgit2`,
+`mirrors/git` and `mirrors/curl`; anonymous HTTPS `ls-remote ... HEAD` succeeded
+for all three during task 1. The owner also reports a `raw-gitlab` cache on
+`repo.internal`. This task adds no recipe, follows no mirror branch and fetches
+no new Git/libgit2/curl source.
 
 ### Measured compilation
 
@@ -227,16 +237,26 @@ Pyxis commit `26770a0cb95afb4fcc7b0aa6a023565becf99ef7` with depth 1 and verifie
 FETCH_HEAD. This establishes that server route for one pin; it is neither a
 libgit2 transaction nor an on-Pyxis TLS/network result, nor a promise for all mirrors.
 
-## Proposed first task and owner decisions
+## First task status and accepted decisions
 
-First task, only after explicit approval: add **public `O_RDWR` and
-`O_CREAT|O_EXCL` in userland libc**, reusing internal read/write descriptors and
-native exclusive creation. Keep the existing 0666 native creation policy and
-explicitly reject unsupported flags/modes. Preserve authority, allocation
-preflight and uncertain-close rules. Qualify duplicate-name EEXIST without
-truncation, read/write positioned use and denied-create cleanup by ordinary
-build and interactive QEMU/debugger inspection. No new test infrastructure,
-kernel mechanism or compiler-container rebuild is proposed.
+- [x] Task 1: public **`O_RDWR` and `O_CREAT|O_EXCL` in userland libc**, implemented
+  and manually qualified; pending owner review and dependency merge.
+
+[Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171) publishes
+`ff278aec50adfaf6af8d8c15062084a8594642e3`. This integration pins that published
+commit. Merge userland first, then the Pyxis gitlink/docs PR. No later task starts
+as part of this delivery.
+
+The two-file implementation reuses internal read/write descriptors and native
+exclusive creation, retains the 0666-only policy, and rejects unsupported
+flags/modes explicitly. O_EXCL without O_CREAT and combined O_WRONLY|O_RDWR fail
+with EINVAL before varargs or path work. Capability authority, allocation
+preflight and uncertain-close rules are unchanged. The ordinary image build and
+interactive nested-KVM QEMU/GDB inspection qualified duplicate-name EEXIST
+without truncation, seek/read/write on one descriptor and denied-create cleanup.
+[Qualification details](../userland/libc-portability.md#readwrite-and-exclusive-create-qualification)
+separate these observations from inspected invariants and unexercised storage/
+failure cases. No kernel change, new test infrastructure or compiler rebuild.
 
 That task unblocks a concrete shared dependency, not a functioning fetch tool.
 Subsequent separately approved work would cover positioned I/O and remaining
@@ -247,12 +267,12 @@ not an arbitrary object or substituted ref. Check completeness of its reachable
 tree/blobs before reporting success. A Git OID verifies source identity relative
 to the trusted recipe pin; it does not authenticate recipe authors or replace TLS.
 
-There are three decisions for the owner; none is accepted by this document:
+The owner accepted these three defaults on 2026-10-09:
 
-1. **Goal. Default: pinned source acquisition via libgit2.** Defer the full
-   `clone/fetch/checkout/status/log` CLI. Choose the Git route instead if interactive
-   repository work is needed now, accepting native launcher and index-cache work.
-2. **Tree profile. Default: ordinary files/directories, with 100644/100755 Git
+1. **Goal: pinned source acquisition via libgit2 first.** A full
+   `clone/fetch/checkout/status/log` CLI remains the eventual goal, requiring its
+   own native launcher and index-cache work.
+2. **Tree profile: ordinary files/directories, with 100644/100755 Git
    blobs both materialized as native files and their original modes retained in
    the fetched tree.** Explicitly document that there is no POSIX execute bit.
    Reject symlinks and gitlinks before export; never dereference a symlink or
@@ -260,7 +280,7 @@ There are three decisions for the owner; none is accepted by this document:
    submodules needs separate decisions. The ports runner already pins extra
    source repositories separately, but the complete recipe-source closure has
    not been audited for these entry kinds.
-3. **Storage and publication. Default: one fresh private `tmp://` store and
+3. **Storage and publication: one fresh private `tmp://` store and
    destination, discard on failure; no shared persistent cache or overwrite.**
    Preflight the tree before writing, with an explicit caller-selected resource
    budget, and let the runner consume it only after successful verification/export.
@@ -276,6 +296,7 @@ shell. This proposal adds no successful fake operations.
 Delivery follows [repository ownership](../development/sdk-and-repositories.md):
 libc changes in userland, libgit2 recipes/patches in ports, a native command and
 TLS adapter in userland, parent integration only after published dependencies.
-The base SDK stays independent of TLS/libgit2. No gitlinks change in this docs PR.
-No new upstream source or compiler container is needed for the proposed libc
-task. The probe branch stays unmerged; this investigation stops for owner review.
+The base SDK stays independent of TLS/libgit2. This task changes only the userland
+pin and related docs in Pyxis. No new upstream source or compiler container is
+needed. The original investigation probe branch stays unmerged; task-owned
+qualification processes are stopped. Stop for owner review of task 1.

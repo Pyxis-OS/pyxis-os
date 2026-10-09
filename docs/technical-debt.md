@@ -912,8 +912,9 @@ separate work.
 
 The completed [descriptor portability slice](userland/libc-portability.md) supplies
 open/read/write/close for cksum and restricted tee, and `lseek` for files.
-Public O_RDWR, fdopen and duplication remain absent even though fopen
-supports update modes internally. Consumers requiring those interfaces need
+Public O_RDWR and exclusive O_CREAT|O_EXCL use existing native constructs, as
+qualified in [libc portability](userland/libc-portability.md#readwrite-and-exclusive-create-qualification).
+fdopen and duplication remain absent. Consumers requiring those interfaces need
 a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
 [SDL2 port](development/sdl2.md); it exposes the stream's existing descriptor and adds
 no new aliasing. Revisit them against a pinned consumer's actual
