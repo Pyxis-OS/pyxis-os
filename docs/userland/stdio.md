@@ -82,8 +82,8 @@ read without O_CREAT. Existing native capability rights, backend creation policy
 and host restrictions remain authoritative. Virtio-fs still requests 0644.
 See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
 
-`unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync` and
-`unlink`, `pread` and `pwrite`, and defines STDIN_FILENO,
+`unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync`,
+`unlink`, `pread`, `pwrite`, `access` and `rmdir`, and defines STDIN_FILENO,
 STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `sys/types.h` defines ssize_t as
 signed long on the LP64 target; `limits.h` defines SSIZE_MAX as LONG_MAX.
 
@@ -134,8 +134,11 @@ Existing FILE streams keep their original object after removal; reopening the
 name fails unless another entry has been created there. Roots and final `.` or
 `..` are rejected, and a trailing slash requires a directory.
 
-Nonempty directories report ENOTEMPTY. This is nonrecursive removal, without
-unlink/rmdir syscall adapters. Persistent storage remains separate work.
+Nonempty directories report ENOTEMPTY. `unlink` selects only files, while
+`rmdir` selects only directories in the same native removal operation.
+Rmdir reports ENOTDIR for a wrong type, ENOENT for a missing name and EACCES
+for denied authority. There is no recursive behavior or POSIX kernel syscall
+adapter. See [path qualification](libc-portability.md#path-and-byte-order-qualification).
 
 ## Directory creation
 
@@ -465,8 +468,10 @@ if reporting itself fails.
 | NOT_EMPTY | ENOTEMPTY |
 | IO, OUTCOME_UNKNOWN, INPUT_LOST, unrecognized failure | EIO |
 
-The native WRONG_TYPE result does not distinguish a file from an intermediate
-directory mismatch, so libc does not invent that distinction. Permission checks
+Access and rmdir map WRONG_TYPE to ENOTDIR because either a required directory
+component or rmdir's target has the wrong kind. Other callers retain EINVAL;
+the native result does not distinguish final from intermediate mismatches.
+Permission checks
 may reject a mutation before the backing reports READ_ONLY. Code should inspect
 native statuses directly when it needs the original protocol detail.
 

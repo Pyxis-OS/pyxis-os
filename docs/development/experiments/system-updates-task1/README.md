@@ -23,18 +23,9 @@ Live boot used a CD-ROM ISO and manual Limine selection, then Super+Right to
 focus installer CPU 1. A 60-second menu timeout was used for these manual runs.
 This is not native USB/ThinkPad, real power-loss or I/O-error qualification.
 
-Ordinary full source builds passed before and after review fixes:
-
-```sh
-PATH=$HOME/src/pyxis-native-writer-build/host-tools/bin:$PATH \
-make -j16 image fs-tools \
-  CROSS_COMPILE=$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
-  PYTHON=/usr/bin/python3 BOOT_MENU_TIMEOUT=60
-```
-
-The kernel, installer and init compiled without new warnings. Existing vendor
-warnings remain. No compiler-container rebuild was needed. No tests, self-tests,
-CI jobs or boot/output automation were added.
+Ordinary full source builds (`make -j16 image fs-tools PYTHON=/usr/bin/python3 BOOT_MENU_TIMEOUT=60`) passed before and after
+review fixes; the kernel, installer and init compiled without new warnings (existing vendor warnings remain), and no
+compiler-container rebuild, tests, CI jobs or automation were added.
 
 ## Fixtures and observed behavior
 
@@ -77,8 +68,7 @@ selected the sole candidate automatically, displayed installed `f104a0948432`
 and live `65ade91f4120`, printed `Update inspection complete. Nothing was
 written.`, and exited with status 0. Target writes/flushes remained zero, and its
 full-file SHA-256 still matched. Subsequent documentation changes do not alter
-the implementation qualified here. All validation QEMU/debugger/client jobs
-were stopped.
+the implementation qualified here. 
 
 ## Existing Install comparison
 
@@ -101,7 +91,3 @@ opening compatibility and required FAT/configuration identity; it does not
 validate every boot option, EFI/kernel/archive bootability, unrelated FAT files,
 ordinary pool file contents or global allocation ownership. Task 2 must recheck
 eligibility under exclusive access before writing.
-
-Raw fixtures, ISO/ELF builds, logs, remote transcripts and full SHA-256 records
-were retained outside Git at
-`~/src/pyxis-system-updates-build/system-updates-task1/`.
