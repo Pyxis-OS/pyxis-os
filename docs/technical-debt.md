@@ -469,7 +469,9 @@ Execution groups supervise separately; the [remote server](userland/remote-termi
 after five seconds, and can still wait indefinitely on published HOST work while holding a slot. Four idle or blocked sessions can
 exhaust the server, and there is no idle timeout, authentication, encryption, restart or reconnection; host-loopback forwarding limits the
 QEMU entry point, but any process reaching it gets the configured shell privileges, with shared roots, space and CPU and no separate
-principals or quotas. Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
+principals or quotas. Live/PXE Remote explicitly enables power: any reachable LAN peer can reboot or power off the machine, an owner-accepted
+sole-user home-LAN exposure; installed remote defaults omit it. Revisit power delegation with authentication or a broader deployment.
+Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
 cell for non-ASCII bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
 then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
 ([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and

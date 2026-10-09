@@ -121,8 +121,15 @@ return {
   resource, with power-off and restart rights, for the shell's
   [`poweroff` and `reboot`](shell.md#power-off-and-restart). Any number of spaces
   may set it. The live Development space and the installed `pyxis` space do, and
-  boot init's built-in rescue space always has it. Other spaces, such as Remote
-  and Read-only, cannot power off or restart.
+  boot init's built-in rescue space always has it. Read-only does not.
+  `remote_power` is a separate optional boolean, defaulting to false: it grants
+  the same object as `remote_power` through trusted session handoffs, and the
+  remote supervisor binds it as `power` only in its root shell. Ordinary local
+  `power` never authorizes remote shells. Live/PXE Remote sets
+  `remote_power = true`; installed defaults leave it absent and keep `pyxis`'s
+  local power unchanged. The unauthenticated live terminal lets any reachable
+  LAN peer reboot or power off the machine, an owner-accepted sole-user home-LAN
+  exposure. Ordinary programs and service providers inherit neither grant.
 - **Screen capture.** `screenshot` is an optional boolean, defaulting to `false`.
   With `screenshot = true`, boot init delegates the separate `screen_capture`
   resource with CAPTURE authority. It observes the whole shown local screen,
