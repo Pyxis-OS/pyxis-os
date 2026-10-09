@@ -6,6 +6,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/memory.h>
+#include <kernel/mm/vm.h>
 #include <kernel/user/wait.h>
 #include <stdatomic.h>
 #include "boot.h"
@@ -26,6 +27,11 @@ static atomic_bool direct_disabled;
 /* Sequential consistency pairs writer publication/recheck with panic's
  * claim/load. Either the writer sees the claim or the claimant sees it. */
 static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
+/* Boot and Bochs frames compose into this write-back copy of the front
+ * buffer's layout; the frame end copies it to scanout memory in one pass.
+ * Zero means composition writes the front buffer directly. Fixed for the
+ * boot: these drivers never resize. VirtIO composes into its own RAM backing. */
+static uintptr_t staging;
 
 /* Runtime availability is BSP-owned. Publish failure after backend waits and
  * outside rendering locks, then wake observers before restoring interrupts. */
@@ -86,12 +92,25 @@ void display_init(const struct boot_info *boot, const char *size)
   }
 }
 
+/* BSP presenter. A frame without staging still presents, directly. */
+static void allocate_staging(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  if (vm_alloc(vm_kernel_space(), target->size, PAGE_SIZE, PAGE_WRITE, &staging) != MM_OK) {
+    staging = 0;
+    klog("display: no %zu-byte staging frame; composing on the front buffer\n",
+        target->size);
+  }
+  cpu_restore_interrupts(flags);
+}
+
 bool display_start(void)
 {
   bool ready = false;
   switch (driver) {
     case DISPLAY_BOOT:
     case DISPLAY_BOCHS:
+      allocate_staging();
       ready = true;
       break;
     case DISPLAY_VIRTIO_GPU:
@@ -205,10 +224,14 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
     size_t count = bytes < DISPLAY_COPY_BYTES ? bytes : DISPLAY_COPY_BYTES;
     switch (driver) {
       case DISPLAY_BOOT:
-        boot_display_copy(offset, source, count);
-        break;
       case DISPLAY_BOCHS:
-        memcpy((void *)(target->address + offset), source, count);
+        if (staging) {
+          memcpy((void *)(staging + offset), source, count);
+        } else if (driver == DISPLAY_BOOT) {
+          boot_display_copy(offset, source, count);
+        } else {
+          memcpy((void *)(target->address + offset), source, count);
+        }
         break;
       case DISPLAY_VIRTIO_GPU:
         virtio_gpu_copy(offset, source, count);
@@ -220,9 +243,32 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
   }
 }
 
+/* Copies the visible rows of a complete staged frame to scanout memory,
+ * leaving row padding untouched. A panic claim stops it between chunks. */
+static void copy_staging(void)
+{
+  size_t row_bytes = target->width * sizeof(uint32_t);
+  if (target->pitch == row_bytes) {
+    size_t total = row_bytes * target->height;
+    for (size_t offset = 0; offset < total && !atomic_load(&panic_claimed);
+        offset += DISPLAY_COPY_BYTES) {
+      size_t count = MIN(total - offset, DISPLAY_COPY_BYTES);
+      memcpy((void *)(target->address + offset), (const void *)(staging + offset), count);
+    }
+    return;
+  }
+  for (size_t y = 0; y < target->height && !atomic_load(&panic_claimed); ++y) {
+    size_t offset = y * target->pitch;
+    memcpy((void *)(target->address + offset), (const void *)(staging + offset), row_bytes);
+  }
+}
+
 bool display_end_frame(const struct pointer_frame *frame)
 {
   bool ready = available;
+  if (staging && available && !display_is_panicking()) {
+    copy_staging();
+  }
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
     ready = virtio_gpu_present();
     if (ready && frame && !display_is_panicking()) {
