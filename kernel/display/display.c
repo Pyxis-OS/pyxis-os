@@ -1,5 +1,6 @@
 #include <arch/cpu.h>
 #include <kernel/display.h>
+#include <kernel/display_capture.h>
 #include <kernel/fb/early_console.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
@@ -185,10 +186,15 @@ bool display_begin_frame(void)
 {
   atomic_store(&writer, cpu_initial_apic_id());
   if (atomic_load(&panic_claimed) || !available) {
-    display_end_frame();
+    display_end_frame(NULL);
     return false;
   }
   return true;
+}
+
+bool display_pointer_hardware(void)
+{
+  return driver == DISPLAY_VIRTIO_GPU;
 }
 
 void display_copy(size_t offset, const void *pixels, size_t bytes)
@@ -214,11 +220,14 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
   }
 }
 
-bool display_end_frame(void)
+bool display_end_frame(const struct pointer_frame *frame)
 {
   bool ready = available;
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
     ready = virtio_gpu_present();
+    if (ready && frame && !display_is_panicking()) {
+      ready = virtio_gpu_pointer_present(frame, screen_capture_active());
+    }
   }
   cpu_store_fence();
   atomic_store(&writer, DISPLAY_NO_WRITER);

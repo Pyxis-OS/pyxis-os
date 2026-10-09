@@ -552,6 +552,28 @@ of native ThinkPad checks, including this deferred PS/2 check.
   behavior and matched cursor cost samples when the batch runs. Update this
   entry with the results; QEMU milestone closure does not mark it complete.
 
+## VirtIO cursor frontend limits
+
+The owner accepted [GTK on X11, relative PS/2 and unscaled 1:1 committed guest
+geometry](development/qemu.md#hardware-pointer-frontend) for hardware-pointer
+qualification on 2026-10-08. QEMU installs the cursor through its host GUI.
+Source inspection found a no-op native Wayland position warp, scaled/centered
+GTK placement differing from the input transform, different SDL channel packing
+and no VNC position callback. Other frontends and modes remain unqualified.
+
+The consequence is that successful guest completion and cursor-inclusive
+capture do not establish correct cursor placement or colors on those host
+frontends. GTK fit-mode output may briefly scale during resizing; qualification
+requires the committed guest dimensions to match actual GTK content at 1:1.
+QEMU 10.2.2's zero-length used completion confirms command-buffer consumption,
+not independently acknowledged cursor application or visible scanout timing.
+The kernel carries no frontend-specific GUI switches. Boot and Bochs keep
+software composition. See [hardware qualification](development/system-pointer-qualification.md#task-4-hardware-qualification).
+
+Revisit on the next emulator/frontend upgrade or when broader frontend support
+is requested, with matched shape, hotspot, position, clipping, alpha and resize
+checks before extending qualification.
+
 ## Unselected graphical applications
 
 The owner chose to keep Quake, Doom, Mandelbrot and `mousetest` running without
@@ -577,7 +599,7 @@ they query or explicitly adapt. Kilo keeps its two-column, three-row minimum;
 support for smaller terminals is deferred. Adaptive libterm reads require clock
 READ authority; without it line helpers retain ordinary input behavior and
 their initial dimensions. Revisit these limits with concrete additional
-consumers. There is no vblank guarantee, hardware cursor, 3D or
+consumers. There is no vblank guarantee, 3D or
 recovery after driver failure. Graphics acquisition, presentation and size
 queries then return unavailable, while release remains usable; the last screen
 may stay stale or blank. A selected VirtIO GPU's failure does not try a separate

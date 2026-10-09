@@ -84,22 +84,21 @@ Chosen by the owner, each starting with a proposal:
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
-  Proposal #530 and tasks 1+2 are merged: Pyxis #545, userland #164, ports #65/#66.
-  The owner authorizes task 3: local TTY selection, trusted mux terminal control,
-  terminal spatial queue/readiness and mux selection/wheel history. The owner's
-  addition makes graphics pointer subscriptions waitable through `wait_many`;
-  the later SDL blocking-event fix remains beta's work. Fresh main `abbeded`
-  has a pre-code [baseline](../development/system-pointer-qualification.md#task-3-baseline)
-  recorded in [#550](https://git.internal/PyxisOS/pyxis-os/pulls/550).
-  [Three task 3 defaults](pointer.md#task-3-planning) are accepted on 2026-10-08;
-  task 3 is delivered in #550 with published userland #166 (`63d4324`),
-  which merges before the parent. [Qualification](../development/system-pointer-qualification.md#task-3-qualification)
-  records runtime/source limits and matched samples. Tasks 4 and 5 need separate authorization.
-  Matched QEMU checks suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
+  Tasks 1–3 are merged: Pyxis #545/#550, userland #164/#166, ports #65/#66.
+  Task 4, the VirtIO hardware cursor, is delivered for review on
+  `pointer/virtio-cursor` in [#560](https://git.internal/PyxisOS/pyxis-os/pulls/560).
+  The [pre-code software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
+  and [hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+  record matched cost samples, cursor-inclusive capture, DevilutionX, resize
+  and boot/Bochs regression checks, including the deferred ordinary-completion
+  review fix. Task 4 is parked in #560 for morning review.
+  Both [task-specific defaults](pointer.md#task-4-planning) are accepted
+  2026-10-08. No dependency pins or public ABI change. The later SDL
+  blocking-event adapter fix remains beta's work. Task 5 needs separate authorization. Matched QEMU checks suffice
+  for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after Bluetooth investigation. Devices stay PS/2;
   clipboard and USB HID implementation remain separate. Bluetooth's accepted
-  conditional source-loss rule is recorded for future integration, without a
-  second input source.
+  conditional source-loss rule remains future integration, without a second source.
 - **Claude** (2026-10-08): [network throughput](network-throughput.md), TCP
   toward the owner's gigabit LAN. Five decisions are accepted and implemented
   in #559 and userland #169, held unmerged until the owner's native baseline

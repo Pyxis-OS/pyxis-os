@@ -4,7 +4,7 @@ The native screen-capture object observes the whole currently shown local screen
 It is independent of the per-space [DRAW capability](graphics.md): CAPTURE permits
 no drawing, graphics acquisition, input access, mode setting or device access.
 The result includes navigation, the selected space's shown layer, clipping and
-background margins, visible terminal selection highlighting, the software
+background margins, visible terminal selection highlighting, the visible
 system pointer and the TTY block caret
 when the terminal is shown. Hidden surfaces are omitted. A hidden system pointer
 is omitted without changing ordinary input routing; relative lock also excludes
@@ -65,11 +65,15 @@ arrival during a composition waits for the following frame. Geometry is selected
 at that frame boundary, after any resize transaction.
 
 After successful frame begin, the presenter retains one pointer image, hotspot,
-position and visibility snapshot alongside the chosen surface. It blends that
-image into intersecting spans after navigation, surface and TTY caret composition,
-then passes only final pixels into the capture tee. Image replacement, hiding,
-warp, lock changes or owner exit during composition affects a later frame. The
-lease remains through display and capture completion. See
+position and visibility snapshot alongside the chosen surface. Boot and Bochs
+blend that image into intersecting spans after navigation, surface and TTY caret
+composition, then pass final pixels into the capture tee. VirtIO tees underlying
+spans once into capture and cursor-free scanout. It then reads the already-teed
+background bytes, blends the same pointer snapshot and writes only to capture
+storage. Without an active capture it performs no software pointer blend.
+Image replacement, hiding, warp, lock changes or owner exit during composition
+affects a later frame. The lease remains through normal display, hardware cursor
+and capture completion. See
 [software pointer presentation](../kernel/display.md#software-pointer) and
 [system pointer qualification](../development/system-pointer-qualification.md).
 
@@ -77,8 +81,15 @@ The presenter allocates compact backing only for an admitted request. For each
 visible source span it first copies into that backing, then sends those same
 staged bytes to the display driver. Copies split at physical row boundaries so
 device offsets cannot index compact storage. Success requires the driver's
-normal frame submission to succeed; incomplete or unpresented backing is never
-published. See [display ownership](../kernel/display.md#screen-capture).
+normal frame submission to succeed; VirtIO also requires cursor state matching
+the leased snapshot. Changed state requires successful fenced image preparation
+when needed and the matching bounded cursor used completion; unchanged state
+reuses its last confirmed completion, or drains a still-posted ordinary command
+for that state. Ordinary frames can release the image lease after copying and
+posting because command and uploaded image buffers belong to the driver.
+Incomplete or failed backing is never
+published. The public reply and FILE lifetime remain the same for all backends.
+See [display ownership](../kernel/display.md#screen-capture).
 
 Capture backing is initially uninitialized. The current full repaint fills every
 visible pixel before publication. Future damage tracking must force a full
@@ -118,6 +129,15 @@ no separate retained-image quota, so callers can retain multiple files and exhau
 memory despite the single in-flight slot. Backing costs `4 * width * height`
 bytes, in addition to existing display buffers. See
 [capture limits](../technical-debt.md#screen-capture-memory-and-consistency-limits).
+
+QEMU 10.2.2's zero-length cursor used completion confirms buffer consumption,
+without independently acknowledging cursor application. Capture includes the
+guest's leased pointer image even when a host frontend cannot place or render it
+correctly; [frontend qualification](../development/qemu.md#hardware-pointer-frontend)
+is separate from capture contents. The
+[task 4 hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
+records cursor-inclusive capture checks, including fractional alpha, against
+cursor-free scanout and one RGBA cursor resource.
 
 Interactive QEMU/debugger inspection established READ-only FILE layout and EOF,
 DENIED and BUSY refusal, copied-handle lifetime and final FILE destruction.

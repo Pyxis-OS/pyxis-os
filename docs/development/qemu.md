@@ -21,7 +21,8 @@ one current 2D resource, full-frame transfers and flushes. GTK window changes
 resize every local TTY with whole-cell raster cropping and update size queries.
 Existing graphics mappings keep their layout and are clipped to the destination;
 idle applications do not wake or adapt yet. Failed preparation keeps the previous
-geometry. Hardware cursors, 3D and multiple monitors remain later work.
+geometry. VirtIO uses a hardware system cursor; boot and Bochs compose it in
+software. 3D and multiple monitors remain later work.
 VirtIO panic output is serial-only.
 `QEMU_VIDEO=bochs` adds `-vga none -device bochs-display`. Both it and standard
 VGA support the same Bochs register driver. `DISPLAY_SIZE` is baked into the
@@ -39,6 +40,33 @@ DISPI mode. It preserves the existing WC mapping only when the boot framebuffer
 starts at BAR0; another offset refuses mode setting. Panic uses the selected
 direct target after successful readback. The [display milestone](../kernel/display.md)
 records interfaces, measured cost and remaining limits.
+
+## Hardware pointer frontend
+
+The owner accepted GTK on X11, relative PS/2 input and unscaled 1:1 committed
+guest geometry for VirtIO cursor qualification on 2026-10-08:
+
+```sh
+GDK_BACKEND=x11 make run CPUS=4 QEMU_VIDEO=virtio QEMU_DISPLAY=gtk
+```
+
+Use a native-sized viewport whose actual GTK content dimensions match the
+committed guest display dimensions. GTK fit mode can briefly scale output while
+the guest processes a resize; qualify pointer placement only after the new
+geometry commits and the content is again 1:1. QEMU installs the hardware shape
+and position through its host GUI, independently of the cursor-free scanout.
+The guest `screenshot` includes that pointer by composing its leased image into
+capture storage; a monitor screendump of scanout alone omits the host cursor.
+
+Source inspection found that GDK's native Wayland position warp is a no-op,
+scaled or centered GTK cursor placement differs from its input transform, SDL
+uses different cursor-channel packing, and VNC has no position callback. Those
+frontends and modes are unqualified; GTK on X11 at 1:1 is the checked path.
+The kernel adds no frontend-specific switches. QEMU 10.2.2 also returns the
+cursor command's used descriptor without a response or fence: checked completion
+proves buffer consumption, without an independent acknowledgment of application.
+See [hardware qualification](system-pointer-qualification.md#task-4-hardware-qualification)
+and [frontend debt](../technical-debt.md#virtio-cursor-frontend-limits).
 
 ## PCI passthrough
 
