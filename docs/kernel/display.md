@@ -2,8 +2,8 @@
 
 Caelum presents one software-rendered screen through a boot framebuffer,
 VirtIO GPU 2D or Bochs driver. The navigation bar, every local TTY and selected
-application graphics share its native 32-bit pixel layout. The [presentation-timing proposal](../wip/presentation-timing.md) records buffering,
-vblank and native flip limits; it assigns no implementation. Pixel dimensions are
+application graphics share its native 32-bit pixel layout. The [presentation-timing plan](../wip/presentation-timing.md) records buffering,
+vblank and native flip limits and the remaining steps. Pixel dimensions are
 distinct from terminal cell dimensions. Remote terminal sessions keep their
 creation dimensions and generation one.
 
@@ -11,6 +11,28 @@ The physical interface is in [display.h](../../include/kernel/display.h), with
 drivers in [kernel/display](../../kernel/display/) and hardware access under
 arch. [Mapped graphics](../interfaces/graphics.md) describes the independent
 per-space DRAW capability; it grants no hardware or mode-setting authority.
+
+## RAM staging
+
+Boot framebuffer and Bochs frames compose in RAM. When presentation starts, the
+presenter allocates one write-back staging frame with the front buffer's size
+and pitch, 7.91 MiB at 1920x1080.
+- **Composition:** every overlay goes into staging: navigation, graphics or TTY,
+  selection, caret and the software pointer.
+- **Copy:** at the frame end, the visible rows go to scanout memory in one pass,
+  leaving row padding untouched, before the frame's store fence.
+- **Coverage:** a presented frame must cover every visible pixel, since
+  staging keeps the previous frame's contents.
+- **Panic:** a panic claim stops the copy between 64 KiB chunks or rows, and
+  panic still writes the front buffer directly.
+- **No allocation:** if staging can't be allocated, frames compose on the front
+  buffer as before, with one log line. These drivers never resize, so the frame
+  lives for the boot.
+
+VirtIO already composes into its RAM backing and transfers it, so it adds no
+copy. Staging keeps partial frames off scanout memory. It does not synchronize
+the copy with the panel, and it still samples application mappings while
+programs write them. See the [measurements](../development/experiments/presentation-staging/README.md).
 
 ## Software pointer
 
