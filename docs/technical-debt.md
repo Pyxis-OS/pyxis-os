@@ -1457,3 +1457,18 @@ upstream. Revisit with a stable libc sort or a patch to sort if a consumer
 depends on the retained line, input too large for memory, or reliable `-o`
 errors. Word splitting, character classes and folding use libutf's tables, with
 no locale collation; revisit with locale support.
+
+## Temporary bundle grant policy
+
+The owner assigned the [program-bundle proposal](wip/program-bundles.md) on
+2026-10-09 with a temporary deliver-all-requested policy, bounded by available
+ordinary launcher authority. It is **not implemented yet**. In that first slice,
+available optional grants would also arrive at launch, without consent. This is
+temporary debt, not a permanent security contract: metadata never creates rights
+or obtains system-only authority, and programs inspect their actual startup grants.
+
+Revisit with users and permissions: required grants approved as a whole before
+launch, optional grants requested in context, remembered answers under stable
+application identity, trusted file-selection grants and next-launch revocation.
+The proposal records update reapproval and explicitly withdrawable grants;
+it adds no signing or consent UI.

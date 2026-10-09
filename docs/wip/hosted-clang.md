@@ -149,3 +149,14 @@ These are proposed defaults, not accepted implementation authority:
 
 Docs only. No dependency pins, kernel/libc code, toolchain container, tests or
 QEMU changes. Probe branches stay unmerged; stop for owner review.
+
+## Program bundle follow-up
+
+The owner assigned the [program-bundle first-slice proposal](program-bundles.md)
+on 2026-10-09, after requesting a return to plain 1 MiB stacks in
+[#617](https://git.internal/PyxisOS/pyxis-os/pulls/617). Bundles propose an 8 MiB
+stack request, private read-only resource/sysroot roots, linker launch authority
+and a bounded route past installed capture's 16 MiB ceiling. ZIP `.pxa` and
+unpacked `.pxb` shapes and admission budgets await review. The temporary grant
+policy and later consent/picker/identity/revocation direction are recorded;
+no bundle or compiler implementation follows from this note.

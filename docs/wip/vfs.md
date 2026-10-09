@@ -98,6 +98,12 @@ for later.
 
 ## Application bundles
 
+The owner assigned a [first-slice bundle proposal](program-bundles.md) on
+2026-10-09. It evaluates ZIP `.pxa` and unpacked `.pxb` forms exposing the same
+per-program `app://`, manifest stack/resource/grant requests and larger executable
+admission. It records the temporary grant policy and later consent/picker,
+identity and revocation direction; implementation remains unassigned.
+
 A future application could be a bundle exposed as a directory under `app://`,
 containing its executable, private libraries, assets and defaults. The current
 use of `app://` for executable lookup could move to `bin://`, separating command
