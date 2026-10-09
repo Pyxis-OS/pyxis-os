@@ -91,6 +91,10 @@
 - End with PR links, what changed, validation performed, material limits and any
   required owner action. For a task in a milestone, update its checkbox in that
   PR. Do not describe an unrun check as passed or start the next task implicitly.
+- Keep the milestone index short. Edit its entry only when work is assigned, a
+  milestone completes or the owner changes the plan; record progress and review
+  status in the milestone document and the PR. Every PR that touches the index
+  conflicts with the next one.
 
 ## Implementation style and ownership
 

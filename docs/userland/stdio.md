@@ -58,14 +58,19 @@ atomic append guarantee; see [technical debt](../technical-debt.md#non-atomic-st
 ## Descriptor I/O
 
 `fcntl.h` declares `open(path, flags, ...)` and defines `O_RDONLY` as zero.
-O_WRONLY selects write-only access; O_CREAT and O_TRUNC may be combined with it
-to create an absent file and/or truncate an existing file. Read-only mutation
-combinations and unknown flags return -1/EINVAL before lookup or mutation.
+O_WRONLY selects write-only access and O_RDWR selects both reading and writing.
+O_CREAT and O_TRUNC may be combined with either writable mode to create an
+absent file and/or truncate an existing file. O_CREAT|O_EXCL uses native exclusive
+creation and returns -1/EEXIST for an authorized attempt at an existing name,
+without opening or truncating it, including with O_TRUNC. It has no concurrent
+creator fallback. Combined access modes, read-only mutation, unknown flags and
+O_EXCL without O_CREAT return -1/EINVAL before lookup or examining varargs.
 Open returns the lowest free descriptor through the same resolver as fopen.
 It creates no FILE wrapper and grants no additional authority. Descriptor
-storage and path workspace are reserved before truncation, with no fallible
-publication afterward. Public read/write access mode, append and seeking are
-not supplied; writable fopen and its existing seeks remain available.
+storage and path workspace are reserved before exclusive creation or truncation,
+with no fallible descriptor publication afterward. Read/write requests require
+both native rights. lseek uses the same private descriptor position as stdio;
+public append, pread/pwrite and descriptor duplication remain absent.
 
 With O_CREAT, the third argument has type mode_t (unsigned int in sys/types.h).
 Only 0666 is accepted, meaning native creation policy rather than Unix permission
@@ -75,7 +80,8 @@ read without O_CREAT. Existing native capability rights, backend creation policy
 and host restrictions remain authoritative. Virtio-fs still requests 0644.
 See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
 
-`unistd.h` declares `read`, `write` and `close`, and defines STDIN_FILENO,
+`unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync` and
+`unlink`, and defines STDIN_FILENO,
 STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `sys/types.h` defines ssize_t as
 signed long on the LP64 target; `limits.h` defines SSIZE_MAX as LONG_MAX.
 

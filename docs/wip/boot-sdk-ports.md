@@ -1,6 +1,6 @@
 # Development milestone index
 
-Status: the current state of planned work, updated 2026-10-09. Nothing here
+Status: the current state of planned work. Nothing here
 authorizes implementation: each milestone settles its decisions in its own
 document before code work starts. Milestone order is flexible; the owner's
 current choice wins. Everyday use for simple tasks guides the order; website
@@ -9,6 +9,11 @@ problems found on the ThinkPad remain allowed in any track.
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document.
+
+Each entry names the milestone, who it is assigned to and its current task, in
+a sentence or two. Change an entry only when work is assigned, a milestone
+completes or the owner changes the plan. Progress, measurements and review
+status belong in the milestone document and the PR.
 
 ## Recently completed
 
@@ -75,6 +80,16 @@ Implemented behavior lives in the subsystem references listed in the
 ## Assigned
 
 Chosen by the owner, each starting with a proposal:
+
+- **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
+  three defaults accepted; task 1 assigned after #567 merges. Split process
+  ownership from task retirement while keeping one user task per process;
+  no thread syscall, TLS, device behavior or dependency pin. Later tasks remain
+  unassigned.
+- **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
+  keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
+  delivered together, ports first. See [SDL2](../development/sdl2.md) and the
+  [matched qualification](../development/sdl2-event-wait-qualification.md).
 
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
@@ -144,8 +159,8 @@ Other candidates; current assignments are listed above.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
-- [Threads and SMP follow-ups](scheduling-and-threads.md), including serial
-  services off the BSP.
+- [Multiple threads per process](threads.md) and
+  [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 - Physical GPU drivers, after the [display milestone](../kernel/display.md);
   the owner prepares the hardware.
 - [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).

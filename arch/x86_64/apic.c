@@ -191,10 +191,25 @@ void arch_timer_deadline_start(void)
                                 now + TIMER_PERIOD_NS;
   cpu->timer_deadline_started = true;
   apic_write(APIC_LVT_TIMER, APIC_TIMER_VECTOR);
-  arch_timer_arm(UINT64_MAX);
+  arch_timer_arm(UINT64_MAX, now);
 }
 
-void arch_timer_arm(uint64_t deadline)
+static uint64_t timer_target(const struct cpu_local *cpu, uint64_t deadline)
+{
+  return deadline < cpu->timer_preempt_deadline ? deadline : cpu->timer_preempt_deadline;
+}
+
+bool arch_timer_arm_needed(uint64_t deadline)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  const struct cpu_local *cpu = cpu_current();
+  if (!cpu->timer_deadline_started) {
+    return false;
+  }
+  return !cpu->timer_armed || timer_target(cpu, deadline) < cpu->timer_armed_target;
+}
+
+void arch_timer_arm(uint64_t deadline, uint64_t now)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct cpu_local *cpu = cpu_current();
@@ -202,9 +217,7 @@ void arch_timer_arm(uint64_t deadline)
     return;
   }
 
-  uint64_t next = deadline < cpu->timer_preempt_deadline ? deadline :
-                  cpu->timer_preempt_deadline;
-  uint64_t now = arch_monotonic_ns();
+  uint64_t next = timer_target(cpu, deadline);
   uint64_t remaining = next > now ? next - now : 1;
   if (remaining > TIMER_PERIOD_NS || now == UINT64_MAX) {
     remaining = TIMER_PERIOD_NS;
@@ -222,22 +235,26 @@ void arch_timer_arm(uint64_t deadline)
     count = UINT32_MAX;
   }
   apic_write(APIC_TIMER_INITIAL, (uint32_t)count);
+  /* A clamped countdown fires before next; record when it actually aims. */
+  cpu->timer_armed_target = remaining > UINT64_MAX - now ? UINT64_MAX : now + remaining;
+  cpu->timer_armed = true;
 }
 
-void arch_timer_interrupt(void)
+uint64_t arch_timer_interrupt(void)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct cpu_local *cpu = cpu_current();
+  uint64_t now = arch_monotonic_ns();
   if (!cpu->timer_deadline_started) {
     if (cpu == cpu_bsp()) {
       arch_clock_tick();
     }
-    return;
+    return now;
   }
 
-  uint64_t now = arch_monotonic_ns();
+  cpu->timer_armed = false;
   if (now < cpu->timer_preempt_deadline) {
-    return;
+    return now;
   }
   uint64_t periods = (now - cpu->timer_preempt_deadline) / TIMER_PERIOD_NS + 1;
   if (periods > (UINT64_MAX - cpu->timer_preempt_deadline) / TIMER_PERIOD_NS) {
@@ -248,6 +265,7 @@ void arch_timer_interrupt(void)
   if (cpu == cpu_bsp()) {
     arch_clock_tick();
   }
+  return now;
 }
 
 uint32_t apic_timer_remaining(void)

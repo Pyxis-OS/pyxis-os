@@ -912,8 +912,9 @@ separate work.
 
 The completed [descriptor portability slice](userland/libc-portability.md) supplies
 open/read/write/close for cksum and restricted tee, and `lseek` for files.
-Public O_RDWR, fdopen and duplication remain absent even though fopen
-supports update modes internally. Consumers requiring those interfaces need
+Public O_RDWR and exclusive O_CREAT|O_EXCL use existing native constructs, as
+qualified in [libc portability](userland/libc-portability.md#readwrite-and-exclusive-create-qualification).
+fdopen and duplication remain absent. Consumers requiring those interfaces need
 a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
 [SDL2 port](development/sdl2.md); it exposes the stream's existing descriptor and adds
 no new aliasing. Revisit them against a pinned consumer's actual
@@ -1144,7 +1145,11 @@ HPET MMIO reads can be expensive, especially under virtualization. The
 [HOST forwarding investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
-deadlines and profiling still pay the clock cost. The current source requires
+deadlines and profiling still pay the clock cost. Timer passes read the clock at
+most once and rearm only for an earlier target, which in nested QEMU cut idle
+HPET reads by 63% and send-side reads per TCP segment by about a quarter
+([measurements](development/experiments/timer-clock-reads/README.md)); each
+remaining read keeps its full cost. The current source requires
 a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
 the owner chose
 [software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
@@ -1309,21 +1314,17 @@ recovery with task 5's owner-run ThinkPad speaker/headphone batch.
 ## SDL2 port limits
 
 The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
-and preference paths. Missing pieces:
+and preference paths. Video event waits now block on keyboard, acquired pointer
+and display readiness; [matched QEMU qualification](development/sdl2-event-wait-qualification.md)
+records the idle CPU reduction and input-delivery samples. Upstream polling
+remains for missing/nonwaitable sessions and failed waits; enabling threads
+requires a real wakeup sender and revisiting the readiness cache. Missing pieces:
 
 - **Audio:** the [native PCM grant](interfaces/audio.md) and
   [QEMU HDA engine](devices/hda.md) are available, but SDL2 has no audio backend
   yet. Revisit with a separately assigned playback consumer task.
 - **Threads:** without them, `SDL_INIT_TIMER` callback timers and
   `SDL_CreateThread` fail. Revisit with userspace threads.
-- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.
-  Deadline sleeps now make that about 1 ms rather than the old 8.33 ms tick,
-  so an idle waiting program wakes about 1000 times a second instead of about
-  120, increasing its CPU wake cost. This is the expected polling rate, not a
-  measured `SDL_WaitEvent` run; see the
-  [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
-  Revisit a blocking wait on the input and display handles when a consumer
-  waits for events.
 - **Windows:** one fullscreen window; multiple windows remain outside the
   current display contract. System pointer positions, program images,
   show/hide, bounded warp and relative lock now use the
