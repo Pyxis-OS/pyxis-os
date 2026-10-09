@@ -281,6 +281,8 @@ void pointer_request_execute(struct pointer_request *request)
     status = CALL_DENIED;
   } else if (request->operation == POINTER_RELEASE) {
     pointer_end_session(pointer);
+  } else if (request->operation == TERMINAL_POINTER_CANCEL_CLIPBOARD) {
+    clipboard_space_cancel(pointer->space);
   } else if (request->operation == POINTER_GEOMETRY) {
     if (terminal) {
       struct tty *tty = pointer->space->tty;
@@ -431,7 +433,7 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
 {
   bool terminal = pointer_is_terminal(pointer);
   if (operation < POINTER_ACQUIRE ||
-      operation > (terminal ? TERMINAL_POINTER_CLIPBOARD_REFUSE : POINTER_STATE) ||
+      operation > (terminal ? TERMINAL_POINTER_CANCEL_CLIPBOARD : POINTER_STATE) ||
       (terminal && (operation == POINTER_WARP || operation == POINTER_LOCK ||
                     operation == POINTER_UNLOCK))) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
