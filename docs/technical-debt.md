@@ -317,6 +317,13 @@ disables further resizing, though the new display keeps working; an eventual ack
 whole old/new pixel pair per space, and every CPU's console and kernel-log writes wait on the global output lock during the copy
 (0.45–4.39 ms in four-TTY nested-KVM measurements). Revisit with a recovery protocol and measured copy durations.
 
+## Display SUBMIT round trip
+
+Each [SUBMIT](interfaces/graphics.md#slots-and-frame-handoff) is a synchronous BSP request, like every display operation. In nested
+KVM it adds 0.11–0.29 ms per frame, so Quake's timedemo runs 20–30% slower; ordinary 72 fps play spends about 1–2% of a CPU
+([measurements](development/experiments/frame-handoff/README.md)). Revisit after the native run: a SUBMIT that doesn't go through the
+BSP needs its own ownership decision for the session's slot state.
+
 ## Screen capture memory and consistency limits
 
 [Screen capture](interfaces/screen-capture.md) admits one pending request, but completed immutable FILEs have ordinary reference
