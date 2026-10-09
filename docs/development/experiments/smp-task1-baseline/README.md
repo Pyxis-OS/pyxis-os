@@ -1,5 +1,7 @@
 # Runtime SMP task-1 baseline
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Pre-implementation baseline for the [runtime SMP milestone](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-05 before any SMP code change. Later tasks repeat the matched
 workloads below and compare against these numbers.
@@ -16,16 +18,14 @@ elapsed wall time, not CPU time.
 | Pyxis | main `83c08d6` |
 | Pins | fs `d352c7e`, userspace `a3ea1b0`, ports `36d952e`, lwIP `a1aadb9` |
 | Build | Pyxis GCC 16.2.0, `make -j16 image`, kernel `CONFIG_XHCI=y` (the default) |
-| Kernel ELF / ISO SHA-256 | `d0d0fde7…3f406` / `fa2878bf…88563` |
-| QEMU | 10.2.2 with upstream AHCI fix `d9f78431d8eb`, KVM, Q35, `-cpu max`, 256 MiB |
+| QEMU | 10.2.2 with upstream AHCI fix `d9f78431d8eb`, KVM, Q35, `-cpu max`, 256 MiB, fresh OVMF variables |
 | CPUs | one boot with 4 CPUs, one with 1 CPU |
-| Firmware | OVMF CODE/VARS from `/usr/share/edk2/ovmf`, fresh VARS copy per boot |
 | Devices | virtio-blk (native pool), virtio-fs, virtio-net (user), virtio-rng, `qemu-xhci` with one USB mass-storage stick |
-| Backing | Every disk image, the virtio-fs export and the ISO copy were regular files under `/dev/shm` |
-| Host tools | virtiofsd 1.14.0, classic ttcp 1.12 (Fedora `ttcp-1.12-50.fc41`) |
+| Backing | every disk image, the virtio-fs export and the ISO copy were regular files under `/dev/shm` |
+| Host tools | virtiofsd 1.14.0, classic ttcp 1.12 |
 
-The build used the normal configuration plus a temporary, uncommitted init and
-explicit session selections:
+The build used the normal configuration plus a temporary, uncommitted init and explicit
+session selections:
 
 ```sh
 make -j16 image INIT=/path/to/init-baseline.sh INIT_PRIMARY=app://init INIT_CPUS= \
@@ -42,46 +42,29 @@ service start text app://textfs.pxe
 session app://session.pxe --configure-network --start-remote-services
 ```
 
-With 4 CPUs this init and every workload ran on CPU 1. CPUs 2 and 3 ran idle init,
-and the BSP ran only kernel work. With 1 CPU, everything ran on the BSP.
-xHCI was enabled and active in both boots. It enumerated the stick (`46f4:0001`,
-32768 × 512-byte blocks, writable, flush qualified), and its controller worker
-stayed running. The stick was a blank 16 MiB image; it was neither mounted nor
-written, and its block counters did not change during the workloads.
+With 4 CPUs this init and every workload ran on CPU 1; CPUs 2 and 3 ran idle init and the
+BSP only kernel work. With 1 CPU everything ran on the BSP. xHCI was active in both boots
+and enumerated the blank 16 MiB stick (`46f4:0001`, 32768 × 512-byte blocks, writable,
+flush qualified); it was neither mounted nor written and its block counters did not change.
 
-The native pool was 128 MiB with an 8 MiB journal and one `bench` volume holding
-the 1 MiB `iobench.bin` fixture. It sat at sector 2049 of a 132 MiB GPT disk
-attached with `cache=writeback`. The commands followed the
-[npfs write-run record](../npfs-io-runs/README.md), using `mkfs.npfs --size 128MiB
---journal 8MiB --volume bench --source DIR`, `sgdisk` and `dd`. The virtio-fs
-export held a copy of the same fixture. virtiofsd ran with the flags from
-[virtio-fs setup](../../../devices/virtio-fs.md#start-the-host-service). The QEMU
-command matched the npfs record, with these differences:
+The native pool was 128 MiB with an 8 MiB journal and one `bench` volume holding the 1 MiB
+`iobench.bin` fixture, at sector 2049 of a 132 MiB GPT disk attached with
+`cache=writeback`, prepared as in the [npfs write-run record](../npfs-io-runs/README.md)
+(`mkfs.npfs --size 128MiB --journal 8MiB --volume bench --source DIR`, `sgdisk`, `dd`). The
+virtio-fs export held a copy of the fixture. The QEMU command matched that record apart from
+`-smp cpus=N,sockets=1,cores=N,threads=1 -m 256M`, a memfd memory backend with
+`vhost-user-fs-pci` (tag `pyxis-host`), `qemu-xhci` with a `usb-storage` stick at port 1, a
+user netdev forwarding the remote port, and a serial file, monitor and GDB port.
 
-```text
--smp cpus=N,sockets=1,cores=N,threads=1 -m 256M
--machine q35,memory-backend=mem0 -object memory-backend-memfd,id=mem0,size=256M,share=on
--chardev socket,id=fs0,path=SOCKET -device vhost-user-fs-pci,chardev=fs0,tag=pyxis-host
--device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,port=1,drive=usbdisk
--netdev user,id=net0,hostfwd=tcp:127.0.0.1:23411-10.0.2.15:2323
--display none -serial file:SERIAL -monitor unix:MONITOR,server,nowait -gdb tcp:127.0.0.1:12411
-```
-
-Each guest command ran in a `build/tools/pyxis-remote --machine --no-shell-echo`
-session. The next command was submitted only after the previous one reported its
-typed completion. For a concurrent set, each client got its own remote session.
-All sessions reported ready before their commands were submitted together.
-Aggregate time runs on the host from the first submission to the last completion.
-These sessions are children of the CPU-1 remote server, so today every client runs
-on CPU 1. No debugger was attached during timed work, except for the snapshot
-described below. Profiling was off except in the two `--profile` rows.
-
-The remote session cannot run `iobench pipe` or `ipcbench`, because those need the
-`session` handoff ([remote terminal limits](../../../userland/remote-terminal.md)).
-Driving them would mean scripting the local framebuffer console, so they are not
-part of this baseline. The pipe numbers in the
-[BSP request record](../../../kernel/bsp-service-requests.md#validation-and-sizes)
-remain the only historical context for them.
+Each guest command ran in a `pyxis-remote --machine --no-shell-echo` session and the next
+was submitted only after the previous reported its typed completion; for a concurrent set
+each client had its own session, all ready before the commands were submitted together, and
+aggregate time runs on the host from first submission to last completion. These sessions are
+children of the CPU-1 remote server, so today every client runs on CPU 1. No debugger was
+attached during timed work (except the snapshot below) and profiling was off except in the
+two `--profile` rows. The remote session cannot run `iobench pipe` or `ipcbench` (they need
+the `session` handoff; see [remote terminal limits](../../../userland/remote-terminal.md)),
+so they are not part of this baseline.
 
 ## Results
 
@@ -139,7 +122,7 @@ Native commands were `iobench write data://grow.bin --sync`,
 `iobench write data://prepared.bin --prepared --sync`,
 `iobench copy app://share/iobench.bin data://copy.bin --sync` and `sync data://`.
 The host and RAM commands were the equivalents from the
-[I/O reproduction list](../../io-ipc-baselines.md#manual-reproduction).
+I/O reproduction list.
 QEMU `info blockstats` snapshots bracketed each complete native write command,
 including warmup, preparation and checkpoint work. The table shows the deltas for
 the native pool disk:
@@ -195,20 +178,15 @@ control (ranges over three repetitions):
 
 ### Placement snapshot
 
-During four concurrent `allocbench heap --rounds 524288` clients on the 4-CPU boot,
-a read-only GDB batch did the following (commands and output are in
-[4cpu-gdb.txt](4cpu-gdb.txt)):
-
-- It found CPU 1 running a user task (cpu_index 1) under its private CR3, with
-  three more tasks in CPU 1's ready queue.
-- It found CPUs 0, 2 and 3 halted in the scheduler idle loop under the kernel
-  root, with empty ready queues.
-
-The four clients took 6.533 s in aggregate, including the stop.
+During four concurrent `allocbench heap --rounds 524288` clients on the 4-CPU boot, a
+read-only GDB batch found CPU 1 running a user task (cpu_index 1) under its private CR3
+with three more tasks in its ready queue, and CPUs 0, 2 and 3 halted in the scheduler idle
+loop under the kernel root with empty ready queues. The four clients took 6.533 s in
+aggregate, including the stop.
 
 ### Kernel heap growth
 
-This is context for task-1 decision 4, the heap arena, now [implemented](../../../kernel/smp.md#memory-and-output-boundaries).
+This is context for task-1 decision 4, the heap arena, now implemented.
 Three further boots used the same image and configuration, each with a freshly
 made pool disk. Their timings were not used, because GDB attached between groups.
 
@@ -274,26 +252,9 @@ distort the result.
   Revision, device set and active workers all differ, so those records are not a
   matched comparison with this one.
 
-## Integrity and cleanup
+## Integrity
 
-After each boot, `sync data://` completed and QEMU quit through the monitor. Then:
-
-- The extracted pool passed `fsck.npfs`.
-- `npfs-inspect extract` of every native output (grow, prepared, copy, single and
-  mixed files) matched the installed fixture byte for byte.
-- The host-side virtio-fs outputs matched as well.
-
-Every remote client ended with `drain: complete`. The QEMU, virtiofsd and ttcp
-processes were stopped, and the `/dev/shm` images were removed after the record
-was assembled.
-
-## Files
-
-- [4cpu-output.txt](4cpu-output.txt) and [1cpu-output.txt](1cpu-output.txt): every
-  decoded guest report, with host completion times.
-- [blockstats.txt](blockstats.txt): the raw QEMU block counters.
-- [4cpu-serial.txt](4cpu-serial.txt) and [1cpu-serial.txt](1cpu-serial.txt): boot
-  serial logs, including xHCI enumeration and init placement.
-- [4cpu-gdb.txt](4cpu-gdb.txt): the placement snapshot.
-- [heap-stats.txt](heap-stats.txt): the kernel heap counter snapshots and the
-  growth-attribution log.
+After each boot `sync data://` completed and QEMU quit through the monitor. The extracted
+pool passed `fsck.npfs`, every native output (grow, prepared, copy, single and mixed
+files) matched the installed fixture byte for byte after `npfs-inspect extract`, the
+virtio-fs outputs matched, and every remote client ended with `drain: complete`.

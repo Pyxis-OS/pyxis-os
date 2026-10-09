@@ -1,5 +1,7 @@
 # SMP task 7b: userspace on the BSP
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Matched before/after record for SMP task 7b
 ([milestone](../../../wip/scheduling-and-threads.md)), recorded on 2026-10-06.
 These are nested-VM measurements: the development host is itself a KVM guest
@@ -29,7 +31,7 @@ default image on QEMU 10.2.2 with KVM, Q35, `-cpu max`, 256 MiB and 4 CPUs.
 - `X` is `ttcp -t -n 192 10.0.2.2`.
 
 Concurrent sets use one remote session per client. The remote server admits
-four clients, so the loaded sets use [loadrun.py](loadrun.py) instead: one
+four clients, so the loaded sets use a small driver script instead: one
 session starts four background `allocbench heap --rounds 1000000` jobs
 (about 3 s each), then runs X or W in the foreground and collects every result.
 Each set ran three times.
@@ -66,22 +68,17 @@ write median improved, but its maximum rose from 9.9 to 14.1 ms in one of the
 three runs. The mixed set did not change. Display presentation and input
 latency, which also run on the BSP, were not measured.
 
-Full output: [pre4-output.txt](pre4-output.txt) and [post4-output.txt](post4-output.txt).
-
 ## Checks
-
-All of these are in [checks.txt](checks.txt).
 
 - **A CPU-0-only space and `affinity 0`.** A 4-CPU boot used
   `SPACE_CPUS='readonly=0'`, and Development's init was replaced by
-  [init-affinity0.sh](init-affinity0.sh). That init runs `affinity 0`, then
+  an init that runs `affinity 0`, then
   starts three background compute jobs.
   - Both spaces started.
-  - Four GDB snapshots ([snapshot.gdb](snapshot.gdb)) taken while the jobs ran
+  - Four GDB snapshots taken while the jobs ran
     showed every Pinned and Read-only task running or queued on CPU 0, among
     kernel workers, while CPUs 1–3 were idle and pulled nothing.
-  - Each job took 9.4–9.6 s, about three times one alone
-    ([pinned-tab.png](pinned-tab.png)).
+  - Each job took 9.4–9.6 s, about three times one alone.
 - **CPU counts.** 1, 2 and 12-CPU boots ran two H, one P and `ls`
   concurrently. On 2 CPUs the two H clients took 0.93 and 1.06 s, one per CPU.
   No boot logged a panic.

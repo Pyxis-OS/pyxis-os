@@ -1,57 +1,41 @@
 # npfs namespace writeback separation
 
-This addresses create, rename and shrink flushing unrelated dirty pool data,
-identified in [review #348](https://git.internal/PyxisOS/pyxis-os/pulls/348).
-The owner accepted keeping these operations immediately durable while flushing
-only affected files when required for consistency. Whole-pool file/directory sync
-and disk-scoped mount sync remain unchanged.
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
 
-Create and rename without replacement commit their metadata without flushing
-cached files. Replacement rename first flushes the moved file, then stages the
-victim's last durable record with DETACHED/list fields. An open victim keeps its
-live cached contents. Shrink flushes only its target before committing
-the smaller size; this preserves pending growth, timestamps and retained partial
-block writes, and can still fail on the target's own delayed-allocation error.
+This addresses create, rename and shrink flushing unrelated dirty pool data, identified in
+[review #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). The owner accepted keeping
+these operations immediately durable while flushing only affected files when required for
+consistency. Whole-pool file/directory sync and disk-scoped mount sync are unchanged.
 
-Before running, expected results were: a successful small create/rename would
-leave unrelated cached data pending; shrink would affect only its target;
-replacement would preserve an open victim's bytes through EOF; explicit sync
-would subsequently make retained linked data durable. Rename without replacement
-does not promise unsynchronized file contents after a crash. Replacement flushes
-the new contents before removing the old name. Pressure/cache
-exhaustion and background flushing may still flush the entire pool.
+Create and rename without replacement commit their metadata without flushing cached files.
+Replacement rename first flushes the moved file, then stages the victim's last durable
+record with DETACHED/list fields; an open victim keeps its live cached contents. Shrink
+flushes only its target before committing the smaller size, preserving pending growth,
+timestamps and retained partial block writes, and can still fail on the target's own
+delayed-allocation error. Rename without replacement does not promise unsynchronized file
+contents after a crash; replacement flushes the new contents before removing the old name.
+Pressure, cache exhaustion and background flushing may still flush the entire pool.
 
 ## Matched ordinary workload
 
-Main `b352a1d` was compared with standalone implementation `5c403ea`.
-Both exclude the other performance changes. The
-[shared baseline/configuration record](../npfs-io-runs/README.md) gives exact
-build, disk creation, QEMU and init commands, pins and
-[baseline output](../npfs-io-runs/baseline.txt). The changed boot substituted
-`namespace` for `io` in QEMU file names. It rebuilt its kernel/image against the
-same verified SDK/userland/ports bundles with `make -j16 image
-PREBUILT="sdk userspace ports"` and the same build overrides. Kernel compilation
-was warning-free; no dependency or compiler-container change was needed.
-
-The configuration was four CPUs, 256 MiB, nested KVM, QEMU 10.2.2 with AHCI fix
-`d9f78431d8ebdc2d03ad74461138c1c9eb076aa5`, fresh OVMF variables, 512-byte VirtIO
-sectors, 64 KiB device transfers and writeback caching. All target files were
-regular tmpfs images under `/dev/shm/pyxis-npfs-performance`. The 128 MiB pool,
-8 MiB journal and imported 1 MiB fixture were identical. The default 30-second
-background interval was enabled in both measured boots; no other benchmark VM
-ran concurrently.
-
-Each command was entered individually through the existing machine-mode remote
-client on port 23389, waiting for completion before the next:
+Main `b352a1d` against standalone implementation `5c403ea`, both excluding the other
+performance changes. Build, disk creation, QEMU and init commands, pins and baseline output
+follow the [shared baseline record](../npfs-io-runs/README.md); the changed boot rebuilt
+its kernel and image against the same verified bundles
+(`make -j16 image PREBUILT="sdk userspace ports"`, warning-free, no dependency or
+compiler-container change). Four CPUs, 256 MiB, nested KVM, QEMU 10.2.2 with AHCI fix
+`d9f78431d8eb`, fresh OVMF variables, 512-byte VirtIO sectors, 64 KiB transfers and
+writeback caching, all target files in tmpfs; the 128 MiB pool, 8 MiB journal and imported
+1 MiB fixture were identical, the default 30-second background interval was enabled and no
+other benchmark VM ran. Each command went through the machine-mode remote client (port
+23389), waiting for completion:
 
 ```text
 iobench write data://grow.bin --buffer 4080 --rounds 5 --sync
 iobench write data://prepared.bin --prepared --buffer 4080 --rounds 5 --sync
 ```
 
-Each verified one untimed warmup and five measured samples, with 258 payload
-writes per sample, no short writes and exit status zero. Complete output is
-[namespace.txt](namespace.txt).
+Each verified one warmup and five samples (258 payload writes each, no short writes).
 
 | Interval | Main median (range), ms | Namespace-only median (range), ms |
 | --- | ---: | ---: |
@@ -60,22 +44,16 @@ writes per sample, no short writes and exit status zero. Complete output is
 | Prepared overwrite transfer | 153.359 (149.764–320.124) | 148.937 (143.986–156.684) |
 | Prepared overwrite sync | 188.077 (62.798–191.799) | 186.407 (185.900–187.314) |
 
-These warm single-file intervals show no material sync change; they do not time
-create itself or establish owner-host latency. Background flushing can overlap
-samples, so the baseline's outlying transfer/sync pair is retained.
+These warm single-file intervals show no material sync change; they do not time create
+itself or establish owner-host latency. Background flushing can overlap samples, so the
+baseline's outlying transfer/sync pair is kept.
 
 ## Small create behind an unrelated cached write
 
-Both kernels ran these commands after the matched workload:
-
-```text
-cat app://share/iobench.bin > data://dirty2.bin
-date > data://small2.txt
-```
-
-Immediately before the second command, read-only GDB inspection showed the
-cached file's size 1048576, durable size 0 and `size_dirty=true` in each kernel.
-QEMU `info blockstats` target counters bracketed the small create:
+Both kernels ran `cat app://share/iobench.bin > data://dirty2.bin` then
+`date > data://small2.txt`. Just before the second command, read-only GDB showed the cached
+file's size 1048576, durable size 0 and `size_dirty=true` in each kernel. QEMU
+`info blockstats` target counters bracketed the small create:
 
 | Counter | Main before / after | Namespace-only before / after |
 | --- | ---: | ---: |
@@ -83,164 +61,84 @@ QEMU `info blockstats` target counters bracketed the small create:
 | Write requests | 5,465 / 5,746 | 5,161 / 5,168 |
 | Flushes | 300 / 312 | 276 / 280 |
 
-The main create caused 1,150,976 bytes, 281 requests and 12 flushes; afterward the
-unrelated file was clean with durable size 1048576. The changed create caused
-28,672 bytes, seven requests and four flushes; afterward the unrelated file
-remained dirty with durable size 0. Counters include the namespace operation and
-asynchronous checkpoint work, not isolated syscall costs or physical wear.
-The baseline ran additional reads/creates before this window, but both selected
-files used existing inode slots and the same one-page root directory.
+Main's create caused 1,150,976 bytes, 281 requests and 12 flushes, after which the unrelated
+file was clean with durable size 1048576. The changed create caused 28,672 bytes, seven
+requests and four flushes, and the unrelated file stayed dirty with durable size 0. The
+counters include the operation and asynchronous checkpoint work, not isolated syscall cost or
+physical wear.
 
-Renaming `dirty2.bin` to `moved.bin` succeeded. A periodic flush overlapped the
-later debugger check, so that attempt does not prove retained dirty state.
-A separate immediate pair did:
-
-```text
-cat app://share/iobench.bin > data://rename-dirty.bin
-mv data://rename-dirty.bin data://renamed-dirty.bin
-sync data://
-```
-
-After rename and before sync, the moved inode still had size 1048576, durable
-size 0 and `size_dirty=true`. Later sync succeeded. Both moved and renamed files
-were extracted from the stopped first disk and matched the fixture with `cmp`;
-host `fsck.npfs` passed.
+Renaming `dirty2.bin` succeeded, but a periodic flush overlapped the later debugger check,
+so that attempt proves nothing. A separate immediate sequence (`cat … > data://rename-dirty.bin`,
+`mv` to `renamed-dirty.bin`, `sync data://`) showed the moved inode still at size 1048576,
+durable size 0 and `size_dirty=true` after the rename and before sync; sync then
+succeeded, both moved files extracted from the stopped disk matched the fixture with `cmp`
+and host `fsck.npfs` passed.
 
 ## Target-only shrink and retained-open dirty replacement
 
-A second ordinary boot used the same implementation/disk, with the existing
-menuconfig option `CONFIG_NPFS_FLUSH_SECONDS=300`. This separates manual debugger
-observations from periodic flushing; its results are behavioral checks, not part
-of the matched performance table. QEMU used `namespace-long-interval.iso`, fresh
-`namespace-long-vars.fd` and the same `namespace-disk.raw`. Other options and
-build overrides were unchanged. The interval was restored to 30 afterward.
+A second boot used the same implementation and disk with `CONFIG_NPFS_FLUSH_SECONDS=300` to
+separate manual debugger observations from periodic flushing (behavioral checks, not part
+of the performance table; the interval was restored to 30). After
+`cat app://share/iobench.bin > data://other-long.bin`, `date > data://grow.bin` truncated the
+1 MiB grow file before its 26-byte write: its durable size was zero while `other-long.bin`
+stayed at size 1048576, durable size 0, `size_dirty=true`, confirming shrink did not flush the
+unrelated file.
 
-```text
-cat app://share/iobench.bin > data://other-long.bin
-date > data://grow.bin
-sync data://
-```
+One `cat` of 31 copies of the fixture wrote `data://victim.bin` without sync: live size
+32505856 (31 MiB), durable size 29360128 (28 MiB), `size_dirty=true`, no handles (capacity-driven
+flushing made the prefix durable). A second session started
+`cat < data://victim.bin > home://victim-copy.bin`; while it ran, the first session ran
+`mv data://iobench.bin data://victim.bin`. Rename succeeded, the old victim inode 11 stayed
+referenced once with its 31 MiB live size, 28 MiB durable size and dirty state,
+`record.cleanup=DETACHED` with cleanup head 11, and the name now selected the imported 1 MiB
+fixture. After the reader finished the cleanup head was zero and free blocks were 29419. All
+commands succeeded with complete final draining, the stopped partition passed `fsck.npfs`,
+extracted `victim.bin` matched the 1 MiB fixture and `victim-copy.bin` matched 31
+concatenated fixtures. GDB only printed inode size/durable/dirty/reference/cleanup fields and
+the volume cleanup head; no engine function was called. Partitions were extracted with
+`dd bs=512 skip=2049 count=262144` and checked with `fsck.npfs`,
+`npfs-inspect extract --volume bench --path … --output …` and `cmp`.
 
-The existing 1 MiB grow file was truncated to zero before the date application's
-26-byte cached write. After that command its durable size was zero, while
-`other-long.bin` remained size 1048576, durable size 0, `size_dirty=true`.
-This confirms that shrinking a target did not flush the unrelated file. Sync
-then succeeded.
-
-Next, one `cat` command with 31 copies of the operand
-`app://share/iobench.bin` wrote `data://victim.bin`, without sync. Its live size
-was 32505856 (31 MiB), durable size 29360128 (28 MiB), `size_dirty=true` and no
-handles remained. The cache's ordinary capacity-driven flushing made the prefix
-durable while retaining the final 3 MiB. A second remote session started:
-
-```text
-cat < data://victim.bin > home://victim-copy.bin
-```
-
-While that reader was active, the first session ran:
-
-```text
-mv data://iobench.bin data://victim.bin
-```
-
-Rename succeeded. GDB then showed the old victim inode 11 still referenced once,
-with its 31 MiB live size, 28 MiB durable size and dirty state unchanged.
-`record.cleanup=DETACHED` and the volume cleanup head was 11. The replacement
-name now selected the imported 1 MiB source. After the old reader completed
-successfully, cleanup head became zero and free blocks were 29419.
-
-The reader session then ran:
-
-```text
-cat home://victim-copy.bin > data://victim-copy.bin
-sync data://
-exit
-```
-
-The first session also ran `sync data://` and `exit`. All commands succeeded,
-clients reported complete final draining, and QEMU was quit. The final stopped
-partition passed host `fsck.npfs`; extracted `victim.bin` matched the 1 MiB
-fixture, and `victim-copy.bin` matched 31 concatenated fixtures with `cmp`.
-The latter's SHA-256 was
-`f367e0c90c768764a50f7d5bb68fb74b9c2afe1c8fab42f3bdf0578cdc5dc5bd`.
-Complete records are [namespace-long.txt](namespace-long.txt) and
-[namespace-long-reader.txt](namespace-long-reader.txt).
-
-Debugger observations used the matching archived ELF and port 12389, printing
-`opened_pools->volumes->inodes` size/durable/dirty/reference/cleanup fields and
-`opened_pools->volumes->record.cleanup_head`, then detaching. No engine functions
-were called or kernel state modified. Stopped-pool extraction used `dd bs=512
-skip=2049 count=262144`; verification used the existing `fsck.npfs`,
-`npfs-inspect extract --volume bench --path ... --output ...` and `cmp`.
-
-No new tests, self-tests, fault injection or automation were added. Disk-full,
-allocator pressure, arbitrary crash points, uncertain writes and physical media
-are not qualified by these runs; healthy/terminal rollback remains source-reviewed.
-The protected task-3 measurements were not changed.
+Disk-full, allocator pressure, arbitrary crash points, uncertain writes and physical media
+are not qualified, and healthy/terminal rollback remains source-reviewed. No tests,
+self-tests, fault injection or automation were added, and the task-3 measurements are
+unchanged.
 
 ## Combined stack and current-main integration
 
-The PRs are stacked in merge order #382 (I/O runs), #386 (metadata cache),
-#387 (namespace writeback). The combined kernel at `d8eb88a`, still on main
-`b352a1d`, passed the same grow/prepared/read commands with five samples each,
-followed by `sync data://` and normal remote exit. It used a fresh copy of the
-initial disk, the same default 30-second interval and the same QEMU options,
-substituting `combined` in the file names. Stopped-pool fsck and extracted
-grow/prepared comparisons passed. [combined.txt](combined.txt) retains the output;
-this confirms integration, not attribution of one item's performance to another.
+The PRs are stacked in merge order #382 (I/O runs), #386 (metadata cache), #387 (namespace
+writeback). The combined kernel at `d8eb88a`, still on main `b352a1d`, passed the same
+grow/prepared/read commands (five samples each), `sync data://` and a normal exit from a fresh
+disk copy with the same 30-second interval; stopped-pool fsck and extracted comparisons
+passed. This confirms integration, not attribution of any item's performance to another.
 
-Main then advanced through `4b5e256` (USB block registration/GPT integration).
-It was merged into #382 and carried through both dependent branches without
-changing any submodule pins. A rebuilt warning-free kernel/image at `d5956f9`
-booted the already-written combined disk, with fresh OVMF variables, default
-30-second flushing and xHCI disabled. The QEMU command substituted
-`current-main-combined.iso`, `current-main-combined-vars.fd` and
-`current-main-combined-serial.txt`, retaining `combined-disk.raw`. It ran:
-
-```text
-iobench read data://grow.bin --buffer 4088 --rounds 1
-cat app://share/iobench.bin > data://integration.bin
-date > data://independent.txt
-mv data://integration.bin data://integration-renamed.bin
-sync data://
-exit
-```
-
-The warmup/sample verified the persisted grow file. After creating
-`independent.txt`, GDB showed the unrelated integration file still dirty with
-live size 1048576 and durable size zero. Rename and sync succeeded, the client
-reported complete draining, and QEMU was quit. Host fsck passed again; extracted
-`integration-renamed.bin` matched the installed fixture with `cmp`.
-[current-main-combined.txt](current-main-combined.txt) is the complete output.
-This is a persistence/integration check, not a new matched performance comparison
-against the changed main or a qualification of its USB backend. All task-owned
-QEMU, debugger and remote-client processes were stopped.
+Main then advanced through `4b5e256` (USB block registration/GPT integration), merged into
+#382 and carried through both dependent branches without changing submodule pins. A
+rebuilt warning-free kernel at `d5956f9` (xHCI disabled, fresh OVMF variables, 30-second
+flushing) booted the already-written combined disk and ran
+`iobench read data://grow.bin --buffer 4088 --rounds 1`, a cat of the fixture to
+`integration.bin`, `date > data://independent.txt`, `mv` to `integration-renamed.bin`,
+`sync data://` and `exit`. The persisted grow file verified; after `independent.txt` was
+created GDB showed the unrelated integration file still dirty (live size 1048576, durable
+size zero); rename and sync succeeded, draining completed, fsck passed and the extracted
+renamed file matched the fixture. This is a persistence check, not a matched performance
+comparison or a qualification of the USB backend.
 
 ## Replacement crash correction from review #387
 
-Review of `365a1df` found that metadata-only replacement could discard a durable
-old file while publishing a moved inode with durable size zero. The existing
-retained-open-victim run used an already durable source, so it did not exercise
-this case. Fix `319bc8f` flushes only the moved file when a victim exists, before
-beginning the namespace transaction and taking its rollback snapshots. A failed
-flush returns without changing either name. The victim's durable detachment and
-retained-handle behavior are unchanged. Delayed allocation may now make a
-replacement fail on the moved file's own disk-full error; that failure path was
-source-reviewed, not forced in this run.
+Review of `365a1df` found that metadata-only replacement could discard a durable old file
+while publishing a moved inode with durable size zero; the earlier retained-open-victim run
+used an already durable source and missed it. Fix `319bc8f` flushes only the moved file when
+a victim exists, before the namespace transaction begins and takes its rollback snapshots; a
+failed flush returns with both names unchanged, the victim's durable detachment and
+retained-handle behavior are unchanged, and replacement may now fail on the moved file's own
+disk-full error (source-reviewed, not forced).
 
-The reviewer reproduced the loss with the default 30-second interval. Our first
-two manual attempts at that interval encountered background writeback and the
-replacement survived; those attempts do not qualify cached replacement. To keep
-the cached state observable during manual inspection, both comparison kernels
-were rebuilt with the existing `CONFIG_NPFS_FLUSH_SECONDS=300` option. Baseline
-was `365a1df`; fixed kernel was `319bc8f`. All other configuration, pinned bundles,
-128 MiB initial pool, 8 MiB journal, four CPUs, 256 MiB, nested KVM, patched QEMU
-and VirtIO writeback disk settings match the earlier record. Each boot used a
-fresh `initial-disk.raw` copy and fresh OVMF variables; QEMU file names substituted
-`replacement-before` or `replacement-fixed` and the archived `*-300.iso`.
-This was a behavior check, not a new latency comparison.
-
-Each command was submitted separately, waiting for exit status zero:
+The reviewer reproduced the loss at the default 30-second interval. Two manual attempts at that
+interval hit background writeback and the replacement survived, which does not qualify cached
+replacement. Both comparison kernels were therefore rebuilt with
+`CONFIG_NPFS_FLUSH_SECONDS=300` (baseline `365a1df`, fixed `319bc8f`), with all else as before
+and a fresh initial disk and OVMF variables per boot. Commands, each waited to exit status 0:
 
 ```text
 cat app://share/hello.txt > data://target.txt
@@ -249,9 +147,8 @@ cat app://share/iobench.bin > data://tmp.bin
 mv data://tmp.bin data://target.txt
 ```
 
-The fixed boot additionally wrote `unrelated.bin` from the same 1 MiB fixture
-between sync and the temp-file write. Neither boot synced after replacement.
-Read-only GDB inspection immediately after rename showed:
+The fixed boot also wrote `unrelated.bin` from the fixture between the sync and the temp-file
+write; neither boot synced after replacement. Read-only GDB right after the rename showed:
 
 | Kernel / inode | Live size | Durable size | Dirty size |
 | --- | ---: | ---: | --- |
@@ -259,20 +156,12 @@ Read-only GDB inspection immediately after rename showed:
 | Fixed moved file, inode 14 | 1048576 | 1048576 | false |
 | Fixed unrelated file, inode 15 | 1048576 | 0 | true |
 
-After detaching GDB, each QEMU process was killed with SIGKILL while the cached
-state remained pending. Partition extraction used the same `dd bs=512 skip=2049
-count=262144` command; host `fsck.npfs --image ... --replay` passed for both.
-`npfs-inspect list --volume bench` reported baseline `target.txt` size zero and
-fixed `target.txt` size 1048576. The fixed file was extracted and `cmp` matched
-the source fixture exactly. Fixed `unrelated.bin` recovered with size zero, as
-expected for its unsynchronized contents: replacement did not flush it.
-[replacement-crash.txt](replacement-crash.txt) retains every guest command
-completion and both debugger snapshots. The expected remote disconnect occurred
-because of abrupt VM termination; no complete final drain is claimed.
-
-The 30-second configuration was restored and the ordinary default image rebuilt.
-All QEMU, debugger and remote-client jobs from this correction were stopped.
-No new test program, self-test, fault-injection mechanism or automation was added;
-only the manual abrupt-shutdown case requested by the review was exercised.
-Arbitrary crash points, uncertain disk failures and physical media remain outside
-this qualification.
+After detaching GDB each QEMU process was killed with SIGKILL while the cached state was
+pending. Host `fsck.npfs --replay` passed for both; `npfs-inspect list` showed baseline
+`target.txt` at size zero and fixed `target.txt` at 1048576, the fixed file extracted and
+matched the fixture exactly, and fixed `unrelated.bin` recovered with size zero as expected
+for its unsynchronized contents. Every guest command completed and both snapshots were taken;
+the remote disconnect was expected from the abrupt termination and no complete final drain is
+claimed. The 30-second configuration was restored. Only this manual abrupt-shutdown case was
+exercised; arbitrary crash points, uncertain disk failures and physical media remain outside
+the qualification.

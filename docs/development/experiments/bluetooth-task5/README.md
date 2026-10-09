@@ -1,5 +1,7 @@
 # First LE scan of the MX Master 3S
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Task 5 completed on 2026-10-08. With the owner's mouse in pairing mode, Pyxis's
 unmerged probe received an advertisement with HID service `0x1812` and mouse
 appearance `0x03C2`, then a correlated scan response with complete name
@@ -126,7 +128,7 @@ redaction before this run; targeted re-review found no remaining findings.
 
 ## Measured identification and cleanup
 
-The [serial capture](serial.txt) records successful status for all eight commands:
+The serial capture recorded successful status for all eight commands:
 Reset `0x0c03`, Read Version `0xfc05` twice, Set Event Mask `0x0c01`, LE Set
 Event Mask `0x2001`, LE Set Scan Parameters `0x200b`, and LE Set Scan Enable
 `0x200c` once for enable and once for disable. Firmware remained operational,
@@ -157,7 +159,7 @@ The shortened name alone was not an identification.
 | disable confirmed | true, status/result 0 |
 | final probe and scan result | `USB_OK` |
 
-Post-scan [GDB inspection](gdb.txt) used only address-free scalar expressions.
+Post-scan GDB inspection used only address-free scalar expressions.
 It independently confirmed those counters and flags, sequence 38, empty copied
 queue, both receives `INTERRUPT_POSTED`, stream `USB_OK` and controller running.
 No target address, raw advertising packet or address-keyed debugger state was

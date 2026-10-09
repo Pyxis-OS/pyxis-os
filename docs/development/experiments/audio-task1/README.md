@@ -1,5 +1,7 @@
 # Audio task 1: contracts and controller/codec bring-up
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 In progress, owner assignment **2026-10-08**. [#549](https://git.internal/PyxisOS/pyxis-os/pulls/549)
 merged into fresh main `ad0db38`; task branch `audio/controller-codec` is rebased
 onto it. The earlier baseline from `abbeded` has the same kernel, ABI and pinned
@@ -34,9 +36,7 @@ pointer #545). Ordinary `make -j16 image` passed in the existing LLVM
 23.1.3/49e2c1a builder. Pinned sources were rebuilt, including the new pointer
 userland/ports revisions; no stale pre-pointer bundles were used. Vendored
 sbase/Quake sources emit existing warnings; no warning-free whole-build claim.
-Provenance: [kernel](baseline-kernel.txt), [SDK](baseline-sdk.txt),
-[userland](baseline-userspace.txt), [ports](baseline-ports.txt),
-[configuration](baseline-kernel.config).
+Provenance (kernel, SDK, userland, ports and configuration) was recorded at build time.
 
 | Artifact | SHA-256 |
 | --- | --- |
@@ -60,7 +60,7 @@ Eight individually entered hardware-breakpoint/`finish` pairs around
 HPET counter reads at `0xfffffe80402020f0`, period 10 ns, following the existing
 [screenshot timing method](../../screenshot-qualification.md#matched-presenter-cost).
 No inferior calls or guest state edits. GDB confirmed `active_space="caelum"`,
-1280x800 and the BSP presenter task. [Raw transcript](baseline-presenter-gdb.txt).
+1280x800 and the BSP presenter task.
 
 Ticks: **72269, 73700, 86171, 85435, 132846, 68946, 85415, 99932**.
 Median **0.854250 ms**, range **0.689460–1.328460 ms**. These are debugger-qualified
@@ -71,7 +71,7 @@ not isolated CPU time or native performance.
 
 No debugger attached during this separate window. Two manual `/proc/<pid>/stat`
 and thread-stat snapshots, with host monotonic timestamps and `CLK_TCK=100`:
-[start](baseline-cpu-start.json), [end](baseline-cpu-end.json). Fields are user
+start and end. Fields are user
 and system CPU ticks, not guest-idle percentages. QEMU monitor `info cpus`
 identified CPU0/1/2/3 thread IDs 355643/355644/355645/355646.
 
@@ -106,22 +106,22 @@ periods. Later producer/refill work must not replay stale PCM silently.
 Production measured code head **`9e456bd`**:
 ELF `c98c62175aa8d3bcfb2a1cf23aae2b3d8385a4536ff764878660236e122439da`,
 ISO `5fdf63ce01b7fb67153d00c70d0308cf8f2c7418479de31e9ec47ca5eb414812`.
-[Kernel provenance](after-kernel.txt). The initrd remains exactly the baseline
+The initrd remains exactly the baseline
 `3dbc113e9cd4df7111ffdfa1eb4a31cd5549f1abcedc1f26509133062a28830c`.
 Only the kernel changed; compiler, firmware, hardware layout and consumer inputs
 are matched. Source image builds passed without kernel warnings using the
 verified baseline SDK/userland/ports bundles.
 
-The [production serial](after-serial.txt) and [debugger record](after-presenter-gdb.txt)
+The production serial and debugger records
 show 22 commands/replies, discovered codec `1af4:0012`, pin 3 → DAC 2, a live
 untimed parked worker, command/stream DMA off, PCI command `0x402` (BME clear,
 INTx disabled), and retained backing. The normal WAV has zero frames. A separate
-one-CPU boot without HDA remains usable ([serial](absent-serial.txt),
-[inventory/echo](absent-remote.txt)); absence selects no controller/worker.
+one-CPU boot without HDA remains usable (serial and
+inventory/echo checks); absence selects no controller/worker.
 No native hardware was accessed.
 
 An actual first boot exposed premature STATESTS acknowledgement erasing QEMU's
-reset-latched detection. [Its failure record](first-boot-failure.txt) confirms
+reset-latched detection. Its failure record confirmed
 normal shutdown/retained backing. The final code reads detection before W1C,
 following QEMU's reset semantics and specification reset ordering. This is a
 real bring-up correction, not injected failure qualification; other failure
@@ -149,7 +149,7 @@ observations in nested KVM, not native or guest-idle utilization. Source inspect
 and GDB establish no recurring engine wake/poll while idle; that is separate
 from attributing timing noise to the change.
 
-After host snapshots: [start](after-cpu-start.json), [end](after-cpu-end.json).
+After host snapshots: start and end.
 Monitor `info cpus` maps guest CPU0/1/2/3 to threads
 370328/370329/370330/370331. Their host CPU seconds were 8.76/2.87/4.05/2.79,
 respectively (8.1688/2.6763/3.7767/2.6017% of one host CPU). No debugger, build
@@ -161,7 +161,7 @@ measured in this bring-up; IRQ/refill/mixer work must measure it later.
 Branch **`probe/audio-task1-qualification`**, measured head **`ced1443`**, adds
 only a private consumer and its worker invocation over production `9e456bd`.
 It is kept unmerged, not a production boot tone or new self-test facility.
-[Qualifier kernel provenance](qualify-kernel.txt):
+Qualifier kernel:
 ELF `a5e6c48834fedf46c798d7860db6590772757759636897568d6c647603afbae7`,
 ISO `8ba762cb165dd6eeea685a62218a5cf827615da29b71c8a4e7ffe0af255297c4`;
 the complete initrd is still identical to baseline.
@@ -179,14 +179,12 @@ BME clears after its stop, then re-enables only for subsequent codec commands.
 | Four CPUs, `hda-output` | CORB/RIRB 54/54 after 310 reads | 366/366 | 1009.881 ms | 101 / 25 | 48,761 / 4,278 |
 | One CPU, `hda-duplex` | CORB/RIRB 54/54 after 310 reads | 376/376 | 1032.612 ms | 100 / 25 | 48,465 / 4,786 |
 
-Serial: [output](qualify-output-serial.txt), [duplex](qualify-duplex-serial.txt).
-GDB: [output](qualify-output-gdb.txt), [duplex](qualify-duplex-gdb.txt).
-Both confirm no engine failure, stopped/reset stream/rings/link, BME off,
+Serial and GDB records for both runs confirm no engine failure, stopped/reset stream/rings/link, BME off,
 retained DMA and no unsolicited replies. LPIB is modulo the cyclic buffer;
 polled BCIS and wrap counts can miss/coalesce events. They do not prove precise
 hardware-period accounting, audible drain or sustained dynamic refill.
 Duplex's unavailable ADC-backend warning is expected for output-only WAV.
-[Inventory and five echo commands](qualify-output-remote.txt) completed after
+The inventory and five echo commands completed after
 qualification, confirming guest responsiveness rather than concurrent audio load.
 
 Every captured nonzero frame matches the expected independent channels exactly:
@@ -195,8 +193,8 @@ left 1 kHz triangle, peak ±8192, period 48 samples; right 500 Hz triangle, peak
 `x=-A+floor(p*4*A/P)` for p<P/2, otherwise `x=3*A-floor(p*4*A/P)`.
 Both wave periods divide the 1,920-frame cyclic buffer. After the tone, every
 frame is zero. Sample comparison used standard Python wave/struct only;
-no generated waveform replaces measured output. The [output WAV](qualify-output.wav)
-is retained, SHA-256
+no generated waveform replaces measured output. The output WAV
+(not kept in the tree) had SHA-256
 `63595f3633d9f3bda93d37b8d3753acbc3ccad5491f3a6afc2ae910df68314b7`
 (212,200 bytes, 53,039 frames). Duplex WAV hash
 `a4e7970a02781aaafe005beef65c99d641e027cf280f4e7093382d4c914b2462`
@@ -213,7 +211,6 @@ QEMU evidence does not qualify it. Confirm the owner's QEMU-closure/native-batch
 choice at milestone closure. All task-owned guests, debuggers, clients and builds
 are stopped. Existing exact submitted-head CI is inspected separately from
 these measured code/consumer revisions.
-
 
 ## Review follow-up: boot log volume
 

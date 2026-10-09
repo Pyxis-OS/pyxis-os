@@ -1,5 +1,7 @@
 # System-update recognition qualification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Manual validation on 2026-10-04, task 1 of
 [system updates](../../../userland/system-updates.md). This qualifies candidate
 recognition and revision recording, not ESP updates or complete bootability.
@@ -69,10 +71,6 @@ write bytes, write requests and flush requests on every target. Full raw-file
 SHA-256 checks after quitting QEMU matched the pre-boot digests for all five
 files, including the pending journal. This also preserves the finalized file.
 
-![Candidate list](candidates.png)
-
-![Cancellation](cancelled.png)
-
 A final full source build from submitted parent `65ade91f4120` and published
 userland `bcb91c7e03a8` passed. Booting that ISO with only the fresh fixture
 selected the sole candidate automatically, displayed installed `f104a0948432`
@@ -81,8 +79,6 @@ written.`, and exited with status 0. Target writes/flushes remained zero, and it
 full-file SHA-256 still matched. Subsequent documentation changes do not alter
 the implementation qualified here. All validation QEMU/debugger/client jobs
 were stopped.
-
-![Selection from the submitted build](selected.png)
 
 ## Existing Install comparison
 

@@ -1,6 +1,0 @@
-0xffffffff80014616 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
-156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
-$1 = {claim = {device = 0xffff8010000001d0, saved_command = 7, capabilities = "`", '\000' <repeats 46 times>, capability_count = 1, bars = {{physical = 2164523008, bytes = 16384}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}, {physical = 0, bytes = 0}}, mappings = 0xffffffff8011c050 <controller+176>, reserved = false, dma_started = true}, registers = {address = 18446603336264380416, base = 18446603336264380416, bytes = 4096, next = 0x0}, firmware = {command = 7, pmcsr = 0, power_capability = 0, command_changed = false, power_changed = false}, corb = {address = 18446603336264384512, physical = 2084864, bytes = 4096}, rirb = {address = 18446603336264388608, physical = 2088960, bytes = 4096}, bdl = {address = 18446603336264392704, physical = 2093056, bytes = 4096}, pcm = {address = 18446603336264396800, physical = 2097152, bytes = 8192}, stream = 256, corb_entries = 256, rirb_entries = 256, corb_write = 7, rirb_read = 7, codec_mask = 1, commands = 376, responses = 376, unsolicited = 0, prepared = true, link_ready = false, command_ready = false, stream_running = false, failed = false, shutdown = true}
-$2 = 0x402
-$3 = 0x0
-[Inferior 1 (process 1) detached]

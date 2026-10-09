@@ -1,5 +1,7 @@
 # ESP update and recovery qualification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Manual validation on 2026-10-04, task 2 of
 [system updates](../../../userland/system-updates.md).
 
@@ -79,10 +81,6 @@ A target-only boot reached the ordinary local session; `fastfetch` reported
 Caelum `91bf91d4a0fb` and npfs `system://`. `cat system://kept.txt` displayed
 the retained file successfully.
 
-![Update completed](updated.png)
-
-![Target-only boot and retained file](updated-kept.png)
-
 ## Interrupted rewrite and recovery
 
 An independent finalized copy was updated normally through typed confirmation.
@@ -112,10 +110,6 @@ again. Host fsck on the extracted recovered pool reported `structural check
 passed`; extracted `kept.txt` matched the same source digest. The recovered ESP
 revision was `91bf91d4a0fb`, and a second target-only boot reached the ordinary
 local session with `fastfetch` showing that revision and mounted `system://`.
-
-![Interrupted disk accepted for recovery](recovery-candidate.png)
-
-![Recovery completed](recovered.png)
 
 ## Matched candidate inspection counters
 

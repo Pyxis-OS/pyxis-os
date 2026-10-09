@@ -1,5 +1,7 @@
 # USB installer authority qualification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Manual QEMU qualification on 2026-10-05 for C.3 of the
 [USB milestone](../../../devices/usb-installation.md). Physical installation is the
 separately assigned C.4 task.
@@ -174,7 +176,7 @@ Fresh target-only boots of both the normally updated disk and the recovered disk
 had no live media or VirtIO disk. Both reached installed init, reported Caelum
 `91346a8d80a8` and npfs `system://`, and returned the original SHA-256 for
 `system://kept.txt`. The normal updated boot additionally had its writable pool
-confirmed in GDB. [The recovered boot screenshot](recovered-boot.png) records
+confirmed in GDB. The recovered boot showed
 the installed revision and preserved file hash.
 
 ## Delivery and limits
@@ -224,7 +226,7 @@ held at that breakpoint. Host inspection observed:
 Fresh live `52c177b` media listed the same disk as eligible with damaged FAT32
 geometry, installed revision `unknown`, and
 `Boot files damaged or missing; Update will rebuild them.`
-[The confirmation screenshot](review-recovery-confirmation.png) records that
+The confirmation screen showed that
 classification. After typed `update`, a second manual debugger stop immediately
 before primary boot-sector publication observed three flushes (qualification,
 invalidation and complete-tree synchronization). The archive was then complete
@@ -239,7 +241,7 @@ Install / Read the room, typed `wipe`, formatting, GPT rescan and boot-file/root
 verification, reporting `installed`, exit 0. The repaired original disk also
 booted alone from USB with no ISO or VirtIO disk, reported `52c177be45b3` and
 npfs `system://`, and returned the unchanged original SHA-256 for `kept.txt`.
-[The target-only boot screenshot](review-target-boot.png) records both results.
+The target-only boot showed both results.
 All follow-up QEMU/debugger processes were closed.
 
 Ordinary full image builds passed for the integrated sources, including
