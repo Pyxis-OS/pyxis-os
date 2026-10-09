@@ -80,7 +80,7 @@
 
   const struct boot_options *options = boot_options_parse(boot->command_line);
   if (options->debug_checkpoint) {
-    arch_debug_enable();
+    arch_debug_enable(boot);
   }
   display_init(boot, options->display_size, options->display_timing,
       options->display_timing_metrics);
