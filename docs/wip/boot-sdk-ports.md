@@ -90,6 +90,8 @@ Chosen by the owner, each starting with a proposal:
   keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
   delivered together, ports first. See [SDL2](../development/sdl2.md) and the
   [matched qualification](../development/sdl2-event-wait-qualification.md).
+- **Claude** (2026-10-09, debt paydown): [page-backed RAM files](ram-file-pages.md),
+  proposal with three decisions for the owner.
 
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
