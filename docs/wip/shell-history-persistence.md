@@ -1,6 +1,7 @@
 # Saved shell history
 
-Proposal, 2026-10-09; not accepted. It implements the accepted follow-up in
+Accepted by the owner on 2026-10-09, all three decisions as the defaults below;
+implementation in progress. It implements the accepted follow-up in
 [initial terminal editor](../technical-debt.md#initial-terminal-editor): shell
 history kept across sessions and reboots, in `home://`. Today each interactive
 shell keeps its last 100 lines in memory
@@ -58,6 +59,14 @@ shell keeps its last 100 lines in memory
 
 ## Owner decisions
 
+Accepted 2026-10-09, all as the defaults. Following review, the temporary file
+is not synced:
+- **Native volumes:** a replacing rename flushes the moved file before it
+  commits ([native adapter](../devices/filesystem-native-adapter.md)).
+- **RAM homes:** they have nothing to make durable.
+- **A `host://`-backed home:** it would rely on the host's own rename
+  durability. A guest crash cannot lose the file there; a host crash could.
+
 1. **Where.**
    - **Default:** one file per home, `home://.history`, shared by every shell
      of every space that can write that home.
@@ -73,7 +82,7 @@ shell keeps its last 100 lines in memory
    - **Default:** merge and replace on every saved line. The shell:
      1. reads the current file;
      2. adds its line at the end and trims;
-     3. writes the result to a new temporary `.history.XXXXXX` and syncs it;
+     3. writes the result to a new temporary `.history.XXXXXX`;
      4. renames it over `.history`.
 
      **Consequences:**
@@ -82,7 +91,7 @@ shell keeps its last 100 lines in memory
        milliseconds: the later rename wins.
      - A crash or kill loses at most the line being saved. It may leave one
        stray temporary file, as Quake and vi already can.
-     - **Cost:** up to 64 KiB read and written, plus two pool commits, per
+     - **Cost:** up to 64 KiB read and written, plus one pool commit, per
        command.
    - **Save only on exit:** cheapest, but loses everything from killed shells,
      which covers every remote session and closed mux pane.

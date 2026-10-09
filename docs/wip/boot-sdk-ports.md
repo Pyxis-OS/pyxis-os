@@ -93,7 +93,7 @@ Chosen by the owner, each starting with a proposal:
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
 - **Claude** (2026-10-09, debt paydown): [saved shell history](shell-history-persistence.md),
-  documentation-only proposal awaiting three owner decisions. xfer pipelining
+  three decisions accepted 2026-10-09; implementation in progress. xfer pipelining
   merged in #600; native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
