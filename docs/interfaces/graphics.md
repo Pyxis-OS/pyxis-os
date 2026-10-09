@@ -126,7 +126,7 @@ keyboard session and ends the pointer subscription and its cursor preference.
 
 ## Ordinary pointer input
 
-The [pointer protocol](../devices/mouse.md#userspace-pointer-sessions) requires
+The [pointer protocol](pointer.md#userspace-pointer-sessions) requires
 both pointer INPUT authority and ownership of this space's graphics session.
 Its 56-byte events report signed surface-local positions below navigation,
 buttons, wheel counts, destination generation and mapping identity. Hit-testing
@@ -156,19 +156,20 @@ device loss and teardown also revoke it. Such revocation leaves a per-space
 fresh-click requirement that survives new sessions and processes. A consumed
 fresh left press on shown graphics reports `POINTER_ACTIVATED`; tab clicks,
 warp and polling cannot grant relock permission. See the
-[lock contract](../devices/mouse.md#relative-lock-and-user-escape).
+[lock contract](pointer.md#relative-lock-and-user-escape).
 
 Pointer and display backing have separate presenter leases. A snapshotted image
 can finish after image replacement, display release or owner exit without
 accessing retired owner state. The kernel composes it after the chosen surface
 and includes it in [screen capture](screen-capture.md); application pixels remain
 cursor-free. Quake acquires pointer input after graphics and requests lock after
-PRESENT. SDL likewise acquires after graphics backing and exposes relative mode
-after PRESENT, alongside native position/cursor/warp support. Both release
-pointer input before graphics teardown and react to revocation instead of
-polling for lock. Their joint integration and QEMU evidence are recorded in
-[system pointer qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration),
-along with source-only limits and the submitted-revision CI location.
+its first PRESENT. It reads relative counts only while locked, observes STATE
+to detect revocation and requests relock on a fresh surface activation. Locked
+same-session geometry changes retain held controls. Cleanup releases pointer
+input before graphics; keyboard-only play remains available without a mouse.
+The [SDL backend](../development/sdl2.md#the-backend) exposes the same native
+position, cursor, warp and lock rules. Runtime evidence and source-inspected
+limits are recorded in [system pointer qualification](../development/system-pointer-qualification.md).
 
 ## Live destination geometry
 

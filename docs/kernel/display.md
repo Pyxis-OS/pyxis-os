@@ -19,7 +19,7 @@ frame begin. A custom immutable image retains a reference through display and
 capture completion; replacement or owner exit releases only its published
 reference. Static arrow and terminal defaults need no allocated image lease.
 Surface ownership, routing, visibility and warp are described in
-[mouse input](../devices/mouse.md#userspace-pointer-sessions).
+[system pointer](../interfaces/pointer.md#userspace-pointer-sessions).
 The single global relative lock forces effective visibility off while retaining
 the surface's image and saved show preference. Unlock restores that preference;
 hidden and locked pointers add no software overlay to scanout or capture.
