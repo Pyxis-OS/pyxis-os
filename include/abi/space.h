@@ -45,6 +45,9 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
 #define SPACE_FACTORY_RIGHTS SPACE_FACTORY_RIGHT_CREATE
 #define SPACE_FACTORY_CREATE UINT64_C(1)
 #define SPACE_CREATE_TERMINAL_CONTROL (UINT64_C(1) << 0)
+#define SPACE_CREATE_CLIPBOARD_LOCAL (UINT64_C(1) << 1)
+#define SPACE_CREATE_CLIPBOARD_SHARED (UINT64_C(1) << 2)
+#define SPACE_CREATE_FLAGS (SPACE_CREATE_TERMINAL_CONTROL | SPACE_CREATE_CLIPBOARD_LOCAL | SPACE_CREATE_CLIPBOARD_SHARED)
 #define SPACE_NAME_MAX 31
 #define SPACE_REASON_MAX 96
 
@@ -80,7 +83,7 @@ struct space_create_request {
   uint64_t cpus, cpu_count;
   uint64_t reason, reason_length;
   uint64_t launch;
-  uint64_t flags; /* TERMINAL_CONTROL only with LAUNCH; trusted local mux startup. */
+  uint64_t flags; /* Explicit independent UI/clipboard grants; only with LAUNCH. */
 };
 
 _Static_assert(sizeof(struct space_create_request) == 96, "space create request layout");

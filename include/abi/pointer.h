@@ -33,6 +33,7 @@ enum pointer_event_type {
   POINTER_GEOMETRY_CHANGED,
   POINTER_LOCK_CHANGED,
   POINTER_ACTIVATED,
+  TERMINAL_POINTER_CLIPBOARD_ACTION,
 };
 
 /* INPUT authority plus ownership of this space's graphics session is required.
@@ -58,6 +59,7 @@ struct pointer_event {
   int32_t wheel;
   int32_t dx, dy; /* Relative device counts only for INPUT with LOCKED set. */
   uint32_t buttons, type, flags;
+  uint64_t action_id, clipboard_operation, clipboard_layer;
 };
 
 /* Header-only LOCK/UNLOCK require the owning ordinary subscription. LOCK may
@@ -100,7 +102,7 @@ struct pointer_warp_request {
 };
 
 _Static_assert(sizeof(struct pointer_read_request) == 24, "pointer read layout");
-_Static_assert(sizeof(struct pointer_event) == 56, "pointer event layout");
+_Static_assert(sizeof(struct pointer_event) == 80, "pointer event layout");
 _Static_assert(sizeof(struct pointer_geometry) == 48, "pointer geometry layout");
 _Static_assert(sizeof(struct pointer_image_request) == 40, "pointer image layout");
 _Static_assert(sizeof(struct pointer_visibility_request) == 24, "pointer visibility layout");
