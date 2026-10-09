@@ -16,11 +16,6 @@
 #define TIMING_MIN_PERIOD_NS UINT64_C(5000000)
 #define TIMING_MAX_PERIOD_NS UINT64_C(50000000)
 #define TIMING_DENSE_GAP_NS UINT64_C(4000000)
-#define TIMING_COMPOSE_LEAD_NS UINT64_C(2000000)
-#define TIMING_POLL_LEAD_NS UINT64_C(125000)
-#define TIMING_POLL_LIMIT_NS UINT64_C(250000)
-#define TIMING_POLL_SPACING_NS UINT64_C(4000)
-#define TIMING_POLL_BRACKETS 64
 #define TIMING_GUARD_LINES 8
 #define TIMING_FRAME_MASK UINT32_C(0xffffff)
 #define TIMING_ADVANCES 4
@@ -42,7 +37,7 @@ static uint64_t fit_max_gap_ns, period_error_ns, rate_start_ns;
 static uint32_t rate_frame;
 static unsigned fit_advances;
 static bool have_previous, have_fit, dense_fit, saw_blank, saw_active, attempt_active;
-static uint64_t edge_lower_ns, edge_upper_ns, planned_edge_ns;
+static uint64_t edge_lower_ns, edge_upper_ns;
 
 static struct {
   enum timing_result result;
@@ -63,6 +58,7 @@ static size_t record_count;
 static uint64_t admitted_count, unsynchronized_count, invalid_count, progress_late_count;
 static uint64_t late_count, expired_count, unavailable_count;
 static uint64_t total_written;
+static uint64_t rejected_bounds, widest_rejected_ns;
 
 static bool text_is(const char *text, const char *expected)
 {
@@ -90,10 +86,9 @@ static void reset_fit(uint64_t now)
 static void lose_timing(const char *reason, uint64_t now, bool permanent)
 {
   if (capability.hardware) {
-    klog("display-timing: hardware observation lost: %s\n", reason);
+    ktrace("display-timing: hardware observation lost: %s\n", reason);
   }
   capability = (struct display_timing_capability){0};
-  planned_edge_ns = 0;
   have_previous = false;
   reset_fit(now);
   attempt_active = false;
@@ -101,7 +96,7 @@ static void lose_timing(const char *reason, uint64_t now, bool permanent)
   permanent_loss |= permanent;
 }
 
-static void set_edges(const struct renoir_otg_sample *sample)
+static bool set_edges(const struct renoir_otg_sample *sample)
 {
   uint64_t line_ns = capability.period_ns / sample->mode.v_total;
   uint64_t lines = (sample->v_position + sample->mode.v_total -
@@ -116,11 +111,21 @@ static void set_edges(const struct renoir_otg_sample *sample)
   edge_upper_ns = sample->after_ns > elapsed ? sample->after_ns - elapsed + uncertainty : 0;
   capability.uncertainty_ns = edge_upper_ns >= edge_lower_ns ?
       edge_upper_ns - edge_lower_ns : 0;
+  uint64_t blank_lines = (sample->mode.blank_end + sample->mode.v_total -
+      sample->mode.blank_start) % sample->mode.v_total;
+  bool usable = edge_lower_ns && edge_upper_ns >= edge_lower_ns &&
+      blank_lines > TIMING_GUARD_LINES && capability.uncertainty_ns <
+      (blank_lines - TIMING_GUARD_LINES) * line_ns;
+  if (!usable) {
+    ++rejected_bounds;
+    widest_rejected_ns = MAX(widest_rejected_ns, capability.uncertainty_ns);
+  }
+  return usable;
 }
 
-static bool observe(struct renoir_otg_sample *sample, bool light)
+static bool observe(struct renoir_otg_sample *sample)
 {
-  enum renoir_otg_result result = light ? renoir_otg_read_light(sample) : renoir_otg_read(sample);
+  enum renoir_otg_result result = renoir_otg_read(sample);
   uint64_t now = arch_monotonic_ns();
   if (result == RENOIR_OTG_UNAVAILABLE) {
     lose_timing(renoir_otg_reason(), now, true);
@@ -171,7 +176,10 @@ static bool observe(struct renoir_otg_sample *sample, bool light)
     }
     capability.frame_sequence += delta;
     capability.timestamp_ns = stamp;
-    set_edges(sample);
+    if (!set_edges(sample)) {
+      lose_timing("uncertainty exceeds guarded blank budget", now, false);
+      return false;
+    }
   } else if (stamp >= retry_after_ns) {
     if (!attempt_active) {
       reset_fit(stamp);
@@ -225,14 +233,20 @@ static bool observe(struct renoir_otg_sample *sample, bool light)
               MAX(travelled_lines, UINT64_C(1)) :
               (fit_max_gap_ns * 2 + TIMING_MAX_PERIOD_NS) / fit_frames;
           capability = (struct display_timing_capability){
-            .hardware = true, .frame_sequence = sample->frame_count,
+            .frame_sequence = sample->frame_count,
             .timestamp_ns = stamp, .period_ns = period,
           };
+          if (!set_edges(sample)) {
+            capability = (struct display_timing_capability){0};
+            previous = *sample;
+            have_previous = true;
+            return true;
+          }
+          capability.hardware = true;
           retained_period_ns = period;
           last_advance_ns = stamp;
           rate_start_ns = stamp;
           rate_frame = sample->frame_count;
-          set_edges(sample);
           if (qualification_metrics) {
             klog("display-timing: hardware otg=%u period=%lu line=%lu blank=%lu uncertainty=%lu ns\n",
                 info.mode.otg, period, period / info.mode.v_total,
@@ -270,7 +284,7 @@ void display_timing_prepare(const struct boot_info *boot, bool firmware_backend,
     return;
   }
   prepared = true;
-  klog("display-timing: %s; read-only Renoir %02x:%02x.%u BAR5=0x%lx OTG%u\n",
+  klog("display-timing: %s; read-only Renoir %x:%x.%u BAR5=0x%lx OTG%u\n",
       mode == TIMING_BLANK ? "experimental blank-start copies" : "observation; unsynchronized copies",
       info.address.bus, info.address.device, info.address.function, info.bar5, info.mode.otg);
   if (qualification_metrics) {
@@ -295,7 +309,7 @@ void display_timing_start(void)
   reset_fit(arch_monotonic_ns());
   while (!capability.hardware && !permanent_loss && !display_is_panicking()) {
     struct renoir_otg_sample sample;
-    observe(&sample, false);
+    observe(&sample);
     uint64_t now = arch_monotonic_ns();
     if (now >= deadline) {
       break;
@@ -327,83 +341,9 @@ static bool start_fits(const struct renoir_otg_sample *sample, uint64_t now)
   return now - edge_lower_ns < budget;
 }
 
-static bool phase_precise(void)
-{
-  if (!capability.hardware) {
-    return false;
-  }
-  uint64_t line = capability.period_ns / info.mode.v_total;
-  uint64_t blank_lines = (info.mode.blank_end + info.mode.v_total -
-      info.mode.blank_start) % info.mode.v_total;
-  return blank_lines > TIMING_GUARD_LINES && capability.uncertainty_ns <
-      (blank_lines - TIMING_GUARD_LINES) * line;
-}
-
-void display_timing_wait(void)
+void display_timing_begin_copy(void)
 {
   copy = (typeof(copy)){.result = TIMING_OBSERVED};
-  if (!prepared || permanent_loss || mode != TIMING_BLANK) {
-    return;
-  }
-  struct renoir_otg_sample sample;
-  if (!observe(&sample, false) || !phase_precise()) {
-    copy.result = TIMING_UNAVAILABLE;
-    return;
-  }
-  uint64_t now = arch_monotonic_ns();
-  if (start_fits(&sample, now)) {
-    copy.result = TIMING_ADMITTED;
-    return;
-  }
-  if (sample.in_blank) {
-    copy.result = TIMING_LATE;
-    return;
-  }
-  uint64_t edge = planned_edge_ns;
-  if (!edge) {
-    edge = edge_upper_ns + capability.period_ns;
-  }
-  if (now >= edge) {
-    copy.result = TIMING_LATE;
-    return;
-  }
-  uint64_t wake = edge > TIMING_POLL_LEAD_NS ? edge - TIMING_POLL_LEAD_NS : edge;
-  if (wake > now) {
-    kernel_task_sleep_until(wake);
-  }
-  uint64_t entered = arch_monotonic_ns();
-  copy.coarse_late_ns = entered > wake ? entered - wake : 0;
-  uint64_t deadline = entered + TIMING_POLL_LIMIT_NS;
-  uint64_t next_read = entered;
-  copy.result = TIMING_POLL_EXPIRED;
-  for (unsigned polls = 0; polls < TIMING_POLL_BRACKETS;) {
-    now = arch_monotonic_ns();
-    if (now >= deadline || display_is_panicking()) {
-      break;
-    }
-    if (now < next_read) {
-      __asm__ volatile("pause");
-      continue;
-    }
-    next_read = now + TIMING_POLL_SPACING_NS;
-    ++polls;
-    if (observe(&sample, true) && capability.hardware) {
-      now = arch_monotonic_ns();
-      if (now < deadline && start_fits(&sample, now)) {
-        copy.result = TIMING_ADMITTED;
-        break;
-      }
-      if (now >= edge && !sample.in_blank) {
-        copy.result = TIMING_LATE;
-        break;
-      }
-    }
-    if (permanent_loss || !capability.hardware) {
-      copy.result = TIMING_UNAVAILABLE;
-      break;
-    }
-  }
-  copy.spin_ns = arch_monotonic_ns() - entered;
 }
 
 bool display_timing_front_write(void)
@@ -412,8 +352,7 @@ bool display_timing_front_write(void)
     return false;
   }
   struct renoir_otg_sample sample;
-  bool full = mode != TIMING_BLANK || copy.result == TIMING_ADMITTED;
-  bool valid = observe(&sample, !full) && capability.hardware;
+  bool valid = observe(&sample) && capability.hardware;
   uint64_t now = arch_monotonic_ns();
   copy.progress = (++total_written % TIMING_PROGRESS_INTERVAL) == 0;
   copy.sample_valid = valid && edge_lower_ns && now >= edge_lower_ns;
@@ -425,9 +364,9 @@ bool display_timing_front_write(void)
     copy.copy_blank_ns = ((info.mode.blank_end + info.mode.v_total - info.mode.blank_start) %
         info.mode.v_total) * copy.copy_line_ns;
   }
-  if (mode == TIMING_BLANK && copy.result == TIMING_ADMITTED &&
-      (!valid || !start_fits(&sample, now))) {
-    copy.result = valid ? TIMING_LATE : TIMING_UNAVAILABLE;
+  if (mode == TIMING_BLANK) {
+    copy.result = !valid ? TIMING_UNAVAILABLE :
+        start_fits(&sample, now) ? TIMING_ADMITTED : TIMING_LATE;
   }
   return true;
 }
@@ -541,10 +480,11 @@ void display_timing_finish(void)
     return;
   }
   if (qualification_metrics) {
-    klog("display-timing: source=%s mode=%s samples=%zu admitted=%lu unsync=%lu invalid=%lu progress-late=%lu frame=%u v=%u position=%x status=%x\n",
+    klog("display-timing: source=%s mode=%s samples=%zu admitted=%lu unsync=%lu invalid=%lu progress-late=%lu frame=%u v=%u position=%x status=%x uncertainty=%lu rejected-bounds=%lu reject-max=%lu ns\n",
         capability.hardware ? "hardware" : "unavailable", mode == TIMING_BLANK ? "blank" : "observe",
         record_count, admitted_count, unsynchronized_count, invalid_count, progress_late_count,
-        previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status);
+        previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status,
+        capability.uncertainty_ns, rejected_bounds, widest_rejected_ns);
     klog("display-timing: missed-starts late=%lu poll-expired=%lu unqualified=%lu\n",
         late_count, expired_count, unavailable_count);
     print_metric("start-upper", METRIC_START);
@@ -557,22 +497,7 @@ void display_timing_finish(void)
   record_count = 0;
   admitted_count = unsynchronized_count = invalid_count = progress_late_count = 0;
   late_count = expired_count = unavailable_count = 0;
-}
-
-uint64_t display_timing_next_deadline(void)
-{
-  if (!prepared || mode != TIMING_BLANK || !phase_precise() || permanent_loss) {
-    planned_edge_ns = 0;
-    return 0;
-  }
-  uint64_t now = arch_monotonic_ns();
-  uint64_t edge = edge_upper_ns + capability.period_ns;
-  if (edge <= now + TIMING_COMPOSE_LEAD_NS) {
-    uint64_t missed = (now + TIMING_COMPOSE_LEAD_NS - edge) / capability.period_ns + 1;
-    edge += missed * capability.period_ns;
-  }
-  planned_edge_ns = edge;
-  return edge - TIMING_COMPOSE_LEAD_NS;
+  rejected_bounds = widest_rejected_ns = 0;
 }
 
 const struct display_timing_capability *display_timing_capability(void)

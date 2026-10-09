@@ -323,27 +323,27 @@ software cadence. `off` skips observation. **blank is an explicit native
 qualification opt-in**, never selected automatically; default timed copies
 remain disabled pending the owner's native results.
 
-The private hardware capability describes validated counter observation and
-its uncertainty, independently of copy-start admission. `blank` phases the
-presenter's own cadence, sleeps before the expected blank, then polls for at
-most 250 µs / 64 brackets spaced at least 4 µs apart, IF=1. Each fine poll reads
-only frame, position and status against the cached mode. Full device, BAR and
-mode revalidation runs once per cadence and again immediately before an admitted
-front write. Admission reserves eight scanlines plus measurement uncertainty;
-late/unqualified copies proceed once immediately as
-unsynchronized. No second-blank queue, page flip, program timing ABI or vsync
-promise is introduced. Sparse requalification can restore counter observation
-with uncertainty too large to permit phased copies.
+The private hardware capability requires observation uncertainty smaller than
+blank minus the existing eight-line guard. Wider acquisition candidates are
+rejected before publishing hardware timing; a widened live bound revokes it.
+The period estimator is unchanged and failed native qualification, so this is
+an uncertainty check, not a promise of an accurate refresh period.
+
+Both modes use the ordinary software cadence and one full observation before
+copying. `blank` only labels an opportunistic guarded start if the current
+sample is already in blank; otherwise it immediately copies as unsynchronized.
+There is no hardware deadline, coarse sleep, fine poll or wait for another
+blank. No page flip, program timing ABI or vsync promise is introduced.
 
 The first pixel's timestamp/store use a short saved-IF section; remaining
 copies and GPU-register observations run IF=1. The clock may use HPET, so that
 section includes clock-access cost, not just a fixed instruction count. Direct
-writer ownership is unpublished during sleep/poll and reacquired/rechecked
+writer ownership is reacquired/rechecked
 before copying; its fence/release precedes diagnostic sorting/logging. Panic,
 frame leases and cursor-inclusive capture retain their existing contracts.
 
-Normal logging retains one preparation summary and rare observation-loss
-reports. `DISPLAY_TIMING_METRICS=1` adds the boot-only
+Normal logging retains one preparation summary; observation losses use
+`ktrace`. `DISPLAY_TIMING_METRICS=1` adds the boot-only
 `display.timing.metrics=1` qualification flag: register dumps, qualification
 details and periodic metrics are printed at the normal info level only when
 requested. Omission or `0` disables these reports and periodic metric sorting,
