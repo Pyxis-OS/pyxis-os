@@ -1083,159 +1083,88 @@ with a measured consumer need; tickless scheduling is outside this task.
 
 ## Wall-clock time and clock-source performance
 
-[Monotonic time and deadline sleep](kernel/timekeeping.md) now use the shared HPET
-counter. Console timeouts no longer count delivered BSP interrupts. Local timer
-dispatch and scheduling still delay execution; nanosecond units do not promise precise
-wakeup, and time spent with the VM paused need not count.
+[Monotonic time and deadline sleep](kernel/timekeeping.md) use a shared clock; local timer dispatch and scheduling still delay
+execution, nanosecond units promise no precise wakeup, and time with the VM paused need not count. [UTC wall time](kernel/wall-clock.md)
+is a whole-second Limine RTC seed plus elapsed monotonic time: firmware accuracy, subsecond alignment and boot handoff delay are
+unknown, there is no drift correction or resynchronization, a missing seed is an explicit error but a plausible wrong RTC cannot be
+detected, and adjustments must not change monotonic deadlines. [Local time](userland/timezones.md) is userspace. HTTPS certificate
+validity depends on this UTC value, so a wrong RTC date can cause wrong acceptance or rejection; revisit authenticated time
+synchronization before treating TLS date checks as independent of firmware or hypervisor time. The VirtIO RTC driver is deferred.
 
-[UTC wall time](kernel/wall-clock.md) uses a whole-second Limine RTC seed plus elapsed
-monotonic time. Firmware accuracy, subsecond alignment and boot handoff delay
-are not known; there is no drift correction or resynchronization. Time while the
-VM is paused need not advance. A missing seed is an explicit error, but a
-plausible incorrect RTC value cannot be detected. Future adjustments must not
-change monotonic deadlines. [Zoneinfo-backed local time](userland/timezones.md) is handled
-in userspace. TCC uses UTC calendar macros and monotonic `-bench`;
-Kilo uses monotonic time for status-message expiry. HTTPS certificate validity
-also depends on this UTC value: an available but incorrect RTC date can cause
-incorrect acceptance or rejection. Revisit authenticated time synchronization
-before treating TLS date checks as independent of firmware/hypervisor time.
+**Clock source.** HPET MMIO reads are expensive under virtualization. Unneeded reads for empty scheduler deadline lists and untimed HOST
+idle waits were removed ([HOST investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)), and timer passes read the
+clock at most once and rearm only for an earlier target, cutting nested-QEMU idle HPET reads by 63% and send-side reads per TCP segment by
+about a quarter ([measurements](development/experiments/timer-clock-reads/README.md)); active deadlines and profiling still pay each
+remaining read. Boot still requires a memory-mapped HPET. The owner chose
+[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit) (2026-10-03), and since 2026-10-09 the
+kernel uses the [TSC](kernel/timekeeping.md#tsc-selection) when every CPU qualifies, removing HPET reads after boot. The running HDA
+worker's 5 ms watchdog (about 200 timed wake opportunities per second, absent while parked) still adds timer re-arms and HPET reads
+([audio profile](development/experiments/audio-task2/profiling.md)), and per-packet network work and audio refill pay several clock
+reads per event ([TCP throughput limits](#tcp-throughput-limits)); cheaper clock sources remain kernel work.
 
-HPET MMIO reads can be expensive, especially under virtualization. The
-[HOST forwarding investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)
-removed unnecessary reads for empty scheduler deadline lists and untimed HOST
-idle waits, restoring the measured unprofiled transfer times to baseline. Active
-deadlines and profiling still pay the clock cost. Timer passes read the clock at
-most once and rearm only for an earlier target, which in nested QEMU cut idle
-HPET reads by 63% and send-side reads per TCP segment by about a quarter
-([measurements](development/experiments/timer-clock-reads/README.md)); each
-remaining HPET read keeps its full cost. Boot still requires a memory-mapped
-HPET. On 2026-10-03 the owner chose
-[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit);
-since 2026-10-09 the kernel switches to the [TSC](kernel/timekeeping.md#tsc-selection)
-when every CPU qualifies, which removes HPET reads after boot. The running HDA
-worker also uses a 5 ms watchdog (about 200 timed wake opportunities per second),
-with timer re-arms and HPET reads; it is absent while playback is parked.
-Its measured wake/deadline amplification is in the
-[audio profile](development/experiments/audio-task2/profiling.md). Cheaper
-clock sources remain separate kernel work.
-The implementation preserves direct 64-bit reads and extends 32-bit counters
-with a shared CAS accumulator. Each advancing extension read publishes to one
-cache line and may retry under contention. BSP maintenance is configurable in
-timer deliveries, default 120 (nominally one second), with explicit early-boot
-sampling. The [matched host-KVM observations](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#local-implementation-results)
-show lower clock-call cost for forced low-32-bit extension, with shared-state
-cost included, but do not establish native performance. The direct profiled
-allocation median was about 2.6% higher, mostly in BSP queue time; its cause
-was not isolated. On the ThinkPad the owner recorded the 32-bit
-software-extended path log and, on 2026-10-07, a native session of more than
-15 minutes with the clock holding; see the
-[target notes](targets/t14-gen1-amd/notes.md#native-status).
+**HPET extension limit (accepted).** 64-bit counters are read directly and 32-bit ones are extended with a shared CAS accumulator, which
+publishes to one cache line per advancing read and can retry under contention; BSP maintenance runs every 120 timer deliveries by
+default (nominally one second). The accepted support requirement is strictly less than one advancing-counter wrap between incorporated
+samples, including boot operations, long interrupt-disabled execution, firmware stalls and debugger or VM pauses. A violating gap needs a
+reboot because the low word cannot reconstruct missing wraps, nominal interval validation cannot enforce the bound, and suspend, resume
+and migration are unqualified. This applies only while the HPET is the clock; revisit with an independent source or a stronger progress
+guarantee if a target falls back to it. Host-KVM observations showed lower call cost for forced low-32-bit extension (native performance
+unestablished; the direct profiled allocation median was about 2.6% higher, cause not isolated), and the ThinkPad logged the 32-bit path
+and held the clock through a native session of more than 15 minutes on 2026-10-07 ([target notes](targets/t14-gen1-amd/notes.md#native-status)).
 
-The accepted support requirement is strictly less than one advancing-counter
-wrap between incorporated samples, including individual boot operations, long
-interrupt-disabled execution, firmware stalls and debugger/VM pauses. A violating
-gap requires reboot: the low word cannot identify or reconstruct missing wraps.
-Nominal interval validation cannot enforce the actual gap bound, and suspend,
-resume and migration remain unqualified. This applies only while the HPET is
-the clock; revisit it with an independent source or an explicitly scoped
-stronger progress guarantee if a target falls back to the HPET.
-
-[TSC selection](kernel/timekeeping.md#tsc-selection) has its own accepted limits
-(owner, 2026-10-09):
-- **Agreement.** Cross-CPU agreement is checked only during startup, about 2 ms
-  per AP, with no shared floor or runtime watchdog, so a later warp would go
-  unnoticed. Monotonic order between readings on different CPUs after boot
-  therefore rests on that startup check and the hardware's invariant TSC alone.
-- **Calibration.** It costs 100 ms on every boot whose BSP qualifies, and its
-  error bound, up to 100 ppm, adds to the HPET's own crystal error. CPUID
-  `0x15` is only logged.
-- **Nested VMs.** These fall back to the HPET: their HPET reads are too slow
-  for a 100 ppm calibration, and the development VM exposes no invariant TSC.
-- **Unqualified.** Suspend and resume, migration and native behaviour stay
-  unqualified until the owner's ThinkPad run; see the
-  [measurements](development/experiments/tsc-clock/README.md).
-
-Revisit with a target that shows a warp or needs better accuracy.
-Per-packet network work and audio refill both pay several clock reads per
-event; see [TCP throughput limits](#tcp-throughput-limits).
-The VirtIO RTC driver remains deferred.
+**TSC limits (accepted, owner 2026-10-09).** Cross-CPU agreement is checked only at startup (about 2 ms per AP, no shared floor or runtime
+watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on
+every boot whose BSP qualifies with an error bound up to 100 ppm on top of the HPET's crystal error, and CPUID `0x15` is only logged.
+Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm calibration and the development VM exposes no invariant TSC).
+Suspend, resume, migration and native behavior are unqualified until the owner's ThinkPad run
+([measurements](development/experiments/tsc-clock/README.md)). Revisit with a target that shows a warp or needs better accuracy.
 
 ## Doom configuration and save-format limits
 
-[Doom save/load](userland/doom.md#saves) now uses checked temporary writes and atomic
-replacement through the [filesystem mutations](interfaces/filesystem-mutations.md). Saves
-persist on installed systems and last until reboot on live boots. The upstream parser assumes trusted saves matching the
-loaded game data; full malformed-file validation and separation by PWAD are not
-implemented. Interrupted saves can leave temporary files for manual removal.
-
-Configuration persistence is already disabled in the pinned generic engine.
-Re-enabling it needs an explicit writable configuration location and review of
-its parser/formatting requirements. Floating printf is now available for the
-upstream timedemo report; exercising timedemo remains separate from normal
-gameplay and demo playback. Wall-clock time is not a prerequisite.
+[Doom save/load](userland/doom.md#saves) uses checked temporary writes and atomic replacement through the
+[filesystem mutations](interfaces/filesystem-mutations.md); saves persist on installed systems and last until reboot on live boots. The
+upstream parser trusts saves matching the loaded game data, with no malformed-file validation or separation by PWAD, and interrupted saves
+can leave temporary files for manual removal. Configuration persistence is disabled in the pinned generic engine; re-enabling it needs a
+writable configuration location and review of its parser and formatting. Floating printf now serves the upstream timedemo report, and
+wall-clock time is not a prerequisite.
 
 ## Clang code generation and predefines
 
-Pyxis builds with Clang since the [LLVM toolchain milestone](development/llvm-toolchain.md).
-Matched nested-KVM measurements on 2026-10-07 (four CPUs) left two measured
-regressions against GCC 16:
-- **Heap allocation:** `allocbench heap` takes about 13.1 ns/op, against
-  12.0 with GCC (about 9%). The TLSF fix for Clang's narrowed flag stores
-  removed most of the original 33% gap; the remainder is uninvestigated. Two
-  early samples after the fix, 20.4 and 21.7 ns/op, did not recur.
-- **Quake:** `timedemo demo1` runs about 3% slower (median 1560 against
-  1604 fps).
+Pyxis builds with Clang since the [LLVM toolchain milestone](development/llvm-toolchain.md). Matched nested-KVM measurements on 2026-10-07
+(four CPUs) left two regressions against GCC 16: `allocbench heap` at about 13.1 ns/op against 12.0 (about 9%; the TLSF fix for Clang's
+narrowed flag stores removed most of an original 33% gap, the rest is uninvestigated, and two early samples of 20.4 and 21.7 ns/op did
+not recur), and Quake `timedemo demo1` about 3% slower (median 1560 against 1604 fps). Clang also emits more byte-sized
+read-modify-writes (164 against 75 in the kernel) with no other measured cost. Reconsider when an allocation-heavy program (Lua, TCC, the
+JVM experiment) measures the heap gap or the LLVM pin moves.
 
-Clang also emits more byte-sized read-modify-writes than GCC (164 against 75 in
-the kernel); no other measured path showed a cost. Reconsider when an
-allocation-heavy program, such as Lua, TCC or the JVM experiment, measures the
-heap gap, or when the LLVM pin moves.
-
-Clang predefines `__INT_FAST8_TYPE__` and `__INT_FAST16_TYPE__` as `signed
-char` and `short`, while libc's `stdint.h` defines `int`. Code using the
-compiler macros instead of the header gets a different type. Reconsider if a
-port relies on those macros; the fork's target information could then match
-the header.
+Clang predefines `__INT_FAST8_TYPE__` and `__INT_FAST16_TYPE__` as `signed char` and `short` while libc's `stdint.h` uses `int`, so code
+using the compiler macros instead of the header sees a different type. Reconsider if a port relies on them; the fork's target information
+could then match the header.
 
 ## C++ runtime subset
 
-The [C++ in userspace milestone](development/cxx-userspace.md) shipped a
-deliberate subset, accepted by the owner on 2026-10-08:
+The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliberate subset (owner, 2026-10-08):
 
-- **No threads or thread-local storage.** `<thread>`, `<mutex>`, `thread_local`
-  and non-lock-free atomics are absent, and local statics use single-threaded
-  guards. Programs that start threads cannot be ported yet.
-- **No localization or wide characters.** `<iostream>`, `<locale>`, `<regex>`
-  and wide strings are absent; so are the fmt headers that need them
-  (`chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h`). libc now has a
-  "C"-only `setlocale` (no `localeconv`) and `wcslen`, but ports that print
-  through `std::cout` still need the other wide-character functions: 58 of
-  the 59 names in `<cwchar>`.
-- **Most of `<cmath>` is missing.** libc's math subset leaves 161 of the 186
-  names `<cmath>` imports undefined, so their first use fails to compile.
-- **Exceptions cannot cross C frames.** C code has no unwind tables, so an
-  exception thrown through, for example, a `qsort` comparator terminates the
-  program.
-- **Uncaught exceptions name mangled types,** such as `St11logic_error`, because
-  the terminate handler leaves out the 184 KB demangler.
-- **No `<filesystem>`, `random_device` or time zones.**
-- **fmt's license is not staged for the boot payload yet.** It lives only in
-  the fmt development files; a port that ships an fmt program must install it.
+- **No threads or thread-local storage:** `<thread>`, `<mutex>`, `thread_local` and non-lock-free atomics are absent and local statics
+  use single-threaded guards, so thread-starting programs cannot be ported yet.
+- **No localization or wide characters:** `<iostream>`, `<locale>`, `<regex>` and wide strings are absent, as are the fmt headers needing
+  them (`chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h`). libc has a "C"-only `setlocale` (no `localeconv`) and `wcslen`, but
+  `std::cout` ports still need the other wide-character functions (58 of the 59 names in `<cwchar>`).
+- **Most of `<cmath>` is missing:** libc's math subset leaves 161 of the 186 imported names undefined, so first use fails to compile.
+- **Exceptions cannot cross C frames** (no unwind tables), so one thrown through a `qsort` comparator terminates the program; uncaught
+  ones name mangled types (`St11logic_error`) because the 184 KB demangler is left out.
+- **No `<filesystem>`, `random_device` or time zones**, and fmt's license is not staged for the boot payload (a port shipping an fmt
+  program must install it).
 
-Revisit threads and TLS with the Clang hosting milestone. Revisit
-localization, wide characters and `<cmath>` when a selected port, such as
-DevilutionX, needs them. Each addition belongs in libc or the runtime
-configuration, never in a port-local stub.
+Revisit threads and TLS with the Clang hosting milestone, and localization, wide characters and `<cmath>` when a selected port such as
+DevilutionX needs them. Additions belong in libc or the runtime configuration, never in a port-local stub.
 
 ## HD Audio scheduling and startup tuning
 
-The [HDA engine](devices/hda.md#progress-and-refill-limits) uses the accepted
-80 ms hardware ring and fails closed until reboot when its conservative refill
-guards cannot establish safe progress. Immediate, unprimed start produced a
-58.667 ms initial silence gap. Revisit ring depth,
-startup latency and service margins during native qualification and separately
-assigned audio-consumer work. The [task 2 report](development/experiments/audio-task2/README.md)
-records the evidence and limits; native and milestone closure checks remain open.
+The [HDA engine](devices/hda.md#progress-and-refill-limits) uses the accepted 80 ms hardware ring and fails closed until reboot when its
+conservative refill guards cannot establish safe progress; immediate unprimed start produced a 58.667 ms initial silence gap. Revisit ring
+depth, startup latency and service margins in native qualification and separately assigned audio-consumer work
+([task 2 report](development/experiments/audio-task2/README.md)).
 
 ## HD Audio sustained eight-session playback
 
@@ -1312,142 +1241,83 @@ its code PR must update this entry to match implemented/qualified behavior.
 
 ## SDL2 port limits
 
-The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
-and preference paths. Video event waits now block on keyboard, acquired pointer
-and display readiness; [matched QEMU qualification](development/sdl2-event-wait-qualification.md)
-records the idle CPU reduction and input-delivery samples. Upstream polling
-remains for missing/nonwaitable sessions and failed waits; enabling threads
-requires a real wakeup sender and revisiting the readiness cache. Missing pieces:
-
-- **Audio:** the [native PCM grant](interfaces/audio.md) and
-  [QEMU HDA engine](devices/hda.md) are available, but SDL2 has no audio backend
-  yet. Revisit with a separately assigned playback consumer task.
-- **Threads:** without them, `SDL_INIT_TIMER` callback timers and
-  `SDL_CreateThread` fail. Revisit with userspace threads.
-- **Windows:** one fullscreen window; multiple windows remain outside the
-  current display contract. System pointer positions, program images,
-  show/hide, bounded warp and relative lock now use the
-  [native pointer contract](interfaces/pointer.md).
-- **Text:** US layout only, from the shared kernel table.
-- **Not covered by validation:** key repeat, because QEMU's injected PS/2 input
-  has no typematic repeat.
+The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing and preference paths. Video event waits block on keyboard,
+acquired pointer and display readiness ([qualification](development/sdl2-event-wait-qualification.md)); upstream polling remains for
+missing or nonwaitable sessions and failed waits, and enabling threads needs a real wakeup sender and a revisit of the readiness cache.
+Missing: **audio** (the [PCM grant](interfaces/audio.md) and [QEMU HDA engine](devices/hda.md) exist, but SDL2 has no backend; revisit with a
+playback consumer task), **threads** (`SDL_INIT_TIMER` timers and `SDL_CreateThread` fail until userspace threads), **windows** beyond one
+fullscreen window, and **text** beyond the shared US layout. Pointer position, program images, show/hide, bounded warp and relative lock use
+the [native pointer contract](interfaces/pointer.md). Key repeat is not covered by validation because QEMU's injected PS/2 input has no
+typematic repeat.
 
 ## DevilutionX port limits
 
-[DevilutionX](userland/devilutionx.md) is personal-use only, because its
-non-commercial licence and libmpq's GPL cannot both be met by someone who
-distributes it. It is therefore an opt-in build that ordinary images, CI and
-bundles never contain.
-
-It has no sound, multiplayer, game controllers or translations; the build
-host has no gettext. Saves are in `home://devilution/`, which is RAM on live
-boots.
-
-Retail data cannot be staged in images: `DIABDAT.MPQ` is about 500 MB, which
-would stay in RAM and does not fit the ESP. On installed systems it has to
-arrive through [remote transfers](#remote-transfer-memory-and-staging-limits),
-which today means splitting it into 15 MiB pieces. Revisit with streaming
-transfers.
+[DevilutionX](userland/devilutionx.md) is personal-use only because its non-commercial licence and libmpq's GPL cannot both be met by a
+distributor, so it is an opt-in build that images, CI and bundles never contain. It has no sound, multiplayer, controllers or translations
+(the build host has no gettext), and saves go to `home://devilution/`, which is RAM on live boots. Retail `DIABDAT.MPQ` (about 500 MB)
+cannot be staged in images, so on installed systems it arrives through [remote transfers](#remote-transfer-memory-and-staging-limits), today
+in 15 MiB pieces; revisit with streaming transfers.
 
 ## SDL2 and DevilutionX native qualification
 
-The owner checked the shareware build natively on 2026-10-08 on the ThinkPad (PXE boot of main `4332801`, 1920x1080 internal display, on AC). DevilutionX
-started and played with keyboard, touchpad and TrackPoint; key repeat worked in
-name entry. With the default "Limit FPS" setting it ran at 59–65 FPS, mostly
-60–62, filling the 1920x1040 content area. The results are in the
-[DevilutionX reference](userland/devilutionx.md#measurements).
-
-A [standalone bundle](userland/devilutionx.md#standalone-bundle) with retail
-data on the installed stick remains unchecked natively. The owner deferred it:
-the shareware result is enough for now, and moving 692 MB waits for streaming
-transfers. At the native upload rate measured the same day, about 2.5 MiB/s,
-that is roughly 4½ minutes. Revisit when the owner wants to play the retail data.
+The owner checked the shareware build natively on 2026-10-08 (ThinkPad PXE, main `4332801`, 1920x1080, AC): DevilutionX played with
+keyboard, touchpad and TrackPoint, key repeat worked in name entry, and with the default "Limit FPS" it ran at 59–65 FPS (mostly 60–62)
+over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurements)). A
+[standalone bundle](userland/devilutionx.md#standalone-bundle) with retail data on the installed stick is unchecked natively; the owner
+deferred it (the shareware result is enough, and 692 MB at the measured native 2.5 MiB/s is roughly 4½ minutes). Revisit when the owner
+wants to play the retail data.
 
 ## Quake port limits
 
-The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240.
-A resolution switcher is wanted: it needs a video driver with a mode list behind
-Quake's Video Modes menu, reallocation of the frame, z-buffer and surface cache,
-and a check of the renderer's size limits (upstream reverted 640x480 as
-unstable). Sound, networking, CD audio and joysticks are absent; adding sound
-needs a native audio device first.
-
-Saves are Quake's trusted text format, written in place without a temporary
-file, and are lost on reboot with the rest of `home://`. Shareware and retail
-data share `home://quake/id1`, so their configuration and saves mix.
-QuakeC strings outside the hunk use a 512-entry engine-string table; overflowing
-it stops the game with an error. Revisit these when persistent storage or a
-second data set makes them matter.
+The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240; a resolution switcher would need a video driver with a mode
+list behind Quake's Video Modes menu, reallocation of the frame, z-buffer and surface cache, and a check of the renderer's size limits
+(upstream reverted 640x480 as unstable). Sound, networking, CD audio and joysticks are absent, and sound needs a native audio device first.
+Saves are Quake's trusted text format written in place without a temporary file, and shareware and retail data share `home://quake/id1`
+so their configuration and saves mix; QuakeC strings outside the hunk use a 512-entry table whose overflow stops the game with an error.
+Revisit when a second data set or atomic saves matter.
 
 ## vi port limits
 
-[BusyBox vi](userland/vi.md) displays ASCII only. Its BRE search/substitution
-uses libc's [regex limits](#regex-character-classes-and-back-references).
-Owner decision, 2026-10-07: adapt GNU regex calls using bounded copies; matching
-stops at an embedded NUL within each copied slice. Revisit bounded/binary regex
-interfaces when a concrete consumer needs them. Saves keep upstream's
-in-place write followed by `ftruncate`, so a short write or crash can leave a
-truncated or mixed file. Revisit with atomic replacement or a durable-save
-policy alongside the [native filesystem](devices/filesystem-native-adapter.md).
-`:!` and shell filters need a native launch adapter, and the read-only marker
-probes WRITE authority because truthful file metadata does not exist yet. The
-recipe's libbb adapter covers the selected vi/less helpers only.
-Input EOF exits and loses unsaved edits, as upstream does; Kilo handles that
-case explicitly.
+[BusyBox vi](userland/vi.md) displays ASCII only. BRE search and substitution use libc's [regex limits](#regex-character-classes-and-back-references)
+through bounded copies (owner decision 2026-10-07), so matching stops at an embedded NUL within a copied slice; revisit bounded or binary
+regex interfaces for a concrete consumer. Saves keep upstream's in-place write followed by `ftruncate`, so a short write or crash can leave a
+truncated or mixed file (revisit with atomic replacement or a durable-save policy, [filesystem](devices/filesystem-native-adapter.md)).
+`:!` and shell filters need a native launch adapter, the read-only marker probes WRITE authority because truthful file metadata does not
+exist, and the recipe's libbb adapter covers only the selected vi and less helpers. Input EOF exits and loses unsaved edits, as upstream does
+(Kilo handles it explicitly).
 
 ## less pager limits
 
-The [BusyBox pager](userland/less.md) retains read display lines for backward
-paging, with the selected line-count limit and process-memory bound. It measures
-screen dimensions once and displays ASCII. BRE search/highlighting inherits
-libc's [regex limits](#regex-character-classes-and-back-references).
-There are no raw escapes, shell commands or live
-refresh. A content read during refill/search blocks, so a stalled producer can
-delay keys; cached navigation performs no extra read. Revisit native readiness
-through a proven libc extension when an actual live-stream consumer needs it,
-and screen resizing when terminal size-change notification is designed.
+The [BusyBox pager](userland/less.md) retains read display lines for backward paging within the selected line-count limit and process
+memory, measures screen dimensions once and shows ASCII; BRE search and highlighting inherit libc's
+[regex limits](#regex-character-classes-and-back-references). There are no raw escapes, shell commands or live refresh, and a content read
+during refill or search blocks, so a stalled producer can delay keys (cached navigation reads nothing). Revisit native readiness through a
+proven libc extension for an actual live-stream consumer, and screen resizing when terminal size-change notification is designed.
 
 ## tar archive limits
 
-The [BusyBox ustar subset](userland/tar.md) captures the whole input archive or
-all creation file contents in process memory before writing. Large archives can
-fail allocation before mutation; recursive creation also consumes stack by tree
-depth. Creation names are limited to 99 bytes plus directory slash. Compression,
-GNU/PAX extensions, links, `-C` and stdin/stdout archives are absent. Revisit these
-limits with a concrete larger documentation/archive consumer.
-
-Validation prevents unsafe archives from writing any members, and a read-only
-root fails on its first required mutation. Extraction and output writes are not
-transactional: later I/O/authority failures can leave earlier entries or partial
-files. Directory enumeration is live. Revisit streaming or archive-wide rollback
-only with an explicit snapshot/transaction design; ordinary close is not sync.
+The [BusyBox ustar subset](userland/tar.md) captures the whole input archive or all creation file contents in memory before writing, so large
+archives can fail allocation before mutation, recursive creation uses stack by tree depth, and creation names are limited to 99 bytes plus a
+directory slash. Compression, GNU/PAX extensions, links, `-C` and stdin/stdout archives are absent. Validation keeps unsafe archives from writing
+any member and a read-only root fails on its first mutation, but extraction and output are not transactional (later I/O or authority failures
+can leave earlier entries or partial files), directory enumeration is live and close is not sync. Revisit with a larger archive consumer,
+and streaming or rollback only with an explicit snapshot or transaction design.
 
 ## Links port limits
 
-[Links](userland/links.md) loads every page synchronously, so a slow network
-fetch freezes the interface until the HTTP provider's own 30-second budget
-ends. In review under nested KVM, a server that accepted the connection and
-never answered left a blank screen for 32 s before "Operation timed out". A Ctrl+C pressed during the wait
-is held and quits Links only after the open returns. Revisit with a native way
-to wait on a provider open alongside console input.
+[Links](userland/links.md) loads every page synchronously, so a slow fetch freezes the interface until the HTTP provider's 30-second budget
+ends (in review a server that accepted and never answered left a blank screen for 32 s before "Operation timed out"), and Ctrl+C during the wait
+is held until the open returns. Revisit with a native way to wait on a provider open alongside console input. Other limits:
 
-- **No saved configuration.** Options, bookmarks and history are not saved.
-  Revisit once `home://` persists and libc has exclusive creation.
-- **No downloads.** Downloads to disk fail, because they need exclusive
-  creation too.
-- **Fixed screen size.** It is read once, without resize notification.
-- **Sockets compiled in.** Links' socket and DNS code is compiled but
-  unreachable. The port's socket functions fail, so `ftp://` and `finger://`
-  report "Host not found".
-- **Remote pages can link to local roots.** A page fetched over HTTP(S) can
-  link to `host://`, `home://` or `system://`, and following the link opens the
-  local object. Without scripting, a page cannot read or send what it opens, so
-  this matches a local link the user chooses to follow. Desktop browsers refuse
-  such navigation. Revisit before Links gains POST, cookies or providers that
-  act on requests.
+- **No saved configuration or downloads:** options, bookmarks and history are not saved and downloads to disk fail with "Invalid argument",
+  both because they needed `home://` persistence and exclusive creation (both now exist; the port has not been revisited).
+- **Fixed screen size,** read once without resize notification.
+- **Sockets compiled in but unreachable:** the port's socket functions fail, so `ftp://` and `finger://` report "Host not found".
+- **Remote pages can link to local roots** (`host://`, `home://`, `system://`), and following the link opens the local object. Without scripting
+  a page cannot read or send what it opens, matching a local link the user chooses to follow, though desktop browsers refuse such navigation.
+  Revisit before Links gains POST, cookies or providers that act on requests.
 
-The HTTP-side limits are recorded under [HTTP redirects](#http-redirects) and
-[response metadata through fopen](#response-metadata-through-fopen).
+HTTP-side limits are under [HTTP redirects](#http-redirects) and [response metadata through fopen](#response-metadata-through-fopen).
 
 ## Virtio-fs runtime resource retention
 
