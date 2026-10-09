@@ -642,7 +642,11 @@ static enum call_status graphics_activation(struct clipboard_request *request,
 
 static void graphics_request_execute(struct clipboard_request *request)
 {
-  space_keyboard_sync_input();
+  /* Pending scan bytes may revoke focus or the action. Refuse at an incomplete
+   * physical boundary; matching consuming requests still spend their attempt. */
+  if (!space_keyboard_sync_input() && request->refusal == CALL_OK) {
+    request->refusal = CALL_BUSY;
+  }
   bool commit = request->operation == CLIPBOARD_GRAPHICS_COMMIT;
   request->status = graphics_activation(request,
       request->operation != CLIPBOARD_GRAPHICS_HAS, commit);
