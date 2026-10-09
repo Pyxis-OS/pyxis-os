@@ -910,11 +910,12 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   if (operation == TERMINAL_HANGUP) {
     hangup(session);
   } else {
-    clipboard_input_hangup(&session->input.object);
+    /* EOF preserves queued reads and their receiver; only hangup invalidates it. */
     session->input_closed = true;
     wake_input(session);
   }
   unlock_session(session);
+  clipboard_input_notify(&session->input.object);
   readiness_notify();
   return (struct syscall_result){CALL_OK, 0};
 }

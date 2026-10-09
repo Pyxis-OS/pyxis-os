@@ -9,6 +9,7 @@
 struct initrd_file;
 struct hostfs_node;
 struct npfs_node;
+struct image_capture;
 
 enum file_backing {
   FILE_INITRD,
@@ -69,10 +70,10 @@ void file_init_npfs(struct file_object *file, struct npfs_node *node);
 bool file_begin_operation(struct file_object *file);
 void file_end_operation(struct file_object *file);
 
-/* RAM only, IF=0, with operation ownership. Copies the whole file into a new
- * heap buffer for loading an executable. NO_MEMORY on allocation failure,
- * BAD_REQUEST for an empty file. */
-enum call_status file_ram_capture(struct file_object *file, void **bytes, size_t *size);
+/* BSP, RAM only, IF=0, with operation ownership lent by the parked caller.
+ * Copies the selected file into bounded reclaimable capture pages. Caller ends
+ * the operation on every result. Failure leaves the capture empty. */
+enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture);
 
 /* Current process, IF=0. Caller holds a live reference and supplies its granted
  * rights and operation from a checked protocol tag. request_address/size

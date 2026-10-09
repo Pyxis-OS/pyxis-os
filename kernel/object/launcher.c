@@ -98,7 +98,7 @@ static void create_execution_group(struct launcher_request *request)
 
 static void discard_capture(struct launch_capture *capture)
 {
-  kfree(capture->external_image);
+  image_capture_release(&capture->captured_image);
   kfree(capture);
 }
 
@@ -126,6 +126,12 @@ void launcher_request_execute(struct launcher_request *request)
     if (!request->group_result) {
       request->result = CALL_NO_MEMORY;
     }
+    break;
+  case LAUNCH_CAPTURE_RAM:
+    KASSERT(request->capture && !request->parent && !request->group);
+    request->result = file_ram_capture(request->capture->image,
+        &request->capture->captured_image);
+    file_end_operation(request->capture->image);
     break;
   case LAUNCH_START:
     KASSERT(request->capture && request->parent && !request->group);
@@ -519,9 +525,8 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     pending->job.rights = image_rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
-    capture->external_image = pending->job.captured;
-    capture->external_image_size = pending->job.count;
-    pending->job.captured = NULL;
+    capture->captured_image = pending->job.captured;
+    pending->job.captured = (struct image_capture){0};
     npfs_request_release(pending);
     if (status != CALL_OK) {
       discard_launch_capture(capture);
@@ -530,7 +535,6 @@ enum call_status launcher_capture_request(const struct launch_request *request,
   } else if (capture->image->backing == FILE_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CAPTURE);
     pending->node = capture->image->host;
-    pending->count = LAUNCH_EXTERNAL_IMAGE_MAX_SIZE;
     hostfs_request_submit_and_wait(pending);
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
@@ -538,25 +542,22 @@ enum call_status launcher_capture_request(const struct launch_request *request,
       discard_launch_capture(capture);
       return error;
     }
-    capture->external_image = pending->captured;
-    capture->external_image_size = pending->count;
-    pending->captured = NULL;
+    capture->captured_image = pending->captured;
+    pending->captured = (struct image_capture){0};
     hostfs_request_release(pending);
   } else if (!file_begin_operation(capture->image)) {
     discard_launch_capture(capture);
     return CALL_ENDPOINT_CLOSED;
   } else if (capture->image->backing == FILE_RAM) {
-    /* RAM pages are not contiguous; the loader reads one copied image. */
-    void *bytes;
-    size_t size;
-    enum call_status status = file_ram_capture(capture->image, &bytes, &size);
-    file_end_operation(capture->image);
+    /* Lend the stable file operation. Copy and mapping access stay on the BSP. */
+    struct launcher_request *pending = request_launch_service(LAUNCH_CAPTURE_RAM,
+        capture, NULL, NULL);
+    enum call_status status = pending->result;
+    bsp_request_release(&pending->request);
     if (status != CALL_OK) {
       discard_launch_capture(capture);
       return status;
     }
-    capture->external_image = bytes;
-    capture->external_image_size = size;
   }
   if (task_stop_requested()) {
     if (capture->image->backing == FILE_INITRD) {

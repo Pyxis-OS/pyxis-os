@@ -12,6 +12,7 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
+#include <kernel/user/image_capture.h>
 
 static const uint8_t zero_page[PAGE_SIZE];
 
@@ -325,21 +326,14 @@ void file_end_operation(struct file_object *file)
   unlock_file(file);
 }
 
-enum call_status file_ram_capture(struct file_object *file, void **bytes, size_t *size)
+enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture)
 {
-  KASSERT(file->backing == FILE_RAM && file->busy);
-  *bytes = NULL;
-  *size = 0;
-  if (!file->size) {
-    return CALL_BAD_REQUEST;
+  KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && file->busy);
+  enum call_status status = image_capture_allocate(file->size, capture);
+  if (status != CALL_OK) {
+    return status;
   }
-  void *copy = kmalloc(file->size);
-  if (!copy) {
-    return CALL_NO_MEMORY;
-  }
-  copy_out_pages(file, 0, file->size, 0, copy);
-  *bytes = copy;
-  *size = file->size;
+  copy_out_pages(file, 0, capture->size, 0, (void *)capture->address);
   return CALL_OK;
 }
 

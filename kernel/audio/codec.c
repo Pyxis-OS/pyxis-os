@@ -116,6 +116,7 @@ static struct hda_widget widgets[HDA_NODE_COUNT];
 static struct hda_controller *route_controller;
 static struct hda_route selected_route;
 static uint32_t group_power;
+static uint8_t native_active_pin;
 static uint8_t route_nodes[HDA_NODE_COUNT];
 static uint8_t route_inputs[HDA_NODE_COUNT];
 static unsigned search_next[HDA_NODE_COUNT];
@@ -480,19 +481,34 @@ native_pin_control(struct hda_controller *controller, uint8_t codec, uint8_t pin
 }
 
 static bool
-native_idle(struct hda_controller *controller, const struct hda_route *route)
+native_mute(struct hda_controller *controller, const struct hda_route *route)
 {
-  uint32_t response;
-  /* Silence both outputs before changing controls or the shared converter. */
   return set_amp(controller, route->codec, route->pin,
                  widgets[route->pin].output_amp, true, 0, true) &&
          set_amp(controller, route->codec, route->headphone_pin,
-                 widgets[route->headphone_pin].output_amp, true, 0, true) &&
-         native_pin_control(controller, route->codec, route->pin, 0, 0) &&
-         native_pin_control(controller, route->codec, route->headphone_pin, 0, 0) &&
-         command(controller, route->codec, route->converter, VERB_SET_STREAM, &response) &&
+                 widgets[route->headphone_pin].output_amp, true, 0, true);
+}
+
+static bool
+native_detach(struct hda_controller *controller, const struct hda_route *route)
+{
+  uint32_t response;
+  return command(controller, route->codec, route->converter, VERB_SET_STREAM, &response) &&
          command(controller, route->codec, route->converter, VERB_GET_STREAM, &response) &&
          (response & 0xff) == 0;
+}
+
+static bool
+native_idle(struct hda_controller *controller, const struct hda_route *route)
+{
+  /* Discovery is already idle; runtime headphone stop settles before this. */
+  if (!(native_mute(controller, route) &&
+         native_pin_control(controller, route->codec, route->pin, 0, 0) &&
+         native_pin_control(controller, route->codec, route->headphone_pin, 0, 0) &&
+         native_detach(controller, route)))
+    return false;
+  native_active_pin = 0;
+  return true;
 }
 
 static bool
@@ -553,14 +569,19 @@ enable_native(struct hda_controller *controller, const struct hda_route *route)
 {
   uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
   uint32_t response, sense;
-  if (!native_power(controller, route, deadline) || !native_idle(controller, route) ||
+  if (!native_power(controller, route, deadline) || !native_mute(controller, route) ||
+      !native_detach(controller, route) ||
       !command(controller, route->codec, route->headphone_pin, VERB_GET_PIN_SENSE, &sense))
     goto failed;
   bool present = (sense & PIN_SENSE_PRESENT) != 0;
   uint8_t pin = present ? route->headphone_pin : route->pin;
   uint32_t control = PIN_CONTROL_OUTPUT | (present ? PIN_CONTROL_HEADPHONE : 0);
   uint32_t stream = HDA_STREAM_TAG << 4;
-  if (!command(controller, route->codec, route->headphone_pin, VERB_SET_CONNECTION, &response) ||
+  /* A restart during the first stop settle retains the selected pin's bias.
+   * Only the other output is disabled; jack choice still belongs to RUN start. */
+  uint8_t unused = present ? route->pin : route->headphone_pin;
+  if (!native_pin_control(controller, route->codec, unused, 0, 0) ||
+      !command(controller, route->codec, route->headphone_pin, VERB_SET_CONNECTION, &response) ||
       !command(controller, route->codec, route->headphone_pin, VERB_GET_CONNECTION, &response) ||
       (response & 0xff) != 0 ||
       !set_amp(controller, route->codec, route->converter,
@@ -575,6 +596,7 @@ enable_native(struct hda_controller *controller, const struct hda_route *route)
       !native_pin_control(controller, route->codec, pin, control, EAPD_ENABLE) ||
       !set_amp(controller, route->codec, pin, widgets[pin].output_amp, true, 0, false))
     goto failed;
+  native_active_pin = pin;
   ktrace("hda-codec: native presence=%u sense=%x active-pin=%u shared-dac=%u\n",
          (unsigned)present, sense, pin, route->converter);
   return true;
@@ -739,6 +761,19 @@ hda_codec_enable(struct hda_controller *controller, const struct hda_route *rout
 failed:
   hda_fail(controller, "codec route activation failed");
   return false;
+}
+
+bool
+hda_codec_stop_mute(struct hda_controller *controller, const struct hda_route *route,
+                    bool *headphone_active)
+{
+  audio_require_worker();
+  if (controller->model != HDA_MODEL_AMD || !route_matches(controller, route) ||
+      controller->failed || !controller->command_ready || controller->stream_running)
+    return false;
+  /* The worker owns this verified activation; do not resample the jack at stop. */
+  *headphone_active = native_active_pin == route->headphone_pin;
+  return native_mute(controller, route);
 }
 
 bool
