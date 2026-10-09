@@ -238,15 +238,12 @@ task or USB HID work is authorized by this direction.
 
 ## Clock source
 
-Accepted direction (owner, 2026-10-03), not scheduled: TSC with extended-HPET
-fallback. The [software-extended HPET](../kernel/timekeeping.md) came first and
-works natively. TSC needs per-CPU invariant-TSC detection, frequency from CPUID
-`0x15` or HPET calibration, ordered reads, and agreement across CPUs, which
-decides whether a shared nondecreasing floor is required. Runtime switching,
-suspend/resume and VM migration are separate scopes; KVM pvclock is another
-possible source. The
+TSC with extended-HPET fallback is
+[implemented](../kernel/timekeeping.md#tsc-selection) as of 2026-10-09. KVM
+pvclock, runtime source switching, suspend and resume and VM migration remain
+separate scopes. The
 [investigation](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#what-caelum-must-establish-for-tsc)
-records the requirements and references in detail.
+records the original requirements and references.
 
 ## Power and ACPI
 

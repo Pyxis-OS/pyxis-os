@@ -1148,11 +1148,11 @@ deadlines and profiling still pay the clock cost. Timer passes read the clock at
 most once and rearm only for an earlier target, which in nested QEMU cut idle
 HPET reads by 63% and send-side reads per TCP segment by about a quarter
 ([measurements](development/experiments/timer-clock-reads/README.md)); each
-remaining read keeps its full cost. The current source requires
-a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
-the owner chose
-[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
-with TSC as the [later direction](wip/later-os-directions.md#clock-source). The running HDA
+remaining HPET read keeps its full cost. Boot still requires a memory-mapped
+HPET. On 2026-10-03 the owner chose
+[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit);
+since 2026-10-09 the kernel switches to the [TSC](kernel/timekeeping.md#tsc-selection)
+when every CPU qualifies, which removes HPET reads after boot. The running HDA
 worker also uses a 5 ms watchdog (about 200 timed wake opportunities per second),
 with timer re-arms and HPET reads; it is absent while playback is parked.
 Its measured wake/deadline amplification is in the
@@ -1176,11 +1176,25 @@ wrap between incorporated samples, including individual boot operations, long
 interrupt-disabled execution, firmware stalls and debugger/VM pauses. A violating
 gap requires reboot: the low word cannot identify or reconstruct missing wraps.
 Nominal interval validation cannot enforce the actual gap bound, and suspend,
-resume and migration remain unqualified. Revisit this limitation with an
-independent source or an explicitly scoped stronger progress guarantee. The
-accepted future direction is TSC with extended-HPET fallback, with frequency
-discovery and cross-CPU qualification, preserving the clock protocol. Revisit performance after native
-bring-up when the TSC stage is assigned; it is not part of the first HPET task.
+resume and migration remain unqualified. This applies only while the HPET is
+the clock; revisit it with an independent source or an explicitly scoped
+stronger progress guarantee if a target falls back to the HPET.
+
+[TSC selection](kernel/timekeeping.md#tsc-selection) has its own accepted limits
+(owner, 2026-10-09):
+- **Agreement.** Cross-CPU agreement is checked only during startup, about 2 ms
+  per AP, with no shared floor or runtime watchdog, so a later warp would go
+  unnoticed.
+- **Calibration.** It costs 100 ms on every boot whose BSP qualifies, and its
+  error bound, up to 100 ppm, adds to the HPET's own crystal error. CPUID
+  `0x15` is only logged.
+- **Nested VMs.** These fall back to the HPET: their HPET reads are too slow
+  for a 100 ppm calibration, and the development VM exposes no invariant TSC.
+- **Unqualified.** Suspend and resume, migration and native behaviour stay
+  unqualified until the owner's ThinkPad run; see the
+  [measurements](development/experiments/tsc-clock/README.md).
+
+Revisit with a target that shows a warp or needs better accuracy.
 Per-packet network work and audio refill both pay several clock reads per
 event; see [TCP throughput limits](#tcp-throughput-limits).
 The VirtIO RTC driver remains deferred.
@@ -1804,10 +1818,12 @@ sink, measured on the ThinkPad on 2026-10-09.
   45–57 MiB/s while Pyxis's advertised window falls close to zero; the program
   writing the file is the limit, not TCP.
 - **Clock reads per packet.** In QEMU the network worker's wake and sleep
-  cycle reads the HPET about 27 times per data segment, nearly all in timer
-  handling. The audio work in #557 found the same amplification. Their native
-  cost is unmeasured; cheaper timekeeping is separate kernel work under
+  cycle read the HPET about 27 times per data segment, nearly all in timer
+  handling, and the audio work in #557 found the same amplification. Timer
+  passes now read the clock at most once, and with a qualifying TSC a read no
+  longer touches the HPET; see
   [clock-source performance](#wall-clock-time-and-clock-source-performance).
+  Native costs before and after are unmeasured.
 - **Not implemented:** path-MTU discovery, so routed peers get 536-byte
   segments; window scaling, so windows stop at 65,535; SACK.
 
