@@ -58,7 +58,12 @@ variables after changing directory.
 Each operation also receives a workspace: a temporary handle array and a buffer
 for one component or scheme plus NUL. All storage, input strings and output
 locations must be disjoint. There is no library-wide path length or depth limit.
-Provider OPEN URIs additionally fit the 4,080-byte copied-payload bound.
+Generic provider OPEN URIs fit the 3,768-byte copied-payload bound; HTTP(S)
+URLs fit 2,048 bytes. HTTP provider routes additionally need caller-owned
+`provider_http_workspace`, borrowed clock READ authority and an optional earlier
+deadline/response destination in `path_workspace`. Libc and ordinary wrappers
+allocate that bounded scratch; native path helpers allocate nothing. The
+[HTTP bridge](http-fetch.md#redirect-chains) documents chain ownership and limits.
 Caller capacity bounds an operation; insufficiency returns LIMIT without
 truncation. A later allocator can supply larger arrays without changing the
 kernel ABI. Scratch grants are released on every return.
