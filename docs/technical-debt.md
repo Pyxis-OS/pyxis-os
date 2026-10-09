@@ -251,6 +251,31 @@ and 684.7 fps. Acquisition without PRESENT, repeated PRESENT while hidden, captu
 Super and device/queue-loss propagation were source-inspected only; revisit them when changing the session, input or teardown paths or
 when a failure appears.
 
+## Native Renoir presentation qualification
+
+The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)
+and guarded blank-start copy path implement presentation step 2, accepted
+2026-10-09. Timed copies stay **off by default**: ordinary boots observe with
+unsynchronized copies, and `display.timing=blank` is an explicit qualification
+opt-in. No native Pyxis execution is claimed. The owner must run the
+[ThinkPad batch](development/experiments/renoir-presentation/README.md#native-thinkpad-batch):
+counter/mode capture, actual first-store start distributions and margins,
+copy/fence and representative prefix progress, plus matched moving-Quake camera
+clips. Revisit default enablement only after those results pass the measured
+eight-line guard and visibility/input/panic checks; insufficient evidence leaves
+unsynchronized presentation. Program timing APIs and page flips remain separate.
+
+Register-window identity bounds access without PCI sizing writes; native BAR
+allocation length and GOP/HUBP routing are not independently decoded. Only the
+single unclaimed `1002:1636`, progressive fixed-timing output is supported.
+Other GPUs, multiple active OTGs, power/clock changes or stalled counters report
+unavailable rather than wake/modeset hardware. Sparse requalification has a
+conservative phase bound which may prevent timed copies until a fresh boot's
+dense calibration. CPU-issued prefix timestamps and a final WC fence do not
+prove each row's display-fetch visibility. Revisit broader discovery/precision
+with concrete native evidence; do not treat the Linux private-buffer model or
+QEMU costs as native qualification.
+
 ## Native system pointer qualification
 
 The owner accepted native PS/2 deferral on 2026-10-08 and QEMU checks on boot, Bochs and VirtIO displays closed the
