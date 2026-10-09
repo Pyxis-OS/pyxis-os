@@ -179,7 +179,7 @@ IPv4's minimum reassembly size minus headers. The clamp is applied once the
 connection is established, before the application can send. Windows are
 65,535 bytes, the largest without window scaling. Window scaling, SACK,
 timestamps, ECN, IPv4 fragmentation and ICMP-error/PMTU handling are not
-implemented; see [network throughput](../wip/network-throughput.md).
+implemented; see [network throughput](../development/network-throughput.md).
 
 ## Request/response utility
 
