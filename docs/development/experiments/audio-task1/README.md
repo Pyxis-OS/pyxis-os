@@ -22,8 +22,8 @@ Accepted by the owner through the orchestrator on **2026-10-08**, before code:
    session, CALL_LIMIT for the ninth active session, CALL_NO_MEMORY on allocation, CALL_DENIED for
    missing authority or wrong owner.
 
-The [accepted contract](../../../wip/hda-playback.md#accepted-session-call-contract) documents the
-layouts and behavior without exporting placeholder ABI.
+The [PCM interface](../../../interfaces/audio.md#calls-and-replies) now documents
+the implemented layouts and behavior; task 1 itself exported no placeholder ABI.
 
 ## No-audio baseline
 
@@ -131,7 +131,9 @@ Task 1 settles the documented session contract and delivers the private controll
 corresponding to the milestone's contract and engine checkboxes. The shipped worker initializes quietly
 and parks. IRQ/refill, per-space sessions and software mixing, native binding and qualification, and
 consumers remain unassigned later tasks; the ALC257 data is kept for the native route and QEMU evidence
-does not qualify it. Confirm the owner's QEMU-closure/native-batch choice at milestone closure.
+does not qualify it. These were task 1's remaining steps; the
+[engine reference](../../../devices/hda.md#qualification-and-remaining-scope) records
+subsequent implementation and native closure.
 
 The review of [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553) requested one success summary and
 quiet absence: controller/codec success details, normal shutdown and the QEMU pin-control detail now use

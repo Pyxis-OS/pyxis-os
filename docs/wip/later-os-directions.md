@@ -206,23 +206,16 @@ Owner ideas, 2026-10-07; none is scheduled.
 
 ## Audio
 
-Owner direction, 2026-10-07: Intel HD Audio, playback only. The assigned
-[investigation](../development/audio-investigation.md) completed 2026-10-08:
-QEMU controller/codec probes on unmerged branches played a known PCM buffer,
-with complete matching WAV samples after a bounded silence tail. This is
-emulated evidence, not native audio or a production interface.
+The [analog HDA engine](../devices/hda.md) and [PCM sessions](../interfaces/audio.md)
+closed 2026-10-09 with native AMD/ALC257 speaker/headphone tones and an
+error-free eleven-minute eight-session silent run. No volume control exists yet;
+[volume and other limits](../technical-debt.md#hd-audio-volume-control) remain debt.
 
-The owner accepted the [playback milestone](hda-playback.md)'s three defaults
-on 2026-10-08: BSP-owned kernel worker/mixer with at most eight exclusive
-per-space sessions through an audio grant; 48 kHz S16LE stereo with userspace
-conversion/resampling; and 4 × 10 ms DMA periods/80 ms session queues as starting
-tuning. No implementation task or SDL2/Quake adapter is assigned. The ThinkPad's
-analog controller is AMD `1022:15e3`, distinct from its GPU HDMI/DP and dock USB
-audio. The supplied Fedora dump identifies Realtek ALC257 (`0x10ec0257`,
-subsystem `0x17aa5081`); native Pyxis playback remains unqualified. The owner's
-established QEMU-closure/later-native-batch practice is carried forward as the
-closure alternative, to be confirmed with the owner at closure. SDL2 also needs
-real audio callback execution; today its port omits both audio devices and threads.
+SDL2 and Quake sound are separate consumer assignments. Conversion/resampling
+belongs in userspace; Quake needs its real mixer and native producer adapter.
+SDL2 needs real audio callback/thread execution under the
+[threads direction](scheduling-and-threads.md); today its port omits audio devices
+and threads. Recording, HDMI/DP, USB/dock and Bluetooth audio remain later directions.
 
 ## Bluetooth
 

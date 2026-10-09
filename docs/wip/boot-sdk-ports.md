@@ -17,6 +17,10 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [HD Audio playback](../devices/hda.md), 2026-10-09: BSP-owned analog engine and
+  [up to eight PCM sessions](../interfaces/audio.md), one per space; native speaker/headphone
+  tones and eleven-minute eight-session silence passed, ninth refused. Volume,
+  live jack switching and the nested-QEMU limit remain [debt](../technical-debt.md#hd-audio-volume-control).
 - [Network throughput](../development/network-throughput.md), 2026-10-09:
   1460-byte segments on-link, 64 KiB windows and Nagle off; natively send went
   from 35.8 to 70.5 MiB/s and receive reaches 85 MiB/s with `ttcp -r`, with
@@ -32,8 +36,8 @@ status belong in the milestone document and the PR.
   stay open. Clipboard and additional input sources remain separate milestones.
 - [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
   unmerged QEMU probes established controller/codec commands and known PCM
-  playback; the Fedora dump identifies ALC257, but native Pyxis audio
-  qualification remains open and the production milestone remains proposed.
+  playback and identified ALC257; the production playback milestone is now closed
+  in the [engine reference](../devices/hda.md).
 - [Kernel random generator](../devices/random-generator.md), 2026-10-08:
   BSP-owned ChaCha20 with the accepted OpenBSD rekey construction, hardware
   seed/reseed policy and unchanged random grant; matched VirtIO/CPU qualification
@@ -90,33 +94,8 @@ Chosen by the owner, each starting with a proposal:
   to the documentation-only proposal; implementation remains unauthorized.
 - **Claude** (2026-10-09, debt paydown): xfer pipelining, three decisions
   accepted 2026-10-09; delivered for review with its
-  [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
-- **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
-  following the completed [QEMU investigation](../development/audio-investigation.md).
-  Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
-  exclusive per-space sessions, 48 kHz S16LE stereo, and 8 × 10 ms DMA/80 ms
-  queues as starting tuning. Controller/codec bring-up merged in #553.
-  Sessions/mixing and IRQ refill implemented as task 2 on 2026-10-08;
-  [baseline, accepted policies and qualification](../development/experiments/audio-task2/README.md)
-  record exact PCM/saturated mixing, eight admissions/ninth refusal and measured
-  BSP cost. The owner accepted task 2 delivery with recorded nested-QEMU
-  [eight-session debt](../technical-debt.md#hd-audio-sustained-eight-session-playback)
-  on 2026-10-09. Two notification/clock-scan fixes are implemented; batching is
-  deferred. Task 5 is assigned as a separate native AMD/ALC257 proposal before
-  code. HDA closure requires native eight-session playback; one guard trip still
-  disables audio until reboot, with recovery revisited from native evidence. Quake can produce sound
-  from its main loop; SDL2/DevilutionX audio waits on real userspace
-  [threads](scheduling-and-threads.md).
-- **Codex** (2026-10-09): [Native AMD/ALC257 audio task 5 proposal](hda-native.md).
-  Decisions accepted 2026-10-09: shared DAC `0x02`, presence sampled at playback
-  start, one attended ten-minute eight-session run per output and a second
-  speaker run checked at completion. Live switching is a separate follow-up;
-  [mid-playback routing debt](../technical-debt.md#hd-audio-jack-routing-at-playback-start)
-  records the consequence. Implementation follows this update and #557 merge;
-  owner-supplied MSI fits the current helper. No native code or result yet.
-  The 2026-10-09 decision supersedes the earlier HDA QEMU-closure alternative:
-  milestone closure requires native eight-session playback. Fail-closed until
-  reboot stays accepted; native evidence decides whether reset recovery is needed.
+  [measurements and native steps](../development/experiments/xfer-pipelining/README.md);
+  a terminal output admission fix accepted 2026-10-09.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
@@ -153,7 +132,8 @@ Other candidates; current assignments are listed above.
   inspector and `top`.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
-- [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
+- [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after
+  the completed analog playback milestone.
 - [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
   first, then remote input after the system pointer.
 - Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),

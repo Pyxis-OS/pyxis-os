@@ -9,11 +9,10 @@ ThinkPad sound, production audio interface or SDL2 audio backend is established.
 
 The [experiment record](experiments/audio-investigation/README.md) identifies
 exact revisions, build inputs, commands, captures and limitations. The
-[playback milestone](../wip/hda-playback.md) records three defaults accepted by the
-owner on **2026-10-08**. At the time of this investigation, no implementation
-task was assigned; the milestone records current status. QEMU closure with
-a later native batch is carried forward for owner confirmation at closure.
-Probe code stays on unmerged branches and is excluded from this documentation PR.
+[engine reference](../devices/hda.md) and [PCM interface](../interfaces/audio.md)
+now describe the production implementation, closed with owner-run native evidence
+on **2026-10-09**. This report retains the earlier probe results; probe code stays
+on unmerged branches.
 
 ## Investigation steps and observations
 
@@ -66,7 +65,7 @@ Probe code stays on unmerged branches and is excluded from this documentation PR
    The owner accepted worker/session ownership, format and starting buffer tuning
    on 2026-10-08. Exact interface/lifetime policies still needed task-specific review;
    at the time of this report no implementation task was assigned (see the
-   [playback milestone](../wip/hda-playback.md) for current status).
+   [engine reference](../devices/hda.md) for the completed implementation).
 
 ## QEMU measurements and interpretation
 
@@ -150,25 +149,17 @@ not selected Pyxis defaults or a sufficient cold-init sequence.
 The mic jack is pin `0x19`, default `0x04a11030`; recording stays outside scope.
 Three GPIOs advertise unsolicited/wake capabilities but are disabled in the
 captured state. Vendor widget `0x20` advertises 142 processing coefficients;
-the file contains no coefficient initialization sequence. EAPD/power handling
-and possible Lenovo-specific Realtek fixups remain bring-up work; this data does
-not prove a GPIO toggle or particular vendor fixup is needed. Inspect relevant
-source with licence/provenance before adapting any fixup. The QEMU probe's
-line-out/headphone preference does not itself select the native fixed speaker;
-production route and jack policy still need review.
+the file contains no coefficient initialization sequence. Inventory alone does
+not prove a GPIO toggle or vendor fixup is needed. The production implementation
+uses checked standard verbs without copying vendor fixups.
 
-Native Pyxis then needs cold-boot speaker and headphone checks, controller
-address-width/position/interrupt behavior, stop/reset ownership, sustained
-refill and underrun observations under normal load, and measured usable latency.
-Speaker/headphone selection and jack events need policy before implementation.
-Do not bind the GPU, coprocessor or USB dock as an analog fallback. Suspend/resume,
-recording and HDMI/DP remain separate scopes. Native qualification remains open.
-The initial QEMU-closure/native-later alternative was superseded by the owner
-on **2026-10-09**: milestone closure requires native eight-session playback.
-Task 2 is delivered with the accepted nested-QEMU limitation; native checks and
-any future controller-reset recovery are decided from task 5 evidence.
-
-All task-owned guests, debugger connections, clients and builds are stopped.
+The [engine reference](../devices/hda.md) now records the implemented native
+route, start-time jack policy, ownership and native closure evidence. The earlier
+QEMU-closure/native-later alternative was superseded: the owner required native
+eight-session playback and accepted the 2026-10-09 eleven-minute silent run.
+Live jack switching, measured latency, recovery, recording, suspend/resume and
+HDMI/DP remain outside that closure. This investigation's own evidence is QEMU
+and Fedora inventory, not native Pyxis listening.
 
 ## Primary references
 

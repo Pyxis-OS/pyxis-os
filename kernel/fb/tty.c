@@ -61,7 +61,7 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
   if (tty->cells) {
     KASSERT(x < tty->width && y < tty->height);
     size_t index = (size_t)y * tty->width + x;
-    if (tty->selection_valid && tty->cells[index] != glyph) {
+    if ((tty->selection_valid || tty->selection_dragging) && tty->cells[index] != glyph) {
       size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
       size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
       if (index >= first && index <= last) {
@@ -388,6 +388,7 @@ void tty_selection_input(struct tty *tty, int64_t x, int64_t y, bool pressed, bo
   KASSERT(tty->width <= SIZE_MAX / tty->font->width &&
       tty->height <= SIZE_MAX / tty->font->height);
   if (pressed) {
+    tty_selection_clear(tty);
     size_t pixel_width = (size_t)tty->width * tty->font->width;
     size_t pixel_height = (size_t)tty->height * tty->font->height;
     if (x < 0 || y < 0 || (uint64_t)x >= pixel_width || (uint64_t)y >= pixel_height) {
@@ -397,7 +398,6 @@ void tty_selection_input(struct tty *tty, int64_t x, int64_t y, bool pressed, bo
     size_t row = (uint64_t)y / tty->font->height;
     tty->selection_anchor = row * tty->width + column;
     tty->selection_endpoint = tty->selection_anchor;
-    tty->selection_valid = true;
     tty->selection_dragging = true;
   }
   if (!tty->selection_dragging) {
@@ -405,9 +405,22 @@ void tty_selection_input(struct tty *tty, int64_t x, int64_t y, bool pressed, bo
   }
   size_t column = selection_coordinate(x, tty->font->width, tty->width);
   size_t row = selection_coordinate(y, tty->font->height, tty->height);
-  tty->selection_endpoint = row * tty->width + column;
+  size_t endpoint = row * tty->width + column;
+  bool same_cell = x >= 0 && y >= 0 &&
+      (uint64_t)x / tty->font->width == tty->selection_anchor % tty->width &&
+      (uint64_t)y / tty->font->height == tty->selection_anchor / tty->width;
+  if (held && !same_cell) {
+    tty->selection_valid = true;
+  }
+  if (tty->selection_valid) {
+    tty->selection_endpoint = endpoint;
+  }
   if (!held) {
-    tty->selection_dragging = false;
+    if (tty->selection_valid) {
+      tty->selection_dragging = false;
+    } else {
+      tty_selection_clear(tty);
+    }
   }
 }
 

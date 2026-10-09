@@ -1077,3 +1077,32 @@ The captures and measurements above retain their original revision boundaries;
 this integration does not claim another native run or timing series. The before
 captures remain as historical visual evidence for that comparison. Link/diff
 checks passed; ordinary image and exact-head CI results are reported on #562.
+
+
+### Click and drag selection
+
+The owner reported on 2026-10-09 that a plain click selected a cell on the
+ThinkPad; no boot revision accompanied this additional report. Both local TTY
+and mux now clear the old selection on a fresh left press and keep only a
+pending anchor. Selection begins when the pointer enters a different cell while
+held. Movement within the anchor cell and release without such movement leave
+no selection. Mux pane focusing remains unchanged.
+
+Manual qualification used main `3838357b` plus the correction, with userland
+`66d31fe6`: QEMU 10.2.2, Q35, nested KVM, four CPUs, 512 MiB, OVMF, standard VGA
+boot framebuffer at 1280x800, relative PS/2 input and a temporary configured mux
+space. HMP input ran with the guest executing; read-only GDB inspected selection
+state afterward. No guest function calls or memory writes were used.
+
+| Case | Local TTY and mux result |
+| --- | --- |
+| Plain click | No selection |
+| Click on an existing selection | Selection cleared |
+| Held movement within the same cell | No selection, including after release |
+| Held movement one cell away | Both inclusive endpoint cells selected |
+| Held movement across rows | Completed range across physical rows |
+| Anchor character changes before movement | Pending selection cancelled; later motion does not restore it |
+
+The ordinary image build passed. Captures and debugger logs remain local;
+exact submitted revisions and CI are recorded in the fix PRs. The native
+correction still needs an owner recheck in the next ThinkPad batch.
