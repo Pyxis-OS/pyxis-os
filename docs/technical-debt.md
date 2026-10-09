@@ -1084,20 +1084,16 @@ bodies.
 
 ## HTTP redirects
 
-The [HTTP and HTTPS providers](userland/http-fetch.md) never follow redirects: a 3xx is a rejected final status, which ordinary sites hit when browsing through
-`fopen`, as the [Links port](userland/links.md) does. The owner deferred redirects on 2026-10-04 (wanted, not yet). When implemented, settle: a bounded hop
-count with loop detection; HTTPS never redirecting to plain HTTP (and whether HTTP may upgrade); relative `Location` resolving against the current hop's URL;
-303 versus 307/308 method rules once non-GET exists; no credentials or request headers carried across origins
-([scheme provider notes](wip/userspace-scheme-providers.md)); and how the consumer learns the final URL (a browser resolves relative links against it), which
-belongs to [response metadata through fopen](#response-metadata-through-fopen).
+[Redirects](userland/http-fetch.md#redirect-chains) remain GET-only and capped at ten
+hops. Custom-CA instances refuse any origin crossing, including HTTP upgrades;
+there is no hidden public-only trust fallback. Revisit broader trust/replay only
+with a concrete consumer and a separate policy decision.
 
 ## Response metadata through fopen
 
-A program reading a provider URI through libc `fopen` gets only bytes: no media type, HTTP status or (once redirects exist) final URL, although the native OPEN
-reply already carries an optional media type and the providers keep the final status. The [Links port](userland/links.md) therefore sniffs HTML by content or
-extension and shows a rejected status only as an open error. Revisit with a way to expose response metadata that fits Pyxis, alongside
-[discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations); redirects are the separate
-[deferral](#http-redirects).
+The [FILE accessor](userland/http-fetch.md#redirect-chains) exposes successful-open
+status/media type/final URL, but failed fopen still reports only errno. Revisit
+failed-response diagnostics or representation discovery when a consumer needs them.
 
 ## HTTPS trust and platform limits
 

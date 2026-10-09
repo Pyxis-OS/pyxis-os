@@ -36,7 +36,10 @@ scheme Links does not know is treated as hierarchical with no host part, so
 relative links resolve against the path. Links decodes `%XX` escapes in local
 URLs, as it does for `file://`. A provider receives the URL unchanged.
 
-Providers report no media type to `fopen`. A page that starts like HTML
+Links copies `pyxis_stdio_response()` metadata before fclose: supplied media type
+wins, and the final URL becomes the document base, address/history, download URL
+and cache identity. Requested URLs remain aliases to the fetched final page;
+adoption performs no second fetch. When media type is absent, a page starting like HTML
 (`<!doctype html`, `<html`, `<head`, `<body`, `<title` or `<!--`) is shown as
 HTML; anything else is typed by its extension, like a local file. A charset
 comes from the page's `<meta>` or Links' default.
@@ -81,13 +84,13 @@ record what those functions cannot report.
   before "Operation timed out", and a Ctrl+C pressed meanwhile quit Links only
   after the open returned.
 - **HTTP:**
-  - a redirect or any status other than 200/204 is an open error, and a
-    redirect reads "Operation not supported" (see
-    [HTTP redirects](../technical-debt.md#http-redirects));
+  - [redirect chains](http-fetch.md#redirect-chains) follow five codes with ten hops,
+    loop checks, upgrades and public cross-origin; downgrade/custom-trust crossings
+    and final statuses other than 200/204 remain open errors;
   - GET forms work as URLs with a query string; there is no POST, and no
     cookies or request headers;
-  - HTML is detected by sniffing (see
-    [response metadata](../technical-debt.md#response-metadata-through-fopen)).
+  - supplied Content-Type is preferred; absent metadata falls back to sniffing
+    and the final URL extension.
 - **Local files:**
   - symlink entries are listed with an unknown type but cannot be opened;
   - directories show size 0 and the date column is blank;
@@ -201,3 +204,9 @@ through `sendkey` and screenshots, with the remote shell for listings:
 
 Not exercised: a read-only `home://` root, a full or failing write, a crash, and
 Continue on an interrupted download.
+
+### Redirects (2026-10-09)
+
+The [controlled QEMU record](../development/experiments/http-redirects/README.md)
+qualifies final-URL adoption and relative-link resolution, with no second fetch.
+Original browsing observations above describe the older revision.

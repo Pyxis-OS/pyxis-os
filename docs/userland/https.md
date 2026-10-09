@@ -176,10 +176,14 @@ the selected peers and configurations, not exhaustive cipher/chain coverage or
 performance measurements. Builds and temporary-validation cleanup accompany
 the changes; future source or trust updates require renewed validation.
 
+Redirects use the [shared HTTP bridge](http-fetch.md#redirect-chains): public trust
+permits cross-origin following, custom augmentation permits only an unchanged
+origin chain, and HTTPS never downgrades. No runtime silently drops custom roots.
+
 ## Accepted limits
 
 This is read-only client HTTPS. TLS servers, SSH, certificate issuance, mutual
-TLS, automatic trust updates, redirects, authenticated writes and asynchronous
+TLS, automatic trust updates, authenticated writes and asynchronous
 fetching require separate scope. Platform trust, revocation, numeric HTTPS
 identity and deadline limits are recorded in
 [technical debt](../technical-debt.md#https-trust-and-platform-limits).
