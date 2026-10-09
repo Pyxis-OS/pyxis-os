@@ -82,8 +82,9 @@ no new Git/libgit2/curl source.
 The no-curl Git probe is a **core build probe**, not an HTTPS candidate. Git's
 `NO_CURL` removes HTTPS. Empty diagnostic headers declare and implement nothing;
 they only let the compiler reveal later dependencies. Those results are not a
-successful cross-build. No target executable, QEMU boot, timing measurement,
-filesystem durability experiment or on-Pyxis clone was performed.
+successful cross-build. The investigation ran no target executable, QEMU boot,
+timing measurement, filesystem durability experiment or on-Pyxis clone. Task 1's
+later runtime qualification is recorded separately below.
 
 Independent interface probes compile real SDK headers and try target links.
 They confirm `open/read/write/close`, `lseek/ftruncate/fsync`, `stat/fstat`,
@@ -191,7 +192,7 @@ are the authorities.
 | Requirement | Current Pyxis contract and consequence |
 | --- | --- |
 | stat ino/dev/ctime/mtime/mode | `userspace/libc/include/sys/stat.h` has only type-only `st_mode` and `st_size`. NPFS stores creation/modification timestamps, but FILE ABI does not export identity/time. Creation time is not POSIX ctime, and timestamps can repeat/backtrack. Do not synthesize cache-validating fields. |
-| Exclusive lock files | Native `path_create_file` and `mkstemp` already perform exclusive creation; public `open` lacks `O_EXCL`. Add a libc flag adapter with real EEXIST and failure unwinding. Grants, not mode bits, establish authority. |
+| Exclusive lock files | Native `path_create_file` and `mkstemp` perform exclusive creation. Task 1 exposes that route through public `O_CREAT\|O_EXCL`, with real EEXIST after authority checks and existing failure unwinding. Grants, not mode bits, establish authority. |
 | Atomic file publication | Native same-volume file rename can replace a file atomically, including across directories; public `rename` uses that operation. Directory rename is unsupported. Cross-volume failure maps to ENOTSUP, not EXDEV. Held victim handles survive replacement. |
 | Symlinks and executable bits | NPFS has regular files/directories only. Host enumeration may report symlinks but lookup refuses them. No chmod/symlink interface or stored execute bit exists. Executable loading requires READ authority; Git tree mode and native launch authority are different concepts. |
 | File and directory fsync | Public `fsync` only accepts writable file descriptors. Native directory sync exists and syncs the current pool, but no directory-fd bridge exposes it. Git/libgit2 open a directory read-only then fsync it, which cannot work through today's descriptor layer. Close is not durability. |
