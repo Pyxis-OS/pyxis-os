@@ -11,7 +11,9 @@
 
 #define AUDIO_WATCHDOG_MS 5
 #define AUDIO_SERVICE_LIMIT_NS UINT64_C(20000000)
-#define AUDIO_COMMIT_LIMIT_NS UINT64_C(1000000)
+#define QEMU_COMMIT_LIMIT_NS UINT64_C(1000000)
+#define NATIVE_COMMIT_LIMIT_NS UINT64_C(20000000)
+#define NATIVE_COMMIT_PROGRESS_BYTES (HDA_RATE * HDA_FRAME_BYTES * 20 / 1000)
 #define HDA_WALLCLOCK_TICKS_PER_MS 24000
 #define QEMU_CODEC_BURST_BYTES 8192
 
@@ -131,6 +133,16 @@ static bool start_output(void)
       !hda_commands_stop(&controller) || !hda_stream_prepare(&controller)) {
     return false;
   }
+  if (controller.model == HDA_MODEL_AMD) {
+    uint32_t reserve = controller.fifo_bytes + HDA_FRAME_BYTES + NATIVE_COMMIT_PROGRESS_BYTES;
+    if (!controller.fifo_bytes || reserve >= HDA_BUFFER_BYTES) {
+      hda_fail(&controller, "native output commit reserve does not fit PCM ring");
+      return false;
+    }
+    ktrace("audio: native FIFO-bytes=%u reserve-bytes=%u commit-ns=%lu commit-WALCLK=%u\n",
+        controller.fifo_bytes, reserve, NATIVE_COMMIT_LIMIT_NS,
+        HDA_WALLCLOCK_TICKS_PER_MS * 20);
+  }
   audio_sessions_cleanup();
   if (!audio_sessions_pending()) {
     return codec_stop();
@@ -196,7 +208,9 @@ static bool observe_progress(const struct hda_stream_position *position,
     refill_fault = "output position is not frame aligned";
     return false;
   }
-  if (event->completed && step < to_boundary) {
+  /* Native BCIS can precede link consumption when the descriptor reaches the
+   * FIFO. Only QEMU's qualified model requires this boundary correspondence. */
+  if (controller.model == HDA_MODEL_QEMU && event->completed && step < to_boundary) {
     refill_fault = "completion without expected boundary advance";
     return false;
   }
@@ -236,14 +250,18 @@ static bool refill_output(void)
   }
   while (refilled_periods < observed_bytes / HDA_PERIOD_BYTES) {
     flags = cpu_save_interrupts();
+    bool native = controller.model == HDA_MODEL_AMD;
     uint64_t before = arch_monotonic_ns();
+    uint32_t before_wallclock = native ? hda_stream_wallclock_locked(&controller) : 0;
     safe = hda_stream_position_locked(&controller, &position, &event) &&
         observe_progress(&position, &event, before);
     uint64_t target = (refilled_periods + HDA_PERIOD_COUNT) * HDA_PERIOD_BYTES;
-    /* Keep a whole codec burst ahead of the reclaimed period. The postcheck
-     * rejects a commit window spanning more than one codec timer interval. */
+    uint32_t margin = native ? controller.fifo_bytes + HDA_FRAME_BYTES +
+        NATIVE_COMMIT_PROGRESS_BYTES : QEMU_CODEC_BURST_BYTES + HDA_FRAME_BYTES;
+    /* Native headroom includes maximum FIFO advance and playback during the
+     * whole bounded commit. QEMU retains its qualified burst/clock profile. */
     if (safe && (target <= observed_bytes ||
-        target - observed_bytes <= QEMU_CODEC_BURST_BYTES + HDA_FRAME_BYTES)) {
+        target - observed_bytes <= margin)) {
       refill_fault = "output refill safety margin exhausted";
       safe = false;
     }
@@ -255,19 +273,32 @@ static bool refill_output(void)
     size_t frames = audio_sessions_mix(
         (void *)(controller.pcm.address + period * HDA_PERIOD_BYTES), HDA_PERIOD_FRAMES);
     dma_write_barrier();
-    uint64_t after = arch_monotonic_ns();
+    uint64_t after;
+    uint32_t wall_ticks;
+    if (native) {
+      safe = hda_stream_position_locked(&controller, &position, &event);
+      wall_ticks = hda_stream_wallclock_locked(&controller) - before_wallclock;
+      /* Include both position scans and the final device-clock observation.
+       * The old QEMU checkpoint below intentionally stays before post-MMIO. */
+      after = arch_monotonic_ns();
+    } else {
+      after = arch_monotonic_ns();
+      before_wallclock = position.wallclock;
+      safe = hda_stream_position_locked(&controller, &position, &event);
+      wall_ticks = position.wallclock - before_wallclock;
+    }
     if (after - before > max_commit_ns) {
       max_commit_ns = after - before;
     }
-    uint32_t before_wallclock = position.wallclock;
-    safe = hda_stream_position_locked(&controller, &position, &event);
-    if (safe && (after - before >= AUDIO_COMMIT_LIMIT_NS ||
-        (uint32_t)(position.wallclock - before_wallclock) >= HDA_WALLCLOCK_TICKS_PER_MS)) {
+    uint64_t commit_limit = native ? NATIVE_COMMIT_LIMIT_NS : QEMU_COMMIT_LIMIT_NS;
+    uint32_t wall_limit = HDA_WALLCLOCK_TICKS_PER_MS * (native ? 20 : 1);
+    if (safe && (after - before >= commit_limit || wall_ticks >= wall_limit)) {
       refill_fault = "output DMA commit exceeded clock limit";
       safe = false;
     }
     safe = safe && observe_progress(&position, &event, after);
-    if (safe && observed_bytes >= target) {
+    uint32_t final_margin = native ? controller.fifo_bytes + HDA_FRAME_BYTES : 0;
+    if (safe && (observed_bytes >= target || target - observed_bytes <= final_margin)) {
       refill_fault = "output reached period during DMA commit";
       safe = false;
     }

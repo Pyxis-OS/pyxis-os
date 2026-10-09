@@ -76,6 +76,9 @@ bool hda_stream_run_locked(struct hda_controller *controller);
  * The engine owns progress/epoch checks before committing a reclaimed period. */
 bool hda_stream_position_locked(struct hda_controller *controller,
     struct hda_stream_position *position, struct hda_irq_event *event);
+/* BSP/IF=0 and RUN active; bracket native position scans without changing
+ * completion ownership. This wrapping clock does not count consumed bytes. */
+uint32_t hda_stream_wallclock_locked(struct hda_controller *controller);
 bool hda_interrupt(struct hda_controller *controller);
 bool hda_stream_stop(struct hda_controller *controller);
 void hda_shutdown(struct hda_controller *controller);
