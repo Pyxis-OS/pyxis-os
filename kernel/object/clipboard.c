@@ -907,8 +907,8 @@ static void clipboard_worker(void *argument)
       worker_wait = NULL;
     }
     unlock_clipboard();
-    cpu_restore_interrupts(flags);
     readiness_notify();
+    cpu_restore_interrupts(flags);
   }
 }
 
