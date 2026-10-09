@@ -25,29 +25,25 @@ struct syscall_result profile_call(uint64_t rights, uint64_t operation,
 {
   bool host = operation == PROFILE_HOST_BEGIN || operation == PROFILE_HOST_SNAPSHOT ||
       operation == PROFILE_HOST_END;
-  bool file = operation == PROFILE_FILE_BEGIN || operation == PROFILE_FILE_SNAPSHOT ||
-      operation == PROFILE_FILE_END;
-  if (!host && !file && operation != PROFILE_BEGIN && operation != PROFILE_SNAPSHOT && operation != PROFILE_END) {
+  if (!host && operation != PROFILE_BEGIN && operation != PROFILE_SNAPSHOT && operation != PROFILE_END) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & (host ? PROFILE_RIGHT_HOST : file ? PROFILE_RIGHT_FILE : PROFILE_RIGHT_MEMORY))) {
+  if (!(rights & (host ? PROFILE_RIGHT_HOST : PROFILE_RIGHT_MEMORY))) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   union {
     struct profile_snapshot memory;
-    struct profile_file_snapshot file;
     struct profile_host_snapshot host;
   } reply;
-  size_t size = host ? sizeof(reply.host) : file ? sizeof(reply.file) : sizeof(reply.memory);
-  bool returns_snapshot = operation != PROFILE_BEGIN && operation != PROFILE_FILE_BEGIN &&
-      operation != PROFILE_HOST_BEGIN;
+  size_t size = host ? sizeof(reply.host) : sizeof(reply.memory);
+  bool returns_snapshot = operation != PROFILE_BEGIN && operation != PROFILE_HOST_BEGIN;
   if (request_size || (returns_snapshot && reply_capacity < size)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (returns_snapshot && !user_buffer_check(reply_address, size, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  enum call_status status = host ? profile_host_control(operation, &reply.host) : file ? profile_file_control(operation, &reply.file) :
+  enum call_status status = host ? profile_host_control(operation, &reply.host) :
       profile_memory_control(operation, &reply.memory);
   if (status != CALL_OK || !returns_snapshot) {
     return (struct syscall_result){status, 0};
