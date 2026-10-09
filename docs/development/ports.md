@@ -217,7 +217,8 @@ helpers. Ordered patches narrow private util.h, restore the declarations the
 tools need, adapt tee's options and descriptor lifetimes and remove tail's
 follow mode; cksum, uniq, sha256sum, wc, sort and helper bodies remain unchanged
 and use conventional libc I/O calls. The full license/contributor list and the
-arg.h, OpenBSD strtonum and reallocarray, memmem and queue.h notices are packaged
+arg.h, OpenBSD strtonum and reallocarray, memmem, queue.h and Unicode License v3
+notices are packaged
 under `boot://share/licenses/sbase/`.
 
 ```text
