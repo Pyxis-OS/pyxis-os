@@ -85,9 +85,20 @@ mirrors, recorded patches and licences, and outputs derived from
     a local patch. Two more patches cover the Pyxis platform (timer, data and
     write directories, `mkdir`) and decision 4's frame sleep.
   - **Libc:** `powf` from the musl pin and `O_APPEND` for `open`.
-- [ ] **Task 3, EDuke32.** The classic renderer only, through the opt-in data
-  handling in decision 1. It is checked by playing E1L1 in QEMU; there is no
-  head-to-head. Its demos aren't a stable benchmark across versions.
+- [x] **Task 3, EDuke32.** Delivered for review: the opt-in recipe and
+  `DUKE3D_DATA` staging, in the [reference](../userland/eduke32.md). Checked by
+  playing E1L1 in QEMU, with saves, loads, screenshots and quitting; there is
+  no head-to-head.
+  - **Built without:** OpenGL, Polymer, the codecs, ENet and network play,
+    through upstream's switches and the platform patch. Further patches cover
+    single-threaded operation (decision 7), Pyxis paths and decision 4's frame
+    sleep.
+  - **Found in the task:** sound startup fails cleanly, and a patch skips
+    playback after it. Pyxis displays report no refresh rate, which hung
+    upstream's frame limiter, so the port paces at 60 Hz.
+  - **Libc:** the musl float math EDuke32 uses, `nanosleep`, `clock_gettime`
+    and `strncat`. The port works around the [libc gaps](../../ports/eduke32/README.md#libc-gaps)
+    that need design decisions (decision 8).
 - [ ] **Closing:** a reference page per game, native steps for the owner, and
   this document rewritten as implemented behaviour.
 
@@ -156,6 +167,17 @@ Accepted 2026-10-09 for Chocolate Quake, before task 2's implementation:
    32 MiB heap. The [port README](../../ports/chocolate-quake/README.md#memory)
    records the cost; small QEMU configurations such as 512 MiB need room for
    it.
+
+Accepted 2026-10-09 for EDuke32, before task 3's implementation:
+7. **Single-threaded patches.** Code that needs threads (loguru, smmalloc's
+   per-thread cache, the audio library's tasks, minicoro) is patched to run
+   in Pyxis's one thread, recorded in
+   [technical debt](../technical-debt.md#eduke32-port-limits) to revisit with
+   userspace threads.
+8. **Libc additions.** Missing standard functions go into libc: float math
+   from the musl pin and `nanosleep`. Functions whose behaviour needs a design
+   decision first are handled in the port and listed as libc gaps.
+9. **The pin** is master commit `ec5824db`.
 
 ## Out of scope
 
