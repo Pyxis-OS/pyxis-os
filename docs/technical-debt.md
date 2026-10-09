@@ -250,6 +250,15 @@ and 684.7 fps. Acquisition without PRESENT, repeated PRESENT while hidden, captu
 Super and device/queue-loss propagation were source-inspected only; revisit them when changing the session, input or teardown paths or
 when a failure appears.
 
+## Renoir scanout memory ownership
+
+[Read-only flip inventory](development/experiments/renoir-flip-inventory/README.md)
+has not proved a firmware/boot-delegated spare pool. Pre-OS PSP/SMU reservations
+remain unknown; visible ATOM/DMCUB exclusions do not prove their complement free.
+No spare allocation or flips are permitted without complete ownership and
+translation evidence. Revisit after the owner's native inventory boot and an
+explicit pool handoff, before any write-backend task.
+
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)

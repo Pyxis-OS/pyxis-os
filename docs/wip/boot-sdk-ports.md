@@ -99,11 +99,9 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
   shared 128 MiB selected-image capture ceiling and failure rollback qualification,
   using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
-- **Codex alpha** (2026-10-09): [remote-script immediate EOF](../development/experiments/remote-immediate-eof/README.md),
-  restore queued command input and graceful EOF through kernel terminal receivers.
-  Presentation step 2 merged in #626; its
-  [native batch](../development/experiments/renoir-presentation/README.md#native-thinkpad-batch)
-  still gates timed-copy qualification.
+- **Codex alpha** (2026-10-09): [Renoir flip task 1](../development/experiments/renoir-flip-inventory/README.md),
+  read-only GOP route and memory-proof inventory after accepted #632; no GPU
+  writes or scanout allocation. Native evidence is collected through Luna's PXE boot.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
   Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
   (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),

@@ -87,6 +87,12 @@ unavailable hardware. Native batches must keep `LOG_LEVEL=info`.
 make -j16 image LOG_LEVEL=info DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1
 ```
 
+For [Renoir flip inventory](experiments/renoir-flip-inventory/README.md),
+`DISPLAY_INVENTORY=1` adds `display.inventory=1`. It emits one read-only numeric
+inventory at info level; default `0` adds no inventory output. Native task 1 uses
+`DISPLAY_TIMING=off LOG_UDP=1` with that flag, so the previous timing observer
+cannot interfere. It never allocates scanout storage or enables flips.
+
 `BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds,
 default `0`. It configures the generated Limine menu independently of kernel
 Kconfig. Ordinary development boots immediately into the normal entry. For
