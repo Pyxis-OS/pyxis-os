@@ -33,6 +33,9 @@ return function(inputs)
   if inputs.network_config ~= "" then
     entries[#entries + 1] = { file = inputs.network_config, at = "config/network.lua", replace = true }
   end
+  if inputs.live_config ~= "" then
+    entries[#entries + 1] = { file = inputs.live_config, at = "config/live.lua", replace = true }
+  end
 
   local wad = inputs.wad
   if wad == "" then
