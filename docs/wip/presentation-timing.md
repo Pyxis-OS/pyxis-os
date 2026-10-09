@@ -12,7 +12,8 @@ were accepted as the defaults on 2026-10-09.
   2026-10-09 ([below](#completed-frame-handoff)), with its
   [measurements and native steps](../development/experiments/frame-handoff/README.md).
 - **Step 2, native timing:** [proposal below](#step-2-read-only-renoir-timing),
-  awaiting the owner's three decisions; no implementation authorized. The read-only
+  all three defaults accepted 2026-10-09; implementation authorized, native
+  timed-copy qualification still pending. The read-only
   [Fedora Renoir reference](../development/experiments/renoir-linux-timing/README.md)
   records the active OTG, panel blank window, idle/animation counters, disabled
   PSR/Replay and private WC copy cost. No Pyxis timing probe is implemented.
@@ -181,8 +182,9 @@ Proposal, 2026-10-09, based on main `f6d82ef9`, including #615. This does not
 reopen #608's read-only observer, conditional timed copies or deferred flips.
 The owner accepted the beam-racing interpretation on 2026-10-09: start latency
 and sustained lead over display fetch matter; the copy need not finish in blank.
-The three defaults below are **proposed, not accepted**. No code, placeholder
-interfaces, program timing ABI or hardware access belongs in this proposal PR.
+All three defaults below were **accepted 2026-10-09**, after #622 merged, and
+step 2 implementation was authorized. Timed copies remain off by default until
+native qualification; program timing APIs and page flips remain later tasks.
 
 ### Observer and firmware boundary
 
@@ -277,7 +279,7 @@ an unconfigured interrupt cannot be relied on, and enabling one would violate
 the no-writes boundary. Cadence-only polling can miss the 465 µs window; full
 refresh-period spinning would consume a BSP core and is not proposed.
 
-Propose an initial **eight-line fetch/safety guard**, about 120 µs at the reference
+Use the accepted initial **eight-line fetch/safety guard**, about 120 µs at the reference
 mode, plus measured timestamp/read/first-write uncertainty. It is a qualification
 guard, not a claimed AMD fetch-depth specification. Admission requires the
 upper bound of copy-start delay plus that guard/uncertainty to be less than
@@ -325,7 +327,7 @@ SDL vsync claim, Quake pacing change or unconditional application cap in step 2.
 QEMU boot/Bochs report software cadence; VirtIO fence completion remains command
 completion, never a physical vblank timestamp. They do not gain AMD timing.
 
-Implementation/qualification breakdown, after owner answers:
+Implementation/qualification breakdown:
 
 - [ ] **2a — observer:** PCI/RO-UC mapping, active OTG validation and bounded
   counter diagnostics. Capture the ordinary-copy baseline before changing its
@@ -349,7 +351,7 @@ Implementation/qualification breakdown, after owner answers:
 
 ### Step 2 owner decisions
 
-All three await an explicit owner answer; recommended defaults:
+Accepted 2026-10-09, all three as the defaults:
 
 1. **Observer boundary:** use the single-device/single-enabled-OTG scope and
    audited two-page Renoir window above, RO/NX/UC, with no BAR-sizing, configuration
