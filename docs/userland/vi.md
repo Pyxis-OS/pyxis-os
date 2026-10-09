@@ -61,9 +61,17 @@ patch changes only the Unix-specific parts:
 | `~/.exrc` owner/mode check | Not read; `EXINIT` from session configuration still works |
 
 Userland libc gained `ftruncate` over native `FILE_RESIZE`, plus `memrchr`,
-`strchrnul` and `stpcpy`. A save keeps upstream's order: open without
-truncation, write, then truncate to the bytes written. Fastfetch now uses the
-libc `memrchr` instead of its bundled fallback.
+`strchrnul` and `stpcpy`. Fastfetch now uses the libc `memrchr` instead of its
+bundled fallback.
+
+A save (`:w`, `:w NAME`, `:wq`, `:x`, `ZZ`) replaces the file atomically instead
+of upstream's in-place write and truncate. The adapter writes a random
+`NAME.XXXXXX` beside it (`mkstemp`, native exclusive creation), syncs it and
+renames it over the target. A failed write, sync, close or rename removes the
+temporary file, leaves the old file untouched and reports the error. The
+[atomic-save limits](../technical-debt.md#atomic-save-limits) cover what a crash
+can lose, and saving needs CREATE and REMOVE on the directory, not only WRITE on
+the file.
 
 Patch 0002 fixes an upstream defect: the per-file read-only bit was never
 cleared, so after one read-only file every later `:n`/`:e` file was also
@@ -88,9 +96,10 @@ keep line anchors and advance after zero-length matches.
 - **Shell:** there is no `:!` and no shell filters.
 - **Screen size:** a change takes effect at the next redraw, since there is no
   resize notification.
-- **Saves:** not atomic. A short write leaves the file overwritten and
-  truncated at that point, and a crash between the write and the resize can
-  leave old trailing bytes.
+- **Saves:** atomic replacement within the
+  [atomic-save limits](../technical-debt.md#atomic-save-limits). Directory
+  CREATE and REMOVE are required. A full or failing write was not exercised
+  and is covered by source inspection only.
 - **Input EOF and failures:** input EOF ends vi as upstream does, losing unsaved
   edits; this comes from source inspection and was not exercised. Allocation or
   terminal output failure also exits and loses unsaved edits.
@@ -114,7 +123,7 @@ using host import analysis and a compile probe against the Pyxis SDK.
 
 The owner agreed on 2026-10-04 to use BusyBox, keep upstream's
 write-then-truncate save via a libc `ftruncate`, and add the string functions to
-libc. `stat`, `fstat` and `access` stay out of libc until truthful file metadata
+libc. The save was replaced by atomic replacement on 2026-10-09. `stat`, `fstat` and `access` stay out of libc until truthful file metadata
 exists.
 
 ## Regex validation (2026-10-07)
