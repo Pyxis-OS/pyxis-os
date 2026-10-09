@@ -118,7 +118,8 @@ panics can reclaim a permanently mapped direct target using the
 remain serial-only: no emergency queue, command, reset or GPU allocation.
 The owner confirmed normal ThinkPad boot-framebuffer output in
 [PR #471](https://git.internal/PyxisOS/pyxis-os/pulls/471); native panic remains
-unqualified. The ThinkPad has no native AMD GPU driver.
+unqualified. The ThinkPad's [opt-in Renoir flip backend](#opt-in-renoir-flips) retains the GOP mode;
+native flips remain unqualified.
 
 ## VirtIO GPU
 
@@ -356,6 +357,31 @@ distinguishes CPU-issued prefix progress from WC visibility/display fetch.
 The audited register span is not an independently sized native BAR; the
 single-output geometry match is not decoded HUBP routing. These and pending
 native validation remain [technical debt](../technical-debt.md#native-renoir-presentation-qualification).
+
+## Opt-in Renoir flips
+
+`DISPLAY_FLIP=1` selects the bounded Renoir backend only after stable route,
+layout, address translation and accepted UMA exclusion checks. It inherits
+firmware mode/format/pitch/tiling and changes only one mono HUBP's synchronized
+flip control and primary high/low address. Default remains ordinary GOP copy;
+Bochs/VirtIO and refused devices retain existing presentation. No PCI, blank,
+clock, power, VM, firmware or interrupt reprogramming occurs.
+
+One WC spare and the original GOP surface form two scanout targets, independent
+of application RAM slots. The presenter keeps a staged frame/capture while one
+flip is pending; input is serviced between 1ms sleeps, with a50ms deadline.
+Pending-clear plus matching earliest-in-use confirms retirement. Timeout pins
+both surfaces, stops GPU writes and copies each subsequent image to both;
+changed identity makes output unavailable. Panic paints both possible fronts
+after claiming/draining direct writers, without GPU access. Capture publishes
+only after confirmation or completed fallback. Native positive/timeout/panic
+paths remain unqualified. The [backend record](../development/experiments/renoir-flip-backend/README.md)
+contains limits, pitch reasoning, MIT provenance, QEMU checks and exact native steps.
+
+`DISPLAY_FLIP_METRICS=1` independently enables info-level cost/confirmation
+reports for matched disabled/enabled boots. Neither flag adds default-boot logs.
+A qualified flip backend skips the failed counter-derived timing/blank-copy
+observer. Disabled/refused paths retain it without making it a flip authority.
 
 ## Qualification and cost
 

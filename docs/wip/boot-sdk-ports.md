@@ -102,8 +102,8 @@ Chosen by the owner, each starting with a proposal:
   shared 128 MiB selected-image capture ceiling and failure rollback qualification,
   using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
-  task 1 read-only inventory complete; exclusion standard and PSP/SMU risk accepted.
-  Inherited pitch remains a backend prerequisite; task 2 awaits separate owner go.
+  task 2 qualified two-surface backend authorized, implemented for review, default off.
+  Task 1 and exclusion/stride decisions complete; paired native qualification pending.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
   Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
   (Chocolate Doom) merged in #623, task 2 (Chocolate Quake) in progress. Presentation timing steps 1 and 2 (#610, #618),

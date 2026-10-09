@@ -253,12 +253,16 @@ when a failure appears.
 ## Renoir inherited pitch and firmware reservations
 
 [Native flip inventory](development/experiments/renoir-flip-inventory/README.md)
-confirms BAR0/GOP correlation and the 512 MiB UMA range. Raw pitch `0x780` remains
-unexplained against GOP 7680 bytes and Linux's pixels-minus-one convention;
-qualify effective row stride before any write-backend layout. The owner accepted
+confirms BAR0/GOP correlation and the 512 MiB UMA range. The owner accepted
+the unsheared native GOP image as evidence of a 7680-byte effective stride for
+raw pitch `0x780` on 2026-10-09. Preserve that register; the Linux convention
+would normally write `0x77f`. Other inherited modes remain unqualified. The owner accepted
 Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
 reservations if new firmware/client ranges appear; retain the low prefix and
-last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers.
+last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers. The [task-2 backend](development/experiments/renoir-flip-backend/README.md)
+is opt-in and awaiting native qualification: no confirmed flip, timeout recovery,
+panic visibility or tear-reduction claim until the owner's paired boots. Revisit
+when those results arrive; interrupts, three surfaces and blanking stay deferred.
 
 ## Native Renoir presentation qualification
 

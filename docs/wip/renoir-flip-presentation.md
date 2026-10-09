@@ -1,7 +1,7 @@
 # Renoir flip presentation
 
-**Design accepted 2026-10-09. Read-only task 1 complete; no flip backend.**
-Task 2 requires the owner's separate go-ahead; no placeholder interfaces.
+**Design accepted 2026-10-09. Task 2 authorized; opt-in backend prepared for review.**
+Read-only task 1 is complete. Native writes/completion remain unqualified; task 3 is not assigned.
 The owner redirected presentation step 2 after native batch 2 failed on main
 `11d35fa6`: inaccurate counter-derived periods, excessive uncertainty and worse
 tearing/input delay in blank-copy mode. The separate observer safety fix keeps
@@ -19,8 +19,8 @@ a later option, not hardware triple-buffer enablement.
 
 This is the first Pyxis AMD GPU register **write** path. It overturns #622's
 read-only boundary for the bounded backend only, as accepted in decision 1
-below on 2026-10-09. Implementation still requires the owner's explicit task
-assignment; the current observer remains read-only.
+below on 2026-10-09. Task 2 is authorized; the opt-in flip backend is implemented for review.
+The separate timing observer remains read-only.
 
 The kernel's BSP display driver exclusively owns the device, mappings and
 surface-address writes. Programs continue supplying pixels through DRAW and
@@ -56,7 +56,10 @@ provides format, viewport, swizzle, compression and addresses. Accept only
 documented linear 32-bit RGB with DCC off, matching GOP channel shifts, pitch,
 width and height. Pitch is pixels minus one in the
 [register programming](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn10/dcn10_hubp.c#L163-L196);
-for four-byte pixels its decoded byte pitch must equal GOP pitch. Check
+for four-byte pixels Linux normally decodes pixels plus one to the byte stride.
+For the inventoried firmware mode, retain raw `0x780` and use GOP 7680 bytes: the
+owner accepted the unsheared native display as evidence of its effective stride
+on 2026-10-09. Do not reinterpret or rewrite that register. Check
 [HUBPRET crossbar](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn10/dcn10_hubp.c#L236-L272)
 and compositor alpha behavior as well as format: a matching format number alone
 does not establish RGB/BGR ordering or opaque GOP semantics. Tiled, compressed,
@@ -152,7 +155,8 @@ BAR0 length is unknown; address correlation does not confer its entire extent.
 Keep the 9 MiB low stolen/GOP prefix, all applicable reservation extents and
 the guard `[0x1f000000,0x20000000)`. One 64 KiB-aligned spare at VRAM offset
 `0x900000`, rounded backing `[0x900000,0x10f0000)`, is the accepted candidate for
-this capture. It is not allocated. Prefer WC direct-UMA mapping; avoid conflicting
+this capture. Task 1 did not allocate it; task 2 maps it privately after rechecking exclusions.
+Use WC direct-UMA mapping; avoid conflicting
 WB/WC aliases, retain exclusion from PMM allocation and allocate/map on the BSP
 before publication. Keep backing until GPU retirement is established.
 No arbitrary RAM, reset, PSP/SMU/DMCUB request or MC reprogramming is authorized.
@@ -165,13 +169,16 @@ records Linux's fixed reservations and later driver BOs distinctly. Linux's
 host scratch helper is not a VRAM allocation; later PSP/SMU BOs do not locate
 all pre-OS firmware storage. No raw firmware/EDID/serial data is logged or committed.
 
-Inherited pitch remains a write-backend prerequisite: raw `0x780` versus GOP
-7680 bytes is unexplained against Linux's pixels-minus-one programming convention.
-[Task 1's pitch finding](../development/experiments/renoir-flip-inventory/README.md#pitch-unresolved-backend-prerequisite)
-records the exact DCN2.1 path and the literal 7684-byte interpretation. Establish
-effective fetch stride before qualifying the spare's row layout. Preserve the
-firmware value; no pitch/mode write or silently assumed stride is authorized.
-Task 2 still requires a separate owner assignment and all read-only prerequisites.
+The owner resolved the effective-stride prerequisite for task 2 on 2026-10-09:
+the unsheared GOP image means a 7680-byte effective stride. Preserve raw `0x780`;
+Linux's pixels-minus-one convention would normally write `0x77f`, and this does
+not establish a general decoder for other firmware modes. The first backend
+requires precisely this width/height/pitch/format, recalculates translations and
+exclusions at boot, and refuses other layouts or unfamiliar/nonzero reservations.
+
+Task 2 is authorized. `DISPLAY_FLIP=1` adds `display.flip=1`; omission is off.
+Default remains today's GOP copy. The [task-2 record](../development/experiments/renoir-flip-backend/README.md)
+covers qualification gates, lifetime, QEMU evidence and paired native steps.
 
 ## Presenter and the three-slot application handoff
 
@@ -254,7 +261,7 @@ and add the entry to LICENSING.md. The relevant
 and [register notice](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_offset.h#L1-L24)
 permit this; do not copy unrelated Linux DRM/BO/VM infrastructure under an assumed
 MIT umbrella. Task 1 retains its adapted read-only definitions and notices;
-the write path is not implemented.
+task 2 adds the narrowly allowed mono write path, default off.
 
 ## Tasks and native qualification
 
@@ -262,8 +269,8 @@ the write path is not implemented.
    `5e342488` and `0f6baec6` establish route/state/translation/ATOM/UEFI evidence;
    the owner accepted the exclusion standard and PSP/SMU risk on 2026-10-09.
    **What the owner sees:** the [inventory report](../development/experiments/renoir-flip-inventory/README.md),
-   no allocation or GPU writes, and the unresolved inherited-pitch prerequisite.
-2. **Qualified two-surface backend.** Only after owner authorization, implement
+   no allocation or GPU writes; task 2 preserves the owner-qualified effective stride.
+2. **Qualified two-surface backend — implemented, native qualification pending.** Implement
    private allocation/ownership, fenced offscreen copies, the exact mono flip
    sequence, bounded completion polling, capture, timeout fallback and panic.
    Boot/Bochs/VirtIO retain their own paths; default remains GOP copy until native
@@ -307,5 +314,6 @@ No synthetic DCN device, new tests or fault injection is implicit in this plan.
    unsynchronized copies to the known owned set; unknown routing makes display
    unavailable. Three surfaces, interrupts and blanking are deferred.
 
-Acceptance records the design. Task 1 completed read-only inventory; tasks 2
-and 3 still require the owner's explicit assignment. No spare or flip is implemented.
+Acceptance records the design. Task 1 is complete and task 2 is authorized and
+implemented for review, default off. No native flip success is claimed. Task 3
+still requires the owner's explicit assignment.
