@@ -98,7 +98,10 @@ replacement; it preserves bytes and line endings. READ supplies a 64 KiB reply
 buffer and receives raw bytes from one retained immutable snapshot, with length
 in `reply_size`; authorized empty/missing data returns zero. HAS returns only
 an eight-byte boolean under a live Paste action, without extending it or reading
-contents. REFUSE spends a matching preflight failure. Libpyxis supplies
+contents. REFUSE spends a matching preflight failure. An acquired keyboard owner
+may also use `KEYBOARD_CLIPBOARD_REFUSE` / `keyboard_clipboard_refuse()` to
+decline its matching action when the store grant is absent; this grants no
+read, publication or store metadata. Libpyxis supplies
 `clipboard_graphics_publish/read/has/refuse()` helpers. The existing 64 KiB text
 and 8 MiB aggregate payload bounds apply. Terminal Paste converts a separate
 charged snapshot under its ASCII/control/CR-normalization rules; richer text

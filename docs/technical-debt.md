@@ -759,10 +759,16 @@ for behavior, measured/manual evidence and validation limits.
 - **Pending input:** Paste refuses while earlier input is queued/staged or the
   decoder is incomplete; it is never saved for later. The user must finish that
   input and issue a fresh gesture. Keep this safety boundary when adding readers.
-- **Later consumers/types:** No SDL2/graphics clipboard, FILE/rich objects,
-  converter execution or remote/host clipboard bridge in this delivery. SDL2,
-  FILE retention and trusted converters follow separate milestone tasks; remote
-  bridging needs its own authority and host/guest paste contract.
+- **Later types/bridges:** FILE/rich objects, converters and remote/host bridging
+  remain separate milestone tasks. They need retained-capability, conversion and
+  host/guest authority contracts before extending the existing text stores.
+- **SDL2 activation:** Only delivered physical Copy/Paste commands authorize
+  [graphics text access](interfaces/clipboard.md#graphics-and-sdl2). Menus, Cut,
+  background queries and ambiguous batch/filtered events refuse; apps inspecting
+  global modifiers need the command-event snapshot for shared chords. Revisit
+  with a concrete consumer and explicit approval, retaining private action identity.
+  Bundle manifests do not delegate clipboard grants; revisit when assigning a
+  bundled clipboard consumer.
 
 ## SDL2 port limits
 
