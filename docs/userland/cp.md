@@ -1,7 +1,7 @@
 # Copying files
 
-The native `cp` copies regular files within a root or across roots using the
-caller's existing grants. Relative paths use the inherited working directory.
+The native `cp` copies regular files, and with `-r` directory trees, within a root
+or across roots using the caller's existing grants. Relative paths use the inherited working directory.
 
 ```text
 cp boot://share/hello.txt home://note.txt
@@ -9,16 +9,53 @@ cp boot://share/hello.txt home://
 mkdir home://copies
 cp home://note.txt boot://share/hello.txt home://copies
 cp -- -notes home://notes
+cp -r boot://share/licenses home://licenses
 ```
 
-`cp [--] source-file... destination` accepts one or more literal source files.
+`cp [-r] [--] source... destination` accepts one or more literal sources.
 An existing directory destination receives each source's basename. Multiple
 sources require an existing destination directory; missing parents are not
 created. Otherwise the single-source destination is an exact file path.
-Existing destination files are replaced; directories are not copied or
-replaced as files. Success is quiet. Options other than `--`, including `-r`,
-are rejected before opening paths; [recursive copying](../wip/recursive-cp.md)
-is proposed, not implemented. No modes, owners or timestamps are copied.
+Existing destination files are replaced; without `-r` a directory source fails,
+and a directory is never replaced as a file. Success is quiet. Options other than
+`-r` and `--` are rejected before opening paths. No modes, owners or timestamps
+are copied.
+
+## Recursive copy
+
+With `-r` a directory source is copied as a new tree. File operands behave as above.
+
+- **Destination:** an existing directory destination receives `destination/<leaf>`
+  (trailing slashes on the source are ignored; a source with no leaf, such as
+  `home://`, needs a destination that does not exist). Otherwise the destination
+  names the new root and its parent must exist. The root is created with exclusive
+  directory CREATE, so a target of any kind that already exists fails that operand
+  before anything changes. There is no merge, so nothing below the root is replaced.
+  Empty directories are copied.
+- **Into itself:** there is no object identity to compare, so after creating the root
+  cp creates a `.cp-tree-` plus 16 hex digit marker in it and walks the whole source
+  for that name before copying data. Finding it means the destination is inside the
+  source (or a leftover marker is there): cp removes the marker and the root and fails.
+  `cp -r a a` is refused. A sibling destination is not a cycle.
+- **Failure:** each file is staged and renamed as below, into directories created before
+  their contents. Native directory rename is unsupported, so a tree is not published
+  atomically and other processes can see it partly copied. The first failure stops that
+  operand, keeps what was copied and prints the path plus `Incomplete copy of SRC (N
+  files, M directories created); nothing removed`. There is no rollback, and `rm` and
+  `rmdir` are not recursive, so a partial tree is removed by hand, bottom up. Later
+  operands run after an ordinary failure; an unconfirmed outcome stops the command.
+  Enumeration reporting CHANGED fails the operand and is not restarted, since a
+  restart would revisit names already created. The copy is not a snapshot.
+- **Bounds:** 32 levels below the root, 65,536 entries per operand and names up to 255
+  bytes, cp settings rather than ABI. The pre-copy walk enforces them and rejects
+  symbolic links, special and unknown entries (reported, never followed or skipped), so
+  these failures normally leave nothing behind; the copy pass checks again because
+  enumeration is live. Traversal is iterative over a fixed stack of about 10 KiB with
+  no per-entry heap, so the 1 MiB stack is not used for recursion.
+- **Authority:** unchanged. Source directories need LOOKUP, ENUMERATE and READ_FILES;
+  the destination needs the rights below, which created directories request again.
+- **Interruption:** killing cp during the pre-copy walk leaves the new empty root
+  holding its marker.
 
 ## Staged replacement and authority
 
@@ -109,6 +146,16 @@ before creation, preserving existing contents. GDB observed exclusive CREATE
 on parent rights `0x39` (LOOKUP/CREATE/WRITE_FILES/REMOVE), requesting child WRITE
 alone. Subsequent file calls read an initrd source with rights `0x1` and wrote
 the RAM temporary with rights `0x2`.
+
+Recursive copy was validated on 2026-10-09 (userland `24dfdc9`) with an ordinary `make -j16 image` and QEMU 10.2.2 (KVM, four CPUs,
+virtiofsd export), through the remote shell. Nested trees with empty files and
+directories and 10 KB and 300 KB binaries round-tripped between `host://` and `tmp://`
+and matched `diff -r`, as did a 32-level tree; a tree copied from `boot://`. Existing
+targets, copying into itself (three forms), a 33-level tree, a 65,537-entry tree, a host
+symlink and a read-only destination were refused with nothing created and no `.cp-` file.
+Copying `boot://share/quake` into a 1 MiB tmpfs export failed with `No space left on
+device`, kept its two directories and left no temporary file. A CHANGED outcome, a
+failing rename and an over-long name were reviewed in code only.
 
 Allocation failure, all-candidate exhaustion, concurrent mutation, interruption
 and uncertain creation/write/publication/cleanup paths were inspected in code,
