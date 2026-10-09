@@ -93,9 +93,13 @@ Linux's [completion predicate](https://github.com/gregkh/linux/blob/v6.19.10/dri
 requires both pending clear and earliest-in-use address equal to the request.
 Read a stable address/control tuple; a clear pending bit alone is insufficient.
 Only this confirmation permits writing the previous front as the next back.
-Poll from the ordinary presenter cadence, with a proposed 50 ms wall-clock
-deadline and no display interrupt or blank-start spin. Keep servicing input
-between polls. A poll timestamp bounds observation of the transition; it is not
+Keep the software input/presentation deadline independent. While a flip is
+outstanding, propose 1 ms sleeping polls with a 50 ms wall-clock deadline (at
+most 50 polls), no display interrupt and no blank-start spin. Check pending at
+the earlier poll/presenter wake, without composing a new image while both
+surfaces are busy. Ordinary-cadence-only polling could miss the in-use transition
+and add a frame; polling cost and wakeups must be measured natively. Keep
+servicing input between polls. A poll timestamp bounds the transition; it is not
 an exact vblank or panel-photon timestamp.
 
 [DCN2.1 offsets](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_offset.h#L2178-L2239)
@@ -256,7 +260,7 @@ MIT umbrella. No source is vendored in this proposal PR.
    unchanged mode, info logging, opt-in disabled/enabled paired boots. Record
    source/reservation evidence, register snapshots before/after, requested versus
    confirmed addresses, pending durations/timeouts, CPU compose/copy costs and
-   service of input. Take matched moving-Quake camera clips; check cursor/selection,
+   BSP poll/wakeup cost and service of input. Take matched moving-Quake camera clips; check cursor/selection,
    lock/unlock, spaces/layers, screenshots and ordinary shutdown. A framebuffer
    screenshot or FPS does not establish a tear-free panel. Keep optional blank
    and timeout recovery unqualified until actually exercised and recorded.
@@ -281,7 +285,8 @@ Nothing here counts as accepted until the owner answers.
    means no allocation and no flips; do not infer free memory from BAR space.
 3. **Buffering and failure policy? Recommended default:** two scanout surfaces,
    unchanged three-slot producer handoff, one outstanding flip, 50 ms bounded
-   polling at the ordinary input/presentation cadence. Timeout stops GPU writes,
+   polling with 1 ms sleeps only while pending, preserving the independent
+   ordinary input/presentation deadline. Timeout stops GPU writes,
    pins possible fronts and falls back to unsynchronized copies to the known
    owned set; unknown routing makes display unavailable. Defer three surfaces,
    interrupts and optional blanking until measurements justify them.
