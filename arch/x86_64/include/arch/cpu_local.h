@@ -23,6 +23,9 @@ struct cpu_local {
   uint32_t timer_count;
   _Atomic uint64_t timer_interrupts;
   uint64_t timer_preempt_deadline;
+  /* Absolute time the pending countdown targets; cleared by its interrupt. */
+  uint64_t timer_armed_target;
+  bool timer_armed;
   bool timer_deadline_started;
   _Atomic uint64_t tlb_flush_ack;
   _Atomic bool online;

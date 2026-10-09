@@ -116,6 +116,17 @@ visits the due prefix. The handler expires all due records and rearms before EOI
 or a context switch, even while idle or in non-preemptible execution. Ordinary
 ready queues decide when eligible tasks run.
 
+Each timer pass reads the clock at most once. The timer interrupt's own reading,
+taken to advance the preemption phase, also serves expiry, BSP sleeper wakeup
+and the rearm. Reschedule and scheduler passes take a reading only when a
+deadline list is non-empty or a rearm is needed. Each CPU records the absolute
+time its pending countdown targets, and the timer interrupt clears it. A rearm
+whose target is not earlier leaves that countdown in place and reads no clock;
+the earlier interrupt finds nothing due and rearms. A reused reading can be a
+few microseconds old, so the countdown it programs ends that much after its
+target. The [measurements](../development/experiments/timer-clock-reads/README.md)
+record the effect.
+
 Insertion is local because blocked syscall continuations cannot migrate. A remote
 resource wake or stop removes membership under the queue lock and uses the
 existing runnable IPI; it never programs another CPU's timer. Removing a minimum

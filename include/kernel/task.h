@@ -133,10 +133,14 @@ void task_user_release(void);
  * Only kernel task bodies and userspace run with interrupts enabled. */
 [[noreturn]] void task_schedule(void);
 
-/* Local timer/reschedule entry or scheduler, IF=0. Expires local deadlines and
- * rearms the CPU's timer before EOI/context switching. Safe before startup;
- * never switches stacks, allocates, cleans up or logs. */
-void task_timer_interrupt(void);
+/* Local timer entry, IF=0, with the reading arch_timer_interrupt took. Expires
+ * local deadlines against it and rearms the CPU's timer if an earlier target is
+ * due, before EOI/context switching. Safe before startup; never switches
+ * stacks, allocates, cleans up or logs. */
+void task_timer_interrupt(uint64_t now);
+/* Reschedule entry or scheduler, IF=0. As task_timer_interrupt, reading the
+ * clock at most once and only if a deadline check or rearm needs it. */
+void task_timer_service(void);
 
 /* Timer entry after EOI, IF=0. user_mode describes the interrupted CS.
  * May switch stacks; never allocates, cleans up or logs in interrupt entry. */

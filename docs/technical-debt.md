@@ -1144,7 +1144,11 @@ HPET MMIO reads can be expensive, especially under virtualization. The
 [HOST forwarding investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
-deadlines and profiling still pay the clock cost. The current source requires
+deadlines and profiling still pay the clock cost. Timer passes read the clock at
+most once and rearm only for an earlier target, which in nested QEMU cut idle
+HPET reads by 63% and send-side reads per TCP segment by about a quarter
+([measurements](development/experiments/timer-clock-reads/README.md)); each
+remaining read keeps its full cost. The current source requires
 a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
 the owner chose
 [software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
