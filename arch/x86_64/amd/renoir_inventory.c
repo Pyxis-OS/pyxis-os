@@ -250,6 +250,26 @@ static bool device_ready(struct pci_device *device, unsigned *power, phys_addr_t
       *bar <= UINT64_C(0x100000000) - register_pages[REGISTER_PAGE_COUNT - 1] - PAGE_SIZE;
 }
 
+struct framebuffer_bar {
+  uint32_t low, high;
+  uint64_t base;
+};
+
+static bool read_framebuffer_bar(struct pci_address address, struct framebuffer_bar *bar)
+{
+  *bar = (struct framebuffer_bar){0};
+  bar->low = pci_read32(address, PCI_BAR_FIRST);
+  unsigned type = bar->low & PCI_BAR_MEMORY_TYPE_MASK;
+  if ((bar->low & PCI_BAR_IO) || (type != PCI_BAR_MEMORY_32 && type != PCI_BAR_MEMORY_64)) {
+    return false;
+  }
+  if (type == PCI_BAR_MEMORY_64) {
+    bar->high = pci_read32(address, PCI_BAR_FIRST + PCI_REGISTER_BYTES);
+  }
+  bar->base = (bar->low & PCI_BAR_MEMORY_ADDRESS_MASK) | ((uint64_t)bar->high << PCI_BAR_HIGH_SHIFT);
+  return bar->base && !(bar->base & (PAGE_SIZE - 1));
+}
+
 static void print_state(const struct inventory_state *s)
 {
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
@@ -326,7 +346,8 @@ static int mono_route(const struct inventory_state *s)
   return hubp;
 }
 
-static bool translation(const struct boot_info *boot, const struct inventory_state *s, unsigned hubp)
+static void translation(const struct boot_info *boot, const struct inventory_state *s,
+                        unsigned hubp, const struct framebuffer_bar *bar, bool bar_valid)
 {
   const struct hubp_state *h = &s->hubp[hubp];
   uint64_t gpu_base = (uint64_t)(s->fb_base & FB_ADDRESS_MASK) << FB_ADDRESS_SHIFT;
@@ -340,15 +361,26 @@ static bool translation(const struct boot_info *boot, const struct inventory_sta
       h->primary >= gpu_end || bytes > gpu_end - h->primary ||
       h->primary - gpu_base > UINT64_MAX - cpu_base ||
       s->fb_offset != s->gc_offset || s->fb_base != s->mc_base || s->fb_top != s->mc_top ||
-      h->primary != h->inuse || h->primary != h->earliest ||
+      h->primary != h->earliest ||
       (h->flip & (FLIP_PENDING | FLIP_LOCK | FLIP_MASTER_LOCK)) ||
       (pt_base && pt_end > pt_start && overlaps(h->primary, bytes, pt_start, pt_end - pt_start))) {
-    return false;
+    klog("renoir-inventory: FB correlation unavailable: range/VMID/context/primary-earliest/flip state\n");
+    return;
   }
-  uint64_t cpu = h->primary - gpu_base + cpu_base;
+  uint64_t offset = h->primary - gpu_base;
+  uint64_t cpu = offset + cpu_base;
   klog("renoir-inventory: direct FB correlation GPU=%lx minus=%lx plus=%lx CPU=%lx GOP=%lx bytes=%lu\n",
       h->primary, gpu_base, cpu_base, cpu, boot->framebuffer.physical, bytes);
-  return cpu == boot->framebuffer.physical;
+  bool direct = cpu == boot->framebuffer.physical;
+  bool aperture_range = bar_valid && offset <= UINT64_MAX - bar->base &&
+      bytes <= UINT64_MAX - (bar->base + offset);
+  bool aperture = aperture_range && bar->base + offset == boot->framebuffer.physical;
+  klog("renoir-inventory: VRAM offset=%lx bytes=%lu direct-GOP-correlation=%u BAR0-GOP-correlation=%u\n",
+      offset, bytes, direct, aperture);
+  if (aperture_range) {
+    klog("renoir-inventory: BAR0 aperture candidate CPU=%lx GOP=%lx (BAR size not probed)\n",
+        bar->base + offset, boot->framebuffer.physical);
+  }
 }
 
 static void print_memory_map(const struct boot_info *boot, const struct inventory_state *s)
@@ -402,8 +434,12 @@ void renoir_inventory(const struct boot_info *boot)
       device->address.bus, device->address.device, device->address.function, bar,
       boot->framebuffer.physical, boot->framebuffer.width, boot->framebuffer.height,
       boot->framebuffer.pitch, boot->framebuffer.red_shift, boot->framebuffer.green_shift, boot->framebuffer.blue_shift);
+  struct framebuffer_bar aperture_first, aperture_second;
+  bool aperture_valid = read_framebuffer_bar(device->address, &aperture_first);
   snapshot(&first);
   snapshot(&second);
+  bool aperture_stable = read_framebuffer_bar(device->address, &aperture_second) && aperture_valid &&
+      aperture_first.low == aperture_second.low && aperture_first.high == aperture_second.high;
   phys_addr_t final_bar;
   unsigned final_power;
   bool stable = !memcmp(&first, &second, sizeof(first)) &&
@@ -412,8 +448,12 @@ void renoir_inventory(const struct boot_info *boot)
   print_state(&second);
   print_memory_map(boot, &second);
   int hubp = stable ? mono_route(&second) : -1;
-  bool matched = hubp >= 0 && translation(boot, &second, hubp);
-  klog("renoir-inventory: stable=%u mono-route=%u direct-GOP-correlation=%u\n", stable, hubp >= 0, matched);
+  klog("renoir-inventory: BAR0 stable=%u low=%x high=%x base=%lx; observed GOP extent only\n",
+      aperture_stable, aperture_second.low, aperture_second.high, aperture_second.base);
+  klog("renoir-inventory: stable=%u mono-route=%u\n", stable, hubp >= 0);
+  if (hubp >= 0) {
+    translation(boot, &second, hubp, &aperture_second, aperture_stable);
+  }
   klog("renoir-inventory: PSP/SMU pre-OS reservations=unknown; DMCUB windows are exclusions, not completeness\n");
-  klog("renoir-inventory: spare-pool=unproven; firmware/boot allocator handoff not established; no allocation or flips\n");
+  klog("renoir-inventory: spare-pool=unproven; inventory supplies evidence only; no allocation or flips\n");
 }
