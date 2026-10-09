@@ -384,12 +384,20 @@ static bool end_flip_frame(const struct pointer_frame *frame)
 {
   enum renoir_flip_state state = renoir_flip_state();
   if (frame && available && !display_is_panicking() && state == RENOIR_FLIP_READY) {
-    const struct framebuffer *back = renoir_flip_back();
-    KASSERT(back);
-    copy_flip_surface(back);
+    /* Prove that the back remains free before its first store, then reclaim
+     * the direct writer. Submission also revalidates after the fenced copy. */
     cpu_store_fence();
-    if (!display_is_panicking()) {
-      state = renoir_flip_submit();
+    atomic_store(&writer, DISPLAY_NO_WRITER);
+    state = renoir_flip_poll();
+    atomic_store(&writer, cpu_initial_apic_id());
+    if (state == RENOIR_FLIP_READY && !display_is_panicking()) {
+      const struct framebuffer *back = renoir_flip_back();
+      KASSERT(back);
+      copy_flip_surface(back);
+      cpu_store_fence();
+      if (!display_is_panicking()) {
+        state = renoir_flip_submit();
+      }
     }
   }
   if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
