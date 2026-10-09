@@ -11,7 +11,10 @@ defaults on 2026-10-09.
 - **Completed-frame handoff:** three decisions accepted 2026-10-09
   ([below](#completed-frame-handoff)); implemented for review, with its
   [measurements and native steps](../development/experiments/frame-handoff/README.md).
-- **Timing and pacing:** later steps.
+- **Timing and pacing:** later steps. The read-only
+  [Fedora Renoir reference](../development/experiments/renoir-linux-timing/README.md)
+  measures the panel mode/blank window and private WC copy cost; protected OTG
+  and PSR/Replay reads are pending host access. No Pyxis timing probe is implemented.
 
 **Recommendation:** stage composition in RAM first, then investigate read-only
 Renoir timing and whether a native copy fits the measured blank interval.
