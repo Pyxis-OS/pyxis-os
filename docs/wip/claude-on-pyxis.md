@@ -105,10 +105,10 @@ already have pinned recipes; no compiler-container rebuild is proposed.
 
 The harness gains only its space's explicitly supplied grants. Data authority
 must be a project directory view, not an entire HOST/home tree selected merely
-by a string prefix; supply that view through native launcher startup. Auxiliary
+by a string prefix; supply that view through native launcher startup.
 File tools accept only project-relative components, rejecting parent traversal,
 absolute/scheme paths and NULs. Child cwd starts at the same project boundary.
-memory, clock, random, console, launch and read-only runtime roots remain
+Auxiliary memory, clock, random, console, launch and read-only runtime roots remain
 explicit. It receives no raw-disk, mount, power or space-factory authority.
 Trusted startup creates/delegates a private RAM work-volume root for capture
 storage only to the harness; it is not the shared `tmp://` tree and is not
@@ -121,8 +121,8 @@ destination sandbox. Keep harness code/resources outside the writable project.
 
 First command capture uses separate private RAM-backed stdout/stderr files and
 closed/absent stdin. Also omit named console input/output, keyboard/pointer,
-display and terminal-service grants so the child cannot bypass captured streams. Preserve ordinary
-`pyxis.run` behavior separately. Separate files avoid stream offsets overwriting
+display and terminal-service grants so the child cannot bypass captured streams.
+Preserve ordinary `pyxis.run` behavior separately. Separate files avoid stream offsets overwriting
 each other; chronology between streams is not promised. Observe the child while
 it runs, inspect output size, stop it at a proposed 1 MiB per-stream trigger or
 deadline, and return capped output with truncation and actual exit/fault/stop
