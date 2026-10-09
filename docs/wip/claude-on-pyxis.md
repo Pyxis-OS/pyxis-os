@@ -75,7 +75,9 @@ already have pinned recipes; no compiler-container rebuild is proposed.
 
 2. **Where does the API key live? Default: prompt without echo for each run,
    keep it only in the harness process's private RAM.** Use the existing native
-   quiet line reader, without history; the HTTPS binding owns the credential and
+   quiet line reader on the local console, without history. No echo does not
+   encrypt the remote terminal; remote credential entry is outside this default.
+   The HTTPS binding owns the credential and
    adds it only to the verified Messages endpoint under the
    [API authentication contract](https://platform.claude.com/docs/en/api/overview).
    Do not expose it as a Lua global, child environment/argument, file, transcript,
