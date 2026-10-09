@@ -114,7 +114,8 @@ Chosen by the owner, each starting with a proposal:
   tasks need explicit assignment.
 - **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)
   accepted 2026-10-09: fewer clock reads per timer event (task A, merged in
-  #571), then TSC with extended-HPET fallback (task B, in progress).
+  #571), then TSC with extended-HPET fallback (task B, #577); native
+  qualification is in the ThinkPad batch.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 

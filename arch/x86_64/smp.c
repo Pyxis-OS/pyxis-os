@@ -184,6 +184,7 @@ void arch_ap_wait(void)
     previous = remaining;
     __asm__ volatile("pause");
   }
+  arch_clock_bsp_check(cpu->index);
   arch_clock_maintain();
   ktrace("SMP: APIC %u online, stack=%p, timer=%u counts per ~8.33 ms\n",
        cpu->lapic_id, (void *)cpu->stack_top, cpu->timer_count);
@@ -194,6 +195,7 @@ void arch_smp_finish(void)
 {
   KASSERT(cpu_count == cpu_capacity);
   klog("SMP: %zu CPU(s) online; APs waiting for scheduler startup\n", cpu_count);
+  arch_clock_select();
 }
 
 size_t arch_cpu_count(void)
@@ -231,8 +233,10 @@ bool arch_cpus_share_core(size_t first, size_t second)
   detect_topology(cpu);
   arch_user_init();
   arch_syscall_init();
+  arch_clock_ap_prepare();
 
   atomic_store_explicit(&cpu->online, true, memory_order_release);
+  arch_clock_ap_check();
   task_schedule();
 }
 

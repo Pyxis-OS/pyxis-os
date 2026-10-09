@@ -1,9 +1,11 @@
 # Monotonic time and deadline sleep
 
-The kernel uses a shared HPET counter discovered through ACPI. It starts
-the counter during BSP architecture initialization, before starting APs. Its
-epoch is clock initialization during this boot, not a calendar date. All CPUs
-and clock capabilities observe that same epoch.
+Monotonic time counts from clock initialization during this boot, not a
+calendar date. All CPUs and clock capabilities observe that same epoch. Boot
+reads a shared HPET counter discovered through ACPI, started during BSP
+architecture initialization before any AP. Before the scheduler starts, every
+CPU switches to its TSC if each one qualifies; otherwise all of them keep the
+HPET. See [TSC selection](#tsc-selection).
 
 The register page is mapped supervisor-only, writable, non-executable and
 uncacheable. Clock initialization logs the hardware width, selected direct or
@@ -57,11 +59,80 @@ HPET advances must still satisfy the bound. Operation after a violating gap is
 unsupported and requires reboot. Suspend/resume and migration are not qualified.
 A pause that also stops HPET does not consume the counter's wrap interval.
 
-The ThinkPad T14 Gen 1 AMD uses this path natively. On 2026-10-07 the owner
-kept a native session running for more than 15 minutes, about three wraps, with
-the clock holding; see the [target notes](../targets/t14-gen1-amd/notes.md#native-status).
-TSC with extended-HPET fallback is the accepted
-[later direction](../wip/later-os-directions.md#clock-source).
+The ThinkPad T14 Gen 1 AMD used this path natively before TSC selection. On
+2026-10-07 the owner kept a native session running for more than 15 minutes,
+about three wraps, with the clock holding; see the
+[target notes](../targets/t14-gen1-amd/notes.md#native-status). The extension
+keeps its maintenance only while the HPET is the clock.
+
+## TSC selection
+
+Accepted by the owner 2026-10-09: invariant TSC on every CPU, no kvmclock and
+no TSC-deadline timer; a startup check only, with all CPUs falling back to the
+HPET together; the same rule under hypervisors.
+
+**BSP checks and calibration.** During clock initialization, before APs start
+and with interrupts off, the BSP requires:
+- a TSC (`CPUID.1:EDX[4]`) that is invariant (`CPUID.80000007:EDX[8]`);
+- an ordered read:
+  - `RDTSCP; LFENCE` where `LFENCE` serializes: always on Intel, and on AMD
+    when `CPUID.80000021:EAX[2]` says so;
+  - on bare AMD hardware from family 10h it sets `DE_CFG` (MSR `C001_1029`)
+    bit 1 first. That MSR is never touched under a hypervisor;
+  - every other CPU, or a CPU without `RDTSCP`, uses `CPUID; RDTSC`.
+
+It then measures the TSC against the HPET for 100 ms. Each end of the interval
+pairs one HPET read with the midpoint of the narrowest of eight TSC brackets
+around it. The error bound is half of each bracket plus one HPET period, over
+the interval. A bound above 100 ppm, or a frequency below 100 MHz, rejects the
+TSC. The 100 ms is spent on every boot whose BSP qualifies, including boots
+that later fall back. CPUID `0x15` is read for comparison only and logged when
+complete.
+
+**Checks on each AP.** Startup brings APs online one at a time. Each AP
+repeats the CPU checks, including its own `DE_CFG`, and must support the
+BSP's read kind. Once it is online, the AP and the BSP run a 2 ms warp check:
+- each repeatedly takes a shared lock, reads its TSC and stores it;
+- the check fails if a value is below the last one stored by either CPU.
+
+A finite check cannot prove agreement for the rest of the boot. No shared
+floor or runtime watchdog follows it.
+
+**Switch.** After the last AP, before the scheduler starts, the BSP switches
+once:
+1. it reads the TSC, then HPET nanoseconds;
+2. it publishes the pair with a fixed-point multiplier,
+   `(10^9 << 32) / frequency`;
+3. it release-stores the selection, which readers acquire.
+
+Reading the TSC first makes TSC time start at or after any HPET reading another
+CPU takes before it observes the switch, so time never steps back. A reading is
+the base nanoseconds plus the scaled TSC delta, from a 128-bit product. It
+saturates at `UINT64_MAX`, and a TSC below the base counts as zero elapsed.
+After the switch nothing reads the HPET, and its software-extension maintenance
+stops. The HPET is therefore not a maintained fallback once the TSC is selected:
+a 32-bit counter's accumulator goes stale after one wrap. Any later runtime
+switch back, such as a watchdog, would have to restart maintenance and rebase
+the epoch, not resume reading it.
+
+**Fallback.** Any failure keeps every CPU on the HPET:
+- a missing invariant TSC or ordered read on any CPU;
+- a calibration outside its bounds;
+- a warp.
+
+One log line reports the outcome, for example:
+
+```text
+clock: TSC selected on 4 CPUs, 3187.062 MHz calibrated against HPET (+/-250 ppm), RDTSCP+LFENCE
+clock: HPET kept: CPU 0 has no invariant TSC
+clock: HPET kept: CPU 0 calibration too uncertain (+/-250 ppm)
+```
+
+QEMU guests see an invariant TSC only when the host has one and `-cpu` asks for
+`+invtsc`. In a nested VM, HPET reads exit through two hypervisors, which widens
+the brackets past the 100 ppm bound. The
+[measurements](../development/experiments/tsc-clock/README.md) record both
+paths.
 
 ## Clock capability
 
@@ -131,7 +202,7 @@ Insertion is local because blocked syscall continuations cannot migrate. A remot
 resource wake or stop removes membership under the queue lock and uses the
 existing runnable IPI; it never programs another CPU's timer. Removing a minimum
 can leave one harmless earlier interrupt armed. Count conversion rounds upward,
-with a positive minimum; HPET confirms expiry before waking a sleeper, so an
+with a positive minimum; the clock confirms expiry before waking a sleeper, so an
 early or stale interrupt only recalculates the next arm.
 
 Nanoseconds are the representation, not a wakeup-precision guarantee. Delayed
@@ -140,8 +211,9 @@ longer extends a deadline by losing counted ticks. There is no busy-wait sleep.
 
 The clock need not include time while QEMU is paused. The extension support limit
 above additionally excludes full-wrap gaps during which the counter advances.
+Suspend and resume and VM migration are not qualified with either source.
 There is no clock-setting operation, cancellation, HPET alarm, or userspace
 direct counter mapping. Native deadline-timer qualification remains in
 [sleep wake debt](../technical-debt.md#sleep-wake-granularity).
-Wall-clock precision and HPET read cost
+Wall-clock precision and clock-source limits
 are tracked in [technical debt](../technical-debt.md#wall-clock-time-and-clock-source-performance).
