@@ -64,8 +64,10 @@ struct launch_request {
    * positive short reads, rejects early EOF/observed size changes with IO, and
    * never retries a failed capture. Do not modify the file in place while it
    * loads: even equal before/after sizes cannot establish a host snapshot.
-   * Native filesystem capture reads the held immutable view, requires its
-   * READ-plus-metadata bundle and publishes no bytes on a core/backing error. */
+   * Native filesystem capture holds a serialized file operation through the
+   * copy, requires READ-plus-metadata, and publishes no bytes on a core/backing
+   * error. Retaining a file or directory handle does not freeze later lookups
+   * or writable aliases; published bundle revisions must remain unchanged. */
   handle_t image;
   uint64_t grants, grant_count;
   uint64_t resources, resource_count;
