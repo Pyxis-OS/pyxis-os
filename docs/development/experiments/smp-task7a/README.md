@@ -1,5 +1,7 @@
 # SMP task 7a: local private memory
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Matched before/after record for [SMP task 7a](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-05. These are nested-VM measurements: the development host is
 itself a KVM guest (Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized i9-12900K), and
@@ -85,18 +87,15 @@ there, so a faster P takes a larger share of it while running. Before, P's memor
 work ran in the BSP executor, a kernel task. This share shift is an explanation
 from inspection, not measured.
 
-Full output: `pre4-output.txt`, `post4-output.txt`, `pre1-output.txt` and
-`post1-output.txt`.
-
 ### PMM lock contention
 
 Page clients now run in parallel, but they do not scale. Two P clients on
 separate CPUs each took 628–664 ms, against 359 ms for one alone. Four clients
 on three CPUs split into 935–1027 ms and 1230–1350 ms.
 
-A throwaway build ([pmm-counters.patch](pmm-counters.patch)) counted PMM lock
+A throwaway build counted PMM lock
 calls, bitmap bits scanned, and `rdtsc` cycles spent waiting for and holding the
-lock. GDB read the counters ([checks.txt](checks.txt)). `rdtsc` appears costly in
+lock. GDB read the counters. `rdtsc` appears costly in
 this nested VM, so the build's absolute times are inflated; only the ratios are
 used.
 
@@ -122,12 +121,10 @@ decision.
 - **Termination.** Ctrl-C through the remote terminal stopped
   `allocbench pages --rounds 1000000` after one second and `allocbench growth`
   after 10 ms. Both reported `terminated`, and the PMM and heap counters were
-  unchanged afterwards. A normal run then completed. All of this is in
-  [checks.txt](checks.txt).
+  unchanged afterwards. A normal run then completed.
 - **Distinct roots and migration.** A GDB breakpoint on
   `private_memory_allocate()` logged the CPU, process and CR3 of 1,500 calls
-  during four page clients, one of them short so that its exit freed a CPU
-  ([migration.gdb](migration.gdb), [migration-gdb.txt](migration-gdb.txt)).
+  during four page clients, one of them short so that its exit freed a CPU.
   - **Own root:** every call ran with CR3 equal to its own process's root.
   - **Concurrent:** different processes made calls on CPUs 1, 2 and 3 at once.
   - **Migrated:** three processes made calls first on one CPU, then on another:

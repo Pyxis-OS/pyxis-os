@@ -108,7 +108,23 @@ static struct scheduler *local_scheduler(void)
   return &schedulers[arch_cpu_index()];
 }
 
-static void arm_local_deadline(void)
+/* At most one clock reading per timer pass, taken only when expiry or a rearm
+ * needs it. Later steps reuse it, so it can be slightly old. */
+struct timer_clock {
+  bool taken;
+  uint64_t now;
+};
+
+static uint64_t timer_clock_now(struct timer_clock *clock)
+{
+  if (!clock->taken) {
+    clock->now = arch_monotonic_ns();
+    clock->taken = true;
+  }
+  return clock->now;
+}
+
+static void arm_local_deadline(struct timer_clock *clock)
 {
   lock_queues();
   struct task_wait *wait = local_scheduler()->timed_waits;
@@ -120,7 +136,9 @@ static void arm_local_deadline(void)
   }
   /* Only this CPU inserts deadlines. A remote removal can leave one harmless
    * earlier interrupt armed, but cannot introduce a deadline we missed. */
-  arch_timer_arm(deadline);
+  if (arch_timer_arm_needed(deadline)) {
+    arch_timer_arm(deadline, timer_clock_now(clock));
+  }
 }
 
 struct process *process_current(void)
@@ -418,7 +436,8 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bo
   unlock_queues();
 
   if (timed) {
-    arm_local_deadline();
+    struct timer_clock clock = {};
+    arm_local_deadline(&clock);
   }
   if (task->kind == TASK_USER) {
     arch_user_save(&task->cpu);
@@ -508,7 +527,7 @@ void task_wait_wake(struct task_wait *wait)
   }
 }
 
-static void expire_timed_waits(void)
+static void expire_timed_waits(struct timer_clock *clock)
 {
   lock_queues();
   struct task_wait **link = &local_scheduler()->timed_waits;
@@ -516,7 +535,7 @@ static void expire_timed_waits(void)
     unlock_queues();
     return;
   }
-  uint64_t now = arch_monotonic_ns();
+  uint64_t now = timer_clock_now(clock);
   while (*link && (*link)->deadline <= now) {
     struct task_wait *wait = *link;
     *link = wait->timeout_next;
@@ -942,12 +961,12 @@ static void reap_completed(void)
   }
 }
 
-static void wake_sleepers(void)
+static void wake_sleepers(struct timer_clock *clock)
 {
   if (!sleeping_tasks) {
     return;
   }
-  uint64_t now = arch_monotonic_ns();
+  uint64_t now = timer_clock_now(clock);
   while (sleeping_tasks && sleeping_tasks->sleep_deadline <= now) {
     struct task *task = sleeping_tasks;
     sleeping_tasks = task->next;
@@ -956,17 +975,29 @@ static void wake_sleepers(void)
   }
 }
 
-void task_timer_interrupt(void)
+static void service_timers(struct timer_clock *clock)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!atomic_load_explicit(&started, memory_order_acquire)) {
     return;
   }
-  expire_timed_waits();
+  expire_timed_waits(clock);
   if (arch_cpu_index() == 0) {
-    wake_sleepers();
+    wake_sleepers(clock);
   }
-  arm_local_deadline();
+  arm_local_deadline(clock);
+}
+
+void task_timer_interrupt(uint64_t now)
+{
+  struct timer_clock clock = {.taken = true, .now = now};
+  service_timers(&clock);
+}
+
+void task_timer_service(void)
+{
+  struct timer_clock clock = {};
+  service_timers(&clock);
 }
 
 void kernel_task_sleep_until(uint64_t deadline)
@@ -1016,7 +1047,7 @@ void kernel_task_yield_if_runnable(void)
   arch_timer_deadline_start();
   bool idle_reported = false;
   for (;;) {
-    task_timer_interrupt();
+    task_timer_service();
     if (cpu_index == 0) {
       reap_completed();
       object_reap();

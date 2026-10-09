@@ -20,8 +20,9 @@ requires a directory. Components are resolved in order: `missing/..` fails at
 
 Only a leading `scheme://` selects a root. There is no URL decoding, wildcard or
 environment expansion, query syntax or fragment syntax. Other name bytes are
-literal. Bare command lookup under `boot://` is future shell policy; ordinary
-relative file lookup does not implicitly search there.
+literal. The shell resolves a bare command by searching `bin://` and then
+`boot://` (see [commands](shell.md#commands-and-quoting)); ordinary relative file
+lookup does not implicitly search there.
 
 An explicit scheme path starts a new chain with that root as its boundary.
 A standalone subtree context cannot escape through `..`; independently supplied

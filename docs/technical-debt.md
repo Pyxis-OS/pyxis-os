@@ -912,8 +912,9 @@ separate work.
 
 The completed [descriptor portability slice](userland/libc-portability.md) supplies
 open/read/write/close for cksum and restricted tee, and `lseek` for files.
-Public O_RDWR, fdopen and duplication remain absent even though fopen
-supports update modes internally. Consumers requiring those interfaces need
+Public O_RDWR and exclusive O_CREAT|O_EXCL use existing native constructs, as
+qualified in [libc portability](userland/libc-portability.md#readwrite-and-exclusive-create-qualification).
+fdopen and duplication remain absent. Consumers requiring those interfaces need
 a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
 [SDL2 port](development/sdl2.md); it exposes the stream's existing descriptor and adds
 no new aliasing. Revisit them against a pinned consumer's actual
@@ -1144,7 +1145,11 @@ HPET MMIO reads can be expensive, especially under virtualization. The
 [HOST forwarding investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
-deadlines and profiling still pay the clock cost. The current source requires
+deadlines and profiling still pay the clock cost. Timer passes read the clock at
+most once and rearm only for an earlier target, which in nested QEMU cut idle
+HPET reads by 63% and send-side reads per TCP segment by about a quarter
+([measurements](development/experiments/timer-clock-reads/README.md)); each
+remaining read keeps its full cost. The current source requires
 a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
 the owner chose
 [software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
@@ -1298,24 +1303,53 @@ eight-session playback**, not QEMU closure. This supersedes the earlier
 QEMU-closure/native-later alternative. Revisit batching, native bounds and
 recovery with task 5's owner-run ThinkPad speaker/headphone batch.
 
+## Initial clipboard delivery limits
+
+Accepted 2026-10-09 in the [clipboard proposal](wip/clipboard.md#first-delivery-limits),
+before implementation. The first delivery is authorized but not yet implemented;
+its code PR must update this entry to match implemented/qualified behavior.
+
+- **Receivers:** Paste is limited to opted-in stock libterm line readers. vi,
+  less, Links and other raw-mode programs refuse Paste until they provide their
+  own receiver contract. Revisit when assigning those concrete consumers; do
+  not fall back to unframed bytes.
+- **One line:** LF/Tab become spaces and insertion needs a fresh Enter after
+  completion. Multi-line documents cannot be preserved by these line readers;
+  revisit with a multiline/raw-program receiver, preserving newline safety.
+- **Selection fidelity:** ASCII-only Copy refuses non-ASCII glyphs, LF-joins
+  physical rows and trims trailing spaces, including intentional whitespace.
+  Tabs and soft wraps cannot be reconstructed from retained glyph cells. Revisit
+  with a verified font mapping and terminal text/provenance work, not by labeling
+  arbitrary bytes UTF-8.
+- **Storage:** One current item per local/shared layer; RAM only, no history,
+  lost at reboot. Revisit history/persistence as separate owner-chosen work.
+- **Admission:** 64 KiB text and 8 MiB aggregate current/staging/active-snapshot
+  storage; one Paste per space; 5 s unused activation and a separate 5 s total
+  Paste deadline. Larger items or slow/stalled delivery refuse/cancel, preserving
+  current clipboard contents and never submitting partial insertion. Revisit
+  limits only from measured memory/progress needs.
+- **Pending input:** Paste refuses while earlier input is queued/staged or the
+  decoder is incomplete; it is never saved for later. The user must finish that
+  input and issue a fresh gesture. Keep this safety boundary when adding readers.
+- **Later consumers/types:** No SDL2/graphics clipboard, FILE/rich objects,
+  converter execution or remote/host clipboard bridge in this delivery. SDL2,
+  FILE retention and trusted converters follow separate milestone tasks; remote
+  bridging needs its own authority and host/guest paste contract.
+
 ## SDL2 port limits
 
 The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
-and preference paths. Missing pieces:
+and preference paths. Video event waits now block on keyboard, acquired pointer
+and display readiness; [matched QEMU qualification](development/sdl2-event-wait-qualification.md)
+records the idle CPU reduction and input-delivery samples. Upstream polling
+remains for missing/nonwaitable sessions and failed waits; enabling threads
+requires a real wakeup sender and revisiting the readiness cache. Missing pieces:
 
 - **Audio:** the [native PCM grant](interfaces/audio.md) and
   [QEMU HDA engine](devices/hda.md) are available, but SDL2 has no audio backend
   yet. Revisit with a separately assigned playback consumer task.
 - **Threads:** without them, `SDL_INIT_TIMER` callback timers and
   `SDL_CreateThread` fail. Revisit with userspace threads.
-- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.
-  Deadline sleeps now make that about 1 ms rather than the old 8.33 ms tick,
-  so an idle waiting program wakes about 1000 times a second instead of about
-  120, increasing its CPU wake cost. This is the expected polling rate, not a
-  measured `SDL_WaitEvent` run; see the
-  [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
-  Revisit a blocking wait on the input and display handles when a consumer
-  waits for events.
 - **Windows:** one fullscreen window; multiple windows remain outside the
   current display contract. System pointer positions, program images,
   show/hide, bounded warp and relative lock now use the
@@ -2732,7 +2766,6 @@ Revisit with the service/connection tasks when they can establish and qualify
 explicit radio-procedure termination, receive continuity and independent USB
 accounting. The accepted handle-reuse boundary is also required for reconnect.
 
-
 ## HD Audio jack routing at playback start
 
 Accepted **2026-10-09** in the [native task 5 plan](wip/hda-native.md): sample
@@ -2747,3 +2780,20 @@ Live switching is a separate follow-up task requiring reviewed RIRB/IRQ receptio
 tag/command correlation, refill-safe routing and discontinuity policy. Revisit
 after native one/eight-session qualification; it does not block task 5's accepted
 start-time routing batch. Public grant/session ownership remains unchanged.
+
+## sbase tail follow and sort limits
+
+The sbase [`tail`](userland/wc-tail-sort.md#tail) refuses `-f` and `-F`, because
+Pyxis has no operation that waits for a file to grow and a polling loop would
+not follow one honestly. A log or growing file cannot be followed. Revisit when a
+native change-notification or wait-for-growth operation exists for the relevant
+providers, and implement following on it; do not add polling or a fake success.
+
+[`sort`](userland/wc-tail-sort.md#sort) uses libc `qsort`, an unstable heapsort,
+so under `-u` the line kept from several that compare equal under the selected
+keys can differ from a stable sort. It also holds all input in memory, accepts
+`-m` without streaming a merge, and does not check writes to its `-o` file, as
+upstream. Revisit with a stable libc sort or a patch to sort if a consumer
+depends on the retained line, input too large for memory, or reliable `-o`
+errors. Word splitting, character classes and folding use libutf's tables, with
+no locale collation; revisit with locale support.

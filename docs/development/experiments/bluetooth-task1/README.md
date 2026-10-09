@@ -1,5 +1,7 @@
 # Bluetooth task 1: passthrough and inventory
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 On 2026-10-08, QEMU attached the ThinkPad's Intel AX200 Bluetooth USB function
 `8087:0029` as the ordinary Fedora user. Pyxis main `078c9759b2803e57368201f4ecd3b44b59bb3af9`
 then enumerated it with complete inventory, both interfaces and all alternate
@@ -93,11 +95,10 @@ GDB with the matching ELF stopped at `parse_configuration`, conditional on
 The recorded `total` was 200. Inspection and `dump binary memory` read
 `device->owner->descriptors` through `device->owner->descriptors + total`;
 no kernel functions were called. This is per-controller scratch, so it was
-captured before continuing. See the [GDB capture](gdb.txt) and exact
-[configuration bytes](guest-configuration.txt).
+captured before continuing.
 
 After detaching GDB, the ordinary remote client ran `lsusb -n`. Its
-[output](guest-lsusb.txt) reported controller `0000:00:04.0` (`1b36:000d`),
+output reported controller `0000:00:04.0` (`1b36:000d`),
 complete inventory and device `8087:0029` at full speed on root port 5.
 The command-complete event reported `exit_status=0`. QEMU's USB monitor port 1
 and Pyxis's xHCI root port 5 are separate numbering domains; neither is the
@@ -123,7 +124,7 @@ Every interface alternate uses class/subclass/protocol `e0/01/01`.
 | 1 / 5 | `0x03` OUT, `0x83` IN | Isochronous (SCO) | 49 | 1 |
 | 1 / 6 | `0x03` OUT, `0x83` IN | Isochronous (SCO) | 63 | 1 |
 
-The [live Fedora descriptor capture](host-lsusb.txt), taken after guest cleanup,
+The live Fedora descriptor capture, taken after guest cleanup,
 reports the same interface alternates, endpoint addresses, types, packet sizes
 and intervals. Its device descriptor also reports USB 2.01 and EP0 maximum packet
 size 64. The host configuration attributes are `0xe0` (remote wakeup advertised),

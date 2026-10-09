@@ -53,7 +53,10 @@ than throwaway work.
   Make is an alternative.
 - **Fetching.** HTTPS already works natively. Archives with checksums are easier
   than Git on Pyxis, but archives a mirror generates from Git commits may not be
-  byte-stable, which a SHA-256 pin needs.
+  byte-stable, which a SHA-256 pin needs. The [Git investigation](git-on-pyxis.md)
+  compares a restricted Git CLI with a native libgit2 fetch command, records
+  the investigated SDK/filesystem gaps, and tracks the accepted route and its
+  libc prerequisites for owner review.
 - **Writing `bin://`.** Today only the installer writes it, and spaces receive it
   read-only. A builder needs a staged directory, verification and a switch, like
   [system updates](../userland/system-updates.md), with new authority to do so.

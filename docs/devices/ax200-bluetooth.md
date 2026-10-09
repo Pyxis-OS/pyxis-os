@@ -6,11 +6,13 @@ the next milestone's stack, security and closure direction. This reference
 replaces the completed WIP; the [final report](../development/bluetooth-investigation.md)
 and linked task reports retain measurements, revisions, captures and limits.
 
-Only the shared private [interrupt-IN interface](usb-interrupt-in.md) is merged
-as reusable code. HCI, warm-firmware verification and scanning remain unmerged
-probes. Connections, pairing, bonds, GATT and pointer delivery were not qualified.
-The [mouse milestone](../wip/bluetooth-mouse.md) retains pending policy decisions
-and unassigned implementation tasks.
+The shared private [interrupt-IN interface](usb-interrupt-in.md) and the
+[runtime HCI transport](bluetooth-hci.md), merged in #552, are on main. The
+investigation's own probe code, including its warm-firmware verification and
+scan consumers, remains on unmerged branches. The investigation did not qualify
+connections, pairing, bonds, GATT or pointer delivery, and main has no pairing,
+HID input or Bluetooth service support. The [mouse milestone](../wip/bluetooth-mouse.md)
+tracks the remaining tasks; task 2, the runtime transport, is complete.
 
 ## Hardware and passthrough
 

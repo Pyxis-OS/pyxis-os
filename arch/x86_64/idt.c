@@ -150,13 +150,12 @@ void interrupt_handler(struct exception_frame *frame)
   }
   if (frame->vector == APIC_TIMER_VECTOR) {
     atomic_fetch_add_explicit(&cpu_current()->timer_interrupts, 1, memory_order_relaxed);
-    arch_timer_interrupt();
-    task_timer_interrupt();
+    task_timer_interrupt(arch_timer_interrupt());
     finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_RESCHEDULE_VECTOR) {
-    task_timer_interrupt();
+    task_timer_service();
     finish_interrupt(frame);
     return;
   }

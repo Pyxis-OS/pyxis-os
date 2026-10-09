@@ -1,5 +1,0 @@
-VirtIO Ctrl+C: {"type": "command_complete", "command": 1, "kind": "terminated"}
-VirtIO HTTPS after cancellation: status=0, body_bytes=577, crc32=2118444194, Example Domain title present=True
-{"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}
-CPU HTTPS: status=0, body_bytes=577, crc32=2118444194, Example Domain title present=True
-{"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}

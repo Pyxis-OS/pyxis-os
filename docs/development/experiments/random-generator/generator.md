@@ -29,7 +29,6 @@ unchanged `random-baseline`: 16 warm-up and 512 measured reads at each extent
 0/1/32/256. Each nonzero extent therefore has 2560 measured successful reads per
 source. The original clock boundaries, deadlines, stdout timing and throughput
 calculation stayed unchanged. No control subtraction or raw entropy output.
-Raw after samples: [VirtIO](virtio-after-samples.txt), [CPU](cpu-after-samples.txt).
 All five command-complete events per source report normal exit zero.
 
 | Source | Bytes/read | Before median mean µs | After median mean µs | After run-mean range µs | Before loop MiB/s | After loop MiB/s |
@@ -53,7 +52,7 @@ The global generator still pays the existing worker handoff cost.
 
 ## RFC vector and erasure
 
-The complete [debugger record](rfc-vector-gdb.txt) checks the compiled core
+The debugger run checked the compiled core
 against [RFC 8439 section 2.3.2](https://www.rfc-editor.org/rfc/rfc8439#section-2.3.2).
 In a separate one-CPU guest, stop at entropy-worker entry before live seeding.
 Four observed FREE call-slot byte buffers serve only as temporary debugger
@@ -84,7 +83,7 @@ output material nor CPU health-history words.
 
 ## Natural reseeding and existing consumers
 
-The [reseed transcript](reseed-gdb.txt) uses only normal consumer requests:
+The reseed run used only normal consumer requests:
 
 - The first observed reseed had age at least 60 seconds while its output budget
   still exceeded the request; the time trigger was independently true.
@@ -94,7 +93,7 @@ The [reseed transcript](reseed-gdb.txt) uses only normal consumer requests:
 - Both commits had a full tentative extent and the required latch; after cleanup
   the seed bytes were erased and output was permitted again.
 
-The [one-CPU record](onecpu-results.txt) includes an ordinary unprofiled consumer
+The one-CPU run included an ordinary unprofiled consumer
 run after vector inspection detached: mean 256-byte latency 524.969 µs and every
 read successful. Its later repeated invocations were boundary qualification,
 including the debugger stops, not matched performance samples. One-/four-CPU
@@ -104,7 +103,7 @@ Existing `cat https://example.com/` succeeded with packaged trust on one-CPU
 VirtIO and four-CPU VirtIO/CPU sources, returning a 577-byte body, CRC32
 2118444194. On the four-CPU VirtIO guest, Ctrl+C terminated an active consumer;
 the following HTTPS command succeeded and session FINAL confirmed complete
-cleanup/drain. [Consumer checks](consumer-checks.txt) retain statuses and body
+cleanup/drain. Consumer checks recorded statuses and body
 identity without the payload. Timing records end after their five completed
 commands; an excluded follow-up session was disconnected by host SIGINT, then
 reconnected with terminal signal handling disabled to send Ctrl+C to the guest.
