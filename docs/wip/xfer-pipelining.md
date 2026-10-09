@@ -1,6 +1,7 @@
 # xfer pipelining
 
-Proposal, 2026-10-09; not accepted. It pays down the one-chunk-in-flight part
+Accepted by the owner on 2026-10-09, all three decisions as the defaults below;
+implementation in progress. It pays down the one-chunk-in-flight part
 of [remote transfer memory and staging limits](../technical-debt.md#remote-transfer-memory-and-staging-limits).
 The current transfer behaviour is in the
 [remote terminal guide](../userland/remote-terminal.md#explicit-file-transfer)
@@ -90,6 +91,8 @@ The window only bounds what is discarded.
   Abrupt death leaves the same `.NAME.xfer-partial-ID` file.
 
 ## Owner decisions
+
+Accepted 2026-10-09, all as the defaults.
 
 1. **Window.**
    - **Default:** a 64 KiB credit of file bytes, 2048-byte chunks, cumulative
