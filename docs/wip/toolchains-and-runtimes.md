@@ -64,10 +64,9 @@ compiler, assembler, linker and runtime pieces. Cross-compilation and LLVM hosti
 have different requirements: a host-running compiler targeting Pyxis does not
 prove that LLVM's own OS-facing support library can run there.
 
-A bounded LLVM hosting requirements probe, like the
-[Neovim/libuv investigation](neovim-libuv.md), should record missing native contracts,
-dependency/runtime gaps and measured resource needs. Select one implementation
-milestone afterward rather than starting all prerequisites concurrently.
+The [hosted-Clang probe](hosted-clang.md) records missing native contracts,
+dependency/runtime gaps and measured resource proxies. Select one implementation
+task after owner review; the investigation does not start all prerequisites.
 
 The owner's approximately 1,600-line, self-hosted C-subset compiler is a possible
 later consumer for a guest compiler-to-compiler workflow. Its requirements and
