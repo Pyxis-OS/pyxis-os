@@ -11,6 +11,12 @@ struct system_info_memory_request {
   struct system_info_memory reply;
 };
 
+struct system_info_hostname_request {
+  struct bsp_request request;
+  struct system_info_hostname value;
+  enum call_status status;
+};
+
 /* SYSTEM_INFO_POWER, or SYSTEM_INFO_BATTERY with INDEX; found is false for an
  * index past the battery count. */
 struct system_info_power_request {
@@ -27,7 +33,7 @@ struct system_info_power_request {
 /* BSP, IF=0, after all CPUs acknowledge boot and before scheduler publication.
  * No allocation; identity and CPU observations are immutable afterward. */
 void system_info_init(void);
-/* BSP, IF=0. Returns one owned reference to stateless observation authority. */
+/* BSP, IF=0. Returns one owned reference to system-information authority. */
 struct kernel_object *system_info_create(void);
 struct syscall_result system_info_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size, uintptr_t reply_address,
@@ -36,5 +42,7 @@ struct syscall_result system_info_call(uint64_t rights, uint64_t operation,
 void system_info_memory_execute(struct system_info_memory_request *request);
 /* Executor only, BSP, IF=0. Copies the ACPI worker's latest published poll. */
 void system_info_power_execute(struct system_info_power_request *request);
+/* Executor only, BSP, IF=0. Publishes the immutable boot-wide hostname once. */
+void system_info_hostname_execute(struct system_info_hostname_request *request);
 
 #endif
