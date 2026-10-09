@@ -106,7 +106,7 @@ Chosen by the owner, each starting with a proposal:
   still gates timed-copy qualification.
 - **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
   Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
-  (Chocolate Doom) in progress. Presentation timing steps 1 and 2 (#610, #618),
+  (Chocolate Doom) merged in #623, task 2 (Chocolate Quake) in progress. Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
