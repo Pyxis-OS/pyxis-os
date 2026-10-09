@@ -85,6 +85,12 @@ stop/exit and terminal hangup invalidate the epoch. Focus/layer/view changes
 cancel a transaction without retargeting it; a still-editing receiver may accept
 a later fresh gesture once eligibility returns.
 
+Terminal END_INPUT is graceful EOF, not hangup. Registration and ordinary
+receiver reads preserve queued input, then report zero-byte EOF; new paste
+admission refuses closed input. An already admitted transaction retains its
+framing/deadline until consumed or released, and cannot submit an unfinished
+line at EOF.
+
 Admission requires a live receiver at a complete decoding boundary and no older
 input. It checks the native destination FIFO and competing reads; mux also
 checks its outer staged bytes, partial key/prefix/confirmation state and the

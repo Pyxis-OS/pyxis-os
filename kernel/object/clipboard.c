@@ -509,9 +509,9 @@ void clipboard_request_execute(struct clipboard_request *request)
       return;
     }
     lock_input(&input);
-    bool closed = (input.closed && *input.closed) || (input.hung_up && *input.hung_up);
+    bool hung_up = input.hung_up && *input.hung_up;
     unlock_input(&input);
-    if (closed) {
+    if (hung_up) {
       request->status = CALL_ENDPOINT_CLOSED;
       return;
     }
