@@ -418,3 +418,26 @@ fail-closed; a trace showing them needs a reviewed ownership-safe recovery desig
 Real boot notification, USB completion, clean frame boundaries and operational
 version confirmation remain mandatory. The single trace batch above determines
 whether this correction resolves the native failure. #564 stays draft.
+
+
+### Warm regression check of the completion correction
+
+Measured code/image revision: 2cf50703, `LOG_LEVEL=trace`, with the earlier
+ThinkPad Fedora KVM/Q35 configuration (four CPUs, 2 GiB, real warm AX200,
+private USB storage and an unsupported `usb-ehci`). The hosting xHCI was COMPLETE,
+EHCI stayed UNSUPPORTED and `lsusb -n` correctly returned 1 for global inventory
+incompleteness. Bluetooth reached warm skip/DDC/development READY: one candidate,
+zero upload commands, two DDC commands, command credit 1, ACL credits 3 and
+payload limit 251 bytes. Text retrieval and all three 1-MiB storage samples
+verified; trace-build timing is not a performance comparison.
+
+Read-only GDB found both interrupt and bulk receive pairs POSTED, queues empty,
+no partial HCI frame and no terminal failure. A separate idle observation with
+a 30-second quiet wait kept those scalar observations and xHCI interrupt/command/
+event counters unchanged. Neither stream had recorded a
+SUCCESS with nonzero residual, so this run does not exercise the compatibility
+case or the cold BOOT transition. Info/trace kernel builds and the trace image
+build passed; matching SDK/userspace/ports bundles were reused. No public ABI,
+dependency pin or firmware asset changed. Raw captures stay local.
+QEMU, debugger and remote-client jobs are stopped. Fedora Bluetooth remains
+inactive for the investigation; re-enable it when Bluetooth work is finished.
