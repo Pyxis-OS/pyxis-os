@@ -117,7 +117,8 @@ owner-reported until supplied. This plan claims no task 3 completion.
 ## Implementation and recoverable status
 
 The private firmware module and HCI integration implement the planned bounded
-flow. Startup uses Intel's combined Read Version selector 0xff, accepting only
+flow. Startup uses the canonical device-recipient HCI USB request type 0x20/index 0
+and Intel's combined Read Version selector 0xff, accepting only
 the AX200 legacy 10-byte profile. Cold postboot version must match the selected
 image metadata before standard HCI Reset; the full tuple must remain unchanged
 after Reset. DDC must complete before capabilities/readiness. No production
@@ -163,3 +164,8 @@ script are prepared in /tmp/pyxis-bluetooth-firmware-readiness. Pending work:
 mirror verification and ordinary image build; baseline/warm passthrough framing,
 DDC/skip and matched storage/idle checks; exact-head CI and final review; the
 owner's cold/warm native batch. Task 3 is incomplete and the PR stays draft.
+
+The earlier 0x21 request was measured warm-only. Linux uses 0x20 for the AX200
+combined path in both states (secure-send alone uses bulk OUT). The canonical
+request and selector still require warm passthrough qualification before the
+native batch; no cold outcome is inferred from the old warm-only shape.

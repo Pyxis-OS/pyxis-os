@@ -61,7 +61,7 @@
 #define HCI_LE_FEATURE_CONNECTION_PARAMETERS (UINT64_C(1) << 1)
 #define HCI_LE_FEATURE_DATA_LENGTH (UINT64_C(1) << 5)
 #define HCI_LE_FEATURE_PRIVACY (UINT64_C(1) << 6)
-#define HCI_USB_COMMAND_REQUEST_TYPE 0x21
+#define HCI_USB_COMMAND_REQUEST_TYPE 0x20
 #define HCI_USB_COMMAND_REQUEST 0
 
 struct hci_command {
@@ -124,7 +124,6 @@ enum hci_initialization {
 static struct {
   struct usb_host_controller *host;
   struct usb_host_device *device;
-  uint8_t interface_number;
   unsigned attachments;
   bool sealed, complete, terminal, dirty, cleanup, progress_active;
   enum call_status failure;
@@ -1431,7 +1430,7 @@ static void publish_command(void)
   --adapter.command_credits;
   struct usb_setup setup = {
     .request_type = HCI_USB_COMMAND_REQUEST_TYPE, .request = HCI_USB_COMMAND_REQUEST,
-    .index = adapter.interface_number, .length = selected->length,
+    .length = selected->length,
   };
   cpu_restore_interrupts(flags);
   struct usb_ticket ticket;
@@ -1571,12 +1570,11 @@ void bluetooth_hci_attach(struct usb_host_controller *host,
   KASSERT(arch_cpu_index() == 0 && host && device);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  if (adapter.attachments != 1 || adapter.host || adapter.sealed) {
+  if (interface_number || adapter.attachments != 1 || adapter.host || adapter.sealed) {
     fail_adapter_reason(CALL_UNAVAILABLE, "invalid AX200 attachment");
   } else {
     adapter.host = host;
     adapter.device = device;
-    adapter.interface_number = interface_number;
     adapter.command_credits = 1; /* Initial HCI command allowance before replies. */
   }
   cpu_restore_interrupts(flags);
