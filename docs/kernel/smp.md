@@ -278,6 +278,15 @@ request/profile allocations. If the BSP itself runs userspace,
 a pending completion makes its next user timer interrupt return to the scheduler
 even when there is no second runnable BSP task.
 
+[Audio exit](../interfaces/audio.md#handoff-and-output-limits) clears the session
+owner and invalidates its generation without allocation or sleeping. Queue
+storage stays with the sole audio worker until it drains the cleanup notice.
+For a grouped producer, a cleanup token keeps completion pending until that
+storage is freed; the worker retains no retired process pointer. Queue consumption
+and direct DMA publication share a bounded IF=0 phase, so exit cannot interleave
+with the mix commit. Already mixed DMA belongs to the engine and may outlive the
+producer.
+
 Capability tables follow that same exclusive process ownership. The BSP installs
 entries before submission; the executing CPU can resolve or close them with
 IF=0. A last object release normally queues its embedded retirement link without
@@ -376,7 +385,7 @@ the clock to preserve the nominal preemption phase.
 
 The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
-It currently services pipe creation, private memory, display, screen capture,
+It currently services pipe creation, display, screen capture and audio admission,
 capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
 allocation and discard, RAM FILE backing replacement, launch preparation/publication and HOST
 forwarding. Preparation zeroes the selected typed record in the caller's reusable
@@ -397,10 +406,11 @@ or servicing work. An early wake is remembered through the normal parking
 handshake. A parked worker becomes runnable, with an IPI only for a remote
 publisher. There is no polling, self-IPI or scheduler sweep of this request queue.
 Local operations write their result and publish completion before waking the
-caller. HOST forwarding instead transfers the request to its existing transport
-worker in FORWARDED state. The executor makes no further request access and
-continues its normal scheduling boundary; only HOST completion paths publish the
-final result, including immediate unavailability and initialization failure.
+caller. Forwarded operations transfer requests to their owning HOST, native
+filesystem, readiness, ACPI, audio or presentation worker in FORWARDED state.
+The executor makes no further request access and continues its normal scheduling
+boundary; the owning completion path publishes the final result, including
+immediate unavailability and initialization failure.
 Completion makes no further access to the request or loaned state. The caller
 consumes the result before releasing its reservation, including staged HOST user
 copies and ownership transfer of returned objects or image captures. Only then
@@ -411,6 +421,17 @@ to itself and wait. Its subsystem operations use local helpers; RAMFS allocation
 and disposal and FILE buffer replacement helpers are static to their subsystems.
 Launch preparation calls BSP-local loading, capability installation and task
 preparation directly; it does not submit nested service requests.
+
+[Audio requests](../interfaces/audio.md) stage bounded PCM in reusable shared
+request storage before submission. Their publication needs no private-root or
+capability-table loan. The caller's uninterruptible reservation keeps its process
+identity and grant alive until completion. The audio worker drains exit notices,
+owns its request FIFO and services one request between refill checks. It enters
+the request's cleanup attribution while servicing, restores the previous context
+and clears borrowed pointers before completion, then makes no further request
+access. Notifications are remembered across work and wait publication.
+A running stream uses IRQ wakeups and a 5 ms watchdog; an idle, absent or failed
+engine parks untimed while retaining request and cleanup service.
 
 Framebuffer presentation runs as a BSP kernel task. It copies the active
 space on a roughly 60 Hz monotonic deadline schedule, skipping missed frames.
@@ -578,10 +599,10 @@ These stay on the BSP:
 
 - the request executor and every service in its catalog: pipe and terminal
   creation, capability growth, namespace creation, endpoint creation and export,
-  RAMFS entries, RAM-file replacement, launch preparation, display, HOST and
+  RAMFS entries, RAM-file replacement, launch preparation, display, audio, HOST and
   native filesystem admission, readiness waits and system-info memory;
-- the network, native filesystem, HOST transport, virtio-blk, USB, ACPI and
-  presentation workers;
+- the network, native filesystem, HOST transport, virtio-blk, USB, ACPI, audio
+  and presentation workers;
 - task reaping, object retirement and the general kernel VM;
 - device interrupt routing.
 

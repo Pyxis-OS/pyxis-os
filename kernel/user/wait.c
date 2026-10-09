@@ -11,6 +11,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
@@ -90,6 +91,15 @@ static enum call_status interest_authority(const struct kernel_object *object,
       return CALL_DENIED;
     }
     required = KEYBOARD_RIGHT_INPUT;
+  } else if (object->type == OBJECT_AUDIO) {
+    if (events != WAIT_WRITABLE) {
+      return CALL_BAD_REQUEST;
+    }
+    struct audio_object *audio = (struct audio_object *)object;
+    if (audio->space != caller->space || !audio_owned(audio, caller)) {
+      return CALL_DENIED;
+    }
+    required = AUDIO_RIGHT_PLAYBACK;
   } else if (object->type == OBJECT_POINTER || object->type == OBJECT_TERMINAL_POINTER) {
     if (events != WAIT_READABLE) {
       return CALL_BAD_REQUEST;

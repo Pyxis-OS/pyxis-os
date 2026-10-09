@@ -80,16 +80,25 @@ Chosen by the owner, each starting with a proposal:
   investigation and proposal only. Kernel ownership, VM/copy safety, native
   lifecycle and TLS/runtime prerequisites; three owner decisions remain open.
   No implementation task is assigned by this investigation.
+- **Codex alpha** (2026-10-09): blocking SDL2 video event waits on existing
+  keyboard, pointer and display readiness; ports adapter and Pyxis pin/docs
+  delivered together, ports first. See [SDL2](../development/sdl2.md) and the
+  [matched qualification](../development/sdl2-event-wait-qualification.md).
+
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
-  exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
-  queues as starting tuning. First controller/codec bring-up task assigned
-  2026-10-08; [private engine and matched qualification delivered for review](../development/experiments/audio-task1/README.md).
-  Public sessions/mixing and IRQ/refill remain later tasks.
-  QEMU closure with
-  a later ThinkPad native batch is carried forward for confirmation at closure;
-  native playback remains unqualified. Quake can produce sound
+  exclusive per-space sessions, 48 kHz S16LE stereo, and 8 × 10 ms DMA/80 ms
+  queues as starting tuning. Controller/codec bring-up merged in #553.
+  Sessions/mixing and IRQ refill implemented as task 2 on 2026-10-08;
+  [baseline, accepted policies and qualification](../development/experiments/audio-task2/README.md)
+  record exact PCM/saturated mixing, eight admissions/ninth refusal and measured
+  BSP cost. The owner accepted task 2 delivery with recorded nested-QEMU
+  [eight-session debt](../technical-debt.md#hd-audio-sustained-eight-session-playback)
+  on 2026-10-09. Two notification/clock-scan fixes are implemented; batching is
+  deferred. Task 5 is assigned as a separate native AMD/ALC257 proposal before
+  code. HDA closure requires native eight-session playback; one guard trip still
+  disables audio until reboot, with recovery revisited from native evidence. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
