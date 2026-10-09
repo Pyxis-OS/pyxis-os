@@ -106,6 +106,8 @@ already have pinned recipes; no compiler-container rebuild is proposed.
 The harness gains only its space's explicitly supplied grants. Data authority
 must be a project directory view, not an entire HOST/home tree selected merely
 by a string prefix; supply that view through native launcher startup. Auxiliary
+File tools accept only project-relative components, rejecting parent traversal,
+absolute/scheme paths and NULs. Child cwd starts at the same project boundary.
 memory, clock, random, console, launch and read-only runtime roots remain
 explicit. It receives no raw-disk, mount, power or space-factory authority.
 Trusted startup creates/delegates a private RAM work-volume root for capture
