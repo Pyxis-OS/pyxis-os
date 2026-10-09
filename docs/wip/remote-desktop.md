@@ -36,9 +36,10 @@ so any existing viewer works and Pyxis needs no host-side client of its own.
 2. **Remote input.** RFB sends key events as X11 keysyms and pointer events as
    absolute positions with a button mask (the wheel arrives as buttons 4 and 5).
    Injecting them is new authority: events from the network would enter the same
-   routing as the PS/2 keyboard and mouse. Absolute positions need the kernel-owned
-   pointer position from task 1 of the [system pointer](pointer.md) milestone;
-   today's pointer reports only relative counts.
+   routing as the PS/2 keyboard and mouse. The [system pointer](../interfaces/pointer.md)
+   already owns position and supplies ordinary surface-local positions to
+   consumers. A remote producer still needs its own authority and an absolute
+   input contract; consumer subscriptions do not authorize injection.
 3. **Cheaper frames.** Each capture copies the whole screen into a new FILE, and
    the presenter does not track which regions changed, so the server must diff
    whole frames itself. A capture stream or shared pixels would avoid the copy,
@@ -67,7 +68,7 @@ records the dependency.
 1. **View-only server.** Native RFB server in userland over the capture grant,
    with raw and zlib encodings and tile diffing. LAN-only, no input. Measure frame
    rate and CPU against a matched static and a moving scene.
-2. **Remote input.** After pointer task 1: a remote input source for keys and
+2. **Remote input.** A remote input source for keys and
    absolute pointer positions, with its own authority decision.
 3. **Efficiency and security.** Capture without whole-frame copies, damage
    tracking, TLS, and clipboard sync once the [clipboard](clipboard.md) exists.
@@ -79,7 +80,8 @@ records the dependency.
   observes whatever any space shows.
 - What authority injects remote input: a separate grant, the remote daemon, or
   part of the Remote space's existing grants. How it interacts with the
-  [pointer lock](pointer.md) and Super+Esc, and whether remote input counts as
+  [pointer lock](../interfaces/pointer.md#relative-lock-and-user-escape) and
+  Super+Esc, and whether remote input counts as
   user activation.
 - How X11 keysyms map onto Pyxis key events and the shared US
   [key layout](../development/sdk.md); non-US layouts and dead keys.

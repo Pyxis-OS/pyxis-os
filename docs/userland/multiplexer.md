@@ -121,8 +121,10 @@ screen as their shell; no alternate-screen protocol is introduced.
 ## Local pointer input
 
 Configured local startup gives mux a separate `terminal_pointer` CONTROL grant
-through its trusted init/shell/session chain. Acquisition is exclusive and
-process-owned. Pane shells retain graphics/pointer grants for their games but
+through its trusted init/shell/session chain. The
+[terminal controller contract](../interfaces/pointer.md#terminal-control-and-selection)
+is independent of graphical pointer INPUT authority. Acquisition is exclusive
+and process-owned. Pane shells retain graphics/pointer grants for their games but
 receive no outer terminal control. Mux adds the spatial queue to its native
 `wait_many` interests, with no idle polling loop. Remote mux remains keyboard-only.
 
@@ -144,9 +146,12 @@ bounded endpoints. Reaching the newest endpoint returns to ordinary pane input.
 The existing prefix/keyboard history controls still work. Drag autoscroll,
 selection across off-view history and clipboard publication/paste are deferred.
 Controller release/exit restores kernel local-TTY selection and cursor handling.
+Selected cells are retained 8-bit glyphs; no text is exported or mislabeled as
+UTF-8. The later [clipboard contract](../wip/clipboard.md) must define an owned
+text snapshot and encoding for both mux and kernel-local selection.
 
-The [pointer task 3 qualification](../development/system-pointer-qualification.md#task-3-qualification)
-records implementation validation separately from the original mux results below.
+The [pointer qualification](../development/system-pointer-qualification.md#task-3-qualification)
+records spatial-input validation separately from the original mux results below.
 
 ## Qualification (2026-10-08)
 

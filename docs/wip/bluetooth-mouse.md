@@ -279,7 +279,7 @@ and explicit sequence/loss handling. Reject absolute or unsupported reports
 rather than interpreting them as relative motion. Initially rediscover GATT
 after reconnect; caching/service-change policy can follow only if needed.
 
-The owner has accepted the [system-pointer milestone](pointer.md), with kernel
+The implemented [system pointer](../interfaces/pointer.md) owns kernel
 positions. Pointer tasks 1+2 merged in
 [#545](https://git.internal/PyxisOS/pyxis-os/pulls/545). Task 1 records the
 [owner-accepted producer, aggregation and source-loss contract](bluetooth-task1-contracts.md#input-source-contract-for-coordination)
@@ -290,8 +290,10 @@ kernel position, routing, cursor and lock path as PS/2;
 consumer APIs do not confer input-injection authority. Physical held state is
 per source. Reset/cancel only when the lost source held buttons; revoke lock then
 or when no live source remains. Idle loss of an unused mouse is invisible while
-PS/2 is live. Terminal/mux wheel remains pointer task 3, not implemented by
-those tasks or Bluetooth. The agreement adds no second source or producer API;
+PS/2 is live. Terminal/mux wheel is implemented by pointer task 3, independently
+of Bluetooth. The [pointer source-coordination reference](../interfaces/pointer.md#input-source-coordination)
+distinguishes the current PS/2 adapter from this accepted future integration.
+The agreement adds no second source or producer API;
 the future Bluetooth adapter remains to be implemented in its assigned task.
 
 ## Proposed sharing with USB HID

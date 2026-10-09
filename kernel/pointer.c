@@ -21,11 +21,70 @@ static struct pointer_object *hover;
 static struct pointer_object *locked_pointer;
 static uint8_t arrow_pixels[16 * 24 * 4], terminal_pixels[9 * 20 * 4];
 
-static void default_pixel(uint8_t *pixels, size_t index, bool white)
+/* Black outline, white fill, transparent space. */
+static const char *const arrow_shape[] = {
+  "#           ",
+  "##          ",
+  "#.#         ",
+  "#..#        ",
+  "#...#       ",
+  "#....#      ",
+  "#.....#     ",
+  "#......#    ",
+  "#.......#   ",
+  "#........#  ",
+  "#.........# ",
+  "#......#####",
+  "#...#..#    ",
+  "#..##..#    ",
+  "#.#  #..#   ",
+  "##   #..#   ",
+  "#     #..#  ",
+  "      #..#  ",
+  "       ##   ",
+};
+
+static const char *const terminal_shape[] = {
+  " ####### ",
+  "#.......#",
+  " ###.### ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  "   #.#   ",
+  " ###.### ",
+  "#.......#",
+  " ####### ",
+};
+
+_Static_assert(sizeof(arrow_shape) / sizeof(arrow_shape[0]) <= 24, "arrow image rows");
+_Static_assert(sizeof(terminal_shape) / sizeof(terminal_shape[0]) <= 20, "terminal image rows");
+
+static void default_image(uint8_t *pixels, size_t width,
+    const char *const *rows, size_t height)
 {
-  uint8_t *pixel = pixels + index * 4;
-  pixel[0] = pixel[1] = pixel[2] = white ? 255 : 0;
-  pixel[3] = 255;
+  for (size_t y = 0; y < height; ++y) {
+    for (size_t x = 0; rows[y][x]; ++x) {
+      KASSERT(x < width);
+      char colour = rows[y][x];
+      KASSERT(colour == '#' || colour == '.' || colour == ' ');
+      if (colour != ' ') {
+        uint8_t *pixel = pixels + (y * width + x) * 4;
+        pixel[0] = pixel[1] = pixel[2] = colour == '.' ? 255 : 0;
+        pixel[3] = 255;
+      }
+    }
+  }
 }
 
 void pointer_init(void)
@@ -34,25 +93,10 @@ void pointer_init(void)
   const struct framebuffer *layout = display_layout();
   position_x = layout->width / 2;
   position_y = layout->height / 2;
-  for (size_t y = 0; y < 17; ++y) {
-    size_t width = y / 2 + 1;
-    for (size_t x = 0; x < width; ++x) {
-      default_pixel(arrow_pixels, y * 16 + x, x && x + 1 < width && y < 16);
-    }
-  }
-  for (size_t y = 12; y < 23; ++y) {
-    for (size_t x = 4; x < 8; ++x) {
-      default_pixel(arrow_pixels, y * 16 + x, x == 5 || x == 6);
-    }
-  }
-  for (size_t y = 0; y < 20; ++y) {
-    for (size_t x = 0; x < 9; ++x) {
-      if (y < 3 || y >= 17 || (x >= 3 && x <= 5)) {
-        default_pixel(terminal_pixels, y * 9 + x,
-            (y == 1 || y == 18) ? (x > 0 && x < 8) : x == 4);
-      }
-    }
-  }
+  default_image(arrow_pixels, 16, arrow_shape,
+      sizeof(arrow_shape) / sizeof(arrow_shape[0]));
+  default_image(terminal_pixels, 9, terminal_shape,
+      sizeof(terminal_shape) / sizeof(terminal_shape[0]));
 }
 
 static int64_t clamped_move(int64_t position, int32_t delta, size_t extent)
