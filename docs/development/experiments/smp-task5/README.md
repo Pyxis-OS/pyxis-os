@@ -17,7 +17,6 @@ new any-CPU paths, which no committed code uses yet.
 | Item | Before | After |
 | --- | --- | --- |
 | Pyxis | main `b45270e` (task 4b and the T14 topology) | this PR's code, built just before committing it as `c1ca77e` |
-| Kernel ELF SHA-256 | `65a0a9c1…71cf001e` | `02dc00fa…08d414` |
 | Pins | fs `d352c7e`, userspace `2f01df6`, ports `36d952e`, lwIP `a1aadb9` | same |
 
 - **Build:** `make -j16 image` with the repository's default spaces (Development,
@@ -59,10 +58,9 @@ goes through the BSP's private-memory requests, so 4 × P still takes about twic
 
 ## Stress run (not committed)
 
-The stress patch is a throwaway patch on top of this PR; it is not
-part of the tree. It applied to main at `fe1f5cd` with `git apply`. When the scheduler starts, it keeps every AP busy for six
-seconds while the BSP continues booting: USB enumeration, display start and
-network setup all allocate during that window. Each round on an AP:
+The stress patch is a throwaway patch on top of this PR (it applied to main at `fe1f5cd`) and is not part of the tree. When the
+scheduler starts it keeps every AP busy for six seconds while the BSP continues booting (USB enumeration, display start and
+network setup all allocate during that window). Each round on an AP:
 
 1. Allocates 1–4 frames.
 2. Zeroes each frame with `arch_frame_zero()`.
@@ -107,9 +105,7 @@ So the stress does detect a missing PMM lock.
 
 ## Scratch slots in the debugger
 
-A hardware breakpoint in the stress build (before refused requests were added)
-stopped each time an AP had both of its
-slots mapped. GDB then read the page table covering `TEMP_MAP_BASE`, where entries
+A hardware breakpoint in the stress build (before refused requests were added) stopped each time an AP had both of its slots mapped. GDB then read the page table covering `TEMP_MAP_BASE`, where entries
 2n and 2n+1 belong to CPU index n.
 
 - **Separate pairs:** both entries of the stopped CPU's pair always mapped the
