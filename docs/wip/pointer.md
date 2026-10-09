@@ -1,6 +1,7 @@
 # A system pointer
 
-Status: **tasks 1–3 merged; task 4 delivered for review, 2026-10-08.**
+Status: **tasks 1–3 merged; task 4 approved, awaiting merge; task 5 authorized
+after task 4 merges, 2026-10-09.**
 [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545),
 [userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164) and
 [ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)/
@@ -23,8 +24,7 @@ The [initial software baseline](../development/system-pointer-qualification.md#t
 and [accepted task-specific decisions](#task-4-planning) preceded implementation.
 [Task 4 qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
 records hardware/capture/consumer checks, software regressions and measured
-costs and the deferred ordinary-completion review fix. Task 5 still requires separate
-authorization.
+costs and the deferred ordinary-completion review fix. Task 5 is authorized on 2026-10-09 and starts after #560 merges.
 
 The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
 All three original decision rounds are accepted on 2026-10-08; round three was
@@ -532,7 +532,8 @@ of at most three, with defaults, rather than silently becoming a requirement.
 ## Task breakdown
 
 Tasks 1–4 have explicit owner authorization on 2026-10-08.
-Task delivery/review does not authorize task 5.
+The owner authorized task 5 on 2026-10-09, after #560 merges, with the default
+cursor redraw folded in.
 
 - [x] **Documentation proposal.** Inspect current main and describe contracts,
   recommendations, boundaries and a task sequence without code or placeholder APIs.
@@ -657,7 +658,8 @@ Implementation breakdown:
 The owner authorized the VirtIO hardware cursor on 2026-10-08. This task owns
 only the kernel display backend and cursor-inclusive capture integration;
 ordinary input, locks, grants and the public image contract remain unchanged.
-Boot and Bochs continue software composition. Task 5 closure is not authorized.
+Boot and Bochs continue software composition. Task 5 closure is now authorized
+after #560 merges, as recorded below.
 
 Implemented breakdown (task 4 delivered for review in #560):
 
@@ -718,3 +720,58 @@ Evidence: [VirtIO 1.4 GPU definition](https://github.com/oasis-tcs/virtio-spec/b
 [GDK Wayland warp](https://github.com/GNOME/gtk/blob/3.24.49/gdk/wayland/gdkdevice-wayland.c#L642).
 These are inspected host implementations, not runtime hardware qualification.
 Both defaults were accepted on 2026-10-08; task 4 implementation is authorized.
+
+
+## Task 5 preparation (2026-10-09)
+
+Owner authorization covers milestone closure and the default cursor redraw.
+#560 is approved but still awaiting the owner's merge. Its integration with
+main `183f7937` is pushed as `60ed2ed8`; exact-head workflow #1346 passed
+build, filesystem and change detection, and links passed. That integration
+preserved both the Codex alpha and main Claude Assigned entries unchanged.
+
+Prepared work is on `pointer/milestone-close` in
+`/home/chronium/src/pyxis-pointer-task5`, based on `60ed2ed8`. Commit `70daff2e`
+replaces the two procedural default shapes with reviewable character rows:
+12x19 drawn arrow inside the unchanged 16x24 image, tip hotspot 0,0, and a
+serifed 9x20 I-beam retaining hotspot 4,10. Opaque black/white pixels retain
+straight alpha; spaces and unused bounds remain transparent. Program images,
+input, hardware queues and ABI are unchanged. Commit `6da88770` records the
+owner's partial native result with its exact checked/unchecked split, leaving
+[native qualification](../technical-debt.md#native-system-pointer-qualification)
+open.
+
+The ordinary before/after `make -j16 image` builds passed using the existing
+LLVM builder. Manual QEMU 10.2.2 Q35/nested-KVM boots used four CPUs, 512 MiB,
+fresh matching OVMF variables, PS/2, modern VirtIO RNG/SCSI CD, no NIC and
+1280x800 boot framebuffer. Read-only GDB confirmed backend and positions:
+arrow (200,8) over navigation, I-beam (800,400) over the Development terminal.
+Monitor dumps include software composition; PNG conversion preserves pixels.
+The detail images below are 8x nearest-neighbour extracts of those full captures,
+not native scale or a ThinkPad check. All preparation QEMU/GDB jobs are stopped.
+
+| Cursor | Before | After |
+| --- | --- | --- |
+| Arrow | [full capture](../images/pointer-task5/arrow-before.png), [8x detail](../images/pointer-task5/arrow-before-detail.png) | [full capture](../images/pointer-task5/arrow-after.png), [8x detail](../images/pointer-task5/arrow-after-detail.png) |
+| I-beam | [full capture](../images/pointer-task5/ibeam-before.png), [8x detail](../images/pointer-task5/ibeam-before-detail.png) | [full capture](../images/pointer-task5/ibeam-after.png), [8x detail](../images/pointer-task5/ibeam-after-detail.png) |
+
+Before kernel/ISO SHA-256:
+`7d7122e3643b8d92e4da6c224af2169ba03ec6e5db3ff9c7d35793a76d87f4a0`,
+`226789d8045260e47c6c8a5fc34acf985375336786258246d3d117278f25786e`.
+After capture kernel/ISO:
+`dbf69533a9f156774c52ffee12f7be128230e05706cc61d8752ea8dc4a82634d`,
+`229dc8cdb55da0456225ab2931a5e554ddf66b1f964b32232567e22c6a525e42`.
+Those after artifacts precede the compile-time table-height guards in `70daff2e`;
+the guards add no runtime instructions. Build logs and saved ELF/ISO/PPM
+artifacts remain local under `build/pointer-task5` and
+`/tmp/pyxis-pointer-task5-*`. Pins are main's userland `362574b1`, ports
+`a642f073`, fs `b427df29` and lwIP `a1aadb91`.
+
+Remaining: after #560 merges, fetch and rebase onto fresh main before opening
+the task 5 PR. Review the existing matched boot/Bochs/VirtIO checks, finish
+redraw smoke/capture checks on the latter backends, rewrite/move this WIP into
+implemented device/interface/userland references, update inbound links and the
+milestone index, and carry remaining clipboard/input-source/frontend/native
+limits forward. Attach the before/after captures to that PR, check the ordinary
+build and exact-head CI, then stop for owner review. No task 5 PR is open and
+no milestone closure is claimed by this preparation.
