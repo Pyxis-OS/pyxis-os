@@ -1,6 +1,5 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
-#include <abi/launcher.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -518,28 +517,26 @@ static enum call_status enumerate_node(struct npfs_store_context *context,
 static enum call_status capture_file(struct npfs_store_context *context, struct npfs_job *job)
 {
   uint64_t size = npfs_store_size(job->node->inode);
-  if (!size || size > LAUNCH_EXTERNAL_IMAGE_MAX_SIZE) {
-    return size ? CALL_LIMIT : CALL_BAD_REQUEST;
-  }
+  struct image_capture captured = {0};
   uint64_t flags = cpu_save_interrupts();
-  void *bytes = kmalloc(size);
+  enum call_status status = image_capture_allocate(size, &captured);
   cpu_restore_interrupts(flags);
-  if (!bytes) {
-    return CALL_NO_MEMORY;
+  if (status != CALL_OK) {
+    return status;
   }
   size_t read = 0;
-  enum call_status status = npfs_store_read(context, job->node->inode, 0, bytes, size, &read);
+  status = npfs_store_read(context, job->node->inode, 0,
+      (void *)captured.address, captured.size, &read);
   if (status == CALL_OK && read != size) {
     status = CALL_IO;
   }
   if (status != CALL_OK) {
     flags = cpu_save_interrupts();
-    kfree(bytes);
+    image_capture_release(&captured);
     cpu_restore_interrupts(flags);
     return status;
   }
-  job->captured = bytes;
-  job->count = size;
+  job->captured = captured;
   return CALL_OK;
 }
 
@@ -822,8 +819,7 @@ static void npfs_worker(void *argument)
           object_release(job->object);
           job->object = NULL;
         }
-        kfree(job->captured);
-        job->captured = NULL;
+        image_capture_release(&job->captured);
       }
       object_cleanup_leave(previous);
       complete_job(job);
@@ -891,7 +887,8 @@ static void enqueue_job(struct npfs_job *job)
 enum call_status npfs_submit(struct npfs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!job || job->state != NPFS_JOB_IDLE || job->object || job->captured || job->next ||
+  if (!job || job->state != NPFS_JOB_IDLE || job->object || job->captured.address ||
+      job->captured.size || job->captured.backing_bytes || job->next ||
       job->user_request || job->admitted || (unsigned)job->operation > NPFS_RAW_CLAIM) {
     return CALL_BAD_REQUEST;
   }
@@ -922,7 +919,8 @@ void npfs_request_submit_and_wait(struct npfs_request *request)
 
 void npfs_request_release(struct npfs_request *request)
 {
-  KASSERT(!request->job.raw && !request->job.node && !request->job.destination && !request->job.table && !request->job.object && !request->job.captured && !request->job.next &&
+  KASSERT(!request->job.raw && !request->job.node && !request->job.destination && !request->job.table && !request->job.object && !request->job.captured.address &&
+      !request->job.captured.size && !request->job.captured.backing_bytes && !request->job.next &&
       !request->job.user_request && !request->job.admitted);
   bsp_request_release(&request->request);
 }

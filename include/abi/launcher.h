@@ -15,10 +15,10 @@
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
 #define LAUNCH_INITIAL_STACK_MIN_SIZE (UINT64_C(1) * 1024 * 1024)
 #define LAUNCH_INITIAL_STACK_MAX_SIZE (UINT64_C(8) * 1024 * 1024)
-/* HOST and native filesystem executables are copied before loading; this bounds
- * staging bytes, not the child's mapped memory. RAM executables are copied
- * without this bound; archive executables need no copy. */
-#define LAUNCH_EXTERNAL_IMAGE_MAX_SIZE (UINT64_C(16) * 1024 * 1024)
+/* Per selected executable for HOST, native filesystem and RAM copies, not an
+ * aggregate concurrent budget or mapped-span limit. Backing is released after
+ * loading or failure. Boot archive bytes need no copy. */
+#define LAUNCH_CAPTURED_IMAGE_MAX_SIZE (UINT64_C(128) * 1024 * 1024)
 
 /* CREATE_GROUP sends only a message_header and requires CREATE_GROUP on an
  * unbound launcher. The ungrouped caller remains outside the new group. Both
