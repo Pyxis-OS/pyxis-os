@@ -142,8 +142,8 @@ to the acquired terminal controller, rather than inventing a control byte in
 mux's byte stream. Plain Ctrl+C, Ctrl+V and mux's Ctrl+B prefix keep their
 application meanings. Existing Super+arrows and Super+Esc keep their priority.
 
-Copy in mux uses the completed selection's pane, even if a later heading click
-changed keyboard focus. Paste uses the currently keyboard-focused pane. Both
+Copy in mux uses the completed selection's pane, even if a later keyboard action
+changed keyboard focus without invalidating selection. Paste uses the currently keyboard-focused pane. Both
 capture pane/session/view identity at the action; neither follows subsequent
 focus. Copy while dragging, stale/cleared selection, or Copy with no selection
 refuses without overwriting the previous item. Explicit history movement clears

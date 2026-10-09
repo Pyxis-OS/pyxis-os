@@ -262,8 +262,8 @@ recording revisions, boot/display/device configuration, behavior and cost sample
 
 
 An additional ThinkPad owner report on 2026-10-09 found that a plain click selected a cell (no boot revision supplied).
-The [click/drag correction](development/system-pointer-qualification.md#click-and-drag-selection) applies to local TTY and mux;
-the correction needs a native recheck in the next owner ThinkPad batch before the click behavior is qualified.
+The owner confirmed the merged [click/drag correction](development/system-pointer-qualification.md#click-and-drag-selection)
+natively in the boot log, raw terminals and mux on 2026-10-09; that correction no longer needs a native recheck.
 
 ## System pointer selection and input limits
 
