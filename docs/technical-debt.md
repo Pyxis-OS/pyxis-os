@@ -1823,523 +1823,239 @@ sink, measured on the ThinkPad on 2026-10-09.
 
 ## DHCP maintainer and client limits
 
-[DHCP](devices/dhcp.md) renewal, rebind, expiry and background discovery live in
-the trusted setup session. Detected failures attempt to clear IPv4 before
-stopping. An unexpected maintainer fault or indefinite scheduling stall leaves
-no independent kernel lease-expiry backstop; reboot is required. Revisit this
-limit with explicit supervision or kernel deadline ownership, rather than two
-uncoordinated lease authorities.
-
-DHCP does not probe address conflicts or persist leases across reboots. Newly
-launched programs receive current chosen DNS; existing programs retain their
-startup DNS_SERVER. Revisit conflict detection for networks with competing
-static addresses. Unassigned input accepts broadcast replies, so a server that
-ignores the BOOTP broadcast flag can prevent acquisition. Clearing or replacing
-IPv4 invalidates concrete endpoints and listeners; DHCP reacquisition does not
-restart services holding those listeners.
+[DHCP](devices/dhcp.md) renewal, rebind, expiry and background discovery live in the trusted setup session, and detected failures attempt to clear
+IPv4 before stopping. An unexpected maintainer fault or indefinite scheduling stall leaves no independent kernel lease-expiry backstop and needs a
+reboot; revisit with explicit supervision or kernel deadline ownership, not two uncoordinated lease authorities. DHCP does not probe address conflicts
+or persist leases across reboots (revisit conflict detection for networks with competing static addresses), new programs receive the current DNS while
+existing ones keep their startup `DNS_SERVER`, unassigned input accepts broadcast replies (a server ignoring the BOOTP broadcast flag can prevent
+acquisition), and clearing or replacing IPv4 invalidates concrete endpoints and listeners without restarting services that hold them.
 
 ## UDP ICMP errors and ephemeral selection
 
-The first [UDP implementation](devices/networking.md#udp-datagrams-and-deadlines) silently
-drops traffic for unbound ports and does not deliver received ICMP errors to
-applications. A remote absent listener can therefore look like packet loss until
-a receive deadline expires. Add bounded, rate-limited ICMP error generation and
-safe matching of quoted packets before claiming full UDP host conformance;
-keep completed/retired calls immune to late errors.
-
-Generic ephemeral binding currently scans 49152–65535 from a rotating cursor;
-this allocator is not a defense against off-path reply guessing. The
-[DNS client shared by dig and ping](userland/dns.md) explicitly chooses random ports
-using [hardware-backed randomness](devices/randomness.md). Revisit the generic allocator's
-policy for other consumers. Network authority and resource
-bounds also remain system-wide rather than isolated by space.
+The first [UDP implementation](devices/networking.md#udp-datagrams-and-deadlines) silently drops traffic for unbound ports and delivers no received ICMP
+errors, so an absent remote listener looks like packet loss until a receive deadline expires. Add bounded, rate-limited ICMP error generation and safe
+matching of quoted packets before claiming full UDP host conformance, keeping completed and retired calls immune to late errors. Generic ephemeral
+binding scans 49152–65535 from a rotating cursor, which is no defense against off-path reply guessing; the [DNS client](userland/dns.md) picks random
+ports from [hardware-backed randomness](devices/randomness.md), and the generic allocator's policy needs a revisit for other consumers. Network authority and
+resource bounds are system-wide, not per space.
 
 ## Shell redirection side effects and file aliases
 
-File redirection opens all targets before truncating outputs, but creation,
-truncation and child launch are separate operations. A failed open can leave
-newly created files; a failed resize or later launch can leave truncated outputs.
-There is no rollback. Redirecting an output onto an input file destroys its
-contents before the child consumes it, even through different path aliases.
-No object-identity/same-file check is provided.
-
-stdout and stderr retain independent per-descriptor offsets when both refer to
-the same file. Their writes can overwrite each other; this does not implement
-descriptor duplication or merged output. These limitations are accepted for the first
-redirection scope. Revisit if alias-safe copying or shared-position output becomes
-an explicit requirement; batch launch does not promise filesystem rollback.
-See [shell redirection](userland/shell.md#file-redirection-and-stdin).
+File redirection opens all targets before truncating outputs, but creation, truncation and launch are separate operations with no rollback: a failed
+open can leave newly created files and a failed resize or later launch can leave truncated outputs. Redirecting an output onto an input file destroys its
+contents before the child reads them, even through different path aliases, because no same-file identity check exists. stdout and stderr keep independent
+offsets when both name one file, so their writes can overwrite each other (descriptor duplication and merged output are not implemented). Accepted for the
+first redirection scope; revisit if alias-safe copying or shared-position output becomes a requirement, noting that batch launch promises no filesystem
+rollback ([shell redirection](userland/shell.md#file-redirection-and-stdin)).
 
 ## Pipe scheduling and resource limits
 
-Native pipes have fixed 64 KiB storage and 4 KiB per-call transfer limits. Copied
-readers compete for bytes and copied writers may interleave transfers, without
-a guaranteed atomic write size or strict fairness. Creation uses normal kernel
-allocation limits; there is no separate per-process pipe-memory quota. A holder
-of unused endpoint copies can delay EOF or EPIPE indefinitely. There are no
-nonblocking operations, deadlines, wait sets or direct cancellation operations.
-Group termination detaches blocked readers/writers safely. Revisit these
-limits when a concrete multi-producer or multiplexed consumer needs them.
-[Shell streams](userland/shell-streams.md) documents the implemented launch ownership.
+Native pipes have fixed 64 KiB storage and 4 KiB per-call transfers. Copied readers compete for bytes and copied writers may interleave, with no
+guaranteed atomic write size or strict fairness; there is no per-process pipe-memory quota, a holder of unused endpoint copies can delay EOF or EPIPE
+indefinitely, and there are no nonblocking operations, deadlines, wait sets or direct cancellation (group termination detaches blocked readers and writers
+safely). Revisit when a multi-producer or multiplexed consumer needs them; [shell streams](userland/shell-streams.md) documents launch ownership.
 
 ## Batch launch after publication
 
-Batch launch protects preparation: all one through eight children are prepared
-before any can execute, and failure starts none. Ordinary ungrouped batches do
-not cancel a running child when a sibling faults, an observer closes or the
-launcher exits. Group supervision separately stops members on final CONTROL loss. A child
-waiting on terminal input or doing unrelated work may therefore keep running
-indefinitely after a peer finishes. Filesystem creations/truncations before
-launch remain visible after preparation failure. Revisit scoped cancellation or
-larger batches only for a concrete lifecycle requirement. Foreground pipelines
-wait for all children; an unrelated or terminal-blocked stage can therefore keep
-the shell waiting even when the last stage has finished. Last-stage success does
-not hide earlier diagnostics, but it permits scripts to continue; no pipefail
-policy is provided. See [shell pipelines](userland/shell.md#foreground-pipelines).
+Batch launch prepares all one to eight children before any can execute and starts none on failure, but ordinary ungrouped batches do not cancel a running
+child when a sibling faults, an observer closes or the launcher exits (group supervision stops members on final CONTROL loss), so a child waiting on
+terminal input or other work can run indefinitely after a peer finishes, and filesystem creations or truncations before launch stay visible after a
+preparation failure. Foreground pipelines wait for all children, so an unrelated or terminal-blocked stage can keep the shell waiting after the last stage
+finished, and last-stage success does not hide earlier diagnostics but lets scripts continue (no pipefail). Revisit scoped cancellation or larger batches for
+a concrete lifecycle requirement ([shell pipelines](userland/shell.md#foreground-pipelines)).
 
 ## Exact line limits in head
 
-Head's line mode reads one byte per backend call so it never consumes past the
-requested newline. Stdio read-ahead cannot serve this exact path, so long lines
-still cost one backend call per byte. Byte mode retains bounded bulk reads. Revisit buffering or a native
-bounded-delimiter read only when a concrete consumer needs both throughput and
-exact stream consumption; do not silently discard read-ahead. Multi-file output
-headers and additional head options are outside the current consumer scope.
-See [head usage](userland/shell.md#bounded-input-with-head).
+Head's line mode reads one byte per backend call so it never consumes past the requested newline, so stdio read-ahead cannot serve it and long lines cost one
+call per byte (byte mode keeps bounded bulk reads). Revisit buffering or a native bounded-delimiter read only when a consumer needs both throughput and exact
+stream consumption, without silently discarding read-ahead. Multi-file headers and extra head options are outside scope
+([head usage](userland/shell.md#bounded-input-with-head)).
 
 ## Endpoint cancellation and capacity
 
-[Endpoints](interfaces/endpoints.md) have no external cancellation operation, wait sets or
-wait-for-capacity facility. Admission to a full endpoint fails immediately.
-A provider can retain all sixteen delivery slots by leaving receipts unfinished;
-deadlines release callers but do not reclaim delivered work. Calls without a
-deadline can wait indefinitely, including self-calls or cycles between blocked
-single-task processes. Control notifications remain deliverable at full capacity,
-but the provider must receive and finish the retained work.
-
-Revisit with asynchronous service scheduling and explicit cancellation/wait APIs.
-Preserve delivery/outcome reporting and receipt ownership; cancellation must not
-silently revoke attachments already delivered. Group termination now cancels its
-callers and detaches receivers while preserving outside provider receipts.
-
-## Endpoint throughput limited by deferred receipt reclamation
-
-Resolved for completed work: final receipt release now performs logical cleanup
-synchronously under the endpoint lock. A delivery record becomes reusable once
-receipt ownership and CALL outcome collection, if any, have both ended. The
-embedded receipt never enters the retirement queue; a separate endpoint backing
-object preserves BSP destruction ownership. See the
-[endpoint contract](interfaces/endpoints.md) and
-[reliability milestone](development/io-reliability-attribution.md) for implementation and
-validation details.
-
-Historical observations before the fix: the sixteen delivery records retained
-completed CALLs and finished SENDs until the BSP destroyed their retired receipt
-objects. The [I/O and IPC baseline](development/io-ipc-baselines.md) observed this on CPU 1 in
-four-CPU nested KVM: a zero-byte 256-call warmup completed 21 round trips before
-QUEUE_FULL; SEND admitted and acknowledged two groups of eight, then rejected
-message 17. These are observed failure points, not deterministic capacity
-thresholds: BSP scheduling/reclamation changed the number completed.
-
-Matched HTTP runs also observed ordinary 1 MiB snapshot reads fail with EAGAIN
-after 61320 and 122640 confirmed bytes, at caller request sizes 4088 and 65536. Each
-OPEN fetched the full body successfully; the retained FILE reads then failed.
-The 32 KiB matched fixtures completed. These failures were consistent with the
-same receipt capacity limit and affected real exported-file consumers, not only
-synthetic IPC batches. Larger caller buffers did not bypass the 4088-byte FILE
-transfer limit.
-
-The original baseline used fresh endpoints and eight-message `ipcbench` samples,
-with creation and teardown outside timing, to obtain successful measurements.
-This workaround did not establish sustainable throughput; even shutdown control
-calls could encounter the same limit. The original measurements remain
-historical evidence, separate from the reliability milestone's reruns.
-
-The live-work limit remains sixteen delivery records. Queued messages,
-unfinished provider receipts and CALL outcomes awaiting collection still consume
-capacity, and genuine exhaustion still reports QUEUE_FULL. A deadline releases
-the caller, not a delivered receipt or the provider's attachment handles;
-calls without deadlines can still wait indefinitely. Revisit these remaining
-limits with the [cancellation and capacity work](#endpoint-cancellation-and-capacity),
-without retrying or pacing away admission failures.
+[Endpoints](interfaces/endpoints.md) have no external cancellation, wait sets or wait-for-capacity, and admission to a full endpoint fails immediately. The
+live-work limit is sixteen delivery records: queued messages, unfinished provider receipts and CALL outcomes awaiting collection use them, and genuine
+exhaustion reports QUEUE_FULL (completed work is reclaimed synchronously at final receipt release, which fixed the earlier throughput failures recorded in
+the [I/O and IPC baseline](development/io-ipc-baselines.md)). A provider can hold all sixteen slots by leaving receipts unfinished, a deadline releases the caller
+but not a delivered receipt or the provider's attachment handles, and calls without a deadline can wait forever (including self-calls or cycles between
+blocked single-task processes). Control notifications stay deliverable at full capacity if the provider finishes the retained work. Revisit with asynchronous
+service scheduling and explicit cancellation and wait APIs, preserving delivery and outcome reporting and receipt ownership, never revoking delivered
+attachments silently, and without retrying or pacing away admission failures. Group termination already cancels its callers and detaches receivers while
+preserving outside provider receipts.
 
 ## Service startup failure before publication
 
-The namespace publication command waits on the provider's registration endpoint.
-Providers can explicitly report setup failure before registration; the launcher
-acknowledges it, and optional startup continues after a well-formed failure. If a
-launched provider exits or faults without reporting, the parent cannot currently
-wait for either IPC or process exit, so startup can remain blocked.
-A provider CALL deadline bounds its own registration wait, but does not bound
-the parent's RECEIVE. Revisit with endpoint/process wait sets or a bounded receive
-facility; do not infer provider readiness from launch success or add automatic
-restart. See [process termination and Ctrl-C](#process-termination-and-ctrl-c)
-for forced shutdown.
-
-The manually invoked pipe/IPC benchmarks have the same startup/reporting limit:
-a companion that faults before its readiness or result message can leave the
-coordinator in RECEIVE. Their CALL deadlines do not bound pipe or process waits.
-Revisit benchmark-wide timeouts with the same bounded-receive/wait-set work;
-retain explicit partial progress and never describe a CALL deadline as forced
-process termination. See [I/O and IPC baselines](development/io-ipc-baselines.md).
+The namespace publication command waits on the provider's registration endpoint. Providers can report setup failure before registering (the launcher
+acknowledges it and optional startup continues), but if a launched provider exits or faults without reporting, the parent cannot wait for either IPC or
+process exit and startup can stay blocked; a provider CALL deadline bounds its own wait, not the parent's RECEIVE. The manually invoked pipe and IPC
+benchmarks have the same limit (a companion faulting before its readiness or result message leaves the coordinator in RECEIVE). Revisit with endpoint and
+process wait sets or a bounded receive facility, never inferring readiness from launch success, adding automatic restart, or describing a CALL deadline as
+process termination (see [process termination](#process-termination-and-ctrl-c) and [I/O and IPC baselines](development/io-ipc-baselines.md)).
 
 ## Provider calls through synchronous file helpers
 
-The shared FILE helpers and ordinary path/libc opens currently submit calls
-without a deadline. Native provider OPEN exposes an explicit caller deadline.
-A live provider that stops replying can therefore block ordinary file readers
-and shell input redirection indefinitely.
-Provider exit or withdrawal releases affected waits, but neither is automatic.
-The immutable text service does no blocking work inside a request. The HTTP fetch
-library bounds one fetch to thirty seconds (or an earlier caller deadline), but
-this does not bound queueing or invocation through the shared file/open helpers.
-Revisit caller-controlled bounded file/open waits alongside cancellation/wait
-sets; do not introduce hidden retries or an arbitrary global timeout. Existing endpoint APIs already support explicit deadlines.
+The shared FILE helpers and ordinary path and libc opens submit calls without a deadline (native provider OPEN exposes an explicit caller deadline), so a live
+provider that stops replying can block file readers and shell input redirection indefinitely; provider exit or withdrawal releases the waits but is not
+automatic. The immutable text service does no blocking work, and the HTTP fetch library bounds one fetch to thirty seconds or an earlier caller deadline, which
+does not bound queueing or invocation through the shared helpers. Revisit caller-controlled bounded file and open waits alongside cancellation and wait sets,
+with no hidden retries or global timeout.
 
 ## HTTP framing compatibility
 
-The [initial HTTP library](userland/http-fetch.md) deliberately rejects duplicate or list
-Content-Length, folded fields, non-CRLF headers and unsupported transfer/content
-codings. The pinned chunk decoder also rejects sufficiently excessive framing
-overhead. Some otherwise valid origins can therefore fail before the configured
-body limit. Close-delimited responses cannot prove whether an orderly EOF was
-intended to end the content. Revisit these restrictions when expanding HTTP client
-compatibility; do not silently accept ambiguous framing or publish partial bodies.
+The [HTTP library](userland/http-fetch.md) rejects duplicate or list Content-Length, folded fields, non-CRLF headers and unsupported transfer or content
+codings, and the pinned chunk decoder rejects excessive framing overhead, so some valid origins fail before the body limit. Close-delimited responses cannot
+prove an orderly EOF was meant to end the content. Revisit when widening client compatibility, never silently accepting ambiguous framing or publishing partial
+bodies.
 
 ## HTTP redirects
 
-The [HTTP and HTTPS providers](userland/http-fetch.md) never follow redirects. A 3xx
-response is a rejected final status, so opening a moved page fails even when
-the server names its new location. Browsing through `fopen`, as the
-[Links port](userland/links.md) does, meets this on ordinary sites.
-
-Deferred by the owner on 2026-10-04: redirects are wanted, but not yet. When
-they are implemented, settle:
-
-- **Hops:** a bounded hop count, with loop detection.
-- **Schemes:** HTTPS never redirects to plain HTTP. Whether HTTP may upgrade to
-  HTTPS is part of the same decision.
-- **Location:** a relative `Location` resolves against the URL of the request
-  that received it, which is the current hop's URL after earlier redirects.
-- **Methods:** methods are GET only today, so 303 versus 307/308 method rules
-  can wait for non-GET requests.
-- **Request data across origins:** credentials and other request headers are
-  not carried to a different origin. See the
-  [scheme provider notes](wip/userspace-scheme-providers.md).
-- **The final URL:** the consumer must learn where it ended up. A browser
-  resolves relative links against the final URL, not the one it asked for.
-  Delivering it to programs that read through `fopen` belongs to
-  [response metadata through fopen](#response-metadata-through-fopen).
+The [HTTP and HTTPS providers](userland/http-fetch.md) never follow redirects: a 3xx is a rejected final status, which ordinary sites hit when browsing through
+`fopen`, as the [Links port](userland/links.md) does. The owner deferred redirects on 2026-10-04 (wanted, not yet). When implemented, settle: a bounded hop
+count with loop detection; HTTPS never redirecting to plain HTTP (and whether HTTP may upgrade); relative `Location` resolving against the current hop's URL;
+303 versus 307/308 method rules once non-GET exists; no credentials or request headers carried across origins
+([scheme provider notes](wip/userspace-scheme-providers.md)); and how the consumer learns the final URL (a browser resolves relative links against it), which
+belongs to [response metadata through fopen](#response-metadata-through-fopen).
 
 ## Response metadata through fopen
 
-A program reading a provider URI through libc `fopen` receives only bytes. It
-gets no media type, HTTP status or, once redirects exist, final URL. The native
-OPEN reply already carries an optional media type, and the providers retain
-the final HTTP status, but neither reaches the program. The
-[Links port](userland/links.md) therefore detects HTML by sniffing or file
-extension, and shows a rejected status only as an open error.
-
-Revisit with a way to expose response metadata to programs that fits Pyxis,
-alongside [discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations).
-Following redirects is a separate deferral, recorded in
-[HTTP redirects](#http-redirects).
+A program reading a provider URI through libc `fopen` gets only bytes: no media type, HTTP status or (once redirects exist) final URL, although the native OPEN
+reply already carries an optional media type and the providers keep the final status. The [Links port](userland/links.md) therefore sniffs HTML by content or
+extension and shows a rejected status only as an open error. Revisit with a way to expose response metadata that fits Pyxis, alongside
+[discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations); redirects are the separate
+[deferral](#http-redirects).
 
 ## HTTPS trust and platform limits
 
-The [HTTPS provider](userland/https.md) uses a pinned Mozilla-derived PEM export, which
-omits Mozilla's additional trust-store constraints. It verifies chains, names
-and dates, but configures no revocation source or online revocation policy.
-A certificate can therefore remain accepted despite revocation or omitted
-constraints while its other verification checks pass. Trust updates are
-manual image/ports updates followed by provider restart, so a deployed instance
-does not automatically receive later removals. Revisit richer trust constraints,
-revocation and update policy for a deployment that requires them; preserve
-explicit authority and bounded failure rather than silently downloading policy.
+The [HTTPS provider](userland/https.md) uses a pinned Mozilla-derived PEM export without Mozilla's additional trust constraints, verifies chains, names and
+dates, and has no revocation source or policy, so a revoked certificate can stay accepted while other checks pass; trust updates are manual image and ports
+updates followed by provider restart. Revisit richer constraints, revocation and update policy for a deployment that needs them, without silently downloading
+policy. It accepts DNS names only (numeric-address URIs fail as unsupported because IP-only SAN verification and SNI are unimplemented; do not route them
+through DNS/CN matching), and scheme authority and optional custom roots do not confine destinations (revisit destination policy for isolation).
 
-HTTPS accepts DNS names only. Numeric-address URIs fail as unsupported because
-IP-only SAN verification and SNI handling have not been implemented. Revisit when
-a concrete IP-address consumer needs HTTPS; do not route it through DNS/CN name
-matching. Scheme authority and optional custom roots do not confine destinations.
-Revisit destination policy separately when a consumer requires isolation.
-
-Entropy comes from the [hardware-backed random capability](devices/randomness.md):
-the kernel ChaCha20 generator seeds from VirtIO when present, otherwise checked
-CPU RDSEED/RDRAND. Hardware trust remains; there is no independent source mixing.
-Initial/required seed failure stops random reads and TLS operations needing new
-material until a later full attempt succeeds. Provider startup failure can leave
-HTTPS unpublished; initial TCP identity failure separately disables new kernel
-TCP connections for that boot. The owner must confirm the generator/startup path
-on native hardware; successful QEMU CPU reads are guest evidence. UTC remains subject to the
-[wall-clock limits](#wall-clock-time-and-clock-source-performance) above.
-
-TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject
-oversized handshakes. Successful controlled connections establish
-fit for the measured roots and peers, not all valid certificate chains or suites.
-Deadline checks between operations do not preempt CPU-bound cryptography. Revisit
-these limits only for a demonstrated endpoint or scheduling requirement, with
-measured demand and bounded ownership; do not weaken verification or silently
-raise budgets.
+Entropy comes from the [hardware-backed random capability](devices/randomness.md): the kernel ChaCha20 generator seeds from VirtIO when present, otherwise
+checked CPU RDSEED/RDRAND, with no independent source mixing. An initial or required seed failure stops random reads and TLS operations needing new material
+until a later full attempt succeeds, provider startup failure can leave HTTPS unpublished, and initial TCP identity failure disables new kernel TCP connections
+for that boot. The owner must confirm the generator and startup path natively (QEMU CPU reads are guest evidence). UTC remains subject to the
+[wall-clock limits](#wall-clock-time-and-clock-source-performance). TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject oversized
+handshakes; controlled connections show fit for the measured roots and peers, not all chains or suites, and deadline checks between operations do not preempt
+CPU-bound cryptography. Revisit with demonstrated endpoint or scheduling demand and bounded ownership, never weakening verification or silently raising budgets.
 
 ## HTTP provider responsiveness
 
-Each [HTTP/HTTPS provider](userland/http-fetch.md) task performs synchronous fetches. While it
-fetches, existing snapshot reads and lifecycle processing wait behind it, and
-retired bodies can continue occupying the storage budget. Each fetch has a
-30-second budget or earlier caller deadline; ordinary file helpers still submit
-unlimited IPC waits, and queued work can compound that delay. Cancellation cannot
-interrupt a blocking network operation instantly. Revisit with asynchronous
+Each [HTTP/HTTPS provider](userland/http-fetch.md) task performs synchronous fetches, so while it fetches, existing snapshot reads and lifecycle processing wait
+behind it and retired bodies can keep occupying the storage budget. A fetch has a 30-second budget or earlier caller deadline, ordinary file helpers still submit
+unlimited IPC waits, queued work can compound the delay, and cancellation cannot interrupt a blocking network operation instantly. Revisit with asynchronous
 service work and wait sets; no worker-process or thread framework is included.
 
 ## Configured mount discovery latency
 
-Deferred by the owner on 2026-10-04 from the non-blocking review of
-[PR #389](https://git.internal/PyxisOS/pyxis-os/pulls/389), revision `0d82e57`.
-With `CONFIG_XHCI=y`, configured GUID mounts wait for sealed boot discovery
-across all controllers and terminal GPT scans, even when the selected disk is
-VirtIO. Slow USB discovery can delay a startup mount such as `system://`, or
-exhaust its deadline. Enumeration and mount requests have existing 30-second
-budgets; waiting does not provide an additional mount budget.
-
-The native startup cost has not been measured; the first native installation
-did not record it. On a later native USB mount boot, record discovery completion, GPT scan completion and mount readiness,
-including the controller/topology and target backend. Revisit any latency policy
-with those measurements while preserving duplicate-GUID detection and explicit
-partial-discovery results.
+Deferred by the owner on 2026-10-04 from the review of [PR #389](https://git.internal/PyxisOS/pyxis-os/pulls/389) (`0d82e57`). With `CONFIG_XHCI=y`, configured
+GUID mounts wait for sealed boot discovery across all controllers and terminal GPT scans even when the selected disk is VirtIO, so slow USB discovery can delay
+a startup mount such as `system://` or exhaust its deadline (enumeration and mount requests have existing 30-second budgets, and waiting adds no mount budget).
+The native startup cost is unmeasured; on a later native USB mount boot record discovery completion, GPT scan completion and mount readiness with the controller
+topology and target backend, and revisit latency policy with those numbers while preserving duplicate-GUID detection and explicit partial-discovery results.
 
 ## Configured GUID and boot-device identity
 
-Deferred by the owner on 2026-10-04 from the same
-[PR #389 review](https://git.internal/PyxisOS/pyxis-os/pulls/389), revision `0d82e57`.
-The accepted observed-uniqueness policy intentionally permits the sole observed
-matching GUID under partial discovery. If an intended internal system disk is
-not observed because it is not ready or lacks a driver, removable media carrying
-that GUID can instead supply `system://`. If both matching disks are observed,
-the duplicate prevents mounting and can block startup. A GUID does not
-authenticate a disk or its contents.
-
-Revisit selection before supporting installed systems on NVMe or another
-internal-disk backend. Preferring the boot device's identity is a review proposal,
-not an accepted or implemented replacement policy; its discovery, authority and
-lifetime contract still need discussion. Current read-only USB boot selection
-remains unchanged.
+Deferred by the owner on 2026-10-04 from the same [PR #389 review](https://git.internal/PyxisOS/pyxis-os/pulls/389). The accepted observed-uniqueness policy permits
+the sole observed matching GUID under partial discovery, so if the intended internal system disk is not observed (not ready, or no driver) removable media with that
+GUID can supply `system://`, and if both matching disks are observed the duplicate prevents mounting and can block startup; a GUID authenticates neither disk nor
+contents. Revisit selection before supporting installed systems on NVMe or another internal-disk backend. Preferring the boot device's identity is only a review
+proposal, with its discovery, authority and lifetime contract undiscussed; current read-only USB boot selection is unchanged.
 
 ## Native mount design limits
 
-[Native mounts](devices/native-readonly-filesystem.md) select one configured GPT
-disk identity, explicit partition and volume. Capability grants govern access;
-the filesystem has no principal or persistent permissions. Observation exposes
-identity and shared-pool capacity, but not usage, quotas or charged bytes.
-Concurrent external image modification, hotplug and unmount are unsupported.
-Mounted pool state survives final handle closure until reboot, so dirty contents
-and errors outlive the process's cleanup charge. Revisit teardown with a concrete
-need and explicit synchronization, shared-mapping and dirty-data ownership.
+[Native mounts](devices/native-readonly-filesystem.md) select one configured GPT disk identity, explicit partition and volume, with access governed by capability
+grants (no principals or persistent permissions). Observation exposes identity and shared-pool capacity but not usage, quotas or charged bytes. Concurrent external
+image modification, hotplug and unmount are unsupported, and mounted pool state (dirty contents and errors) survives final handle closure until reboot; revisit
+teardown with explicit synchronization, shared-mapping and dirty-data ownership.
 
-The worker admits 32 jobs with a cooperative 30-second deadline. Adapter storage
-has a 1 MiB/1,024-wrapper limit; pool metadata, the free-inode list and caches are
-separate. Each pool can retain 4 MiB of cached file payload plus entry metadata.
-A separate metadata read cache can retain 512 KiB plus physical-home keys.
-A writable pool reserves up to 520 KiB for 128 journal images and encoding
-buffers. These are implementation bounds, not format limits or aggregate memory
-admission. The retained allocation bitmap needs one bit per pool block, rounded
-to 4 KiB: 32 KiB for a 1 GiB pool, about 8 MiB for 256 GiB. Mount reads and
-validates it after replay; both mount modes retain it and pressure cannot evict it.
-Allocation and mapping checks use this memory plus current journal overlays.
-Mount scans the selected volume's inode file and builds its free list;
-reclaimed slots retain their inode allocation as a list node until reuse.
-Large inode files can therefore exhaust memory or take too long to mount. Revisit
-compact free-slot storage or an explicit pool budget if representative workloads
-reach those limits; preserve NO_MEMORY/LIMIT versus corrupt-image reporting.
+Implementation bounds, not format limits or aggregate memory admission: 32 worker jobs with a cooperative 30-second deadline; adapter storage of 1 MiB and 1,024
+wrappers; per pool up to 4 MiB of cached file payload plus entry metadata, a 512 KiB metadata read cache plus keys, and for a writable pool 520 KiB for 128 journal
+images and encoding buffers; a retained allocation bitmap of one bit per block rounded to 4 KiB (32 KiB for 1 GiB, about 8 MiB for 256 GiB) read and validated at
+mount and never evicted; mount scans the selected volume's inode file to build a free list whose reclaimed slots keep their inode allocation as a list node until
+reuse, so large inode files can exhaust memory or mount slowly (revisit compact free-slot storage or a pool budget, preserving NO_MEMORY/LIMIT versus corrupt-image
+reporting); executable capture of one image up to 16 MiB per caller outside the wrapper and cache limits with no aggregate staging budget; userspace root selection
+bounded to 16 entries within 64 KiB of startup and capture storage. Memory pressure wakes the filesystem worker after allocator work to flush dirty data and return
+whole clean cache chunks to VM (failed writeback preserves dirty chunks, the allocating call is not retried, and kernel heap backing stays mapped); revisit
+reclaim granularity and admission with measured pressure workloads and BSP ownership intact.
 
-Memory pressure wakes the filesystem worker after allocator work. It can flush
-dirty data and return whole clean cache chunks to VM; failed writeback preserves
-dirty chunks. The allocating call is not transparently retried. Kernel heap
-backing remains mapped under the existing heap policy. Revisit reclaim granularity
-and admission only with measured pressure workloads and BSP ownership intact.
+All native reads and writes go through the BSP worker, including cache hits; directory lookup is linear, and directory, inode-file and indirect pages have a best-effort
+[128-page clean cache](devices/npfs-metadata-cache.md) with linear physical-home lookup that pressure can empty ([measurements](development/experiments/npfs-metadata-cache/README.md):
+lower warm-open time, no payload or sync gain; revisit indexing or size with a larger working set). Contiguous file data and journal payload use bounded runs, checkpoint
+groups adjacent homes, and an optional pressure-reclaimable 128 KiB per-pool gathering buffer is best effort, while device limits can split runs and fragmented writes
+wait on separate requests ([batching record](development/experiments/npfs-io-runs/README.md); revisit broader scheduling with a consumer workload, see also the
+[task-3 measurements](development/experiments/native-filesystem-task3/README.md)).
 
-All native reads and writes traverse the BSP worker, including cache hits.
-Directory lookup remains linear; directory, inode-file and indirect pages now
-have a best-effort [128-page clean cache](devices/npfs-metadata-cache.md).
-Its physical-home lookup is linear too, and pressure can discard every page.
-[Matched measurements](development/experiments/npfs-metadata-cache/README.md)
-show lower warm-open time without a payload/sync improvement; revisit indexing
-or cache size with a representative larger working set.
-
-Contiguous file data and journal payload now use bounded runs; checkpoint groups
-adjacent homes already adjacent in scratch. An optional 128 KiB/pool gathering
-buffer is best effort and pressure-reclaimable. Device limits can split those
-runs; fragmented writes still wait on separate requests. The
-[matched batching record](development/experiments/npfs-io-runs/README.md) measures
-sync and request-count changes on VirtIO; revisit broader request scheduling or
-reordering with a measured consumer workload. The
-[task-3 measurements](development/experiments/native-filesystem-task3/README.md)
-distinguish this scheduling/I/O cost from RAM file calls. Revisit only when an
-actual consumer needs lower latency. Executable capture permits one image of up
-to 16 MiB per caller outside wrapper/cache limits; concurrent captures have no
-aggregate staging budget and can fail allocation below that per-image limit.
-The userspace root selection remains bounded to 16 entries within existing
-64 KiB startup/capture storage, independently of format volume/name limits.
-
-Uncertain backing failure and allocation pressure retain source-review coverage.
-Committed-journal recovery has been exercised at runtime; see the
-[adapter qualification](devices/filesystem-native-adapter.md#task-3-validation).
-The [disk-full and retained-open deletion follow-up](development/experiments/npfs-runtime-qualification/README.md)
-also exercises delayed ENOSPC, background retention, one-time error reporting and
-recovery after freeing space, complete reads after unlink, final-close reclamation
-and pending detached cleanup after an unclean writable restart. The last case
-stops before reclamation while a handle is still open; it does not qualify
-arbitrary interruption during a cleanup batch or storage failure. The
-[populated-pool review](development/experiments/native-filesystem-task3/populated-pool-review.md)
-reproduced the old allocation timeout and validated the retained-bitmap correction.
-No fault injection or physical-media validation
-is claimed by the native writer's ordinary QEMU workflow.
+Qualification: uncertain backing failure and allocation pressure are source-reviewed; committed-journal recovery has run
+([adapter qualification](devices/filesystem-native-adapter.md#task-3-validation)); the
+[disk-full and retained-open follow-up](development/experiments/npfs-runtime-qualification/README.md) exercised delayed ENOSPC, background retention, one-time error
+reporting, recovery after freeing space, reads after unlink, final-close reclamation and pending detached cleanup after an unclean restart (stopping before
+reclamation, not mid-batch); and the [populated-pool review](development/experiments/native-filesystem-task3/populated-pool-review.md) validated the retained-bitmap
+fix. No fault injection or physical-media validation is claimed.
 
 ## Native filesystem design limits
 
-The [native format design rules](devices/filesystem-readonly.md#design-rules)
-now have [implemented codecs and host tools](../fs/docs/npfs-host-tools.md).
-Caelum owns the mounted inode/cache/writer state. Accepted limits include 64 volume slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
-Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
-reserved bytes and feature flags provide extension points. Volumes can exhaust the
-shared pool; quotas and starvation policy remain deferred until a concrete need.
+The [format design rules](devices/filesystem-readonly.md#design-rules) have [implemented codecs and host tools](../fs/docs/npfs-host-tools.md), and Caelum owns the
+mounted inode, cache and writer state. Accepted limits: 64 volume slots, about 513 GiB per-file block-pointer capacity and linear directory lookup (revisit when a
+workload exceeds them; reserved bytes and feature flags give extension points), and volumes can exhaust the shared pool with quotas and starvation policy deferred.
+128 MiB is the initial 256 GB target setting, not a measured optimum, and journal capacity is chosen per pool with no v1 resize.
 
-One transaction commits/checkpoints at a time. Cleanup delays space reuse, and
-large shrinking truncates stall further writes/resizes of the affected inode.
-Create and file rename no longer flush unrelated cached files. Replacement
-rename flushes the moved file before discarding the old name; shrink flushes its
-target. Both can still fail on that file's delayed allocation. Rename without
-replacement makes the directory edit durable without synchronizing moved-file
-contents. Cache exhaustion and explicit/background sync still flush the pool.
-The [namespace record](development/experiments/npfs-namespace-writeback/README.md)
-checks this separation and retained-open dirty replacement. Revisit target-only
-shrink writeback if a concrete workload needs to truncate despite its own disk-full
-writeback error, with an explicit partial-block and pending-growth contract.
-The accepted sync completion point is durable COMMITTED; checkpointing continues
-in the background before the next commit. The writer's free-inode list avoids
-per-create scans but adds mount-time work and memory usage.
-The [task-3 record](development/experiments/native-filesystem-task3/README.md)
-measures latency and virtual-device bytes from the initial writer.
-128 MiB is the initial 256 GB target setting, not a measured optimum or universal
-minimum. Journal capacity is selected per pool and has no v1 resize operation.
+One transaction commits and checkpoints at a time; cleanup delays space reuse and large shrinking truncates stall further writes and resizes of the inode. Create and
+file rename no longer flush unrelated cached files, replacement rename flushes the moved file before discarding the old name, and shrink flushes its target (both can
+still fail on that file's own delayed allocation), while rename without replacement makes the directory edit durable without synchronizing moved-file contents, and cache
+exhaustion and explicit or background sync still flush the pool ([namespace record](development/experiments/npfs-namespace-writeback/README.md)). Revisit target-only
+shrink writeback with a partial-block and pending-growth contract if a workload must truncate despite its own disk-full error. The accepted sync completion point is
+durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
+([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
-Creation/modification times use signed 64-bit Unix nanoseconds, clamped on write.
-Dates outside that range lose precision at the endpoints, and wall-clock values
-can repeat or move backwards; timestamps are not unique change counters. A missing
-clock leaves the affected timestamp explicitly unknown without failing mutation.
-Revisit only if a consumer needs wider dates or a stronger change-detection contract.
+Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
+(not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger
+change-detection contract. Unknown required features refuse opening, unknown read-only-compatible features refuse writes (including recovery), unknown compatible
+features are ignored, and conflicting valid headers need repair (accepted rules). Kernel read-only mounts and image-only tools refuse committed journals, the Linux FUSE
+adapter provides a RAM replay view, writable fsck replays, and the owner accepted no home-metadata checksums in v1 (once the journal clears, later corruption is not
+always detectable; revisit with a feature-gated layout change if integrity needs justify it). Committed replay and pending detached cleanup after an unclean restart have
+runtime coverage ([adapter](devices/filesystem-native-adapter.md#task-3-validation), [follow-up](development/experiments/npfs-runtime-qualification/README.md)), while arbitrary
+mid-batch interruption stays source-reviewed. Formatting, checking and inspection need unchanged standalone regular images and cooperating locks, stage replay payloads in
+memory (large images can exhaust host memory), and neither repair arbitrary damage nor reclaim cleanup lists. Physical-media wear is unmeasured and native latency and QEMU
+target bytes (nested VM) do not qualify SSD endurance.
 
-Unknown required features refuse opening; unknown read-only-compatible features
-refuse writes, including recovery writes; unknown compatible features are ignored.
-Conflicting valid headers require repair. These are accepted compatibility rules.
-Kernel read-only mounts and image-only inspection/checking refuse committed
-journals; the Linux FUSE adapter separately provides a RAM replay view. The owner
-accepted no home-metadata checksums in v1. Writable fsck replays the journal; checksums cannot
-detect every later metadata corruption once it is cleared. Revisit metadata
-checksums when integrity needs justify a feature-gated layout change. Committed
-replay has been exercised at runtime; see the
-[adapter qualification](devices/filesystem-native-adapter.md#task-3-validation).
-Pending detached cleanup across an unclean writable restart has runtime coverage
-in the [follow-up record](development/experiments/npfs-runtime-qualification/README.md).
-Arbitrary mid-batch cleanup interruption and failure points remain source-reviewed;
-broader qualification waits until explicitly assigned. Formatting, checking and
-inspection require unchanged standalone regular images and cooperating locks,
-stage replay payloads in memory,
-and do not repair arbitrary damage or reclaim cleanup lists. Large images/volumes
-can exhaust host checker memory. Physical-media wear remains unmeasured; native operation latency and QEMU target
-bytes are measured in a nested VM, and do not qualify SSD endurance.
+The [read-only Linux mount](development/npfs-linux-mount.md) also accepts npfs partition devices. Its source must stay unchanged for the whole mount (image locks only
+coordinate cooperating tools, and devices have no writer exclusion), Linux can cache that view, and directory handles keep sorted metadata snapshots that can exhaust host
+memory for very large directories. Committed journals are fully validated and replayed into RAM without source writes, with the payload and sorted home-block index
+living until unmount plus a temporary pool-sized target bitset, so large pools or journals can exhaust host memory and fail the mount; the recovery view shares fsck's
+payload validation, not its writable admission or sequence increment, and the [task-2 record](development/experiments/npfs-fuse-task2/README.md) did not measure worst-case
+replay memory or startup. Native timestamp xattrs preserve unknown status and creation time that Linux attributes cannot represent, and access and change time and
+allocated-block accounting are not native metadata. Revisit snapshot and caching policy, or a shared-writer protocol, with large-directory or recovery workloads.
 
-The [read-only Linux mount](development/npfs-linux-mount.md) also accepts npfs
-partition devices.
-Its source must stay unchanged for the entire mount: image locks only coordinate
-cooperating tools, and devices have no external writer exclusion. Linux can cache
-that immutable view. Directory handles retain sorted metadata snapshots and can
-exhaust host memory for very large open directories; global ownership checking
-remains fsck's job. Revisit snapshot/caching policy with measured large-directory
-workloads or a separately designed shared-writer protocol. Committed journals
-are fully validated and replayed into RAM without source writes. The full payload
-and sorted home-block index live until unmount; validation also temporarily holds
-a pool-sized target bitset. Large pools/journals can exhaust host memory and fail
-the mount. This recovery view shares fsck's payload validation, not its writable
-feature admission or sequence increment. The
-[task-2 record](development/experiments/npfs-fuse-task2/README.md) qualifies a
-real interrupted write and unchanged source bytes; it does not measure worst-case
-replay memory or startup cost. Revisit those costs with a concrete recovery
-workload. Native timestamp xattrs
-preserve unknown status and creation time that ordinary Linux attributes cannot
-represent; Linux access/change time and allocated-block accounting are not native
-npfs metadata.
-
-GPT selection, automatic mounting and host writes remain separate follow-ups.
-A host writer needs an explicitly chosen sharing boundary with Caelum's writer;
-revisit when host writing is assigned. Per-user visibility awaits the
-[users milestone](wip/users-and-authority.md); currently every volume is visible
-to the mounting user.
+GPT selection, automatic mounting and host writes are separate follow-ups: a host writer needs an explicit sharing boundary with Caelum's writer, and per-user visibility
+awaits the [users milestone](wip/users-and-authority.md) (today every volume is visible to the mounting user).
 
 ## Execution-group shutdown
 
-[Execution groups](interfaces/execution-groups.md) now support termination and cleanup
-completion. Published BSP/HOST loans still finish before their caller retires, so a
-stalled host operation can delay completion indefinitely. Killing members cannot
-roll back completed external effects or recall capabilities delegated outside the
-group. Completion excludes legitimately external owners and independent protocol
-maintenance after native ownership ends.
-
-Revisit bounded HOST cancellation when transport ownership can be revoked safely;
-do not turn a timeout into permission to free lent process state. Group/member
-allocation has no quota beyond available storage. The remote server bounds
-concurrent sessions at four; that is not a descendant or per-session memory quota.
-Foreground interruption remains separate work.
+[Execution groups](interfaces/execution-groups.md) support termination and cleanup completion. Published BSP/HOST loans finish before their caller retires, so a stalled
+host operation can delay completion indefinitely; killing members cannot roll back completed external effects or recall capabilities delegated outside the group, and
+completion excludes legitimately external owners and independent protocol maintenance after native ownership ends. Revisit bounded HOST cancellation when transport
+ownership can be revoked safely (a timeout is not permission to free lent process state). Group and member allocation has no quota beyond available storage, and the
+remote server's limit of four sessions is not a descendant or memory quota. Foreground interruption is separate work.
 
 ## System-information observation limits
 
-[System information](interfaces/system-information.md) caches one guest-visible
-BSP CPU brand and the online logical count at boot. It cannot describe a
-heterogeneous machine, hotplug or process CPU allowance; revisit that snapshot
-when CPU lifecycle or scheduling contracts change. Allocator counters exclude
-permanent reservations and expose system-wide usage to every READ holder. Keep
-the explicit **Memory (allocator)** label; a future installed-memory query needs
-its own authoritative source and meaning.
-
-The embedded source commit identifies the running kernel's base checkout, not
-whether its inputs were modified. Revisit dirty-input provenance when release
-or support workflows need that distinction, after agreeing which inputs count.
-No dirty suffix or clean-tree attestation is currently implemented.
+[System information](interfaces/system-information.md) caches one guest-visible BSP CPU brand and the online logical count at boot, so it cannot describe a
+heterogeneous machine, hotplug or a process CPU allowance (revisit when CPU lifecycle or scheduling contracts change). Allocator counters exclude permanent
+reservations and expose system-wide usage to every READ holder, so keep the **Memory (allocator)** label; installed memory needs its own authoritative source. The
+embedded source commit identifies the kernel's base checkout, not whether inputs were modified, and no dirty suffix or clean-tree attestation exists; revisit when
+release or support workflows need that distinction, after agreeing which inputs count.
 
 ## Fastfetch first-port boundary
 
-The [implemented port](userland/fastfetch.md) uses explicit
-native-URI JSON/JSONC configs, one-shot text/JSON output and eleven selected modules.
-Automatic config discovery, config/cache writes, dynamic refresh, image logos,
-Lua execution and executable/network helpers are excluded. Existing upstream
-configs may encounter unsupported diagnostics or upstream fallback behavior.
-The port does not impose a new strict option validator. Revisit individual
-features only when a concrete native use case and authority contract exist.
-The normal image packages this port. Narrow terminals retain upstream layout,
-so logo/data lines may wrap; use `--logo none` or shorter formats. Revisit layout
-only with a concrete display requirement, without changing upstream formatting
-as part of routine platform integration.
-
-Disk reports only explicitly selected native roots with observation authority.
-Shared-pool capacity is separately labeled; usage, volume totals, quotas,
-guarantees and percentages remain unavailable until the filesystem observation
-contract establishes their meaning and evidence. Repeated bindings/volumes can
-share a pool ID and capacity, so consumers must not sum those rows. Revisit richer
-Disk values with a concrete verified core accounting interface, not inferred
-used/free arithmetic. Folder/glob filters remain unsupported on Pyxis; their
-Unix path grammar is not a capability-binding selector. Add selection only with
-a concrete caller need and an explicit native binding contract.
-
-Battery has no temperature or manufacture date, which ACPI does not report.
-Power Adapter is not built: ACPI's `_PSR` gives only online or offline, and the
-module prints watts, so it would show an invented value; AC presence appears in
-Battery's status instead. Linux shows no power adapter on the T14 either.
-Revisit with a source of adapter wattage, such as USB-C power delivery.
-
-Uptime exposes duration since HPET initialization. JSON bootTime is null;
-calendar boot-time/age placeholders are unset and render empty, so configurations
-that need those observations require editing. Revisit this only if Pyxis gains an authoritative boot epoch
-and agrees its meaning across wall-clock changes; do not infer one by subtracting
-monotonic duration from the current wall clock.
+The [implemented port](userland/fastfetch.md) uses explicit native-URI JSON/JSONC configs, one-shot text or JSON output and eleven selected modules, and is packaged in
+the normal image. Automatic config discovery, config and cache writes, dynamic refresh, image logos, Lua and executable or network helpers are excluded, so upstream
+configs may meet unsupported diagnostics or fallback behavior and the port adds no strict option validator. Narrow terminals keep upstream layout so lines may wrap
+(use `--logo none` or shorter formats). Disk reports only explicitly selected native roots with observation authority; shared-pool capacity is labeled separately, usage,
+totals, quotas and percentages stay unavailable until the filesystem observation contract defines them, and bindings or volumes sharing a pool ID repeat its capacity, so
+rows must not be summed. Folder and glob filters are unsupported (their Unix path grammar is not a binding selector). Revisit individual features, layout or Disk values only
+with a concrete native use case and contract, never inferred used/free arithmetic or changed upstream formatting.
 
 ## xHCI hardware profile and runtime retention
 

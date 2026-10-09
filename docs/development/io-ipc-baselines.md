@@ -382,8 +382,8 @@ The attribution/coverage gaps and revisit points are retained in
 - **Endpoint receipt reclamation — completed:** logical slot reuse is now
   separate from backing destruction, preserving BSP ownership and receipt,
   attachment and delivery lifetimes. The agreed 256-message IPC and 1 MiB HTTP
-  reruns passed. The original failures and remaining live-work limit are in
-  [technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
+  reruns passed. The remaining live-work limit is in
+  [technical debt](../technical-debt.md#endpoint-cancellation-and-capacity).
 - **RAM growth attribution — superseded:** growing RAM writes no longer use BSP
   requests; see [RAM FILE profiling](io-reliability-attribution.md#ram-file-profiling).
 - **Host FILE attribution — instrumented limits:** HOST profiling separates guest
