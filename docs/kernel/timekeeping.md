@@ -110,7 +110,10 @@ CPU takes before it observes the switch, so time never steps back. A reading is
 the base nanoseconds plus the scaled TSC delta, from a 128-bit product. It
 saturates at `UINT64_MAX`, and a TSC below the base counts as zero elapsed.
 After the switch nothing reads the HPET, and its software-extension maintenance
-stops.
+stops. The HPET is therefore not a maintained fallback once the TSC is selected:
+a 32-bit counter's accumulator goes stale after one wrap. Any later runtime
+switch back, such as a watchdog, would have to restart maintenance and rebase
+the epoch, not resume reading it.
 
 **Fallback.** Any failure keeps every CPU on the HPET:
 - a missing invariant TSC or ordered read on any CPU;

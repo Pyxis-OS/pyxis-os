@@ -1184,7 +1184,8 @@ stronger progress guarantee if a target falls back to the HPET.
 (owner, 2026-10-09):
 - **Agreement.** Cross-CPU agreement is checked only during startup, about 2 ms
   per AP, with no shared floor or runtime watchdog, so a later warp would go
-  unnoticed.
+  unnoticed. Monotonic order between readings on different CPUs after boot
+  therefore rests on that startup check and the hardware's invariant TSC alone.
 - **Calibration.** It costs 100 ms on every boot whose BSP qualifies, and its
   error bound, up to 100 ppm, adds to the HPET's own crystal error. CPUID
   `0x15` is only logged.
