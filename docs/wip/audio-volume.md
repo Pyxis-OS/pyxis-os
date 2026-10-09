@@ -1,33 +1,41 @@
 # Volume control proposal
 
-Assigned by the owner **2026-10-09**, proposal only; the three defaults below
-are pending. [Native full-scale tones were painfully loud](../technical-debt.md#hd-audio-volume-control).
+Owner decisions and the decibel-based curve accepted **2026-10-09**;
+**−60 dB at 1% is the proposed floor for final review**. Documentation only;
+implementation remains unassigned. [Native full-scale tones were painfully loud](../technical-debt.md#hd-audio-volume-control).
 Volume gates the later MIDI/SPC/keyboard-piano players; none is included here.
 
-## Three owner decisions
+## Accepted decisions (2026-10-09)
 
-1. **Gain/defaults — recommended: software master plus per-space attenuation,
-   0–100% in 1% steps, with separate mute.** Space gain precedes summing;
-   saturate the mixed result to S16, then apply master gain. Thus settled master 10%
-   caps PCM magnitude at 10% of full scale even with eight sources; quieting the
-   master does not recover clipping already caused by the mix. Boot master
-   **muted, remembered level 10%**; each new space starts unmuted at 100%.
-   Settings survive session release/reacquisition within that space, but remain
-   volatile across reboot. Alternative: persistent levels, requiring trusted
-   userspace restore/storage authority and an explicit startup-mute policy.
-2. **Authority — recommended: trusted bar controls both user levels; existing
-   playback grants cannot set either.** A producer can read its levels in STATUS
-   and scale its own PCM, but cannot undo the user's attenuation/mute. No master
-   grant or control command is added initially. Alternative: a separately
-   delegated own-space control right and command; its holder could raise that
-   user's space level, so it must not accompany ordinary playback delegation.
-3. **UI/assets — recommended: the recorded widgets, hover sliders plus explicit
-   keyboard control, four compiled masks, owner artwork under MPL-2.0.** Keep
-   pointer-lock escape and the battery unchanged. Dedicated laptop media-key
-   decoding waits for native input evidence. Alternative: include observed
-   volume-key mappings in this milestone; ACPI/firmware buttons remain separate.
-   Artwork's MPL-2.0 designation is proposed here, not presumed already granted;
-   the owner can specify different asset terms before import.
+1. **Software master plus per-space attenuation, 0–100% in 1% steps, with
+   separate mute.** Space gain precedes summing; saturate the mix to S16, then
+   apply master gain, bounding output at the selected amplitude even with eight
+   sources. Master attenuation does not recover clipping already caused by the
+   mix. Owner changed boot to **unmuted at 50%**; new spaces start unmuted at
+   100%. Settings survive session release/reacquisition but remain volatile
+   across reboot: each boot restores 50%, rather than the last user's setting.
+   There is no per-boot unmute step. Persistence remains separate work.
+2. **Trusted bar controls both user levels; playback grants cannot set either.**
+   Producers can read their levels in STATUS and scale their PCM, but cannot
+   undo user attenuation/mute. No master grant or control command initially.
+3. **Recorded widgets, hover sliders plus explicit keyboard control, four
+   compiled masks, owner artwork licensed MPL-2.0.** Pointer-lock escape and
+   battery stay unchanged; dedicated laptop media-key decoding waits for native
+   input evidence. Popup chords are **Super+G / Super+Shift+G**, corrected to
+   avoid the accepted shared-clipboard Super+Shift+V action. Super+M toggles master mute.
+
+### Accepted curve; proposed floor
+
+Percentage maps linearly onto a **dB range**, not amplitude: 100% is 0 dB,
+1% is the floor, and 0% is exact silence. **Propose −60 dB as the floor**:
+for `p=1..100`, `dB(p) = -60 + 60 × (p-1)/99`. Thus 50% is about −30.3 dB,
+roughly 3.05% amplitude; linear-amplitude 50% (about −6 dB) is superseded.
+Master and space settings use the same curve; their attenuations combine.
+
+Kernel scaling uses a **precomputed 101-entry fixed-point gain table**;
+propose Q16 coefficients with exact zero/unity endpoints and host-side rounding.
+No runtime floating point or exponentiation. The curve/table requirement is
+accepted; the −60 dB floor and Q16 representation are proposals for final review.
 
 ## Mixer and state
 
@@ -41,7 +49,7 @@ transport/lifetime policy. See the [engine](../devices/hda.md) and
 Gain changes take effect on newly mixed frames. Already-published PCM can remain
 in the nominal **80 ms DMA ring**; software mute is not instantaneous audible
 silence. Keep all refill guards, capacity, queues and ownership unchanged.
-Propose a 5 ms sample-count ramp for ordinary level changes/unmute; mute emits
+Retain the proposed 5 ms sample-count ramp for ordinary level changes/unmute; mute emits
 zeros immediately in subsequent mixing. Muted/zero-level sessions still consume
 PCM, update writable readiness and finish normally; mute is not pause or release.
 Zero remains zero when unmuted; moving a slider above zero explicitly unmutes
@@ -88,8 +96,8 @@ without changing any program's surface ownership.
 Hover alone leaves keyboard delivery unchanged. Explicit popup focus suspends
 content delivery, resets held-key state and publishes focus loss/gain while
 retaining an application's existing capture. Slider click focuses that popup;
-**Super+V** focuses the master popup, **Super+Shift+V** the active space popup. Arrows change
-1%, Page Up/Down 5%, Home/End 0/100%, Space toggles mute, Escape closes without
+**Super+G** focuses the master popup, **Super+Shift+G** the active space popup.
+These are exact chords, without extra Control/Alt. Arrows change 1%, Page Up/Down 5%, Home/End 0/100%, Space toggles mute, Escape closes without
 reverting applied changes. **Super+M** toggles master mute as a trusted shortcut,
 including under application capture. Other popup shortcuts/hover do not override
 relative pointer lock: use existing Super+Escape first. Existing escape/navigation
@@ -107,9 +115,8 @@ ignore 4–7 and introduce no shared pool or battery artwork changes.
 
 At implementation, retain the original editable Aseprite and PNG under
 `assets/ui/volume/`, with an attribution/licence note crediting the owner and
-recording the shared-folder source. Decision 3 proposes **MPL-2.0** for these
-original assets; update [licensing](../../LICENSING.md) to cover them explicitly
-once accepted. A bounded host conversion generates only four 24×24 bit masks
+recording the shared-folder source. The owner accepted **MPL-2.0** for these
+original assets on **2026-10-09**; update [licensing](../../LICENSING.md) to cover them explicitly when imported. A bounded host conversion generates only four 24×24 bit masks
 for kernel drawing; no runtime PNG/Aseprite parser, Aseprite build dependency,
 network fetch or new image library. Source hashes:
 
@@ -124,17 +131,19 @@ network fetch or new image library. Source hashes:
 2. [ ] Import licensed owner assets, four-mask conversion and bar controls;
    route only these UI events, preserving content focus/lock and battery behavior.
 3. [ ] Capture baseline before performance changes, then matched QEMU WAV at
-   0/1/10/25/50/100%, combined master/space steps, ramps and exact mute after the
-   ring drains. Check unity match, clipping/peak bound, two-space isolation,
+   0/1/10/25/50/100%, checking fixed-point coefficients against the agreed dB
+   mapping, combined master/space steps, ramps and exact mute after ring drain. Check unity match, clipping/peak bound, two-space isolation,
    hidden playback, reacquisition, eight sources, readiness and repeated UI use.
    Measure presenter/idle and mixer/refill cost at identical CPU/device settings;
    nested QEMU is not native performance. No new test/CI or boot automation.
-4. [ ] Owner native speaker/headphone listening: boot muted, unmute at 1%, then
-   small comfortable increases with brief tones; verify both controls, mute delay,
+4. [ ] Owner native speaker/headphone listening: verify the unmuted 50% boot
+   setting with no autoplay, then lower master to 1% before brief tones and
+   increase only as comfortable; verify both controls, mute delay,
    changes without pops/dropouts, hidden-space isolation and warm/cold defaults.
    Do not repeat painfully loud full-scale speaker tests. Observe media-key input
    only when the ThinkPad is available. Fold completed behavior into references;
    record any residual latency, persistence or input limits as short debt.
 
 Docs only here: no code, binary asset import, dependency pin or measurement changes.
-Implementation requires acceptance and a separate owner assignment.
+Stop for final review of the floor/table details. Implementation still requires
+an explicit owner assignment.
