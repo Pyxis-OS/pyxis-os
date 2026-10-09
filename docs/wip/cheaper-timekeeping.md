@@ -1,8 +1,9 @@
 # Cheaper timekeeping
 
 Status: **accepted, 2026-10-09,** assigned to Claude. The owner accepted the
-three [decisions](#accepted-decisions) as proposed. Task A starts when the
-owner confirms; no code exists yet.
+three [decisions](#accepted-decisions) as proposed. Task A merged in #571; its
+[measurements](../development/experiments/timer-clock-reads/README.md) are
+recorded. Task B is in progress.
 
 ## Why
 
