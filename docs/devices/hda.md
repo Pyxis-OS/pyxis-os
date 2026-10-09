@@ -109,8 +109,10 @@ The first queued frames trigger activation without a priming threshold. Codec
 verbs and stream preparation finish before the worker drains exit notices and
 prefills DMA. Mix consumption, direct output copy, barriers and RUN publication
 then share IF=0, preventing exit between consuming a source and handing it to
-hardware. The mixer adds all sources in signed 32-bit accumulators and clips once
-to S16. Starving sources supply zeros independently of other spaces.
+hardware. The mixer applies per-space software gain, adds all sources in signed 32-bit
+accumulators, clips once to S16, then applies master gain. The
+[volume contract](../interfaces/audio.md#user-volume-controls) preserves unity
+behavior and keeps codec command rings stopped during playback. Starving sources supply zeros independently of other spaces.
 
 RELEASE and exit discard queued PCM without resetting another source's stream.
 Frames already mixed into DMA can remain audible. After the last queued PCM,
@@ -216,8 +218,8 @@ DMA path. Audible eight-source content was skipped because full-scale speaker
 tones were painfully loud; content and routing were checked by ear at one
 session. This meets the owner's native eight-session closure requirement. It
 establishes neither end-to-end latency nor native CPU/commit-time distributions.
-There is **no volume control**; a master volume or per-session gain is needed
-before ordinary use. See the [volume debt](../technical-debt.md#hd-audio-volume-control).
+That evidence predates the [software volume controls](../interfaces/audio.md#user-volume-controls);
+their native listening check remains [pending](../wip/audio-volume.md).
 
 For later native batches, **two minutes of eight simultaneous silent sessions**
 (`pcm 0 0 120` in eight spaces) is sufficient as a regression check. Let every
@@ -251,16 +253,10 @@ remain outside this analog playback implementation.
 
 ## Later directions
 
-Owner ideas, **2026-10-09**. The [volume proposal](../wip/audio-volume.md) is assigned
-for documentation first; its implementation and the players remain unassigned.
-**Volume comes first**, gating
-all players below: master and per-session/space mixer gain, a master widget beside
-the bar's battery and a per-space widget on each tab, with a classic speaker icon
-and a classic volume slider on hover. See the [no-volume debt](../technical-debt.md#hd-audio-volume-control).
-
-Later players: MIDI with TinySoundFont + TinyMidiLoader (MIT, single-header C;
-a SoundFont needs its own asset licence and cache entry); SPC with blargg's
-snes_spc (LGPL 2.1, C++, userspace 32→48 kHz resampling); and the keyboard piano
-test app. This volume proposal uses only the owner's four speaker masks.
-A broader shared black-and-white bitmap pool, including battery reuse, remains
-separate UI work; it does not gate these four volume widgets.
+Owner ideas, **2026-10-09**. [Volume control](../wip/audio-volume.md) now has
+software gain and the owner's four-mask bar UI; native listening remains its gate
+before ordinary use and the later players. Players remain unassigned: MIDI with
+TinySoundFont + TinyMidiLoader (MIT, single-header C; a SoundFont needs its own
+asset licence/cache entry), SPC with blargg's snes_spc (LGPL 2.1, C++, userspace
+32→48 kHz resampling), and the keyboard piano test app. A broader shared
+black-and-white bitmap pool, including battery reuse, is separate UI work.

@@ -51,6 +51,7 @@ void pointer_image_release(struct pointer_image *image);
 enum call_status pointer_surface_lock(struct pointer_object *pointer);
 void pointer_surface_unlock(struct pointer_object *pointer, bool require_activation);
 void pointer_escape(void);
+bool pointer_locked(void);
 struct pointer_event pointer_position_event(struct pointer_object *pointer, uint32_t type);
 struct pointer_geometry pointer_surface_geometry(struct pointer_object *pointer);
 bool pointer_surface_focused(struct pointer_object *pointer);

@@ -16,6 +16,31 @@
  * object snapshot, leaving storage in its slot until worker cleanup. */
 static struct audio_object *sessions[AUDIO_SESSION_MAX];
 
+#define AUDIO_GAIN_UNITY 65536
+#define AUDIO_VOLUME_RAMP_FRAMES (AUDIO_RATE * 5 / 1000)
+
+/* Rounded Q16 coefficients for -60 + 60 * (percent - 1) / 99 dB.
+ * Zero is exact silence and 100% is exact unity. No runtime floating point. */
+static const int32_t volume_gains[101] = {
+  0, 66, 70, 75, 81, 87, 93, 100, 107, 115,
+  123, 132, 141, 151, 162, 174, 187, 200, 215, 230,
+  247, 265, 284, 304, 326, 350, 375, 402, 431, 462,
+  496, 532, 570, 611, 655, 703, 754, 808, 866, 929,
+  996, 1068, 1145, 1228, 1317, 1412, 1514, 1623, 1741, 1866,
+  2001, 2146, 2301, 2467, 2646, 2837, 3042, 3262, 3497, 3750,
+  4021, 4312, 4623, 4958, 5316, 5700, 6112, 6554, 7027, 7535,
+  8080, 8663, 9290, 9961, 10681, 11453, 12280, 13168, 14119, 15140,
+  16234, 17407, 18665, 20014, 21460, 23011, 24674, 26457, 28369, 30419,
+  32617, 34975, 37502, 40212, 43118, 46234, 49576, 53158, 57000, 61119,
+  AUDIO_GAIN_UNITY,
+};
+
+static atomic_bool volume_locked;
+static struct audio_volume master_volume = {.percent = 50};
+static struct audio_object *volume_head, *volume_tail;
+static uint64_t volume_generation;
+static bool volume_available;
+
 static void lock_audio(struct audio_object *audio)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -27,6 +52,197 @@ static void lock_audio(struct audio_object *audio)
 static void unlock_audio(struct audio_object *audio)
 {
   atomic_store_explicit(&audio->locked, false, memory_order_release);
+}
+
+static void lock_volume(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  while (atomic_exchange_explicit(&volume_locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_volume(void)
+{
+  atomic_store_explicit(&volume_locked, false, memory_order_release);
+}
+
+static void volume_changed(void)
+{
+  if (volume_generation != UINT64_MAX) {
+    ++volume_generation;
+  }
+}
+
+bool audio_volume_snapshot(struct space *space, struct audio_volume_snapshot *snapshot)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  struct audio_object *audio = space ? space->audio : NULL;
+  if (audio) {
+    lock_audio(audio);
+  }
+  lock_volume();
+  *snapshot = (struct audio_volume_snapshot){
+    .volume_generation = volume_generation,
+    .master_percent = master_volume.percent, .master_muted = master_volume.muted,
+    .space_percent = audio ? audio->volume.percent : master_volume.percent,
+    .space_muted = audio ? audio->volume.muted : master_volume.muted,
+    .available = volume_available && (!space || (audio && space != space_caelum())),
+  };
+  unlock_volume();
+  if (audio) {
+    unlock_audio(audio);
+  }
+  cpu_restore_interrupts(flags);
+  return snapshot->available;
+}
+
+bool audio_volume_control(struct space *space, enum audio_volume_action action, int value)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  struct audio_object *audio = space ? space->audio : NULL;
+  if (audio) {
+    lock_audio(audio);
+  }
+  lock_volume();
+  bool accepted = volume_available && (!space || (audio && space != space_caelum()));
+  if (accepted) {
+    struct audio_volume *volume = audio ? &audio->volume : &master_volume;
+    unsigned percent = volume->pending ? volume->pending_percent : volume->percent;
+    bool muted = volume->pending ? volume->pending_muted : volume->muted;
+    if (action == AUDIO_VOLUME_SET_PERCENT || action == AUDIO_VOLUME_ADJUST_PERCENT) {
+      int64_t selected = action == AUDIO_VOLUME_SET_PERCENT ? value : (int64_t)percent + value;
+      percent = selected < 0 ? 0 : selected > 100 ? 100 : selected;
+      if (percent) {
+        muted = false;
+      }
+    } else if (action == AUDIO_VOLUME_TOGGLE_MUTE) {
+      muted = !muted;
+    } else {
+      accepted = false;
+    }
+    if (accepted) {
+      if (!volume->pending && audio) {
+        KASSERT(!audio->volume_next);
+        if (volume_tail) {
+          volume_tail->volume_next = audio;
+        } else {
+          volume_head = audio;
+        }
+        volume_tail = audio;
+      }
+      volume->pending_percent = percent;
+      volume->pending_muted = muted;
+      volume->pending = true;
+    }
+  }
+  unlock_volume();
+  if (audio) {
+    unlock_audio(audio);
+  }
+  if (accepted) {
+    audio_worker_notify();
+  }
+  cpu_restore_interrupts(flags);
+  return accepted;
+}
+
+void audio_volume_available(bool available)
+{
+  audio_require_worker();
+  uint64_t flags = cpu_save_interrupts();
+  lock_volume();
+  if (volume_available != available) {
+    if (available) {
+      /* Controls are disabled until first readiness publication. */
+      master_volume.gain = master_volume.target_gain = volume_gains[master_volume.percent];
+    }
+    volume_available = available;
+    volume_changed();
+  }
+  unlock_volume();
+  cpu_restore_interrupts(flags);
+}
+
+static bool apply_volume(struct audio_volume *volume)
+{
+  if (!volume->pending) {
+    return false;
+  }
+  volume->pending = false;
+  bool changed = volume->percent != volume->pending_percent ||
+      volume->muted != volume->pending_muted;
+  if (!changed) {
+    return false;
+  }
+  volume->percent = volume->pending_percent;
+  volume->muted = volume->pending_muted;
+  volume->target_gain = volume->muted ? 0 : volume_gains[volume->percent];
+  if (!volume->target_gain) {
+    volume->gain = 0;
+    volume->ramp_remaining = 0;
+  } else {
+    int32_t change = volume->target_gain - volume->gain;
+    volume->ramp_step = change / AUDIO_VOLUME_RAMP_FRAMES;
+    volume->ramp_direction = change < 0 ? -1 : 1;
+    volume->ramp_remainder = (change < 0 ? -change : change) % AUDIO_VOLUME_RAMP_FRAMES;
+    volume->ramp_error = 0;
+    volume->ramp_remaining = change ? AUDIO_VOLUME_RAMP_FRAMES : 0;
+  }
+  return true;
+}
+
+void audio_volume_apply(void)
+{
+  audio_require_worker();
+  uint64_t flags = cpu_save_interrupts();
+  lock_volume();
+  if (apply_volume(&master_volume)) {
+    volume_changed();
+  }
+  unlock_volume();
+  /* One retained slot per changed space; no allocation, PCM borrowing or wait.
+   * The boot space registry bounds the number of controls in this list. */
+  while (volume_head) {
+    struct audio_object *audio = volume_head;
+    volume_head = audio->volume_next;
+    audio->volume_next = NULL;
+    if (!volume_head) {
+      volume_tail = NULL;
+    }
+    lock_audio(audio);
+    bool changed = apply_volume(&audio->volume);
+    unlock_audio(audio);
+    if (changed) {
+      lock_volume();
+      volume_changed();
+      unlock_volume();
+    }
+  }
+  cpu_restore_interrupts(flags);
+}
+
+static int32_t volume_gain_next(struct audio_volume *volume)
+{
+  if (volume->ramp_remaining) {
+    volume->gain += volume->ramp_step;
+    volume->ramp_error += volume->ramp_remainder;
+    if (volume->ramp_error >= AUDIO_VOLUME_RAMP_FRAMES) {
+      volume->gain += volume->ramp_direction;
+      volume->ramp_error -= AUDIO_VOLUME_RAMP_FRAMES;
+    }
+    if (!--volume->ramp_remaining) {
+      volume->gain = volume->target_gain;
+    }
+  }
+  return volume->gain;
+}
+
+static int32_t volume_scale(int32_t sample, int32_t gain)
+{
+  return (int64_t)sample * gain / AUDIO_GAIN_UNITY;
 }
 
 static void require_worker(void)
@@ -49,7 +265,9 @@ struct audio_object *audio_create(struct space *space)
   if (!audio) {
     return NULL;
   }
-  *audio = (struct audio_object){.space = space};
+  *audio = (struct audio_object){.space = space,
+    .volume = {.percent = 100, .gain = AUDIO_GAIN_UNITY, .target_gain = AUDIO_GAIN_UNITY},
+  };
   atomic_init(&audio->locked, false);
   object_init(&audio->object, OBJECT_AUDIO, destroy_audio);
   return audio;
@@ -247,12 +465,17 @@ void audio_session_request_execute(struct audio_request *request)
     } else if (audio->owner != request->process || audio->generation != request->generation) {
       status = CALL_DENIED;
     } else if (request->operation == AUDIO_STATUS) {
+      lock_volume();
       request->reply.status = (struct audio_status_reply){
         .generation = audio->generation, .capacity_frames = AUDIO_QUEUE_FRAMES,
         .free_frames = audio->free_frames, .starvations = audio->starvations,
         .discontinuities = audio->discontinuities,
         .state = audio->failed ? AUDIO_STATE_FAILED : AUDIO_STATE_READY,
+        .master_percent = master_volume.percent, .space_percent = audio->volume.percent,
+        .master_muted = master_volume.muted, .space_muted = audio->volume.muted,
+        .volume_generation = volume_generation,
       };
+      unlock_volume();
     } else if (request->operation == AUDIO_RELEASE) {
       audio->owner = NULL;
       if (audio->generation != UINT64_MAX) {
@@ -331,8 +554,12 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
     size_t count = audio->count < frames ? audio->count : frames;
     for (size_t j = 0; j < count; ++j) {
       size_t source = (audio->head + j) % AUDIO_QUEUE_FRAMES;
-      mixed[j * AUDIO_CHANNELS] += audio->queue[source * AUDIO_CHANNELS];
-      mixed[j * AUDIO_CHANNELS + 1] += audio->queue[source * AUDIO_CHANNELS + 1];
+      int32_t gain = volume_gain_next(&audio->volume);
+      mixed[j * AUDIO_CHANNELS] += volume_scale(audio->queue[source * AUDIO_CHANNELS], gain);
+      mixed[j * AUDIO_CHANNELS + 1] += volume_scale(audio->queue[source * AUDIO_CHANNELS + 1], gain);
+    }
+    for (size_t j = count; j < frames; ++j) {
+      volume_gain_next(&audio->volume);
     }
     audio->head = (audio->head + count) % AUDIO_QUEUE_FRAMES;
     audio->count -= count;
@@ -350,9 +577,14 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
       consumed = count;
     }
   }
-  for (size_t i = 0; i < frames * AUDIO_CHANNELS; ++i) {
-    int32_t value = mixed[i];
-    output[i] = value > INT16_MAX ? INT16_MAX : value < INT16_MIN ? INT16_MIN : value;
+  for (size_t i = 0; i < frames; ++i) {
+    int32_t gain = volume_gain_next(&master_volume);
+    for (size_t channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+      size_t sample = i * AUDIO_CHANNELS + channel;
+      int32_t value = mixed[sample];
+      value = value > INT16_MAX ? INT16_MAX : value < INT16_MIN ? INT16_MIN : value;
+      output[sample] = volume_scale(value, gain);
+    }
   }
   if (writable) {
     readiness_notify();
