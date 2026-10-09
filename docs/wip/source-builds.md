@@ -41,7 +41,9 @@ than throwaway work.
 
 ## What it needs
 
-- **Hosted Clang and LLD,** the third LLVM milestone.
+- **Hosted Clang and LLD,** the third LLVM milestone. The
+  [hosted-Clang investigation](hosted-clang.md) records measured build gaps,
+  native load/runtime constraints and proposed prerequisite order.
 - **Where the toolchain lives.** The boot archive stays in RAM for the kernel's
   lifetime, and an install copies it to a 512 MiB ESP. A host Clang binary today
   is about 150 MB, plus LLD at about 85 MB; a Pyxis build will differ, but the

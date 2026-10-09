@@ -787,8 +787,8 @@ and streaming or rollback only with an explicit snapshot or transaction design.
 ends (in review a server that accepted and never answered left a blank screen for 32 s before "Operation timed out"), and Ctrl+C during the wait
 is held until the open returns. Revisit with a native way to wait on a provider open alongside console input. Other limits:
 
-- **No saved configuration or downloads:** options, bookmarks and history are not saved and downloads to disk fail with "Invalid argument",
-  both because they needed `home://` persistence and exclusive creation (both now exist; the port has not been revisited).
+- **Saves and downloads are not durable or atomic beyond the rename:** libc has no directory sync, so a crash can keep an old `links.cfg`, and
+  downloads (including Overwrite) are written in place under their final name. On a live boot `home://links/` is RAM.
 - **Fixed screen size,** read once without resize notification.
 - **Sockets compiled in but unreachable:** the port's socket functions fail, so `ftp://` and `finger://` report "Host not found".
 - **Remote pages can link to local roots** (`host://`, `home://`, `system://`), and following the link opens the local object. Without scripting
