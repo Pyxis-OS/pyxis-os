@@ -161,9 +161,7 @@ tcp DESKTOP 5002 | sha256sum
 tcp DESKTOP 5002 > tmp://rx.bin
 ```
 
-Each 64 MiB receive into `tmp://` leaves several times its size in RAM-file
-heap pools for the rest of the boot; see
-[contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing).
+Each 64 MiB receive into `tmp://` holds 64 MiB of pages until `rm` frees them.
 Afterwards stop `tcpdump` and the sink, keep the capture, and remove the rule
 with `sudo ufw delete allow from 192.168.0.50 to any port 5001:5002 proto tcp`.
 

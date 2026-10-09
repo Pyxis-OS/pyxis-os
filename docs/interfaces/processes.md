@@ -447,8 +447,8 @@ mutation. Success reports the full requested count; failure leaves contents and
 logical size unchanged. A nonempty write beyond EOF zero-fills the gap. A
 zero-length write ignores the data address and does not extend the file, even
 at an offset beyond EOF. It still checks authority, backing and reply storage.
-RESIZE returns no reply bytes. Growth exposes zero-filled bytes; shrink discards
-the tail permanently, including when later growth reuses retained capacity.
+RESIZE returns no reply bytes. Growth exposes zero bytes; shrink discards the
+tail permanently.
 
 SYNC returns no reply bytes. RAM files accept it as a no-op; host files request
 full backing-storage synchronization. Parent directories require separate sync
@@ -456,28 +456,37 @@ requests, and neither close nor `fflush` implicitly syncs storage. See the
 [host synchronization contract](../devices/virtio-fs.md#synchronization) for ordering and
 durability limits.
 
-A RAM file uses one heap buffer, with geometric capacity growth and an exact-size
-retry if spare capacity cannot be allocated. Nonzero shrink retains capacity;
-resize to zero releases it. There is no protocol file-size ceiling beyond checked
-arithmetic and allocator limits. See [technical debt](../technical-debt.md) for the
-memory-cost tradeoff.
+A RAM file keeps one physical frame per 4 KiB page, indexed by a heap array that
+grows geometrically. Unwritten pages are holes that read as zeros:
+- **Growth.** RESIZE growth and the gap before a write past EOF allocate nothing,
+  so RESIZE does not reserve memory. A later WRITE inside the size can fail with
+  NO_MEMORY, still leaving the file unchanged.
+- **Shrinking.** It frees whole pages past the new size and zeroes the rest of
+  the last page. Resize to zero also frees the index.
+- **Release.** Last-reference retirement frees every frame and the index.
+
+There is no protocol file-size ceiling beyond checked arithmetic and allocator
+limits.
 
 A short per-file spinlock protects operation ownership and a FIFO of waiters.
-Only the owner accesses bytes, size and capacity. It can lend that ownership to
-the BSP while blocked for backing replacement; `busy` remains set and no spinlock
-spans the wait. Other operations sleep and receive ownership directly in FIFO
-order. The previous owner detaches the resource waiter before waking it; only
-after that wait finishes can the new owner prepare a BSP service wait.
+The owner alone accesses the size, the page index and the frames, for the whole
+operation; no spinlock spans the operation. Other operations sleep and receive
+ownership directly in FIFO order; the previous owner detaches the resource
+waiter before waking it.
 
-The typed FILE replacement request uses the common BSP FIFO and its ordinary
-executor notification, with no VM handoff. Waiters and requests live in task
-metadata, never private syscall stacks. The BSP's local replacement helper
-allocates, copies the old live prefix and frees the old buffer; failure keeps the
-old allocation and capacity. Capacity zero releases backing without allocation.
-Submission also allocates nothing. The BSP clears its file loan before completion
-and never changes logical size. The requester consumes the result, releases its
-request, then zeroes/copies bytes and publishes size before handing operation
-ownership on. Readers cannot observe an intermediate state.
+**Allocation and copying.** These run on the calling CPU with interrupts
+disabled, with no BSP request:
+- A WRITE first extends the index and gives each page in its range a zeroed
+  frame, freeing any frames it added if one allocation fails.
+- Only then does it copy the payload, page by page, through the CPU's own
+  scratch slot.
+- READ copies the same way. A FILE payload is below one page, so one call
+  touches at most two pages.
+- Readers cannot observe an intermediate state.
+
+**Executables.** Program launch copies a RAM file's bytes into one heap buffer
+during capture, as it does for host and native files. Boot-archive executables
+are read in place.
 
 The current single-task/private-mapping contract keeps checked user sources and
 replies stable across waits. Only the resumed caller accesses them. Request
