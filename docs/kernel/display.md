@@ -306,6 +306,46 @@ rendering into old backing and waits for a fresh generation before automatic
 retry. Query-only programs see changed geometry on their next SIZE call;
 other graphics ports retain fixed mappings until explicitly adapted.
 
+## Read-only Renoir firmware timing
+
+The boot-framebuffer backend can observe the sole enabled Renoir OTG on a
+unique unclaimed AMD `1002:1636` display function. It reads an already-D0,
+memory-enabled BAR5 through two private RO/NX/UC pages at offsets `0x13000`
+and `0x14000`, prepared before AP startup. No PCI command/BAR/power writes,
+BAR-sizing probe, interrupt configuration or firmware handoff occurs. Other
+backends/devices, ambiguous outputs, changing geometry, unusable counters or
+allocation failure retain normal presentation with timing unavailable.
+
+`DISPLAY_TIMING=off|observe|blank` builds the corresponding `display.timing`
+boot option. Omission defaults to **observe**: qualify advancing counters and
+collect bounded diagnostics while retaining unsynchronized copies and the
+software cadence. `off` skips observation. **blank is an explicit native
+qualification opt-in**, never selected automatically; default timed copies
+remain disabled pending the owner's native results.
+
+The private hardware capability describes validated counter observation and
+its uncertainty, independently of copy-start admission. `blank` phases the
+presenter's own cadence, sleeps before the expected blank, then polls for at
+most 250 µs / 64 brackets spaced at least 4 µs apart, IF=1. The actual position
+is reread before the first front write. Admission reserves eight scanlines plus
+measurement uncertainty; late/unqualified copies proceed once immediately as
+unsynchronized. No second-blank queue, page flip, program timing ABI or vsync
+promise is introduced. Sparse requalification can restore counter observation
+with uncertainty too large to permit phased copies.
+
+The first pixel's timestamp/store use a short saved-IF section; remaining
+copies and GPU-register observations run IF=1. The clock may use HPET, so that
+section includes clock-access cost, not just a fixed instruction count. Direct
+writer ownership is unpublished during sleep/poll and reacquired/rechecked
+before copying; its fence/release precedes diagnostic sorting/logging. Panic,
+frame leases and cursor-inclusive capture retain their existing contracts.
+
+The [qualification and native batch record](../development/experiments/renoir-presentation/README.md)
+distinguishes CPU-issued prefix progress from WC visibility/display fetch.
+The audited register span is not an independently sized native BAR; the
+single-output geometry match is not decoded HUBP routing. These and pending
+native validation remain [technical debt](../technical-debt.md#native-renoir-presentation-qualification).
+
 ## Qualification and cost
 
 Earlier tasks qualified boot and post-handoff direct panic output, serial-only

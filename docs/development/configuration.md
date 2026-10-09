@@ -67,6 +67,19 @@ so it remains directly editable without opening the menu.
 
 ## Boot menu timeout
 
+For the native [Renoir qualification batch](experiments/renoir-presentation/README.md#native-thinkpad-batch),
+`DISPLAY_TIMING=off|observe|blank` generates the `display.timing` boot option
+for normal, rescue and installer entries. Omission defaults to **observe**:
+read-only counter observation with unsynchronized copying. `off` is the
+same-revision baseline; `blank` explicitly enables the experimental guarded
+copy path when hardware observation is qualified. It remains off by default
+pending native qualification. This boot-only policy has no runtime program
+setter; unsupported backends retain their existing presentation path.
+
+```sh
+make -j16 image DISPLAY_TIMING=observe
+```
+
 `BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds,
 default `0`. It configures the generated Limine menu independently of kernel
 Kconfig. Ordinary development boots immediately into the normal entry. For

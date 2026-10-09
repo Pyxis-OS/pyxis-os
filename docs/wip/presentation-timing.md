@@ -11,9 +11,12 @@ were accepted as the defaults on 2026-10-09.
 - **Completed-frame handoff:** merged in #618, after three decisions accepted
   2026-10-09 ([below](#completed-frame-handoff)), with its
   [measurements and native steps](../development/experiments/frame-handoff/README.md).
-- **Step 2, native timing:** [proposal below](#step-2-read-only-renoir-timing),
-  all three defaults accepted 2026-10-09; implementation authorized, native
-  timed-copy qualification still pending. The read-only
+- **Step 2, native timing:** all three defaults accepted 2026-10-09;
+  observer and guarded-copy implementation delivered for review. The
+  [interface/limits](../kernel/display.md#read-only-renoir-firmware-timing) and
+  [qualification record](../development/experiments/renoir-presentation/README.md)
+  include exact native steps. Timed copies remain off by default until native
+  qualification. The read-only
   [Fedora Renoir reference](../development/experiments/renoir-linux-timing/README.md)
   records the active OTG, panel blank window, idle/animation counters, disabled
   PSR/Replay and private WC copy cost. No Pyxis timing probe is implemented.
@@ -348,6 +351,20 @@ Implementation/qualification breakdown:
   only observer qualification and retain labelled unsynchronized copies; record
   the missing native evidence and revisit point. Rewrite implemented contracts
   into the display reference; step 3 and page flips remain unassigned.
+
+### Implementation and native gate
+
+`display.timing=observe` is the default: observation/start distributions with
+unsynchronized copies. `off` provides the same-revision copy baseline; `blank`
+explicitly opts the trusted boot into native qualification. The Make setting
+`DISPLAY_TIMING` accepts only these three values. No program can change this
+boot policy. Native qualification remains pending; no tear-free claim is made.
+
+The observer/guarded-copy source and QEMU unavailable path are implemented;
+the native checkboxes above remain open for the owner's ThinkPad batch. The
+record explains dense startup versus conservative sparse requalification,
+the IRQ-atomic first pixel, diagnostic overhead and source-reviewed limits.
+Step 3 remains unassigned.
 
 ### Step 2 owner decisions
 

@@ -99,8 +99,10 @@ Chosen by the owner, each starting with a proposal:
   master/per-space gain and the owner's four-icon bar UI; decisions accepted,
   dB floor proposed for final review, implementation unassigned.
 - **Codex alpha** (2026-10-09): [presentation timing step 2](presentation-timing.md#step-2-read-only-renoir-timing),
-  proposal first for a read-only Renoir OTG observer and measured blank-started
-  copying; its three defaults await owner answers. Clipboard terminal Copy +
+  all three defaults accepted; read-only Renoir observation and guarded
+  blank-start copies implemented for review. Timed copies remain off by default;
+  the [native batch](../development/experiments/renoir-presentation/README.md#native-thinkpad-batch)
+  still gates qualification. Clipboard terminal Copy +
   Paste merged in #619 / userland #180; its later SDL2, FILE and converter tasks
   remain unassigned.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
