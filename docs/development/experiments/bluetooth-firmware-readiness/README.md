@@ -40,9 +40,11 @@ disk mount. Missing/mismatched assets fail image assembly; no upstream fallback
 or implicit host firmware input. Kernel compilation remains independent.
 No ports/userland pin or compiler-container change is planned.
 
-**Owner mirror URLs are required before consumption.** No matching entry was
-found in the inspected mirror/cache catalogs. This is a missing build dependency,
-not a new firmware-policy decision.
+The owner supplied the raw-gitlab mirror on 2026-10-09, recorded in
+[metadata.json](../../../../firmware/ax200/metadata.json). The cache prefix is:
+https://repo.internal/repository/raw-gitlab/kernel-firmware/linux-firmware/-/raw/c822cbbb14ce5b8ee1f27346220640ac350bbf34/
+Its binary availability remains a build dependency, not a new firmware-policy
+decision. The fetcher must succeed and verify all four files before consumption.
 
 ## Controller plan under accepted decisions
 
@@ -153,8 +155,13 @@ fault injection, forced cold transition or new benchmark infrastructure were
 added. The unmodified baseline image/ELF from successful main52451d3 CI run1349
 was saved before code changes; its attached measurements await restored access.
 
-Actual owner cache URLs remain pending in firmware/ax200/metadata.json.
-A missing mirror fails image assembly explicitly. The AX200 is still node
+The owner cache URL is now recorded in firmware/ax200/metadata.json. An ordinary
+fetch through it failed closed with HTTP 404 for intel/ibt-20-1-3.sfi. Claude
+reports the DDC also returned 404, while LICENCE.ibt_firmware and WHENCE matched
+the manifest's sizes and hashes. Cache content-type validation is a suspected
+cause reported by Claude, not established by Pyxis measurement. The owner is
+correcting binary availability; no upstream or host-file fallback is used.
+The AX200 is still node
 /dev/bus/usb/004/003, currently not writable after reboot; its owner access
 grant must be restored before attachment. Fedora Bluetooth is inactive/disabled.
 No QEMU, debugger or probe was started.
@@ -180,4 +187,4 @@ independent source inspection. This is not controller validation. Exact-head
 CI run [1373](https://git.internal/PyxisOS/pyxis-os/actions/runs/1373) passed
 change detection and filesystem checks, but image build failed explicitly with
 “AX200 owner mirror_root is missing in the metadata”. The published source
-therefore remains a draft awaiting the owner's cache prefix and USB access.
+therefore remains a draft awaiting cached binaries and USB access.

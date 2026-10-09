@@ -36,8 +36,13 @@ output preserves the four upstream paths and adds `PROVENANCE.json`, generated
 from the manifest. Downloads use a finite timeout, reject redirects and read at
 most each expected size plus one byte; partial files are removed on failure.
 
-`mirror_root` is pending the owner's exact mirror prefix. An empty prefix fails
-before reading cached assets or downloading. The fetcher appends only the
+The owner supplied `mirror_root` on 2026-10-09:
+
+https://repo.internal/repository/raw-gitlab/kernel-firmware/linux-firmware/-/raw/c822cbbb14ce5b8ee1f27346220640ac350bbf34/
+
+The binaries currently await the owner's cache correction; the fetcher fails
+closed on an HTTP error. An empty prefix also fails before reading cached assets
+or downloading. The fetcher appends only the
 canonical paths from the manifest and never falls back to upstream or installed
 host firmware. The URLs above identify provenance, not build download sources.
 

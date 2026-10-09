@@ -418,7 +418,7 @@ reconnect or native closure. See the
 
 Task 3 uses branch bluetooth/firmware-readiness from fresh main 52451d3 and
 [the pre-code plan and implementation record](../development/experiments/bluetooth-firmware-readiness/README.md).
-The loader and specific failure diagnostics compile, but owner mirror URLs and
+The loader and specific failure diagnostics compile, but cached binaries and
 USB-node access remain required for image/passthrough validation. Native cold
 power-on and warm reboot are collected as the next owner batch. Task 3 remains
 unchecked until its validation is accounted for; later tasks are unassigned.
