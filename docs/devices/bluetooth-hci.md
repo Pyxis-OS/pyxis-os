@@ -16,13 +16,15 @@ start before initialization. Complete inventory must establish a single adapter.
 The owning BSP xHCI worker advances finite initialization transactions without
 waiting for HCI replies. Storage waits reach the same bounded progress point.
 
-Intel Read Version precedes Reset. Only the investigation's operational tuple
-is admitted for development; unknown/cold firmware is unavailable without an
-upload or speculative reset. Read Version after Reset must match. Local version,
-commands, LE features, buffer lengths and packet credits are checked before
-mandatory event masks and readiness. This warm profile is development evidence,
-not production firmware qualification. Task 3 adds the [pinned firmware readiness flow](../development/experiments/bluetooth-firmware-readiness/README.md);
-its image, warm and native validation remain pending.
+Intel Read Version precedes Reset. The investigation's operational tuple skips
+SFI upload for development. A matching cold bootloader instead enters the bounded
+pinned SFI upload and real boot-event flow; unknown firmware fails closed.
+Operational version is checked before and after Reset, and pinned DDC must
+complete successfully. Local version, commands, LE features, buffer lengths and
+packet credits are checked before mandatory event masks and readiness. The
+[task 3 record](../development/experiments/bluetooth-firmware-readiness/README.md)
+distinguishes this implementation from its pending image, warm and native
+validation. Neither path establishes production firmware qualification.
 
 ## Authority and messages
 
