@@ -1,13 +1,9 @@
 # Native AMD HD Audio / ALC257: task 5 proposal
 
-Status: **three owner decisions accepted 2026-10-09**. Prepared from fresh main
-`26770a0c` on a separate documentation branch. Implementation is authorized after
-this accepted-decision update is pushed and the session/refill dependencies
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) and
-[userland #168](https://git.internal/PyxisOS/pyxis-userland/pulls/168) are merged.
-The owner reports both merged. The forwarded root PCI inventory below settles
-MSI compatibility; no native implementation or qualification is claimed yet.
-Coordinate the owner-run ThinkPad batch with its Bluetooth work.
+Status: **owner decisions accepted 2026-10-09**; implementation is in
+[#578](https://git.internal/PyxisOS/pyxis-os/pulls/578), with native qualification
+outstanding. The session/refill dependencies and proposal are merged. Coordinate
+the owner-run ThinkPad sitting with its Bluetooth work.
 
 ## Accepted boundary
 
@@ -245,7 +241,7 @@ remains the command/register reference; deferred event work does not change task
    stops qualification, preserves DMA and requires reboot; report it for a
    separate recovery/batching/guard decision rather than weakening the policy.
 
-Plan validation so far is source/dump/document review only. No native execution
-or driver code is claimed by this update. Implementation is authorized after
-publishing this update and verifying the dependency merges; preserve the accepted
-native-batch/guard boundaries and stop the implementation PR for owner review.
+The engine and qualification records describe implementation and the first
+native boot's legacy-snoop blocker. The accepted PCIe replacement needs the
+owner's next sitting; no native playback is qualified. Preserve the accepted
+batch, guard and reboot-only failure boundaries through milestone closure.
