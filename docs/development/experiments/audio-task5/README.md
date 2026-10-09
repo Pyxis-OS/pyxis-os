@@ -127,9 +127,9 @@ ACQUIRE with CALL_UNAVAILABLE (status 6), and left ordinary shell commands
 serviceable. All owned QEMU, debugger and remote-client jobs were stopped.
 
 The final source build at `6c4a4aaa` also passed with verified unchanged bundles.
-It factors the accepted native 20 ms value into one constant; the audio object's
-compiled `.text` is byte-identical to the integration build. No guard or runtime
-behavior changed after these boots.
+It factors the accepted native 20 ms value into one constant. Disassembly differs
+only in assertion source-line immediates; the guard instructions are unchanged.
+No playback behavior changed after these boots.
 
 ## Native implementation and remaining checks
 
