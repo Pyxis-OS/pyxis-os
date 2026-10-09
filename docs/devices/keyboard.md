@@ -146,7 +146,7 @@ its foreground job rather than reading ordinary text, so unread bytes wait for
 a later reader.
 
 Super+Up discards unread console bytes. Entering capture routing also discards
-them, including on first PRESENT. Acquisition, release or process cleanup
+them, including on first SUBMIT. Acquisition, release or process cleanup
 preserves queued text when the destination remains terminal text. Acquiring or
 releasing capture while graphics is hidden cannot steal text routing or clear
 the queue. Releasing hidden graphics preserves text unless an independent

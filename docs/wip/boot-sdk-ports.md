@@ -100,8 +100,8 @@ Chosen by the owner, each starting with a proposal:
   unassigned; [contracts](../interfaces/clipboard.md) and
   [qualification](../development/clipboard-first-delivery-qualification.md) describe this delivery.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
-  RAM staging for boot and Bochs, delivered for review; the completed-frame
-  handoff is proposed with three decisions. Saved shell history (#609) and
+  RAM staging (#610), is merged; the completed-frame handoff is delivered for
+  review with userland and ports PRs. Saved shell history (#609) and
   xfer pipelining (#600) are merged; xfer's native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),

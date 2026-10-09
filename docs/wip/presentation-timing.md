@@ -6,9 +6,11 @@ the ThinkPad's 60 Hz panel. All three decisions below were accepted as the
 defaults on 2026-10-09.
 
 **Status:**
-- **Step 1, RAM staging for boot and Bochs:** delivered for review, with its
+- **Step 1, RAM staging for boot and Bochs:** merged in #610, with its
   [measurements and native steps](../development/experiments/presentation-staging/README.md).
-- **Completed-frame handoff:** a proposal, [below](#completed-frame-handoff-proposal).
+- **Completed-frame handoff:** three decisions accepted 2026-10-09
+  ([below](#completed-frame-handoff)); implemented for review, with its
+  [measurements and native steps](../development/experiments/frame-handoff/README.md).
 - **Timing and pacing:** later steps.
 
 **Recommendation:** stage composition in RAM first, then investigate read-only
@@ -28,14 +30,14 @@ selection/caret and pointer. There is no kernel damage protocol.
 | Bochs | Same direct-copy path into WC BAR0; mode setup fixes offsets at zero. | Device/frontend samples the currently selected aperture page, independently of copying. |
 | VirtIO 2D | One guest-RAM resource backing; compose there, full TRANSFER_TO_HOST_2D, initial SET_SCANOUT, then RESOURCE_FLUSH, with fenced control completion. | Transfer populates a host resource; flush requests its display update. Completion is not a monitor timestamp. |
 
-[DISPLAY_PRESENT](../../include/abi/display.h) currently selects a continuously
-sampled writable mapping; later writes can appear without another call. Frame
-leases protect lifetime, not pixel immutability. SDL already draws off-screen,
-then copies dirty rectangles into this mapping; those rectangles save only its
-own copy. Quake scales/palette-expands directly into the mapping and independently
-paces its loop at 72 Hz; timedemo is uncapped. Thus two mixtures are possible:
-application writes racing presenter reads, and front-buffer writes racing panel
-scanout. The 72/60 mismatch adds repeats/drops; even equal nominal rates drift.
+Until the [frame handoff](#completed-frame-handoff), DISPLAY_PRESENT selected a
+continuously sampled writable mapping; later writes could appear without another
+call. Frame leases protected lifetime, not pixel immutability. SDL drew
+off-screen, then copied dirty rectangles into this mapping. Quake scaled and
+palette-expanded directly into the mapping and paces its loop at 72 Hz;
+timedemo is uncapped. Thus two mixtures were possible: application writes
+racing presenter reads, and front-buffer writes racing panel scanout. The
+handoff removes the first. The 72/60 mismatch adds repeats/drops; even equal nominal rates drift.
 
 ## What each backend can do
 
@@ -147,50 +149,14 @@ Accepted 2026-10-09, all as the defaults.
    bounded pending frames and truthful timing capability; keep uncapped mode
    available. No unconditional 60 Hz cap or pretend SDL vsync.
 
-## Completed-frame handoff (proposal)
+## Completed-frame handoff
 
-Proposal, 2026-10-09; not accepted. Today a graphics session has one mapping
-that the presenter samples every cadence while the program writes it, so a
-presented frame can mix two program frames. The handoff gives each session
-several slots and makes the program hand over finished frames:
-- **Mapping:** ACQUIRE and REPLACE map the session's slots at disjoint
-  addresses, with one geometry. Each slot is a complete frame.
-- **Submitting:** DISPLAY_SUBMIT names a slot the program has finished. That
-  slot becomes the pending frame. The program must not write it again until a
-  reply hands it back.
-- **Latching:** at each cadence, the presenter latches the pending frame as
-  the current one. The previous current slot becomes reusable. The presenter
-  repaints from the current slot every cadence, so it stays untouched while it
-  is current.
-- **Replies:** each SUBMIT reply names the slot to render next, and says
-  whether an earlier pending frame was dropped. A slot is never returned while
-  it is current or pending.
-- **Errors:** an unknown slot, or one the program doesn't hold, is
-  BAD_REQUEST and changes nothing.
-- **Unchanged:** REPLACE, RELEASE and exit retire every slot together, as the
-  mapping is retired today. Capture reads the current slot. Overlays and
-  staging are unchanged.
-- **Out of scope:** timing and pacing information, a later step.
+Accepted by the owner on 2026-10-09, all three as the defaults:
+1. **Three slots per session:** current, pending and being rendered, so SUBMIT
+   never waits.
+2. **Newest frame wins:** a SUBMIT while a frame is pending replaces it, and
+   the reply reports the drop explicitly.
+3. **Continuous sampling retired:** SDL2, Quake and the other graphics programs
+   moved to SUBMIT in the same change, with userland and ports PRs.
 
-**Decisions** (proposed defaults):
-
-1. **Slots per session.**
-   - **Default:** three: one current, one pending and one being rendered.
-     SUBMIT never waits. Memory is three frames per session, 23.7 MiB at
-     1920x1080.
-   - **Alternative:** two. SUBMIT then waits, for up to one cadence, until the
-     presenter latches the pending frame. That halves the memory but couples
-     the program's frame time to the presenter.
-2. **A SUBMIT while a frame is pending.**
-   - **Default:** the newest frame wins. The pending frame is dropped, its slot
-     is handed back at once, and the reply says so. Quake's 72 fps then shows
-     as explicit drops at 60 Hz.
-   - **Alternative:** never drop. SUBMIT waits until the pending frame is
-     latched, which paces the program to the presenter. This overlaps the
-     later pacing step.
-3. **Continuous sampling.**
-   - **Default:** retire it. Graphics appear only through submitted frames.
-     SDL2's surface path and the Quake adapter move to SUBMIT in the same
-     change, with userland and ports PRs. A program that never submits shows
-     nothing.
-   - **Alternative:** keep sampled mappings beside the handoff.
+The contract is in [graphics](../interfaces/graphics.md#slots-and-frame-handoff).

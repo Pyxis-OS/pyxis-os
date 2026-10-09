@@ -50,7 +50,7 @@ device protocols.
    the program. A compositor must see each client's pixels without copying a
    frame per present, and Pyxis has no shared-memory capability yet. This is the
    first prerequisite, already noted in [desktop graphics](desktop-graphics.md).
-2. **Provider-backed device handles.** `display_present`, `pointer_read`,
+2. **Provider-backed device handles.** `display_submit`, `pointer_read`,
    `keyboard_read` and the other helpers must reach a provider when the handle is
    exported, as the file helpers do. `wait_many` must report readiness for those
    handles, so a client waits on a compositor's pointer exactly as on the

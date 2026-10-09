@@ -60,12 +60,13 @@ capabilities.
 
 Rendering uses a 320x200 game buffer scaled by an integer to fit the space's
 content area, with black borders. Pixel conversion respects native channel
-shifts and pitch. Presentation retains the existing single-buffer contract;
-tearing is possible. There is no display refresh synchronization or pixel-aspect
-correction.
+shifts and pitch. Each frame is drawn into a held display slot and
+[submitted](../interfaces/graphics.md#slots-and-frame-handoff) whole; the
+borders are never drawn, so every slot keeps them black. There is no display
+refresh synchronization or pixel-aspect correction.
 
 At each frame boundary Doom queries destination geometry. A fresh generation
-replaces its mapping and recomputes integer scaling and black borders; the game
+replaces its slots and recomputes integer scaling and black borders; the game
 engine keeps its fixed frame size. A destination too small for scale one keeps
 the old mapping and clipped output until growth. Replacement failure also
 keeps the old buffer usable, with no allocation retry on every frame; another
