@@ -326,9 +326,11 @@ remain disabled pending the owner's native results.
 The private hardware capability describes validated counter observation and
 its uncertainty, independently of copy-start admission. `blank` phases the
 presenter's own cadence, sleeps before the expected blank, then polls for at
-most 250 µs / 64 brackets spaced at least 4 µs apart, IF=1. The actual position
-is reread before the first front write. Admission reserves eight scanlines plus
-measurement uncertainty; late/unqualified copies proceed once immediately as
+most 250 µs / 64 brackets spaced at least 4 µs apart, IF=1. Each fine poll reads
+only frame, position and status against the cached mode. Full device, BAR and
+mode revalidation runs once per cadence and again immediately before an admitted
+front write. Admission reserves eight scanlines plus measurement uncertainty;
+late/unqualified copies proceed once immediately as
 unsynchronized. No second-blank queue, page flip, program timing ABI or vsync
 promise is introduced. Sparse requalification can restore counter observation
 with uncertainty too large to permit phased copies.
@@ -339,6 +341,11 @@ section includes clock-access cost, not just a fixed instruction count. Direct
 writer ownership is unpublished during sleep/poll and reacquired/rechecked
 before copying; its fence/release precedes diagnostic sorting/logging. Panic,
 frame leases and cursor-inclusive capture retain their existing contracts.
+
+Normal logging retains one preparation summary and rare observation-loss
+reports. Register dumps, qualification details and periodic metrics use `ktrace`;
+native measurement images need `LOG_LEVEL=trace`. Periodic metric sorting is
+also skipped at the normal info level.
 
 The [qualification and native batch record](../development/experiments/renoir-presentation/README.md)
 distinguishes CPU-issued prefix progress from WC visibility/display fetch.

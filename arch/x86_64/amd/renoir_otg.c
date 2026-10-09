@@ -372,6 +372,40 @@ static enum renoir_otg_result unavailable(void)
   return RENOIR_OTG_UNAVAILABLE;
 }
 
+enum renoir_otg_result renoir_otg_read_light(struct renoir_otg_sample *sample)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  cpu_restore_interrupts(flags);
+  KASSERT(sample);
+  *sample = (struct renoir_otg_sample){0};
+  if (!observer.ready) {
+    return RENOIR_OTG_UNAVAILABLE;
+  }
+  struct renoir_otg_sample current = {.mode = observer.info.mode};
+  unsigned otg = current.mode.otg;
+  current.before_ns = arch_monotonic_ns();
+  current.raw_frame_count = read_register(otg, OTG_STATUS_FRAME_COUNT);
+  current.raw_position = read_register(otg, OTG_STATUS_POSITION);
+  current.raw_status = read_register(otg, OTG_STATUS);
+  current.after_ns = arch_monotonic_ns();
+  current.frame_count = current.raw_frame_count & OTG_FRAME_MASK;
+  current.v_position = current.raw_position & OTG_TIMING_MASK;
+  current.h_position = (current.raw_position >> OTG_HIGH_FIELD_SHIFT) & OTG_TIMING_MASK;
+  current.in_blank = (current.raw_status & OTG_V_BLANK) != 0;
+  bool position_blank = current.v_position >= current.mode.blank_start ||
+    current.v_position < current.mode.blank_end;
+  if (current.after_ns < current.before_ns || current.v_position >= current.mode.v_total ||
+      current.h_position >= current.mode.h_total || current.in_blank != position_blank) {
+    refuse("light OTG tuple is incoherent; full validation required");
+    return RENOIR_OTG_RETRY;
+  }
+  *sample = current;
+  reason = "available";
+  return RENOIR_OTG_OK;
+}
+
 enum renoir_otg_result renoir_otg_read(struct renoir_otg_sample *sample)
 {
   KASSERT(cpu_current() == cpu_bsp());

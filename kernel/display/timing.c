@@ -118,9 +118,9 @@ static void set_edges(const struct renoir_otg_sample *sample)
       edge_upper_ns - edge_lower_ns : 0;
 }
 
-static bool observe(struct renoir_otg_sample *sample)
+static bool observe(struct renoir_otg_sample *sample, bool light)
 {
-  enum renoir_otg_result result = renoir_otg_read(sample);
+  enum renoir_otg_result result = light ? renoir_otg_read_light(sample) : renoir_otg_read(sample);
   uint64_t now = arch_monotonic_ns();
   if (result == RENOIR_OTG_UNAVAILABLE) {
     lose_timing(renoir_otg_reason(), now, true);
@@ -233,7 +233,7 @@ static bool observe(struct renoir_otg_sample *sample)
           rate_start_ns = stamp;
           rate_frame = sample->frame_count;
           set_edges(sample);
-          klog("display-timing: hardware otg=%u period=%lu line=%lu blank=%lu uncertainty=%lu ns\n",
+          ktrace("display-timing: hardware otg=%u period=%lu line=%lu blank=%lu uncertainty=%lu ns\n",
               info.mode.otg, period, period / info.mode.v_total,
               ((info.mode.blank_end + info.mode.v_total - info.mode.blank_start) %
                info.mode.v_total) * (period / info.mode.v_total), capability.uncertainty_ns);
@@ -270,13 +270,13 @@ void display_timing_prepare(const struct boot_info *boot, bool firmware_backend,
   klog("display-timing: %s; read-only Renoir %02x:%02x.%u BAR5=0x%lx OTG%u\n",
       mode == TIMING_BLANK ? "experimental blank-start copies" : "observation; unsynchronized copies",
       info.address.bus, info.address.device, info.address.function, info.bar5, info.mode.otg);
-  klog("renoir-otg: active=%ux%u total=%ux%u blank=%u..%u control=0x%x\n",
+  ktrace("renoir-otg: active=%ux%u total=%ux%u blank=%u..%u control=0x%x\n",
       info.mode.h_active, info.mode.v_active, info.mode.h_total, info.mode.v_total,
       info.mode.blank_start, info.mode.blank_end, info.mode.raw_control);
-  klog("renoir-otg: H_TOTAL=%x H_BLANK=%x H_TIMING=%x V_TOTAL=%x V_BLANK=%x\n",
+  ktrace("renoir-otg: H_TOTAL=%x H_BLANK=%x H_TIMING=%x V_TOTAL=%x V_BLANK=%x\n",
       info.mode.raw_h_total, info.mode.raw_h_blank, info.mode.raw_h_timing,
       info.mode.raw_v_total, info.mode.raw_v_blank);
-  klog("renoir-otg: V_MIN=%x V_MAX=%x V_CONTROL=%x INTERLACE=%x\n",
+  ktrace("renoir-otg: V_MIN=%x V_MAX=%x V_CONTROL=%x INTERLACE=%x\n",
       info.mode.raw_v_total_min, info.mode.raw_v_total_max,
       info.mode.raw_v_total_control, info.mode.raw_interlace);
 }
@@ -290,7 +290,7 @@ void display_timing_start(void)
   reset_fit(arch_monotonic_ns());
   while (!capability.hardware && !permanent_loss && !display_is_panicking()) {
     struct renoir_otg_sample sample;
-    observe(&sample);
+    observe(&sample, false);
     uint64_t now = arch_monotonic_ns();
     if (now >= deadline) {
       break;
@@ -298,9 +298,9 @@ void display_timing_start(void)
     kernel_task_sleep_until(MIN(now + TIMING_SAMPLE_NS, deadline));
   }
   if (!capability.hardware) {
-    klog("display-timing: counters unqualified; unsynchronized copies\n");
+    ktrace("display-timing: counters unqualified; unsynchronized copies\n");
   }
-  klog("renoir-otg: frame=%u v=%u position=%x status=%x advances=%u bracket=%lu ns\n",
+  ktrace("renoir-otg: frame=%u v=%u position=%x status=%x advances=%u bracket=%lu ns\n",
       previous.frame_count, previous.v_position, previous.raw_position,
       previous.raw_status, fit_advances, max_bracket_ns);
 }
@@ -339,7 +339,7 @@ void display_timing_wait(void)
     return;
   }
   struct renoir_otg_sample sample;
-  if (!observe(&sample) || !phase_precise()) {
+  if (!observe(&sample, false) || !phase_precise()) {
     copy.result = TIMING_UNAVAILABLE;
     return;
   }
@@ -380,7 +380,7 @@ void display_timing_wait(void)
     }
     next_read = now + TIMING_POLL_SPACING_NS;
     ++polls;
-    if (observe(&sample) && capability.hardware) {
+    if (observe(&sample, true) && capability.hardware) {
       now = arch_monotonic_ns();
       if (now < deadline && start_fits(&sample, now)) {
         copy.result = TIMING_ADMITTED;
@@ -405,7 +405,8 @@ bool display_timing_front_write(void)
     return false;
   }
   struct renoir_otg_sample sample;
-  bool valid = observe(&sample) && capability.hardware;
+  bool full = mode != TIMING_BLANK || copy.result == TIMING_ADMITTED;
+  bool valid = observe(&sample, !full) && capability.hardware;
   uint64_t now = arch_monotonic_ns();
   copy.progress = (++total_written % TIMING_PROGRESS_INTERVAL) == 0;
   copy.sample_valid = valid && edge_lower_ns && now >= edge_lower_ns;
@@ -481,7 +482,7 @@ static void print_metric(const char *name, enum timing_metric metric)
     sorted[count++] = metric_value(&records[i], metric);
   }
   if (!count) {
-    klog("display-timing: %s unavailable\n", name);
+    ktrace("display-timing: %s unavailable\n", name);
     return;
   }
   for (size_t i = 1; i < count; ++i) {
@@ -493,7 +494,7 @@ static void print_metric(const char *name, enum timing_metric metric)
     }
     sorted[j] = value;
   }
-  klog("display-timing: %s n=%zu p50=%lu p95=%lu p99=%lu max=%lu ns\n", name, count,
+  ktrace("display-timing: %s n=%zu p50=%lu p95=%lu p99=%lu max=%lu ns\n", name, count,
       sorted[count / 2], sorted[count * 95 / 100],
       sorted[count * 99 / 100], sorted[count - 1]);
 }
@@ -532,18 +533,20 @@ void display_timing_finish(void)
   if (record_count != TIMING_RECORDS) {
     return;
   }
-  klog("display-timing: source=%s mode=%s samples=%zu admitted=%lu unsync=%lu invalid=%lu progress-late=%lu frame=%u v=%u position=%x status=%x\n",
-      capability.hardware ? "hardware" : "unavailable", mode == TIMING_BLANK ? "blank" : "observe",
-      record_count, admitted_count, unsynchronized_count, invalid_count, progress_late_count,
-      previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status);
-  klog("display-timing: missed-starts late=%lu poll-expired=%lu unqualified=%lu\n",
-      late_count, expired_count, unavailable_count);
-  print_metric("start-upper", METRIC_START);
-  print_metric("copy-fence", METRIC_COPY);
-  print_metric("spin", METRIC_SPIN);
-  print_metric("read-bracket", METRIC_BRACKET);
-  print_metric("wake-late", METRIC_WAKE);
-  print_metric("issued-prefix-gap", METRIC_PROGRESS);
+  if (KLOG_TRACE_ENABLED) {
+    ktrace("display-timing: source=%s mode=%s samples=%zu admitted=%lu unsync=%lu invalid=%lu progress-late=%lu frame=%u v=%u position=%x status=%x\n",
+        capability.hardware ? "hardware" : "unavailable", mode == TIMING_BLANK ? "blank" : "observe",
+        record_count, admitted_count, unsynchronized_count, invalid_count, progress_late_count,
+        previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status);
+    ktrace("display-timing: missed-starts late=%lu poll-expired=%lu unqualified=%lu\n",
+        late_count, expired_count, unavailable_count);
+    print_metric("start-upper", METRIC_START);
+    print_metric("copy-fence", METRIC_COPY);
+    print_metric("spin", METRIC_SPIN);
+    print_metric("read-bracket", METRIC_BRACKET);
+    print_metric("wake-late", METRIC_WAKE);
+    print_metric("issued-prefix-gap", METRIC_PROGRESS);
+  }
   record_count = 0;
   admitted_count = unsynchronized_count = invalid_count = progress_late_count = 0;
   late_count = expired_count = unavailable_count = 0;

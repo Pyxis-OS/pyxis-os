@@ -101,6 +101,10 @@ admission and per-row WC visibility were not exercised in QEMU. All task-owned
 QEMU, debugger and build jobs were stopped after qualification.
 Missed-start reason counters were added afterward to native diagnostics only;
 the unavailable QEMU path performs no such accounting or logging.
+The review follow-up makes fine polling read only frame, position and status,
+with full device/BAR/mode validation once per cadence and before an admitted
+write. Register dumps and periodic metrics now require trace logging. These
+native-only changes do not provide new hardware cost or latency measurements.
 
 ## Native ThinkPad batch
 
@@ -111,22 +115,26 @@ Do not set `DISPLAY_SIZE`, attach another display, change power/mode/clock
 settings, or run a debugger during latency samples. Firmware timing may differ
 from Fedora's 1920x1080 / 60.0204 Hz / 31-line reference; qualify the actual boot.
 
-Build three images from the **same source revision and private Quake data**, in
-the usual compiler environment. Set `QUAKE_DATA` to the local id1 directory:
+Build three measurement images from the **same source revision and private Quake
+data**, in the usual compiler environment. Use `LOG_LEVEL=trace` for register
+dumps and bounded metrics; normal info builds retain one preparation summary
+and rare observation-loss reports, with no periodic logging or metric sorting.
+Trace also enables other kernel traces: match this setting across measurement
+images and record its overhead. Set `QUAKE_DATA` to the local id1 directory:
 
 ```sh
 mkdir -p build/renoir-native
-make -j16 image DISPLAY_TIMING=off QUAKE_DATA=/path/to/id1
+make -j16 image LOG_LEVEL=trace DISPLAY_TIMING=off QUAKE_DATA=/path/to/id1
 cp build/pyxis.iso build/renoir-native/off.iso
 cp build/caelum.elf build/renoir-native/off.elf
 cp build/initrd.cpio build/renoir-native/off.cpio
 cp build/limine.conf build/renoir-native/off.conf
-make -j16 image DISPLAY_TIMING=observe QUAKE_DATA=/path/to/id1
+make -j16 image LOG_LEVEL=trace DISPLAY_TIMING=observe QUAKE_DATA=/path/to/id1
 cp build/pyxis.iso build/renoir-native/observe.iso
 cp build/caelum.elf build/renoir-native/observe.elf
 cp build/initrd.cpio build/renoir-native/observe.cpio
 cp build/limine.conf build/renoir-native/observe.conf
-make -j16 image DISPLAY_TIMING=blank QUAKE_DATA=/path/to/id1
+make -j16 image LOG_LEVEL=trace DISPLAY_TIMING=blank QUAKE_DATA=/path/to/id1
 cp build/pyxis.iso build/renoir-native/blank.iso
 cp build/caelum.elf build/renoir-native/blank.elf
 cp build/initrd.cpio build/renoir-native/blank.cpio
@@ -177,6 +185,9 @@ observation. Duplicate kernel options retain the parser's existing fatal rule.
    Super+Esc/relock, space/layer changes, TTY selection and screenshots with a
    visible cursor; report input responsiveness alongside the distributions.
    A screenshot/FPS is not a tearing check. Stop each workload before the next.
+
+Repeat the `off`/`blank` camera comparison with `LOG_LEVEL=info` images from the
+same revision to check the visible result without trace-output overhead.
 
 The start marker timestamps one actual four-byte front store with IRQs saved,
 then restores IF before remaining copying/accounting. GPU observation and waits
