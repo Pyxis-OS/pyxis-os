@@ -61,6 +61,12 @@ optional: without it, or without a mouse, the program runs from the keyboard.
 - **Keyboard.** Pyxis key positions map to SDL scancodes. Text input comes from
   the US layout shared with the kernel's terminal (`pxe/key_layout.h`). Control,
   Alt and Super suppress text.
+- **Clipboard.** Get/Set/Has use the separate local/shared grants and
+  [physical graphics actions](../interfaces/clipboard.md#graphics-and-sdl2).
+  Unarmed reads/publications refuse; shared Super+Shift+C/V becomes an
+  identity-bound Ctrl command. Has does not consume Paste activation. UTF-8
+  text is bounded to 64 KiB, with no upstream cached-success fallback. The
+  [manual exercise](../../ports/sdl2/manual/README.md) is opt-in, outside ordinary images.
 - **Pointer.** The [native protocol](../interfaces/pointer.md#userspace-pointer-sessions)
   provides 56-byte events with surface-local positions and geometry/mapping
   identities. Ordinary SDL motion follows those positions; native locked input

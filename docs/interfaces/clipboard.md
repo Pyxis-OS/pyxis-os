@@ -1,4 +1,4 @@
-# Terminal clipboard
+# Clipboard
 
 Caelum retains one immutable UTF-8 `text/plain` item per space and one shared
 item. An explicit Copy replaces the chosen layer atomically; failure leaves the
@@ -6,10 +6,11 @@ old item intact. Each item owns its bytes independently of its source selection
 or program. Local and shared publications are independent. Stores are volatile,
 with no history or persistence; reboot loses them.
 
-This first delivery serves local terminals, Caelum log Copy and the
-[multiplexer](../userland/multiplexer.md). It provides no graphical/SDL2 access,
-FILE representations, converters or host/remote bridge. The broader
-[clipboard milestone](../wip/clipboard.md) retains those later tasks.
+Terminal delivery serves local terminals, Caelum log Copy and the
+[multiplexer](../userland/multiplexer.md). Eligible graphics owners also use
+bounded UTF-8 text through the SDL2 adapter below. FILE representations,
+converters and host/remote bridging remain later
+[milestone tasks](../wip/clipboard.md).
 
 ## Gestures and selection
 
@@ -41,14 +42,16 @@ before publication, without allocation under the terminal output lock.
 PUBLISH and PASTE rights. A local object names one space and checks the caller's
 actual space. Shared authority is independently requested/delegated. It confers
 no source roots, namespaces, FILE rights or future items. There is no general
-store READ operation or discoverable clipboard namespace binding.
+unactivated store-read operation or discoverable clipboard namespace binding.
 
 Trusted space startup requests separate `SPACE_CREATE_CLIPBOARD_LOCAL` and
 `SPACE_CREATE_CLIPBOARD_SHARED` flags. Terminal CONTROL by itself grants neither.
-Boot init explicitly requests both for configured mux spaces; shell/session
-forward the grants on the trusted mux startup path. Pane children and remote
-clients inherit neither merely from their streams. Receiver registration itself
-grants no clipboard access.
+Boot init explicitly requests both for stock local interactive spaces;
+session/shell and mux pane shells forward each separately on local foreground
+startup. [Configuration](../userland/init.md#boot-configuration) may withhold either.
+Background/service/remote launches receive neither. Pane shells receive no
+terminal CONTROL merely from these stores, and streams or receiver registration
+grant no clipboard access.
 
 A copied path such as `home://notes.txt` is only text. Paste does not open it or
 transfer source roots or FILE rights; any later command resolves it using the
@@ -71,6 +74,55 @@ cancellation uses the acquired terminal controller without resetting
 spatial identity/buttons; layout/history/resize boundaries still advance the view.
 No first-delivery Clear key is assigned. The trusted kernel local-terminal handler performs the
 user's gestures directly and lends no clipboard authority to its application.
+
+## Graphics and SDL2
+
+The same caller must own the shown, presented display and focused keyboard
+session in its actual space; no pointer grant is needed. Fresh exact physical
+Ctrl+C/V or Ctrl+Shift+C/V arms local Copy/Paste and retains the application's
+key events. Exact Super+Shift+C/V is a shared system command. Repeats, Ctrl+X,
+menu clicks, polling and synthetic SDL events create no activation. Both layers
+require their own grant; there is no fallback between stores.
+
+Each action binds its operation/layer/owner, keyboard acquisition, display mapping
+and geometry to an opaque ID with a five-second expiry. Matched Get/Set/refusal
+attempts consume it; Has does not. Overlapping unconsumed gestures cancel rather
+than replacing permission. Focus/overlay/layer loss, reset, queue loss, release/
+exit and resize/remap revoke it. Admission synchronizes physical input; an
+incomplete scan boundary refuses busy before exposing text or availability.
+
+[clipboard.h](../../include/abi/clipboard.h) adds graphics PUBLISH, READ, HAS and
+REFUSE requests using the action ID from the 40-byte native keyboard event.
+PUBLISH copies and validates complete scalar UTF-8, excluding NUL, before atomic
+replacement; it preserves bytes and line endings. READ supplies a 64 KiB reply
+buffer and receives raw bytes from one retained immutable snapshot, with length
+in `reply_size`; authorized empty/missing data returns zero. HAS returns only
+an eight-byte boolean under a live Paste action, without extending it or reading
+contents. REFUSE spends a matching preflight failure. Libpyxis supplies
+`clipboard_graphics_publish/read/has/refuse()` helpers. The existing 64 KiB text
+and 8 MiB aggregate payload bounds apply. Terminal Paste converts a separate
+charged snapshot under its ASCII/control/CR-normalization rules; richer text
+refuses before any insertion.
+
+SDL installs all three clipboard hooks even without grants, avoiding upstream's
+private-cache success fallback. Set returns 0 only for native publication;
+refusal returns negative with an SDL error. Get returns an SDL-allocated,
+NUL-terminated string: empty plus an error on refusal, empty without a new error
+for authorized empty data; allocation failure may return NULL. Call `SDL_free()`.
+Has returns false when unarmed/denied/empty; an armed non-consuming boolean is
+advisory across replacement. No app/menu/background read or cached-self exception.
+
+The adapter translates shared actions into Ctrl+C/V command-event modifier
+snapshots without faking global Control state or inserting character text.
+Private SDL queue-node identity arms only upon single-event delivery. Peek,
+batch delivery, stale/synthetic events, callbacks, filtering/discard and queue
+failure cannot lend or refresh permission. A later delivered event retires an
+unused action; calls must handle the delivered command before polling onward.
+Applications that inspect global modifiers need the event snapshot adaptation,
+as applied to DevilutionX's text editor. See the
+[SDL port](../../ports/sdl2/README.md) and its explicitly opt-in
+[manual exercise](../../ports/sdl2/manual/README.md); the tool is absent from
+ordinary images.
 
 ## Safe receiver
 
