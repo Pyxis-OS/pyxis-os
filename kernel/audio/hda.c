@@ -26,6 +26,10 @@
 #define HDA_AMD_SNOOP_CONTROL 0x42
 #define HDA_AMD_SNOOP_MASK 0x07
 #define HDA_AMD_SNOOP_ENABLE 0x02
+#define HDA_PCIE_FLAGS 0x02
+#define HDA_PCIE_DEVICE_CONTROL 0x08
+#define HDA_PCIE_DEVICE_CONTROL_BYTES 0x0a
+#define HDA_PCIE_NO_SNOOP (1u << 11)
 #define HDA_AMD_DMA_MAX ((UINT64_C(1) << 40) - 1)
 #define HDA_VERSION_MAJOR 1
 #define HDA_DMA_ALIGNMENT 128
@@ -765,9 +769,29 @@ static enum pci_selection select_controller(size_t *selected, enum hda_model *mo
   return found ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
 }
 
+static void trace_native_pcie(const struct hda_controller *controller)
+{
+  const struct pci_claim *claim = &controller->claim;
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    unsigned offset = claim->capabilities[i];
+    if (pci_read8(claim->device->address, offset + PCI_CAP_ID) != PCI_CAP_EXPRESS) {
+      continue;
+    }
+    if (!pci_capability_fits(claim, offset, HDA_PCIE_DEVICE_CONTROL_BYTES)) {
+      ktrace("hda: native PCIe capability does not contain Device Control\n");
+      continue;
+    }
+    uint16_t flags = pci_read16(claim->device->address, offset + HDA_PCIE_FLAGS);
+    uint16_t control = pci_read16(claim->device->address, offset + HDA_PCIE_DEVICE_CONTROL);
+    ktrace("hda: native PCIe cap=%x flags=%x DEVCTL=%x NoSnoop=%u\n",
+        offset, (unsigned)flags, (unsigned)control, (unsigned)!!(control & HDA_PCIE_NO_SNOOP));
+  }
+}
+
 static bool enable_native_snoop(struct hda_controller *controller)
 {
   struct pci_address address = controller->claim.device->address;
+  trace_native_pcie(controller);
   uint8_t control = pci_read8(address, HDA_AMD_SNOOP_CONTROL);
   uint8_t expected = (control & ~HDA_AMD_SNOOP_MASK) | HDA_AMD_SNOOP_ENABLE;
   pci_write8(&controller->claim, HDA_AMD_SNOOP_CONTROL, expected);
@@ -775,6 +799,7 @@ static bool enable_native_snoop(struct hda_controller *controller)
   ktrace("hda: native PCI 42 snoop before=%x requested=%x after=%x mask=%x enabled=%x\n",
       (unsigned)control, (unsigned)expected, (unsigned)observed,
       HDA_AMD_SNOOP_MASK, HDA_AMD_SNOOP_ENABLE);
+  trace_native_pcie(controller);
   return observed == expected;
 }
 
