@@ -1,3 +1,4 @@
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include "firmware.h"
 #include "firmware-settings.h"
@@ -163,6 +164,8 @@ static void validate_sfi(struct bluetooth_firmware *state)
     fail(state, "SFI build below controller minimum");
     return;
   }
+  ktrace("Bluetooth firmware: validated SFI bytes %zu, build %u/%u/%u\n",
+      state->sfi.size, state->image_build, state->image_week, 2000 + state->image_year);
   state->scan_offset = 0;
   state->phase = BLUETOOTH_FIRMWARE_VALIDATE_DDC;
 }
@@ -192,7 +195,6 @@ static void validate_ddc(struct bluetooth_firmware *state)
   }
   if (state->scan_offset == state->ddc.size) {
     state->offset = 0;
-    state->secure_armed = state->cold;
     state->phase = state->cold ? BLUETOOTH_FIRMWARE_SECURE_INIT : BLUETOOTH_FIRMWARE_RESET;
   }
 }
@@ -277,6 +279,9 @@ enum bluetooth_firmware_progress bluetooth_firmware_prepare(struct bluetooth_fir
     if (!state->secure_result) {
       return BLUETOOTH_FIRMWARE_IDLE;
     }
+    ktrace("Bluetooth firmware: upload complete, commands %zu, payload bytes %zu, duration ns %llu\n",
+        state->upload_commands, state->upload_bytes,
+        (unsigned long long)(now - state->upload_started));
     state->secure_armed = false;
     state->upload_deadline = state->result_deadline = 0;
     state->phase = BLUETOOTH_FIRMWARE_BOOT;
@@ -372,6 +377,26 @@ enum bluetooth_firmware_progress bluetooth_firmware_prepare(struct bluetooth_fir
   return BLUETOOTH_FIRMWARE_COMMAND;
 }
 
+bool bluetooth_firmware_published(struct bluetooth_firmware *state, uint64_t now)
+{
+  bluetooth_firmware_tick(state, now);
+  if (state->phase == BLUETOOTH_FIRMWARE_FAILED) {
+    return false;
+  }
+  if (!state->pending || state->published) {
+    return fail(state, "unexpected firmware command publication");
+  }
+  state->published = true;
+  if (state->pending_opcode == INTEL_OP_SECURE_SEND && !state->secure_armed) {
+    state->secure_armed = true;
+    state->upload_started = now;
+  }
+  if (state->phase == BLUETOOTH_FIRMWARE_BOOT) {
+    state->boot_armed = true;
+  }
+  return true;
+}
+
 bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
     const uint8_t *reply, size_t length, uint64_t now)
 {
@@ -379,7 +404,7 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
   if (state->phase == BLUETOOTH_FIRMWARE_FAILED) {
     return false;
   }
-  if (!state->pending || state->replied || opcode != state->pending_opcode ||
+  if (!state->pending || !state->published || state->replied || opcode != state->pending_opcode ||
       state->phase == BLUETOOTH_FIRMWARE_BOOT) {
     return fail(state, "unexpected firmware command response");
   }
@@ -387,7 +412,14 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
     return fail(state, "firmware command rejected");
   }
   if (opcode == INTEL_OP_VERSION) {
-    if (length != sizeof(state->version) || !hardware_profile(reply)) {
+    if (length != sizeof(state->version)) {
+      return fail(state, "invalid Intel version length");
+    }
+    ktrace("Bluetooth firmware: %s, platform %u variant %u hardware revision %u, "
+        "firmware type %u revision %u build %u/%u/%u patch %u\n",
+        bluetooth_firmware_phase_name(state), reply[1], reply[2], reply[3], reply[4],
+        reply[5], reply[6], reply[7], 2000 + reply[8], reply[9]);
+    if (!hardware_profile(reply)) {
       return fail(state, "unsupported Intel controller version");
     }
     if (state->phase == BLUETOOTH_FIRMWARE_VERSION) {
@@ -407,9 +439,8 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
       return fail(state, "firmware version changed after reset");
     }
   } else if (opcode == INTEL_OP_BOOT_PARAMETERS) {
-    if (length != INTEL_BOOT_PARAMETERS_BYTES ||
-        read16(reply + 4) != INTEL_AX200_DEVICE_REVISION || reply[21]) {
-      return fail(state, "unsupported Intel boot parameters");
+    if (length != INTEL_BOOT_PARAMETERS_BYTES) {
+      return fail(state, "invalid Intel boot parameters length");
     }
     state->boot = (struct bluetooth_firmware_boot_parameters){
       .device_revision = read16(reply + 4),
@@ -419,6 +450,17 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
       .minimum_build = reply[18], .minimum_week = reply[19], .minimum_year = reply[20],
       .limited_cce = reply[21], .unlocked_state = reply[22],
     };
+    ktrace("Bluetooth firmware: boot device revision %u, OTP format/content/patch %u/%u/%u, "
+        "secure boot %u key header/type %u/%u, locks OTP/API/debug %u/%u/%u, "
+        "minimum build %u/%u/%u, limited CCE %u unlocked %u\n",
+        state->boot.device_revision, state->boot.otp_format, state->boot.otp_content,
+        state->boot.otp_patch, state->boot.secure_boot, state->boot.key_from_header,
+        state->boot.key_type, state->boot.otp_lock, state->boot.api_lock,
+        state->boot.debug_lock, state->boot.minimum_build, state->boot.minimum_week,
+        2000 + state->boot.minimum_year, state->boot.limited_cce, state->boot.unlocked_state);
+    if (state->boot.device_revision != INTEL_AX200_DEVICE_REVISION || state->boot.limited_cce) {
+      return fail(state, "unsupported Intel boot parameters");
+    }
   } else if (length != 1) {
     return fail(state, "invalid firmware command response length");
   }
@@ -432,11 +474,15 @@ bool bluetooth_firmware_retired(struct bluetooth_firmware *state, uint64_t now)
   if (state->phase == BLUETOOTH_FIRMWARE_FAILED) {
     return false;
   }
-  if (!state->pending || (state->phase == BLUETOOTH_FIRMWARE_BOOT ?
+  if (!state->pending || !state->published || (state->phase == BLUETOOTH_FIRMWARE_BOOT ?
       !state->boot_notified : !state->replied)) {
     return fail(state, "unconfirmed firmware command retirement");
   }
-  state->pending = state->replied = false;
+  if (state->pending_opcode == INTEL_OP_SECURE_SEND) {
+    ++state->upload_commands;
+    state->upload_bytes += state->pending_bytes;
+  }
+  state->pending = state->published = state->replied = false;
   state->command_deadline = 0;
   switch (state->phase) {
   case BLUETOOTH_FIRMWARE_VERSION:
@@ -485,6 +531,7 @@ bool bluetooth_firmware_retired(struct bluetooth_firmware *state, uint64_t now)
     }
     break;
   case BLUETOOTH_FIRMWARE_BOOT:
+    state->boot_armed = false;
     state->bulk_events = false;
     state->phase = BLUETOOTH_FIRMWARE_VERSION_BOOTED;
     break;
@@ -499,8 +546,11 @@ bool bluetooth_firmware_retired(struct bluetooth_firmware *state, uint64_t now)
     state->phase = BLUETOOTH_FIRMWARE_DDC;
     break;
   case BLUETOOTH_FIRMWARE_DDC:
+    ++state->ddc_commands;
     state->offset += state->pending_bytes;
     if (state->offset == state->ddc.size) {
+      ktrace("Bluetooth firmware: DDC complete, commands %zu, bytes %zu\n",
+          state->ddc_commands, state->ddc.size);
       state->phase = BLUETOOTH_FIRMWARE_READY;
     }
     break;
@@ -525,18 +575,32 @@ bool bluetooth_firmware_notify(struct bluetooth_firmware *state,
     return true;
   }
   if (wire[2] == INTEL_EVENT_SECURE_RESULT) {
-    if (!state->secure_armed || state->secure_result || length != 7) {
+    if (!state->secure_armed || length != 7) {
       return fail(state, "unexpected secure result notification");
     }
+    ktrace("Bluetooth firmware: secure notification result %u opcode %x status %u\n",
+        wire[3], read16(wire + 4), wire[6]);
     if (wire[3]) {
       return fail(state, "secure firmware verification failed");
     }
+    /* Endpoints complete independently: the final fragment can be acknowledged
+     * before its USB ticket is collected, but it must already be published. */
+    bool final_data = state->phase == BLUETOOTH_FIRMWARE_SECURE_DATA &&
+        state->pending && state->published &&
+        state->offset + state->pending_bytes == state->sfi.size;
+    if (state->secure_result || (!final_data && state->phase != BLUETOOTH_FIRMWARE_SECURE_RESULT)) {
+      return fail(state, "premature or duplicate secure result notification");
+    }
     state->secure_result = true;
   } else if (wire[2] == INTEL_EVENT_BOOT) {
-    if (!state->pending || state->phase != BLUETOOTH_FIRMWARE_BOOT ||
+    if (!state->pending || !state->published || !state->boot_armed ||
+        state->phase != BLUETOOTH_FIRMWARE_BOOT ||
         state->boot_notified || length != 9) {
       return fail(state, "unexpected boot notification");
     }
+    ktrace("Bluetooth firmware: boot notification zero %u commands %u source %u "
+        "reset type/reason %u/%u DDC status %u\n",
+        wire[3], wire[4], wire[5], wire[6], wire[7], wire[8]);
     /* Field meanings beyond this event's framing are not qualified here.
      * In particular, num_cmds is not used to invent command allowance. */
     state->boot_notified = true;

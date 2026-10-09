@@ -64,7 +64,8 @@ struct bluetooth_firmware_boot_parameters {
 struct bluetooth_firmware {
   enum bluetooth_firmware_phase phase, failure_phase;
   const char *failure;
-  bool cold, bulk_events, pending, replied, secure_armed, secure_result, boot_notified;
+  bool cold, bulk_events, pending, published, replied;
+  bool secure_armed, secure_result, boot_armed, boot_notified;
   bool boot_parameters_found;
   uint8_t version[10];
   struct bluetooth_firmware_boot_parameters boot;
@@ -73,14 +74,18 @@ struct bluetooth_firmware {
   uint8_t image_build, image_week, image_year;
   size_t scan_offset, scan_group_bytes, offset, group_end, group_scan;
   size_t pending_bytes;
+  size_t upload_commands, upload_bytes, ddc_commands;
   uint16_t pending_opcode;
-  uint64_t command_deadline, upload_deadline, result_deadline;
+  uint64_t command_deadline, upload_deadline, result_deadline, upload_started;
 };
 
 void bluetooth_firmware_init(struct bluetooth_firmware *state, uint64_t now);
 enum bluetooth_firmware_progress bluetooth_firmware_prepare(struct bluetooth_firmware *state,
     uint8_t wire[BLUETOOTH_FIRMWARE_COMMAND_MAX], struct bluetooth_firmware_command *command,
     uint64_t now);
+/* Call after successful nonblocking USB submission and ticket capture, before
+ * collecting any later events. Preparing a command does not arm notifications. */
+bool bluetooth_firmware_published(struct bluetooth_firmware *state, uint64_t now);
 /* Validate the response, but keep the transaction until the owner also collects
  * its USB completion. BOOT has no Command Complete and must not call reply. */
 bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
