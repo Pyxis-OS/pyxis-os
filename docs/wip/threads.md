@@ -168,12 +168,18 @@ a session. They are observations, not reservations for a particular thread.
 Delayed operations must capture a session generation and recheck admission; a
 second sibling can release and reacquire the same process-owned session.
 
-Prospective dependency only: audio sessions are in open
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557), inspected at
+Audio sessions were in open
+[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) during source inspection at
 `4281d372d54be8877fee6fee7886435df8555f75`; they are absent from this main baseline.
+Before handoff, #557 merged as `c2407b6019a91df0dc231f18bf47e25e3d5ecf4a`.
+The diff between those revisions for `kernel/object/audio.c`,
+`include/kernel/object/audio.h`, `include/abi/audio.h` and
+`kernel/user/readiness.c` is empty, so the following audio findings also describe
+the merged code. The rest of this investigation
+retains its original baseline and dependency pins.
 Its `kernel/object/audio.c` uses locked process-owner/free-capacity snapshots,
 request generations, copied PCM and process-exit invalidation. Preserve those
-contracts if merged. `audio_request.audio` still relies on the caller's capability
+contracts. `audio_request.audio` still relies on the caller's capability
 for storage lifetime; siblings require operation references and safe copies.
 Run `audio_process_exit()` at final process teardown, not each thread's exit.
 Nothing here qualifies that PR's playback behavior or changes its device policy.
