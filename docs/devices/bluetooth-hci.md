@@ -12,7 +12,14 @@ distinguishes measured passthrough from source-reviewed behavior.
 Boot enumeration admits only checked AX200 `8087:0029` configuration 1,
 interface 0/alternate 0, with one interrupt-IN and two bulk endpoints matching
 the observed root/full-speed profile. Interrupt and asynchronous bulk reception
-start before initialization. Complete inventory must establish a single adapter.
+start before initialization. After final USB publication, initialization requires
+the AX200's hosting controller record to be COMPLETE, including inspection of
+its devices and descendants. Any incomplete inspection, exhausted budget,
+expired enumeration deadline or hardware failure there prevents readiness.
+Accepted 2026-10-09: unsupported or incomplete controllers elsewhere do not
+invalidate that hosting record; the global USB snapshot retains their states
+and may remain INCOMPLETE. Multiple identified AX200 candidates still make
+selection ambiguous, including candidates whose transport cannot be admitted.
 The owning BSP xHCI worker advances finite initialization transactions without
 waiting for HCI replies. Storage waits reach the same bounded progress point.
 

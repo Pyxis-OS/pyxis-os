@@ -8,6 +8,7 @@
 #include <kernel/panic.h>
 #include "settings.h"
 #include "firmware.h"
+#include "../usb/core.h"
 #include "../usb/host.h"
 
 #define HCI_COMMAND_HEADER 3
@@ -535,7 +536,7 @@ void bluetooth_hci_request_forward(struct bluetooth_hci_request *request)
     complete_request(request, CALL_BAD_REQUEST);
     return;
   }
-  if (!adapter.host || adapter.terminal) {
+  if (!adapter.device || adapter.terminal) {
     complete_request(request, adapter.terminal ? adapter.failure : CALL_UNAVAILABLE);
     return;
   }
@@ -1553,14 +1554,16 @@ void bluetooth_hci_drain_progress(struct usb_host_controller *host)
   work_tick(host);
 }
 
-void bluetooth_hci_candidate(void)
+void bluetooth_hci_candidate(struct usb_host_controller *host)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(arch_cpu_index() == 0 && host);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   ++adapter.attachments;
   if (adapter.attachments != 1 || adapter.sealed) {
     fail_adapter_reason(CALL_UNAVAILABLE, "multiple or late AX200 candidates");
+  } else {
+    adapter.host = host;
   }
   cpu_restore_interrupts(flags);
 }
@@ -1571,24 +1574,24 @@ void bluetooth_hci_attach(struct usb_host_controller *host,
   KASSERT(arch_cpu_index() == 0 && host && device);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  if (interface_number || adapter.attachments != 1 || adapter.host || adapter.sealed) {
+  if (interface_number || adapter.attachments != 1 || adapter.host != host ||
+      adapter.device || adapter.sealed) {
     fail_adapter_reason(CALL_UNAVAILABLE, "invalid AX200 attachment");
   } else {
-    adapter.host = host;
     adapter.device = device;
     adapter.command_credits = 1; /* Initial HCI command allowance before replies. */
   }
   cpu_restore_interrupts(flags);
 }
 
-void bluetooth_hci_inventory_sealed(bool complete)
+void bluetooth_hci_inventory_sealed(void)
 {
   KASSERT(arch_cpu_index() == 0 && !adapter.sealed);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   adapter.sealed = true;
-  adapter.complete = complete;
-  if (!complete) {
-    fail_adapter_reason(CALL_UNAVAILABLE, "USB inventory incomplete");
+  adapter.complete = usb_inventory_host_complete(adapter.host);
+  if (adapter.attachments && !adapter.complete) {
+    fail_adapter_reason(CALL_UNAVAILABLE, "AX200 hosting controller inventory incomplete");
   } else if (adapter.attachments > 1) {
     fail_adapter_reason(CALL_UNAVAILABLE, "multiple AX200 candidates");
   }

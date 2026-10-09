@@ -1,6 +1,6 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **implementation ready for review; warm passthrough qualified, native cold evidence pending.**
+Status: **hosting-inventory correction in progress; native cold/warm rerun pending.**
 The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
 at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
@@ -83,15 +83,29 @@ and [USB transport](https://raw.githubusercontent.com/torvalds/linux/v6.18/drive
 Cold PXE power-on boots of main 114f2ac and 183f793 on 2026-10-09 reportedly showed
 only “Bluetooth HCI: unavailable (status 6); reboot required”.
 
-Code inspection identifies fail_adapter(CALL_UNAVAILABLE), not wire HCI status.
-Both revisions share this code. A decoded non-warm version would also log
-“running firmware outside development profile”. Incomplete inventory, ambiguous
-candidate/attachment, rejected initialization reply, invalid capabilities and
-unclean logical cleanup can share the generic emitter. The sole line cannot
-identify its caller; the exact cold branch remains unconfirmed.
-Task 3 now reports one specific initialization phase/reason in klog, without a
-second generic Bluetooth failure line. Success remains one upload/warm-skip
-summary; details use ktrace. No addresses, raw packets or keys are recorded.
+The owner-reported integration cold boot on 2026-10-09 now identifies the path:
+“Bluetooth HCI: unavailable: USB inventory incomplete (phase inventory, call
+status 6); reboot required”. The full log is on horse at
+/shared/batch-2026-10-09/caelum.log. Direct reading requires a Tailscale SSH check;
+this record uses the supplied owner observation.
+
+The owner identifies the built-in Realtek DASH EHCI function 02:00.4
+(10ec:816d, programming interface 0x20), present docked and undocked. Current
+Fedora sysfs confirms its vendor/device and class 0x0c0320. Source inspection
+confirms usb/core.c records every non-xHCI function as unsupported, marks global
+inventory incomplete, and previously passed that global flag to HCI sealing.
+The owner attributes the morning boots to this same gate. Their generic line
+alone could not distinguish it; the new integration line confirms inventory
+failure before the firmware state machine. No native firmware upload ran.
+
+**Accepted option 1, 2026-10-09:** readiness requires the hosting xHCI's final
+controller record to be COMPLETE and exactly one identified AX200. Unsupported
+controllers elsewhere remain recorded; global USB state can remain INCOMPLETE.
+No hosting-controller failure is relaxed. Candidate counting precedes transport
+admission, so an unsupported second AX200 cannot disappear from selection.
+Success remains one upload/warm-skip summary, failures one specific phase/reason,
+with parsed detail in ktrace. No Bluetooth addresses, raw packets or keys are
+recorded. Fresh native cold power-on and warm reboot are required after the fix.
 
 ## Owner's next native batch
 
@@ -102,7 +116,10 @@ Booting Pyxis takes this session offline.
    power on directly into Pyxis/PXE without Fedora first. Record the one upload,
    DDC and operational-readiness summary, or its specific failed phase/reason.
    Success should read “AX200 USB ready (cold upload, DDC, development firmware)”.
-   Record USB inventory completeness.
+   Record the AX200 hosting controller's inventory completeness (07:00.4 on this
+   ThinkPad). The separate EHCI 02:00.4 should remain unsupported; global USB
+   INCOMPLETE is compatible with Bluetooth readiness when the hosting xHCI is
+   COMPLETE.
 2. Warm reboot Pyxis into that same image. Record warm skip or specific failure;
    distinguish reboot from cold power-on. The expected skip summary is
    “AX200 USB ready (warm skip, DDC, development firmware)”.

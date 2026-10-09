@@ -88,6 +88,14 @@ service commands cannot race its firmware transaction. Numeric protocol/right
 declarations belong to review of later assigned implementation under these
 accepted ownership contracts; no placeholder ABI is proposed here.
 
+Accepted 2026-10-09 after the native cold batch: Bluetooth readiness requires
+complete enumeration of the xHCI controller hosting the AX200 and exactly one
+identified AX200 candidate. Unsupported controllers elsewhere remain in the
+global USB inventory without blocking that controller. Incomplete devices,
+descendants, budgets/deadlines or hardware failure on the hosting controller
+remain terminal. Candidate identity is counted before transport admission;
+multiple known AX200s remain ambiguous even if a transport cannot bind.
+
 Commands and ACL data need separate, bounded queues and the controller's real
 completion/credit events. A command timeout is not permission to associate a late
 same-opcode reply with a new request. Idle interrupt or bulk reception must not
@@ -422,3 +430,9 @@ The mirrored assets verify, the image builds and corrected warm passthrough
 passed three fresh guests, including DDC, storage and idle reception. Native cold
 power-on and warm reboot are collected as the next owner batch. Task 3 remains
 unchecked until its validation is accounted for; later tasks are unassigned.
+
+The owner-reported 2026-10-09 integration cold boot stopped at global USB
+inventory sealing, before firmware initialization, because of the built-in
+unsupported Realtek DASH EHCI function. The owner accepted hosting-controller
+completeness on #564; fresh cold power-on and warm reboot must be repeated after
+that correction. Native upload remains unqualified.

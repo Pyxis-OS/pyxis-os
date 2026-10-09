@@ -21,6 +21,9 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline);
 size_t usb_storage_capacity(void);
 void usb_storage_process(struct usb_discovery *discovery);
 
+/* Completeness is scoped to this retained host's final discovery record;
+ * unsupported or incomplete controllers elsewhere do not change its result. */
+bool usb_inventory_host_complete(const struct usb_host_controller *host);
 /* Acquire publication before copying immutable records on any CPU. */
 void usb_inventory_read(struct system_info_usb *reply);
 bool usb_inventory_read_controller(uint64_t index, struct system_info_usb_controller *reply);
