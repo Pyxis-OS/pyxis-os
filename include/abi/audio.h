@@ -37,12 +37,16 @@ struct audio_write_request {
 struct audio_status_reply {
   uint64_t generation, capacity_frames, free_frames;
   uint64_t starvations, discontinuities, state;
+  /* Confirmed user controls, read-only through playback grants. Percentages
+   * select the dB curve; mute preserves the percentage. Not ramp amplitude. */
+  uint64_t master_percent, space_percent, master_muted, space_muted;
+  uint64_t volume_generation;
 };
 
 /* STATUS/RELEASE/WRITE require the acquiring process. WAIT_WRITABLE observes
  * room for a maximum write, reserves nothing; terminal failure is WAIT_ERROR. */
 _Static_assert(sizeof(struct audio_acquire_reply) == 40, "audio acquire layout");
 _Static_assert(sizeof(struct audio_write_request) == 32, "audio write layout");
-_Static_assert(sizeof(struct audio_status_reply) == 48, "audio status layout");
+_Static_assert(sizeof(struct audio_status_reply) == 88, "audio status layout");
 
 #endif

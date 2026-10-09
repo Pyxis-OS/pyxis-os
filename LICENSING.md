@@ -15,6 +15,10 @@ applied: MPL's standard secondary-license provisions remain available.
 
 ## Third-party and separately licensed material
 
+The owner's original volume artwork in `assets/ui/volume/` (editable Aseprite
+source and PNG export) is also licensed under MPL-2.0. Its attribution, supplied
+source and conversion are recorded in [the asset note](assets/ui/volume/README.md).
+
 - `third_party/limine/`: the imported bootloader, protocol header and binaries
   retain [Limine's license](third_party/limine/LICENSE) and the protocol header's
   own embedded 0BSD notice.

@@ -7,6 +7,7 @@
 #include <kernel/object/pointer.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
+#include <kernel/volume_ui.h>
 #include <kernel/space.h>
 
 enum destination_kind { DESTINATION_NONE, DESTINATION_TERMINAL, DESTINATION_GRAPHICS };
@@ -129,6 +130,9 @@ static void clamp_position(void)
 static struct pointer_destination hit_test(void)
 {
   struct space *space = space_pointer_active();
+  if (volume_ui_pointer_over(position_x, position_y)) {
+    return (struct pointer_destination){0};
+  }
   if (position_y < (int64_t)space_pointer_content_y()) {
     return (struct pointer_destination){0};
   }
@@ -374,6 +378,7 @@ void pointer_source_lost(uint32_t physical_buttons)
   if (locked_pointer) {
     pointer_surface_unlock(locked_pointer, true);
   }
+  volume_ui_cancel();
   device_buttons = physical_buttons;
   consumed_buttons = drag_buttons = 0;
   drag = (struct pointer_destination){0};
@@ -407,6 +412,12 @@ void pointer_handle_input(const struct pointer_input_report *event)
   device_buttons = event->buttons;
   consumed_buttons &= device_buttons;
   pressed &= ~consumed_buttons;
+  if (volume_ui_pointer_input(position_x, position_y, event->wheel,
+      device_buttons, pressed, drag.space != NULL)) {
+    consumed_buttons |= pressed;
+    update_hover((struct pointer_destination){0});
+    return;
+  }
   struct pointer_destination target = hit_test();
   if (!drag.space && (pressed & POINTER_BUTTON_LEFT)) {
     struct space *tab = space_pointer_tab(position_x, position_y);
@@ -510,7 +521,7 @@ enum call_status pointer_surface_lock(struct pointer_object *pointer)
   if (locked_pointer) {
     return CALL_BUSY;
   }
-  if (!pointer_surface_focused(pointer) ||
+  if (volume_ui_keyboard_focused() || !pointer_surface_focused(pointer) ||
       (pointer->space->pointer_activation_required && !activated) ||
       ((device_buttons | space_pointer_suppressed_buttons()) &
        ~consumed_buttons & ~pointer->accepted) ||
@@ -520,6 +531,7 @@ enum call_status pointer_surface_lock(struct pointer_object *pointer)
   drag = (struct pointer_destination){0};
   drag_buttons = 0;
   hover = NULL;
+  volume_ui_cancel();
   locked_pointer = pointer;
   pointer_set_lock(pointer, true);
   return CALL_OK;
@@ -544,6 +556,11 @@ void pointer_surface_unlock(struct pointer_object *pointer, bool require_activat
     pointer_queue_state(pointer, POINTER_LEAVE);
   }
   update_hover(target);
+}
+
+bool pointer_locked(void)
+{
+  return locked_pointer != NULL;
 }
 
 void pointer_escape(void)

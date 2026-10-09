@@ -10,6 +10,13 @@
 struct process;
 struct space;
 
+struct audio_volume {
+  unsigned percent, pending_percent;
+  bool muted, pending_muted, pending;
+  int32_t gain, target_gain, ramp_step, ramp_direction;
+  unsigned ramp_remaining, ramp_remainder, ramp_error;
+};
+
 struct audio_object {
   struct kernel_object object;
   struct space *space; /* Initialized spaces retain the object and outlive it. */
@@ -25,6 +32,10 @@ struct audio_object {
    * the snapshot and leaves allocation-free cleanup for that worker. */
   int16_t *queue;
   size_t head, count;
+  /* Worker-confirmed target is covered by locked; only the worker advances
+   * gain. BSP bar input coalesces pending targets without borrowing PCM. */
+  struct audio_volume volume;
+  struct audio_object *volume_next;
 };
 
 struct audio_request {
