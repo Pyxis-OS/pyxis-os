@@ -14,6 +14,7 @@ struct boot_options {
   const char *display_size;
   const char *display_timing;
   bool display_timing_metrics;
+  bool display_inventory;
 };
 
 /* BSP, IF=0: call once before display/AP initialization. Copies the command
@@ -21,5 +22,6 @@ struct boot_options {
  * this boot. Invalid or duplicate options are fatal. The display driver owns
  * display.size value validation and its nonfatal fallback. */
 const struct boot_options *boot_options_parse(const char *command_line);
+const struct boot_options *boot_options_get(void);
 
 #endif

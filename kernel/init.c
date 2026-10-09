@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/amd/renoir_inventory.h>
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <arch/debug.h>
@@ -78,7 +79,10 @@
   acpi_prepare(boot);
   arch_clock_maintain();
 
-  const struct boot_options *options = boot_options_parse(boot->command_line);
+  const struct boot_options *options = boot_options_get();
+  if (options->display_inventory) {
+    renoir_inventory(boot);
+  }
   if (options->debug_checkpoint) {
     arch_debug_enable();
   }

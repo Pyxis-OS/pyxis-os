@@ -13,6 +13,7 @@ return function(inputs)
     { tree = inputs.sdk .. "/share/toolchain", at = "sdk/share/toolchain" },
     { file = inputs.provenance, at = "sdk/manifest.txt" },
     { file = "build/kernel-random-NOTICE", at = "share/licenses/kernel-random/NOTICE" },
+    { file = "build/kernel-amd-NOTICE", at = "share/licenses/kernel-amd/NOTICE" },
     { file = "assets/ui/volume/README.md", at = "share/licenses/volume-icons/NOTICE" },
     { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" },
     { file = "third_party/limine/BOOTX64.EFI", at = "share/installer/BOOTX64.EFI" },

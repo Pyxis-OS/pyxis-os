@@ -5,6 +5,7 @@
 #include <kernel/panic.h>
 
 #define RSDP_V1_BYTES 20
+#define ACPI_BOOT_TABLE_MAX_BYTES (1024 * 1024)
 #define FADT_SCI_INTERRUPT_OFFSET 46
 #define FADT_BOOT_ARCH_OFFSET 109
 #define FADT_BOOT_ARCH_REVISION 3
@@ -147,6 +148,59 @@ static const struct acpi_header *root_table(const struct boot_info *boot,
     panic("invalid ACPI root table");
   }
   return root;
+}
+
+static const void *optional_firmware_pointer(const struct boot_info *boot,
+                                             uint64_t physical, size_t bytes)
+{
+  if (!physical || !bytes || bytes > UINT64_MAX - physical ||
+      physical + bytes > UINTPTR_MAX - boot->bootstrap_direct_offset) {
+    return NULL;
+  }
+  uint64_t end = physical + bytes, covered = physical;
+  for (size_t i = 0; i < boot->region_count && covered < end; ++i) {
+    const struct boot_region *region = &boot->regions[i];
+    uint64_t region_end = region->base + region->length;
+    if (region_end <= covered) {
+      continue;
+    }
+    if (region->base > covered ||
+        (region->type != BOOT_ACPI && region->type != BOOT_FIRMWARE)) {
+      return NULL;
+    }
+    covered = region_end;
+  }
+  return covered >= end ? (const void *)(boot->bootstrap_direct_offset + physical) : NULL;
+}
+
+const void *acpi_boot_table(const struct boot_info *boot, const char signature[4], size_t *bytes)
+{
+  *bytes = 0;
+  if (!boot->acpi_rsdp) {
+    return NULL;
+  }
+  size_t entry_bytes;
+  const struct acpi_header *root = root_table(boot, &entry_bytes);
+  const uint8_t *entries = (const uint8_t *)(root + 1);
+  const struct acpi_header *found = NULL;
+  for (size_t offset = 0; offset < root->length - sizeof(*root); offset += entry_bytes) {
+    uint64_t physical = 0;
+    memcpy(&physical, entries + offset, entry_bytes);
+    const struct acpi_header *header = optional_firmware_pointer(boot, physical, sizeof(*header));
+    if (!header || memcmp(header->signature, signature, 4)) {
+      continue;
+    }
+    if (found || header->length < sizeof(*header) || header->length > ACPI_BOOT_TABLE_MAX_BYTES ||
+        !optional_firmware_pointer(boot, physical, header->length) ||
+        !checksum_valid(header, header->length)) {
+      return NULL;
+    }
+    found = header;
+  }
+  if (found) {
+    *bytes = found->length;
+  }
+  return found;
 }
 
 static const struct madt_entry *madt_entry_at(const struct acpi_madt *madt,

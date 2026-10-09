@@ -9,7 +9,7 @@ or repeated checkouts.
 
 | Component / artifact | Local target | Tar payload |
 | --- | --- | --- |
-| kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config`, `build/kernel-random-NOTICE` |
+| kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config`, `build/kernel-random-NOTICE`, `build/kernel-amd-NOTICE` |
 | sdk / pyxis-sdk | `make bundle-sdk` | `build/sdk` |
 | userland / pyxis-userland | `make bundle-userspace` | `build/userspace-root` |
 | ports / pyxis-ports | `make bundle-ports` | `build/ports-root`, `build/ports-dev` |

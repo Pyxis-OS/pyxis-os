@@ -39,7 +39,8 @@ DEBUG_CHECKPOINT ?= 0
 DISPLAY_SIZE ?=
 DISPLAY_TIMING ?=
 DISPLAY_TIMING_METRICS ?= 0
-export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_CHECKPOINT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS
+DISPLAY_INVENTORY ?= 0
+export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_CHECKPOINT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -99,11 +100,18 @@ ifneq ($(filter kernel,$(PREBUILT)),)
 kernel:
 	./scripts/bundle.sh verify kernel
 
+build/kernel-amd-NOTICE: | kernel
+	@test -f $@
+
 build/kernel-random-NOTICE: | kernel
 	@test -f $@
 else
-kernel: build/caelum.elf build/kernel-random-NOTICE
+kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE
 	CC="$(CC)" LOG_LEVEL="$(LOG_LEVEL)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" ./scripts/bundle.sh record kernel
+
+build/kernel-amd-NOTICE: arch/x86_64/amd/NOTICE
+	@mkdir -p build
+	cp $< $@
 
 build/kernel-random-NOTICE: kernel/random/NOTICE
 	@mkdir -p build
@@ -178,7 +186,7 @@ initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE \
+build/initrd.cpio: userspace ports ax200-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
 	./scripts/assemble-initrd.sh
 

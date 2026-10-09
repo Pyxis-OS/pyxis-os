@@ -31,4 +31,8 @@ struct pci_ecam;
  * Missing/unsupported MCFG disables discovery with a diagnostic. */
 bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam);
 
+/* Bootstrap-only validated table view. Never retain its pointer past
+ * paging_init. Missing, duplicate, malformed or over-1-MiB tables return NULL. */
+const void *acpi_boot_table(const struct boot_info *boot, const char signature[4], size_t *bytes);
+
 #endif

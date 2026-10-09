@@ -1,7 +1,7 @@
 # Renoir flip presentation
 
-**Design accepted 2026-10-09; not implemented. No placeholder interfaces.**
-The owner assigned read-only task 1 for a separate implementation PR.
+**Design accepted 2026-10-09. Read-only task 1 complete; no flip backend.**
+Task 2 requires the owner's separate go-ahead; no placeholder interfaces.
 The owner redirected presentation step 2 after native batch 2 failed on main
 `11d35fa6`: inaccurate counter-derived periods, excessive uncertainty and worse
 tearing/input delay in blank-copy mode. The separate observer safety fix keeps
@@ -132,64 +132,46 @@ Blanking output does not prove HUBP fetch has stopped or cancel a pending flip.
 The accepted first slice does not use it; a demonstrated need returns to the owner
 before extending the write allowlist.
 
-## Extra surface memory: proof before writes
+## Extra surface memory: accepted exclusion standard
 
-Use CPU-WC-addressable linear storage in the GPU carve-out/VRAM aperture beside
-the GOP allocation, not arbitrary RAM or an unexplained GPU address. At this
-mode one pitch-times-height surface is 8,294,400 bytes (7.91 MiB), plus required
-alignment. Two surfaces mean one extra allocation; three mean two extras.
+The owner accepted the Linux-derived exclusion rule on **2026-10-09** after
+[task 1's native inventory](../development/experiments/renoir-flip-inventory/README.md),
+replacing the requirement for an explicit firmware allocator handoff. Treat the
+validated 512 MiB UMA range as kernel-driver-owned except GOP/VGA storage,
+all reported firmware/driver/live-client reservations, applicable
+IP-discovery/training/stolen reservations and the last-16-MiB guard. Exclude any
+newly identified reservation in full. The owner accepts the pre-OS PSP/SMU
+residual risk; disabled DMCUB and zero ATOM usage do not prove those clients absent.
 
-Current boot metadata proves the GOP surface extent, **not** that the rest of
-its BAR or stolen-memory region is free. Reserved memory-map entries, zero
-contents, Linux's available VRAM count and absence of an in-use plane are not
-an allocator ownership proof. Linux owns a different initialized GPU lifetime.
-The [Linux plane address path](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_plane.c#L839-L872)
-uses a GPU address obtained from its buffer object; CPU physical addresses are
-not interchangeable with it.
+The native route is `OTG0 <- OPP0 <- MPCC0 <- HUBP0`. GPU framebuffer range is
+`[0xf400000000,0xf420000000)`, direct CPU UMA is
+`[0x810000000,0x830000000)`. Stable BAR0 `0x860000000` correlates the GOP-advertised
+allocation to VRAM `[0,0x7e9000)`, primary/earliest GPU address `0xf400000000`.
+BAR0 length is unknown; address correlation does not confer its entire extent.
 
-Task 1 starts with the firmware's VBIOS claim: obtain the matching image from
-ACPI VFCT following
-[`amdgpu_acpi_vfct_bios()`](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c#L374-L423),
-with table/image bounds, PCI identity and ATOM validation. Decode the versioned
-ATOM `vram_usagebyfirmware` table as in
-[`amdgpu_atomfirmware_allocate_fb_scratch()`](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_atomfirmware.c#L103-L210).
-The [table contract](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/atomfirmware.h#L742-L799)
-describes the posted VBIOS/GOP reservation at the top of framebuffer memory and
-version-specific firmware/driver ranges. Validate lengths, units and flags;
-do not treat a driver-size field as an already delegated pool. Linux's helper
-allocates host scratch, and its reservation bookkeeping includes SR-IOV-specific
-branches; it is not a bare-metal Renoir spare-VRAM allocator.
+Keep the 9 MiB low stolen/GOP prefix, all applicable reservation extents and
+the guard `[0x1f000000,0x20000000)`. One 64 KiB-aligned spare at VRAM offset
+`0x900000`, rounded backing `[0x900000,0x10f0000)`, is the accepted candidate for
+this capture. It is not allocated. Prefer WC direct-UMA mapping; avoid conflicting
+WB/WC aliases, retain exclusion from PMM allocation and allocate/map on the BSP
+before publication. Keep backing until GPU retirement is established.
+No arbitrary RAM, reset, PSP/SMU/DMCUB request or MC reprogramming is authorized.
 
-A validated posted table tied to this boot can establish the firmware's reported
-reserved extent. Pool proof additionally requires a documented firmware/boot
-handoff assigning the proposed range to this driver, verified translation and
-exclusion of all other owners. An absent/zero table, a range below that reservation,
-or a Linux allocation succeeding is insufficient. PSP TMR and DMCUB allocations
-made after Linux driver load describe that driver's lifetime; task 1 must establish
-whether pre-OS PSP/DMCUB regions exist on this machine and their extents or evidence
-of absence. Linux's [PSP setup](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/amdgpu/amdgpu_psp.c#L849-L886)
-also allows a boot-time TMR, while its
-[DMCUB buffer setup](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c#L2567-L2591)
-allocates a driver buffer. Neither path proves this machine's inherited state.
+Task 1 read bounds/identity-validated ACPI VFCT/VBIOS ATOM
+`vram_usagebyfirmware` and `firmware_info`, UEFI descriptors, display route/state
+and direct MC/DCN translation registers. Its
+[source/reservation report](../development/experiments/renoir-flip-inventory/README.md#linux-pre-initialization-reservations-on-this-renoir)
+records Linux's fixed reservations and later driver BOs distinctly. Linux's
+host scratch helper is not a VRAM allocation; later PSP/SMU BOs do not locate
+all pre-OS firmware storage. No raw firmware/EDID/serial data is logged or committed.
 
-Before allocating, produce a bounded native inventory establishing:
-
-- GPU carve-out/aperture CPU base, size, GPU base and translation, cross-checked
-  against the live original primary address and GOP CPU extent.
-- Firmware GOP allocations and any secondary/pending surfaces; PSP/security,
-  SMU and DMCUB code/data/mailbox reservations and their actual extents.
-- A documented firmware/boot reservation or allocator handoff that assigns
-  the entire proposed pool to this driver and excludes those owners. Retain
-  that evidence for the exact native boot; a user-chosen range cannot confer it.
-- Page/surface/pitch alignment, overflow checks, no conflicting WB/WC aliases,
-  exclusion from kernel PMM allocation, and lifetime until the GPU is known to
-  have relinquished it. Allocate/map on the BSP before publication.
-
-This proof is currently missing. Task 1 may conclude there is no usable pool.
-If firmware supplies no ownership evidence within this scope, remain on GOP
-copying and return that finding to the owner; do not turn an unused-looking
-remainder into an allocation. No PSP/DMCUB request, reset or memory-controller
-reprogramming is authorized to manufacture a pool.
+Inherited pitch remains a write-backend prerequisite: raw `0x780` versus GOP
+7680 bytes is unexplained against Linux's pixels-minus-one programming convention.
+[Task 1's pitch finding](../development/experiments/renoir-flip-inventory/README.md#pitch-unresolved-backend-prerequisite)
+records the exact DCN2.1 path and the literal 7684-byte interpretation. Establish
+effective fetch stride before qualifying the spare's row layout. Preserve the
+firmware value; no pitch/mode write or silently assumed stride is authorized.
+Task 2 still requires a separate owner assignment and all read-only prerequisites.
 
 ## Presenter and the three-slot application handoff
 
@@ -271,16 +253,16 @@ and add the entry to LICENSING.md. The relevant
 [HUBP source notice](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn21/dcn21_hubp.c#L1-L24)
 and [register notice](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_offset.h#L1-L24)
 permit this; do not copy unrelated Linux DRM/BO/VM infrastructure under an assumed
-MIT umbrella. No source is vendored in this proposal PR.
+MIT umbrella. Task 1 retains its adapted read-only definitions and notices;
+the write path is not implemented.
 
 ## Tasks and native qualification
 
-1. **Read-only inventory and memory proof.** Record the actual GOP route,
-   complete surface state, address translation and reservation evidence, starting
-   with the VFCT/VBIOS ATOM sources above. Stop
-   if any prerequisite is missing; return the report before write implementation.
-   **What the owner sees:** a native route/reservation report with a proven pool
-   or a precise blocker, before any GPU write.
+1. **Read-only inventory and memory evidence — complete.** Native builds
+   `5e342488` and `0f6baec6` establish route/state/translation/ATOM/UEFI evidence;
+   the owner accepted the exclusion standard and PSP/SMU risk on 2026-10-09.
+   **What the owner sees:** the [inventory report](../development/experiments/renoir-flip-inventory/README.md),
+   no allocation or GPU writes, and the unresolved inherited-pitch prerequisite.
 2. **Qualified two-surface backend.** Only after owner authorization, implement
    private allocation/ownership, fenced offscreen copies, the exact mono flip
    sequence, bounded completion polling, capture, timeout fallback and panic.
@@ -304,16 +286,20 @@ boot/Bochs/VirtIO, frame/capture lifetime and ordinary input; it cannot qualify
 register writes, VRAM ownership, flip completion, native panic or tear reduction.
 No synthetic DCN device, new tests or fault injection is implicit in this plan.
 
-## Owner decisions — accepted 2026-10-09, not implemented
+## Accepted flip-backend decisions — 2026-10-09
 
 1. **First GPU writes authorized for the bounded backend only:** kernel-exclusive,
    one verified mono HUBP, synchronized flip control plus primary address
    high/low, after all read-only prerequisites pass. No OTG blank in the first
    slice; no modeset/clock/power/VM/firmware/interrupt changes. This replaces
    #622's read-only rule for that backend.
-2. **Spare memory only from a firmware/boot-proven driver-owned pool:** use the
-   original GOP allocation plus one proven spare. No proof, no allocation and
-   no flips; neither BAR space nor missing reservations establishes ownership.
+2. **Spare memory under the accepted Linux-derived exclusion rule:** the
+   validated 512 MiB UMA range is owned by the kernel driver minus GOP/VGA,
+   reported firmware/driver/live-client and applicable discovery/training/stolen
+   reservations, plus the last-16-MiB guard. One 64 KiB-aligned spare at offset
+   `0x900000` is the candidate for this capture. The owner accepts PSP/SMU
+   residual uncertainty. This 2026-10-09 criterion replaces explicit allocator
+   handoff, not the requirement to validate translation/layout before writes.
 3. **Two scanout surfaces and bounded completion:** unchanged three-slot producer
    handoff, one outstanding flip, 1 ms sleeping polls with a 50 ms deadline only
    while pending, preserving the independent ordinary input/presentation
@@ -321,5 +307,5 @@ No synthetic DCN device, new tests or fault injection is implicit in this plan.
    unsynchronized copies to the known owned set; unknown routing makes display
    unavailable. Three surfaces, interrupts and blanking are deferred.
 
-Acceptance records the design. Task 1 is assigned separately; tasks 2 and 3
-still require the owner's explicit assignment.
+Acceptance records the design. Task 1 completed read-only inventory; tasks 2
+and 3 still require the owner's explicit assignment. No spare or flip is implemented.
