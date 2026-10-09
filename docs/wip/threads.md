@@ -303,11 +303,8 @@ podman run --rm --network=none --entrypoint /bin/sh \
 
 Clang reports `thread-local storage is not supported for the current target`.
 The revision file records fork `49e2c1a1518b3e4687b52ceb6001069c1b6d261e`.
-The combined shell returned zero because its final `cat` succeeded; the compiler
-exit status was not separately captured. No image digest was captured. This
+The compiler exit status and image digest were not captured. This
 measures compiler rejection only, not TLS generation, linking or runtime support.
-The container had no workspace mount, wrote assembly to `/dev/null`, and was
-removed; no probe process remains.
 
 Proposed first TLS scope: static, executable-owned TLS with one initialized
 template, zero-filled tail and alignment; libc allocates/copies it per thread,
@@ -359,7 +356,7 @@ libc++'s external thread adapter supports mutexes, conditions, once, thread IDs,
 create/join/detach/sleep and TLS keys. These are useful audit targets and an
 adapter option, not proof of identical implementation at `49e2c1a`; recheck that
 pin before changing configuration. Pinned runtime sources were not available
-locally during this investigation. A stalled lazy object read was stopped.
+locally during this investigation.
 
 The exact [SDL config](../../ports/sdl2/SDL_config.h) disables threads; its
 [recipe](../../ports/sdl2/Makefile) selects generic thread backends. Existing
@@ -440,8 +437,3 @@ All three are proposals; defaults are recommendations, not accepted requirements
    mapping-lifetime keys and ordinary stop unwinding. Handle-based synchronization
    is the alternative when explicit kernel object lifetime outweighs uncontended
    lock cost; full pthread/Linux futex semantics are outside this proposal.
-
-The branch is `docs/shared-process-threads` in
-`/home/chronium/src/pyxis-epsilon-threads`. Only documentation is delivered; no
-probe implementation or active QEMU/debugger job exists. Next action is owner
-review of these decisions and explicit assignment of task 1.
