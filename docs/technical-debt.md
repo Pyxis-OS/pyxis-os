@@ -643,60 +643,41 @@ The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliber
 Revisit threads and TLS with the Clang hosting milestone, and localization, wide characters and `<cmath>` when a selected port such as
 DevilutionX needs them. Additions belong in libc or the runtime configuration, never in a port-local stub.
 
+## HD Audio volume control
+
+The [PCM interface](interfaces/audio.md) has no master volume or per-session gain.
+Full-scale speaker test tones were painfully loud in native qualification. Add
+reviewed gain controls and their authority before ordinary audio use.
+
 ## HD Audio scheduling and startup tuning
 
-The [HDA engine](devices/hda.md#progress-and-refill-limits) uses the accepted 80 ms hardware ring and fails closed until reboot when its
-conservative refill guards cannot establish safe progress; immediate unprimed start produced a 58.667 ms initial silence gap. Revisit ring
-depth, startup latency and service margins in native qualification and separately assigned audio-consumer work
-([task 2 report](development/experiments/audio-task2/README.md)).
+The [engine](devices/hda.md#progress-and-refill-limits) uses an 80 ms hardware ring;
+unprimed QEMU startup produced a 58.667 ms silence gap. Closure establishes no
+native latency guarantee. Revisit startup, ring depth and service margins with
+latency measurements and separately assigned consumer work.
 
 ## HD Audio sustained eight-session playback
 
-Accepted by the owner **2026-10-09**: deliver the session/mixer/refill work in
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) with this recorded limit.
-Sustained eight-session playback fails closed in **nested QEMU**: the longer
-uninstrumented run produced **112.227 s of output from first RUN** before the
-codec WALCLK commit guard rejected progress. The exact eight-only failure time
-was not timestamped. Matched four-CPU BSP host-thread CPU was **99.55–99.61%**
-before notification gating/one-clock-per-readiness-scan fixes and
-**93.93–96.40%** afterward (of one host CPU). One-session BSP cost fell
-**54.41–54.47% → 40.47–44.73%**. Linux-accounted eight-session guest BSP time was
-**42.42–42.48% → 41.73–43.40%**. Eight-source whole-QEMU CPU increased
-**125.11–126.51% → 136.26–144.20%** as retry/wait traffic increased. The
-[profiling report](development/experiments/audio-task2/profiling.md) records
-revisions, configuration, ranges and shared-host/probe limits; these are not
-native performance figures. Bounded request batching remains deferred.
+Sustained eight-session playback still fails closed in **nested QEMU**: the longer
+run tripped the 1 ms WALCLK commit guard after 112.227 s, most likely from a
+transient host stall, not proven inadequate mixer throughput. BSP host-thread CPU
+was 99.55–99.61% before the two fixes and 93.93–96.40% afterward. Native eight
+silent sessions passed eleven minutes. See the [profiling report](development/experiments/audio-task2/profiling.md);
+revisit QEMU scheduling/guard evidence separately from native qualification.
 
-The most likely trigger is a transient nested-host scheduling/VM-exit delay
-inside one IF=0 commit window, which includes mixing and MMIO/HPET observations,
-turned into permanent unavailability by fail-closed. The mixer itself costs
-about **5–6 µs** per period; this failure does not establish inadequate mixing
-throughput. Maximum recorded HPET commit time was **922,780 ns**, so the rejecting
-condition was the later WALCLK check reaching 1 ms. The exact codec-clock delta
-and a coincident host descheduling event were not captured; the attribution is
-an inference, not a proven host trace.
+## HD Audio fail-closed recovery
 
-`QEMU_CODEC_BURST_BYTES` (**8192**) and the **1 ms HPET commit/WALCLK bounds**
-are derived from QEMU's timer-driven codec, not native HDA guarantees. They stay
-unchanged for QEMU. Task 5 implements the owner's **2026-10-09** accepted native
-FIFO-derived reserve and 20 ms commit profile; actual AMD `1022:15e3` FIFO,
-DMA progress/skew and timing evidence remains outstanding in the native batch.
-These are separate profiles, not universal HDA limits. See the
-[engine bounds](devices/hda.md#progress-and-refill-limits).
+One unsafe-progress or hardware guard trip disables audio until reboot, as
+accepted 2026-10-09. STATUS/RELEASE and cleanup remain usable; DMA stays retained.
+A controller-reset recovery path needs a separate decision supported by failure
+and ownership evidence; the successful native sitting does not remove this limit.
 
-The owner also retained the existing PCI refusal on **2026-10-09**: a boot
-controller needing a power/decode change with BME set remains unavailable.
-The supplied Linux D3+BME snapshot is not a Pyxis boot observation. Task 5 traces
-boot COMMAND/PM/PME/NoSoftRst and explains refused states; no handoff helper is
-added. Revisit only if the native batch shows D3+BME at boot.
+## HD Audio request batching
 
-One guard trip continues to disable all audio until reboot; STATUS/RELEASE and
-cleanup remain serviceable, with DMA retained. Native evidence decides whether
-a separately reviewed controller-reset recovery path is needed; no recovery
-path is accepted or implemented yet. **HDA milestone closure requires native
-eight-session playback**, not QEMU closure. This supersedes the earlier
-QEMU-closure/native-later alternative. Revisit batching, native bounds and
-recovery with task 5's owner-run ThinkPad speaker/headphone batch.
+Bounded request batching remains deferred by the owner. Per-write BSP handoff
+and retry/wait traffic remain costs; the [profile](development/experiments/audio-task2/profiling.md)
+records them. Revisit after consumer or native measurements justify a batching
+proposal without silently changing capacity, queues or safety thresholds.
 
 ## Initial clipboard delivery limits
 
@@ -1441,18 +1422,10 @@ they can establish explicit radio-procedure termination, receive continuity and 
 
 ## HD Audio jack routing at playback start
 
-Accepted **2026-10-09** in the [native task 5 plan](wip/hda-native.md): sample
-headphone presence when the physical playback engine starts, then hold that
-route until its next start. This is implemented behavior awaiting native qualification.
-**Headphones inserted mid-playback keep the speaker until the next start.**
-Unplugging headphones also retains the headphone route until then. A new session
-or WRITE while other sessions keep the engine running does not resample presence.
-There is no live speaker automute or unsolicited jack-response path in task 5.
-
-Live switching is a separate follow-up task requiring reviewed RIRB/IRQ reception,
-tag/command correlation, refill-safe routing and discontinuity policy. Revisit
-after native one/eight-session qualification; it does not block task 5's accepted
-start-time routing batch. Public grant/session ownership remains unchanged.
+[Headphone presence](devices/hda.md#codec-and-stream-activation) is sampled only
+at physical playback start. Mid-playback insertion keeps the speaker, and removal
+keeps the headphone route, until the next start. Live switching is a separate
+follow-up needing unsolicited-response transport and refill-safe routing policy.
 
 ## sbase tail follow and sort limits
 

@@ -2,8 +2,9 @@
 
 Caelum supports QEMU's `8086:2668` Intel HDA controller with `hda-output` or
 `hda-duplex`. A narrowly matched AMD `1022:15e3`, Lenovo `17aa:5081` controller
-and Realtek ALC257 output pair are also implemented, awaiting native qualification.
-Both use a checked 48 kHz S16LE stereo analog route. One BSP
+and Realtek ALC257 output pair are qualified on the ThinkPad T14 Gen 1 AMD.
+Both use a checked 48 kHz S16LE stereo analog route. The playback milestone
+closed with owner-run native evidence on **2026-10-09**. One BSP
 worker owns command transport, stream state, DMA and software mixing. Userspace
 uses process-owned [PCM sessions](../interfaces/audio.md) through its space's
 named audio grant. Ordinary initialization plays no audio: command DMA stops,
@@ -43,24 +44,10 @@ allocations respect 128-byte alignment and a conservative 40-bit ceiling when
 GCAP permits 64-bit addresses, otherwise 32-bit. The supplied single-message,
 64-bit, non-maskable MSI layout uses the existing helper. Boot-enabled MSI/MSI-X
 still prevents reservation. No licensed vendor fixup or speculative GPIO/codec
-coefficient write is included; coherence and cold initialization need native
-evidence. See the [accepted native plan](../wip/hda-native.md).
-
-The owner's **2026-10-09** cold boot reached GCAP `4401`/HDA 1.0 with
-COMMAND `0` and PMCSR `8` (D0, NoSoftRst, PME off). The D3+BME refusal was
-not hit; native preparation failed the `0x42` snoop readback before driver DMA.
-That historical image used the now-replaced legacy gate. Ktrace records the
-read-only byte and PCIe Device Control before/requested/after in the new image.
-
-Pinned [Linux's 15e3 entry and ATI capability](https://github.com/torvalds/linux/blob/adc218676eef25575469234709c2d87185ca223a/sound/pci/hda/hda_intel.c#L2570)
-select the same write, but its helper never checks readback. AMD's public
-[Renoir PPR 55922 rev. 3.06](https://docs.amd.com/v/u/en-US/55922-A1-PUB_3.06),
-Table 13, identifies this controller without defining `0x42`. The older
-[SP5100 guide, p. 252](https://www.amd.com/content/dam/amd/en/documents/archived-tech-docs/programmer-references/44413.pdf#page=252)
-defines a snoop control there; that is not a Renoir register contract. No
-read-only-bit explanation or Renoir vendor-register contract is established
-by that evidence. The accepted implementation relies on the standard PCIe
-NoSnoop permission and verified clear, with native qualification still pending.
+coefficient write is included. The native controller has a 32 KiB BAR and
+single-message MSI at capability `0xa0`; PM is at `0x50`. The supplied
+[Fedora codec inventory](../development/experiments/audio-investigation/thinkpad-alc257-codec.txt)
+records the graph used for the checked route.
 
 The [worker](../../kernel/audio/audio.c) alone releases reset, initializes command
 transport and reads the codec graph. Runtime helpers assert the owning worker
@@ -179,8 +166,8 @@ publication share the checked commit interval, bounded below **20,000,000 ns**
 and **480,000 WALCLK ticks**; the final monotonic read follows post-MMIO/device
 clock observation. Final distance must remain greater than **F + 4**. Native
 LPIB equal to CBL normalizes to zero. Actual FIFOS, progress/skew and commit
-timings still require native batch evidence; these are accepted conservative
-guards, not measured native guarantees.
+timing distributions are not established by the closure sitting; these remain
+accepted conservative guards, not hard real-time guarantees.
 
 QEMU's codec can request an 8,192-byte burst, coalesce completions and adjust its
 timer origin. The 8,192-byte per-callback bound applies to QEMU's default timer-driven codec;
@@ -208,37 +195,70 @@ and checked. All claims and backing remain retained until reboot; uncertain
 ownership quarantines DMA without reuse. There is no automatic restart or hot
 removal. Session release never exposes or frees engine DMA.
 
-## Evidence and native scope
+## Qualification and remaining scope
 
-[Task 1](../development/experiments/audio-task1/README.md) records production idle
-ownership and the unmerged static-PCM consumer used for initial engine checks.
-[Task 2](../development/experiments/audio-task2/README.md) records the public
-sessions, refill, mixing and matched measurements. The initial four-CPU QEMU
-waveform matched all 240,000 requested PCM frames exactly. Its unprimed start
-also produced **58.667 ms of silence after the first 21.33 ms of PCM**; no zero-gap
-startup or audible-latency guarantee follows from the waveform match.
+The owner's [native results on #578](https://git.internal/PyxisOS/pyxis-os/pulls/578)
+close the playback milestone on **2026-10-09**. The image was main `51cbec9`
+plus Bluetooth #564 `a1d97dc5` and audio #578 `65af50b0`, with default logging,
+a nine-space validation configuration and UDP logging on horse.
 
-Eight admitted producers also produced an exact saturated mix segment, but the
-nested-QEMU run subsequently exceeded the 20 ms observation horizon and failed
-closed. Its measured BSP-thread cost was about one full host CPU. The
-[profiling follow-up](../development/experiments/audio-task2/profiling.md)
-separates guest time from host exit/emulation work. Accepted notification gating
-and a shared readiness-scan clock snapshot reduce deadline/HPET amplification.
-Both repeated eight-source profiles passed without failure, but whole-VM CPU
-increased with retry/wait traffic while BSP savings were modest. The owner accepted delivery with this limitation on **2026-10-09**:
-the longer current-main run failed the codec commit-clock guard after 112.227 s
-of output. The most likely cause is a transient nested-host scheduling/VM-exit
-delay during one IF=0 mix/MMIO/HPET commit window, made permanent by fail-closed,
-rather than insufficient mixer throughput. The mix costs about 5–6 µs; the
-recorded HPET maximum was 922,780 ns, with rejection at the later 1 ms WALCLK
-check. Exact host descheduling and the rejecting codec-clock delta were not
-captured. See the [accepted debt](../technical-debt.md#hd-audio-sustained-eight-session-playback).
+- Cold and warm boots both reported `audio: ready codec=10ec0257`; the checked
+  PCIe NoSnoop coherence setup passed and the speaker/headphone route was found.
+- One-session `pcm 1000 500 10`, `pcm 1000 0 10`, `pcm 0 500 10` and the
+  pause/reacquire run completed. The owner heard the correct tones on the
+  internal speaker and wired headphones.
+- Eight simultaneous `pcm 0 0 660` sessions in Development and Audio 1–7
+  completed the full **11 minutes**, with no errors or logged audio/HDA failure
+  or guard trip. The ninth acquisition in Remote returned `CALL_LIMIT`.
 
-Native AMD `1022:15e3` bring-up is implemented but unqualified. The supplied ALC257 dump establishes
-advertised topology, format and EAPD state, not native Pyxis cold-init, speaker or
-headphone playback. Eight periods are starting tuning to revisit during native
-latency/refill qualification. The owner's later ThinkPad batch remains the
-qualification direction. The owner requires native eight-session playback
-for milestone closure. Native evidence decides whether controller-reset recovery
-needs a separate proposal; fail-closed until reboot remains accepted. SDL2, Quake, recording, HDMI/DP, USB/dock audio and suspend
-remain outside this implementation.
+The eight-session run used silence through the same queue, mixer, refill and
+DMA path. Audible eight-source content was skipped because full-scale speaker
+tones were painfully loud; content and routing were checked by ear at one
+session. This meets the owner's native eight-session closure requirement. It
+establishes neither end-to-end latency nor native CPU/commit-time distributions.
+There is **no volume control**; a master volume or per-session gain is needed
+before ordinary use. See the [volume debt](../technical-debt.md#hd-audio-volume-control).
+
+For later native batches, **two minutes of eight simultaneous silent sessions**
+(`pcm 0 0 120` in eight spaces) is sufficient as a regression check. Let every
+producer finish naturally, retain each final STATUS and the complete log, check
+for errors/guard trips, and check ninth-session refusal. Ten minutes was the
+one-time closure duration requirement; the closure run lasted eleven. Longer
+runs are warranted only by counter findings. Do not halt active audio for GDB.
+
+QEMU evidence remains separate. [Task 1](../development/experiments/audio-task1/README.md)
+records private engine/idle qualification; [task 2](../development/experiments/audio-task2/README.md)
+records exact PCM and saturated mixing. The initial four-CPU waveform matched
+all 240,000 requested PCM frames but included **58.667 ms of startup silence**
+after the first 21.33 ms of PCM. No zero-gap startup or latency promise follows.
+The [profiling report](../development/experiments/audio-task2/profiling.md) records
+BSP costs before/after notification gating and one clock snapshot per readiness
+scan. Sustained eight-session playback still fails closed in nested QEMU; the
+longer run failed its 1 ms WALCLK commit guard after **112.227 s** of output.
+A transient nested-host scheduling/VM-exit delay during a roughly 5–6 µs mix is
+the most likely cause, not a proven trace. This is a QEMU limitation, not the
+native result. [Task 5's QEMU record](../development/experiments/audio-task5/README.md)
+contains matched presenter measurements and regression evidence.
+
+[Technical debt](../technical-debt.md#hd-audio-sustained-eight-session-playback)
+retains the QEMU limit, deferred batching, reboot-only failure recovery, startup
+and jack-switching limits. Eight periods remain starting tuning. SDL2 and Quake
+adapters are separate consumer work: conversion/resampling stays in userspace;
+SDL2 needs real callback/thread execution under the
+[threads direction](../wip/scheduling-and-threads.md). Recording, HDMI/DP,
+USB/dock and Bluetooth audio, ACP, suspend/resume and general device selection
+remain outside this analog playback implementation.
+
+## Later directions
+
+Owner ideas, **2026-10-09**; none is authorized. **Volume comes first**, gating
+all players below: master and per-session/space mixer gain, a master widget beside
+the bar's battery and a per-space widget on each tab, with a classic speaker icon
+and a classic volume slider on hover. See the [no-volume debt](../technical-debt.md#hd-audio-volume-control).
+
+Later players: MIDI with TinySoundFont + TinyMidiLoader (MIT, single-header C;
+a SoundFont needs its own asset licence and cache entry); SPC with blargg's
+snes_spc (LGPL 2.1, C++, userspace 32→48 kHz resampling); and the keyboard piano
+test app. The widgets depend on a small shared pool of simple black-and-white
+bitmap icons, blitted unscaled and also usable by the battery widget; that pool
+is separate UI work, not audio implementation.

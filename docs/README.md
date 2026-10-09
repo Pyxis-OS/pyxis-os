@@ -49,12 +49,6 @@ completed task 1 contracts. The [runtime HCI reference](devices/bluetooth-hci.md
 task 2 transport and its warm-only qualification limits. Later tasks require
 explicit assignment.
 
-The [native AMD/ALC257 audio proposal](wip/hda-native.md) covers task 5's
-controller profile, speaker/headphone routing and owner-run one/eight-session
-qualification. Its route, start-time jack policy and native batch were accepted
-2026-10-09; implementation is described in the [engine reference](devices/hda.md),
-and native qualification remains pending.
-
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals. Files in [wip](wip/) describe unfinished work or design directions;
 they do not establish implemented behavior. Existing costs and revisit conditions

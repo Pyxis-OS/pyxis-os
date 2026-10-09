@@ -1,8 +1,9 @@
 # Native audio task 5: QEMU evidence
 
-The [accepted AMD/ALC257 plan](../../../wip/hda-native.md) is implemented;
-ThinkPad boot state, coherence and one/eight-session sound remain unqualified.
-All measurements here are **QEMU**, not native results. Raw captures stay local.
+The [AMD/ALC257 engine](../../../devices/hda.md) is implemented and its
+[native closure evidence](../../../devices/hda.md#qualification-and-remaining-scope)
+is recorded separately. All measurements here are **QEMU**, not native results.
+Raw captures stay local.
 
 ## Inputs and commands
 
@@ -80,18 +81,6 @@ QEMU ADC backend is expected; recording is unsupported. Without HDA, absence
 was quiet, ACQUIRE returned UNAVAILABLE (6), and shell commands still worked.
 Final source build `6c4a4aaa` also passed; disassembly changes only assertion
 line numbers after factoring the same native 20 ms tuning into one constant.
-
-Native batch instructions are in [#578](https://git.internal/PyxisOS/pyxis-os/pulls/578).
-The owner initially froze that PR pending the native batch. The 2026-10-09 cold
-boot (reported integration of main/#577/#564/#578, trace logging) then reached
-COMMAND `0`, PMCSR `8` and GCAP `4401`, but failed the `0x42` snoop readback
-before driver DMA. No native playback ran. The owner accepted the replacement
-coherence contract on **2026-10-09**: clear and verify standard PCIe No Snoop
-Enable with BME off, preserving other controls and cached DMA policy. `0x42`
-is now read-only trace evidence; missing or invalid capability/state and refused
-clear fail closed. The new image still needs native playback evidence. D3+BME
-remains refused; no PCI helper, live jack switching, recovery or batching.
-Native eight-session speaker/headphone playback remains the closure gate.
 
 The PCIe replacement's ordinary image build (`1cd9f929`, main `7910beea`)
 passed. Same four-CPU QEMU configuration: `pcm 1000 500 2` completed, all

@@ -5,9 +5,10 @@ local probe worktrees. This record keeps the summaries.
 
 Measured **2026-10-09**, following the [early review of #557](https://git.internal/PyxisOS/pyxis-os/pulls/557).
 Candidates 1 and 2 were accepted and implemented; candidate 3 (request batching)
-remains deferred. The owner accepts task 2 delivery with the recorded
-nested-QEMU eight-session limit; native eight-session playback remains mandatory for
-milestone closure. Eight sessions, eight 10 ms DMA periods, 80 ms session queues,
+remains deferred. The owner accepted task 2 delivery with the recorded
+nested-QEMU eight-session limit and required native playback for closure; the
+[engine reference](../../../devices/hda.md#qualification-and-remaining-scope) records
+that subsequent closure. Eight sessions, eight 10 ms DMA periods, 80 ms session queues,
 4096-byte writes and the safety thresholds are unchanged.
 
 ## Method
@@ -216,7 +217,8 @@ rest on the capture and frozen state, not on a matching live line.
 **Sustained eight-session playback remains unqualified in nested QEMU.** The owner
 accepted task 2 delivery with this limitation on 2026-10-09; see
 [technical debt](../../../technical-debt.md#hd-audio-sustained-eight-session-playback).
-Batching stays deferred and milestone closure requires native eight-session playback.
+Batching stays deferred. Native closure was subsequently recorded in the
+[engine reference](../../../devices/hda.md#qualification-and-remaining-scope).
 The likely trigger was a transient nested-host scheduling/VM-exit delay rather than
 mixer throughput, but no coincident host trace proves it. AMD/ALC257 remains unbound at
 this record; the branch could give a ThinkPad availability check, not native listening
