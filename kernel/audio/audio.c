@@ -12,8 +12,9 @@
 #define AUDIO_WATCHDOG_MS 5
 #define AUDIO_SERVICE_LIMIT_NS UINT64_C(20000000)
 #define QEMU_COMMIT_LIMIT_NS UINT64_C(1000000)
-#define NATIVE_COMMIT_LIMIT_NS UINT64_C(20000000)
-#define NATIVE_COMMIT_PROGRESS_BYTES (HDA_RATE * HDA_FRAME_BYTES * 20 / 1000)
+#define NATIVE_COMMIT_MS 20
+#define NATIVE_COMMIT_LIMIT_NS (UINT64_C(1000000) * NATIVE_COMMIT_MS)
+#define NATIVE_COMMIT_PROGRESS_BYTES (HDA_RATE * HDA_FRAME_BYTES * NATIVE_COMMIT_MS / 1000)
 #define HDA_WALLCLOCK_TICKS_PER_MS 24000
 #define QEMU_CODEC_BURST_BYTES 8192
 
@@ -141,7 +142,7 @@ static bool start_output(void)
     }
     ktrace("audio: native FIFO-bytes=%u reserve-bytes=%u commit-ns=%lu commit-WALCLK=%u\n",
         controller.fifo_bytes, reserve, NATIVE_COMMIT_LIMIT_NS,
-        HDA_WALLCLOCK_TICKS_PER_MS * 20);
+        HDA_WALLCLOCK_TICKS_PER_MS * NATIVE_COMMIT_MS);
   }
   audio_sessions_cleanup();
   if (!audio_sessions_pending()) {
@@ -293,7 +294,7 @@ static bool refill_output(void)
       max_commit_ns = after - before;
     }
     uint64_t commit_limit = native ? NATIVE_COMMIT_LIMIT_NS : QEMU_COMMIT_LIMIT_NS;
-    uint32_t wall_limit = HDA_WALLCLOCK_TICKS_PER_MS * (native ? 20 : 1);
+    uint32_t wall_limit = HDA_WALLCLOCK_TICKS_PER_MS * (native ? NATIVE_COMMIT_MS : 1);
     if (safe && (after - before >= commit_limit || wall_ticks >= wall_limit)) {
       refill_fault = "output DMA commit exceeded clock limit";
       safe = false;
