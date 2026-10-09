@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
@@ -96,6 +97,9 @@ static void queue_event(struct pointer_object *pointer, struct pointer_event eve
 
 static void reset_buttons(struct pointer_object *pointer)
 {
+  if (pointer_is_terminal(pointer)) {
+    clipboard_space_cancel(pointer->space);
+  }
   pointer->head = pointer->count = 0;
   pointer->accepted = 0;
 }
@@ -212,6 +216,9 @@ void pointer_queue_input(struct pointer_object *pointer, struct pointer_event ev
 
 void pointer_end_session(struct pointer_object *pointer)
 {
+  if (pointer_is_terminal(pointer)) {
+    clipboard_space_cancel(pointer->space);
+  }
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
   /* One task per process; the owner cannot release/exit while READ sleeps. */
@@ -274,6 +281,8 @@ void pointer_request_execute(struct pointer_request *request)
     status = CALL_DENIED;
   } else if (request->operation == POINTER_RELEASE) {
     pointer_end_session(pointer);
+  } else if (request->operation == TERMINAL_POINTER_CANCEL_CLIPBOARD) {
+    clipboard_space_cancel(pointer->space);
   } else if (request->operation == POINTER_GEOMETRY) {
     if (terminal) {
       struct tty *tty = pointer->space->tty;
@@ -424,7 +433,7 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
 {
   bool terminal = pointer_is_terminal(pointer);
   if (operation < POINTER_ACQUIRE ||
-      operation > (terminal ? TERMINAL_POINTER_VIEW_CHANGED : POINTER_STATE) ||
+      operation > (terminal ? TERMINAL_POINTER_CANCEL_CLIPBOARD : POINTER_STATE) ||
       (terminal && (operation == POINTER_WARP || operation == POINTER_LOCK ||
                     operation == POINTER_UNLOCK))) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -432,6 +441,9 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
   uint64_t required = terminal ? TERMINAL_POINTER_RIGHT_CONTROL : POINTER_RIGHT_INPUT;
   if (!(rights & required) || process_current()->space != pointer->space) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == TERMINAL_POINTER_CLIPBOARD_REFUSE) {
+    return clipboard_controller_refuse_call(request_address, request_size);
   }
   if (operation == POINTER_READ) {
     return read_pointer(pointer, request_address, request_size, reply_address, reply_capacity);
@@ -500,4 +512,22 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     return (struct syscall_result){CALL_OK, sizeof(command.data.flags)};
   }
   return (struct syscall_result){status, 0};
+}
+
+void terminal_pointer_clipboard_action(struct pointer_object *pointer, uint64_t action_id,
+    uint64_t operation, uint64_t layer)
+{
+  lock_pointer(pointer);
+  if (pointer->count == POINTER_EVENT_CAPACITY) {
+    reset_buttons(pointer);
+    queue_event(pointer, pointer_position_event(pointer, POINTER_STATE_RESET));
+  } else {
+    struct pointer_event event = pointer_position_event(pointer, TERMINAL_POINTER_CLIPBOARD_ACTION);
+    event.action_id = action_id;
+    event.clipboard_operation = operation;
+    event.clipboard_layer = layer;
+    queue_event(pointer, event);
+  }
+  unlock_pointer(pointer);
+  readiness_notify();
 }

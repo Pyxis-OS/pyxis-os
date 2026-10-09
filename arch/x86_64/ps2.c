@@ -386,13 +386,24 @@ void ps2_init(void)
   ps2_interrupt();
 }
 
-void ps2_interrupt(void)
+bool ps2_sync_input(void)
 {
   for (unsigned i = 0; i < PS2_IRQ_BYTE_LIMIT; ++i) {
     uint8_t status = inb(PS2_STATUS_PORT);
     if (!(status & PS2_OUTPUT_FULL)) {
-      break;
+      return true;
     }
     route_byte(status, inb(PS2_DATA_PORT));
   }
+  return ps2_input_empty();
+}
+
+bool ps2_input_empty(void)
+{
+  return !(inb(PS2_STATUS_PORT) & PS2_OUTPUT_FULL);
+}
+
+void ps2_interrupt(void)
+{
+  (void)ps2_sync_input();
 }

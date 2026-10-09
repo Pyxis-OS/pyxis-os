@@ -1,10 +1,11 @@
 # Clipboard
 
-Status: **first terminal delivery authorized, 2026-10-09**. Rounds one and two
-are accepted, not yet implemented. The owner authorized Copy + Paste for local
-terminals and mux into opted-in stock libterm line readers. This proposal update
-records the contract and limits before code; implementation branches from fresh
-main after this PR merges. Graphics, FILE and converter contracts remain proposed.
+Status: **first terminal delivery implemented, pending owner review**. The
+accepted 2026-10-09 rounds authorize local-terminal and mux Copy + Paste into
+opted-in stock libterm readers. The [implemented interface](../interfaces/clipboard.md)
+and [qualification record](../development/clipboard-first-delivery-qualification.md)
+describe its native authority, receiver contract and validation limits.
+Graphics, FILE and converter contracts remain proposed.
 
 ## Owner decisions
 
@@ -142,8 +143,8 @@ to the acquired terminal controller, rather than inventing a control byte in
 mux's byte stream. Plain Ctrl+C, Ctrl+V and mux's Ctrl+B prefix keep their
 application meanings. Existing Super+arrows and Super+Esc keep their priority.
 
-Copy in mux uses the completed selection's pane, even if a later heading click
-changed keyboard focus. Paste uses the currently keyboard-focused pane. Both
+Copy in mux uses the completed selection's pane, even if a later keyboard action
+changed keyboard focus without invalidating selection. Paste uses the currently keyboard-focused pane. Both
 capture pane/session/view identity at the action; neither follows subsequent
 focus. Copy while dragging, stale/cleared selection, or Copy with no selection
 refuses without overwriting the previous item. Explicit history movement clears
@@ -334,7 +335,8 @@ source review before the typed-object task; they are proposed tuning, not existi
 
 ## First-delivery limits
 
-Accepted 2026-10-09; the code PR will record which are implemented and qualified.
+Accepted 2026-10-09 and implemented for the first delivery. The qualification
+record distinguishes manual checks from source-reviewed limits.
 
 - Paste goes only to opted-in stock libterm line readers. vi, less, Links and
   other raw-mode programs refuse it until they implement their own receiver.
@@ -453,7 +455,7 @@ first. Pointer/cursor/input and clipboard remain separate grants and protocols.
 
 ## Task breakdown
 
-1. **First delivery: terminal Copy + Paste.** Both stores, completed
+1. [x] **First delivery: terminal Copy + Paste.** Both stores, completed
    local-TTY/Caelum and mux selection export, accepted gestures and explicit
    controller grants, followed by safe Paste into stock libterm line readers.
    Include receiver lifetime, admission, framing, backpressure and cancellation
@@ -464,13 +466,13 @@ first. Pointer/cursor/input and clipboard remain separate grants and protocols.
    selected/focused pane routing, empty text, source exit/mutation, replacement
    mid-paste, competing opt-in, pending input, short transfers, admission limits,
    focus/view changes and multiline paste not executing commands in matched QEMU.
-2. **SDL2 text adapter.** Local/shared graphical action routing and native
+2. [ ] **SDL2 text adapter.** Local/shared graphical action routing and native
    Set/Get/Has integration, owned text and a real consumer. No background access
    or implied menu-pointer permission; graphical activation awaits a later round.
-3. **Typed objects and FILE retention.** Exact-match representations and
+3. [ ] **Typed objects and FILE retention.** Exact-match representations and
    mandatory text form; immutable/source-independent backing, capability
    attenuation, retained admission and concrete path examples qualified.
-4. **Trusted converters and closure.** One-step bounded userspace conversion,
+4. [ ] **Trusted converters and closure.** One-step bounded userspace conversion,
    explicit cancellation/failure and authority checks; rewrite implemented
    contracts into references and carry deferred limits into technical debt.
 

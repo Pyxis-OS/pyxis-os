@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 //
 // Created by chronium on 9/18/26.
 //
@@ -222,6 +223,11 @@ static struct space *space_alloc(const char *name, const char *title,
   space->console = console_create(space->tty);
   if (!space->console) {
     panic("cannot allocate space console");
+  }
+
+  space->console->space = space;
+  if (!clipboard_space_init(space)) {
+    panic("cannot allocate space clipboard");
   }
 
   space->display = display_create(space);
@@ -1081,7 +1087,7 @@ static void switch_adjacent_space(bool next)
   }
 }
 
-static void handle_space_input(void)
+static void handle_space_input_locked(void)
 {
   struct key_event event;
   static bool navigation_held[KEY_COUNT];
@@ -1096,6 +1102,7 @@ static void handle_space_input(void)
       memset(volume_held, 0, sizeof(volume_held));
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
+      clipboard_key_event(active_space, &event);
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
       for (struct space *space = caelum_space->next; space; space = space->next) {
@@ -1157,6 +1164,13 @@ static void handle_space_input(void)
       volume_held[event.key] = event.action != KEY_RELEASE;
       continue;
     }
+    uint64_t clipboard_flags = cpu_save_interrupts();
+    bool clipboard_consumed = clipboard_key_event(active_space, &event);
+    cpu_restore_interrupts(clipboard_flags);
+    if (clipboard_consumed) {
+
+      continue;
+    }
     /* Caelum's space has no input reader. */
     if (active_space == caelum_space) {
       continue;
@@ -1166,6 +1180,24 @@ static void handle_space_input(void)
     keyboard_route_event(active_space->keyboard, &event);
     cpu_restore_interrupts(flags);
   }
+}
+
+static void handle_space_input(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  handle_space_input_locked();
+  cpu_restore_interrupts(flags);
+}
+
+bool space_keyboard_sync_input(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  bool device_complete = keyboard_sync_device();
+  handle_space_input_locked();
+  bool complete = device_complete && keyboard_input_complete();
+  cpu_restore_interrupts(flags);
+  return complete;
 }
 
 struct space *space_pointer_active(void)

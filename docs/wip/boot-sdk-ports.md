@@ -95,7 +95,10 @@ Chosen by the owner, each starting with a proposal:
   priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
   merged in #612; later thread tasks remain unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
-  to the documentation-only proposal; implementation remains unauthorized.
+  first terminal Copy + Paste delivery implemented for owner review under the
+  accepted rounds one and two. SDL2, FILE representations and converters remain
+  unassigned; [contracts](../interfaces/clipboard.md) and
+  [qualification](../development/clipboard-first-delivery-qualification.md) describe this delivery.
 - **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
   RAM staging (#610), is merged; the completed-frame handoff is delivered for
   review with userland and ports PRs. Saved shell history (#609) and

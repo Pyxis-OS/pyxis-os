@@ -146,12 +146,30 @@ may remain.
 Wheel over content moves that pane's history three rows per detent without
 changing keyboard focus. Away moves older, toward moves toward live, with
 bounded endpoints. Reaching the newest endpoint returns to ordinary pane input.
-The existing prefix/keyboard history controls still work. Drag autoscroll,
-selection across off-view history and clipboard publication/paste are deferred.
-Controller release/exit restores kernel local-TTY selection and cursor handling.
-Selected cells are retained 8-bit glyphs; no text is exported or mislabeled as
-UTF-8. The later [clipboard contract](../wip/clipboard.md) must define an owned
-text snapshot and encoding for both mux and kernel-local selection.
+The existing prefix/keyboard history controls still work. Drag autoscroll and
+selection across off-view history remain deferred. Controller release/exit
+restores kernel local-TTY selection and cursor handling.
+
+## Clipboard
+
+Exact Ctrl+Shift+C/V copies/pastes the local layer; Super+Shift+C/V selects the
+shared layer. Trusted startup explicitly delegates separate clipboard grants to
+mux; pane children inherit neither. Actions arrive on the terminal spatial queue
+with native operation/view identity, keeping them outside the Ctrl+B byte parser.
+Copy exports the completed selection's pane as owned printable-ASCII text;
+physical rows are LF-joined and trailing spaces trimmed. Non-ASCII, missing,
+pending or dragging selections refuse without replacing the previous item.
+A plain click clears selection, including when it focuses another pane.
+
+Paste targets the focused live pane and its opted-in stock libterm receiver.
+Outer staged bytes, partial key/prefix/confirmation state, pane pending bytes,
+history browsing and native pending input refuse admission. The native transaction
+pins pane session, receiver, item and view; short records go directly to that
+receiver and bypass mux input routing. Focus/view invalidation cancels it without
+retargeting. Output scrolling that advances the visible-row view can also cancel
+an unfinished Paste. A cancellation may leave an editable prefix, never a submitted
+line; a fresh Enter is required after consumed completion. See the
+[clipboard interface](../interfaces/clipboard.md) for authority, framing and bounds.
 
 The [pointer qualification](../development/system-pointer-qualification.md#task-3-qualification)
 records spatial-input validation separately from the original mux results below.
