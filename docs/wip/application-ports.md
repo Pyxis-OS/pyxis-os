@@ -84,8 +84,16 @@ proposal for media-type aliases such as `json+http://` remains future work.
   separate slices.
 - **DevilutionX:** [implemented](../userland/devilutionx.md) as an opt-in,
   personal-use build: single player without sound or networking.
-- **Chocolate Doom, Chocolate Quake and EDuke32:** proposed in the
-  [SDL game ports](sdl-game-ports.md) milestone.
+- **Chocolate Doom, Chocolate Quake and EDuke32:**
+  [implemented](../development/sdl-game-ports.md) without sound; EDuke32 is an
+  opt-in personal build. Deferred:
+  - **sound and music,** after SDL2 gains an audio backend. Music needs a
+    choice per game: built-in OPL synthesis for Chocolate Doom and EDuke32, CD
+    tracks for Chocolate Quake, or none at first;
+  - **network play;**
+  - **EDuke32's OpenGL renderers** and the other Chocolate Doom games;
+  - **whether a Chocolate port replaces its native port,** an owner decision
+    once native comparisons are recorded.
 - **Peanut-GB:** a single-header Game Boy emulator; parked (owner, 2026-10-07).
   A native display/keyboard backend can come first, converted to SDL2 later; its
   SDL2 example frontend shows what a backend needs.
