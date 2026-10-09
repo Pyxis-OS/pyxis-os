@@ -11,8 +11,10 @@ level/mute; a space popup also reports master mute. Inactive-tab controls do not
 switch focus. Muted/zero uses the crossed speaker; low/medium/high cover
 1–33/34–66/67–100%. Caelum and unavailable audio show disabled controls.
 At narrow sizes whole controls/popups are omitted rather than scaled or overlapped.
-The battery remains unchanged. [Owner artwork](../../assets/ui/volume/README.md)
-is blitted unscaled as a mask in the theme's text colour.
+The battery remains unchanged. The [owner assets](../../assets/ui/volume/README.md)
+in [pyxis-icons.png](../../assets/ui/volume/pyxis-icons.png) are blitted unscaled
+as masks in the theme's text colour. They can be redrawn without code changes:
+keep the sheet/slot format and rebuild to regenerate the four masks.
 
 **Super+G** focuses master, **Super+Shift+G** the active space popup, and
 **Super+M** toggles master mute. Extra Control/Alt prevents those chords.
@@ -33,5 +35,22 @@ Master mute still works under capture/lock. Laptop media keys are not decoded ye
 Mute keeps the selected level; a positive slider change unmutes that control.
 0% remains silent when unmuted. Other changes/unmute ramp over 5 ms of newly
 mixed frames; already-published audio can remain in the nominal 80 ms ring.
-Muting does not pause, release or stop queue consumption. Native listening and
-performance evidence live in the [milestone](../wip/audio-volume.md).
+Muting does not pause, release or stop queue consumption.
+
+## Native qualification
+
+The volume milestone closed with the owner's ThinkPad batch on **2026-10-09**,
+main `11d35fa6` plus #628. The speaker was comfortable at 70%, loud at 80%;
+the 300-ohm planar headphones had a listening level of 70–80%. These levels
+describe the owner's outputs and test tones.
+Icon mute and **Super+M** worked, and reboot restored master to 50%.
+Sliders/keyboard increments were exercised while reaching these levels;
+no separate native interaction matrix is claimed. The
+[headphone stop record](../development/experiments/audio-headphone-pop/README.md)
+records no end-of-tone pops across many runs after #628; the speaker never popped.
+
+[QEMU qualification](../development/experiments/audio-volume/README.md) covers
+gain captures, UI interactions and costs. The new native eight-session silent
+regression (`pcm 0 0 120` in eight spaces) was not run, and media keys remain
+undecoded. Remaining qualification and control limits are
+[debt](../technical-debt.md#hd-audio-volume-control).

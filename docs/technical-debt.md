@@ -675,9 +675,20 @@ DevilutionX needs them. Additions belong in libc or the runtime configuration, n
 
 [Software master/per-space controls](interfaces/audio.md#user-volume-controls)
 boot unmuted at 50% (about −30.3 dB); settings do not persist, and software mute
-can leave up to the nominal 80 ms of published DMA audio. Native volume listening
-remains [pending](wip/audio-volume.md): earlier full-scale speaker tones were
-painfully loud. Revisit persistence/media keys when ordinary use requires them.
+can leave up to the nominal 80 ms of published DMA audio. Media keys are not
+decoded, so use the bar or Super+M. [Native listening passed](userland/audio-volume.md#native-qualification).
+Revisit persistence/media-key input when ordinary use requires them, and mute
+latency with the ring-tuning work.
+
+## HD Audio volume native regression
+
+After volume control and #628, the native two-minute eight-session silent
+regression (`pcm 0 0 120` x8) remains unrun; the earlier eleven-minute pass
+predates these changes. Native per-space isolation/retention, hidden playback,
+the full slider/keyboard interaction matrix, pops/dropouts during level changes,
+published-ring mute delay and rapid restart during codec settling remain unqualified. Revisit in the next
+ThinkPad batch, retaining each final STATUS/log; current closure establishes
+[one-session listening/mute/reboot behavior](userland/audio-volume.md#native-qualification).
 
 ## HD Audio scheduling and startup tuning
 
