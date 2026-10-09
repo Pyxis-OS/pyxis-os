@@ -1,8 +1,8 @@
 # Cheaper timekeeping
 
-Status: **proposal, 2026-10-09,** assigned to Claude. Nothing here is accepted
-yet; the [decisions](#owner-decisions) below need the owner. No code exists for
-it.
+Status: **accepted, 2026-10-09,** assigned to Claude. The owner accepted the
+three [decisions](#accepted-decisions) as proposed. Task A starts when the
+owner confirms; no code exists yet.
 
 ## Why
 
@@ -78,7 +78,7 @@ follow-up work, as #557 did for readiness.
   the maximum extended leaf first.
 - `RDTSCP` (`CPUID.80000001:EDX[27]`) for the ordered read below.
 - Under a hypervisor (`CPUID.1:ECX[31]`) the same bits decide; see
-  [decision 3](#owner-decisions). kvmclock is not used.
+  [decision 3](#accepted-decisions). kvmclock is not used.
 - **TSC-deadline mode is not used.** The ThinkPad's Zen 2 CPU lacks it (no
   `tsc_deadline_timer` in the [inventory](../targets/t14-gen1-amd/thinkpad-inventory-docked.txt)),
   while QEMU offers it. Using it only where present would make QEMU and native
@@ -121,7 +121,8 @@ follow-up work, as #557 did for readiness.
   - The klog line reports the bound actually achieved.
   - A native check: Linux's refined calibration on the ThinkPad was
     2,096.061 MHz.
-- **Cost:** 100 ms is added to boot.
+- **Cost:** 100 ms is added to every boot, including boots that end up on
+  the HPET fallback, because calibration runs before the decision is known.
 
 **Conversion.** One shared, immutable record holds:
 - the TSC value at the switch;
@@ -142,7 +143,7 @@ across CPUs.
 - **Limits.** A finite check cannot prove agreement for the rest of the boot.
   With no shared nondecreasing floor, a later warp would go unnoticed. A floor
   would put one contended cache line on every read, which
-  [decision 2](#owner-decisions) weighs.
+  [decision 2](#accepted-decisions) leaves out.
 
 **Switching and fallback.**
 - **One switch.** Boot keeps running on the extended HPET exactly as today,
@@ -194,8 +195,20 @@ For each run, record:
 - the BSP thread's host CPU split into guest, QEMU userspace and host kernel
   time from `/proc`, as #557 recorded.
 
-Task B can only select the TSC in QEMU if the guest sees an invariant TSC;
-see decision 3.
+Task B can only select the TSC in QEMU if the guest sees an invariant TSC,
+which the nested configuration cannot provide; see
+[decision 3](#accepted-decisions). The nested runs therefore measure task B's
+fallback.
+
+**QEMU on the desktop host** (task B's TSC path): the same workloads in QEMU
+running directly on the desktop, an i9-12900K whose Linux reports
+`constant_tsc` and `nonstop_tsc` on all 24 CPUs and uses the TSC as its clock
+source (checked 2026-10-09). The guest gets `-cpu host,+invtsc` through a QEMU
+wrapper, as earlier measurements did, so `make run` doesn't change. This is a
+separate configuration from the nested one; its results are recorded apart
+from both the nested and the native ones. If that QEMU does not expose
+invariant TSC either, the fallback is to expose it to the development VM
+through libvirt, which gives up the VM's live migration.
 
 **Native ThinkPad, run by the owner** (wired, on AC, PXE builds):
 - the clock klog lines;
@@ -211,35 +224,33 @@ see decision 3.
 Results go in this document and then the timekeeping reference. Nested and
 native results are kept apart.
 
-## Owner decisions
+## Accepted decisions
 
-1. **Order: task A first, then task B.** Default: yes, as separate PRs, each
-   measured. Task A is small, independent of the clock source, and also
-   benefits the HPET fallback. Its measurement shows how much of the cost is
-   the number of reads rather than the cost of each read.
+Accepted by the owner 2026-10-09, all three as proposed:
+
+1. **Order: task A first, then task B,** as separate PRs, each measured.
+   Task A is small, independent of the clock source, and also benefits the
+   HPET fallback. Its measurement shows how much of the cost is the number of
+   reads rather than the cost of each read.
 2. **Cross-CPU policy: a startup check, no shared floor, no runtime watchdog.**
-   Default: yes, accept invariant TSC plus the per-AP warp check, and fall
-   back to HPET for all CPUs on any failure.
-   - The risk is a warp appearing after boot, which would go unnoticed.
-   - The alternatives are a shared nondecreasing floor (a contended cache
-     line on every read) or a periodic TSC-against-HPET watchdog that switches
-     back at runtime (a second switch path).
-   - Either can be added later if a target shows warps.
-3. **Hypervisors: same rule as hardware, no kvmclock.** Default: under a
-   hypervisor, use the TSC only when the invariant-TSC bit is set.
+   Invariant TSC plus the per-AP warp check; any failure keeps all CPUs on the
+   HPET.
+   - The accepted risk is a warp appearing after boot, which would go
+     unnoticed.
+   - A shared nondecreasing floor (a contended cache line on every read) or a
+     periodic TSC-against-HPET watchdog that switches back at runtime (a
+     second switch path) can be added later if a target shows warps.
+3. **Hypervisors: same rule as hardware, no kvmclock.** Under a hypervisor the
+   TSC is used only when the invariant-TSC bit is set.
    - **Consequence:** QEMU on my development VM falls back to HPET. On
      2026-10-09, `-cpu max,+invtsc` there gave "host doesn't support requested
      feature: CPUID[eax=80000007h].EDX.invtsc", because the VM on the desktop
      doesn't expose invariant TSC to its own guests; the VM itself runs on
-     kvm-clock.
-   - **To measure task B in QEMU**, the owner exposes invariant TSC to that VM,
-     for example libvirt's `host-passthrough` with
-     `<feature policy='require' name='invtsc'/>`, which gives up live
-     migration. `make run` would then pass `+invtsc` to `-cpu`. QEMU on the
-     ThinkPad can expose it directly, because that host has it.
-   - **Alternative:** trust the TSC under KVM when kvmclock reports its
-     stable-TSC flag. That means implementing kvmclock's shared page, a second
-     source this proposal avoids.
+     kvm-clock. Task B's TSC path is measured in QEMU on the desktop host
+     instead; see [measurement](#measurement).
+   - **Not chosen:** trusting the TSC under KVM when kvmclock reports its
+     stable-TSC flag, which would mean implementing kvmclock's shared page as
+     a second source.
 
 ## Out of scope
 

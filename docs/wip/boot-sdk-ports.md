@@ -104,8 +104,8 @@ Chosen by the owner, each starting with a proposal:
   clipboard and USB HID implementation remain separate. Bluetooth's accepted
   conditional source-loss rule remains future integration, without a second source.
 - **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)
-  proposal: fewer clock reads per timer event, then TSC with extended-HPET
-  fallback. Three decisions await the owner.
+  accepted 2026-10-09: fewer clock reads per timer event (task A), then TSC
+  with extended-HPET fallback (task B). Task A starts on the owner's go-ahead.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
