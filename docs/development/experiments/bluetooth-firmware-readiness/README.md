@@ -169,3 +169,7 @@ The earlier 0x21 request was measured warm-only. Linux uses 0x20 for the AX200
 combined path in both states (secure-send alone uses bulk OUT). The canonical
 request and selector still require warm passthrough qualification before the
 native batch; no cold outcome is inferred from the old warm-only shape.
+
+Known unexpected firmware boot/secure-result notifications after initialization
+terminate continuity; they cannot silently restart the owned runtime controller.
+No automatic upload or recovery follows that failure.

@@ -1007,13 +1007,14 @@ static void flush_deferred_acl(void)
 
 static void receive_event(const uint8_t *wire, size_t length)
 {
-  if (adapter.initialization == HCI_INIT_FIRMWARE && adapter.firmware_started) {
+  if (adapter.firmware_started) {
     if (!bluetooth_firmware_notify(&adapter.firmware, wire, length, arch_monotonic_ns())) {
-      fail_adapter_reason(CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
+      fail_adapter_reason(adapter.initialization == HCI_INIT_READY ? CALL_INPUT_LOST :
+          CALL_UNAVAILABLE, bluetooth_firmware_reason(&adapter.firmware));
       return;
     }
     struct hci_command *command = &adapter.commands[0];
-    if (command->used && command->kernel && command->boot && command->published &&
+    if (adapter.initialization == HCI_INIT_FIRMWARE && command->used && command->kernel && command->boot && command->published &&
         adapter.firmware.boot_notified) {
       command->hci_done = true;
     }
