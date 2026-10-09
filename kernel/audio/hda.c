@@ -23,13 +23,17 @@
 #define HDA_PCI_CLASS 0x04
 #define HDA_PCI_SUBCLASS 0x03
 #define HDA_PCI_INTERFACE 0x00
-#define HDA_AMD_SNOOP_CONTROL 0x42
-#define HDA_AMD_SNOOP_MASK 0x07
-#define HDA_AMD_SNOOP_ENABLE 0x02
+#define HDA_AMD_LEGACY_CONTROL 0x42
 #define HDA_PCIE_FLAGS 0x02
+#define HDA_PCIE_VERSION_MASK 0x0f
+#define HDA_PCIE_TYPE_SHIFT 4
+#define HDA_PCIE_TYPE_MASK 0x0f
+#define HDA_PCIE_ENDPOINT 0
+#define HDA_PCIE_ROOT_ENDPOINT 9
 #define HDA_PCIE_DEVICE_CONTROL 0x08
 #define HDA_PCIE_DEVICE_CONTROL_BYTES 0x0a
 #define HDA_PCIE_NO_SNOOP (1u << 11)
+#define HDA_PCIE_FUNCTION_RESET (1u << 15)
 #define HDA_AMD_DMA_MAX ((UINT64_C(1) << 40) - 1)
 #define HDA_VERSION_MAJOR 1
 #define HDA_DMA_ALIGNMENT 128
@@ -769,41 +773,59 @@ static enum pci_selection select_controller(size_t *selected, enum hda_model *mo
   return found ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
 }
 
-static void trace_native_pcie(const struct hda_controller *controller)
+static const char *prepare_native_coherence(struct hda_controller *controller)
 {
-  if (!KLOG_TRACE_ENABLED) {
-    return;
+  struct pci_claim *claim = &controller->claim;
+  struct pci_address address = claim->device->address;
+  ktrace("hda: native legacy PCI 0x42=%x (read-only evidence)\n",
+      (unsigned)pci_read8(address, HDA_AMD_LEGACY_CONTROL));
+  if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
+    return "native PCI BME enabled before coherence setup";
   }
-  const struct pci_claim *claim = &controller->claim;
+  unsigned capability = 0;
   for (unsigned i = 0; i < claim->capability_count; ++i) {
     unsigned offset = claim->capabilities[i];
-    if (pci_read8(claim->device->address, offset + PCI_CAP_ID) != PCI_CAP_EXPRESS) {
+    if (pci_read8(address, offset + PCI_CAP_ID) != PCI_CAP_EXPRESS) {
       continue;
+    }
+    if (capability) {
+      return "native PCIe capability is ambiguous";
     }
     if (!pci_capability_fits(claim, offset, HDA_PCIE_DEVICE_CONTROL_BYTES)) {
-      ktrace("hda: native PCIe capability does not contain Device Control\n");
-      continue;
+      return "native PCIe capability does not contain Device Control";
     }
-    uint16_t flags = pci_read16(claim->device->address, offset + HDA_PCIE_FLAGS);
-    uint16_t control = pci_read16(claim->device->address, offset + HDA_PCIE_DEVICE_CONTROL);
-    ktrace("hda: native PCIe cap=%x flags=%x DEVCTL=%x NoSnoop=%u\n",
-        offset, (unsigned)flags, (unsigned)control, (unsigned)!!(control & HDA_PCIE_NO_SNOOP));
+    capability = offset;
   }
-}
-
-static bool enable_native_snoop(struct hda_controller *controller)
-{
-  struct pci_address address = controller->claim.device->address;
-  trace_native_pcie(controller);
-  uint8_t control = pci_read8(address, HDA_AMD_SNOOP_CONTROL);
-  uint8_t expected = (control & ~HDA_AMD_SNOOP_MASK) | HDA_AMD_SNOOP_ENABLE;
-  pci_write8(&controller->claim, HDA_AMD_SNOOP_CONTROL, expected);
-  uint8_t observed = pci_read8(address, HDA_AMD_SNOOP_CONTROL);
-  ktrace("hda: native PCI 42 snoop before=%x requested=%x after=%x mask=%x enabled=%x\n",
-      (unsigned)control, (unsigned)expected, (unsigned)observed,
-      HDA_AMD_SNOOP_MASK, HDA_AMD_SNOOP_ENABLE);
-  trace_native_pcie(controller);
-  return observed == expected;
+  if (!capability) {
+    return "native PCIe capability is missing";
+  }
+  uint16_t flags = pci_read16(address, capability + HDA_PCIE_FLAGS);
+  unsigned version = flags & HDA_PCIE_VERSION_MASK;
+  unsigned type = (flags >> HDA_PCIE_TYPE_SHIFT) & HDA_PCIE_TYPE_MASK;
+  uint16_t control = pci_read16(address, capability + HDA_PCIE_DEVICE_CONTROL);
+  ktrace("hda: native PCIe cap=%x flags=%x DEVCTL-before=%x\n",
+      capability, (unsigned)flags, (unsigned)control);
+  if ((version != 1 && version != 2) ||
+      (type != HDA_PCIE_ENDPOINT && type != HDA_PCIE_ROOT_ENDPOINT) ||
+      control == UINT16_MAX || (control & HDA_PCIE_FUNCTION_RESET)) {
+    return "native PCIe Device Control state is invalid";
+  }
+  /* Never issue a word update that can restore firmware bus mastering or
+   * trigger FLR. The adjacent Device Status word has W1C bits. */
+  uint16_t expected = control & ~HDA_PCIE_NO_SNOOP;
+  if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
+    return "native PCI BME enabled during coherence setup";
+  }
+  if (expected != control) {
+    pci_write16(claim, capability + HDA_PCIE_DEVICE_CONTROL, expected);
+  }
+  uint16_t observed = pci_read16(address, capability + HDA_PCIE_DEVICE_CONTROL);
+  ktrace("hda: native PCIe DEVCTL-requested=%x after=%x NoSnoop=%u\n",
+      (unsigned)expected, (unsigned)observed, (unsigned)!!(observed & HDA_PCIE_NO_SNOOP));
+  if (observed != expected || (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER)) {
+    return "native PCIe NoSnoop clear did not verify with BME off";
+  }
+  return NULL;
 }
 
 static struct hda_boot_state capture_boot_state(const struct pci_device *device)
@@ -951,10 +973,13 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
       (unsigned)device->address.bus, (unsigned)device->address.device,
       (unsigned)device->address.function, (unsigned)capabilities, input, output,
       (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
-  if (controller->model == HDA_MODEL_AMD && !enable_native_snoop(controller)) {
-    controller->failed = true;
-    klog("hda: native coherent DMA snoop did not set; ownership retained until reboot\n");
-    return;
+  if (controller->model == HDA_MODEL_AMD) {
+    const char *failure = prepare_native_coherence(controller);
+    if (failure) {
+      controller->failed = true;
+      klog("hda: %s; ownership retained until reboot\n", failure);
+      return;
+    }
   }
   if (!output || controller->stream + HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES ||
       dma_buffer_allocate(&controller->corb, PAGE_SIZE) != MM_OK ||
