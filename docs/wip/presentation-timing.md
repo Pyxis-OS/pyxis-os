@@ -13,8 +13,8 @@ defaults on 2026-10-09.
   [measurements and native steps](../development/experiments/frame-handoff/README.md).
 - **Timing and pacing:** later steps. The read-only
   [Fedora Renoir reference](../development/experiments/renoir-linux-timing/README.md)
-  measures the panel mode/blank window and private WC copy cost; protected OTG
-  and PSR/Replay reads are pending host access. No Pyxis timing probe is implemented.
+  records the active OTG, panel blank window, idle/animation counters, disabled
+  PSR/Replay and private WC copy cost. No Pyxis timing probe is implemented.
 
 **Recommendation:** stage composition in RAM first, then investigate read-only
 Renoir timing and whether a native copy fits the measured blank interval.
@@ -100,7 +100,9 @@ would write roughly the changed fraction, but need damage for navigation,
 cursor old/new positions, caret and all source changes; moving Quake usually
 changes most pixels. Introduce that only after correctness and measurement.
 
-**Native copy time is unknown.** Existing [copy qualification](../kernel/display.md#qualification-and-cost)
+**Native Pyxis front-copy time is unknown.** The Linux reference's private full
+WC copy exceeds its computed panel blank window; it does not establish GOP
+handoff or Pyxis copy performance. Existing [copy qualification](../kernel/display.md#qualification-and-cost)
 reports 0.640 ms median for an entire 1280×800 presenter in nested KVM, not a
 1920×1080 ThinkPad WC blit. Native evidence is owner-observed improvement after
 rep movsq, not isolated bandwidth. Measure the actual RAM→WC copy including its
@@ -136,7 +138,8 @@ width/wake lateness if available, application cadence and input latency. Compare
 idle TTY/cursor and ordinary moving Quake separately from timedemo. Short camera
 clips/owner observations verify visible tearing; FPS or screenshots alone cannot.
 Check QEMU VirtIO/Bochs separately and qualify resize/capture/panic/lifetime paths.
-No native timing measurement, QEMU boot or register access was performed here.
+The original proposal performed no hardware access; the linked Linux reference
+now supplies read-only timing evidence. Native Pyxis qualification remains later work.
 
 ## Owner decisions
 

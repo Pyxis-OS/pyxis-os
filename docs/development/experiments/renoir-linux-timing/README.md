@@ -3,8 +3,7 @@
 2026-10-09, ThinkPad T14 Gen 1 AMD, Ryzen 5 PRO 4650U; Fedora 44,
 Linux 6.19.10-300.fc44.x86_64. Linux reference for
 [accepted presentation step 2](../../../wip/presentation-timing.md), not a Pyxis
-implementation. **In progress: protected OTG and cached PSR/Replay reads await
-owner sudo access.** No Pyxis code, dependency pin or display configuration changed.
+implementation. **Complete: panel mode, active OTG, idle/animation counters and WC copy reference.** No Pyxis code, dependency pin or display configuration changed.
 
 ## Panel and blank interval
 
@@ -27,7 +26,9 @@ values and arithmetic, not measured panel phase or a Pyxis timing capability.
 
 ## OTG and panel self-refresh
 
-Live values and idle/animation counter samples are pending protected reads.
+The owner ran the protected collector; this agent parsed both captures. The first
+30-second capture supplied register snapshots; a second coordinated capture
+compared static desktop, temporary Wayland animation and return to idle.
 GPU is AMD 1002:1636, PCI 0000:07:00.0. Sysfs reports MMIO BAR5
 **0xfd300000–0xfd37ffff**, 512 KiB. GPU runtime status was active, power control
 on, suspended time zero; no power-control request was issued.
@@ -48,12 +49,28 @@ constructs OTG0–3; generated OTG4–5 definitions are not probed.
 | STATUS_FRAME_COUNT | 0x1b4c | 0x14030 | 0x14230 | 0x14430 | 0x14630 |
 | STATUS | 0x1b49 | 0x14024 | 0x14224 | 0x14424 | 0x14624 |
 
-Planned collector: O_RDONLY BAR5, mmap offset 0x13000/length 0x2000 with PROT_READ,
-then const volatile aligned 32-bit loads only. CONTROL master-enable bit 0 locates
-candidates; match timings and movement to the sole active eDP stream, rather than
-assuming OTG0 or equating DRM CRTC index with an OTG. Bracket position/frame/status
-loads with CLOCK_MONOTONIC_RAW; they are not one atomic snapshot. Compare idle,
-ordinary temporary Wayland animation and return-to-idle intervals.
+Collector: O_RDONLY BAR5, mmap offset 0x13000/length 0x2000 with PROT_READ,
+then const volatile aligned 32-bit loads only. **OTG0 drives the panel:** only its
+CONTROL master-enable bit is set (0x80011301 versus 0x80000300 on OTG1–3); its
+programmed timing matches the sole active eDP stream, and its measured frame rate
+matches the DRM mode. This does not equate DRM CRTC index/object ID with OTG0.
+
+| Active OTG register | Read value / decoded observation |
+| --- | --- |
+| V_TOTAL | 0x00000456: 1110 + 1 = 1111 lines |
+| V_BLANK_START_END | 0x001c0454: start 1108, end 28; modulo-1111 width 31 lines |
+| STATUS_POSITION | First/last 0x0560042d / 0x00700274; vertical count observed 0–1110 |
+| STATUS_FRAME_COUNT | First/last 0x000809fe / 0x00081107: 526846 → 528647 |
+| STATUS | Example 0x00020002 outside blank; V_BLANK observed both 0 and 1 |
+
+The 29.99997-second capture had 109478 samples per OTG. OTG0 advanced 1801 frames;
+a fit to frame transitions gives 60.02027 Hz (16.66104 ms/frame), consistent with
+DRM. Observed V_BLANK sample fraction 2.79965% versus computed 31/1111 = 2.79028%.
+OTG1–3 stayed disabled with zero position/frame counters; their static V_BLANK
+bits are not panel timing. Loads are bracketed with CLOCK_MONOTONIC_RAW, not
+one atomic snapshot. Per-OTG sample spacing had 276.2 µs median / 825.5 µs maximum;
+OTG0 three-read brackets had 6.622 µs median / 105.418 µs maximum. Poll quantization
+and occasional scheduling delay limit measured phase precision.
 
 [Field masks](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h):
 V_TOTAL low 15 bits + 1; blank start/end low/high 15 bits; vertical position low
@@ -69,8 +86,28 @@ Source reference is upstream v6.19.10; Fedora's patched source was not inspected
 
 Observed module settings: dc=-1, dcfeaturemask=2, dcdebugmask=0, sg_display=-1,
 runpm=-1, aspm=-1, fw_load_type=-1. No explicit amdgpu kernel command-line option
-was present; those settings were read, not changed. Capability/enable results
-and animation/stall observations remain pending.
+was present; those settings were read, not changed. Cached eDP getters report
+PSR sink/driver support **no**, Replay sink/driver/config support **no**;
+disallow_edp_enter_psr=0. Neither feature is enabled on this link; no current-state
+firmware query was needed. The counters also advanced in all three controlled conditions:
+
+| Condition | Analyzed duration (s) | Samples | Frame-count advance | Fitted rate (Hz) |
+| --- | ---: | ---: | ---: | ---: |
+| Idle before | 6.0000 | 21911 | 360 | 60.0206 |
+| Animation | 8.9816 | 33049 | 539 | 60.0207 |
+| Idle after | 8.8178 | 32302 | 529 | 60.0209 |
+
+The 30-second repeat started a 480×280 moving-rectangle window at 10.200 s and
+closed it at 20.182 s (599 frame callbacks). Analyze 2–8 s for initial idle;
+exclude 0.5 s after first draw/before closure for animation, and 0.5 s after
+closure/before capture end for final idle. Rates fit hardware frame transitions;
+endpoint counts include partial frame periods. All phases covered vertical count
+0–1110, with **no observed stalls**; longest detected frame interval was 16.935 ms,
+consistent with 16.661 ms plus polling jitter. OTG1–3 remained disabled/zero.
+The requested 200 µs sleep produced 272–278 µs median sample spacing in these
+phases, with maxima 429–601 µs. Polling can miss/quantize a blank edge; this is not
+an interrupt timestamp. Mode remained identical afterward. Vertical wrap was
+observed; full 24-bit frame-counter rollover was not exercised.
 
 ## RAM to write-combined copy
 
@@ -113,5 +150,9 @@ corrected copy source
 2af32479fe47858e12cd6ba9910bb65890c1ad08c40b15228d2d4957029e4fc8.
 Commands: `cc -O2 -Wall -Wextra reference.c -o reference`, `reference --mode`,
 `copy-reference --copy 0`; protected collector is `sudo reference --metadata`
-and `sudo reference --otg 30 200`. Register writes, display mode, clock and power
-configuration changes are outside this task. No Pyxis build/boot is needed.
+and `sudo reference --otg 30 200`; `collect-paired.sh` coordinates the second
+capture/animation. No helper MMIO stores, modeset or clock/power configuration
+request was issued. The animation and all collector/benchmark jobs exited.
+This qualifies the Linux reference only: firmware/GOP timing and actual Pyxis
+front-copy cost still require the separately assigned native observer. No Pyxis
+code, build, boot, source pin or host package installation was needed.
