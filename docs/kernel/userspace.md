@@ -236,7 +236,7 @@ This libc saves only the callee-saved integer registers, stack pointer and retur
 address; it adds no signal-mask handling or kernel context-switch interface.
 
 The `<math.h>` subset provides `floor`, `ceil`, `ceilf`, `round`, `roundf`,
-`modf`, `fmod`, `pow`, `sqrt`, `sqrtf`, `sin`, `cos`, `tan`, `atan`, `atan2`,
+`modf`, `fmod`, `pow`, `log`, `log10`, `sqrt`, `sqrtf`, `sin`, `cos`, `tan`, `atan`, `atan2`,
 `frexp`, `ldexp`, `scalbn`, `fabs`, `scalbnl`, `ldexpl`, `fmodl`, `fabsl`,
 `copysignl` and `frexpl`, built from pinned musl sources. `round` and `roundf`
 round halfway cases away from zero. `sqrt` and `sqrtf` use SSE2 `sqrtsd` and
