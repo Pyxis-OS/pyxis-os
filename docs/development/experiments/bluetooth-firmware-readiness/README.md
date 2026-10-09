@@ -216,16 +216,21 @@ build and [CI run 1389](https://git.internal/PyxisOS/pyxis-os/actions/runs/1389)
 passed. The saved main **52451d3** baseline image/ELF was assembled from matching
 successful CI run 1349 bundles before implementation; the actual attached
 measurements were taken after code was written, against that unchanged image,
-before the post-change measurements. [Artifact identities](artifact-identities.txt)
-identify both images, ELFs and the unattached original storage fixture.
+before the post-change measurements. Raw captures and generated provenance are
+retained locally in /tmp/pyxis-bluetooth-firmware-readiness; this summary keeps
+the measured revisions, configuration, commands, results and limits.
 
-The [baseline kernel](baseline-kernel-provenance.txt),
-[SDK](baseline-sdk-provenance.txt), [userspace](baseline-userspace-provenance.txt)
-and [ports](baseline-ports-provenance.txt) records identify its inputs. The
-[warm kernel](warm-kernel-provenance.txt), [SDK](warm-sdk-provenance.txt),
-[userspace](warm-userspace-provenance.txt) and [ports](warm-ports-provenance.txt)
-records show the current kernel and matching reused bundles. No public ABI or
+Both builds used userspace 362574b1ed93827bac9219c23ee511afdf8d07f5,
+ports a642f07382e14bd233ac1be2b6a814e95c32d835,
+filesystem b427df29f865bc361b8da92bcd74e114581e9a32 and
+lwIP a1aadb91a50360ff5b52864f7cec810b8162ee85. The warm image used the current
+kernel with matching reused SDK/userspace/ports bundles. No public ABI or
 dependency pin changed in this task; no stale kernel bundle was used.
+
+| Measured ELF | SHA-256 |
+| --- | --- |
+| Baseline 52451d3 | 7a6f0c3a5e5799df7217c127c810b1b9870f0ebfd7d33584b8760756cf6a1f7c |
+| Warm 9b75b3a | aaa0b2331b01339373a0e87be5184e5cedf20da94115ac8545609a0c0de9455d |
 
 Both images used ThinkPad Fedora KVM, QEMU 10.2.2, Q35, cpu=max, four single-thread
 cores, 2 GiB RAM, standard VGA with display disabled, fresh Fedora OVMF variables,
@@ -257,14 +262,14 @@ warmup plus three 1 MiB read samples verified. Repeated samples within each boot
 use the existing npfs cache; they are not cold-media or concurrent radio traffic.
 Profiling was off and no local build ran during measurements.
 
-| Boot/capture | Payload reads (ms) | Complete consumption (ms) |
+| Boot | Payload reads (ms) | Complete consumption (ms) |
 | --- | --- | --- |
-| [Baseline 1](baseline-1-storage.txt) | 134.151, 137.390, 138.994 | 135.423, 140.378, 140.432 |
-| [Baseline 2](baseline-2-storage.txt) | 115.015, 125.017, 126.362 | 117.182, 126.046, 127.545 |
-| [Baseline 3](baseline-3-storage.txt) | 123.352, 122.972, 123.500 | 125.015, 125.786, 124.897 |
-| [Warm 1](warm-1-storage.txt) | 115.532, 126.117, 124.397 | 117.723, 128.266, 126.908 |
-| [Warm 2](warm-2-storage.txt) | 139.219, 153.324, 154.710 | 141.271, 155.968, 155.815 |
-| [Warm 3](warm-3-storage.txt) | 118.080, 124.911, 123.632 | 119.821, 126.923, 125.261 |
+| Baseline 1 | 134.151, 137.390, 138.994 | 135.423, 140.378, 140.432 |
+| Baseline 2 | 115.015, 125.017, 126.362 | 117.182, 126.046, 127.545 |
+| Baseline 3 | 123.352, 122.972, 123.500 | 125.015, 125.786, 124.897 |
+| Warm 1 | 115.532, 126.117, 124.397 | 117.723, 128.266, 126.908 |
+| Warm 2 | 139.219, 153.324, 154.710 | 141.271, 155.968, 155.815 |
+| Warm 3 | 118.080, 124.911, 123.632 | 119.821, 126.923, 125.261 |
 
 Payload median/range: baseline **125.017 / 115.015–138.994 ms**, warm
 **124.911 / 115.532–154.710 ms**. Complete-consumption median/range: baseline
@@ -281,20 +286,19 @@ QEMU process relative to one host CPU, not isolated Bluetooth cost or a native
 Pyxis measurement. All six intervals had zero additional xHCI IRQs, commands and
 events, unchanged endpoint sequences, READY and no terminal failure.
 
-| Boot/capture | Actual interval (s) | QEMU user/system (s) | One-CPU cost | BSP/AP1/AP2/AP3 timer deltas |
+| Boot | Actual interval (s) | QEMU user/system (s) | One-CPU cost | BSP/AP1/AP2/AP3 timer deltas |
 | --- | ---: | --- | ---: | --- |
-| [Baseline 1](baseline-1-idle.txt) | 30.000093 | 3.68 / 4.17 | 26.17% | 7949 / 3616 / 3616 / 3616 |
-| [Baseline 2](baseline-2-idle.txt) | 30.000371 | 4.07 / 4.04 | 27.03% | 7773 / 3616 / 3616 / 3616 |
-| [Baseline 3](baseline-3-idle.txt) | 30.000101 | 3.72 / 4.33 | 26.83% | 7767 / 3616 / 3616 / 3616 |
-| [Warm 1](warm-1-idle.txt) | 30.000310 | 3.97 / 4.25 | 27.40% | 7966 / 3616 / 3615 / 3615 |
-| [Warm 2](warm-2-idle.txt) | 30.000115 | 3.74 / 3.95 | 25.63% | 6788 / 3615 / 3616 / 3616 |
-| [Warm 3](warm-3-idle.txt) | 30.000139 | 4.10 / 4.06 | 27.20% | 7921 / 3616 / 3616 / 3616 |
+| Baseline 1 | 30.000093 | 3.68 / 4.17 | 26.17% | 7949 / 3616 / 3616 / 3616 |
+| Baseline 2 | 30.000371 | 4.07 / 4.04 | 27.03% | 7773 / 3616 / 3616 / 3616 |
+| Baseline 3 | 30.000101 | 3.72 / 4.33 | 26.83% | 7767 / 3616 / 3616 / 3616 |
+| Warm 1 | 30.000310 | 3.97 / 4.25 | 27.40% | 7966 / 3616 / 3615 / 3615 |
+| Warm 2 | 30.000115 | 3.74 / 3.95 | 25.63% | 6788 / 3615 / 3616 / 3616 |
+| Warm 3 | 30.000139 | 4.10 / 4.06 | 27.20% | 7921 / 3616 / 3616 / 3616 |
 
 Idle median/range: baseline **26.83 / 26.17–27.03%**, warm
 **27.20 / 25.63–27.40%**. This variation does not isolate a firmware-path cost.
 
-Each [warm state 1](warm-1-state.txt), [2](warm-2-state.txt) and
-[3](warm-3-state.txt) had HCI/firmware READY, cold=false, zero upload commands and
+All three warm boots had HCI/firmware READY, cold=false, zero upload commands and
 bytes, two DDC records from nine bytes, firmware build 193/week 33/year 24, one
 command credit and 3/3 ACL credits with 251-byte payloads. Twelve interrupt
 completions supplied initialization replies; neither endpoint held a partial
@@ -308,9 +312,9 @@ concrete defect; that review does not qualify native cold operation.
 An immediately relaunched guest at the same corrected code revision received a
 successful Command Complete for **0x100e**, while Pyxis had published only its
 initial **0xfc05**. It correctly failed closed with receive continuity lost,
-before SFI or DDC. [Parsed evidence](handoff-failure.txt) retains the mismatch;
-storage still verified. This failed controller boot is excluded from the
-successful readiness comparison, not discarded. The host journal also showed
+before SFI or DDC. The native call status was 16; both receive streams remained
+POSTED, and storage still verified. This failed controller boot is excluded from
+the successful readiness comparison, not discarded. The host journal also showed
 btusb initialization and command timeouts across rebinds. A late host completion
 is an inference consistent with those observations, not proven packet origin.
 
