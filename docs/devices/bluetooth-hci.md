@@ -61,9 +61,17 @@ Independent endpoint sequences and bounded framing detect discontinuity. An
 owned IN completion with SUCCESS and a bounded nonzero residual is treated as a
 short transfer, copying only requested minus residual bytes. SHORT_PACKET and
 zero-length reception use the same retirement path. Ownership mismatch,
-oversized residual, STALL or other error retains the existing terminal limits;
-there is no BOOT-specific error exemption or endpoint recovery. A first
-ACL frame can precede its connection event across drains. Up to eight whole
+oversized residual, STALL or other errors retain the existing terminal limits.
+One owned zero-byte bulk IN USB Transaction Error is admitted only during a
+published cold BOOT, at an empty/whole-frame bulk boundary. It ends bootloader
+bulk event framing and suspends IN rearm. Outside drain/class progress, the outer
+worker issues Reset Endpoint with transfer-state preservation, then Set TR
+Dequeue to the existing producer frontier/cycle. Both receive owners stay retained
+until both commands succeed. The original BOOT deadline bounds the fence; failed
+retirement or a second error still quarantines the controller. Fresh ACL receives
+are posted only after real interrupt boot notification and BOOT USB completion;
+BOOT cannot retire before that host fence/rearm. This is not retry of the failed
+TD or general runtime recovery. A first ACL frame can precede its connection event across drains. Up to eight whole
 frames are retained in endpoint order for at most five seconds from their first
 byte, then replayed only after connection admission in the captured session.
 Overflow, stale epoch/generation or unresolved expiry reports input loss; it does

@@ -24,6 +24,14 @@ void bluetooth_hci_inventory_sealed(void);
  * during physical failure do not reenter the active tick. */
 void bluetooth_hci_progress(struct usb_host_controller *host);
 void bluetooth_hci_drain_progress(struct usb_host_controller *host);
+/* BSP, either IF state. Admit one owned zero-byte bootloader bulk IN transaction
+ * error during published BOOT. These hooks perform no USB operations. Recovery
+ * reports the original BOOT deadline and whether interrupt notification plus
+ * USB retirement permit operational IN rearm. The outer host worker owns the
+ * bounded Reset Endpoint/Set TR Dequeue fence, outside drain/class progress. */
+bool bluetooth_hci_boot_bulk_end(struct usb_host_device *device);
+bool bluetooth_hci_boot_bulk_recovery(struct usb_host_device *device,
+    uint64_t *deadline, bool *resume);
 /* BSP, either IF state. Latch failure without performing USB operations. */
 void bluetooth_hci_transport_failed(struct usb_host_controller *host);
 

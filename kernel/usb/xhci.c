@@ -99,6 +99,7 @@ struct xhci_async_bulk_record {
   struct usb_interrupt_completion completion;
   uint8_t bytes[USB_ASYNC_BULK_BYTES];
 };
+enum async_bulk_boot_state { ASYNC_BULK_BOOT_NONE, ASYNC_BULK_BOOT_HALTED, ASYNC_BULK_BOOT_RETIRED };
 struct xhci_async_bulk {
   struct usb_host_device *device;
   struct xhci_bulk_endpoint in, out;
@@ -108,6 +109,7 @@ struct xhci_async_bulk {
   uint64_t sequence;
   unsigned queue_head, queue_count;
   enum usb_result result;
+  enum async_bulk_boot_state boot_state;
   bool configured, started, successful_short_traced;
   struct {
     uintptr_t data_address;
@@ -1281,7 +1283,7 @@ static bool rearm_async_bulk(struct usb_host_controller *controller)
       }
       continue;
     }
-    if (bulk->result != USB_OK) {
+    if (bulk->result != USB_OK || bulk->boot_state != ASYNC_BULK_BOOT_NONE) {
       continue;
     }
     for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
@@ -1362,6 +1364,22 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
     if (KLOG_TRACE_ENABLED && successful_short) {
       bulk->successful_short_traced = true;
     }
+  }
+  if (completion == XHCI_EVENT_TRANSACTION_ERROR && residue == bulk->receive_bytes &&
+      bulk->result == USB_OK && bulk->boot_state == ASYNC_BULK_BOOT_NONE &&
+      !bulk->queue_count && bluetooth_hci_boot_bulk_end(bulk->device)) {
+    /* The error halted IN; neither this TD nor its prefetched successor may be
+     * reused until the outer worker's reset/dequeue fence has completed. */
+    receive->state = ASYNC_BULK_HELD;
+    bulk->in.halted = true;
+    bulk->boot_state = ASYNC_BULK_BOOT_HALTED;
+    return true;
+  }
+  if (bulk->boot_state != ASYNC_BULK_BOOT_NONE) {
+    receive->state = ASYNC_BULK_HELD;
+    bulk->result = USB_IO;
+    controller->failure = "unexpected bulk IN completion after firmware boot halt";
+    return false;
   }
   /* Match the retained interrupt path's successful short-transfer handling. */
   if ((completion == XHCI_EVENT_SUCCESS || completion == XHCI_EVENT_SHORT_PACKET) &&
@@ -2804,6 +2822,9 @@ enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *d
   if (result != USB_OK) {
     return result;
   }
+  if (bulk->boot_state != ASYNC_BULK_BOOT_NONE) {
+    return USB_BUSY;
+  }
   if (!bulk->queue_count) {
     return USB_BUSY;
   }
@@ -2818,6 +2839,71 @@ enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *d
   bulk->queue_head = (bulk->queue_head + 1) % USB_ASYNC_BULK_COMPLETIONS;
   --bulk->queue_count;
   return USB_OK;
+}
+
+bool usb_host_async_bulk_in_ready(const struct usb_host_device *device)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  const struct xhci_async_bulk *bulk = device->async_bulk;
+  return bulk && bulk->started && bulk->result == USB_OK &&
+      bulk->boot_state == ASYNC_BULK_BOOT_NONE && !bulk->in.halted &&
+      device->controller->running && !device->controller->failed;
+}
+
+static bool recover_boot_bulk(struct usb_host_controller *controller)
+{
+  for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
+    struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
+    if (bulk->boot_state == ASYNC_BULK_BOOT_NONE) {
+      continue;
+    }
+    struct usb_host_device *device = bulk->device;
+    uint64_t deadline;
+    bool resume;
+    if (!device_ready(device) || bulk->result != USB_OK || bulk->queue_count ||
+        !bluetooth_hci_boot_bulk_recovery(device, &deadline, &resume) ||
+        task_deadline_expired(deadline)) {
+      controller->failure = "firmware bulk IN retirement lost boot authority or deadline";
+      return false;
+    }
+    if (bulk->boot_state == ASYNC_BULK_BOOT_HALTED) {
+      struct xhci_bulk_endpoint *endpoint = &bulk->in;
+      /* Preserve the USB toggle: a transaction error is not a device STALL.
+       * Set Dequeue skips both boot TDs and invalidates their cached state. */
+      if (!run_command_flags(controller, XHCI_TRB_RESET_ENDPOINT, device->slot, 0,
+          (endpoint->dci << XHCI_TRB_ENDPOINT_SHIFT) | XHCI_TRB_PRESERVE_TRANSFER_STATE,
+          deadline) ||
+          !endpoint_command(device, XHCI_TRB_SET_DEQUEUE, endpoint->dci,
+              (endpoint->ring.physical + endpoint->enqueue * XHCI_TRB_BYTES) |
+              (endpoint->cycle ? XHCI_TRB_CYCLE : 0), deadline)) {
+        controller->failure = "firmware bulk IN reset/dequeue retirement failed";
+        return false;
+      }
+      for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
+        bulk->receive[j].state = ASYNC_BULK_FREE;
+      }
+      endpoint->halted = false;
+      bulk->boot_state = ASYNC_BULK_BOOT_RETIRED;
+      ktrace("xHCI %x:%x.%u: firmware bulk IN reset/dequeue fence complete, slot %u dci %u\n",
+          controller->address.bus, controller->address.device, controller->address.function,
+          device->slot, endpoint->dci);
+      if (!bluetooth_hci_boot_bulk_recovery(device, &deadline, &resume) ||
+          task_deadline_expired(deadline)) {
+        controller->failure = "firmware bulk IN retirement lost boot authority or deadline";
+        return false;
+      }
+    }
+    if (resume) {
+      bulk->boot_state = ASYNC_BULK_BOOT_NONE;
+      if (!rearm_async_bulk(controller)) {
+        return false;
+      }
+      ktrace("xHCI %x:%x.%u: firmware bulk IN operational receives posted\n",
+          controller->address.bus, controller->address.device, controller->address.function);
+    }
+  }
+  return true;
 }
 
 enum usb_result usb_host_async_bulk_out_submit(struct usb_host_device *device, const void *bytes,
@@ -3207,6 +3293,10 @@ static void controller_worker(void *argument)
       return;
     }
     bluetooth_hci_progress(controller);
+    if (!recover_boot_bulk(controller)) {
+      stop_controller(controller);
+      return;
+    }
     usb_storage_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;

@@ -1,6 +1,6 @@
 # Bluetooth mouse task 3: firmware readiness
 
-Status: **owned-IN compatibility correction and BOOT diagnostics; native trace rerun pending.**
+Status: **bounded BOOT bulk-IN retirement implemented; native default-level rerun pending.**
 The pre-code plan was posted in [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564)
 at signed fbbb72b before implementation.
 Branch bluetooth/firmware-readiness starts from fresh main 52451d3, after
@@ -109,11 +109,12 @@ recorded. Fresh native cold power-on and warm reboot are required after the fix.
 
 ## Owner's next native batch
 
-After review, collect one diagnostic cold boot and a warm reboot. Build the
-kernel/image with `make -j16 image LOG_LEVEL=trace LOG_UDP=1`; for PXE, verify
+After review, collect one default-level cold boot and a warm reboot. Build the
+kernel/image with `make -j16 image LOG_LEVEL=info LOG_UDP=1`; for PXE, verify
 `log.udp=1` is on the kernel command line. Use the existing UDP listener before
-power-on and preserve the compiled trace ELF/image identity. An info-level kernel
-compiles ktrace out: UDP enablement alone cannot expose these diagnostics.
+power-on and preserve the actual ELF/image identity. The diagnostic trace batch
+below already identified completion code 4. An info-level kernel compiles ktrace
+out; another diagnostic run, if needed, must explicitly use `LOG_LEVEL=trace`.
 Booting Pyxis takes this session offline.
 
 1. Record reviewed revision and image/ELF identity. Fully power off, then cold
@@ -127,7 +128,9 @@ Booting Pyxis takes this session offline.
 2. Warm reboot Pyxis into that same image. Record warm skip or specific failure;
    distinguish reboot from cold power-on. The expected skip summary is
    “AX200 USB ready (warm skip, DDC, development firmware)”.
-3. Retain the unusual/rejected interrupt/async bulk IN completion code, residual,
+3. Default-level success needs the cold/warm readiness summaries and usable
+   hosting-controller/storage observations. If another trace run is needed,
+   retain the unusual/rejected interrupt/async bulk IN completion code, residual,
    requested length, slot/DCI and receive/ring indices; BOOT publication and USB
    collection; transport-failure flags; and the parsed vendor boot notification.
    Successful-short examples are limited to one per stream. Record whether real
@@ -441,3 +444,47 @@ build passed; matching SDK/userspace/ports bundles were reused. No public ABI,
 dependency pin or firmware asset changed. Raw captures stay local.
 QEMU, debugger and remote-client jobs are stopped. Fedora Bluetooth remains
 inactive for the investigation; re-enable it when Bluetooth work is finished.
+
+
+## Native transaction-error transition, 2026-10-09
+
+Owner-reported diagnostic image: main e6cc8a3 plus #564 de83ce0c, trace level;
+full log was supplied at `/shared/batch-2026-10-09/caelum-3.log` on horse. SFI
+validated at 801016 bytes/build 193/33/2024, secure notification succeeded, and
+3237 upload commands carried 801012 bytes in 2.756 seconds. BOOT control ticket 8
+was published and USB-retired with 11/11 bytes. The next owned boot bulk IN TD
+reported completion 4 (USB Transaction Error), residual/requested 4096/4096,
+slot 2/DCI 5, receive 1/ring index 177, with both copied queues empty. The host
+halted and HCI failed at BOOT. Warm reboot ran operational type 35, the same
+uploaded build, both DDC records and warm skip READY. These are owner-reported
+native observations, not this agent's QEMU measurements.
+
+This establishes the rejected USB error and zero-byte count; losing the bootloader
+bulk event path as firmware switches is the transition interpretation. The earlier
+SUCCESS/residual correction was not the native cause and remains bounded Linux
+compatibility behavior, not a claim that xHCI normally specifies such SUCCESS.
+
+Implemented exception: exactly one owned zero-byte transaction error during a
+real published cold BOOT, with no copied bulk prefix or partial boot event. End
+bulk event framing, transfer its sequence authority to ACL framing and retain
+both boot receive owners. Consume the error/ERDP, suppress IN rearm, then use the
+outer worker's existing bounded command path for Reset Endpoint TSP=1 and Set TR
+Dequeue at the current producer frontier/cycle. TSP=1 preserves the USB toggle;
+a transaction error does not establish a device STALL. No CLEAR_FEATURE or retry
+of the errored TD is introduced. Both command completions must precede buffer
+reuse, and the original BOOT deadline is not extended.
+
+[The xHCI specification, sections 4.6.8–4.6.10](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf)
+describes halt/reset, transfer-state preservation and dequeue cache invalidation.
+After the fence, IN remains suspended until real interrupt boot notification,
+BOOT USB retirement and clean event boundaries permit fresh operational receives.
+HCI BOOT retirement is held until the host fence/rearm, preserving real-notification
+and operational-version gates. Class/event-drain progress still never waits;
+hardware commands run in the outer worker while their waits drain other events.
+A second/data-bearing error, unknown owner, queued/partial prefix, missed deadline
+or failed host command remains fail-closed. No runtime retry policy was added.
+
+The next owner batch uses the default info level for one cold power-on and direct
+warm reboot of the reviewed image. Native cold readiness and operational bulk
+reuse remain qualification gates; this code inspection is not a native pass.
+Task 3 stays open and #564 draft. Task 4 is not assigned.

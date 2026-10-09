@@ -440,6 +440,11 @@ incompleteness while Bluetooth and storage worked on the complete hosting xHCI.
 The next owner batch (main 51cbec9 plus #564/#578) completed the secure upload,
 then failed at BOOT's async bulk IN completion; a direct Pyxis warm reboot reached
 warm skip/DDC readiness. The firmware booted, but cold readiness is unqualified.
-The bounded owned-IN SUCCESS/residual compatibility correction and BOOT trace
-points are on #564 for review. One trace-enabled cold/warm batch remains required;
-task 3 stays open, #564 draft and task 4 unassigned.
+The trace batch (main e6cc8a3 plus #564 de83ce0c) identified a zero-byte USB
+Transaction Error on bootloader bulk IN after BOOT USB retirement. The earlier
+SUCCESS/residual correction was not its cause. #564 now admits that error only
+once during published BOOT, fences both boot TDs with Reset Endpoint/Set TR
+Dequeue, then requires real interrupt boot notification before operational IN
+rearm and BOOT retirement. All other errors remain fail-closed. One default-level
+cold/warm batch remains required; task 3 stays open, #564 draft and task 4
+unassigned.
