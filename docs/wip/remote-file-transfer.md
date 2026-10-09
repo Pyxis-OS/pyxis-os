@@ -422,9 +422,8 @@ is fastfetch's allocator figure.
 - **1.1 GiB upload.** 1,153,433,723 bytes into `tmp://` were verified and
   published in 2492 s, about 0.44 MiB/s. Guest `sha256sum` matched the host.
   Host RSS stayed at 2088 KiB throughout. The guest allocator rose from
-  112 MiB to 4.32 GiB, because the RAM file's growing heap buffer keeps its
-  pools mapped; see
-  [contiguous RAM-file backing](../technical-debt.md#contiguous-ram-file-backing).
+  112 MiB to 4.32 GiB, because the RAM file's growing heap buffer kept its
+  pools mapped. Page-backed RAM files (2026-10-09) hold only the file's size.
   `xfer` itself holds one 64 KiB block.
 - **1.1 GiB download, stopped deliberately.** The same file was sent from
   `host://` into a disk-backed host directory. After 51 minutes, at 480,811,008

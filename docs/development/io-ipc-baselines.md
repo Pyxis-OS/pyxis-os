@@ -384,11 +384,8 @@ The attribution/coverage gaps and revisit points are retained in
   attachment and delivery lifetimes. The agreed 256-message IPC and 1 MiB HTTP
   reruns passed. The original failures and remaining live-work limit are in
   [technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
-- **RAM growth attribution — measured:** independent FILE profiling identifies
-  publication-to-BSP-service wait as the dominant measured interval. A FILE
-  notification correction remains a separate proposal; queue timestamps do not
-  identify individual wake causes. See the
-  [RAM report](io-reliability-attribution.md#ram-file-profiling).
+- **RAM growth attribution — superseded:** growing RAM writes no longer use BSP
+  requests; see [RAM FILE profiling](io-reliability-attribution.md#ram-file-profiling).
 - **Host FILE attribution — instrumented limits:** HOST profiling separates guest
   queues, worker service and transport, but still perturbs execution after the
   notification correction. Normal-workload phase attribution remains unresolved.

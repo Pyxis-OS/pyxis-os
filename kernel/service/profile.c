@@ -27,11 +27,6 @@ struct profile_snapshot *profile_memory_current(void)
   return &task_profile_current()->memory;
 }
 
-struct profile_file_snapshot *profile_file_current(void)
-{
-  return &task_profile_current()->file;
-}
-
 struct profile_host_snapshot *profile_host_current(void)
 {
   return &task_profile_current()->host;
@@ -54,29 +49,6 @@ enum call_status profile_memory_control(uint64_t operation, struct profile_snaps
       profile->flags &= ~PROFILE_ACTIVE;
     } else {
       KASSERT(operation == PROFILE_SNAPSHOT);
-    }
-    *reply = *profile;
-  }
-  return CALL_OK;
-}
-
-enum call_status profile_file_control(uint64_t operation, struct profile_file_snapshot *reply)
-{
-  struct profile_file_snapshot *profile = profile_file_current();
-  bool active = profile->flags & PROFILE_ACTIVE;
-  if (operation == PROFILE_FILE_BEGIN) {
-    if (active) {
-      return CALL_BUSY;
-    }
-    *profile = (struct profile_file_snapshot){.flags = PROFILE_ACTIVE};
-  } else {
-    if (operation == PROFILE_FILE_END) {
-      if (!active) {
-        return CALL_BAD_REQUEST;
-      }
-      profile->flags &= ~PROFILE_ACTIVE;
-    } else {
-      KASSERT(operation == PROFILE_FILE_SNAPSHOT);
     }
     *reply = *profile;
   }

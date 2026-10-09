@@ -64,8 +64,6 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct endpoint_export_request, request)},
   [BSP_SERVICE_RAMFS] = {sizeof(struct ramfs_request), alignof(struct ramfs_request),
       offsetof(struct ramfs_request, request)},
-  [BSP_SERVICE_FILE_REPLACE] = {sizeof(struct file_replace_request), alignof(struct file_replace_request),
-      offsetof(struct file_replace_request, request)},
   [BSP_SERVICE_LAUNCHER] = {sizeof(struct launcher_request), alignof(struct launcher_request),
       offsetof(struct launcher_request, request)},
   [BSP_SERVICE_HOSTFS] = {sizeof(struct hostfs_request), alignof(struct hostfs_request),
@@ -146,7 +144,6 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_ENDPOINT_CREATE:
   case BSP_SERVICE_ENDPOINT_EXPORT:
   case BSP_SERVICE_RAMFS:
-  case BSP_SERVICE_FILE_REPLACE:
   case BSP_SERVICE_LAUNCHER:
   case BSP_SERVICE_HOSTFS:
   case BSP_SERVICE_NPFS:
@@ -168,9 +165,7 @@ static bool requires_handoff(enum bsp_service service)
 
 static void publish_request(struct bsp_request *request)
 {
-  if (request->service == BSP_SERVICE_FILE_REPLACE) {
-    file_replace_published((struct file_replace_request *)request);
-  } else if (request->service == BSP_SERVICE_HOSTFS) {
+  if (request->service == BSP_SERVICE_HOSTFS) {
     hostfs_request_published((struct hostfs_request *)request);
   } else if (request->service == BSP_SERVICE_NPFS) {
     npfs_request_published((struct npfs_request *)request);
@@ -308,9 +303,6 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_RAMFS:
     ramfs_request_execute((struct ramfs_request *)request);
-    break;
-  case BSP_SERVICE_FILE_REPLACE:
-    file_replace_execute((struct file_replace_request *)request);
     break;
   case BSP_SERVICE_LAUNCHER:
     launcher_request_execute((struct launcher_request *)request);

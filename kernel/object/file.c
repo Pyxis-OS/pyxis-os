@@ -1,17 +1,151 @@
 #include <abi/file.h>
 #include <arch/smp.h>
-#include <arch/clock.h>
 #include <arch/cpu.h>
+#include <arch/paging.h>
 #include <kernel/object/file.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/pmm.h>
 #include <kernel/panic.h>
-#include <kernel/service/profile.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
+
+static const uint8_t zero_page[PAGE_SIZE];
+
+static size_t page_count(size_t size)
+{
+  return size / PAGE_SIZE + (size % PAGE_SIZE != 0);
+}
+
+/* Frees every frame from page first onwards; later entries become holes. */
+static void free_pages_from(struct file_object *file, size_t first)
+{
+  for (size_t i = first; i < file->page_capacity; ++i) {
+    if (file->pages[i]) {
+      pmm_free(file->pages[i], 1);
+      file->pages[i] = 0;
+    }
+  }
+}
+
+static void release_pages(struct file_object *file)
+{
+  free_pages_from(file, 0);
+  kfree(file->pages);
+  file->pages = NULL;
+  file->page_capacity = 0;
+}
+
+/* Grows the index to cover count pages, doubling when it can. New entries are
+ * holes. Failure leaves the index unchanged. */
+static bool reserve_index(struct file_object *file, size_t count)
+{
+  if (count <= file->page_capacity) {
+    return true;
+  }
+  size_t capacity = count;
+  if (file->page_capacity <= SIZE_MAX / 2 && capacity < file->page_capacity * 2) {
+    capacity = file->page_capacity * 2;
+  }
+  phys_addr_t *pages = NULL;
+  if (capacity <= SIZE_MAX / sizeof(*pages)) {
+    pages = kmalloc(capacity * sizeof(*pages));
+  }
+  if (!pages && capacity != count && count <= SIZE_MAX / sizeof(*pages)) {
+    capacity = count;
+    pages = kmalloc(capacity * sizeof(*pages));
+  }
+  if (!pages) {
+    return false;
+  }
+  if (file->page_capacity) {
+    memcpy(pages, file->pages, file->page_capacity * sizeof(*pages));
+  }
+  memset(pages + file->page_capacity, 0, (capacity - file->page_capacity) * sizeof(*pages));
+  kfree(file->pages);
+  file->pages = pages;
+  file->page_capacity = capacity;
+  return true;
+}
+
+/* A FILE payload is below one page, so a READ or WRITE spans at most two. */
+#define FILE_CALL_MAX_PAGES 2
+
+/* Gives every page in [first, last] a zeroed frame. On failure frees the frames
+ * this call added, leaving the file unchanged. */
+static bool fill_holes(struct file_object *file, size_t first, size_t last)
+{
+  KASSERT(first <= last && last - first < FILE_CALL_MAX_PAGES && last < file->page_capacity);
+  size_t added[FILE_CALL_MAX_PAGES];
+  size_t count = 0;
+  for (size_t i = first; i <= last; ++i) {
+    if (file->pages[i]) {
+      continue;
+    }
+    phys_addr_t frame = pmm_alloc(1);
+    if (!frame) {
+      while (count) {
+        size_t page = added[--count];
+        pmm_free(file->pages[page], 1);
+        file->pages[page] = 0;
+      }
+      return false;
+    }
+    arch_frame_zero(frame);
+    file->pages[i] = frame;
+    added[count++] = i;
+  }
+  return true;
+}
+
+/* Copies between the file's pages and a user or kernel buffer, page by page,
+ * through this CPU's scratch slot. Holes read as zeros. */
+static void copy_out_pages(const struct file_object *file, size_t offset, size_t count,
+    uintptr_t user, uint8_t *kernel)
+{
+  while (count) {
+    size_t page = offset / PAGE_SIZE, within = offset % PAGE_SIZE;
+    size_t chunk = PAGE_SIZE - within < count ? PAGE_SIZE - within : count;
+    phys_addr_t frame = page < file->page_capacity ? file->pages[page] : 0;
+    const uint8_t *source = frame ? arch_frame_map(frame) : zero_page;
+    if (kernel) {
+      memcpy(kernel, source + within, chunk);
+      kernel += chunk;
+    } else {
+      KASSERT(copy_to_user(user, source + within, chunk));
+      user += chunk;
+    }
+    if (frame) {
+      arch_frame_unmap();
+    }
+    offset += chunk;
+    count -= chunk;
+  }
+}
+
+static void copy_in_pages(struct file_object *file, size_t offset, size_t count,
+    uintptr_t user, const uint8_t *kernel)
+{
+  while (count) {
+    size_t page = offset / PAGE_SIZE, within = offset % PAGE_SIZE;
+    size_t chunk = PAGE_SIZE - within < count ? PAGE_SIZE - within : count;
+    KASSERT(page < file->page_capacity && file->pages[page]);
+    uint8_t *target = arch_frame_map(file->pages[page]);
+    if (kernel) {
+      memcpy(target + within, kernel, chunk);
+      kernel += chunk;
+    } else {
+      KASSERT(copy_from_user(target + within, user, chunk));
+      user += chunk;
+    }
+    arch_frame_unmap();
+    offset += chunk;
+    count -= chunk;
+  }
+}
 
 static void destroy_file(struct kernel_object *object)
 {
@@ -26,7 +160,7 @@ static void destroy_file(struct kernel_object *object)
     return;
   }
   if (file->backing == FILE_RAM) {
-    kfree((void *)file->data);
+    release_pages(file);
   }
   kfree(file);
 }
@@ -60,15 +194,28 @@ struct file_object *file_create_ram(void)
   return create_file(FILE_RAM);
 }
 
-struct file_object *file_create_snapshot(void *data, size_t size)
+struct file_object *file_create_snapshot(const void *data, size_t size)
 {
   KASSERT(data && size);
   struct file_object *file = create_file(FILE_RAM);
-  if (file) {
-    file->data = data;
-    file->size = size;
-    file->capacity = size;
+  if (!file) {
+    return NULL;
   }
+  size_t count = page_count(size);
+  bool ok = reserve_index(file, count);
+  for (size_t i = 0; ok && i < count; ++i) {
+    file->pages[i] = pmm_alloc(1);
+    ok = file->pages[i] != 0;
+  }
+  if (!ok) {
+    release_pages(file);
+    kfree(file);
+    return NULL;
+  }
+  /* Zero the last page first so bytes past the size start out zero. */
+  arch_frame_zero(file->pages[count - 1]);
+  copy_in_pages(file, 0, size, 0, data);
+  file->size = size;
   return file;
 }
 
@@ -178,131 +325,22 @@ void file_end_operation(struct file_object *file)
   unlock_file(file);
 }
 
-static bool file_replace_buffer(struct file_object *file, size_t capacity,
-    struct file_buffer_profile *profile)
+enum call_status file_ram_capture(struct file_object *file, void **bytes, size_t *size)
 {
-  KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && file->busy);
-  KASSERT(!capacity || capacity >= file->size);
-  void *data = NULL;
-  if (capacity) {
-    if (profile) {
-      profile->allocation_started = arch_monotonic_ns();
-    }
-    data = kmalloc(capacity);
-    if (profile) {
-      profile->allocation_ended = arch_monotonic_ns();
-    }
-    if (!data) {
-      return false;
-    }
-    if (file->size) {
-      if (profile) {
-        profile->copy_started = arch_monotonic_ns();
-      }
-      memcpy(data, file->data, file->size);
-      if (profile) {
-        profile->copy_ended = arch_monotonic_ns();
-        profile->copied_bytes = file->size;
-      }
-    }
+  KASSERT(file->backing == FILE_RAM && file->busy);
+  *bytes = NULL;
+  *size = 0;
+  if (!file->size) {
+    return CALL_BAD_REQUEST;
   }
-  if (profile) {
-    profile->release_started = arch_monotonic_ns();
+  void *copy = kmalloc(file->size);
+  if (!copy) {
+    return CALL_NO_MEMORY;
   }
-  kfree((void *)file->data);
-  if (profile) {
-    profile->release_ended = arch_monotonic_ns();
-  }
-  file->data = data;
-  file->capacity = capacity;
-  return true;
-}
-
-void file_replace_published(struct file_replace_request *request)
-{
-  KASSERT(request && request->request.state == BSP_REQUEST_PREPARED);
-  if (request->profile.active) {
-    request->profile.published_ns = arch_monotonic_ns();
-  }
-}
-
-void file_replace_execute(struct file_replace_request *request)
-{
-  KASSERT(arch_cpu_index() == 0 && request && request->file);
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
-  if (request->profile.active) {
-    request->profile.service_started_ns = arch_monotonic_ns();
-  }
-  request->result = file_replace_buffer(request->file, request->capacity,
-      request->profile.active ? &request->profile.buffer : NULL);
-  if (request->profile.active) {
-    request->profile.service_ended_ns = arch_monotonic_ns();
-  }
-  request->file = NULL;
-}
-
-static void finish_file_profile(struct profile_file_snapshot *stats,
-    const struct file_replace_request *request)
-{
-  uint64_t resumed = arch_monotonic_ns();
-  const struct file_replace_profile *sample = &request->profile;
-  const struct file_buffer_profile *service = &sample->buffer;
-  profile_add(&stats->flags, &stats->requests, 1);
-  profile_add(&stats->flags, request->result ? &stats->successes : &stats->failures, 1);
-  profile_add(&stats->flags, &stats->requested_capacity, request->capacity);
-  profile_add(&stats->flags, &stats->copied_bytes, service->copied_bytes);
-  profile_duration_add(&stats->flags, &stats->publication, sample->started_ns,
-      sample->published_ns);
-  profile_duration_add(&stats->flags, &stats->queue, sample->published_ns,
-      sample->service_started_ns);
-  profile_duration_add(&stats->flags, &stats->service, sample->service_started_ns,
-      sample->service_ended_ns);
-  profile_duration_add(&stats->flags, &stats->resume, sample->service_ended_ns, resumed);
-  profile_duration_add(&stats->flags, &stats->total, sample->started_ns, resumed);
-  profile_duration_add(&stats->flags, &stats->allocation, service->allocation_started,
-      service->allocation_ended);
-  profile_duration_add(&stats->flags, &stats->copy, service->copy_started,
-      service->copy_ended);
-  profile_duration_add(&stats->flags, &stats->release, service->release_started,
-      service->release_ended);
-}
-
-static bool replace_buffer(struct file_object *file, size_t capacity)
-{
-  struct profile_file_snapshot *profile = profile_file_current();
-  bool profiled = profile->flags & PROFILE_ACTIVE;
-  uint64_t started = profiled ? arch_monotonic_ns() : 0;
-  struct file_replace_request *request =
-      (struct file_replace_request *)bsp_request_prepare(BSP_SERVICE_FILE_REPLACE);
-  request->file = file;
-  request->capacity = capacity;
-  request->result = false;
-  request->profile = (struct file_replace_profile){.active = profiled, .started_ns = started};
-
-  bsp_request_submit_and_wait(&request->request);
-  if (profiled) {
-    finish_file_profile(profile, request);
-  }
-  bool result = request->result;
-  bsp_request_release(&request->request);
-  return result;
-}
-
-static bool reserve_buffer(struct file_object *file, size_t size)
-{
-  if (size <= file->capacity) {
-    return true;
-  }
-  size_t capacity = size;
-  if (file->capacity <= SIZE_MAX / 2 && capacity < file->capacity * 2) {
-    capacity = file->capacity * 2;
-  }
-  if (replace_buffer(file, capacity)) {
-    return true;
-  }
-  /* Spare capacity is an optimization, not a requirement for this write. */
-  return capacity != size && replace_buffer(file, size);
+  copy_out_pages(file, 0, file->size, 0, copy);
+  *bytes = copy;
+  *size = file->size;
+  return CALL_OK;
 }
 
 static struct syscall_result read_file(struct file_object *file, uint64_t rights,
@@ -367,9 +405,11 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
       count = request->capacity;
     }
   }
-  /* Never form data + offset at EOF. RAM backing cannot be replaced or
-   * modified during this copy, and cannot alias private user mappings. */
-  if (count) {
+  /* Never form data + offset at EOF. Operation ownership keeps the bytes
+   * stable during this copy; they cannot alias private user mappings. */
+  if (count && file->backing == FILE_RAM) {
+    copy_out_pages(file, request->offset, count, data_address, NULL);
+  } else if (count) {
     KASSERT(copy_to_user(data_address,
         (const uint8_t *)file->data + request->offset, count));
   }
@@ -444,17 +484,15 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   size_t end = request->offset + request->size;
-  if (!reserve_buffer(file, end)) {
+  size_t first = request->offset / PAGE_SIZE, last = (end - 1) / PAGE_SIZE;
+  if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
     file_end_operation(file);
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
-  uint8_t *data = (uint8_t *)file->data;
-  if (request->offset > file->size) {
-    memset(data + file->size, 0, request->offset - file->size);
-  }
-  /* All fallible work is complete. The sole user task cannot change its
-   * source or mappings while blocked; BSP never reads its private memory. */
-  KASSERT(copy_from_user(data + request->offset, data_address, request->size));
+  /* All fallible work is complete. Pages past the old size were already
+   * zero, so a gap needs no clearing. The sole user task cannot change its
+   * source or mappings during this syscall. */
+  copy_in_pages(file, request->offset, request->size, data_address, NULL);
   if (end > file->size) {
     file->size = end;
   }
@@ -469,14 +507,18 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
   if (!file_begin_operation(file)) {
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
-  if (!size && file->capacity) {
-    KASSERT(replace_buffer(file, 0));
-  } else if (!reserve_buffer(file, size)) {
-    file_end_operation(file);
-    return (struct syscall_result){CALL_NO_MEMORY, 0};
-  } else if (size > file->size) {
-    /* Also clear retained capacity: truncated contents must never reappear. */
-    memset((uint8_t *)file->data + file->size, 0, size - file->size);
+  /* Growth leaves holes. Shrinking frees whole pages past the new size and
+   * zeroes the rest of its last page, so truncated bytes never reappear. */
+  if (!size) {
+    release_pages(file);
+  } else if (size < file->size) {
+    free_pages_from(file, page_count(size));
+    size_t last = page_count(size) - 1, within = size % PAGE_SIZE;
+    if (within && last < file->page_capacity && file->pages[last]) {
+      uint8_t *tail = arch_frame_map(file->pages[last]);
+      memset(tail + within, 0, PAGE_SIZE - within);
+      arch_frame_unmap();
+    }
   }
   file->size = size;
   file_end_operation(file);
