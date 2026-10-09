@@ -1,9 +1,12 @@
 # Multiple threads in one process
 
 Status: the owner accepted all three defaults on 2026-10-09. No thread
-implementation is delivered. Task 1 is assigned to Codex epsilon after
-[#567](https://git.internal/PyxisOS/pyxis-os/pulls/567) merges; later tasks remain
-unassigned. Detailed interfaces below remain proposals to refine within those
+implementation is provided by the investigation in
+[#567](https://git.internal/PyxisOS/pyxis-os/pulls/567), now merged. Task 1's
+process-lifetime split is implemented and delivered for review, with
+[matched qualification](../development/experiments/threads-task1/README.md).
+Exactly one user task per process remains; later tasks are unassigned.
+Detailed thread interfaces below remain proposals to refine within those
 accepted boundaries. This is separate from moving kernel services off the BSP in
 [SMP follow-ups](scheduling-and-threads.md).
 
@@ -32,6 +35,11 @@ The scheduler already has distinct task stacks, register/FP state, CPU placement
 wait records, deadlines and reusable BSP request storage. Those are useful thread
 building blocks. The missing boundary is shared process ownership, not another
 ready queue.
+
+The table records assumptions at the investigation revision above. Task 1 replaces
+task-owned process lifetime and task-targeted process/group observation; the VM,
+table and buffer safety work remains for task 2. Current task-1 behavior is in
+[SMP ownership](../kernel/smp.md#scheduling-and-ownership).
 
 | Inspected code and present invariant | Required change |
 | --- | --- |
@@ -385,18 +393,24 @@ external source or mirror entry is introduced by this docs PR.
 
 ## First task and later gates
 
+The separate [program image and initial stack capacity proposal](program-stack-capacity.md)
+coordinates initial stack placement with later disjoint thread stacks; it adds
+no public threads. The owner assigned that priority-0 proposal after task 1.
+
 The smallest useful first task is **split process ownership from task retirement**,
 while retaining exactly one submitted user task per process, including blocked
 tasks. CREATE/EXIT/JOIN is
 the first public thread slice only after the safety gates below; combining all
 of them into a supposedly small create syscall would hide the actual work.
 
-- [ ] Task 1: move submitted-process ownership, thread membership, process-control
+- [x] Task 1: move submitted-process ownership, thread membership, process-control
   stop targeting and terminal result into an explicit process lifetime. Keep
   current single-task execution and process-exit behavior. Reap task storage
   separately, and destroy the process once only after its final task and admitted
   shared activity drain. Update group membership/cleanup attribution together.
   Add no thread syscall, device behavior, TLS or dependency pin in this task.
+  Implemented 2026-10-09; see [process lifetime and retirement](../kernel/smp.md#scheduling-and-ownership)
+  and the [baseline/qualification record](../development/experiments/threads-task1/README.md).
 - [ ] Task 2: establish process VM activity/quiescence, user-copy leases and
   synchronized capability/object lifetimes; replace exclusive BSP loans. Audit
   every blocking/committing syscall and retained reply/input. Unchanged devices
@@ -413,21 +427,19 @@ of them into a supposedly small create syscall would hide the actual work.
   their APIs. Enable SDL worker/timer callbacks as a bounded consumer afterward;
   audio callbacks remain an independent device consumer task.
 
-The owner assigned task 1 to Codex epsilon on 2026-10-09, to start only after
-#567 merges, on a fresh branch from main in its own worktree. Keep exactly one
-user task per process; add no thread syscall, TLS, device behavior or dependency
-pin. Deliver focused commits and a PR, then stop for review. Later tasks need
-separate assignment and their own focused PRs. Before task 1, capture existing
-launch/exit and BSP cleanup workloads on the exact baseline. Repeat matched
-single/four-CPU workloads after lifetime changes; later compare uncontended locks,
+The owner assigned task 1 to Codex epsilon on 2026-10-09, after #567 merged.
+Its exact-main baseline, matched single/four-CPU workloads and interactive
+retirement/failure inspection are recorded in the qualification above. No
+thread syscall, TLS, device behavior or dependency pin changed. Task 1 stops
+for owner review; later tasks need separate assignment and their own focused PRs.
+For later work, compare uncontended locks,
 creation/join, VM mutation pauses and parallel work with repeated samples and
 variation. Use existing programs/probes and interactive QEMU/debugger inspection,
 not new test or boot automation. Inspect normal/fault/group retirement and
 unpublished failure paths; later observe two distinct task stacks/FS bases sharing
 CR3, safe retirement while another sibling runs, and buffer/table loans during
-stop. Task 1's baseline, matched single/four-CPU workloads and retirement/failure
-inspection are assigned validation requirements; later checks remain proposed.
-None is completed by this documentation PR.
+stop. Those later validation checks remain proposed; task 1 does not validate
+multiple threads, shared-root execution or runtime TLS.
 
 ## Owner decisions
 

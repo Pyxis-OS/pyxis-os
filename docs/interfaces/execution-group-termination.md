@@ -6,11 +6,22 @@ The public contract is in [execution groups](execution-groups.md).
 ## Stopping boundary
 
 A stop request prevents further userspace execution at the assigned scheduler's
-safe point. The same per-task request also implements a process observer's
-[TERMINATE](processes.md) operation, for grouped and ungrouped tasks alike. Running/runnable user state retires locally; an interrupted syscall
+safe point. Group members and process-control objects borrow process links; the
+process owns its group member record, terminal result and sole task stop target.
+There is still exactly one user task per process. Both group stop and a process
+observer's [TERMINATE](processes.md) operation target that process through the
+same path, for grouped and ungrouped processes alike. The lock order is control
+or group, then process lifetime, then scheduler queues. Running/runnable user
+state retires locally; an interrupted syscall
 continues solely to detach waits, return loans and dispose owned results. Its stack
 stays alive through that unwind. Stop wakeups leave subsystem registration removal
 to the continuation, under the resource lock. Shared workers remain alive.
+
+The sole task commits its exit, fault or termination result once, then
+release-publishes `result_set` without taking the process lifetime lock, including
+on user fault entry. Stop targeting acquire-reads this marker and preserves an
+already committed result. Borrowed control/group links remain protected until
+final process reclamation; the task stop target is detached before task freeing.
 
 Published BSP/HOST requests retain their uninterruptible handoff. Their request
 header borrows cleanup attribution from the caller, whose membership cannot end
@@ -26,7 +37,7 @@ omitted because those implementations will change.
 
 | State / subsystem | Retained ownership and required stopping action | Final handoff owner / source |
 | --- | --- | --- |
-| Running/runnable user task | Private VM, kernel stack, saved CPU state, request/profile storage. Reschedule on assigned CPU; prevent user return. Leave private root/stack and clear entry state before retirement. Remove runnable membership under scheduler lock. User syscall execution is currently non-preemptible. | Local scheduler then BSP reaper: [task.c](../../kernel/task.c), `task_preempt`, `complete_task`, `reap_completed`. |
+| Running/runnable user task | Task owns kernel stack, saved CPU state and request/profile storage; it borrows the process that owns private VM and the terminal result. Reschedule on assigned CPU; prevent user return. Leave private root/stack and clear entry state before retirement. Remove runnable membership under scheduler lock. User syscall execution is currently non-preemptible. | Local scheduler then BSP reaper: [task.c](../../kernel/task.c), `task_preempt`, `complete_task`, `reap_completed`; [process.c](../../kernel/process.c), `process_task_detach`, `process_task_reclaimed`. |
 | Clock sleep / timed resource wait | Timer list retains embedded wait. Remove timer membership and separately detach the resource registration; an expired timer does not erase the resource pointer. | Scheduler queue lock: [task.c](../../kernel/task.c), `sleep_wait`, `task_wait_wake`, `expire_timed_waits`; [clock.c](../../kernel/object/clock.c). |
 | Process WAIT | Completion object retains task-owned waiter link. Detach only the dying observer; preserve the observed process's independent execution. | Completion lock/publisher: [process.c](../../kernel/object/process.c), `process_control_call`, `process_control_complete`. |
 | Local console input | FIFO reader or active read ownership plus input waiter. Detach queued/active wait and return acquired reader ownership, including concurrent handoff. Console survives process exit. | Input lock and `begin_read`/`end_read`: [console.c](../../kernel/object/console.c). |
@@ -47,10 +58,17 @@ omitted because those implementations will change.
 
 ## Completion accounting
 
-Member retirement follows process/private-VM, capability, kernel-stack and task
-reclamation. Before metadata is freed, the BSP removes its stop-request list link
-under the group lock; the member count stays positive throughout cleanup. Admitted
-launch reservations also survive unpublished child and capture disposal.
+Once the local scheduler has left the task's private root and stack and all
+loans have returned, the BSP detaches the process's sole task stop target under
+its lifetime lock. It then frees the task kernel stack, request/profile storage
+and metadata. `process_task_reclaimed()` ends the process's task-storage lifetime,
+releases the lifetime lock, and detaches the borrowed control/group process links
+under their respective locks. It destroys the process/private VM and capabilities
+under group cleanup attribution, publishes and releases the process-control
+completion, then completes the group member. The member count stays positive
+throughout task and process reclamation. Admitted launch reservations also survive
+unpublished child and capture disposal; unpublished destruction publishes no
+process completion and releases only group storage.
 
 Final object release carries the active group context into the BSP retirement queue.
 Callbacks retain attribution through child releases. TCP/UDP wrappers and HOST nodes

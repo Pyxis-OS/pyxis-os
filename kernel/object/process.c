@@ -6,10 +6,11 @@
 #include <kernel/object/process.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/process.h>
 #include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
-/* IF=0; lock order is completion -> scheduler queues. No allocation, user
+/* IF=0; lock order is control -> process lifetime -> scheduler queues. No allocation, user
  * copies or context switch under this lock. */
 static void lock_control(struct process_control *control)
 {
@@ -27,7 +28,7 @@ static void destroy_control(struct kernel_object *object)
 {
   struct process_control *control = (struct process_control *)object;
   /* Each blocked observer retains a reference through its own handle. */
-  KASSERT(!control->waiters);
+  KASSERT(!control->waiters && !control->process);
   kfree(control);
 }
 
@@ -44,20 +45,21 @@ struct process_control *process_control_create(void)
   return control;
 }
 
-void process_control_attach_task(struct process_control *control, struct task *task)
+void process_control_attach_process(struct process_control *control, struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0 && task);
+  KASSERT(arch_cpu_index() == 0 && process);
   lock_control(control);
-  KASSERT(!control->task && !control->complete);
-  control->task = task;
+  KASSERT(!control->process && !control->complete);
+  control->process = process;
   unlock_control(control);
 }
 
-void process_control_detach_task(struct process_control *control)
+void process_control_detach_process(struct process_control *control)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_control(control);
-  control->task = NULL;
+  KASSERT(control->process && !control->complete);
+  control->process = NULL;
   unlock_control(control);
 }
 
@@ -67,7 +69,7 @@ void process_control_complete(struct process_control *control, struct process_re
   KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED ||
       result.kind == PROCESS_TERMINATED);
   lock_control(control);
-  KASSERT(!control->complete && !control->task);
+  KASSERT(!control->complete && !control->process);
   control->result = result;
   control->complete = true;
 
@@ -100,7 +102,14 @@ bool process_control_stopped(struct process_control *control)
     return true;
   }
   lock_control(control);
-  bool stopped = !control->task || task_is_stopped(control->task);
+  struct process *process = control->process;
+  bool stopped = !process;
+  if (process) {
+    spin_lock(&process->lifetime_lock);
+    stopped = process->stopping || process->lifetime == PROCESS_RETIRED ||
+        atomic_load_explicit(&process->result_set, memory_order_acquire);
+    spin_unlock(&process->lifetime_lock);
+  }
   unlock_control(control);
   return stopped;
 }
@@ -116,11 +125,10 @@ struct syscall_result process_control_call(struct process_control *control,
     if (request_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    /* The link keeps the task's memory live until detached under this lock.
-     * A task that already exited keeps its committed result. */
+    /* The locked link keeps process storage live through stop targeting. */
     lock_control(control);
-    if (control->task) {
-      task_request_stop(control->task);
+    if (control->process) {
+      process_request_stop(control->process);
     }
     unlock_control(control);
     clipboard_stop_notify();

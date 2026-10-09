@@ -6,11 +6,12 @@
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/user/wait.h>
 #include <kernel/wait.h>
 
-/* IF=0; group -> scheduler queues. Never allocate, copy user memory or switch
+/* IF=0; group -> process lifetime -> scheduler queues. Never allocate, copy user memory or switch
  * context while held. Final grant release may run on any CPU. */
 static void lock_group(struct execution_group *group)
 {
@@ -49,7 +50,7 @@ static void stop_locked(struct execution_group *group)
     group->stopping = true;
     for (struct execution_group_member *member = group->first_member;
          member; member = member->next) {
-      task_request_stop(member->task);
+      process_request_stop(member->process);
     }
   }
   complete_locked(group);
@@ -143,7 +144,9 @@ enum call_status execution_group_publish(struct execution_group *group,
     status = CALL_LIMIT;
   } else {
     for (size_t i = 0; i < count; ++i) {
-      struct execution_group_member *member = task_group_member(tasks[i]);
+      struct process *process = user_task_process(tasks[i]);
+      KASSERT(process->execution_group == group);
+      struct execution_group_member *member = &process->group_member;
       member->next = group->first_member;
       group->first_member = member;
     }

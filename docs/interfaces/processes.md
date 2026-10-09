@@ -265,10 +265,11 @@ and allocation/reclamation constraints when a syscall runs on an AP.
 
 ## Kernel ownership and lifetime
 
-A process would own its address space and capability table and belong to a
-space. A task would represent execution and refer to its process. Begin with
-one task per process; shared address-space execution and multiple tasks within
-a process are later decisions.
+A process owns its address space, capability table, process observation and
+execution-group membership independently of its sole user task. The task owns
+execution storage and borrows that process. Exactly one prepared/submitted task
+is permitted, including blocked tasks. Shared address-space execution and
+multiple tasks require the later [thread tasks](../wip/threads.md).
 
 The ownership walkthrough for the example is:
 
@@ -281,8 +282,11 @@ The ownership walkthrough for the example is:
    rights, and operate on that object.
 5. Closing a handle removes its table entry and releases that reference.
 6. On exit or a fatal userspace fault, execution leaves the process's stack and
-   address space before final cleanup. The BSP reaper releases remaining
-   capabilities and process-owned memory, preserving the existing cleanup order.
+   address space before final cleanup. The BSP detaches the task stop target
+   and reclaims task execution storage. Process finalization then releases
+   capabilities and process-owned memory, publishes the process result, and
+   completes group membership. Deferred object cleanup can keep the group
+   pending after process observation completes. See [SMP ownership](../kernel/smp.md#scheduling-and-ownership).
 
 The space retains its console, and the boot archive retains its reserved backing
 and read-only kernel mapping. Closing these process handles does not free that

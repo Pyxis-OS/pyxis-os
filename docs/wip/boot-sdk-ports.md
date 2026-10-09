@@ -17,6 +17,9 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [HTTP redirects](../userland/http-fetch.md#redirect-chains), 2026-10-09:
+  bounded delegated-provider chains and FILE response metadata, with Links
+  adopting the final URL; [controlled QEMU qualification](../development/experiments/http-redirects/README.md).
 - [HD Audio playback](../devices/hda.md), 2026-10-09: BSP-owned analog engine and
   [up to eight PCM sessions](../interfaces/audio.md), one per space; native speaker/headphone
   tones and eleven-minute eight-session silence passed, ninth refused. Volume,
@@ -85,17 +88,15 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex epsilon** (2026-10-09): [multiple threads per process](threads.md),
-  three defaults accepted; task 1 assigned after #567 merges. Split process
-  ownership from task retirement while keeping one user task per process;
-  no thread syscall, TLS, device behavior or dependency pin. Later tasks remain
-  unassigned.
+- **Codex epsilon** (2026-10-09): [program image and initial stack capacity](program-stack-capacity.md),
+  priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
+  merged in #612; later thread tasks remain unassigned.
 - **Codex alpha** (2026-10-09): [clipboard milestone](clipboard.md), assigned
   to the documentation-only proposal; implementation remains unauthorized.
-- **Claude** (2026-10-09, debt paydown): saved shell history, three decisions
-  accepted 2026-10-09; delivered for review with its
-  [measurements](../development/experiments/shell-history/README.md). xfer pipelining
-  merged in #600; native runs follow its
+- **Claude** (2026-10-09): [presentation timing](presentation-timing.md) step 1,
+  RAM staging for boot and Bochs, delivered for review; the completed-frame
+  handoff is proposed with three decisions. Saved shell history (#609) and
+  xfer pipelining (#600) are merged; xfer's native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner

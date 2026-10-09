@@ -10,7 +10,6 @@ struct task_wait_link;
 struct bsp_request;
 struct task;
 struct execution_group;
-struct execution_group_member;
 struct space;
 
 /* Current user task only; false for workers and before scheduler setup. A stop
@@ -19,19 +18,15 @@ struct space;
  * stop was requested; the caller must detach under its resource lock before
  * reusing the wait or returning. Published loans use uninterruptible sleeps. */
 bool task_stop_requested(void);
-/* Retained process-control/group task link held by caller. */
-bool task_is_stopped(const struct task *task);
 bool task_wait_stop_requested(const struct task_wait *wait);
 bool task_wait_sleep_interruptible(struct task_wait *wait);
 bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline);
 
-/* IF=0. The caller keeps the task live by holding either its group lock or
- * the process-control lock guarding a nonnull task link. Marks and wakes an
+/* IF=0. The caller keeps the task live through its process lifetime lock.
+ * Marks and wakes an
  * interruptible wait, then notifies the assigned CPU. Does not inspect remote
  * process state. */
 void task_request_stop(struct task *task);
-/* Inactive task before publication; group owns the link while enrolled. */
-struct execution_group_member *task_group_member(struct task *task);
 
 /* Explicit borrowed cleanup context, scoped by object retirement/reaping.
  * Getter falls back to the current user's group. Setter returns the previous
