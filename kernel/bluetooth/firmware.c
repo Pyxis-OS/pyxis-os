@@ -22,6 +22,7 @@
 #define INTEL_BOOTLOADER 0x06
 #define INTEL_OPERATIONAL 0x23
 #define INTEL_BOOT_PARAMETERS_BYTES 23
+#define INTEL_DDC_REPLY_BYTES 3
 #define INTEL_SOFT_RESET 0
 #define INTEL_PATCH_ENABLE 1
 #define INTEL_DDC_RELOAD_DISABLED 0
@@ -459,6 +460,11 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
     if (state->boot.device_revision != INTEL_AX200_DEVICE_REVISION || state->boot.limited_cce) {
       return fail(state, "unsupported Intel boot parameters");
     }
+  } else if (opcode == INTEL_OP_DDC) {
+    if (length != INTEL_DDC_REPLY_BYTES) {
+      return fail(state, "invalid DDC response length");
+    }
+    ktrace("Bluetooth firmware: DDC response identifier %u\n", read16(reply + 1));
   } else if (length != 1) {
     return fail(state, "invalid firmware command response length");
   }

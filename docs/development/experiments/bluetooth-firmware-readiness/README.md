@@ -196,3 +196,12 @@ reply. Linux's AX200 combined path explains that operational firmware supports
 both formats and selects the zero-parameter legacy command for its legacy
 bootloader setup. This implementation now uses that query throughout. The
 failure establishes neither an unknown firmware build nor a cold-upload result.
+
+The next warm boot at afbbfc7 verified the expected operational version but
+failed closed on the first DDC response length. Scalar debugger inspection
+measured three return bytes: success status and a two-byte identifier of zero.
+The [BlueZ Intel decoder](https://raw.githubusercontent.com/bluez/bluez/master/monitor/intel.c)
+defines this three-byte DDC Config Write reply. The parser now requires that
+format and successful status; its identifier is parsed trace metadata, not an
+invented echo check. The outstanding opcode and dual USB/HCI retirement still
+correlate each serialized DDC command. Neither failed boot is a readiness result.
