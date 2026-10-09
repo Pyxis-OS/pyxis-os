@@ -553,10 +553,23 @@ and TrackPoint, 1920x1080 boot framebuffer.
 - The default arrow looked wrong natively. The task 5 redraw addresses its
   shape; its updated native appearance remains to be judged by the owner.
 
-The consequence is that the unchecked behavior and native cursor cost remain
-unqualified. The text-selection report does not establish separate local-TTY
-and mux coverage. Nested-VM results do not establish native input latency or
-display performance.
+Owner-reported boot 2, 2026-10-09: ThinkPad, PXE main `183f793`, PS/2,
+1920x1080 boot framebuffer.
+
+- Checked and working: Super+Esc unlocks the cursor in Quake; switching spaces
+  with the cursor shown; text selection in the local terminal.
+- Multiplexer selection and wheel were not checked. The image had no space
+  with `multiplexer = true`; launching `mux` by hand printed its documented
+  "missing terminal, clock, session creation or launcher authority" diagnostic.
+  This is expected authority refusal, not a failure.
+- Still not checked: click-to-relock after Super+Esc; layer changes
+  (Super+Up/Down) with the cursor; program cursor image/hotspot/show/hide and
+  bounded warp; cursor cost samples.
+
+The consequence is that the remaining behavior and native cursor cost remain
+unqualified. Boot 2 establishes local-terminal selection, while multiplexer
+selection and wheel still lack a native check. Nested-VM results do not
+establish native input latency or display performance.
 
 - [ ] Finish the unchecked native items in a later owner ThinkPad batch and
   judge the redrawn default cursor. Record revisions, boot/display/device
