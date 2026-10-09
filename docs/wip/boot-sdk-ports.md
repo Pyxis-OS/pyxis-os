@@ -17,6 +17,11 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [SDL game ports](../development/sdl-game-ports.md), 2026-10-09: Chocolate
+  Doom and Chocolate Quake in ordinary images and EDuke32 as an opt-in
+  personal build, all without sound (#623, #634, #646); QEMU comparisons
+  recorded, [native qualification](../technical-debt.md#sdl-game-ports-native-qualification)
+  pending.
 - [Volume controls](../userland/audio-volume.md), 2026-10-09: master/per-space
   gain and bar widgets; native listening, mute and reboot default checked.
   [Remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).
@@ -104,10 +109,8 @@ Chosen by the owner, each starting with a proposal:
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   task 1 read-only inventory complete; exclusion standard and PSP/SMU risk accepted.
   Inherited pitch remains a backend prerequisite; task 2 awaits separate owner go.
-- **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
-  Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, tasks 1
-  (Chocolate Doom, #623) and 2 (Chocolate Quake, #634) merged, task 3 (EDuke32)
-  in review. Presentation timing steps 1 and 2 (#610, #618),
+- **Claude** (2026-10-09): no milestone after closing SDL game ports.
+  Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).

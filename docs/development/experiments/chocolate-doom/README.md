@@ -1,7 +1,7 @@
 # Chocolate Doom against native Doom
 
 Measured on 2026-10-09 for task 1 of the
-[SDL game ports](../../../wip/sdl-game-ports.md) milestone: the cost of the SDL2
+[SDL game ports](../../sdl-game-ports.md) milestone: the cost of the SDL2
 path, comparing [Chocolate Doom](../../../userland/chocolate-doom.md) with the
 native [Doom](../../../userland/doom.md) on the same demo.
 

@@ -1,7 +1,7 @@
 # Chocolate Quake against native Quake
 
 Measured on 2026-10-09 for task 2 of the
-[SDL game ports](../../../wip/sdl-game-ports.md) milestone: the cost of the SDL2
+[SDL game ports](../../sdl-game-ports.md) milestone: the cost of the SDL2
 path, comparing [Chocolate Quake](../../../userland/chocolate-quake.md) with the
 native [Quake](../../../userland/quake.md) on the same demo.
 
@@ -54,7 +54,7 @@ neighbours in the same round are normal.
   found about 1.6 ms per frame for the same SDL path, at a similar presented
   size.
 
-**Idle CPU** (decision 4): host CPU time used by the whole QEMU process over
+**Idle CPU** (the frame sleep): host CPU time used by the whole QEMU process over
 20 s, in 1/100 s ticks, with each game in its demo loop. The variant without
 the frame sleep is a local scratch build, never committed.
 - **Shell idle:** 278, and 260 afterwards.
