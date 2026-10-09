@@ -131,6 +131,7 @@ static struct {
   bool sealed, complete, terminal, dirty, cleanup, progress_active;
   enum call_status failure;
   enum hci_initialization initialization;
+  const char *initialization_reason;
   struct process *owner;
   uint64_t epoch_counter, epoch, receive_sequence, submission_counter, generation_counter;
   uint64_t features, le_features;
@@ -173,13 +174,37 @@ static void complete_request(struct bluetooth_hci_request *request, enum call_st
   bsp_request_complete(&request->request);
 }
 
-static void fail_adapter(enum call_status result)
+static const char *initialization_phase(void)
+{
+  if (!adapter.sealed || !adapter.complete || adapter.attachments != 1) {
+    return "inventory";
+  }
+  switch (adapter.initialization) {
+  case HCI_INIT_VERSION_BEFORE: return "version-before-reset";
+  case HCI_INIT_RESET: return "reset";
+  case HCI_INIT_VERSION_AFTER: return "version-after-reset";
+  case HCI_INIT_LOCAL_VERSION: return "local-version";
+  case HCI_INIT_COMMANDS: return "supported-commands";
+  case HCI_INIT_FEATURES: return "local-features";
+  case HCI_INIT_LE_FEATURES: return "LE-features";
+  case HCI_INIT_LE_BUFFER: return "LE-buffers";
+  case HCI_INIT_BR_BUFFER: return "shared-buffers";
+  case HCI_INIT_EVENT_MASK: return "event-mask";
+  case HCI_INIT_LE_EVENT_MASK: return "LE-event-mask";
+  case HCI_INIT_READY: return "runtime";
+  }
+  return "initialization";
+}
+
+static void fail_adapter_reason(enum call_status result, const char *reason)
+
 {
   if (!adapter.terminal) {
     adapter.terminal = true;
     adapter.failure = result;
     adapter.receive_head = adapter.receive_count = 0;
-    klog("Bluetooth HCI: unavailable (status %u); reboot required\n", (unsigned)result);
+    klog("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
+        reason, initialization_phase(), (unsigned)result);
   }
   if (adapter.reader) {
     struct bluetooth_hci_request *reader = adapter.reader;
@@ -197,6 +222,20 @@ static void fail_adapter(enum call_status result)
     }
     complete_request(request, adapter.failure);
   }
+}
+
+static void fail_adapter(enum call_status result)
+{
+  const char *reason;
+  switch (result) {
+  case CALL_IO: reason = "USB or controller I/O failure"; break;
+  case CALL_INPUT_LOST: reason = "receive continuity lost"; break;
+  case CALL_TIMED_OUT: reason = "unpublished command deadline expired"; break;
+  case CALL_OUTCOME_UNKNOWN: reason = "published command outcome unknown"; break;
+  case CALL_LIMIT: reason = "sequence or clock limit exhausted"; break;
+  default: reason = "controller operation failed"; break;
+  }
+  fail_adapter_reason(result, reason);
 }
 
 static struct hci_connection *find_connection(uint16_t handle)
@@ -243,7 +282,7 @@ static void end_session(void)
   adapter.receive_sequence = 0;
   adapter.receive_head = adapter.receive_count = 0;
   if (adapter.dirty || !work_accounted()) {
-    fail_adapter(CALL_UNAVAILABLE);
+    fail_adapter_reason(CALL_UNAVAILABLE, "service cleanup unconfirmed");
   }
 }
 
@@ -548,7 +587,14 @@ static size_t service_requests(size_t budget)
 
 static bool initialization_reply(const uint8_t *reply, size_t length)
 {
-  if (!length || reply[0]) {
+  adapter.initialization_reason = "invalid initialization reply";
+  if (!length) {
+    adapter.initialization_reason = "empty initialization reply";
+    return false;
+  }
+  if (reply[0]) {
+    adapter.initialization_reason = "controller rejected initialization command";
+    ktrace("Bluetooth HCI: initialization HCI status %u\n", reply[0]);
     return false;
   }
   switch (adapter.initialization) {
@@ -556,7 +602,7 @@ static bool initialization_reply(const uint8_t *reply, size_t length)
   case HCI_INIT_VERSION_AFTER: {
     static const uint8_t warm_version[] = {0, 0x37, 0x14, 1, 0x23, 3, 193, 33, 24, 0};
     if (length != sizeof(warm_version) || memcmp(reply, warm_version, sizeof(warm_version))) {
-      klog("Bluetooth HCI: running firmware outside development profile\n");
+      adapter.initialization_reason = "firmware outside development profile";
       return false;
     }
     if (adapter.initialization == HCI_INIT_VERSION_BEFORE) {
@@ -629,7 +675,7 @@ static void advance_initialization(void)
   if (adapter.initialization == HCI_INIT_EVENT_MASK) {
     if (adapter.acl_packet_length < 27 ||
         adapter.acl_packet_length > BLUETOOTH_HCI_ACL_MAX - HCI_ACL_HEADER || !adapter.acl_total) {
-      fail_adapter(CALL_UNAVAILABLE);
+      fail_adapter_reason(CALL_UNAVAILABLE, "invalid controller ACL buffer limits");
       return;
     }
     adapter.acl_credits = adapter.acl_total;
@@ -677,8 +723,12 @@ static bool command_event(const uint8_t *wire, size_t length, uint64_t *submissi
     return false;
   }
   if (command->kernel) {
-    if (!complete || !initialization_reply(wire + 5, length - 5)) {
-      fail_adapter(CALL_UNAVAILABLE);
+    if (!complete) {
+      fail_adapter_reason(CALL_UNAVAILABLE, "initialization returned Command Status");
+      return true;
+    }
+    if (!initialization_reply(wire + 5, length - 5)) {
+      fail_adapter_reason(CALL_UNAVAILABLE, adapter.initialization_reason);
       return true;
     }
   } else {
@@ -1433,7 +1483,7 @@ void bluetooth_hci_candidate(void)
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   ++adapter.attachments;
   if (adapter.attachments != 1 || adapter.sealed) {
-    fail_adapter(CALL_UNAVAILABLE);
+    fail_adapter_reason(CALL_UNAVAILABLE, "multiple or late AX200 candidates");
   }
   cpu_restore_interrupts(flags);
 }
@@ -1445,7 +1495,7 @@ void bluetooth_hci_attach(struct usb_host_controller *host,
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   if (adapter.attachments != 1 || adapter.host || adapter.sealed) {
-    fail_adapter(CALL_UNAVAILABLE);
+    fail_adapter_reason(CALL_UNAVAILABLE, "invalid AX200 attachment");
   } else {
     adapter.host = host;
     adapter.device = device;
@@ -1461,8 +1511,10 @@ void bluetooth_hci_inventory_sealed(bool complete)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   adapter.sealed = true;
   adapter.complete = complete;
-  if (!complete || adapter.attachments > 1) {
-    fail_adapter(CALL_UNAVAILABLE);
+  if (!complete) {
+    fail_adapter_reason(CALL_UNAVAILABLE, "USB inventory incomplete");
+  } else if (adapter.attachments > 1) {
+    fail_adapter_reason(CALL_UNAVAILABLE, "multiple AX200 candidates");
   }
   if (adapter.host) {
     usb_host_notify(adapter.host);
