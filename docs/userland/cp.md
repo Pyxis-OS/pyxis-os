@@ -33,9 +33,11 @@ With `-r` a directory source is copied as a new tree. File operands behave as ab
   before anything changes. There is no merge, so nothing below the root is replaced.
   Empty directories are copied.
 - **Into itself:** there is no object identity to compare, so after creating the root
-  cp creates a `.cp-tree-` plus 16 hex digit marker in it and walks the whole source
-  for that name before copying data. Finding it means the destination is inside the
-  source (or a leftover marker is there): cp removes the marker and the root and fails.
+  cp creates a `.cp-tree-` marker with 16 random hex digits in it and walks the whole
+  source for that name before copying data. The name comes from the clock and random
+  grants that libc `mkstemp` uses (a tree copy fails without them) and is retried on
+  ALREADY_EXISTS, so a marker left by another run cannot match. Finding it means the
+  destination is inside the source: cp removes the marker and the root and fails.
   `cp -r a a` is refused. A sibling destination is not a cycle.
 - **Failure:** each file is staged and renamed as below, into directories created before
   their contents. Native directory rename is unsupported, so a tree is not published
@@ -76,7 +78,7 @@ are held at a time; path resolution uses temporary heap workspace.
 Temporary names are `.cp-` followed by 16 hexadecimal digits. A copy considers
 at most 64 candidates, retries only known name collisions and skips any
 candidate equal to the destination leaf. It never opens/truncates a colliding
-temporary file, and requires no clock or entropy grant. Each process starts at
+temporary file, and requires no clock or entropy grant (only a tree copy's marker does). Each process starts at
 `.cp-0000000000000000`; enough colliding names can exhaust the candidate limit.
 The reservation error identifies the `.cp-` prefix. Inspect leftovers before
 removing them, and leave active copies' temporary names untouched.
@@ -147,12 +149,14 @@ on parent rights `0x39` (LOOKUP/CREATE/WRITE_FILES/REMOVE), requesting child WRI
 alone. Subsequent file calls read an initrd source with rights `0x1` and wrote
 the RAM temporary with rights `0x2`.
 
-Recursive copy was validated on 2026-10-09 (userland `24dfdc9`) with an ordinary `make -j16 image` and QEMU 10.2.2 (KVM, four CPUs,
+Recursive copy was validated on 2026-10-09 (userland `fba8b55`) with an ordinary `make -j16 image` and QEMU 10.2.2 (KVM, four CPUs,
 virtiofsd export), through the remote shell. Nested trees with empty files and
 directories and 10 KB and 300 KB binaries round-tripped between `host://` and `tmp://`
 and matched `diff -r`, as did a 32-level tree; a tree copied from `boot://`. Existing
 targets, copying into itself (three forms), a 33-level tree, a 65,537-entry tree, a host
-symlink and a read-only destination were refused with nothing created and no `.cp-` file.
+symlink and a read-only destination were refused with nothing created and no `.cp-` file. A source containing a stale
+`.cp-tree-0000000000000000` file copied it as an ordinary file, and each copy-into-itself
+refusal named a different random marker.
 Copying `boot://share/quake` into a 1 MiB tmpfs export failed with `No space left on
 device`, kept its two directories and left no temporary file. A CHANGED outcome, a
 failing rename and an over-long name were reviewed in code only.
