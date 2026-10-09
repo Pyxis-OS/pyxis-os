@@ -251,7 +251,9 @@ remain outside this analog playback implementation.
 
 ## Later directions
 
-Owner ideas, **2026-10-09**; none is authorized. **Volume comes first**, gating
+Owner ideas, **2026-10-09**. The [volume proposal](../wip/audio-volume.md) is assigned
+for documentation first; its implementation and the players remain unassigned.
+**Volume comes first**, gating
 all players below: master and per-session/space mixer gain, a master widget beside
 the bar's battery and a per-space widget on each tab, with a classic speaker icon
 and a classic volume slider on hover. See the [no-volume debt](../technical-debt.md#hd-audio-volume-control).
@@ -259,6 +261,6 @@ and a classic volume slider on hover. See the [no-volume debt](../technical-debt
 Later players: MIDI with TinySoundFont + TinyMidiLoader (MIT, single-header C;
 a SoundFont needs its own asset licence and cache entry); SPC with blargg's
 snes_spc (LGPL 2.1, C++, userspace 32→48 kHz resampling); and the keyboard piano
-test app. The widgets depend on a small shared pool of simple black-and-white
-bitmap icons, blitted unscaled and also usable by the battery widget; that pool
-is separate UI work, not audio implementation.
+test app. This volume proposal uses only the owner's four speaker masks.
+A broader shared black-and-white bitmap pool, including battery reuse, remains
+separate UI work; it does not gate these four volume widgets.

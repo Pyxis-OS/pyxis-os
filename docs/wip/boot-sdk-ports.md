@@ -88,6 +88,9 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-09): [volume control](audio-volume.md), proposal first for
+  master/per-space gain and the owner's four-icon bar UI; decisions accepted,
+  dB floor proposed for final review, implementation unassigned.
 - **Codex epsilon** (2026-10-09): [program image and initial stack capacity](program-stack-capacity.md),
   priority 0 from hosted Clang, proposal first. [Thread task 1](threads.md)
   merged in #612; later thread tasks remain unassigned.
