@@ -37,7 +37,10 @@ static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
  * Zero means composition writes the front buffer directly. Fixed for the
  * boot: these drivers never resize. VirtIO composes into its own RAM backing. */
 static uintptr_t staging;
-static bool flip_enabled, flip_pending;
+static bool flip_enabled, flip_pending, flip_completed, presentation_metrics;
+static uint64_t frame_started, frame_compose, frame_copy;
+static uint64_t compose_total, copy_total, metric_frames;
+static uint64_t compose_max, copy_max;
 static atomic_bool flip_failed;
 /* Prepared before AP startup and retained until reboot. Panic never queries
  * the GPU, including while normal completion polling is interrupted. */
@@ -103,6 +106,7 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
   }
   panic_surfaces[0] = target;
   const struct boot_options *options = boot_options_get();
+  presentation_metrics = options->display_flip_metrics;
   if (driver == DISPLAY_BOOT && options->display_flip) {
     flip_enabled = renoir_flip_prepare(boot, target, options->display_flip_metrics);
     if (flip_enabled) {
@@ -236,6 +240,11 @@ void display_resize_disable(void)
 
 bool display_begin_frame(void)
 {
+  flip_completed = false;
+  if (presentation_metrics) {
+    frame_started = arch_monotonic_ns();
+    frame_compose = frame_copy = 0;
+  }
   KASSERT(!flip_pending);
   atomic_store(&writer, cpu_initial_apic_id());
   if (atomic_load(&panic_claimed) || !available) {
@@ -322,6 +331,19 @@ static void copy_staging(void)
   }
 }
 
+static void record_frame_cost(uint64_t compose, uint64_t copy)
+{
+  compose_total += compose;
+  copy_total += copy;
+  compose_max = MAX(compose_max, compose);
+  copy_max = MAX(copy_max, copy);
+  if (++metric_frames % 120 == 0) {
+    klog("display-flip-metrics: frames=%lu compose-mean=%lu ns compose-max=%lu ns copy-mean=%lu ns copy-max=%lu ns backend=%s\n",
+        metric_frames, compose_total / metric_frames, compose_max,
+        copy_total / metric_frames, copy_max, flip_enabled ? "flip" : "ordinary");
+  }
+}
+
 static void copy_flip_surface(const struct framebuffer *surface)
 {
   size_t row_bytes = target->width * sizeof(uint32_t);
@@ -348,9 +370,13 @@ static bool finish_flip(enum renoir_flip_state state)
     return false;
   }
   if (state == RENOIR_FLIP_READY) {
+    if (presentation_metrics) {
+      record_frame_cost(frame_compose, frame_copy);
+    }
     return true;
   }
   if (state == RENOIR_FLIP_FALLBACK) {
+    uint64_t started = presentation_metrics ? arch_monotonic_ns() : 0;
     atomic_store(&writer, cpu_initial_apic_id());
     if (!display_is_panicking()) {
       copy_flip_surface(panic_surfaces[0]);
@@ -358,6 +384,9 @@ static bool finish_flip(enum renoir_flip_state state)
     }
     cpu_store_fence();
     atomic_store(&writer, DISPLAY_NO_WRITER);
+    if (presentation_metrics && !display_is_panicking()) {
+      record_frame_cost(frame_compose, frame_copy + arch_monotonic_ns() - started);
+    }
     return !display_is_panicking();
   }
   return false;
@@ -368,6 +397,11 @@ bool display_frame_pending(void)
   return flip_pending;
 }
 
+bool display_frame_flip_completed(void)
+{
+  return flip_completed;
+}
+
 bool display_frame_poll(void)
 {
   KASSERT(flip_pending && atomic_load(&writer) == DISPLAY_NO_WRITER);
@@ -376,6 +410,7 @@ bool display_frame_poll(void)
     return false;
   }
   enum renoir_flip_state state = renoir_flip_poll();
+  flip_completed = state == RENOIR_FLIP_READY;
   flip_pending = state == RENOIR_FLIP_PENDING && !display_is_panicking();
   return finish_flip(state);
 }
@@ -383,6 +418,9 @@ bool display_frame_poll(void)
 static bool end_flip_frame(const struct pointer_frame *frame)
 {
   enum renoir_flip_state state = renoir_flip_state();
+  if (presentation_metrics) {
+    frame_compose = arch_monotonic_ns() - frame_started;
+  }
   if (frame && available && !display_is_panicking() && state == RENOIR_FLIP_READY) {
     /* Prove that the back remains free before its first store, then reclaim
      * the direct writer. Submission also revalidates after the fenced copy. */
@@ -393,8 +431,10 @@ static bool end_flip_frame(const struct pointer_frame *frame)
     if (state == RENOIR_FLIP_READY && !display_is_panicking()) {
       const struct framebuffer *back = renoir_flip_back();
       KASSERT(back);
+      uint64_t started = presentation_metrics ? arch_monotonic_ns() : 0;
       copy_flip_surface(back);
       cpu_store_fence();
+      frame_copy = presentation_metrics ? arch_monotonic_ns() - started : 0;
       if (!display_is_panicking()) {
         state = renoir_flip_submit();
       }
@@ -428,6 +468,7 @@ bool display_end_frame(const struct pointer_frame *frame)
     return end_flip_frame(frame);
   }
   bool ready = available;
+  uint64_t copy_started = presentation_metrics ? arch_monotonic_ns() : 0;
   if (staging && available && !display_is_panicking()) {
     /* Publish/recheck before any direct write, just as at frame begin. */
     atomic_store(&writer, DISPLAY_NO_WRITER);
@@ -446,6 +487,9 @@ bool display_end_frame(const struct pointer_frame *frame)
   cpu_store_fence();
   atomic_store(&writer, DISPLAY_NO_WRITER);
   display_timing_finish();
+  if (presentation_metrics && ready && frame && !display_is_panicking()) {
+    record_frame_cost(copy_started - frame_started, arch_monotonic_ns() - copy_started);
+  }
   if (ready != available) {
     set_availability(ready);
   }

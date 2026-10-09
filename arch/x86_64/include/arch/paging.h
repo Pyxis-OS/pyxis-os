@@ -46,6 +46,9 @@ enum mm_result arch_page_map(struct arch_address_space *space,
                              unsigned permissions);
 /* Supervisor RW/NX/UC mapping in the kernel allocation area. */
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical);
+/* BSP IF=0 before AP startup, caller-proven driver-owned scanout page.
+ * No generic RAM use; PAT[5] must remain WC. */
+enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical);
 /* Display-only fixed WC aperture, BSP/IF=0 before AP startup. A supplied boot
  * framebuffer must start at physical. Its existing leaves remain unchanged;
  * new leaves persist until reboot and never belong to a VM reservation. */

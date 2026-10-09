@@ -6,5 +6,8 @@
  * Poll returns true only after confirmation or a complete fallback copy. */
 bool display_frame_pending(void);
 bool display_frame_poll(void);
+/* A confirmed flip may consume the software deadline; do not add another
+ * full interval after that wait. Timeout fallback keeps ordinary cadence. */
+bool display_frame_flip_completed(void);
 
 #endif

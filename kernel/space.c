@@ -1312,8 +1312,9 @@ void space_present_task(void *argument)
     deadline += PRESENT_INTERVAL_NS;
     uint64_t now = arch_monotonic_ns();
     if (deadline <= now) {
-      /* Drop missed frames rather than catching up in a busy loop. */
-      deadline = now + PRESENT_INTERVAL_NS;
+      /* A synchronized flip already paced this frame. If the software
+       * deadline is due, continue without adding another full interval. */
+      deadline = display_frame_flip_completed() ? now : now + PRESENT_INTERVAL_NS;
     }
     kernel_task_sleep_until(deadline);
   }

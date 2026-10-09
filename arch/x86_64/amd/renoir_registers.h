@@ -21,7 +21,7 @@
 #ifndef AMD_RENOIR_REGISTERS_H
 #define AMD_RENOIR_REGISTERS_H
 
-/* Linux v6.19.10 DCN2.1, Renoir segment 2: BAR5 byte offsets. Read only. */
+/* Linux v6.19.10 DCN2.1, Renoir segment 2: BAR5 byte offsets; flip writes have a separate allowlist. */
 #define RENOIR_PIPES 4
 #define RENOIR_MPCCS 6
 #define HUBP_STRIDE 0x370u
@@ -38,7 +38,23 @@
 #define OTG_MASTER_ENABLE 1u
 #define HUBP_BLANK 1u
 #define HUBP_DISABLE 4u
+#define HUBP_REQUEST_STATUS 0xf0002u
+#define HUBP_CLOCK_STATUS 0xf00000u
 #define HUBP_VTG_SHIFT 4
+#define HUBP_CLOCK_ENABLE 1u
+#define OTG_CURRENT_MASTER_ENABLE 0x10000u
+#define OTG_INTERLACE_ENABLE 1u
+#define OTG_TIMING_MASK 0x7fffu
+#define FORMAT_ARGB8888 8u
+#define MPCC_MODE_MASK 3u
+#define MPCC_STEREO_ENABLE 1u
+#define SCALER_MODE_MASK 7u
+#define SCALER_AUTOCAL_MASK 3u
+#define SCALER_CURRENT_BANK 0x1000u
+#define RECOUT_ORIGIN_MASK 0x1fff1fffu
+#define CROSSBAR_MASK 0xff0000u
+#define SYSTEM_APERTURE_MASK 0x3fffffffu
+#define SYSTEM_APERTURE_SHIFT 18
 #define FORMAT_MASK 0x7fu
 #define ROTATION_MASK 0x300u
 #define MIRROR_MASK 0x400u
@@ -52,9 +68,24 @@
 #define FLIP_STEREO 0x13000u
 #define FLIP_GSL 0x100u
 #define FLIP_TRIPLE 0x400u
+#define DSCL_STRIDE 0x5acu
+#define DSCL_MODE 0x106b0u
+#define DSCL_AUTOCAL 0x106f4u
+#define DSCL_RECOUT_START 0x10708u
+#define DSCL_RECOUT_SIZE 0x1070cu
+#define DSCL_MPC_SIZE 0x10710u
+#define OTG_STEREO 0x14050u
+#define OTG_MASTER_LOCK 0x1412cu
+#define OTG_GSL 0x14130u
+#define MPCC_STEREO 0x11cd4u
+#define OTG_STEREO_ENABLE 0x01000000u
+#define OTG_LOCK_MASK 0x101u
+#define OTG_GSL_MASK 0x8000000fu
+#define MPCC_TOP_PASSTHROUGH 1u
 #define ODM_INPUT_COUNT 1u
 #define ODM_SEG0_SHIFT 8
 #define ODM_SEG1_SHIFT 12
+#define DMCUB_ENABLE 0x10000u
 #define DMCUB_WINDOW_ENABLE 0x80000000u
 #define DMCUB_WINDOW_ADDRESS 0x1fffffffu
 #define DMCUB_OFFSET_LOW_MASK 0xffffff00u
