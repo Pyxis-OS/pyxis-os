@@ -1,6 +1,6 @@
 # Development milestone index
 
-Status: the current state of planned work, updated 2026-10-09. Nothing here
+Status: the current state of planned work. Nothing here
 authorizes implementation: each milestone settles its decisions in its own
 document before code work starts. Milestone order is flexible; the owner's
 current choice wins. Everyday use for simple tasks guides the order; website
@@ -9,6 +9,11 @@ problems found on the ThinkPad remain allowed in any track.
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document.
+
+Each entry names the milestone, who it is assigned to and its current task, in
+a sentence or two. Change an entry only when work is assigned, a milestone
+completes or the owner changes the plan. Progress, measurements and review
+status belong in the milestone document and the PR.
 
 ## Recently completed
 
