@@ -87,13 +87,16 @@ static bool all_acknowledged(void)
 
 [[noreturn]] static void incomplete_stop(void)
 {
-  for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
-    arch_debug_stop.cpus[i].missing =
-      atomic_load_explicit(&arch_debug_stop.cpus[i].ack_generation,
-        memory_order_acquire) != arch_debug_stop.generation;
+  if (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) !=
+      DEBUG_STOP_INCOMPLETE) {
+    for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
+      arch_debug_stop.cpus[i].missing =
+        atomic_load_explicit(&arch_debug_stop.cpus[i].ack_generation,
+          memory_order_acquire) != arch_debug_stop.generation;
+    }
+    atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_INCOMPLETE,
+                          memory_order_release);
   }
-  atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_INCOMPLETE,
-                        memory_order_release);
   /* No ordinary panic/log locks: a missing or stopped CPU may own them. */
   for (;;) {
     arch_clock_maintain();
