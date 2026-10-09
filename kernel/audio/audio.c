@@ -253,6 +253,8 @@ static bool refill_output(void)
     bool native = controller.model == HDA_MODEL_AMD;
     uint64_t before = arch_monotonic_ns();
     uint32_t before_wallclock = native ? hda_stream_wallclock_locked(&controller) : 0;
+    /* Native notification age follows status collection; before still bounds
+     * the whole commit rather than just mixing/copying. */
     safe = hda_stream_position_locked(&controller, &position, &event) &&
         observe_progress(&position, &event, native ? arch_monotonic_ns() : before);
     uint64_t target = (refilled_periods + HDA_PERIOD_COUNT) * HDA_PERIOD_BYTES;

@@ -548,6 +548,7 @@ bool hda_stream_prepare(struct hda_controller *controller)
       return fail_controller(controller, "native output FIFO exceeds PCM ring");
     }
     controller->fifo_bytes = bytes;
+    ktrace("hda: native SDnFIFOS=%x FIFO-bytes=%u\n", (unsigned)encoded, bytes);
   }
   controller->stream_prepared = true;
   return true;
