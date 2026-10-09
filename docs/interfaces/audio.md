@@ -135,5 +135,7 @@ exactly, but also contained **58.667 ms of startup silence after the first
 guarantee. The [task 2 report](../development/experiments/audio-task2/README.md)
 records qualification and the accepted tuning; the
 [engine reference](../devices/hda.md#progress-and-refill-limits) describes its
-position and scheduling limits. Native AMD/ALC257 playback remains unqualified,
-and SDL2 and Quake sound remain separate work.
+position and scheduling limits. Native AMD/ALC257 one-session tones and an
+eleven-minute eight-session silent run are
+[qualified](../devices/hda.md#qualification-and-remaining-scope). There is no master volume or per-session gain; full-scale speaker tones were painfully
+loud. SDL2 and Quake sound remain separate consumer work.

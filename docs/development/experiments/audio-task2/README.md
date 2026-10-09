@@ -7,9 +7,10 @@ Measurements belong to their named revisions, before the accepted BSP cost
 follow-up. The owner accepted [#557](https://git.internal/PyxisOS/pyxis-os/pulls/557)
 delivery with the recorded nested-QEMU eight-session limitation on **2026-10-09**.
 The [profiling report](profiling.md) records the later cost analysis and the
-matched remeasurement of the accepted fixes. Native eight-session playback remains
-required for milestone closure. This record claims no results for later fixes and
-no native qualification.
+matched remeasurement of the accepted fixes. This historical record claims no
+results for later fixes or native qualification; the
+[engine reference](../../../devices/hda.md#qualification-and-remaining-scope) records
+the subsequent native closure.
 
 The [session reference](../../../interfaces/audio.md) and
 [engine reference](../../../devices/hda.md) describe the implemented behavior.
@@ -135,4 +136,5 @@ manual refused-authority and malformed-call qualification was not added.
 The accepted BSP follow-up needs matched one/eight measurements and sustained
 eight-session qualification. Native AMD binding, speaker/headphone/jack behavior,
 latency and refill qualification remain open, and eight periods remain starting
-tuning. Milestone closure needs the owner's QEMU/ThinkPad qualification decision.
+tuning. Those were the limits at this revision; subsequent native qualification
+is recorded in the engine reference linked above.

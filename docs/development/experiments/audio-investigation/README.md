@@ -3,7 +3,7 @@
 Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
 
 Captured 2026-10-08. See the [result report](../../audio-investigation.md) and the
-[milestone with accepted defaults](../../../wip/hda-playback.md). All HDA code is private probe code on unmerged
+[production engine reference](../../../devices/hda.md). All HDA code measured here is private probe code on unmerged
 branches; this record accompanies a documentation-only PR.
 
 ## Revisions and matching inputs
