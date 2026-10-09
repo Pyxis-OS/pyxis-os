@@ -62,7 +62,7 @@ struct clipboard_receiver {
   struct task_wait *wait;
   uint64_t epoch, transaction_id, deadline, phase, status;
   size_t offset;
-  bool boundary, acknowledged, interrupt_pending, invalid;
+  bool boundary, terminator_delivered, interrupt_pending, invalid;
 };
 
 static struct clipboard_store shared;
@@ -266,7 +266,7 @@ uint64_t clipboard_input_ready(struct kernel_object *object, struct process *cal
   struct clipboard_receiver *receiver = find_receiver(object);
   uint64_t ready = 0;
   if (active(receiver)) {
-    if (receiver->owner == caller && !receiver->acknowledged) {
+    if (receiver->owner == caller && !receiver->terminator_delivered) {
       ready = WAIT_READABLE;
     }
   }
@@ -280,10 +280,10 @@ static void cancel_locked(struct clipboard_receiver *receiver, enum call_status 
   if (!active(receiver) || receiver->phase == CONSOLE_PASTE_CANCEL) {
     return;
   }
-  bool terminated = receiver->phase == CONSOLE_PASTE_END && receiver->acknowledged;
+  bool terminated = receiver->phase == CONSOLE_PASTE_END && receiver->terminator_delivered;
   receiver->phase = CONSOLE_PASTE_CANCEL;
   receiver->status = reason;
-  receiver->acknowledged = terminated;
+  receiver->terminator_delivered = terminated;
   if (receiver->item) {
     object_release(&receiver->item->object);
     receiver->item = NULL;
@@ -414,7 +414,7 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
     receiver->phase = CONSOLE_PASTE_BEGIN;
     receiver->deadline = task_deadline_after_ms(CLIPBOARD_TIMEOUT_MS);
     receiver->status = CALL_OK;
-    receiver->acknowledged = false;
+    receiver->terminator_delivered = false;
     receiver->interrupt_pending = false;
     space->clipboard->transaction = receiver;
     *transaction_id = receiver->transaction_id;
@@ -549,7 +549,7 @@ void clipboard_request_execute(struct clipboard_request *request)
     }
     lock_clipboard();
     if (!active(receiver) || receiver->transaction_id != request->transaction_id ||
-        !receiver->acknowledged || (receiver->phase != CONSOLE_PASTE_END &&
+        !receiver->terminator_delivered || (receiver->phase != CONSOLE_PASTE_END &&
         receiver->phase != CONSOLE_PASTE_CANCEL)) {
       request->status = CALL_BAD_REQUEST;
       unlock_clipboard();
@@ -971,7 +971,7 @@ static struct syscall_result receiver_read(struct clipboard_receiver *receiver,
       if (arch_monotonic_ns() >= receiver->deadline && receiver->phase != CONSOLE_PASTE_CANCEL) {
         cancel_locked(receiver, CALL_TIMED_OUT);
       }
-      if (!receiver->acknowledged) {
+      if (!receiver->terminator_delivered) {
         reply.kind = receiver->phase;
         reply.transaction_id = receiver->transaction_id;
         reply.status = receiver->status;
@@ -986,7 +986,7 @@ static struct syscall_result receiver_read(struct clipboard_receiver *receiver,
             receiver->phase = CONSOLE_PASTE_END;
           }
         } else {
-          receiver->acknowledged = true;
+          receiver->terminator_delivered = true;
         }
       }
     } else if (input->lost && *input->lost) {
