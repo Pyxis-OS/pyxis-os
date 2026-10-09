@@ -89,11 +89,12 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 
 ## Fixed userspace stacks
 
-Each process eagerly backs a 1 MiB user stack (960 KiB more than the former 64 KiB budget), giving native parsers room without
-port-specific recursion limits; it is still finite and port stack needs need review. An unmapped guard page catches ordinary
-overruns but a large adjustment can skip it, and neither compiler stack probing nor stack growth exists. Reconsider eager backing
-when process counts or memory pressure justify it; demand-backed stacks must respect BSP ownership of allocation and page-table
-mutation.
+Each plain executable eagerly backs a fixed [1 MiB user stack](kernel/program-loading.md), including boot init and small commands.
+An unmapped guard catches ordinary overruns, but a large adjustment can skip it; neither compiler stack probing nor growth exists.
+The owner retained 1 MiB after the experimental 8 MiB default's [nested-KVM costs](development/experiments/program-capacity/README.md):
+28–42 MiB more session backing and roughly 3.2–3.4 times the complete 1,024-launch session cost.
+Clang's 8 MiB expectation remains unmet; revisit with future [application-bundle manifest](wip/vfs.md#application-bundles)
+requests passed as a bounded loader parameter, without a P1F field or compiler-container rebuild. That path is unimplemented.
 
 ## BSP-only allocation and VM mutation
 

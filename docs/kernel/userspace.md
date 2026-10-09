@@ -47,12 +47,12 @@ allocations; loading does not change the caller's active address space.
 
 The kernel supplies an executable entry point and a writable, non-executable,
 16-byte-aligned user stack. Boot and subsequently launched processes each get
-1 MiB of eager stack backing at `0x800000`, with the initial stack pointer at
-`0x900000`. The page immediately below the backing (`0x7ff000`) is reserved
-without a mapping, so later allocations cannot consume it. Images overlapping
-either the stack or guard are rejected. Process destruction releases both.
-Stack growth is not implemented. The guard catches accesses into that page;
-it cannot catch a large stack adjustment that skips over it.
+1 MiB of eager backing below `0x7ffffffff000`, with a reserved unmapped guard
+immediately below it. The [program-loading reference](program-loading.md)
+defines image admission, stack addresses and ownership: the page-rounded image
+span is capped at 256 MiB, and stack/guard collisions reject before backing.
+Process destruction releases both. Stack growth is not implemented; the guard
+cannot catch a large stack adjustment that skips over it.
 Entry receives a pointer in `RDI` to the
 [startup region](../../include/abi/startup.h), which remains mapped until process
 exit. Its address is chosen by VM allocation; programs must use the pointer.

@@ -393,9 +393,10 @@ external source or mirror entry is introduced by this docs PR.
 
 ## First task and later gates
 
-The separate [program image and initial stack capacity proposal](program-stack-capacity.md)
-coordinates initial stack placement with later disjoint thread stacks; it adds
-no public threads. The owner assigned that priority-0 proposal after task 1.
+The [program image and initial stack layout](../kernel/program-loading.md)
+places the fixed eager 1 MiB initial stack high in the lower half, with a reserved
+unmapped guard. Later thread stacks must remain disjoint; their placement and
+guards still belong to this milestone. Capacity work adds no public threads.
 
 The smallest useful first task is **split process ownership from task retirement**,
 while retaining exactly one submitted user task per process, including blocked
