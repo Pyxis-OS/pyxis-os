@@ -125,6 +125,15 @@ struct hda_buffer_descriptor {
   uint32_t bytes, flags;
 };
 
+enum hda_boot_power { HDA_BOOT_POWER_ABSENT, HDA_BOOT_POWER_PRESENT,
+                      HDA_BOOT_POWER_INVALID };
+
+struct hda_boot_state {
+  uint16_t command, pmcsr;
+  unsigned power_capability;
+  enum hda_boot_power power;
+};
+
 static uint8_t read8(const struct hda_controller *controller, unsigned offset)
 {
   return *(volatile uint8_t *)(controller->registers.address + offset);
@@ -605,6 +614,13 @@ bool hda_interrupt(struct hda_controller *controller)
   return collect_status(controller);
 }
 
+uint32_t hda_stream_wallclock_locked(struct hda_controller *controller)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(controller->stream_running);
+  return read32(controller, HDA_WALCLK);
+}
+
 bool hda_stream_position_locked(struct hda_controller *controller,
     struct hda_stream_position *position, struct hda_irq_event *event)
 {
@@ -757,6 +773,81 @@ static bool enable_native_snoop(struct hda_controller *controller)
   return pci_read8(address, HDA_AMD_SNOOP_CONTROL) == expected;
 }
 
+static struct hda_boot_state capture_boot_state(const struct pci_device *device)
+{
+  struct pci_address address = device->address;
+  struct hda_boot_state state = {.command = pci_read16(address, PCI_COMMAND)};
+  struct pci_claim layout = {0};
+  bool seen[PCI_CONVENTIONAL_BYTES / PCI_REGISTER_BYTES] = {0};
+  unsigned offset = 0;
+  if (pci_read16(address, PCI_STATUS) & PCI_STATUS_CAPABILITIES) {
+    offset = pci_read8(address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
+  }
+  while (offset) {
+    if (offset < PCI_CAP_FIRST || seen[offset / PCI_REGISTER_BYTES] ||
+        layout.capability_count == PCI_CAP_COUNT) {
+      state.power = HDA_BOOT_POWER_INVALID;
+      break;
+    }
+    seen[offset / PCI_REGISTER_BYTES] = true;
+    layout.capabilities[layout.capability_count++] = offset;
+    offset = pci_read8(address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
+  }
+  if (state.power != HDA_BOOT_POWER_INVALID) {
+    for (unsigned i = 0; i < layout.capability_count; ++i) {
+      offset = layout.capabilities[i];
+      if (pci_read8(address, offset + PCI_CAP_ID) != PCI_CAP_POWER) {
+        continue;
+      }
+      if (state.power_capability || !pci_capability_fits(&layout, offset, PCI_POWER_BYTES)) {
+        state.power = HDA_BOOT_POWER_INVALID;
+        break;
+      }
+      state.power_capability = offset;
+      state.power = HDA_BOOT_POWER_PRESENT;
+    }
+  }
+  /* Reservation can reject firmware MSI before the PCI probe fills its snapshot.
+   * This read-only capture records boot state without enabling configuration writes. */
+  ktrace("hda: boot PCI=%u:%u.%u COMMAND=%x Mem=%u BME=%u\n",
+      (unsigned)address.bus, (unsigned)address.device, (unsigned)address.function,
+      (unsigned)state.command, !!(state.command & PCI_COMMAND_MEMORY),
+      !!(state.command & PCI_COMMAND_MASTER));
+  if (state.power == HDA_BOOT_POWER_PRESENT) {
+    state.pmcsr = pci_read16(address, state.power_capability + PCI_POWER_CONTROL);
+    ktrace("hda: boot PM-cap=%x PMCSR=%x D%u NoSoftRst=%u PME-enable=%u PME-status=%u\n",
+        state.power_capability, (unsigned)state.pmcsr,
+        (unsigned)(state.pmcsr & PCI_POWER_STATE_MASK),
+        !!(state.pmcsr & PCI_POWER_NO_SOFT_RESET), !!(state.pmcsr & PCI_POWER_PME_ENABLE),
+        !!(state.pmcsr & PCI_POWER_PME_STATUS));
+  } else {
+    ktrace("hda: boot PM capability %s; power state unavailable\n",
+        state.power == HDA_BOOT_POWER_INVALID ? "invalid" : "absent");
+  }
+  return state;
+}
+
+static const char *native_probe_failure(const struct hda_boot_state *state)
+{
+  if (state->power == HDA_BOOT_POWER_INVALID) {
+    return "native PCI PM capability unusable";
+  }
+  if (state->power == HDA_BOOT_POWER_PRESENT &&
+      (state->pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D0 &&
+      (state->command & PCI_COMMAND_MASTER)) {
+    return "native PCI non-D0 boot state with BME on; wake refused";
+  }
+  if (!(state->command & PCI_COMMAND_MEMORY) && (state->command & PCI_COMMAND_MASTER)) {
+    return "native PCI memory decode disabled with BME on; probe refused";
+  }
+  if (state->power == HDA_BOOT_POWER_PRESENT &&
+      (state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT &&
+      !(state->pmcsr & PCI_POWER_NO_SOFT_RESET)) {
+    return "native PCI D3hot wake would reset BARs; probe refused";
+  }
+  return "native PCI D0/memory-decode setup failed";
+}
+
 void hda_prepare(struct hda_controller *controller, const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -771,19 +862,25 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     }
     return;
   }
+  struct hda_boot_state boot_state = capture_boot_state(pci_device_at(selected));
   if (!pci_reserve_device_at(selected, &controller->claim)) {
     klog("hda: cannot reserve controller; inactive\n");
     return;
   }
   struct pci_device *device = controller->claim.device;
-  if (!pci_begin_mmio_probe(&controller->claim, &controller->firmware) ||
+  bool probe_ready = pci_begin_mmio_probe(&controller->claim, &controller->firmware);
+  const char *probe_failure = "BAR0 bootstrap unavailable";
+  if (!probe_ready && controller->model == HDA_MODEL_AMD) {
+    probe_failure = native_probe_failure(&boot_state);
+  }
+  if (!probe_ready ||
       pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->registers) != MM_OK) {
     if (pci_restore_mmio_probe(&controller->claim, &controller->firmware)) {
       pci_cancel_reservation(&controller->claim);
-      klog("hda: BAR0 bootstrap unavailable; inactive\n");
+      klog("hda: %s; inactive\n", probe_failure);
     } else {
       controller->failed = true;
-      klog("hda: BAR0 probe restore failed; reservation retained until reboot\n");
+      klog("hda: %s; probe restore failed; reservation retained until reboot\n", probe_failure);
     }
     return;
   }
