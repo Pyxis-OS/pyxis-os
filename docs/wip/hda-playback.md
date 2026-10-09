@@ -223,11 +223,12 @@ controller or all other sessions.
    bounded request batching remains deferred. Current nested-QEMU limitations
    are recorded in [technical debt](../technical-debt.md#hd-audio-sustained-eight-session-playback).
    No strict absolute DMA-progress or zero-gap startup guarantee is claimed.
-5. [ ] **Native AMD analog qualification.** Assigned **2026-10-09**, starting
-   with a separate proposal for speaker/headphone route and jack policy from the
-   ALC257 graph. After owner acceptance, bind `1022:15e3` with checked PCI/codec
-   capabilities, DMA coherence and licensed/pinned fixups if needed. Re-derive
-   QEMU-specific burst and commit-clock bounds for native hardware. Qualify one
+5. [ ] **Native AMD analog qualification.** Assigned **2026-10-09**; the
+   [accepted plan](hda-native.md) is implemented for narrowly matched `1022:15e3`
+   / ALC257 with checked speaker/headphone routes, snoop/DMA constraints, start-time
+   presence selection and a FIFO-derived 20 ms commit guard. Existing D3+BME
+   refusal remains, with boot PM/COMMAND ktrace. QEMU regression is separate from
+   the outstanding native gate. Qualify one
    and eight sessions, speaker/headphone selection, normal load, stop/reset and
    latency in the owner's ThinkPad batch. Keep fail-closed until reboot; native
    evidence determines whether reset recovery needs a separate proposal.

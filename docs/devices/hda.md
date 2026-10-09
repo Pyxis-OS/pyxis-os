@@ -1,7 +1,9 @@
 # HD Audio playback engine
 
 Caelum supports QEMU's `8086:2668` Intel HDA controller with `hda-output` or
-`hda-duplex`, discovering a checked 48 kHz S16LE stereo analog route. One BSP
+`hda-duplex`. A narrowly matched AMD `1022:15e3`, Lenovo `17aa:5081` controller
+and Realtek ALC257 output pair are also implemented, awaiting native qualification.
+Both use a checked 48 kHz S16LE stereo analog route. One BSP
 worker owns command transport, stream state, DMA and software mixing. Userspace
 uses process-owned [PCM sessions](../interfaces/audio.md) through its space's
 named audio grant. Ordinary initialization plays no audio: command DMA stops,
@@ -18,6 +20,25 @@ rings and asserts link reset before completing the claim or sizing BARs. A check
 Coherent, physically contiguous CORB, RIRB, BDL and PCM backing is allocated on
 the BSP before AP startup. CPU mappings and physical DMA addresses are separate.
 Unsupported or absent hardware remains optional.
+
+Native selection verifies class and subsystem in the complete inventory, rather
+than binding the GPU HDMI or ACP function. Before reservation, ktrace records
+actual boot COMMAND (Mem/BME) and validated PMCSR state, NoSoftRst and PME bits.
+Captured Fedora runtime state is not a boot default. The existing PCI probe
+requires BME off for a wake/decode change; D3+BME and reset-causing D3hot wake
+remain refused with specific failure explanations. There is no new handoff
+helper. An already usable D0/memory-decode device retains firmware BME until
+the established halt/claim sequence.
+
+After halt and claim, native initialization updates only PCI snoop byte `0x42`
+under mask `0x07` to value `0x02`, with full readback. It does not copy PCIe
+NoSnoop/Relaxed Ordering settings or unknown vendor capabilities. Complete DMA
+allocations respect 128-byte alignment and a conservative 40-bit ceiling when
+GCAP permits 64-bit addresses, otherwise 32-bit. The supplied single-message,
+64-bit, non-maskable MSI layout uses the existing helper. Boot-enabled MSI/MSI-X
+still prevents reservation. No licensed vendor fixup or speculative GPIO/codec
+coefficient write is included; coherence and cold initialization need native
+evidence. See the [accepted native plan](../wip/hda-native.md).
 
 The [worker](../../kernel/audio/audio.c) alone releases reset, initializes command
 transport and reads the codec graph. Runtime helpers assert the owning worker
@@ -52,8 +73,19 @@ power and amplifier metadata. Direct NIDs bound the static graph and iterative
 search to 128 entries. Unsupported indirect addresses, malformed/range-overflow
 connections, digital/mono/processing paths and unusable amplifier indices are
 rejected. No recursive search or runtime graph allocation is needed. Selection
-prefers analog line-out, then headphones. Native fixed-speaker/jack policy is
-still a separate task.
+prefers analog line-out, then headphones for QEMU.
+
+The native path validates codec `10ec0257`, AFG subsystem `17aa5081`, speaker
+pin `0x14` (`90170110`) and headphone pin `0x21` (`04211020`). Both share DAC
+`0x02`; headphone connection index 0 is checked explicitly. Discovery parks both
+pins muted/disabled, EAPD off and converter detached. At physical playback start,
+one checked headphone Pin Sense selects the output, then D0, advertised 0 dB
+DAC gain, connection, format/tag, pin controls and EAPD are programmed/read back;
+the selected pin is unmuted last. Stop parks both pins. No jack verbs or
+unsolicited-response handling run during playback. A session joining an active
+mix does not resample. Inserting headphones mid-playback keeps the speaker until
+the next start; unplugging retains headphones until then. See the
+[routing debt](../technical-debt.md#hd-audio-jack-routing-at-playback-start).
 
 Discovery does not activate pins, EAPD or amplifiers. Activation checks D0,
 selected connections, advertised amplifier gain offsets, output pin controls,
@@ -88,7 +120,9 @@ do not replace physical-stream stop.
 An IRQ completion is a coalesced hint, not a period count. The worker brackets
 status capture with LPIB reads and retries a moving sample at most three times.
 Within the same IF=0 phase it consumes the completion hint with that position;
-a completion without the expected boundary advance is refused. The RUN epoch
+a QEMU completion without the expected boundary advance is refused. Native BCIS
+can occur when descriptor data enters the FIFO, before link consumption, and is
+only a wake hint. The RUN epoch
 begins with HPET and WALCLK captured immediately before RUN, allowing legitimate
 progress before the first observation. Monotonic HPET and wrapping WALCLK bound
 observation and progress gaps. While running, a **5 ms watchdog** supplements
@@ -99,7 +133,7 @@ notification age begins when the CPU first observes status, not at hardware
 completion. A bounded retry can conservatively refuse healthy moving progress.
 
 Before a reclaimed period is mixed directly into DMA, the worker takes a fresh
-position/time observation with IF=0 and requires more than **8,192 bytes plus
+position/time observation with IF=0. QEMU requires more than **8,192 bytes plus
 one frame** of headroom before that period's next consumption. A DMA barrier
 follows copying. A second observation rejects a commit taking **1 ms or more**
 in HPET or WALCLK, or progress reaching the target. Commit duration is retained
@@ -108,9 +142,21 @@ they are not hard real-time guarantees or an absolute hardware consumption
 counter.
 
 `QEMU_CODEC_BURST_BYTES` (8192) and the 1 ms HPET commit/WALCLK bounds
-are QEMU-derived. Task 5 must re-derive or replace them for the native AMD
-controller from its FIFO/DMA progress and timing evidence. They remain unchanged
-for this delivered QEMU path; adding a PCI match does not qualify native bounds.
+are QEMU-derived and remain unchanged for QEMU.
+
+The owner accepted a separate native profile on **2026-10-09**. After stopped
+format programming, `F = round_up(FIFOS + 1, 4)` overestimates both literal-byte
+and size-minus-one FIFO encodings; zero, all-ones and unusable sizes are refused.
+HDA 1.0a §3.3.40 bounds fetch/untransmitted bytes and LPIB advance by FIFOS.
+Before RUN, check that **F + 4 + 3840 bytes** fits the ring. Before overwriting
+a reclaimed period, require more than that reserve: one frame plus FIFO advance
+and 20 ms of playback at 192,000 bytes/s. Pre/post position scans and DMA
+publication share the checked commit interval, bounded below **20,000,000 ns**
+and **480,000 WALCLK ticks**; the final monotonic read follows post-MMIO/device
+clock observation. Final distance must remain greater than **F + 4**. Native
+LPIB equal to CBL normalizes to zero. Actual FIFOS, progress/skew and commit
+timings still require native batch evidence; these are accepted conservative
+guards, not measured native guarantees.
 
 QEMU's codec can request an 8,192-byte burst, coalesce completions and adjust its
 timer origin. The 8,192-byte per-callback bound applies to QEMU's default timer-driven codec;
@@ -164,7 +210,7 @@ recorded HPET maximum was 922,780 ns, with rejection at the later 1 ms WALCLK
 check. Exact host descheduling and the rejecting codec-clock delta were not
 captured. See the [accepted debt](../technical-debt.md#hd-audio-sustained-eight-session-playback).
 
-Native AMD `1022:15e3` remains unbound. The supplied ALC257 dump establishes
+Native AMD `1022:15e3` bring-up is implemented but unqualified. The supplied ALC257 dump establishes
 advertised topology, format and EAPD state, not native Pyxis cold-init, speaker or
 headphone playback. Eight periods are starting tuning to revisit during native
 latency/refill qualification. The owner's later ThinkPad batch remains the
