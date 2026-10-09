@@ -18,7 +18,6 @@ work only when it is no busier than the APs.
 | Item | Before | After |
 | --- | --- | --- |
 | Pyxis | main `ac12d20`, built as `564b8db` (same code) | this PR's code |
-| Kernel ELF SHA-256 | `1fff98ca…7eaace1746` | `d49c91af…72daea90` |
 | Userspace | `76eef93` | `2d17795` (shell: no CPU-0 affinity message) |
 | Other pins | fs `d352c7e`, ports `36d952e`, lwIP `a1aadb9` | same |
 

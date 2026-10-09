@@ -31,7 +31,6 @@ add a branch.
 | Item | Before | After |
 | --- | --- | --- |
 | Pyxis | main `f713b81` (task 7a) | this PR's code commit `564b8db` |
-| Kernel ELF SHA-256 | `83c6a57a…fc1c90c1d1` | `1fff98ca…7eaace1746` |
 | Pins | userspace `76eef93`, fs `d352c7e`, ports `36d952e`, lwIP `a1aadb9` | same |
 
 The setup and workloads are those of the [7a record](../smp-task7a/README.md#configuration):
