@@ -44,9 +44,10 @@ pinned probe:
    memory, synchronization and thread contracts, established through bounded
    consumers. The [shared-process thread investigation](threads.md) records VM,
    lifetime, TLS and libc/C++ prerequisites and accepted native direction;
-   task 1 assigns only process ownership/retirement, after #567 merges. Public
-   threads and runtime integration remain later tasks. Do not bury missing OS
-   behavior in compiler-specific stubs.
+   task 1's process ownership/retirement split is delivered for review, with
+   [matched qualification](../development/experiments/threads-task1/README.md).
+   Public threads and runtime integration remain later tasks. Do not bury missing
+   OS behavior in compiler-specific stubs.
 3. **Clang hosted on Pyxis.** The [hosted-Clang investigation](hosted-clang.md)
    records cross-build failures, process/runtime gaps, resource proxies and
    proposed sequencing. Cross-build the selected compiler, linker and tools

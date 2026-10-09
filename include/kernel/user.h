@@ -6,8 +6,8 @@
 struct process;
 struct task;
 
-/* Queue one user task with a private kernel stack. On success, transfers sole
- * ownership of the unsubmitted process to the task; failure leaves it with the
+/* Queue one user task with a private kernel stack. On success, transfers the
+ * unsubmitted process to its submitted lifetime; failure leaves it with the
  * caller. Entry must be executable and the writable user stack top aligned
  * to 16 bytes in the process's inactive address space. The scheduler places the
  * task on the least-loaded CPU its space allows and may later move it between
@@ -28,6 +28,8 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
                                  uintptr_t stack_top, size_t preferred_cpu,
                                  struct task **result);
 void user_task_discard_prepared(struct task *task);
+/* Exclusive prepared-task access only, before publication. */
+struct process *user_task_process(struct task *task);
 void user_task_publish_group(struct task **tasks, size_t count);
 
 /* Abandon the current task's kernel-entry stack. The scheduler switches to

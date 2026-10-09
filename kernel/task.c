@@ -46,18 +46,16 @@ struct task {
   struct bsp_request *deferred_request; /* Published only after the safe handoff. */
   struct task_profile *profile;
   enum task_kind kind;
-  struct process *process; /* Owned by a user task; NULL for a kernel task. */
+  struct process *process; /* Borrowed submitted/prepared lifetime; NULL for workers. */
   uintptr_t kernel_stack;
   uintptr_t saved_stack;
   uintptr_t entry, user_stack;
   struct arch_user_state cpu;
   size_t cpu_index;
-  bool exited, faulted, terminated, in_syscall;
+  bool exited, in_syscall;
   bool relocate; /* Leave this CPU at syscall return; set under queues_locked. */
   atomic_bool stop_requested;
-  struct execution_group_member group_member;
   struct execution_group *cleanup_group;
-  int exit_status;
   void (*kernel_entry)(void *);
   void *argument;
   uint64_t sleep_deadline;
@@ -159,12 +157,6 @@ bool task_wait_stop_requested(const struct task_wait *wait)
   return atomic_load_explicit(&wait->task->stop_requested, memory_order_acquire);
 }
 
-struct execution_group_member *task_group_member(struct task *task)
-{
-  KASSERT(task->kind == TASK_USER);
-  return &task->group_member;
-}
-
 struct execution_group *task_cleanup_group(void)
 {
   if (!schedulers) {
@@ -195,13 +187,21 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
   return previous;
 }
 
+[[noreturn]] static void finish_user_task(struct process_result result)
+{
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  KASSERT(task && task->kind == TASK_USER && !task->exited);
+  KASSERT(!task->bsp_request && !task->deferred_request && !task->wait);
+  process_set_result(task->process, result);
+  task->exited = true;
+  arch_context_switch(&task->saved_stack, scheduler->stack);
+  panic("resumed an exited user task");
+}
+
 [[noreturn]] static void terminate_task(void)
 {
-  struct task *task = local_scheduler()->current_task;
-  KASSERT(task && task->kind == TASK_USER);
-  KASSERT(!task->bsp_request && !task->deferred_request && !task->wait);
-  task->terminated = true;
-  user_exit(0);
+  finish_user_task((struct process_result){.kind = PROCESS_TERMINATED});
 }
 
 void task_syscall_enter(void)
@@ -715,7 +715,6 @@ static enum mm_result allocate_task(struct task **result)
   }
   memset(task, 0, sizeof(*task));
   atomic_init(&task->stop_requested, false);
-  task->group_member.task = task;
 
   enum mm_result status = vm_alloc(vm_kernel_space(), TASK_STACK_SIZE,
                                     PAGE_SIZE, PAGE_WRITE, &task->kernel_stack);
@@ -802,6 +801,7 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   KASSERT(arch_cpu_index() == 0);
   *result = NULL;
   if (!schedulers || !process || !process->startup_address ||
+      !process_task_available(process) ||
       !arch_user_entry_valid(entry, stack_top)) {
     return MM_INVALID;
   }
@@ -845,6 +845,7 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   /* Holds only the placement preference until publication places the task. */
   task->cpu_index = preferred_cpu;
   arch_user_state_init(&task->cpu);
+  process_task_attach(process, task);
   *result = task;
   return MM_OK;
 }
@@ -852,7 +853,14 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  process_task_discard(task->process, task);
   free_task(task);
+}
+
+struct process *user_task_process(struct task *task)
+{
+  KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  return task->process;
 }
 
 void user_task_publish_group(struct task **tasks, size_t count)
@@ -862,6 +870,9 @@ void user_task_publish_group(struct task **tasks, size_t count)
    * only their destination indices for notification. */
   size_t destinations[LAUNCH_BATCH_MAX];
   size_t destination_count = 0;
+  for (size_t i = 0; i < count; ++i) {
+    process_publish(user_task_process(tasks[i]));
+  }
   lock_queues();
   for (size_t i = 0; i < count; ++i) {
     KASSERT(tasks[i] && tasks[i]->kind == TASK_USER);
@@ -889,7 +900,7 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
   struct task *task;
   enum mm_result status = user_task_prepare(process, entry, stack_top, SIZE_MAX, &task);
   if (status == MM_OK) {
-    /* Publication transfers process and stack ownership. */
+    /* Publication transfers prepared process lifetime and task storage. */
     user_task_publish_group(&task, 1);
   }
   return status;
@@ -914,48 +925,23 @@ static void reap_completed(void)
 
   while (task) {
     struct task *next = task->next;
-    struct process_control *control = NULL;
-    struct execution_group *execution_group = NULL;
-    struct process_result result = {0};
+    struct process *process = task->process;
     if (task->kind == TASK_USER) {
-      /* Transfer the execution owner's reference before freeing the process,
-       * and end the observer's task link before this task can be freed. */
-      control = task->process->control;
-      task->process->control = NULL;
-      if (control) {
-        process_control_detach_task(control);
-      }
-      execution_group = task->process->execution_group;
-      task->process->execution_group = NULL;
-      if (execution_group) {
-        execution_group_member_detach(execution_group, &task->group_member);
-      }
-      result.kind = task->faulted ? PROCESS_FAULTED :
-          task->terminated ? PROCESS_TERMINATED : PROCESS_EXITED;
-      result.exit_status = result.kind == PROCESS_EXITED ? task->exit_status : 0;
-      struct execution_group *previous = object_cleanup_enter(execution_group);
-      KASSERT(process_destroy(task->process) == MM_OK);
-      object_cleanup_leave(previous);
-    }
-    if (task->kind == TASK_USER) {
-      if (task->terminated) {
-        klog("userspace: CPU %zu terminated task released\n", task->cpu_index);
-      } else if (task->faulted) {
-        klog("userspace: CPU %zu faulted task released\n", task->cpu_index);
+      process_task_detach(process, task);
+      struct process_result result = process->result;
+      size_t cpu_index = task->cpu_index;
+      free_task(task);
+      process_task_reclaimed(process);
+      if (result.kind == PROCESS_TERMINATED) {
+        klog("userspace: CPU %zu terminated task released\n", cpu_index);
+      } else if (result.kind == PROCESS_FAULTED) {
+        klog("userspace: CPU %zu faulted task released\n", cpu_index);
       } else {
         ktrace("userspace: CPU %zu exited with status %d; address space released\n",
-             task->cpu_index, task->exit_status);
+             cpu_index, (int)result.exit_status);
       }
-    }
-    free_task(task);
-    if (control) {
-      process_control_complete(control, result);
-      struct execution_group *previous = object_cleanup_enter(execution_group);
-      object_release(&control->object);
-      object_cleanup_leave(previous);
-    }
-    if (execution_group) {
-      execution_group_member_complete(execution_group);
+    } else {
+      free_task(task);
     }
     task = next;
   }
@@ -1071,7 +1057,9 @@ void kernel_task_yield_if_runnable(void)
     }
 
     if (task->kind == TASK_USER && !task->in_syscall && task_stop_requested()) {
-      task->terminated = task->exited = true;
+      process_set_result(task->process,
+          (struct process_result){.kind = PROCESS_TERMINATED});
+      task->exited = true;
       scheduler->current_task = NULL;
       complete_task(task);
       continue;
@@ -1170,19 +1158,10 @@ void task_preempt(bool user_mode)
 
 [[noreturn]] void user_exit(int status)
 {
-  struct scheduler *scheduler = local_scheduler();
-  struct task *task = scheduler->current_task;
-  KASSERT(task && task->kind == TASK_USER && !task->exited);
-  task->exit_status = status;
-  task->exited = true;
-  arch_context_switch(&task->saved_stack, scheduler->stack);
-  panic("resumed an exited user task");
+  finish_user_task((struct process_result){PROCESS_EXITED, status});
 }
 
 [[noreturn]] void user_fault(void)
 {
-  struct task *task = local_scheduler()->current_task;
-  KASSERT(task);
-  task->faulted = true;
-  user_exit(-1);
+  finish_user_task((struct process_result){.kind = PROCESS_FAULTED});
 }

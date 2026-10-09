@@ -37,7 +37,9 @@ User threads are a separate milestone, needed by native consumers including
 [Neovim/libuv](neovim-libuv.md) and [Go](go-runtime.md). The
 [multiple-threads investigation](threads.md) audits current source and proposes
 the native contract, safety prerequisites and first task. Its three defaults
-are accepted; task 1 is assigned after #567 merges, with later tasks unassigned.
+are accepted in merged #567; task 1's process-lifetime split is delivered for
+review, with [matched qualification](../development/experiments/threads-task1/README.md).
+Later tasks remain unassigned.
 It must specify:
 
 - thread creation, join and exit;
