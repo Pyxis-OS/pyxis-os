@@ -154,6 +154,11 @@ bool task_stop_requested(void)
       atomic_load_explicit(&task->stop_requested, memory_order_acquire);
 }
 
+bool task_is_stopped(const struct task *task)
+{
+  return atomic_load_explicit(&task->stop_requested, memory_order_acquire);
+}
+
 bool task_wait_stop_requested(const struct task_wait *wait)
 {
   return atomic_load_explicit(&wait->task->stop_requested, memory_order_acquire);

@@ -9,6 +9,7 @@ struct vm_space;
 struct private_allocation;
 struct process_control;
 struct endpoint;
+struct clipboard_receiver;
 struct execution_group;
 
 /* One user task per process. Owns address_space, private allocation records,
@@ -20,6 +21,7 @@ struct process {
   struct capability_table capabilities;
   struct process_control *control; /* Owned reference; reaper takes it before destruction. */
   struct execution_group *execution_group; /* Owned storage; reaper completes published membership. */
+  struct clipboard_receiver *paste_receiver; /* Scoped process-owned line reader. */
   struct endpoint *endpoints; /* BSP-owned weak list of receiving endpoints. */
   struct private_allocation *allocations; /* Private-memory service regions only. */
   uintptr_t startup_address; /* Read-only record in address_space; zero until prepared. */

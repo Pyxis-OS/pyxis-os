@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/pointer.h>
@@ -45,6 +46,7 @@ enum mm_result process_destroy(struct process *process)
     return MM_INVALID;
   }
 
+  clipboard_process_exit(process);
   keyboard_process_exit(process);
   pointer_process_exit(process);
   bluetooth_hci_process_exit(process);

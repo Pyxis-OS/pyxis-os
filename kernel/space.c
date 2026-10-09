@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 //
 // Created by chronium on 9/18/26.
 //
@@ -221,6 +222,11 @@ static struct space *space_alloc(const char *name, const char *title,
   space->console = console_create(space->tty);
   if (!space->console) {
     panic("cannot allocate space console");
+  }
+
+  space->console->space = space;
+  if (!clipboard_space_init(space)) {
+    panic("cannot allocate space clipboard");
   }
 
   space->display = display_create(space);
@@ -1049,7 +1055,7 @@ static void switch_adjacent_space(bool next)
   }
 }
 
-static void handle_space_input(void)
+static void handle_space_input_locked(void)
 {
   struct key_event event;
   static bool navigation_held[KEY_COUNT];
@@ -1061,6 +1067,7 @@ static void handle_space_input(void)
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
       uint64_t flags = cpu_save_interrupts();
+      clipboard_key_event(active_space, &event);
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
       for (struct space *space = caelum_space->next; space; space = space->next) {
@@ -1105,6 +1112,12 @@ static void handle_space_input(void)
         continue;
       }
     }
+    uint64_t clipboard_flags = cpu_save_interrupts();
+    bool clipboard_consumed = clipboard_key_event(active_space, &event);
+    cpu_restore_interrupts(clipboard_flags);
+    if (clipboard_consumed) {
+      continue;
+    }
     /* Caelum's space has no input reader. */
     if (active_space == caelum_space) {
       continue;
@@ -1114,6 +1127,19 @@ static void handle_space_input(void)
     keyboard_route_event(active_space->keyboard, &event);
     cpu_restore_interrupts(flags);
   }
+}
+
+static void handle_space_input(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  handle_space_input_locked();
+  cpu_restore_interrupts(flags);
+}
+
+void space_keyboard_sync_input(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  handle_space_input();
 }
 
 struct space *space_pointer_active(void)

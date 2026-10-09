@@ -19,6 +19,8 @@ struct space;
  * stop was requested; the caller must detach under its resource lock before
  * reusing the wait or returning. Published loans use uninterruptible sleeps. */
 bool task_stop_requested(void);
+/* Retained process-control/group task link held by caller. */
+bool task_is_stopped(const struct task *task);
 bool task_wait_stop_requested(const struct task_wait *wait);
 bool task_wait_sleep_interruptible(struct task_wait *wait);
 bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline);

@@ -82,4 +82,7 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
 
+void terminal_pointer_clipboard_action(struct pointer_object *pointer, uint64_t action_id,
+    uint64_t operation, uint64_t layer);
+
 #endif

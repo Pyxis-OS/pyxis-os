@@ -1,3 +1,4 @@
+#include <kernel/object/clipboard.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -93,6 +94,17 @@ uint64_t process_control_ready(struct process_control *control)
   return complete ? WAIT_COMPLETE : 0;
 }
 
+bool process_control_stopped(struct process_control *control)
+{
+  if (!control) {
+    return true;
+  }
+  lock_control(control);
+  bool stopped = !control->task || task_is_stopped(control->task);
+  unlock_control(control);
+  return stopped;
+}
+
 struct syscall_result process_control_call(struct process_control *control,
     uint64_t rights, uint64_t operation, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -111,6 +123,7 @@ struct syscall_result process_control_call(struct process_control *control,
       task_request_stop(control->task);
     }
     unlock_control(control);
+    clipboard_stop_notify();
     return (struct syscall_result){CALL_OK, 0};
   }
   if (operation != PROCESS_WAIT) {
