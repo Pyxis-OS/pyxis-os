@@ -1,9 +1,15 @@
 # Presentation timing and buffering
 
-Short investigation/proposal, 2026-10-09, at Pyxis `f4c5cdbc`, userland
-`9ea770b9`, ports `8b918c46`. No implementation, hardware-register reads/writes
-or new performance measurements. The owner reports a tear line with ordinary
-Quake at about 72 fps on the ThinkPad's 60 Hz panel.
+Investigation, 2026-10-09, at Pyxis `f4c5cdbc`, userland `9ea770b9`, ports
+`8b918c46`; the owner reports a tear line with ordinary Quake at about 72 fps on
+the ThinkPad's 60 Hz panel. All three decisions below were accepted as the
+defaults on 2026-10-09.
+
+**Status:**
+- **Step 1, RAM staging for boot and Bochs:** delivered for review, with its
+  [measurements and native steps](../development/experiments/presentation-staging/README.md).
+- **Completed-frame handoff:** a proposal, [below](#completed-frame-handoff-proposal).
+- **Timing and pacing:** later steps.
 
 **Recommendation:** stage composition in RAM first, then investigate read-only
 Renoir timing and whether a native copy fits the measured blank interval.
@@ -127,7 +133,9 @@ clips/owner observations verify visible tearing; FPS or screenshots alone cannot
 Check QEMU VirtIO/Bochs separately and qualify resize/capture/panic/lifetime paths.
 No native timing measurement, QEMU boot or register access was performed here.
 
-## Owner decisions (proposed defaults)
+## Owner decisions
+
+Accepted 2026-10-09, all as the defaults.
 
 1. **Software first:** default RAM staging/full-frame presentation, followed by
    explicit completed-frame handoff for SDL/Quake; no tear-free promise from
@@ -139,4 +147,50 @@ No native timing measurement, QEMU boot or register access was performed here.
    bounded pending frames and truthful timing capability; keep uncapped mode
    available. No unconditional 60 Hz cap or pretend SDL vsync.
 
-Docs only; no implementation is assigned. Stop for owner review.
+## Completed-frame handoff (proposal)
+
+Proposal, 2026-10-09; not accepted. Today a graphics session has one mapping
+that the presenter samples every cadence while the program writes it, so a
+presented frame can mix two program frames. The handoff gives each session
+several slots and makes the program hand over finished frames:
+- **Mapping:** ACQUIRE and REPLACE map the session's slots at disjoint
+  addresses, with one geometry. Each slot is a complete frame.
+- **Submitting:** DISPLAY_SUBMIT names a slot the program has finished. That
+  slot becomes the pending frame. The program must not write it again until a
+  reply hands it back.
+- **Latching:** at each cadence, the presenter latches the pending frame as
+  the current one. The previous current slot becomes reusable. The presenter
+  repaints from the current slot every cadence, so it stays untouched while it
+  is current.
+- **Replies:** each SUBMIT reply names the slot to render next, and says
+  whether an earlier pending frame was dropped. A slot is never returned while
+  it is current or pending.
+- **Errors:** an unknown slot, or one the program doesn't hold, is
+  BAD_REQUEST and changes nothing.
+- **Unchanged:** REPLACE, RELEASE and exit retire every slot together, as the
+  mapping is retired today. Capture reads the current slot. Overlays and
+  staging are unchanged.
+- **Out of scope:** timing and pacing information, a later step.
+
+**Decisions** (proposed defaults):
+
+1. **Slots per session.**
+   - **Default:** three: one current, one pending and one being rendered.
+     SUBMIT never waits. Memory is three frames per session, 23.7 MiB at
+     1920x1080.
+   - **Alternative:** two. SUBMIT then waits, for up to one cadence, until the
+     presenter latches the pending frame. That halves the memory but couples
+     the program's frame time to the presenter.
+2. **A SUBMIT while a frame is pending.**
+   - **Default:** the newest frame wins. The pending frame is dropped, its slot
+     is handed back at once, and the reply says so. Quake's 72 fps then shows
+     as explicit drops at 60 Hz.
+   - **Alternative:** never drop. SUBMIT waits until the pending frame is
+     latched, which paces the program to the presenter. This overlaps the
+     later pacing step.
+3. **Continuous sampling.**
+   - **Default:** retire it. Graphics appear only through submitted frames.
+     SDL2's surface path and the Quake adapter move to SUBMIT in the same
+     change, with userland and ports PRs. A program that never submits shows
+     nothing.
+   - **Alternative:** keep sampled mappings beside the handoff.

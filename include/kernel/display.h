@@ -38,7 +38,10 @@ void display_resize_disable(void);
 
 /* Sole BSP presenter, after early-console retirement. Successful begin must
  * pair with end, including cancelled frames. Copy checks panic ownership in
- * bounded chunks; end submits/drains the frame before relinquishing the target. */
+ * bounded chunks; end submits/drains the frame before relinquishing the target.
+ * Boot and Bochs copies land in a RAM staging frame that end copies to scanout
+ * memory, so a presented frame must cover every visible pixel; unwritten parts
+ * would show the previous frame. */
 bool display_begin_frame(void);
 /* Stable backend selection; boot and Bochs use software composition. */
 bool display_pointer_hardware(void);
