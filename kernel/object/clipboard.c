@@ -28,6 +28,7 @@
 #define CLIPBOARD_CONTROLLER_REFUSE UINT64_C(102)
 #define CLIPBOARD_GRAPHICS_ALLOCATE UINT64_C(103)
 #define CLIPBOARD_GRAPHICS_COMMIT UINT64_C(104)
+#define CLIPBOARD_GRAPHICS_OWNER_REFUSE UINT64_C(105)
 #define CLIPBOARD_READ_CHUNK 256
 
 struct clipboard_item {
@@ -737,6 +738,29 @@ void clipboard_request_execute(struct clipboard_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   request->status = CALL_OK;
+  if (request->operation == CLIPBOARD_GRAPHICS_OWNER_REFUSE) {
+    space_keyboard_sync_input();
+    struct space *space = request->process->space;
+    struct keyboard_object *keyboard = (struct keyboard_object *)request->object;
+    lock_clipboard();
+    struct clipboard_activation action = space->clipboard->activation;
+    unlock_clipboard();
+    bool matches = keyboard == space->keyboard && action.graphics && action.id &&
+        action.owner == request->process && action.id == request->action_id &&
+        action.operation == request->length &&
+        keyboard_acquired(keyboard, request->process, action.keyboard_acquisition);
+    if (matches) {
+      lock_clipboard();
+      matches = space->clipboard->activation.id == action.id;
+      if (matches) {
+        /* Declining consumes unused and staged attempts, without accessing a store. */
+        space->clipboard->activation = (struct clipboard_activation){0};
+      }
+      unlock_clipboard();
+    }
+    request->status = matches ? CALL_OK : CALL_DENIED;
+    return;
+  }
   if (request->operation == CLIPBOARD_GRAPHICS_ALLOCATE ||
       request->operation == CLIPBOARD_GRAPHICS_COMMIT ||
       (request->operation >= CLIPBOARD_GRAPHICS_READ && request->operation <= CLIPBOARD_GRAPHICS_REFUSE)) {
@@ -1635,6 +1659,31 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
+  return (struct syscall_result){status, 0};
+}
+
+struct syscall_result clipboard_keyboard_refuse_call(struct keyboard_object *keyboard,
+    uintptr_t request_address, size_t request_size)
+{
+  uint64_t payload[2];
+  if (request_size != sizeof(payload)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(payload, request_address, sizeof(payload))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (payload[1] != CLIPBOARD_PUBLISH && payload[1] != CLIPBOARD_PASTE) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct clipboard_request *request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
+  request->process = process_current();
+  request->object = &keyboard->object;
+  request->operation = CLIPBOARD_GRAPHICS_OWNER_REFUSE;
+  request->action_id = payload[0];
+  request->length = payload[1];
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->status;
+  bsp_request_release(&request->request);
   return (struct syscall_result){status, 0};
 }
 

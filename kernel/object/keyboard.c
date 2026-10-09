@@ -40,6 +40,16 @@ bool keyboard_owned(struct keyboard_object *keyboard, struct process *process)
   return owned;
 }
 
+bool keyboard_acquired(struct keyboard_object *keyboard, struct process *process,
+    uint64_t acquisition)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_keyboard(keyboard);
+  bool acquired = keyboard->owner == process && keyboard->acquisition == acquisition;
+  unlock_keyboard(keyboard);
+  return acquired;
+}
+
 bool keyboard_clipboard_owner(struct keyboard_object *keyboard, struct process *process,
     uint64_t acquisition)
 {
@@ -302,12 +312,16 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != KEYBOARD_ACQUIRE && operation != KEYBOARD_READ && operation != KEYBOARD_RELEASE) {
+  if (operation != KEYBOARD_ACQUIRE && operation != KEYBOARD_READ &&
+      operation != KEYBOARD_RELEASE && operation != KEYBOARD_CLIPBOARD_REFUSE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   struct process *process = process_current();
   if (!(rights & KEYBOARD_RIGHT_INPUT) || process->space != keyboard->space) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == KEYBOARD_CLIPBOARD_REFUSE) {
+    return clipboard_keyboard_refuse_call(keyboard, request_address, request_size);
   }
   uint64_t flags = 0;
   struct keyboard_event reply;

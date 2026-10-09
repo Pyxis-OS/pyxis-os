@@ -17,6 +17,7 @@ struct clipboard_receiver;
 struct clipboard_item;
 struct key_event;
 struct keyboard_event;
+struct keyboard_object;
 
 /* Borrowed descriptors are used only while their input object is retained.
  * Input lock -> clipboard lock -> scheduler locks. No heap/user access locked. */
@@ -67,6 +68,8 @@ void console_paste_end_read(struct console_object *console);
 enum call_status terminal_paste_begin_read(struct kernel_object *object, bool timed, uint64_t deadline);
 void terminal_paste_end_read(struct kernel_object *object);
 
+struct syscall_result clipboard_keyboard_refuse_call(struct keyboard_object *keyboard,
+    uintptr_t request_address, size_t request_size);
 struct syscall_result clipboard_controller_refuse_call(uintptr_t request_address, size_t request_size);
 
 struct syscall_result clipboard_call(struct kernel_object *object, uint64_t rights,

@@ -38,7 +38,9 @@ void keyboard_set_layer(struct keyboard_object *keyboard, bool terminal_layer,
                         bool discard_input);
 void keyboard_set_overlay(struct keyboard_object *keyboard, bool overlay_focused);
 void keyboard_reset_input(struct keyboard_object *keyboard);
-/* BSP, IF=0: clipboard admission checks focused acquisition ownership. */
+/* BSP, IF=0: acquired ownership; clipboard admission additionally checks focus. */
+bool keyboard_acquired(struct keyboard_object *keyboard, struct process *process,
+    uint64_t acquisition);
 bool keyboard_clipboard_owner(struct keyboard_object *keyboard, struct process *process,
     uint64_t acquisition);
 /* Any CPU, preserves IF. INPUT and same-space authority are checked by caller;
