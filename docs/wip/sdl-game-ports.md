@@ -13,7 +13,7 @@ The comparisons isolate the cost of the SDL2 path, including the
 **Accepted by the owner** (2026-10-09): no audio for any of the three games.
 They are built video- and input-only, without SDL2_mixer or audio libraries
 wherever the build allows. Sound and music become a separate, later plan after
-[volume control](audio-volume.md). Today's SDL2 port has no audio either:
+[volume control](../userland/audio-volume.md), now closed. Today's SDL2 port has no audio either:
 `SDL_INIT_AUDIO` fails, and SDL's audio needs threads the port doesn't have.
 
 ## What each game needs

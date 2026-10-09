@@ -208,8 +208,9 @@ Owner ideas, 2026-10-07; none is scheduled.
 
 The [analog HDA engine](../devices/hda.md) and [PCM sessions](../interfaces/audio.md)
 closed 2026-10-09 with native AMD/ALC257 speaker/headphone tones and an
-error-free eleven-minute eight-session silent run. No volume control exists yet;
-[volume and other limits](../technical-debt.md#hd-audio-volume-control) remain debt.
+error-free eleven-minute eight-session silent run. [Master/per-space volume](../userland/audio-volume.md)
+also closed with native listening/mute/reboot evidence; [remaining limits](../technical-debt.md#hd-audio-volume-control)
+include media-key input and the later native regression.
 
 SDL2 and Quake sound are separate consumer assignments. Conversion/resampling
 belongs in userspace; Quake needs its real mixer and native producer adapter.
