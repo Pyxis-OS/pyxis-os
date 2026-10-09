@@ -178,8 +178,8 @@ bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
   bool icon = icon_hit(&drawn_layout, x, y, &space);
   bool popup = in_popup(x, y);
   if (icon) {
-    if (!focused || pressed) {
-      show_popup(space, false);
+    if ((!focused || pressed) && !show_popup(space, false)) {
+      volume_ui_cancel();
     }
     if (enabled(space) && (pressed & POINTER_BUTTON_LEFT)) {
       audio_volume_control(space, AUDIO_VOLUME_TOGGLE_MUTE, 0);
