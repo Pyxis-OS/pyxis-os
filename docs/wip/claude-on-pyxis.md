@@ -45,6 +45,17 @@ An error after transmission can leave delivery/billing unknown; report it and
 let the owner decide whether to retry. HTTP status, request ID and bounded error
 body are useful diagnostics; request headers and credentials are not logs.
 
+The owner's 2026-09-24 direction for [future writable providers](userspace-scheme-providers.md#future-writes-and-shell-operations)
+and [prepared requests and shell handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
+already describes POST through files: `fopen` with `"w"`/`"w+"` stages a body,
+an explicit commit submits one POST, and reads return its response, without
+automatic retry. Flush/close must not implicitly submit a request.
+Task 1a's bounded libhttp POST operation is the engine that future writable
+provider will use, not a second HTTP implementation. The harness can move onto
+that file path once the provider exists, preserving its credential, deadline
+and no-retry policy. Implementing writable providers or shell handoff is outside
+these harness tasks.
+
 Select [dkjson 2.11](https://dkolf.de/dkjson-lua/dkjson-2.11.lua), MIT, pure Lua,
 without optional LPeg. Its versioned source has author-published SHA-256
 `197cb50834c642f84b4cf99fe724932c50e6d9c92faec7ad89aa25e91df4d481`
@@ -55,9 +66,10 @@ tool-input objects must remain objects. Its permissive decoder is not a complete
 strict-JSON validator: bound input/nesting, require complete consumption, validate
 UTF-8 and every tool schema, and never evaluate response text as Lua code.
 
-Before vendoring or building, the owner needs a mirror/cache entry for that
-versioned dkjson file. No upstream fallback. Lua, Mbed TLS and the HTTP parser
-already have pinned recipes; no compiler-container rebuild is proposed.
+Task 1c uses the [owner's dkjson mirror](https://repo.internal/repository/raw-dkolf/dkjson-lua/dkjson-2.11.lua),
+available and SHA-256 verified by the owner at the hash above. Preserve that pin
+and license when vendoring; no upstream fallback. Lua, Mbed TLS and the HTTP
+parser already have pinned recipes; no compiler-container rebuild is proposed.
 
 ## Three owner decisions, with defaults
 
@@ -185,14 +197,17 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
 
 - **1a, small first task: bounded libhttp POST and overall deadlines.** Add the
   request operation, response/error ownership and required TLS/native-wait deadline
-  adaptation. Use local fixtures; Lua, credentials and Anthropic calls stay out.
+  adaptation. This is also the future writable provider's HTTP engine; provider
+  integration is deferred. Use local fixtures; Lua, credentials and Anthropic
+  calls stay out.
   **After this task, the owner can:** send a bounded native C POST and inspect its response, including slow/error cases.
 - **1b: shared Lua/native HTTPS integration.** Wire the userland embedding,
   reusable `pyxis` registration, one crypto owner, verified HTTPS and private
   credential-file delegation/loading with the installed, QEMU and live/PXE
   provisioning paths above. Preserve ordinary Lua `run`/`dir`/hash behavior.
   **After this task, the owner can:** make an explicitly authorized HTTPS request from the embedded Lua application.
-- **1c: pinned pure-Lua JSON.** Vendor mirrored dkjson with license/provenance,
+- **1c: pinned pure-Lua JSON.** Vendor dkjson 2.11 from the owner's mirror above
+  at the recorded SHA-256, with license/provenance,
   object/null handling, bounded response parsing and schema validation.
   **After this task, the owner can:** construct and decode Messages/tool data locally without API spending.
 - **1d: native command capture.** Add explicit stream/grant selection, per-command
