@@ -8,16 +8,16 @@ receiving output while hidden. They share the space's processes and grants.
 
 | Session state or action | Visible layer and tab marker |
 | --- | --- |
-| No session, or ACQUIRE before first PRESENT | Terminal, no marker |
-| First successful PRESENT | Graphics, `+` |
-| Super+Down after PRESENT | Terminal, `−` |
-| Super+Up after PRESENT | Graphics, `+` |
-| Later PRESENT, REPLACE, resize or space switch | Preserve the choice |
+| No session, or ACQUIRE before first SUBMIT | Terminal, no marker |
+| First successful SUBMIT | Graphics, `+` |
+| Super+Down after SUBMIT | Terminal, `−` |
+| Super+Up after SUBMIT | Graphics, `+` |
+| Later SUBMIT, REPLACE, resize or space switch | Preserve the choice |
 | RELEASE or owner exit | Terminal, no marker |
 
 Starting a session in another space does not select that space. Its first
-PRESENT records graphics for the next visit. A later session starts with its
-own first-PRESENT behavior.
+SUBMIT records graphics for the next visit. A later session starts with its
+own first-SUBMIT behavior.
 
 Either Super key works without Shift, Control or Alt. Each arrow press acts
 once; its repeats and release are consumed even if Super is released first.

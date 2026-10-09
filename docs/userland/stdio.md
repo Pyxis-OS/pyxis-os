@@ -57,6 +57,16 @@ Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
 atomic append guarantee; see [technical debt](../technical-debt.md#non-atomic-stdio-append).
 
+## Provider response metadata
+
+`pyxis_stdio_response(FILE *, struct pyxis_response_info *)` in `<pyxis/stdio.h>`
+copies presence flags, status, redirect count, final URL and media type without
+changing cursor, indicators or native authority. It returns zero for a valid
+stream, including local/inherited streams with absent metadata; NULL arguments
+use EINVAL and closed/invalid streams EBADF. Failure clears the output; success
+preserves errno. Metadata belongs to the descriptor and is freed on close.
+Failed fopen exposes errno only. See the [redirect contract](http-fetch.md#redirect-chains).
+
 ## Descriptor I/O
 
 `fcntl.h` declares `open(path, flags, ...)` and defines `O_RDONLY` as zero.

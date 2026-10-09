@@ -22,20 +22,26 @@ Relative paths still use the retained native working directory.
 
 The [OPEN ABI](../../include/abi/provider.h) carries the complete URI as copied bytes
 and a nonzero READ/WRITE mask. The provider interprets the URI without library
-decoding, normalization or component walking. URI bytes are bounded to 4,080;
+decoding, normalization or component walking. Generic URI bytes are bounded to 3,768;
 longer requests fail with FILE_TOO_LARGE instead of being truncated. Requested access
 needs the corresponding service OPEN right. Read-only services reject writable
 opens before producing an exported file.
 
-Successful OPEN returns exactly one owned exported FILE grant, exactly the
-requested resource rights, and SEND|RECEIVE transport authority. Reply metadata
+The 328-byte request prefix carries rights, URI length and optional HTTP
+continuation context; an 80-byte reply prefix distinguishes ERROR, BYTES and
+REDIRECT. Generic requests zero HTTP flags/origin/budgets.
+
+BYTES returns exactly one owned exported FILE grant, exactly the
+requested resource rights, and CALL transport authority. Reply metadata
 declares the FILE interface and byte representation, with an optional printable
 ASCII media type of at most 127 bytes. Libpyxis checks these declarations against
 the kernel-authenticated handle query. Metadata grants no authority and does not
 prove that bytes conform to their media type. Malformed replies release received
 grants and fail; unsuccessful OPEN returns no resource. Every reply includes
 the fixed OPEN prefix. Failure zeroes the interface, representation and media-type
-fields, but may retain a provider-specific diagnostic status. HTTP uses its final
+fields, outcome and accounting, but may retain a provider-specific diagnostic status.
+REDIRECT succeeds without a FILE, carrying a bounded Location and HTTP charges;
+only the shared HTTP open bridge follows it. HTTP uses its final
 response code; text uses zero. The kernel does not interpret this field.
 
 `provider_open(provider, uri, rights, deadline_ns, &result, &file)` returns a
@@ -43,7 +49,9 @@ transport/local-validation status. When that is CALL_OK, `result.status` is the
 provider's operation result and `result.provider_status` is its diagnostic, on
 both success and failure. `result.delivery` retains IPC delivery state even on
 transport or validation failure. Successful representation metadata is in
-`result.metadata`; only operation success supplies an owned file.
+`result.metadata`; only BYTES supplies an owned file. REDIRECT has no grant,
+with Location and consumed accounting in the result. The contextual helper is
+`provider_open_context()`; low-level `provider_open()` performs just one hop.
 `deadline_ns` is an absolute monotonic deadline; zero means unlimited. `path_resolve()` for
 files and `path_open_file()` use the same bridge; libc and shell redirects share
 the latter's open/create routing. Provider directory operations, cwd changes,
@@ -64,9 +72,11 @@ reply extents and application status; unexpected attachments are closed.
 Transport and operation failures remain distinct until the helper maps them to
 its native status. A delivered mutation whose transport fails reports
 OUTCOME_UNKNOWN. No automatic retry, reconnection or rebinding occurs. Existing
-FILE helpers and ordinary path/libc opens still wait without a caller deadline.
-Native OPEN callers can supply one explicitly; an unresponsive provider can
-otherwise block its client. A fetch budget does not bound queueing time.
+FILE reads and generic path/libc opens still wait without a caller deadline.
+HTTP(S) open chains use one absolute 30-second/earlier-caller deadline, including
+OPEN queueing; their low-level callers supply bounded scratch and clock READ
+authority through `path_workspace`. Other native OPEN callers can supply a
+deadline explicitly; an unresponsive generic provider can block its client.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
 Each libc descriptor keeps its own offset. Namespace replacement affects future
@@ -117,9 +127,10 @@ supervisor; this is capability-driven shutdown, not forced cancellation.
 ## HTTP and HTTPS snapshots
 
 Separate [HTTP and HTTPS services](../userland/http-fetch.md) publish OPEN_READ as `http` and
-`https` in configured interactive namespaces. Each fetches a complete response
-before returning a read-only FILE snapshot, preserving the optional Content-Type
-and final HTTP status.
+`https` in configured interactive namespaces. Each performs one network hop.
+The shared bridge follows the [bounded redirect policy](../userland/http-fetch.md#redirect-chains);
+only a complete final response becomes a read-only FILE snapshot. Optional
+Content-Type, status and effective URL reach libc through copied metadata.
 Existing `cat`, `cksum`, `tee`, libc and input redirection share this bridge.
 Each open fetches independently; copies retain the same immutable body.
 Retirement releases its allocation and shared storage reservation. The provider

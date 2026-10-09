@@ -31,8 +31,8 @@ and pitch, 7.91 MiB at 1920x1080.
 
 VirtIO already composes into its RAM backing and transfers it, so it adds no
 copy. Staging keeps partial frames off scanout memory. It does not synchronize
-the copy with the panel, and it still samples application mappings while
-programs write them. See the [measurements](../development/experiments/presentation-staging/README.md).
+the copy with the panel. Application frames arrive whole through the
+[frame handoff](../interfaces/graphics.md#slots-and-frame-handoff). See the [measurements](../development/experiments/presentation-staging/README.md).
 
 ## Software pointer
 
@@ -85,9 +85,8 @@ An immutable READ-only FILE is published only after normal frame submission
 succeeds. VirtIO also requires confirmed cursor state matching the snapshot:
 successful fenced image preparation when needed and a matching bounded cursor
 used completion. An unchanged state reuses its last confirmed completion rather
-than submitting a redundant request. Failure publishes no FILE. This preserves
-the existing single-buffer tearing semantics; it adds no atomic application
-frame, independently acknowledged cursor application or vblank guarantee.
+than submitting a redundant request. Failure publishes no FILE. It adds no
+independently acknowledged cursor application or vblank guarantee.
 
 Admission, allocation and FILE publication are BSP/IF=0 work outside the output
 lock; copying and device waits remain on the sole IF=1 presenter. Deferred caller
@@ -280,15 +279,16 @@ clock READ handle; absent clock authority preserves legacy input behavior.
 Kilo redraws its editor and search prompt while retaining its existing minimum
 of two columns and three rows.
 
-Acquired graphics mappings keep their address, extent, pitch and dimensions
+Acquired graphics slots keep their address, extent, pitch and dimensions
 until owner-only REPLACE or RELEASE. Presentation clips the top-left
 intersection and fills uncovered destination margins. REPLACE takes an expected
-generation, prepares a zeroed candidate at a disjoint user address through the
+generation, prepares a zeroed slot set at a disjoint user address through the
 parked-process BSP loan, and returns BUSY on mismatch. Allocation or mapping
-failure leaves the old mapping and ownership intact. Success retires the old
-user alias within the call while presenter leases retain old backing. There
-is no RELEASE/ACQUIRE gap; a visible session selects the new blank buffer until
-redraw. The old pointer is invalid after successful return.
+failure leaves the old slots and ownership intact. Success retires the old
+user aliases within the call while the session's on-screen reference and
+presenter leases retain old backing. There is no RELEASE/ACQUIRE gap; a visible
+session keeps showing its last frame until it submits a new one. The old
+pointers are invalid after successful return.
 
 A local TTY uses approximately `pitch * (height - bar_height)` bytes per
 space; navigation/cursor storage and the VirtIO surface add their own backing.

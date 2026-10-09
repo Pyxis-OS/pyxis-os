@@ -147,7 +147,7 @@ initial mode before AP startup, with direct panic output withdrawn while PCI
 decoding or mode registers change. It publishes the immutable selected target
 only after readback, or returns to a verified firmware target on failure.
 Unverifiable restoration halts boot on serial. The bar, cursor composition,
-full-frame cadence and userspace mapping/PRESENT lifetime are unchanged.
+full-frame cadence and userspace slot/SUBMIT lifetime are unchanged.
 
 ## Serial
 
