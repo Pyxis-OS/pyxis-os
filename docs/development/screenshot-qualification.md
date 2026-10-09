@@ -118,8 +118,9 @@ control change bypassed the capture begin/copy/finish presenter hooks, used dire
 `display_copy` and retained ordinary `display_end_frame`. The native ABI, seed,
 service and space creation remained linked. No capture request ran during idle
 sampling. This isolates presenter hooks; it is not a whole-system pre-feature
-comparison. The [measurement-only patch](experiments/screenshot-qualification/idle-control.patch)
-is retained for reproduction; it is not applied to the implementation.
+comparison. The measurement-only patch
+was not applied to the implementation; Git history keeps it at `d6733033` as
+`docs/development/experiments/screenshot-qualification/idle-control.patch`.
 
 | Artifact | SHA-256 |
 | --- | --- |

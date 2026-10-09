@@ -1,5 +1,7 @@
 # Read-only npfs FUSE qualification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Manual validation on 2026-10-06 for
 [the Linux mount](../../npfs-linux-mount.md). Implementation and QEMU/loop-device
 checks are complete. On 2026-10-06 the owner reported successful physical stick
@@ -80,8 +82,6 @@ mode 0444. Linux `sha256sum` matched every value reported inside Pyxis:
 | `kept.txt` | 661 | `aa947fd83f8021231c34df87f225c5d5e2db615b5041af7b84a7800dfb09c86d` |
 | `doom.pxe` | 438384 | `58aaadfbc831a008f6363a423c79678cfa6d8c7c84e9c6aaed517867571d4966` |
 | `notes/editor.pxe` | 97296 | `bdcc20ff1d2b1b8c9cb2a374bb8245e442c0b61a13f751afff942d940cdf8846` |
-
-![Hashes reported inside Pyxis](guest-hashes.png)
 
 The mounted binary files also matched their immutable boot-source copies with
 `cmp`. Linux `cp` copied the nested file out, and that copy matched too. Seeking

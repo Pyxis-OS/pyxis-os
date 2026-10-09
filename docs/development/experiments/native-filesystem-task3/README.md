@@ -1,5 +1,7 @@
 # Native filesystem task-3 measurements
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 The [populated-pool review](populated-pool-review.md) records the allocation bitmap
 blocker found after the initial measurements, its fix and the matched populated
 case. The historical intervals below retain their original revisions/configuration.
@@ -57,8 +59,7 @@ Write samples made 258 calls, with no short writes. RAM sync is a no-op and
 provides no disk-durability comparison. Warmup affects caches; reopening does
 not imply cold storage. These are elapsed workload intervals, not per-call
 percentiles or confidence estimates. They do not qualify the owner's host or
-physical hardware. The [complete benchmark output](baseline.txt) and
-[serial boot record](baseline-serial.txt) retain the measured evidence.
+physical hardware.
 
 The remote client exited with shell success and complete output draining. The
 read-only QEMU process was stopped; no task validation processes remain.
@@ -100,7 +101,7 @@ unsupported operator before filesystem access, so append/end-relative seek has
 source-review coverage rather than a shell runtime result.
 The final boot's ordinary write/read, repeated directory sync and writable INFO
 query passed. After clean stop, extracted-pool fsck and the new text-file comparison
-passed again. Its output is appended to the [consumer record](writer-final-consumer.txt).
+passed again.
 
 The first trusted init mounted both volumes read/write, created `data://trusted`,
 copied the 1 MiB fixture there and completed `sync --disk` before creating the
@@ -146,8 +147,8 @@ sync remains a no-op.
 | RAM sync | 0.034 ms | 0.034–0.036 ms |
 
 Read samples made 257 calls plus EOF, and write samples made 258 calls, with no
-short transfers. The complete [second-boot output](writer-after-batching.txt)
-includes the workflows and expected failures described below. A copy command
+short transfers. The second-boot run
+covered the workflows and expected failures described below. A copy command
 also verified warmup and one measured 1 MiB sample: transfer 438.273 ms, retained
 file sync 209.538 ms. These are warm workload intervals, not cold-disk results,
 per-call distributions or owner-host measurements.
@@ -161,7 +162,7 @@ truncate. Its repeated grow-write workload therefore measured transfer median
 and 255 short writes per sample. The implementation now handles the complete
 request when possible and batches up to 64 reclaimed mappings within a bounded
 metadata-image budget. The same workload's transfer median fell to 251.179 ms.
-The [first-boot output](writer-before-batching.txt) preserves the earlier result.
+The first boot gave the earlier result.
 
 Existing QEMU `info blockstats` snapshots bracketed complete write commands:
 
@@ -173,7 +174,7 @@ Existing QEMU `info blockstats` snapshots bracketed complete write commands:
 The byte ratio fell from about 8.55 to 1.24, or about 85.5% fewer virtual-device
 write bytes for this workload. Prepared-write deltas were 13,316,096 bytes,
 3,251 writes and 100 flushes over **12 MiB** of logical data including preparation.
-[Target-device snapshots](blockstats.txt) retain the counters. They include
+The target-device counter snapshots include
 creation, warmup, preparation and asynchronous checkpoint work, rather than
 isolating a single syscall. A COMMITTED completion can precede later checkpoint
 writes. No other successful mutation command ran inside those grow-write windows;
@@ -197,8 +198,8 @@ removed that obsolete requirement while preserving other validation. After the
 SDK and consumers rebuilt, the third clean boot confirmed fastfetch reported
 both writable volumes and the read-only alias with consistent pool IDs, capacity
 and journal sequence. It also ran the saved native executable and verified a
-persisted 1 MiB file. [Final consumer output](writer-final-consumer.txt) records
-the commands and typed completion results.
+persisted 1 MiB file. The final consumer run completed
+every command with a typed success result.
 
 After synchronized clean stops, standalone pool extraction and native host fsck
 passed. Extracted grow-write, prepared-write and copied 1 MiB files matched the
@@ -215,11 +216,11 @@ This checks the image consumer; no USB boot or native installer result is claime
 
 ### Debugger inspection and limits
 
-[GDB observations](writer-gdb.txt) captured the first CREATE and the reboot's
+GDB observations covered the first CREATE and the reboot's
 root acquisition with interrupts enabled on the BSP worker. A settled second-boot
 snapshot showed EMPTY journal sequence 2859, zero images, no retained writeback
 error, no failed-pool flag and all four cache chunks allocated. Debugger inspection
-did not inject filesystem calls. [Serial output](writer-serial.txt) records that
+did not inject filesystem calls. The serial output showed that
 boot's four-CPU and writable virtio-blk configuration.
 
 Separate compilation with the ordinary kernel flags plus `-fstack-usage` found

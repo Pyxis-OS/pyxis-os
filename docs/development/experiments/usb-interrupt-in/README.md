@@ -1,5 +1,7 @@
 # Root full-speed interrupt-IN qualification
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 On 2026-10-08, Bluetooth investigation task 3a implemented the private
 [interrupt-IN interface](../../../devices/usb-interrupt-in.md), following the
 owner's decisions on [#517](https://git.internal/PyxisOS/pyxis-os/pulls/517).
@@ -72,8 +74,7 @@ GDB used the ELF from the same build as its guest, with
 `-gdb tcp:127.0.0.1:1234` and, when setting startup breakpoints, `-S`.
 Debugger sessions only inspected state and ran the existing execution flow;
 they did not call kernel functions or inject register/event faults.
-The [expression mapping](gdb-expressions.txt) identifies the numbered values in
-the GDB captures, whose logging omitted the entered commands.
+The numbered values in the GDB output below are the expressions the text names.
 
 ## Kernel-only boot and matched baseline
 
@@ -125,11 +126,11 @@ the host before SET_CONFIGURATION, and started two 257-byte receives. A six-seco
 wait returned `USB_TIMEOUT` without terminating reception. HCI Reset then returned
 a six-byte event. Then 270 Intel Read Version requests completed; sampled replies
 were 15 bytes.
-The first, second and 271st collected sequences appear in the
-[serial capture](coexist-serial.txt).
+The first, second and 271st collected sequences appeared in the
+serial output.
 
 The consumer sent one final version request without taking its event. Post-boot
-[GDB inspection](coexist-gdb.txt) showed sequence 272, one copied completion,
+GDB inspection showed sequence 272, one copied completion,
 producer 19 with cycle false and both receives still `INTERRUPT_POSTED`. The
 one-page transfer ring has 255 usable TRBs plus its Link TRB, so this workload
 crossed the producer wrap while retaining two independently owned receives.
@@ -137,7 +138,7 @@ The stream remained `USB_OK`.
 
 The observed context has DCI 3, Interrupt IN type 7, packet 64, interval exponent
 3 and Max ESIT Payload 64. An earlier
-[Bluetooth-only snapshot](context-gdb.txt) recorded words `00030001`,
+Bluetooth-only snapshot recorded words `00030001`,
 `0040003e` and `00400101`, matching running state, the periodic fields and a
 257-byte Average TRB Length. This qualifies the observed full-speed `bInterval=1`
 profile, not every permitted interval or packet size. That snapshot used the
@@ -150,7 +151,7 @@ queued final reply.
 In a separate run of the same consumer, GDB stopped at `drain_events` inside
 `usb_host_control_wait` for the final command. After `finish`, while still in
 that control wait, sequence advanced 271 → 272, producer 18 → 19 and copied queue
-count 0 → 1. The [backtrace and before/after capture](progress-gdb.txt) establish
+count 0 → 1. The backtrace and before/after values establish
 receive capture and rearm at that inner wait, rather than only at the outer
 controller loop. The shared drain point in command and bulk waits has source
 review; this capture specifically exercised the control wait.
@@ -166,8 +167,8 @@ coexistence, not writes or native USB-media qualification.
 
 After the same traffic and disk preparation, the QEMU monitor's
 `device_del bluetooth` detached that guest device while its two receives were
-posted. The [removal log](removal-serial.txt) recorded controller quarantine,
-confirmed halt and disabled interrupt delivery. [GDB](removal-gdb.txt) showed
+posted. The removal log recorded controller quarantine,
+confirmed halt and disabled interrupt delivery. GDB showed
 `running=false`, `failed=true`, `interrupt_ready=false`, stream `USB_IO`, both
 receives `INTERRUPT_HELD`, nonzero retained arena/ring physical addresses and
 the copied completion still present. No register corruption or fabricated

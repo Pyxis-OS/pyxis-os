@@ -1,5 +1,7 @@
 # SMP task 5: PMM lock and per-CPU scratch mappings
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Matched before/after record for [SMP task 5](../../../wip/scheduling-and-threads.md),
 recorded on 2026-10-05. These are nested-VM measurements: the development host is
 itself a KVM guest (Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized i9-12900K), and
@@ -55,13 +57,10 @@ Every difference is within the spread between runs on this VM. Page work still
 goes through the BSP's private-memory requests, so 4 × P still takes about twice
 2 × P. Task 7 moves that work off the BSP.
 
-Full output: `pre4-output.txt`, `post4-output.txt`, `pre1-output.txt` and
-`post1-output.txt`.
-
 ## Stress run (not committed)
 
-[stress.patch](stress.patch) is a throwaway patch on top of this PR; it is not
-part of the tree. It applies to main at `fe1f5cd` with `git apply`. When the scheduler starts, it keeps every AP busy for six
+The stress patch is a throwaway patch on top of this PR; it is not
+part of the tree. It applied to main at `fe1f5cd` with `git apply`. When the scheduler starts, it keeps every AP busy for six
 seconds while the BSP continues booting: USB enumeration, display start and
 network setup all allocate during that window. Each round on an AP:
 
@@ -78,8 +77,7 @@ as long as the free count, which scans the whole bitmap and fails because free
 memory is fragmented. Every 1024th round, it sends a memory-pressure notification.
 
 At the end, each AP recounts the allocated frames in the bitmap under the PMM
-lock and compares the count with the statistics. Output is in
-[stress-serial.txt](stress-serial.txt).
+lock and compares the count with the statistics.
 
 | CPUs | Rounds per AP | Private spaces per AP | Refused large requests | Failures | Pattern mismatches | Bitmap matches stats |
 | ---: | --- | --- | --- | ---: | ---: | --- |
@@ -112,7 +110,7 @@ So the stress does detect a missing PMM lock.
 A hardware breakpoint in the stress build (before refused requests were added)
 stopped each time an AP had both of its
 slots mapped. GDB then read the page table covering `TEMP_MAP_BASE`, where entries
-2n and 2n+1 belong to CPU index n ([scratch-gdb.txt](scratch-gdb.txt)).
+2n and 2n+1 belong to CPU index n.
 
 - **Separate pairs:** both entries of the stopped CPU's pair always mapped the
   same frame. In one stop, CPU 1 (entries 2–3) and CPU 3 (6–7) held live

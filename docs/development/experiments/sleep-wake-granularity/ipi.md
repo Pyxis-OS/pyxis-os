@@ -57,8 +57,8 @@ After SDL completed, the same packaged `quake +map e1m1` ran with no input,
 retained the original verified P1F entry/loadable-byte identity. Manual
 `Host_Frame` boundary samples used `host_framecount` and the 10 ns HPET counter;
 the hardware breakpoint was disabled between boundaries. No sampling loop,
-inferior function call or guest state substitution occurred. The sanitized
-[transcript](quake-ipi-gdb.txt) preserves all numerical readings.
+inferior function call or guest state substitution occurred. The numerical
+readings are in the table below.
 
 | Window | Completed frames | HPET ticks, 10 ns | Frames/s |
 | --- | ---: | ---: | ---: |

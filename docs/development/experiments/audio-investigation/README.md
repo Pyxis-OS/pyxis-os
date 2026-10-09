@@ -1,5 +1,7 @@
 # QEMU HD Audio playback evidence
 
+Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
+
 Captured 2026-10-08. See the [result report](../../audio-investigation.md) and
 [milestone with accepted defaults](../../../wip/hda-playback.md). All HDA code is private probe
 code on unmerged branches; this record accompanies a documentation-only PR.
@@ -26,9 +28,8 @@ The bundle verifier checked pinned SDK/userland/ports payloads; only the kernel
 changed. The complete initrd SHA-256 was identical in all three images:
 `cb7b47c9e3585407f92c936ea5f6e5d5d07bb314ad4d9287770bc745be264d69`.
 
-The retained [baseline kernel](baseline-kernel.txt), [probe kernel](probe-kernel.txt),
-[effective configuration](kernel.config), [SDK](bundle-sdk.txt),
-[userland](bundle-userspace.txt) and [ports](bundle-ports.txt) records give
+The recorded provenance (baseline and probe kernels, effective configuration,
+SDK, userland and ports) gives
 compiler/configuration/ABI/pin provenance. SDK/userland/ports bundles originate
 from clean `6c7ced2`, with unchanged inputs verified against this main:
 userspace `df780027`, ports `2a5c30f4`, fs `b427df29`, lwIP `a1aadb91`.
@@ -85,24 +86,20 @@ gdb -q -batch build/caelum.elf \
 
 The output-only final capture instead prints `probe.failed`, `probe.shutdown`,
 `probe.commands` and route length. No inferior calls or state edits were used.
-Retained transcripts: [initial output](audio-output-gdb.txt),
-[final output](audio-output-drain-gdb.txt), [final duplex](audio-duplex-drain-gdb.txt).
+GDB transcripts covered the initial output, final output and final duplex runs.
 
 The existing remote client ran `lspci -n`, then five `echo audio-check-N` commands,
-then `exit`. The [baseline](audio-baseline-remote.txt),
-[initial output](audio-output-remote.txt) and
-[final duplex](audio-duplex-drain-remote.txt) transcripts decode its machine
-records and retain completion statuses. All six workload commands returned 0.
+then `exit`. The baseline, initial output and final duplex runs decoded its machine
+records and completion statuses. All six workload commands returned 0.
 They ran after the probe finished: responsiveness evidence only, no concurrent
 refill test or numerical round-trip benchmark.
 
 ## Raw observations and sample inspection
 
-Serial records: [initial output](audio-output-serial.txt),
-[initial duplex](audio-duplex-serial.txt), [final output](audio-output-drain-serial.txt),
-[final duplex](audio-duplex-drain-serial.txt). Ring counts, all codec responses,
+The serial records of the initial and final output and duplex runs held ring
+counts, all codec responses,
 route controls, elapsed HPET/WALCLK, stream positions/status and shutdown
-readbacks are retained. The report interprets their boundaries.
+readbacks. The report interprets their boundaries.
 
 | Run | HPET playback ns | WALCLK ticks | Stop LPIB bytes | Polls | BCIS observations | WAV frames | Tone frames present |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -120,9 +117,8 @@ the initial captures were exact prefixes, the final captures contained the
 whole tone plus silence. Peaks were −8192/+8192 and positive-going crossings
 were 48 frames apart (1 kHz). Identical channels do not test channel ordering.
 
-The [final output WAV](audio-output-drain.wav) is retained for inspection.
-Other local WAVs are identified by hashes; their metrics and serial captures
-are retained here. No WAV generated from the formula replaces captured output.
+The WAVs are not kept in the tree; they are identified by hashes above and their
+metrics are recorded here. No WAV generated from the formula replaces captured output.
 
 | WAV | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -139,7 +135,6 @@ WALCLK and WAV duration are not interchangeable latency/consumption promises.
 Native playback, IRQ delivery, sustained refill/mixing, independent channels,
 ring wrap, command faults and failure recovery remain unmeasured. All task-owned
 processes stopped; no native device was accessed.
-
 
 ## Native codec inventory supplied after review
 

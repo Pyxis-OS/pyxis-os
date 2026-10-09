@@ -52,7 +52,6 @@ the original verified P1F/debugger ELF pair. Five manual `Host_Frame` boundary
 windows sampled completed frames and the 10 ns HPET counter, with the hardware
 breakpoint disabled between boundaries. No sampling loop or inferior call.
 All four deadline modes were active; ordinary migration remained enabled.
-See the sanitized [raw transcript](quake-timer-gdb.txt).
 
 | Window | Completed frames | HPET ticks, 10 ns | Frames/s |
 | --- | ---: | ---: | ---: |
@@ -89,7 +88,7 @@ Its two manual windows measured:
 This is consistent with retained nominal 120 Hz preemption and shows no material
 idle interrupt increase. Endpoint/count differences and unobserved intermediate
 state do not establish exact absence of every premature/stale IRQ or native
-power behavior. See [idle transcript](idle-timer-gdb.txt).
+power behavior.
 
 For the short-sleep check, the same SDL measurement source changed only
 `DELAY_MS` from 16 to 1. Its separately compiled/uploaded P1F SHA-256 was
@@ -105,7 +104,7 @@ and final output, the boundary interval was 104642625 HPET 10 ns ticks
 carried approximately their nominal preemption plus 310 sleep events, with some
 deadline/preemption coalescence; BSP also serviced kernel deadlines. No IRQ
 storm was observed. This checks the real positive-duration path, not an injected
-zero-count or saturation fault. See [short-sleep transcript](short-sleep-gdb.txt).
+zero-count or saturation fault.
 
 ## One CPU, cancellation and resource wakes
 
@@ -121,7 +120,7 @@ At deadline-service entry, GDB observed sorted timed deadlines
 306203587560, 306209185800, 306222168660, 307138811970, 322369354370 ns;
 the first was a kernel waiter, followed by the two user waiters on CPU 0.
 BSP's separate kernel sleeper deadline was 306207443668 ns. Ctrl+C released
-both logger tasks and returned to the shell. See [one-CPU transcript](onecpu-gdb.txt).
+both logger tasks and returned to the shell.
 
 The existing `session ipcbench call --messages 4 --rounds 1` then completed a
 warm-up and timed pass with four verified round trips each, no failed call/delivery
