@@ -7,6 +7,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
@@ -86,6 +87,9 @@ static uint64_t display_ready(struct display_object *display,
 bool readiness_service(struct bsp_request **active_list)
 {
   bool worked = false;
+  /* Both workers recheck the earliest absolute deadline before parking. */
+  uint64_t now = 0;
+  bool have_now = false;
   struct bsp_request **link = active_list;
   while (*link) {
     struct readiness_request *request = (struct readiness_request *)*link;
@@ -120,6 +124,10 @@ bool readiness_service(struct bsp_request **active_list)
         interest->ready = keyboard_ready((struct keyboard_object *)interest->object,
             request->caller);
         break;
+      case OBJECT_AUDIO:
+        interest->ready = audio_ready((struct audio_object *)interest->object,
+            request->caller);
+        break;
       case OBJECT_POINTER:
       case OBJECT_TERMINAL_POINTER:
         interest->ready = pointer_ready((struct pointer_object *)interest->object,
@@ -136,7 +144,14 @@ bool readiness_service(struct bsp_request **active_list)
     }
     /* Current readiness wins over an expired deadline, including after worker
      * queueing delay. Polling is a successful empty observation, not timeout. */
-    bool expired = request->deadline && arch_monotonic_ns() >= request->deadline;
+    bool expired = false;
+    if (!stopped && !ready && request->deadline) {
+      if (!have_now) {
+        now = arch_monotonic_ns();
+        have_now = true;
+      }
+      expired = now >= request->deadline;
+    }
     if (stopped || ready || !request->deadline || expired) {
       *link = request->request.next;
       request->request.next = NULL;

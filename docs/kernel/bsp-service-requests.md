@@ -111,7 +111,11 @@ existing 4,928-byte request allocation. See
 Readiness waits also use FORWARDED. The executor hands their copied interests to
 the appropriate worker: TCP/mixed waits use the network worker, while terminal-only
 waits use a dedicated BSP readiness worker. Both check current readiness before
-deadlines and detach all registrations/object references before completion. The typed wait record fits
+deadlines and detach all registrations/object references before completion.
+Each scan uses one fresh, lazy clock snapshot for blocked requests. Stop, ready
+and polling observations need no expiry read; both workers recheck the earliest
+absolute deadline before parking so an aged snapshot cannot add a blocking wait.
+The typed wait record fits
 inside the existing request area; it adds no per-task allocation or global waiter
 slot pool. A poll can still require this worker handoff. It never waits for an I/O
 condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts).
