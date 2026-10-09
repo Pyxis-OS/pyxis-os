@@ -14,6 +14,31 @@
 
 #define HDA_QEMU_VENDOR 0x8086
 #define HDA_QEMU_DEVICE 0x2668
+#define HDA_AMD_VENDOR 0x1022
+#define HDA_AMD_DEVICE 0x15e3
+#define HDA_LENOVO_VENDOR 0x17aa
+#define HDA_LENOVO_DEVICE 0x5081
+#define HDA_PCI_SUBSYSTEM_VENDOR 0x2c
+#define HDA_PCI_SUBSYSTEM_DEVICE 0x2e
+#define HDA_PCI_CLASS 0x04
+#define HDA_PCI_SUBCLASS 0x03
+#define HDA_PCI_INTERFACE 0x00
+#define HDA_AMD_LEGACY_CONTROL 0x42
+#define HDA_PCIE_FLAGS 0x02
+#define HDA_PCIE_VERSION_MASK 0x0f
+#define HDA_PCIE_TYPE_SHIFT 4
+#define HDA_PCIE_TYPE_MASK 0x0f
+#define HDA_PCIE_ENDPOINT 0
+#define HDA_PCIE_ROOT_ENDPOINT 9
+#define HDA_PCIE_SLOT_IMPLEMENTED (1u << 8)
+#define HDA_PCIE_RESERVED_FLAGS (1u << 14)
+#define HDA_PCIE_DEVICE_CONTROL 0x08
+#define HDA_PCIE_DEVICE_CONTROL_BYTES 0x0a
+#define HDA_PCIE_NO_SNOOP (1u << 11)
+#define HDA_PCIE_FUNCTION_RESET (1u << 15)
+#define HDA_AMD_DMA_MAX ((UINT64_C(1) << 40) - 1)
+#define HDA_VERSION_MAJOR 1
+#define HDA_DMA_ALIGNMENT 128
 
 #define HDA_GCAP 0x00
 #define HDA_VMIN 0x02
@@ -47,6 +72,7 @@
 #define HDA_SD_LPIB 0x04
 #define HDA_SD_CBL 0x08
 #define HDA_SD_LVI 0x0c
+#define HDA_SD_FIFOS 0x10
 #define HDA_SD_FMT 0x12
 #define HDA_SD_BDPL 0x18
 #define HDA_SD_BDPU 0x1c
@@ -107,6 +133,15 @@ struct hda_response {
 struct hda_buffer_descriptor {
   uint64_t address;
   uint32_t bytes, flags;
+};
+
+enum hda_boot_power { HDA_BOOT_POWER_ABSENT, HDA_BOOT_POWER_PRESENT,
+                      HDA_BOOT_POWER_INVALID };
+
+struct hda_boot_state {
+  uint16_t command, pmcsr;
+  unsigned power_capability;
+  enum hda_boot_power power;
 };
 
 static uint8_t read8(const struct hda_controller *controller, unsigned offset)
@@ -508,6 +543,23 @@ bool hda_stream_prepare(struct hda_controller *controller)
       read32(controller, controller->stream + HDA_SD_BDPU) != controller->bdl.physical >> 32) {
     return fail_controller(controller, "output descriptor configuration did not set");
   }
+  if (controller->model == HDA_MODEL_AMD) {
+    if (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN) {
+      return fail_controller(controller, "native output running during FIFO inspection");
+    }
+    uint16_t encoded = read16(controller, controller->stream + HDA_SD_FIFOS);
+    if (!encoded || encoded == UINT16_MAX) {
+      return fail_controller(controller, "native output FIFO size unavailable");
+    }
+    /* Overestimate both byte-count and size-minus-one FIFO encodings. */
+    uint32_t bytes = (uint32_t)encoded + 1;
+    bytes = (bytes + HDA_FRAME_BYTES - 1) / HDA_FRAME_BYTES * HDA_FRAME_BYTES;
+    if (bytes >= HDA_BUFFER_BYTES) {
+      return fail_controller(controller, "native output FIFO exceeds PCM ring");
+    }
+    controller->fifo_bytes = bytes;
+    ktrace("hda: native SDnFIFOS=%x FIFO-bytes=%u\n", (unsigned)encoded, bytes);
+  }
   controller->stream_prepared = true;
   return true;
 }
@@ -573,6 +625,13 @@ bool hda_interrupt(struct hda_controller *controller)
   return collect_status(controller);
 }
 
+uint32_t hda_stream_wallclock_locked(struct hda_controller *controller)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(controller->stream_running);
+  return read32(controller, HDA_WALCLK);
+}
+
 bool hda_stream_position_locked(struct hda_controller *controller,
     struct hda_stream_position *position, struct hda_irq_event *event)
 {
@@ -592,6 +651,9 @@ bool hda_stream_position_locked(struct hda_controller *controller,
       continue;
     }
     *event = controller->irq;
+    if (controller->model == HDA_MODEL_AMD && bytes == HDA_BUFFER_BYTES) {
+      bytes = 0;
+    }
     *position = (struct hda_stream_position){
       .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
     };
@@ -645,7 +707,8 @@ static bool boot_halt(struct hda_controller *controller)
   unsigned output = (capabilities >> HDA_GCAP_OSS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
   unsigned bidirectional = (capabilities >> HDA_GCAP_BSS_SHIFT) & HDA_GCAP_BSS_COUNT_MASK;
   unsigned streams = input + output + bidirectional;
-  if (HDA_STREAM_BASE + streams * HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES) {
+  if (read8(controller, HDA_VMAJ) != HDA_VERSION_MAJOR || !output ||
+      HDA_STREAM_BASE + streams * HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES) {
     return false;
   }
   write32(controller, HDA_INTCTL, 0);
@@ -676,38 +739,206 @@ static bool boot_halt(struct hda_controller *controller)
   return true;
 }
 
-static bool dma_address_fits(const struct dma_buffer *buffer, bool wide)
+static bool dma_address_fits(const struct dma_buffer *buffer, uint64_t maximum)
 {
-  return wide || (buffer->physical <= UINT32_MAX &&
-      buffer->bytes - 1 <= UINT32_MAX - buffer->physical);
+  return buffer->bytes && !(buffer->physical & (HDA_DMA_ALIGNMENT - 1)) &&
+      buffer->physical <= maximum && buffer->bytes - 1 <= maximum - buffer->physical;
+}
+
+static enum pci_selection select_controller(size_t *selected, enum hda_model *model)
+{
+  if (pci_inventory_state() != PCI_INVENTORY_COMPLETE) {
+    return PCI_SELECTION_INCOMPLETE;
+  }
+  bool found = false;
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *device = pci_device_at(i);
+    enum hda_model candidate;
+    if (device->vendor_id == HDA_QEMU_VENDOR && device->device_id == HDA_QEMU_DEVICE) {
+      candidate = HDA_MODEL_QEMU;
+    } else if (device->vendor_id == HDA_AMD_VENDOR && device->device_id == HDA_AMD_DEVICE &&
+        device->base_class == HDA_PCI_CLASS && device->subclass == HDA_PCI_SUBCLASS &&
+        device->interface == HDA_PCI_INTERFACE &&
+        pci_read16(device->address, HDA_PCI_SUBSYSTEM_VENDOR) == HDA_LENOVO_VENDOR &&
+        pci_read16(device->address, HDA_PCI_SUBSYSTEM_DEVICE) == HDA_LENOVO_DEVICE) {
+      candidate = HDA_MODEL_AMD;
+    } else {
+      continue;
+    }
+    if (found) {
+      return PCI_SELECTION_AMBIGUOUS;
+    }
+    found = true;
+    *selected = i;
+    *model = candidate;
+  }
+  return found ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
+}
+
+static const char *prepare_native_coherence(struct hda_controller *controller)
+{
+  struct pci_claim *claim = &controller->claim;
+  struct pci_address address = claim->device->address;
+  ktrace("hda: native legacy PCI 0x42=%x (read-only evidence)\n",
+      (unsigned)pci_read8(address, HDA_AMD_LEGACY_CONTROL));
+  if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
+    return "native PCI BME enabled before coherence setup";
+  }
+  unsigned capability = 0;
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    unsigned offset = claim->capabilities[i];
+    if (pci_read8(address, offset + PCI_CAP_ID) != PCI_CAP_EXPRESS) {
+      continue;
+    }
+    if (capability) {
+      return "native PCIe capability is ambiguous";
+    }
+    if (!pci_capability_fits(claim, offset, HDA_PCIE_DEVICE_CONTROL_BYTES)) {
+      return "native PCIe capability does not contain Device Control";
+    }
+    capability = offset;
+  }
+  if (!capability) {
+    return "native PCIe capability is missing";
+  }
+  uint16_t flags = pci_read16(address, capability + HDA_PCIE_FLAGS);
+  unsigned version = flags & HDA_PCIE_VERSION_MASK;
+  unsigned type = (flags >> HDA_PCIE_TYPE_SHIFT) & HDA_PCIE_TYPE_MASK;
+  uint16_t control = pci_read16(address, capability + HDA_PCIE_DEVICE_CONTROL);
+  ktrace("hda: native PCIe cap=%x flags=%x DEVCTL-before=%x\n",
+      capability, (unsigned)flags, (unsigned)control);
+  if ((version != 1 && version != 2) ||
+      (type != HDA_PCIE_ENDPOINT && type != HDA_PCIE_ROOT_ENDPOINT) ||
+      (flags & (HDA_PCIE_SLOT_IMPLEMENTED | HDA_PCIE_RESERVED_FLAGS)) ||
+      control == UINT16_MAX || (control & HDA_PCIE_FUNCTION_RESET)) {
+    return "native PCIe Device Control state is invalid";
+  }
+  /* BME stays off and FLR stays clear. Use a word write because the adjacent
+   * Device Status word has W1C bits. */
+  uint16_t expected = control & ~HDA_PCIE_NO_SNOOP;
+  if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
+    return "native PCI BME enabled during coherence setup";
+  }
+  if (expected != control) {
+    pci_write16(claim, capability + HDA_PCIE_DEVICE_CONTROL, expected);
+  }
+  uint16_t observed = pci_read16(address, capability + HDA_PCIE_DEVICE_CONTROL);
+  ktrace("hda: native PCIe DEVCTL-requested=%x after=%x NoSnoop=%u\n",
+      (unsigned)expected, (unsigned)observed, (unsigned)!!(observed & HDA_PCIE_NO_SNOOP));
+  if (observed != expected || (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER)) {
+    return "native PCIe NoSnoop clear did not verify with BME off";
+  }
+  return NULL;
+}
+
+static struct hda_boot_state capture_boot_state(const struct pci_device *device)
+{
+  struct pci_address address = device->address;
+  struct hda_boot_state state = {.command = pci_read16(address, PCI_COMMAND)};
+  struct pci_claim layout = {0};
+  bool seen[PCI_CONVENTIONAL_BYTES / PCI_REGISTER_BYTES] = {0};
+  unsigned offset = 0;
+  if (pci_read16(address, PCI_STATUS) & PCI_STATUS_CAPABILITIES) {
+    offset = pci_read8(address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
+  }
+  while (offset) {
+    if (offset < PCI_CAP_FIRST || seen[offset / PCI_REGISTER_BYTES] ||
+        layout.capability_count == PCI_CAP_COUNT) {
+      state.power = HDA_BOOT_POWER_INVALID;
+      break;
+    }
+    seen[offset / PCI_REGISTER_BYTES] = true;
+    layout.capabilities[layout.capability_count++] = offset;
+    offset = pci_read8(address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
+  }
+  if (state.power != HDA_BOOT_POWER_INVALID) {
+    for (unsigned i = 0; i < layout.capability_count; ++i) {
+      offset = layout.capabilities[i];
+      if (pci_read8(address, offset + PCI_CAP_ID) != PCI_CAP_POWER) {
+        continue;
+      }
+      if (state.power_capability || !pci_capability_fits(&layout, offset, PCI_POWER_BYTES)) {
+        state.power = HDA_BOOT_POWER_INVALID;
+        break;
+      }
+      state.power_capability = offset;
+      state.power = HDA_BOOT_POWER_PRESENT;
+    }
+  }
+  /* Reservation can reject firmware MSI before the PCI probe fills its snapshot.
+   * This read-only capture records boot state without enabling configuration writes. */
+  ktrace("hda: boot PCI=%u:%u.%u COMMAND=%x Mem=%u BME=%u\n",
+      (unsigned)address.bus, (unsigned)address.device, (unsigned)address.function,
+      (unsigned)state.command, !!(state.command & PCI_COMMAND_MEMORY),
+      !!(state.command & PCI_COMMAND_MASTER));
+  if (state.power == HDA_BOOT_POWER_PRESENT) {
+    state.pmcsr = pci_read16(address, state.power_capability + PCI_POWER_CONTROL);
+    ktrace("hda: boot PM-cap=%x PMCSR=%x D%u NoSoftRst=%u PME-enable=%u PME-status=%u\n",
+        state.power_capability, (unsigned)state.pmcsr,
+        (unsigned)(state.pmcsr & PCI_POWER_STATE_MASK),
+        !!(state.pmcsr & PCI_POWER_NO_SOFT_RESET), !!(state.pmcsr & PCI_POWER_PME_ENABLE),
+        !!(state.pmcsr & PCI_POWER_PME_STATUS));
+  } else {
+    ktrace("hda: boot PM capability %s; power state unavailable\n",
+        state.power == HDA_BOOT_POWER_INVALID ? "invalid" : "absent");
+  }
+  return state;
+}
+
+static const char *native_probe_failure(const struct hda_boot_state *state)
+{
+  if (state->power == HDA_BOOT_POWER_INVALID) {
+    return "native PCI PM capability unusable";
+  }
+  if (state->power == HDA_BOOT_POWER_PRESENT &&
+      (state->pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D0 &&
+      (state->command & PCI_COMMAND_MASTER)) {
+    return "native PCI non-D0 boot state with BME on; wake refused";
+  }
+  if (!(state->command & PCI_COMMAND_MEMORY) && (state->command & PCI_COMMAND_MASTER)) {
+    return "native PCI memory decode disabled with BME on; probe refused";
+  }
+  if (state->power == HDA_BOOT_POWER_PRESENT &&
+      (state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT &&
+      !(state->pmcsr & PCI_POWER_NO_SOFT_RESET)) {
+    return "native PCI D3hot wake would reset BARs; probe refused";
+  }
+  return "native PCI D0/memory-decode setup failed";
 }
 
 void hda_prepare(struct hda_controller *controller, const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!controller->claim.device && !controller->prepared);
-  struct pci_device *device;
-  enum pci_selection selection = pci_select_device(HDA_QEMU_VENDOR, HDA_QEMU_DEVICE, &device);
+  size_t selected = 0;
+  enum pci_selection selection = select_controller(&selected, &controller->model);
   if (selection != PCI_SELECTION_UNIQUE) {
     if (selection == PCI_SELECTION_ABSENT) {
-      ktrace("hda: QEMU 8086:2668 absent; inactive\n");
+      ktrace("hda: supported controller absent; inactive\n");
     } else {
-      klog("hda: QEMU 8086:2668 selection=%u; inactive\n", (unsigned)selection);
+      klog("hda: controller selection=%u; inactive\n", (unsigned)selection);
     }
     return;
   }
-  if (!pci_reserve_device(device, &controller->claim)) {
+  struct hda_boot_state boot_state = capture_boot_state(pci_device_at(selected));
+  if (!pci_reserve_device_at(selected, &controller->claim)) {
     klog("hda: cannot reserve controller; inactive\n");
     return;
   }
-  if (!pci_begin_mmio_probe(&controller->claim, &controller->firmware) ||
+  struct pci_device *device = controller->claim.device;
+  bool probe_ready = pci_begin_mmio_probe(&controller->claim, &controller->firmware);
+  const char *probe_failure = "BAR0 bootstrap unavailable";
+  if (!probe_ready && controller->model == HDA_MODEL_AMD) {
+    probe_failure = native_probe_failure(&boot_state);
+  }
+  if (!probe_ready ||
       pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->registers) != MM_OK) {
     if (pci_restore_mmio_probe(&controller->claim, &controller->firmware)) {
       pci_cancel_reservation(&controller->claim);
-      klog("hda: BAR0 bootstrap unavailable; inactive\n");
+      klog("hda: %s; inactive\n", probe_failure);
     } else {
       controller->failed = true;
-      klog("hda: BAR0 probe restore failed; reservation retained until reboot\n");
+      klog("hda: %s; probe restore failed; reservation retained until reboot\n", probe_failure);
     }
     return;
   }
@@ -745,6 +976,14 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
       (unsigned)device->address.bus, (unsigned)device->address.device,
       (unsigned)device->address.function, (unsigned)capabilities, input, output,
       (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
+  if (controller->model == HDA_MODEL_AMD) {
+    const char *failure = prepare_native_coherence(controller);
+    if (failure) {
+      controller->failed = true;
+      klog("hda: %s; ownership retained until reboot\n", failure);
+      return;
+    }
+  }
   if (!output || controller->stream + HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES ||
       dma_buffer_allocate(&controller->corb, PAGE_SIZE) != MM_OK ||
       dma_buffer_allocate(&controller->rirb, PAGE_SIZE) != MM_OK ||
@@ -754,9 +993,14 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     klog("hda: output or coherent DMA unavailable; backing retained until reboot\n");
     return;
   }
-  bool wide = capabilities & HDA_GCAP_64OK;
-  if (!dma_address_fits(&controller->corb, wide) || !dma_address_fits(&controller->rirb, wide) ||
-      !dma_address_fits(&controller->bdl, wide) || !dma_address_fits(&controller->pcm, wide)) {
+  uint64_t maximum = UINT32_MAX;
+  if (capabilities & HDA_GCAP_64OK) {
+    maximum = controller->model == HDA_MODEL_AMD ? HDA_AMD_DMA_MAX : UINT64_MAX;
+  }
+  if (!dma_address_fits(&controller->corb, maximum) ||
+      !dma_address_fits(&controller->rirb, maximum) ||
+      !dma_address_fits(&controller->bdl, maximum) ||
+      !dma_address_fits(&controller->pcm, maximum)) {
     controller->failed = true;
     klog("hda: DMA exceeds controller address width; backing retained until reboot\n");
     return;
