@@ -91,7 +91,9 @@ The host option is `--download-dir DIR`; downloads always refuse an existing
 host name. Host paths are absolute or relative to the host user's home directory,
 as in kitty; no shell expansion is performed.
 
-The OSC 5113 extension is `px_sha256=1`, echoed in the initial `status=OK`.
+The OSC 5113 extension is `px_xfer=2`, echoed in the initial `status=OK`; it
+replaced `px_sha256=1` when data became windowed; see the
+[`xfer` notes](../../userspace/xfer/README.md).
 Both sides require that echo before data. The sender includes `sha256=HEX` in
 file metadata, and receivers verify that 64-digit digest and the declared size
 before publication. Serialized kitty keys (`ac`, `fid`, `n`, `st`, `sz`, `d`)
@@ -101,12 +103,14 @@ base64 encoding. The first implementation bounded buffered files at 16 MiB;
 the protocol.
 
 For downloads, `send` also carries name, size and hash for the host's confirmation
-before its initial permission reply. Then `file`, per-chunk `data`/`PROGRESS`,
-`end_data`/file `OK`, and `finish`/session `OK` complete the transfer.
+before its initial permission reply. Then `file`, windowed `data` with
+cumulative `PROGRESS` replies, `end_data`/file `OK`, and `finish`/session `OK`
+complete the transfer.
 For uploads, `receive` plus one file query precede confirmation; the host replies
 with session `OK`, one regular-file metadata frame (`st` is its actual file ID),
 and catalog `OK`. The Pyxis program then requests that file and the host supplies
-`data`/`end_data`. Per-chunk `PROGRESS` responses pace uploads too. After verified
+`data`/`end_data`. The same window and cumulative `PROGRESS` replies pace
+uploads. After verified
 atomic publication, Pyxis sends `finish`; the host acknowledges session `OK`.
 Cancellation uses `cancel` and `status=CANCELED`, draining transfer replies before
 returning to the shell. The host disconnects if cancellation is not acknowledged

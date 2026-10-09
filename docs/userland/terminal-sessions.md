@@ -44,9 +44,10 @@ to four concurrent sessions.
 
 Application reads retain the console timeout convention and return available
 short input. Empty live input blocks, subject to that timeout. Application
-output blocks for capacity and may accept a short byte prefix. Concurrent calls
-serialize accepted chunks and complete controls; whole multi-call messages are
-not atomic. No terminal queue silently drops data under backpressure.
+output blocks until the whole call, at most 4 KiB, fits as one record, so a
+continuous writer cannot fill the queue with fragments each sized to the space
+just drained. Concurrent calls serialize accepted chunks and complete controls;
+whole multi-call messages are not atomic. No terminal queue silently drops data under backpressure.
 
 Libpyxis exposes creation, `terminal_try_inject`, `terminal_try_drain`,
 `terminal_end_input`, `terminal_hangup` and `terminal_command_complete` in
