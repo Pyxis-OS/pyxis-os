@@ -50,6 +50,10 @@ forward the grants on the trusted mux startup path. Pane children and remote
 clients inherit neither merely from their streams. Receiver registration itself
 grants no clipboard access.
 
+A copied path such as `home://notes.txt` is only text. Paste does not open it or
+transfer source roots or FILE rights; any later command resolves it using the
+destination program's own delegated namespace and authority.
+
 A shown terminal controller must also own the acquired terminal spatial queue.
 A fresh gesture supplies one operation/layer/owner/view-bound action with a
 five-second expiry. Polling, selection movement, repeats and synthetic events
@@ -62,7 +66,8 @@ queue with generation, mapping identity, action ID, operation and layer. The
 clipboard grant selects the store; the supplied identity cannot select another
 space or UI owner. PUBLISH receives owned text, PASTE names a matching-space
 terminal attachment with injection authority, CLEAR removes the current item,
-and REFUSE consumes an unused action without changing data. Focus-only cancellation uses the acquired terminal controller without resetting
+and REFUSE consumes an unused action without changing data. Focus-only
+cancellation uses the acquired terminal controller without resetting
 spatial identity/buttons; layout/history/resize boundaries still advance the view.
 No first-delivery Clear key is assigned. The trusted kernel local-terminal handler performs the
 user's gestures directly and lends no clipboard authority to its application.
@@ -104,8 +109,9 @@ prefix parser. Subsequent store replacement does not change an active snapshot.
 Completion requires receiver-consumed END/CANCEL and acknowledgement after
 leaving paste mode. Ordinary typing is suppressed until that boundary, not
 buffered for later. Kernel keyboard routing retains physical Enter freshness,
-including controller-visible input queued before acknowledgement: an Enter pressed/held before or
-during Paste needs release and a new press after completion. Physical Ctrl+C
+including controller-visible input queued before acknowledgement: an Enter
+pressed/held before or during Paste needs release and a new press after
+completion. Physical Ctrl+C
 cancels before its normal interrupt/line-cancel effect; unmodified Escape
 cancels, while Super+Esc retains its kernel priority. Cancellation may leave an
 editable inserted prefix but never submits it. Libterm reports inserted bytes,

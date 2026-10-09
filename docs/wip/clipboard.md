@@ -455,7 +455,7 @@ first. Pointer/cursor/input and clipboard remain separate grants and protocols.
 
 ## Task breakdown
 
-1. **First delivery: terminal Copy + Paste.** Both stores, completed
+1. [x] **First delivery: terminal Copy + Paste.** Both stores, completed
    local-TTY/Caelum and mux selection export, accepted gestures and explicit
    controller grants, followed by safe Paste into stock libterm line readers.
    Include receiver lifetime, admission, framing, backpressure and cancellation
@@ -466,13 +466,13 @@ first. Pointer/cursor/input and clipboard remain separate grants and protocols.
    selected/focused pane routing, empty text, source exit/mutation, replacement
    mid-paste, competing opt-in, pending input, short transfers, admission limits,
    focus/view changes and multiline paste not executing commands in matched QEMU.
-2. **SDL2 text adapter.** Local/shared graphical action routing and native
+2. [ ] **SDL2 text adapter.** Local/shared graphical action routing and native
    Set/Get/Has integration, owned text and a real consumer. No background access
    or implied menu-pointer permission; graphical activation awaits a later round.
-3. **Typed objects and FILE retention.** Exact-match representations and
+3. [ ] **Typed objects and FILE retention.** Exact-match representations and
    mandatory text form; immutable/source-independent backing, capability
    attenuation, retained admission and concrete path examples qualified.
-4. **Trusted converters and closure.** One-step bounded userspace conversion,
+4. [ ] **Trusted converters and closure.** One-step bounded userspace conversion,
    explicit cancellation/failure and authority checks; rewrite implemented
    contracts into references and carry deferred limits into technical debt.
 

@@ -35,7 +35,7 @@ added. All baseline QEMU/GDB processes were stopped before code changes.
 The earlier baseline on `6df2bdd8` predates the fixed click rule and is not used
 as this delivery's matched comparison. Main includes the merged correction;
 the owner also confirmed it natively in boot log, raw terminals and mux.
-Implementation and matched qualification results will be recorded below.
+Implementation and matched qualification results follow.
 
 ## Matched after samples
 
@@ -95,3 +95,34 @@ claimed. A pre-admission Return entered while GDB stopped the VM exposed the nee
 for a bounded controller/decoder fence; deferred host events not yet observable
 by emulated PS/2 cannot prove physical ordering. Final fence checks are recorded
 with their tested revision below.
+
+## Integrated image and input boundary
+
+The ordinary full image passed at Pyxis `af1fbf08`, userland `49b3817f`, ports
+`bc04b447`, fs `b427df29` and lwIP `a1aadb91`, with the same compiler image.
+This includes main's process-lifetime and HTTP changes, the focus-only controller
+cancellation fix and the bounded PS/2/decoder admission/resume fence. All ports
+were rebuilt against the changed SDK; no older bundle substituted changed inputs.
+
+The same matched local mux configuration booted that source in QEMU. Final
+functional checks added a QMP monitor for manual key down/up events; no timing
+samples used it. GDB remained read-only. Observed:
+
+- Local Copy retained the exact nine bytes `echo held`. A live QMP Return press
+  executed the original typed command. With Return still physically held, Paste
+  inserted the copied command without execution; a further Return-down repeat
+  still did not submit it. GDB showed both physical Enter-down and quarantine
+  set, with the transaction completed. Release followed by a fresh press
+  executed exactly once and cleared quarantine.
+- The existing Lua CLI printed `string.char(128)`. Retained local TTY cell 960
+  was byte 128. Selecting it and issuing Copy refused as unsupported selection;
+  the prior nine-byte item charge remained unchanged. No lossy ASCII fallback.
+- Mux copied seven selected prompt bytes `ome://>` and pasted them into the
+  editable line, without submission. Repeating Paste while Ctrl+B's prefix was
+  pending displayed `Paste refused; finish pending input` and inserted nothing.
+
+Local artifacts are under `build/clipboard-final`: ISO/kernel, serial/debugger
+logs and captures of held-Enter Paste, fresh Enter, non-ASCII output, mux Paste
+and prefix refusal. These final checks do not expand the source-reviewed cases
+listed above into runtime qualification, nor establish native latency. All
+task-owned QEMU, QMP and debugger processes were stopped afterward.
