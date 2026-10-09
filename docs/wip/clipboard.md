@@ -1,9 +1,10 @@
 # Clipboard
 
-Status: **assigned docs-only proposal, 2026-10-09**. The five owner decisions
-below are accepted; every recommendation after them is proposed, not agreed or
-implemented. No code, interface declarations or placeholder APIs are part of
-this PR. The first implementation task waits for owner authorization.
+Status: **docs only; round one accepted 2026-10-09, round two pending**.
+The five foundations below and the round-one decisions are accepted, not
+implemented. The safe-paste receiver contract, numeric limits and later graphics,
+FILE and converter recommendations remain proposed. No code or placeholder APIs
+are authorized by this update; implementation waits for round-two answers.
 
 ## Owner decisions
 
@@ -27,6 +28,22 @@ Accepted 2026-10-08:
    clipboard does not hold, a converter can supply it; for example, SVG to PNG.
    Haiku's Translation Kit is a working precedent for system-wide translators.
 
+## Accepted round one
+
+Accepted 2026-10-09:
+
+1. **Ownership and authority:** kernel-owned volatile per-space and shared
+   stores, separate explicitly delegated local/shared grants and one-attempt
+   activation.
+2. **Terminal gestures and text:** Ctrl+Shift+C/V local, Super+Shift+C/V shared;
+   Copy from the completed selection's pane and Paste into the focused live
+   pane. ASCII-only export, physical rows joined with LF, trailing spaces trimmed.
+   Ctrl+C/V and mux's Ctrl+B retain their ordinary meanings.
+3. **First delivery, changed:** Copy **and Paste** for the local terminal and
+   mux into stock libterm line readers. This may be two PRs back to back, but
+   Copy alone does not complete the delivery. SDL2, FILE and converters stay
+   later tasks. The receiver contract must be answered before code starts.
+
 ## Existing boundary
 
 [Pointer selection](../interfaces/pointer.md#terminal-control-and-selection)
@@ -44,9 +61,9 @@ host bracketed paste to recognize upload candidates, then forwards ordinary
 bytes; this is not guest-side newline safety. Clipboard paste needs explicit
 receiver and framing work, not just two escape sequences around existing input.
 
-## Proposed ownership before Continuum
+## Accepted ownership before Continuum
 
-**Recommendation:** Caelum owns one volatile store per space and one shared
+Caelum owns one volatile store per space and one shared
 store. Each holds one current immutable typed item and its mandatory text form.
 The stores belong to the space registry and boot session, respectively, not to
 shell, session launcher, mux, graphics owner or last publisher. Shell/launcher
@@ -60,13 +77,7 @@ those controllers without changing the stored-item or grant contract. Replacing
 the kernel stores with supervised services would require a separate migration
 proposal, not an implicit ownership change.
 
-Alternatives: a persistent service per space plus one shared service keeps
-storage in userspace but adds service bootstrap, failure/restart policy and a
-kernel-local selection bridge before the first paste. Making the session or
-launcher the store owner loses data at their normal handoff/exit and is not
-recommended. The accepted two-layer decision does not settle this owner choice.
-
-## Proposed authority and activation
+## Authority and activation
 
 Clipboard authority is separate from console READ/WRITE, pointer INPUT,
 terminal CONTROL, FILE READ and namespace LOOKUP. Input ownership supplies
@@ -102,11 +113,11 @@ untrusted space ID in an IPC payload. Copies of grants retain their ordinary
 [capability transfer](../interfaces/processes.md#objects-capabilities-and-handles)
 semantics; copying one does not transfer UI ownership or bypass activation.
 
-**Recommendation:** fresh operation-specific activation, modeled on
-[pointer lock](../interfaces/pointer.md#relative-lock-and-user-escape), authorizes
-one Copy or Paste attempt for one layer and UI owner. It expires after a
-proposed five seconds, and is consumed even on refusal. Repeats, held keys,
-selection dragging, pointer warp, polling and synthetic application events
+The accepted one-attempt activation is operation-specific and follows
+[pointer lock](../interfaces/pointer.md#relative-lock-and-user-escape): one
+Copy or Paste attempt for one layer and UI owner, consumed even on refusal.
+Its proposed five-second expiry is included in round-two decision 3. Repeats,
+held keys, selection dragging, pointer warp, polling and synthetic application events
 create none. Focus/layer/input reset, owner exit or session replacement cancels
 unused activation. Already captured data is never silently retargeted.
 
@@ -118,9 +129,9 @@ inactive. A source disappearing does not revoke a completed independent item.
 Local fallback is never substituted for an empty/denied shared paste or vice
 versa. Refusal inserts nothing and leaves the old store intact.
 
-## Proposed keys and graphics integration
+## Accepted terminal gestures
 
-**Recommendation for shown local terminals and mux:** exact Ctrl+Shift+C/V for
+For shown local terminals and mux: exact Ctrl+Shift+C/V for
 local Copy/Paste; exact Super+Shift+C/V for shared Copy/Paste. Either left/right
 modifier works, lock modifiers are ignored, and extra Control/Alt/Super modifiers
 outside the selected chord prevent recognition. Consume the command key press,
@@ -139,8 +150,9 @@ refuses without overwriting the previous item. Explicit history movement clears
 selection as today. Paste to a non-live history view refuses without changing
 history or keyboard focus.
 
-The following graphical routing is proposed for the later SDL2 task, outside
-round one. Graphical Ctrl+C/V (and Ctrl+Shift+C/V, without Alt/Super) remain
+## Proposed graphics activation
+
+This routing remains proposed for the later SDL2 task, outside round one. Graphical Ctrl+C/V (and Ctrl+Shift+C/V, without Alt/Super) remain
 application key events. While an
 eligible graphics owner is shown, a fresh physical chord may establish the
 matching **local** clipboard intent without consuming the application's key.
@@ -156,7 +168,7 @@ application's conventional Ctrl+C/V request while retaining its one-attempt
 shared-layer context privately. Such translation does not manufacture fresh
 native activation. No global remapping of ordinary application keys is proposed.
 
-## Proposed owned text handoff
+## Owned text handoff
 
 Freeze the completed selection and revalidate its source/view identity before
 publication. Local TTY staging follows BSP allocation and output-lock ownership;
@@ -166,7 +178,7 @@ between sizing and capture either retries a still-valid selection within bounds
 or refuses; it never publishes mixed cells. Publication replaces the current
 item atomically only after complete validation/admission. Failure preserves it.
 
-**First-task recommendation:** printable ASCII glyph indices 0x20..0x7e map
+The accepted ASCII-only export maps printable glyph indices 0x20..0x7e
 exactly to UTF-8 bytes; reject the entire Copy if a selected cell is outside that
 range. Bizcat has no declared in-tree glyph-to-Unicode table, so high bytes must
 not be labeled UTF-8 or silently changed. A verified complete font mapping is a
@@ -180,77 +192,121 @@ this choice loses the latter too. Do not infer soft wrapping or reconstruct
 tabs. An existing selection that becomes empty after trimming publishes an
 empty text item; absence of a selection instead refuses.
 
-## Proposed safe terminal paste
+## Round-two proposal: safe terminal paste
 
-Paste is a bounded input transaction with an owned text snapshot, fixed
-receiver/process/session epoch and progress. It is not a sequence of keyboard
-reports or an unowned string pushed into the console FIFO. Require a live,
-explicitly opted-in bracketed-paste receiver; default refusal is safe for older
-or raw readers. Ordinary console READ/WRITE or a program emitting a mode escape
-alone does not identify a safe input consumer. The receiver opt-in and end of its
-input ownership must have an explicit lifetime, including process exit/handoff.
-Recommendation for task 2: the receiver must hold READ on the destination
-input and WRITE on its matching terminal output, be in that terminal's space,
-and opt in while its line reader is active. Registration is exclusive and
-process-owned; a competing opt-in is refused busy. Copying a grant does not
-transfer the registration. Explicit release, process exit/stop, terminal hangup
-or input handoff ends it. No general foreground-input arbitration is added
-outside this paste interval. This is new behavior requiring task-2 approval.
+Everything in this receiver section is **pending round two**. Native console
+READ currently has no process-owned foreground receiver; the clipboard must not
+infer one from a writer, a mode escape or a process that happens to be reading.
+The first delivery adds a scoped paste receiver, not general foreground-input
+arbitration. Older/raw readers receive no unframed fallback.
 
-For task 2, stock libterm line readers opt in while editing. A paste
-interval reserves delivery to that receiver; other readers cannot consume its
-payload. Ending the receiver or changing focus/layer discards unsent transaction
-data and prevents it appearing as ordinary input to a successor. Implement this
-receiver-bound delivery before promising arbitrary terminal-session paste.
+### Receiver opt-in and lifetime
 
-Validate text before admitting a transaction: UTF-8 without NUL; normalize CRLF
-and lone CR to LF, allow LF/Tab, and refuse other ASCII controls/DEL. Initial
-ASCII line readers also refuse non-ASCII text rather than feeding multibyte
-glyphs to them. The clipboard itself is unchanged on refusal. This prevents
-embedded bracket-end escapes, Ctrl+B and byte 3 from escaping the transaction.
-Older/raw readers get no unframed fallback.
+**Default:** a stock libterm line reader explicitly opts in while editing, using
+READ on its terminal input and WRITE on matching terminal output in its own
+space. Registration is exclusive, process-owned and names one input session
+with a fresh receiver epoch. Competing registration is refused busy; grant
+copies, launches and stream inheritance do not transfer it. The registration
+allows safe delivery to the reader; it grants no clipboard access to that
+program. The terminal handler or acquired mux controller performs the user's
+paste action with its separate clipboard authority.
 
-Admission also requires empty ordinary input, including mux outer staging,
-destination-pane pending bytes and the destination FIFO, with an opted-in reader
-at a complete decoding boundary. If earlier input or a partial key remains, refuse
-busy; do not drop it, wait and silently paste into a later line, or reinterpret
-an already queued Enter as a fresh submission. Bracket begin/end are framing,
-not displayed text. The single-line reader inserts printable ASCII, maps each
-newline/tab to a space and reports line-capacity exhaustion without submission.
-It waits for a fresh physical Enter after the closing frame; Enter pressed
-during the transaction is suppressed, not queued for later submission. No paste
-byte triggers Ctrl+C interruption, history, or mux command routing. Supporting
-arbitrary terminal-session readers comes after this scoped safe reader.
+Libterm releases registration on every line-reader return, including submission,
+EOF, cancellation and error, before the shell can hand input to a child. Explicit
+release, process stop/exit and terminal hangup invalidate the epoch, discard
+unsent paste data and end framing. A later receiver starts a new epoch; it
+cannot receive the old transaction's payload or buffered Enter. Native operations
+must enforce this lifetime rather than rely only on cooperative cleanup.
 
-The current local console and session input queues are 4 KiB, and mux stages
-256 bytes per pane. Do not enlarge/drop into those queues to fit a clipboard
-item. The sender retains its snapshot across short acceptance/backpressure,
-uses native readiness and advances only accepted progress. Mux receives the
-explicit Paste action, then sends to the fixed pane directly, bypassing ordinary
-outer-byte command routing. Bracket framing and payload stay ordered as one
-paste transaction even across short transfers. A second Paste is refused busy;
-ordinary typing is suppressed until completion/cancellation rather than mixed
-into it. Closing the destination cancels; focus/layer change or mux view invalidation
-(history movement, layout, pane closure or resize) cancels remaining delivery
-and releases receiver state, never retargeting another pane/program. Even a
-layout change that keeps the pane alive cancels initially.
-Partial content already inserted may remain visible; cancellation is reported
-and never submits it. Cancellation/teardown must also terminate framing state.
+Focus/layer or mux-view changes cancel an active paste. They need not unregister
+a still-editing reader; after return to a live view, a new gesture and admission
+are required. During an admitted transaction, its payload is delivered only to
+the registered process. Other readers cannot consume paste data. Outside that
+interval, existing console READ semantics remain unchanged.
+
+### Admission with pending input
+
+**Default:** admit only with a live receiver at a complete decoding boundary and
+no earlier ordinary input. This includes the destination FIFO, mux outer staging,
+its partial key/prefix state and the destination pane's pending input. An
+outstanding empty read by the registered receiver may wake for Paste; an ordinary
+read by another process or an incomplete decoder makes admission busy.
+
+If any earlier input remains, refuse busy and consume that attempt. Do not
+flush it, queue a deferred paste, or wait and silently insert into a later line
+or successor. The reader declares its parser boundary; the kernel validates
+its registration/input state and mux validates its own staged state. Reserve
+one transaction per space and pin the chosen clipboard generation, receiver
+epoch, input session and focused live pane/view as one admission. If those
+identities change during admission, refuse without delivering text.
+
+Validate the complete text before admitting: UTF-8 without NUL, normalize CRLF
+and lone CR to LF, allow printable ASCII/LF/Tab, and refuse non-ASCII or other
+ASCII controls/DEL for these readers. Refusal changes neither store nor input.
+This excludes embedded bracket markers, Ctrl+B and byte 3 from the payload.
+Already queued Enter is not fresh submission; the admission boundary must not
+let older staged input arrive after Paste begins.
+
+### Framing, progress and cancellation
+
+**Default:** an owned snapshot and its begin/end framing form one receiver-bound
+transaction, independent of subsequent clipboard replacement or clear. Brackets
+are framing, not displayed text. Libterm inserts ASCII and maps each newline/tab
+to a space, reporting line-capacity exhaustion while finishing framing. Paste
+never submits a line, triggers history/interrupts or enters mux command routing.
+Completion means the receiver has consumed the end/cancellation and left paste
+mode, not that the sender has queued the final bytes. Until then, ordinary typing
+stays suppressed. Submission needs a fresh physical Enter after that boundary;
+an Enter held or pressed before/during Paste needs release and a new press.
+
+Physical press/repeat/release handling belongs to the kernel keyboard frontend,
+which retains Enter freshness and routes cancellation through native transaction
+state, including through mux. Libterm cannot infer physical freshness from
+ordinary logical input bytes. Ordinary typing is suppressed rather than buffered
+for later. Physical Ctrl+C cancels Paste **before** following its existing interrupt
+or line-cancel path; pasted control bytes never reach that path. Unmodified
+Escape cancels Paste. Super+Esc retains its existing kernel-escape priority,
+and mux's Ctrl+B retains its normal meaning outside the paste interval.
+
+The existing local/session input queues are 4 KiB and mux stages 256 bytes per
+pane. Keep the snapshot/progress across short acceptance and backpressure; do
+not fit it by enlarging, overflowing or silently truncating those queues. Mux
+sends to the fixed pane directly, bypassing outer-byte prefix routing. Native
+readiness drives progress within the text/storage bounds below; current items,
+staging and active snapshots all count. A second Paste is refused busy.
+A proposed five-second total transaction deadline bounds admission through completion, without restarting after a short transfer.
+
+Cancel on release/stop/exit/hangup, focus or layer loss, or any mux view
+invalidation: history movement, layout change, pane closure or resize, even if
+the pane survives. Explicit cancellation or deadline expiry also ends delivery.
+Stop future chunks and discard queued paste payload belonging to that epoch;
+terminate decoder framing independently of ordinary FIFO capacity. Never retarget
+to another pane/program or send an old closing marker to a successor. The
+receiver must consume completion/cancellation before ordinary input resumes.
+If the receiver disappears, epoch invalidation ends the transaction without
+waiting for its acknowledgement; no framing/data transfers to the successor.
+A blocked unrelated output operation has no new guaranteed cleanup time.
+
+Cancellation may leave an already inserted prefix visible and editable, but
+never submits it; normal Ctrl+C may discard the line as today. Report partial
+insertion/cancellation. A fresh gesture can try again only after the reader and
+queues meet admission again. This cancellation and admission contract needs
+owner acceptance before any implementation.
 
 ## Proposed size and lifetime bounds
 
 These are proposed admission settings, not new ABI constants or immutable
 architecture. Measure peak staging/retained memory before increasing them.
 
-| Resource | Text phase (tasks 1–2) recommendation | Later typed-object recommendation |
+| Resource | First terminal delivery recommendation | Later typed-object recommendation |
 | --- | --- | --- |
 | Current item | One per local layer and one shared | Same; no history manager |
 | UTF-8 text form | 64 KiB, excluding a string terminator | Same |
 | Typed item total | Same text, stored once | 8 MiB including primary, text and FILE-backed logical bytes |
 | Retained storage | 8 MiB global, including old/paste/staging bytes | 64 MiB global; 16 MiB per receiving/publishing space |
 | Retained item versions | Current slots and staging; no general snapshot handles | 128 globally, at most four distinct retained versions per receiving space |
-| UI paste transactions | Deferred to task 2: one active per space | Same initially |
-| Activation | One attempt, five-second expiry | Same initially |
+| UI paste transactions | One active per space | Same initially |
+| Activation | One attempt accepted; five-second expiry proposed | Same initially |
 | Persistence | RAM only; clear explicitly or at reboot | Same initially |
 
 Current entries, staging overlap and active paste snapshots count together;
@@ -258,13 +314,13 @@ replacing a full item may need both old and new storage. Admission failure is
 visible, preserves the previous item and does not truncate. Shared/local copies
 are independent publications, not aliases that keep changing. No idle timeout
 silently loses copied data. Clear requires the same chosen-layer authority and
-fresh action as Copy; no additional key is assigned in the first task. Local
+fresh action as Copy; no additional key is assigned in the first delivery. Local
 state clears when its space is actually retired; this milestone adds no space-teardown operation. Shared state survives
 source program/space exit until replacement, clear or reboot. Active snapshots
 retain their bytes through replacement/clear, but new requests see the new item.
 
-Task 1 exposes no general-purpose retained snapshot handles; clipboard storage
-has current slots and bounded staging. Task 2 adds active UI paste snapshots.
+The first delivery exposes no general-purpose retained snapshot handles; storage
+has current slots, bounded staging and active UI paste snapshots.
 For later FILE grants, recommendation: charge each retained item's logical
 bytes, even with nonresident backing, to the global budget once and to each
 receiving/publishing space that retains it. Same-space handle copies do not
@@ -273,7 +329,7 @@ the destination's charge before installing a grant. Current, staged and old
 referenced versions count; no forced revocation of admitted snapshots to make
 room for another copy. A limit refuses the new operation and preserves existing
 items. The later-column values and transfer accounting need owner approval and
-source review before task 4; they are proposed tuning, not existing FILE rules.
+source review before the typed-object task; they are proposed tuning, not existing FILE rules.
 
 ## Proposed FILE and path contract
 
@@ -312,7 +368,7 @@ Reject an unsupported lifetime rather than promising source-exit survival.
 Do not label a staged read of a concurrently modified file as a coherent
 filesystem snapshot; require a frozen source or refuse mutation uncertainty.
 Only complete, validated staging becomes the current item. Rich types and FILE
-publication are later tasks; task 1 stores owned text only.
+publication are later tasks; the first delivery stores owned text only.
 
 ## Proposed converter authority and execution
 
@@ -369,66 +425,61 @@ one-attempt consumption with a real SDL text consumer before pinning the port.
 Publish its ports PR before the Pyxis gitlink; userland/native dependencies merge
 first. Pointer/cursor/input and clipboard remain separate grants and protocols.
 
-## Proposed task breakdown
+## Task breakdown
 
-1. **Owned terminal Copy and stores.** Both kernel-owned layers for completed
-   local-TTY/Caelum and mux selection snapshots, terminal Copy gestures,
-   explicitly delegated controller grants, one-attempt Copy activation,
-   64 KiB owned ASCII/UTF-8 text and the 8 MiB aggregate bound. Publication
-   supplies `text/plain` and its mandatory text form once, atomically. Refusal
-   preserves the previous item. No Paste, graphical clipboard, FILE payloads,
-   converters or remote bridge. Capture selection/idle baselines before code;
-   qualify both layers, Copy without selection, non-ASCII refusal, selected-pane
-   identity, source mutation/exit, empty text, replacement and admission limits
-   in matched QEMU. Inspect stored snapshots with existing read-only debugger
-   tools; do not add a test-only clipboard command or placeholder paste API.
-2. **Safe terminal Paste.** Receiver registration and lifetime, bracket parsing,
-   ordinary-input admission boundary, control/newline safety, fixed local/mux
-   destination, backpressure and cancellation. Opted-in stock libterm readers
-   only; no raw-reader fallback. Settle this new receiver contract before code,
-   then qualify multiline paste not executing commands, competing opt-in,
-   partial transfers, focus/view changes, source exit and replacement mid-paste.
-3. **SDL2 text adapter.** Local/shared graphical action routing and native
-   Set/Get/Has integration, one owned text representation and a real consumer.
-   No autonomous/background access or implied menu-pointer permission.
-4. **Typed objects and FILE retention.** Exact-match non-text representations
-   with mandatory text form; immutable/source-independent backing, capability
-   attenuation, global/per-space retained admission and path examples qualified.
-5. **Trusted converters and closure.** One-step bounded userspace conversion,
+1. **First delivery: terminal Copy + Paste.** Both stores, completed
+   local-TTY/Caelum and mux selection export, accepted gestures and explicit
+   controller grants, followed by safe Paste into stock libterm line readers.
+   Include receiver lifetime, admission, framing, backpressure and cancellation
+   once round two is accepted. Two PRs back to back may separate owned Copy/store
+   work from receiver/Paste work for review; both form this delivery. No SDL2,
+   FILE payloads, converters or remote bridge. Capture selection/idle baselines
+   before code, then qualify both layers, no implicit Copy, non-ASCII refusal,
+   selected/focused pane routing, empty text, source exit/mutation, replacement
+   mid-paste, competing opt-in, pending input, short transfers, admission limits,
+   focus/view changes and multiline paste not executing commands in matched QEMU.
+2. **SDL2 text adapter.** Local/shared graphical action routing and native
+   Set/Get/Has integration, owned text and a real consumer. No background access
+   or implied menu-pointer permission; graphical activation awaits a later round.
+3. **Typed objects and FILE retention.** Exact-match representations and
+   mandatory text form; immutable/source-independent backing, capability
+   attenuation, retained admission and concrete path examples qualified.
+4. **Trusted converters and closure.** One-step bounded userspace conversion,
    explicit cancellation/failure and authority checks; rewrite implemented
    contracts into references and carry deferred limits into technical debt.
 
-These tasks each need explicit authorization. Remote clipboard bridging, USB
-input, arbitrary converter plugins, history, persistence, Unicode terminal
-layout and Continuum are outside this milestone. If task 2 needs broader reader
-ownership than the scoped paste transaction, bring that contract to the owner
-before implementing it.
+The first-delivery scope is accepted, but code waits for round-two answers.
+Later tasks need separate decisions/assignment. Remote clipboard bridging, USB
+input, arbitrary plugins, history, persistence, Unicode terminal layout and
+Continuum are outside this milestone. If Paste needs broader reader ownership
+than this scoped transaction, bring that contract to the owner before code.
 
-## Owner decision round one
+## Owner decision round two: safe-paste receiver
 
-These three questions are **pending**, with recommended defaults. Only an
-explicit owner answer records acceptance; merging this docs proposal does not
-approve unanswered recommendations or authorize implementation.
+These three decisions are **pending**; nothing counts as accepted until the
+owner answers. The detailed defaults are in the receiver section above.
 
-1. **Who owns storage and gates actions before Continuum?** Default: the kernel
-   owns both volatile stores and verifies focus/owner/one-attempt activation;
-   trusted startup delegates separate local/shared grants and UI controllers.
-   Alternative: independently started userspace store services plus a kernel
-   activation/selection bridge; never make the transient session/launcher own
-   clipboard lifetime.
-2. **Which terminal gestures and source text?** Default: Ctrl+Shift+C/V local
-   and Super+Shift+C/V shared; completed selection's pane for Copy, focused live
-   pane for later Paste; reject non-ASCII glyphs, LF-join physical rows and trim
-   trailing spaces. Ctrl+C/V and mux's prefix keep their current meanings.
-   Alternative: different explicit chords or a verified complete font mapping
-   before any selection export. Later graphics routing is outside this round.
-3. **What is the first task boundary and its limits?** Default: task 1 is
-   Copy/storage only, both layers with 64 KiB owned text, an 8 MiB aggregate bound
-   and five-second single-attempt activation. Safe Paste is task 2 after its
-   receiver contract is accepted. Alternative: combine text Copy/Paste in one
-   larger task after first settling the receiver/admission contract. Neither
-   choice is authorization to start code.
+1. **Opt-in and lifetime:** default exclusive, process-owned registration by
+   the stock libterm line reader with matching input/output authority; fresh
+   receiver epoch; release on every return/handoff and invalidate on stop, exit
+   or hangup. Paste goes only to that registered receiver; no ownership transfer
+   through copied grants and no raw-reader fallback.
+2. **Admission with pending input:** default refuse busy unless the registered
+   reader is at a clean decoder boundary and local/mux staged and queued input
+   is empty. Preserve earlier input, consume the attempt, never defer it to a
+   later line. Pin the item, receiver/session and focused live pane/view at
+   admission; competing readers or changing identities refuse.
+3. **Framing and cancellation:** default receiver-bound bracketed transaction,
+   ASCII insertion with LF/Tab mapped to spaces, fresh post-paste Enter and short
+   transfer progress. Kernel keyboard handling owns physical freshness and
+   cancellation; ordinary typing resumes only after the reader consumes end/
+   cancellation. Physical Ctrl+C retains its normal effect after cancellation;
+   unmodified Escape cancels. Receiver loss or focus/layer/view change discards
+   remaining transaction data and ends framing without retargeting or submission.
+   Default bounds: one transaction per space, 64 KiB text, 8 MiB aggregate storage,
+   five-second unused-activation expiry and a separate five-second total Paste
+   deadline from admission. The latter does not restart on partial progress.
 
-Next rounds cover safe receiver-bound Paste, SDL2 graphical activation/menu
-approval, retained FILE admission and trusted converter execution limits. Their
-recommended contracts above remain proposals until the owner answers them.
+Graphics/menu activation, retained FILE admission and converter execution limits
+remain proposed for later rounds/tasks. Round one approved the first-delivery
+scope, not those later contracts or the unconfirmed numeric settings.
