@@ -1,23 +1,20 @@
 # Recursive cp
 
-Proposal, 2026-10-09. Nothing here is implemented. It settles the contract for the
+Accepted 2026-10-09; implementation in progress. It settles the contract for the
 deferred "recursive directory copying" item in
 [technical debt](../technical-debt.md#native-cp-staging-and-recovery-limits); the
 [current cp](../userland/cp.md) copies regular files only.
 
-## Owner decisions
+## Accepted decisions
 
-Defaults apply unless the owner answers otherwise.
+The owner accepted all three defaults on 2026-10-09.
 
 1. **Existing destinations: refuse, never merge.** A copied tree's root is created
    with exclusive directory CREATE and must not exist. Nothing below the root is
-   ever replaced, so file-versus-directory collisions cannot occur. The alternative
-   is merging into an existing tree: replace files as today, fail on a kind mismatch.
+   ever replaced, so file-versus-directory collisions cannot occur.
 2. **Mid-tree failure: stop that operand, keep what was copied, no rollback.**
-   The alternative is to skip the failing entry, continue and exit with failure.
 3. **Bounds: depth 32 below the root, 65,536 entries (files and directories) per
-   operand, names up to 255 bytes.** These are cp settings like the 64 temporary
-   candidates, not ABI.
+   operand, names up to 255 bytes.** These are cp settings, not ABI.
 
 ## Syntax and destinations
 
@@ -61,7 +58,7 @@ one unit; other processes and a crash can see a partial tree.
 - **Directories:** a directory is created before its contents. Traversal is
   depth-first with unspecified order.
 - **Failure:** the first read, create, write, rename, close or limit failure stops
-  that operand (decision 2). cp removes only its own confirmed temporary file. It
+  that operand. cp removes only its own confirmed temporary file. It
   reports `cp: PATH: reason` with the path relative to the source root, then
   `cp: DEST: incomplete copy of SRC (N files, M directories created); nothing removed`.
   Unconfirmed outcomes stop the whole command, as today. Later operands run after
