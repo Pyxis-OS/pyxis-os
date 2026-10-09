@@ -538,7 +538,7 @@ source inspection into measured coverage.
 The owner accepted native PS/2 deferral on 2026-10-08 while the ThinkPad was
 occupied by the [Bluetooth investigation](development/bluetooth-investigation.md).
 Matched QEMU checks on boot, Bochs and VirtIO displays suffice to close the
-[system pointer milestone](wip/pointer.md); this native entry remains open.
+[system pointer](interfaces/pointer.md); this native entry remains open.
 
 Owner-reported boot 1, 2026-10-09: ThinkPad, PXE main `114f2ac`, PS/2 touchpad
 and TrackPoint, 1920x1080 boot framebuffer.
@@ -576,6 +576,28 @@ establish native input latency or display performance.
   configuration, behavior and cursor cost samples. Update this entry with
   the reported results; neither partial native coverage nor QEMU milestone
   closure marks it complete.
+
+## System pointer selection and input limits
+
+Visible-cell selection has no export, clipboard publication or paste operation.
+Stored cells are 8-bit glyph indices, so a later owned text snapshot also needs
+an explicit encoding before it can be advertised as `text/plain`. Clipboard
+stores, gestures, capability transfer and conversion remain in the separate
+[clipboard proposal](wip/clipboard.md); revisit this boundary when that milestone
+is assigned, using both kernel-local and mux-owned selections.
+
+Mux drag autoscroll and selection across off-view history are absent; users must
+first browse the desired history into view. Kernel terminals retain visible
+cells without scrollback. Revisit these interaction limits with a concrete
+terminal-history extension. PS/2 remains the sole implemented pointer source,
+with raw counts and relative-mode Synaptics behavior. Bluetooth aggregation and
+conditional source loss, USB HID, acceleration, absolute-mode scrolling, remote
+pointer transport and multiple-display/window composition remain separate
+tracks. Revisit input routing through the
+[pointer source boundary](interfaces/pointer.md#input-source-coordination) when
+another trusted source is integrated; independent masks must not release a
+surviving source's held buttons. The current PS/2 reset hook alone does not
+implement the accepted conditional multi-source rules.
 
 ## VirtIO cursor frontend limits
 
@@ -1237,10 +1259,10 @@ and preference paths. Missing pieces:
   [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
   Revisit a blocking wait on the input and display handles when a consumer
   waits for events.
-- **Windows and cursor:** one fullscreen window; no system cursor,
-  `SDL_ShowCursor` or hardware cursor. The pointer position is SDL's, built
-  from relative counts. The [system pointer](wip/pointer.md) milestone replaces
-  that translation after the SDL2 milestone.
+- **Windows:** one fullscreen window; multiple windows remain outside the
+  current display contract. System pointer positions, program images,
+  show/hide, bounded warp and relative lock now use the
+  [native pointer contract](interfaces/pointer.md).
 - **Text:** US layout only, from the shared kernel table.
 - **Not covered by validation:** key repeat, because QEMU's injected PS/2 input
   has no typematic repeat.

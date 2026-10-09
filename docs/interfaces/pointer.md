@@ -174,6 +174,8 @@ or copies do not release/transfer ownership. RELEASE or owner exit clears its
 queue, drag and cursor preference and restores kernel terminal handling. It
 confers no graphics lock/warp/acquisition. The common BGRA8 image/default/show
 operations retain the graphics image bounds and copy/lifetime guarantees.
+Terminal DEFAULT_IMAGE restores the I-beam; graphics DEFAULT_IMAGE restores
+the arrow.
 
 READ returns one shared 56-byte spatial record, blocking or with POLL. The
 separate bounded 64-record queue has the same coalescing/reset rules and native

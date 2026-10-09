@@ -304,7 +304,7 @@ system or second source was added. Availability remains PS/2-only at the adapter
 boundary. Source review confirmed release/fresh-press and pre-report lock/warp
 guard parity. At that validation revision the producer contract was proposed;
 the later accepted conditional source-loss adjustment is recorded in
-[pointer coordination](../wip/pointer.md#input-source-coordination). The final
+[pointer coordination](../interfaces/pointer.md#input-source-coordination). The final
 default image build passed.
 A manual headless Q35/KVM, four-CPU, 512 MiB, VirtIO GPU/PS/2 smoke at
 `b77cd1d` confirmed ordinary position changing from `(640, 400)` to `(675, 388)`,
@@ -600,8 +600,9 @@ under `build/pointer-task4` and `/tmp/pyxis-pointer-task4-*`. All task-owned
 QEMU/GDB jobs are stopped. These initial samples make no hardware or isolated
 cursor-cost claim. The remaining software workloads were completed before code changes, as
 recorded below; the hardware comparison follows them. The task's capture
-completion and host frontend defaults are accepted 2026-10-08 in
-[task 4 planning](../wip/pointer.md#task-4-planning).
+completion and host frontend defaults were accepted 2026-10-08, as described in
+[hardware ownership](../kernel/display.md#hardware-pointer) and
+[frontend limits](qemu.md#hardware-pointer-frontend).
 
 
 ### Completed software baseline before task 4 code
@@ -828,7 +829,8 @@ See [frontend limits](qemu.md#hardware-pointer-frontend) and their
 [revisit point](../technical-debt.md#virtio-cursor-frontend-limits).
 [Native PS/2 qualification](../technical-debt.md#native-system-pointer-qualification)
 remains deferred to the owner's ThinkPad batch after Bluetooth investigation.
-Task 5 milestone closure still requires separate owner authorization.
+At this task 4 checkpoint, milestone closure still required separate owner
+authorization; task 5 results are recorded below.
 
 Main's separately merged Bluetooth runtime transport `114f2acb` was integrated
 as `a84fb601`, preserving unchanged dependency pins and pointer rules. The
@@ -918,5 +920,137 @@ source-reviewed without fault injection. These checks do not repeat the earlier
 DevilutionX data/image or boot/Bochs matrix because those paths are unchanged.
 Raw logs are `/tmp/pyxis-pointer-task4-async-gtk.log` and
 `/tmp/pyxis-pointer-task4-async-software-control.log`; artifacts remain local.
-All task-owned QEMU/GDB processes are stopped. Task 4 is parked in #560 for
-morning review; task 5 is not started and still requires owner authorization.
+All task-owned QEMU/GDB processes were stopped at this checkpoint. Task 4 was
+parked in #560 for morning review; it subsequently merged as `52451d3a`.
+The owner authorized task 5 on 2026-10-09; its closure record follows.
+
+
+## Task 5 closure and cursor redraw
+
+The owner authorized closure with the default-cursor redraw on 2026-10-09,
+after task 4 merged. #560 merged as `52451d3a`; `pointer/milestone-close` was
+rebased onto that fresh main before opening its PR. No dependency update belongs
+to task 5: userland stays at main's `362574b1`, ports `a642f073`, fs `b427df29`
+and lwIP `a1aadb91`.
+
+- [x] Task 1: ordinary surface input and bounded software cursor, #545.
+- [x] Task 2: relative lock, Super+Esc and consumer migration, #545,
+  userland #164 and ports #65/#66.
+- [x] Task 3: local/mux selection, wheel history and terminal/graphics native
+  readiness, #550 and userland #166.
+- [x] Task 4: VirtIO hardware cursor and capture-only software blend, #560.
+- [x] Task 5: cursor redraw, reviewed qualification and permanent references,
+  delivered for review. This checkbox records task delivery, not its merge.
+
+The implemented [pointer contract](../interfaces/pointer.md),
+[PS/2 device reference](../devices/mouse.md),
+[display/capture ownership](../kernel/display.md#hardware-pointer),
+[mousetest usage](../userland/mousetest.md) and
+[mux behavior](../userland/multiplexer.md#local-pointer-input) replace the completed
+WIP. Git retains the accepted decisions and worklists; this report retains
+measurement/configuration boundaries rather than duplicating the proposal.
+
+### Reviewed closure evidence
+
+The earlier task records supply matched QEMU checks on boot, Bochs and VirtIO,
+which the owner accepted as sufficient for milestone closure. Task 1 covers
+ordinary motion, program images/hotspots/hiding, warp, geometry and capture;
+task 2 covers lock/escape/fresh-click activation, Quake and SDL/DevilutionX;
+task 3 covers local/mux selection, wheel/history, layout/clipping/lifecycle and
+native wait readiness. Task 4 qualifies the hardware queue, host/upload images,
+clipping, capture, focus, lock hiding, teardown, resize and local-only
+DevilutionX hardware-cursor option.
+
+The historical hardware warm-motion median 5.659 ms included a serial cursor
+wait. The approved review fix removes that wait from ordinary-frame completion:
+frames returned with a descriptor still posted, while capture and resource reuse
+drain it. Its median was 5.309 ms versus the contemporaneous saved software
+image's 5.252 ms, with overlapping ranges. Both exceed the historical software
+median 4.198 ms. This is a measured nested-VM limit, not a stable native gain or
+proof of hardware-cursor bandwidth savings. Full-frame submission/cadence is
+unchanged. The full sample tables, cold observations and raw method remain above;
+task 5 does not replace them with another timing series for an init-only redraw.
+Source-only refusal/overflow/fault/panic/allocation cases remain distinguished
+from interactive checks, without tests or fault injection.
+
+### Default images and captures
+
+The owner's native report described the old arrow as a sliver with a vertical
+tail. Character-row tables in `kernel/pointer.c` now draw a 12x19 classic arrow:
+vertical left edge, 45-degree head edge, notched tail angled down to the right,
+black outline and white fill. It stays inside the existing transparent 16x24
+image at hotspot `(0,0)`. The 9x20 I-beam uses the same table style, serifs and
+unchanged hotspot `(4,10)`. Bounds and alphabet checks run at initialization;
+height guards are compile-time checks. Opaque black/white pixels use the existing
+straight-alpha BGRA storage; no ABI, program-image or input change is made.
+
+The before image uses task 4 integration `60ed2ed8`; the after captures were
+made with the redraw before its compile-time height guards were added. Those
+guards add no runtime instructions. Both ordinary full-image builds passed with
+`pyxis-llvm23.1.3-49e2c1a`; the guarded kernel also built. After rebase, ordinary
+and `DISPLAY_SIZE=1280x800` Bochs image builds passed again. No compiler rebuild,
+new tests or boot/benchmark automation was added.
+
+Manual QEMU 10.2.2 Q35/nested-KVM boots used CPU max, four CPUs, 512 MiB,
+UTC RTC, fresh matching OVMF code/variables, PS/2, modern VirtIO RNG/SCSI CD,
+and no NIC/storage export. Before/after software captures use the confirmed
+1280x800 boot framebuffer. The Development terminal remains shown: the arrow
+hotspot is `(200,8)` over navigation; the I-beam is `(800,400)` over empty content.
+PNG conversion preserves original pixels. The linked details are 8x
+nearest-neighbour extracts for review, not native scale or new native evidence.
+
+| Cursor | Before | After |
+| --- | --- | --- |
+| Arrow | [full capture](../images/pointer-task5/arrow-before.png), [8x detail](../images/pointer-task5/arrow-before-detail.png) | [full capture](../images/pointer-task5/arrow-after.png), [8x detail](../images/pointer-task5/arrow-after-detail.png) |
+| I-beam | [full capture](../images/pointer-task5/ibeam-before.png), [8x detail](../images/pointer-task5/ibeam-before-detail.png) | [full capture](../images/pointer-task5/ibeam-after.png), [8x detail](../images/pointer-task5/ibeam-after-detail.png) |
+
+Bochs smoke confirmed `DISPLAY_BOCHS`, 1280x800/pitch 5120 and no started
+VirtIO GPU. Both drawn shapes matched the boot-framebuffer capture pixels at
+the same hotspots. A native `screenshot` reached `screen_capture_finish(true)`;
+its RGB backing exactly matched the stopped frame's scanout, including I-beam.
+
+VirtIO used GTK/X11, relative PS/2, unscaled 1280x800 inside its 1280x827 window.
+The uploaded 64x64 padded arrow and live XFixes host cursor matched all bytes,
+including hotspot `(0,0)`. The I-beam retained `(4,10)`. Native capture completed
+with both queues drained and its pixels equalled cursor-free scanout plus
+exactly one uploaded I-beam; differences were confined to x=796–804, y=390–409.
+Those I-beam pixels also matched the boot/Bochs captures. Earlier incorrectly
+typed HMP commands did not run capture and are excluded. Typing with breakpoints
+disabled and explicit short key holds avoided debugger/key-release interference;
+no guest call injection or memory mutation was used.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Before kernel | `7d7122e3643b8d92e4da6c224af2169ba03ec6e5db3ff9c7d35793a76d87f4a0` |
+| Before ordinary ISO | `226789d8045260e47c6c8a5fc34acf985375336786258246d3d117278f25786e` |
+| After capture kernel | `dbf69533a9f156774c52ffee12f7be128230e05706cc61d8752ea8dc4a82634d` |
+| After capture ordinary ISO | `229dc8cdb55da0456225ab2931a5e554ddf66b1f964b32232567e22c6a525e42` |
+| Rebased guarded kernel, Bochs/VirtIO smoke | `653a28afc594d28f2726e6e5fdb32581b39aac4e70548b6d181dcceaf8e0525b` |
+| Rebased Bochs ISO | `728dd5ced6cdae5ec9aab3cebdacb3bf8ebd58d68df5c6ef1068ff99eba82f3f` |
+| Rebased ordinary VirtIO ISO | `1e07b035feede5f359d8a1255c31f8ef240c8ec4f7173409142237b50ceb7b85` |
+
+### Native evidence and remaining work
+
+The owner reported partial ThinkPad PXE qualification on 2026-10-09 at
+1920x1080 using PS/2 and the boot framebuffer. Boot 1 (`114f2ac`) checked
+ordinary motion/buttons, tabs and unspecified text selection; a remote-terminal
+screenshot contained the local I-beam. Boot 2 (`183f793`) checked Super+Esc in
+Quake, switching spaces with the cursor shown and local-terminal selection.
+Mux selection/wheel were not checked: no space opted into `multiplexer = true`,
+and manual `mux` launch produced the expected missing-authority diagnostic.
+
+Click-to-relock, cursor-visible layer changes, program image/hotspot/show/hide
+and warp, native cost samples and judgment of the new native arrow remain open
+in the exact [native qualification split](../technical-debt.md#native-system-pointer-qualification).
+These are owner reports, not agent-run native validation; boot 1's selection
+report is not upgraded to mux coverage. Native checks remain open even with
+QEMU milestone closure.
+
+Clipboard export/publication/paste and encoding remain in the
+[clipboard proposal](../wip/clipboard.md). Multi-source Bluetooth integration,
+USB HID, absolute-mode scrolling, broader host frontends, damage tracking,
+recovery and advanced selection remain separately scoped work; the references
+and [technical debt](../technical-debt.md#system-pointer-selection-and-input-limits)
+retain their consequences and revisit points. Local-only shareware data and game
+images were not republished for task 5. All task-owned QEMU/GDB processes are
+stopped. Final exact-head CI is reported on the task 5 PR; the owner merges it.
