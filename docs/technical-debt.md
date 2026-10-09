@@ -1405,8 +1405,8 @@ nested QEMU with archive, RAM and HOST directories).
 [cp](userland/cp.md) uses exclusive sibling temporary files and held-directory rename and removal. Accepted 2026-10-07: other writers must leave the temporary file and name
 untouched until completion because native mutation APIs do not bind a name to the held file identity. Source data stays live (copying its initial size), so concurrent
 overwrites can mix contents and same-file aliases replace the object. Staging needs destination CREATE/WRITE_FILES/REMOVE, not permission to write an existing file alone, and
-has no direct-truncation fallback. Recursive directory copying is deferred (files only; revisit with a bounded tree-copy contract). Interruption can leave a named temporary
-file, unconfirmed creation or publication is reported without retry or removal, failed cleanup can leave partial storage, and there is no stale-file sweeper or crash-durability
+has no direct-truncation fallback. Recursive copy (`-r`) keeps a partial tree after a failure with no rollback, and there is no recursive remove, so it is deleted by hand; trees beyond 32 levels or
+65,536 entries are refused. Interruption can leave a named temporary file or a `.cp-tree-` marker, unconfirmed creation or publication is reported without retry or removal, failed cleanup can leave partial storage, and there is no stale-file sweeper or crash-durability
 guarantee, so operators must establish which names exist before removing anything. Revisit reservation and publication primitives if cp must tolerate another writer changing
 its temporary, and cleanup policy when persistent use needs recovery from interrupted copies. Provider sources, native disk copies, durability and ThinkPad usage are
 unqualified (evidence covers archive, RAM and HOST copies in nested QEMU).
