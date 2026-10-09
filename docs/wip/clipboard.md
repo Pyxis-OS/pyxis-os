@@ -1,11 +1,11 @@
 # Clipboard
 
-Status: **first terminal delivery implemented; SDL2 graphics contract proposed**. The
+Status: **first terminal delivery implemented; SDL2 graphics contract accepted, implementation assigned**. The
 accepted 2026-10-09 rounds authorize local-terminal and mux Copy + Paste into
 opted-in stock libterm readers. The [implemented interface](../interfaces/clipboard.md)
 and [qualification record](../development/clipboard-first-delivery-qualification.md)
 describe its native authority, receiver contract and validation limits.
-Graphics, FILE and converter contracts remain proposed.
+The SDL2 round below is accepted **2026-10-09**; FILE and converters remain proposed.
 
 ## Owner decisions
 
@@ -99,7 +99,7 @@ Trusted boot/init/session/shell startup forwards grants deliberately where it
 forwards the corresponding UI ownership. Pane children get no mux-controller
 clipboard authority; a graphics child may receive its own attenuated graphics
 clipboard grant. First delivery forwards these named resources only on mux
-startup; graphics forwarding below is a separate proposed extension. The
+startup; the accepted graphics extension below is not implemented yet. The
 kernel-local handler needs no userspace controller grant, including Copy from Caelum's visible log selection. Caelum has
 no application paste destination.
 
@@ -151,12 +151,11 @@ refuses without overwriting the previous item. Explicit history movement clears
 selection as today. Paste to a non-live history view refuses without changing
 history or keyboard focus.
 
-## Proposed graphics activation
+## Graphics activation
 
-SDL2 round, **2026-10-09**, pending owner decisions; no graphics code is
-accepted yet. Terminal routing and safe line-reader Paste remain unchanged.
+SDL2 round accepted **2026-10-09**, with implementation assigned by the owner. Terminal routing and safe line-reader Paste remain unchanged.
 
-Default: trusted boot explicitly requests `SPACE_CREATE_CLIPBOARD_LOCAL` and,
+Trusted boot explicitly requests `SPACE_CREATE_CLIPBOARD_LOCAL` and,
 separately, `SPACE_CREATE_CLIPBOARD_SHARED` for stock local interactive spaces,
 as it already does for mux startup. Forward the named `clipboard_local` and,
 only when independently granted, `clipboard_shared` through
@@ -175,7 +174,7 @@ leaving the application's key events intact. Ctrl+X creates none. Get requires
 Paste; Set requires Copy. Each is one attempt, consumed even on refusal, with
 the existing five-second expiry. Repeats, synthetic SDL events, ordinary clicks,
 startup/polling and menu calls create none. No app-initiated read exception,
-including cached self-publications, is proposed. Menu approval is later work.
+including cached self-publications, is permitted. Menu approval is later work.
 
 Exact Super+Shift+C/V remains a consumed shared system action. The adapter
 presents one conventional Ctrl+C/V command with that event's Control modifier
@@ -194,25 +193,15 @@ insufficient; narrow Pyxis-only SDL event-core support may be needed. Kernel
 ownership, identity, layer and expiry checks remain authoritative regardless of
 public SDL event fields. Cancelled commands cannot rearm permission.
 
-### Three owner decisions
+### Accepted SDL2 decisions, 2026-10-09
 
-1. **Grant route — default:** both separately requested/delegated grants on
-   stock local interactive foreground startup, as above. Alternative: local
-   enabled by default, with a separate trusted-startup opt-in for exporting
-   shared to graphics descendants while retaining mux controller grants. The
-   default makes explicit shared chords consistent across terminal and SDL UI;
-   store use still requires matching physical activation and input ownership.
-2. **Activation — default:** physical, operation-specific chords and the
-   identity-bound shared translation above; no app/menu read without activation.
-   Alternative: defer SDL clipboard until an explicit native approval UI also
-   covers menu/app requests. The default implements the existing gesture model
-   without ambient access to another program's saved text.
-3. **Text/API and qualification — default:** the bounded Get/Set/Has contract
-   below, using DevilutionX plus an explicitly authorized, opt-in minimal SDL
-   clipboard exercise program for edge cases. Alternative: DevilutionX only,
-   leaving cases its editor cannot produce as source-inspected limits. The
-   default provides real API coverage without treating a game's editor as a
-   complete boundary probe; the exercise program is not authorized until accepted.
+1. Both separately delegated grants through stock local interactive foreground
+   startup, including mux pane shells; background/service/remote launches get neither.
+2. Fresh physical operation-specific activation only, with private shared-action
+   identity; no app/menu/background read exception.
+3. Bounded UTF-8 Get/Set/Has, qualified with DevilutionX and an authorized opt-in
+   minimal SDL clipboard exercise program. It is a manual tool like mousetest,
+   excluded from ordinary images unless the owner asks.
 
 ## Owned text handoff
 
@@ -477,9 +466,9 @@ only trusted packaged handlers in this milestone; hostile plugin containment,
 supervision/restart and conversion caches remain separate work. Settle retained
 result accounting and actual cleanup limits before authorizing converter code.
 
-## Proposed SDL2 first graphical consumer
+## SDL2 text contract
 
-The proposed [SDL2 adapter](../development/sdl2.md) maps UTF-8 `text/plain`
+The [SDL2 adapter](../development/sdl2.md) maps UTF-8 `text/plain`
 only: no FILE/rich data, converter, primary-selection or host/remote bridge.
 Set validates bytes before the first terminating NUL as Unicode scalar UTF-8
 (no overlong encodings, surrogates or out-of-range values). Native
@@ -492,7 +481,7 @@ preserves the old store. Get pins one immutable current item for its bounded
 copy, independent of source exit/replacement, then returns an SDL-allocated
 NUL-terminated copy to be freed with `SDL_free()`.
 
-| SDL call | Proposed result |
+| SDL call | Accepted result |
 | --- | --- |
 | `SDL_SetClipboardText` | 0 only after native publication with Copy activation; negative plus SDL error on denial, expiry, invalid text or limit/allocation failure. Authorized empty text is a valid item. |
 | `SDL_GetClipboardText` | Paste attempt consumes activation. Authorized empty/missing item returns an allocated empty string; refusal returns an empty string plus SDL error, never another layer or cached text. Allocation failure may return NULL with an error. |
@@ -513,14 +502,14 @@ missing shared grants, empty text, valid multibyte UTF-8, malformed input and
 Use DevilutionX's
 [text editor](https://github.com/diasurgical/DevilutionX/blob/7223eeac9e8274fbf665b4de86fda26d3b22c52f/Source/DiabloUI/text_input.cpp)
 for integration: it calls Set and Has-then-Get. A narrow event-modifier adaptation
-is included in the proposed consumer scope. Chocolate Doom has no clipboard use.
-The proposed manual exercise program covers otherwise unreachable cases, with
-no boot autoplay, self-tests or CI automation; omit it unless decision 3 permits it.
+is included in the accepted consumer scope. Chocolate Doom has no clipboard use.
+The authorized manual exercise program covers otherwise unreachable cases;
+it stays opt-in and out of ordinary images, with no autoplay or CI automation.
 
-After acceptance, publish dependency PRs from current userland/ports mains,
+Publish dependency PRs from current userland/ports mains,
 fast-forward only, then pin their published heads in Pyxis. State merge order
 (userland/native interface, ports, Pyxis integration) and check pins CI. No new
-klog lines. Implementation and validation remain unstarted.
+klog lines. Implementation is assigned; runtime qualification remains unstarted.
 
 ## Task breakdown
 
@@ -537,8 +526,8 @@ klog lines. Implementation and validation remain unstarted.
    focus/view changes and multiline paste not executing commands in matched QEMU.
 2. [ ] **SDL2 text adapter.** Local/shared graphical action routing and native
    Set/Get/Has integration, owned text and a real consumer. No background access
-   or implied menu-pointer permission; this round settles graphics authority and
-   activation before implementation. Qualification follows the owner's decision 3.
+   or implied menu-pointer permission; graphics authority/activation and the
+   opt-in manual exercise tool are accepted above. Implementation is assigned.
 3. [ ] **Typed objects and FILE retention.** Exact-match representations and
    mandatory text form; immutable/source-independent backing, capability
    attenuation, retained admission and concrete path examples qualified.
