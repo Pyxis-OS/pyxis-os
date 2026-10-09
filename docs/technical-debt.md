@@ -324,7 +324,7 @@ lifetimes and no quota: each retained snapshot costs `4 * width * height` bytes,
 Revisit admission and retained-image policy with a concrete pressure workload and an authority and lifetime contract. Capture backing
 starts uninitialized and relies on the presenter's full repaint to fill every visible pixel, so damage tracking must force full
 composition for a pending capture ([frame contract](interfaces/screen-capture.md#frame-boundary-and-lifetime)). Captured bytes freeze one
-composition and keep tearing from concurrent single-buffer writes; no atomic frame, vblank or scanout timing is promised, and a stuck
+composition of whole submitted application frames; no vblank or scanout timing is promised, and a stuck
 presenter or panic cannot complete a capture. Revisit stronger consistency or bounded recovery with a separate presenter and backing
 ownership contract. The [qualification report](development/screenshot-qualification.md) covers QEMU boot-framebuffer, Bochs and VirtIO
 comparisons, shown-layer and resize coverage, retained snapshots and BUSY admission; failure cleanup is source-reviewed only.

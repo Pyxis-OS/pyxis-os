@@ -1,7 +1,7 @@
 # Mapped graphics buffers
 
 Run `mandelbrot` from the shell in an application space. It draws a
-pixel-resolution Mandelbrot set progressively. Hold the arrow keys to pan,
+pixel-resolution Mandelbrot set and shows each view once it is complete. Hold the arrow keys to pan,
 `=`/`+` to zoom in around the centre, and `-` to zoom out. Escape releases the
 keyboard and display sessions and returns to the shell. Super+Left/Right switches
 spaces; Super+Down shows the terminal and Super+Up restores graphics. Losing focus
@@ -34,29 +34,29 @@ The display is restricted to processes in its owning space. Acquiring graphics
 requires this capability, not a space index or a global framebuffer address.
 
 One process may acquire graphics in a space at a time. Another acquisition,
-including a repeated call by the owner, returns BUSY. PRESENT, RELEASE and
+including a repeated call by the owner, returns BUSY. SUBMIT, RELEASE and
 REPLACE are permitted only to the acquiring process. Copying a capability delegates the
 ability to acquire a future session; it does not transfer the current session
-or map its pixels into the recipient. Closing a handle does not end the session.
+or map its slots into the recipient. Closing a handle does not end the session.
 The owner can use another DRAW handle to the same display to release it, or exit.
 
 ## Choosing the visible layer
 
-The first successful PRESENT of each session shows graphics. Acquisition alone
-leaves the terminal visible, without a layer marker. After that first PRESENT,
+The first successful SUBMIT of each session shows graphics. Acquisition alone
+leaves the terminal visible, without a layer marker. After that first SUBMIT,
 Super+Down shows the terminal and Super+Up restores graphics. The tab ends with
 `+` for graphics or `−` for the terminal. With no presented session either
 shortcut is consumed without changing state. Repeating the current choice does
 not reset input or clear terminal bytes.
 
-The choice lasts for the session: further PRESENT calls, REPLACE, physical
+The choice lasts for the session: further SUBMIT calls, REPLACE, physical
 resize and switching away from and back to the space preserve it. A session
-started in another space never selects that space; its first PRESENT records
+started in another space never selects that space; its first SUBMIT records
 graphics as the layer for the next visit. RELEASE or owner exit ends the
-session and removes its marker. A later session gets its own first-PRESENT
+session and removes its marker. A later session gets its own first-SUBMIT
 behavior.
 
-Hiding graphics keeps its mapping, ownership and independent input sessions.
+Hiding graphics keeps its slots, ownership and independent input sessions.
 The program remains runnable, and terminal output stays live. Captured keyboard
 input and ordinary pointer input lose focus; terminal typing uses the normal
 console queue.
@@ -65,56 +65,90 @@ foreground graphical job still occupies the shell, so hiding it opens no second
 prompt. [Ctrl+C](../userland/shell.md#interrupting-foreground-commands) can reach
 the shell's existing armed foreground interrupt while the terminal is shown.
 
-## Mapping and presentation
+## Slots and frame handoff
 
-[The ABI](../../include/abi/display.h) has five synchronous requests. All but
-REPLACE carry only a message header:
+[The ABI](../../include/abi/display.h) has five synchronous requests. REPLACE
+carries a generation and SUBMIT a slot; the others carry only a message header.
 
-- ACQUIRE allocates zeroed RAM and maps it writable and non-executable into the
-  caller. Its reply contains the address, mapped size, width, height, pitch and
-  red/green/blue shifts and geometry generation in a 64-byte `display_buffer`.
-  Acquisition leaves the TTY selected until PRESENT.
-- PRESENT records that the session has presented. Its first successful call
-  selects graphics; later calls preserve the user's layer choice. It returns
-  before scanout or a complete frame copy.
-- RELEASE removes the user mapping, ends the owner's pointer subscription and
-  selects the TTY again. It returns no reply payload; the old pixel pointer must
-  no longer be used.
-- SIZE returns the current destination width, height, pitch, channel shifts and
-  generation atomically in a 48-byte `display_size_reply`. DRAW permits this
+- **ACQUIRE** allocates three zeroed frames, the slots, and maps them writable
+  and non-executable into the caller, back to back. Its reply is a 64-byte
+  `display_buffer`:
+  - the address of slot 0 and the mapped size of one slot;
+  - width, height and pitch;
+  - the red, green and blue shifts;
+  - the geometry generation;
+  - the slot count.
+
+  Slot *i* starts at `address + i * size`. The program holds every slot, and
+  the TTY stays selected until the first SUBMIT.
+- **SUBMIT** hands over a finished frame. The program renders a complete frame
+  into a slot it holds and submits it; that slot becomes the pending frame.
+  - **Reply:** a 16-byte `display_submit_reply` naming a slot the program
+    holds, to render next, and whether this submission replaced a pending
+    frame that was never shown.
+  - **First SUBMIT:** selects graphics; later calls preserve the user's layer
+    choice.
+  - **Return:** SUBMIT returns before any copy or scanout.
+- **RELEASE** removes the slots, ends the owner's pointer subscription and
+  selects the TTY again. It returns no reply payload, and no slot pointer may be
+  used afterwards.
+- **SIZE** returns the current destination width, height, pitch, channel shifts
+  and generation atomically in a 48-byte `display_size_reply`. DRAW permits this
   query without acquiring graphics or owning the current session; it grants no
   mode-setting authority. `display_size()` exposes the same native result.
-- REPLACE carries the expected destination generation. It allocates a zeroed
-  current-size buffer at a disjoint user address and returns a new 64-byte
-  descriptor. A generation mismatch returns BUSY; allocation/mapping failure
-  preserves the old mapping and session. Success removes the old user mapping
-  within the call, so its pointer is invalid after return. The acquiring process
-  remains owner, and the layer choice is preserved. If graphics is shown, the
-  blank new buffer is selected until it redraws. Reply storage must not overlap
-  the mapping being retired.
+- **REPLACE** carries the expected destination generation and maps a zeroed
+  current-size slot set at a disjoint user address, returning a new
+  descriptor.
+  - **Failure:** a generation mismatch returns BUSY. Allocation or mapping
+    failure preserves the old slots and session.
+  - **Success:** the old slots are unmapped within the call, so their pointers
+    are invalid after return. Every new slot is held and nothing is pending.
+  - **Screen:** the frame on screen stays until the next SUBMIT replaces it.
+  - **Ownership:** the acquiring process remains owner, and the layer choice is
+    preserved.
+  - **Reply storage** must not overlap the slots being retired.
 
-Pixels are 32-bit words with three 8-bit channels at the returned shifts. Pitch
-is bytes between row starts. The layout matches the current display; dimensions
-exclude the kernel-owned navigation bar. An acquired mapping's address, extent,
-pitch and dimensions remain fixed until REPLACE or RELEASE; its generation identifies the
-geometry at acquisition. Mapped size includes page padding, which is zeroed
-along with the pixels. Applications draw only
-within width/height and use pitch rather than assuming tightly packed rows.
-The mapping is distinct from private-memory allocations and cannot be released
-through the memory service.
+**Slot rules.**
+- **Taking the pending frame:** at each presentation, the presenter takes the
+  pending frame, if any, as the current one and repaints from it until another
+  replaces it. The previous current slot then returns to the program.
+- **Dropping:** a SUBMIT while another frame is pending replaces it. The
+  replaced frame is never shown, its slot returns at once, and the reply says
+  so. A program that renders faster than presentation therefore sees explicit
+  drops; it is never blocked.
+- **What the program may write:** never a pending or current slot. A slot
+  returns only through a reply naming it, or because a newer frame took its
+  place on screen; every reply names a held slot.
+- **Contents:** slots keep the frame they last held, so programs redraw every
+  pixel of the frame they submit.
+- **Errors:** an unknown slot, or one the program doesn't hold, is BAD_REQUEST
+  and changes nothing.
 
-After PRESENT, when graphics is chosen in the active space, the kernel reads the
-same backing pages that the application writes. Further changes may appear
-without another request. Hidden or unselected graphics takes no new presenter
-reference and adds no pixel copy; an already-snapshotted frame may finish after
-a transition. This single-buffer contract permits tearing; PRESENT neither
-freezes pixels nor promises vblank,
-atomic frames or completion notification. The kernel copies pixels into the
-physical driver's target: directly to the boot/Bochs framebuffer, or into kernel RAM
-followed by a fenced VirtIO transfer and flush. Application backing is never
-attached to the GPU. A failed physical driver makes ACQUIRE/PRESENT/SIZE/REPLACE unavailable;
-RELEASE still tears down an existing session. Double buffering and a compositor
-remain separate work.
+**Layout.** Pixels are 32-bit words with three 8-bit channels at the returned
+shifts, and pitch is bytes between row starts.
+- **Geometry:** the layout matches the current display, and dimensions exclude
+  the kernel-owned navigation bar. A slot set's address, extent, pitch and
+  dimensions stay fixed until REPLACE or RELEASE; its generation identifies
+  the geometry at acquisition.
+- **Padding:** the mapped size includes page padding, zeroed along with the
+  pixels. Applications draw only within width and height, and use pitch rather
+  than assuming tightly packed rows.
+- **Not private memory:** the slots are distinct from private-memory
+  allocations and can't be released through the memory service.
+
+**What the guarantee covers.** Presentation copies only whole submitted frames,
+never pixels a program is writing.
+- **Hidden graphics:** hidden or unselected graphics takes no new frame, but a
+  SUBMIT still replaces any pending one.
+- **Copy path:** the kernel copies the current frame and its overlays into the
+  physical driver's target: the boot or Bochs RAM staging frame, then one copy
+  to scanout memory, or VirtIO's RAM backing followed by a fenced transfer and
+  flush.
+- **Not promised:** vblank synchronization, tear-free scanout or completion
+  timing.
+- **Never attached to the GPU:** application slots.
+- **A failed driver:** makes ACQUIRE, SUBMIT, SIZE and REPLACE unavailable.
+  RELEASE still tears down an existing session.
 
 The TTY keeps its own framebuffer and continues accepting output while graphics
 is selected. Its cursor is not composited over graphics. Releasing graphics or
@@ -148,7 +182,7 @@ pointer lock exists; it requires shown, focused graphics and permits refusal.
 Locked INPUT has `POINTER_EVENT_LOCKED` and device-count `dx`/`dy`, while the
 ordinary position stays parked. Lock forces cursor hiding without altering the
 surface's saved preference. UNLOCK restores ordinary routing; STATE reports
-current focus/lock flags. Acquisition and PRESENT do not themselves lock input.
+current focus/lock flags. Acquisition and SUBMIT do not themselves lock input.
 
 Super+Esc with either Super key and any additional modifiers revokes lock and
 consumes Escape through its release before keyboard capture. Space/layer loss,
@@ -163,7 +197,7 @@ can finish after image replacement, display release or owner exit without
 accessing retired owner state. The kernel composes it after the chosen surface
 and includes it in [screen capture](screen-capture.md); application pixels remain
 cursor-free. Quake acquires pointer input after graphics and requests lock after
-its first PRESENT. It reads relative counts only while locked, observes STATE
+its acquisition. It reads relative counts only while locked, observes STATE
 to detect revocation and requests relock on a fresh surface activation. Locked
 same-session geometry changes retain held controls. Cleanup releases pointer
 input before graphics; keyboard-only play remains available without a mouse.
@@ -222,7 +256,7 @@ keep their acquired layout until they explicitly adapt.
 ## Mapping and teardown invariants
 
 All display state and backing allocation are BSP-owned, with interrupts disabled
-while mutating them. All five operations, including PRESENT and SIZE, use typed
+while mutating them. All five operations, including SUBMIT and SIZE, use typed
 requests on the common BSP FIFO. The service catalog requires the scheduler to park the
 requesting task outside its private root and stack, with entry/current-task state
 cleared, before publication. The BSP executor performs the operation and clears
@@ -230,14 +264,15 @@ its process/display loans before completion and wakeup; resumption reloads CR3.
 The display capability keeps the object alive during the request. Failed
 acquisition unwinds partial mappings and backing without claiming the display.
 
-VM owns the kernel allocation; user mappings borrow its physical frames. The
-session holds one buffer reference. Presentation acquires another with interrupts
-disabled, then copies with interrupts enabled. If release or process cleanup runs
-while that copy is preempted, it detaches the old buffer and removes its user aliases
-but retains backing until presentation drops the last reference. A presenter
-borrows no process pointer. It may finish one old frame before the next tick
-shows the restored TTY or newly selected graphics. REPLACE applies the same
-retirement rule while retaining the session. Deferred backing reclamation is
+VM owns the kernel allocations; user mappings borrow their physical frames. The
+session holds one reference per slot and one for the frame on screen.
+Presentation acquires another with interrupts disabled, then copies with
+interrupts enabled. If release or process cleanup runs while that copy is
+preempted, it removes the slots' user aliases but retains backing until
+presentation drops the last reference. A presenter borrows no process pointer.
+It may finish one old frame before the next tick shows the restored TTY or newly
+selected graphics. REPLACE applies the same retirement rule to the old slots,
+and the frame on screen survives it until a submitted frame replaces it. Deferred backing reclamation is
 attributed to the owner's execution group, so group completion includes it.
 
 Normal exit and fatal user-fault cleanup both release an owned session before
@@ -247,12 +282,11 @@ may temporarily retain only pixel backing. No application mapping survives exit.
 
 ## Current boundaries
 
-One buffer, one owner and one user mapping per space; fixed acquired layouts and
-native 32-bit pixels. Cross-space presentation, shared application mappings,
-dirty rectangles, frame completion and graphics-specific
-resource quotas remain separate work. The single-CPU development fallback can use the same
+Three slots, one owner and one user mapping per space; fixed acquired layouts
+and native 32-bit pixels. Cross-space presentation, shared application mappings,
+dirty rectangles, presentation timing and pacing, and graphics-specific resource
+quotas remain separate work. The single-CPU development fallback can use the same
 display protocol, while its TTY still shares kernel logs.
 
-Presentation timing and completed-frame handoff are proposed separately in
-[presentation timing](../wip/presentation-timing.md); today's mutable mapping and
-PRESENT semantics above remain authoritative.
+Presentation timing and pacing are later steps of
+[presentation timing](../wip/presentation-timing.md).

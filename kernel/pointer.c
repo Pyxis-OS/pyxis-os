@@ -133,7 +133,7 @@ static struct pointer_destination hit_test(void)
   }
   struct display_object *display = space->display;
   if (display->visible) {
-    const struct framebuffer *mapping = &display->frame->fb;
+    const struct framebuffer *mapping = display_slot_layout(display);
     if (position_x < (int64_t)mapping->width &&
         position_y - (int64_t)space_pointer_content_y() < (int64_t)mapping->height) {
       return (struct pointer_destination){space, DESTINATION_GRAPHICS};
@@ -153,14 +153,14 @@ bool pointer_surface_focused(struct pointer_object *pointer)
 struct pointer_geometry pointer_surface_geometry(struct pointer_object *pointer)
 {
   struct space *space = pointer->space;
-  const struct display_object *display = space->display;
+  const struct framebuffer *mapping = display_slot_layout(space->display);
   bool terminal = pointer_is_terminal(pointer);
   return (struct pointer_geometry){
     .width = space->fb->width, .height = space->fb->height,
     .generation = space->tty->geometry_generation,
-    .mapping_identity = terminal ? pointer->view_identity : display->mapping_identity,
-    .mapping_width = terminal ? space->fb->width : display->frame ? display->frame->fb.width : 0,
-    .mapping_height = terminal ? space->fb->height : display->frame ? display->frame->fb.height : 0,
+    .mapping_identity = terminal ? pointer->view_identity : space->display->mapping_identity,
+    .mapping_width = terminal ? space->fb->width : mapping ? mapping->width : 0,
+    .mapping_height = terminal ? space->fb->height : mapping ? mapping->height : 0,
   };
 }
 

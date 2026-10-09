@@ -36,12 +36,15 @@ optional: without it, or without a mouse, the program runs from the keyboard.
     framebuffer acquires graphics, then the optional pointer subscription.
     Destroying the window releases pointer and keyboard input before graphics.
   - **Drawing.** SDL draws into its own surface. `SDL_UpdateWindowSurface` and
-    `SDL_RenderPresent` copy the updated rectangles into the display mapping,
-    so the presenter never shows a cleared or half-drawn frame, though rows can
-    tear. The first presentation shows graphics.
-  - **Resize.** A display geometry change replaces the mapping, updates the
-    display mode and sends SDL's resized event. A failed replacement keeps the
-    old mapping until the next change.
+    `SDL_RenderPresent` copy the whole surface into a held display slot and
+    [submit](../interfaces/graphics.md#slots-and-frame-handoff) it. Slots
+    rotate and each keeps an older frame, so dirty rectangles alone would leave
+    stale areas. The presenter shows only complete frames. The first
+    submission shows graphics.
+  - **Resize.** A display geometry change replaces the slots, resubmits the
+    last frame at the new geometry, updates the display mode and sends SDL's
+    resized event. A failed replacement keeps the old slots until the next
+    change.
 - **Event pump.** One `wait_many` poll covers display geometry, keyboard and the
   acquired pointer subscription. `SDL_WaitEvent` and positive-timeout
   `SDL_WaitEventTimeout` block on these interests; the next pump consumes that
@@ -65,7 +68,7 @@ optional: without it, or without a mouse, the program runs from the keyboard.
   warp using current identities. Refusal sets an SDL error; success arrives
   through native input, without a synthetic SDL position update.
 - **Relative mode.** `SDL_SetRelativeMouseMode` requires pointer ownership and
-  a first PRESENT before requesting native LOCK. A refused lock reports an
+  a first SUBMIT before requesting native LOCK. A refused lock reports an
   error and leaves relative mode disabled. Super+Esc and focus/device loss can
   revoke lock; the event pump clears SDL relative mode, pending motion and held
   buttons without warping or automatically relocking. Fresh surface activation
@@ -121,7 +124,7 @@ refusal; it retains other video drivers' behavior.
 1. **First consumer:** DevilutionX, with the game data as a local build
    input.
 2. **Presentation:** an SDL-owned surface, copied into the display mapping on
-   present.
+   present; whole frames are submitted since the frame handoff (2026-10-09).
 3. **Paths:** `home://APP/` for preferences; no base path.
 4. **DevilutionX packaging:** opt-in only, because of its non-commercial
    licence.
