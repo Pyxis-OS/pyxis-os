@@ -24,6 +24,13 @@ struct boot_region {
   enum boot_region_type type;
 };
 
+/* Firmware EFI descriptors copied by the boot adapter. Numeric type and
+ * attributes retain UEFI meanings; these are evidence, not PMM authority. */
+struct boot_efi_region {
+  uint64_t base, length, attributes;
+  uint32_t type;
+};
+
 /* Boot files remain in boot-reserved physical frames. The kernel must
  * map them before reading; neither the Limine pointer nor its HHDM survives. */
 struct boot_module {
@@ -62,6 +69,9 @@ struct boot_info {
   struct boot_framebuffer framebuffer;
   size_t region_count;
   struct boot_region regions[BOOT_MAX_REGIONS];
+  bool efi_map_valid;
+  size_t efi_region_count;
+  struct boot_efi_region efi_regions[BOOT_MAX_REGIONS];
 };
 
 /* BSP only, after VM/heap setup: finish the bootloader's AP handoff. */

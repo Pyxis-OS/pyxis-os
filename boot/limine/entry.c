@@ -6,12 +6,14 @@
 #include <kernel/log.h>
 #include <kernel/fb/early_console.h>
 #include <kernel/panic.h>
+#include <kernel/memory.h>
 #include "mp.h"
 
 #define REQUIRED_BASE_REVISION 6
 #define PAGING_REQUEST_MIN_MAX_REVISION 1
 #define FRAMEBUFFER_BITS_PER_PIXEL 32
 #define FRAMEBUFFER_CHANNEL_BITS 8
+#define EFI_PAGE_BYTES UINT64_C(4096)
 
 __attribute__((used, section(".limine_requests_start")))
 static volatile uint64_t requests_start[] = LIMINE_REQUESTS_START_MARKER;
@@ -22,6 +24,11 @@ static volatile uint64_t base_revision[] = LIMINE_BASE_REVISION(REQUIRED_BASE_RE
 __attribute__((used, section(".limine_requests")))
 static volatile struct limine_memmap_request memory_request = {
   .id = LIMINE_MEMMAP_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_efi_memmap_request efi_memory_request = {
+  .id = LIMINE_EFI_MEMMAP_REQUEST_ID,
 };
 
 __attribute__((used, section(".limine_requests")))
@@ -77,6 +84,38 @@ __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t requests_end[] = LIMINE_REQUESTS_END_MARKER;
 
 static struct boot_info boot;
+
+static void copy_efi_memory_map(void)
+{
+  const struct limine_efi_memmap_response *map = efi_memory_request.response;
+  struct efi_descriptor {
+    uint32_t type, padding;
+    uint64_t physical, virtual, pages, attributes;
+  };
+  if (!map || !map->memmap || map->desc_version != 1 ||
+      map->desc_size < sizeof(struct efi_descriptor) || !map->memmap_size ||
+      map->memmap_size % map->desc_size ||
+      map->memmap_size > UINTPTR_MAX - (uintptr_t)map->memmap ||
+      map->memmap_size / map->desc_size > BOOT_MAX_REGIONS) {
+    return;
+  }
+  size_t count = map->memmap_size / map->desc_size;
+  for (size_t i = 0; i < count; ++i) {
+    struct efi_descriptor descriptor;
+    memcpy(&descriptor, (const uint8_t *)map->memmap + i * map->desc_size,
+        sizeof(descriptor));
+    if (!descriptor.pages || descriptor.pages > (UINT64_MAX - descriptor.physical) / EFI_PAGE_BYTES ||
+        (descriptor.physical & (EFI_PAGE_BYTES - 1))) {
+      return;
+    }
+    boot.efi_regions[i] = (struct boot_efi_region){
+      .base = descriptor.physical, .length = descriptor.pages * EFI_PAGE_BYTES,
+      .attributes = descriptor.attributes, .type = descriptor.type,
+    };
+  }
+  boot.efi_region_count = count;
+  boot.efi_map_valid = true;
+}
 
 static enum boot_region_type region_type(uint64_t type)
 {
@@ -384,6 +423,7 @@ static void copy_command_line(void)
   validate_responses();
   copy_executable_placement();
   copy_memory_map();
+  copy_efi_memory_map();
   /* Validation needs the memory map; start the screen before other checks. */
   copy_framebuffer();
   if (boot.framebuffer.size) {

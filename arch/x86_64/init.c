@@ -10,6 +10,8 @@
 #include <arch/paging.h>
 #include <arch/syscall.h>
 #include <arch/user.h>
+#include <arch/amd/renoir_inventory.h>
+#include <kernel/boot/options.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 
@@ -59,10 +61,14 @@ void arch_init(struct boot_info *boot)
   struct cpu_local *cpu = cpu_bsp();
   gdt_init(&cpu->descriptors, cpu->double_fault_stack_top);
   cpu_install_local(cpu);
+  const struct boot_options *options = boot_options_parse(boot->command_line);
   idt_init();
   klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   io_apic_prepare(boot);
   arch_clock_prepare(boot);
+  if (options->display_inventory) {
+    renoir_inventory_boot(boot);
+  }
   paging_init(boot);
   arch_clock_init();
   apic_init();
