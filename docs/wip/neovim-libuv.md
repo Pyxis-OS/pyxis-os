@@ -1,6 +1,7 @@
 # Neovim on Pyxis
 
-Status: **owner decisions accepted 2026-10-10; task 1 implemented in this PR.**
+Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651.**
+Task 2 is assigned; its contract below awaits owner decisions before code.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -49,7 +50,7 @@ without Neovim.
    TCP model. The owner can pipe a slow producer into a viewer that shows output
    as it arrives and keeps answering keys, such as `less` following its input;
    today [`less`](../userland/less.md) blocks on a pipe read and has no live
-   refresh. This PR supplies the native operations and helpers, without changing
+   refresh. Task 1 supplies the native operations and helpers, without changing
    consumers. [Qualification and matched costs](../development/experiments/pipe-readiness/README.md)
    cover one and four CPUs, a responsive scratch child-output viewer, and mixed
    pipe/console/process/TCP waits.
@@ -58,7 +59,7 @@ without Neovim.
    and the libc `stat` fields where a backend reports them. The owner can see
    the shell refuse to redirect output onto an input file reached by another
    path ([redirection debt](../technical-debt.md)), and TCC honour
-   `#pragma once`.
+   `#pragma once`. See the [pending task 2 contract](#task-2-contract).
 3. [ ] **Terminal profile for a full-screen editor.** Alternate screen, scroll
    region and saved cursor in the framebuffer TTY and the multiplexer, and the
    `TERM` name that advertises exactly what is supported. ASCII only. The owner
@@ -92,6 +93,82 @@ Later, each with its own proposal: swap and backup recovery (needs task 2 and a
 lease policy), jobs and `system()` (extra stream delegation and group stop),
 `:terminal`, UTF-8 rendering, user threads and the pool, tree-sitter parsers,
 LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
+
+### Task 2 contract
+
+**Proposed, not accepted or implemented.** Inspected main `df0885f2`, userspace
+`5aede1c2`, ports `19fb10b0`, fs `b427df29`. No task 2 baseline or runtime claim.
+Three material decisions, with defaults:
+
+1. **Identity — live backend objects within one boot, using a comparable
+   64-bit domain/object pair.** Domains follow backing instances/volumes, not
+   root grants. Delegated paths share RAM/archive object identities; native
+   wrappers for one mounted volume/inode compare equal, different volumes
+   unequal. HOST maps the session and complete FUSE node incarnation losslessly
+   into native IDs, never using wrapper IDs, pointers, hashes or a libc cache.
+   Mapping storage follows live references; allocation/exhaustion fails without
+   collisions or wrapping. These are Pyxis IDs, not raw host st_dev/st_ino.
+
+   Comparison requires keeping one reference to the original object alive.
+   Rename preserves identity; held replacement victims remain old objects while
+   new lookups see the replacement. After final release, native slots can reuse
+   and HOST can assign a new ID even to an unchanged file. No cross-boot or
+   historical identity promise. HOST repeated roots and same-mount hardlinks
+   match while held; bind-mount aliases and cross-session comparison are excluded.
+   Stronger HOST identity needs additional backing support.
+
+2. **Metadata — native FILE/DIRECTORY queries with independent identity/mtime
+   validity, preserved in libc.** FILE requires READ or WRITE, like SIZE;
+   DIRECTORY self-metadata needs no additional content rights, preserving
+   stat's zero-right directory handles. No traversal or new authority results.
+
+   HOST samples real Unix time through fresh GETATTR; npfs reports its current
+   inode's modified_ns/validity, including accepted cached writes. RAM records
+   real wall time at creation/content changes, with validity clear when time is
+   unavailable. Authored archive times remain unknown. No disk-format change,
+   invented epoch time or generation-as-timestamp. Time can repeat or move
+   backwards; equality does not prove unchanged content.
+
+   Libc adds st_dev/st_ino/st_mtim plus explicit validity bits; unknown fields
+   have no usable value, rather than zero meaning absence. Identity is lossless,
+   nanoseconds normalized. Partial type/size stat remains successful, including
+   providers and special objects. Only unsupported-query BAD_OPERATION permits
+   fallback to SIZE; operational/malformed failures remain errors.
+
+3. **Consumers — fail closed when an identity comparison is required; retain
+   TCC once-header streams until translation-unit cleanup.** Before any resize,
+   the shell compares every explicit output with every stage's final FILE stdin,
+   including inherited input. Alias, unknown identity or failed query aborts
+   before truncation; no FILE input/output pair needs no comparison. Created
+   outputs may remain, and later resize/launch failure has no rollback. Argument
+   files are outside this check: `cat < input > alias` is covered,
+   `cat input > alias` is not.
+
+   TCC compares opened candidates with all once-marked identities, including
+   differently named aliases; no pathname-only once shortcut. Keeping one opened
+   stream per once object prevents final-FORGET discontinuity and inode reuse,
+   at the cost of handles and stream backing. Existing allocation/descriptor
+   limits produce a diagnostic. Missing identity at once, or on a candidate
+   needing comparison, is a diagnostic. Borrowed stdin remains caller-owned;
+   include guards need no once cache.
+
+Evidence: [RAM](../../kernel/object/file.c),
+[npfs lifetime/time](../../kernel/fs/npfs_store.c),
+[format validity](../../fs/include/pyxis_fs/npfs.h),
+[HOST](../../include/kernel/virtio/fs.h). FUSE guarantees
+[node-incarnation uniqueness](https://github.com/torvalds/linux/blob/v6.3/include/uapi/linux/fuse.h#L577),
+not continuity after final FORGET; [virtiofsd](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/passthrough/inode_store.rs)
+uses host inode/device/mount internally, but GETATTR omits the filesystem device.
+
+After acceptance, capture baseline before code: existing small-file iobench
+open/read rounds, include-heavy TCC preprocessing and a bounded manual open/stat
+workload on RAM, HOST and installed-image npfs. Repeat matched samples and record
+ranges/configuration; end-to-end costs are not isolated stat latency. No new
+benchmark infrastructure. QEMU/GDB checks cover aliases, rename/replacement with
+held handles, cross-volume IDs, valid/unknown times, HOST external edits,
+redirection preservation and once aliases/replacement. Userland/ports PRs precede
+the integration PR; pin their published heads, update consumer docs/debt, and
+check task 2 only after qualification.
 
 ### Mirrors the owner must provide
 
