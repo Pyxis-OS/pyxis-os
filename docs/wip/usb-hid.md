@@ -1,103 +1,129 @@
 # USB HID boot keyboards and mice
 
-Status: **baseline captured; implementation in progress**. Owner decisions accepted
-2026-10-10. No public raw-USB interface or new input grant is added.
+Status: **implemented and QEMU qualified; owner native batch pending**.
+Implemented behavior and limits live in [USB boot input](../devices/usb-hid.md).
+No public input ABI or task-owned dependency pin changes are needed.
 
 ## Accepted contract
 
-- USB and PS/2 keyboards share focus, grants, shortcuts, locks and the existing
-  US text mapping. Per-device held state prevents one device releasing another's
-  key. USB host repeat starts after 500 ms, then repeats every 33 ms; PS/2
-  typematic stays unchanged. Repeat and unchanged reports create no activation.
-  If attachment observes held keys/buttons, release them all before that source
-  supplies new presses; queued pre-bind state cannot create activation. Keyboard
-  rollover resets accepted input and quarantines recovered holds until release.
-- Boot-subclass keyboard and mouse interfaces include composite dongles, with
-  one keyboard and one mouse interface per device. Select boot protocol; decode
-  the eight-byte keyboard and three-byte mouse reports. Wheel needs an established
-  extension layout; unknown trailing bytes have no invented meaning. General
-  report-protocol HID, media keys and keyboard LED updates are outside this task.
-- The [pointer source rule](../interfaces/pointer.md#input-source-coordination)
-  aggregates buttons and continuity suppression. Losing a button-holding source
-  cancels drag, resets accepted input and revokes lock. Losing a buttonless source
-  leaves a live survivor's input and lock unchanged; losing the last source revokes
-  lock. No acceleration or public pointer ABI change.
-- Boot admission covers low/full/high-speed leaves on roots or through up to
-  five external USB 2 hubs, with existing transaction-translator routing. Runtime
-  low/full-speed leaf attachment works on roots and boot-present supported hub
-  chains. Runtime new hubs and USB 3 HID are outside this profile; a dock's USB 2
-  companion path is eligible.
-- Each controller has 32 HID attachment records, including initial, failed and
-  retired admissions. Prepared endpoint/DMA resources stay separate from storage
-  and Bluetooth and remain retained until reboot. Exhaustion refuses new devices.
-  Ordinary HID-leaf removal needs a device-local stop/disable fence; uncertain
-  ownership or hub-subtree removal may quarantine the controller until reboot.
-  [USB switch survival](../technical-debt.md#usb-switch-subtree-removal) is later work.
-
-The BSP controller worker owns USB commands, streams and DMA. A bounded progress
-pass services HID while existing command/control/storage waits drain events.
-Input delivery performs no allocation, USB command or sleep under input locks.
-Attach/detach diagnostics use ktrace, with no new klog lines. The boot inventory
-remains a snapshot; runtime attachment does not silently rewrite it.
+Owner accepted 2026-10-10: one shared keyboard path with per-device holds,
+USB repeat at 500 ms then 33 ms and unchanged PS/2 typematic; the existing
+[pointer source rule](../interfaces/pointer.md#input-source-coordination), boot
+keyboard/mouse composites and only established wheel layouts; boot paths through
+five USB 2 hubs, runtime low/full-speed leaves on roots or boot-present chains,
+32 retained attachment records per controller and possible subtree quarantine.
+[Surviving a USB switch flip](../technical-debt.md#usb-switch-subtree-removal)
+without quarantine is a much-later follow-up.
 
 ## Delivery
 
-1. [x] Capture unchanged-source input/CPU baseline; record matched configurations,
-   revisions, repeated samples and debugger perturbation.
-2. [ ] Extend private interrupt endpoints, bounded leaf attachment/retirement and
-   boot-present hub monitoring without breaking Bluetooth or storage progress.
-3. [ ] Bind boot HID and integrate shared keyboard/pointer state, repeat and loss.
-4. [ ] Qualify QEMU roots, hubs/chains, coexistence and hotplug; repeat measurements
-   and prepare the owner's native batch. Native results remain separate.
+1. [x] Capture unchanged-source input/CPU baseline before code.
+2. [x] Extend private endpoint handles, bounded leaf attachment/retirement and
+   boot-present USB 2 hub notifications, preserving storage/HCI progress.
+3. [x] Bind boot HID and integrate shared keyboard/pointer state, repeat and loss.
+4. [x] Qualify QEMU, repeat matched measurements and prepare native batch below.
 
-## Qualification
+Native results have not been supplied; this is not native milestone closure.
 
-QEMU uses `qemu-xhci`, `usb-kbd`, `usb-mouse` and `usb-hub`, with PS/2 still present.
-Inspect configuration/endpoint contexts, completion identities, report lengths and
-source state with the matching ELF in GDB. Exercise typing, modifiers, repeat,
-focus/clipboard freshness, pointer buttons/motion/wheel, drags/lock, leaf detach
-and reattach, chained hubs and concurrent storage. Separate BSP work from host
-QEMU cost; debugger-observed latency is not uninstrumented native latency.
+## QEMU qualification — 2026-10-10
 
-The owner checks the ASUS dongle and a USB keyboard on the ThinkPad through the
-actual dock/switch chain, including boot and leaf attachment after boot. Check
-held-key/button removal, PS/2 coexistence, typing/repeat/shortcuts and pointer
-motion/buttons/wheel. Removing the whole hub subtree can still disable USB until
-reboot. Luna stages through the owner. Record actual descriptors before claiming
-dongle wheel support. Steam Deck lizard mode is eligible only if its actual
-interfaces expose these boot protocols; neither Deck nor Bluetooth HID is qualified
-by QEMU USB checks.
+Ordinary LLVM 23 builder `49e2c1a` kernel/image builds passed, reusing verified
+SDK/application/ports bundles: `make -j16 image PREBUILT="sdk userspace ports"`.
+The before-code image `b0e2d1c6` changes only docs from main `dc91a4c6` and uses
+userland `8cbd9f87`. Main advanced during work, so the final matched pair is main
+`df0885f2` and implementation `0a891e2a`, both using userland `5aede1c2`, ports
+`19fb10b0`, fs `b427df29` and lwIP `a1aadb91`, with identical SDK contents and ABI.
+No compiler rebuild or new test/boot automation was added. Raw measurements stay
+local; the tables retain samples, revisions and configuration.
 
-Reference: [USB HID 1.11](https://www.usb.org/sites/default/files/hid1_11.pdf),
-especially §§7.2.4–7.2.6 and appendices B/C; QEMU 10.2.2's
-[mouse report implementation](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/hw/input/hid.c)
-establishes its fourth-byte wheel extension. No upstream code is copied.
+QEMU 10.2.2, Q35, nested KVM, `-cpu host`, four CPUs (one socket/four cores/one
+thread), 2 GiB, fresh raw OVMF variables, standard VGA 1280x800, UTC RTC, ISO boot,
+modern VirtIO RNG/network and user networking. Common device arguments:
 
-## Baseline — 2026-10-10
+```sh
+-device qemu-xhci,id=xhci \
+-device usb-hub,id=hub1,bus=xhci.0,port=1 \
+-device usb-hub,id=hub2,bus=xhci.0,port=1.1 \
+-device usb-kbd,id=hidkbd,bus=xhci.0,port=1.1.1 \
+-device usb-mouse,id=hidmouse,bus=xhci.0,port=1.1.2
+```
 
-Source `b0e2d1c6` changes only documentation from main `dc91a4c6`; LLVM 23 builder
-`49e2c1a`, kernel `make -j16 image PREBUILT="sdk userspace ports"`, unchanged
-userland `8cbd9f87`, ports `19fb10b0`, fs `b427df29`, lwIP `a1aadb91`. Verified
-local SDK/application/ports bundles have these pins and the matching public ABI.
-QEMU 10.2.2: Q35, nested KVM, four host CPUs, 2 GiB, raw OVMF, standard VGA
-1280×800, VirtIO RNG/network, `qemu-xhci`, two chained full-speed `usb-hub`s,
-`usb-kbd` at `1.1.1` and `usb-mouse` at `1.1.2`. Enumeration completed; HID was
-unbound, as expected. Five five-second idle samples on Caelum, no debugger:
+Manual monitor input and matching-ELF GDB inspection established:
 
-| Host-thread CPU (% of one CPU) | Median | Range |
-| --- | ---: | ---: |
-| BSP vCPU | 9.8 | 9.6–10.0 |
-| QEMU main | 0.0 | 0.0–0.0 |
+- Typing, modifiers, shared-space navigation, USB `KEY_REPEAT`, motion, buttons
+  and the descriptor-confirmed wheel. `mousetest` acquired input and relative lock.
+- Ordinary hub-leaf removal/reattachment and post-boot root full-speed attachment
+  (`device_add usb-kbd,...,usb_version=1`); endpoint/slot retirement left the
+  controller running. Runtime high-speed root attachment was refused.
+- A held USB mouse's removal revoked lock and cleared buttons. Removing an
+  attached buttonless mouse preserved the PS/2 survivor's same lock object.
+- Pre-bind RightCtrl+Shift+V became quarantined initial holds, with zero accepted
+  keys/events; release then fresh chord reached clipboard as `KEY_V` PRESS with
+  Control+Shift. Seven-key rollover reset input, and recovery supplied no new press.
+- Five chained full-speed hubs at `3.1.1.1.1.1` delivered real typing. A high-speed
+  root keyboard delivered input with endpoint interval exponent 6 from `bInterval=7`.
+  The same controller completed a 128 KiB BOT media/GPT read probe on read-only
+  USB storage. Removing a hub subtree quarantined it; PS/2 remained available.
 
-These `/proc` thread times include KVM execution/exits; they are not pure guest
-accounting, and emulation can also run in a vCPU thread. After removing the two
-unbound HID leaves and selecting Development, five five-second samples of PS/2
-F1 (40 ms) plus relative mouse motion at 10 Hz gave BSP 9.0% (8.6–10.2%) and
-QEMU main 0.6% (0.4–0.6%). The hubs remained attached.
+The last checks also ran at `0a891e2a`; detailed initial-hold/rollover/lock checks
+ran at `5db7669d`, before the unrelated main merge. At `b9e59d8a`, a USB-only
+`-machine q35,i8042=off` boot ran `hostname` and `mousetest`, with both PS/2
+availability flags false and exactly one live USB keyboard and mouse. This fixes
+the stock shell starting before USB input enumeration; the normal PS/2 path and
+steady-state paths measured above are unchanged. Composite parsing, low-speed
+scheduling, real high-speed hub/TT routing and HCI coexistence are source-reviewed,
+not native or QEMU-device qualification. QEMU supplies no composite or low-speed
+fixture here. Its host input dispatcher also cannot establish independent physical
+holds across multiple keyboards; that check belongs to the owner batch.
 
-Eight debugger-observed host injection-to-route samples per source used HMP
-`sendkey a 40` / `mouse_move 1 0`, with conditional hardware breakpoints at
-`keyboard_route_event` / `pointer_handle_input`: keyboard median 11.390 ms,
-range 4.242–19.275 ms; pointer median 10.903 ms, range 3.380–16.820 ms. Socket,
-debugger and host scheduling costs are included; this is not native or
-uninstrumented latency. Raw samples stay local. Baseline VM/debugger stopped.
+Five warmed five-second CPU samples per state, no debugger during CPU sampling.
+Idle shows Caelum with hubs and HID devices present (unbound in controls). Active
+selects Development and sends F1 (40 ms) plus one-count mouse motion at 10 Hz.
+PS/2 active removes the USB leaves while retaining the hubs.
+Values are median (range), percent of one host CPU:
+
+| Workload / host thread | Before code | Matched main | Implementation |
+| --- | --- | --- | --- |
+| Idle BSP vCPU | 9.8 (9.6–10.0) | 11.0 (9.8–14.2) | 11.0 (10.2–11.6) |
+| Idle QEMU main | 0.0 (0.0–0.0) | 0.0 (0.0–0.2) | 0.0 (0.0–0.0) |
+| PS/2 active BSP vCPU | 9.0 (8.6–10.2) | 10.2 (9.6–11.6) | 10.6 (10.4–11.0) |
+| PS/2 active QEMU main | 0.6 (0.4–0.6) | 0.6 (0.4–0.8) | 0.6 (0.4–0.8) |
+| USB active BSP vCPU | unavailable | unavailable | 11.6 (11.4–12.8) |
+| USB active QEMU main | unavailable | unavailable | 0.6 (0.6–1.0) |
+
+Eight host-monotonic samples per device: timestamp before monitor `sendkey a 40`
+or `mouse_move 1 0`, then GDB hardware breakpoint at `keyboard_route_event` or
+`pointer_handle_input`. Milliseconds, median (range):
+
+| Input | Before code PS/2 | Matched main PS/2 | Implementation PS/2 | Implementation USB |
+| --- | --- | --- | --- | --- |
+| Keyboard | 11.390 (4.242–19.275) | 12.087 (5.129–17.414) | 10.270 (3.233–15.938) | 9.483 (2.631–15.680) |
+| Pointer | 10.903 (3.380–16.820) | 10.364 (3.780–17.734) | 7.900 (2.883–16.484) | 11.790 (1.765–17.731) |
+
+Ranges overlap; these samples establish no latency improvement. vCPU thread time
+includes guest work, KVM exits and some emulation, not pure guest BSP accounting;
+QEMU main is reported separately. Timings include monitor/socket/debugger and
+host scheduling costs, not uninstrumented or native latency. VMs/debuggers stopped.
+
+## Owner native batch
+
+Luna stages through the owner. Record image/ELF revision, controller, actual
+keyboard/dongle descriptors, link speeds and dock/switch hub path; `lsusb -n`
+shows the boot snapshot, not post-boot devices.
+
+1. Boot the ThinkPad with the USB keyboard and ASUS 2.4 GHz mouse on the actual
+   USB 2 dock/switch chain. Check letters/digits, both modifier sides, locks,
+   extended keys, repeat, focus changes and fresh clipboard/navigation chords.
+2. With USB and PS/2 together, hold the same key/button on two devices and release
+   one; the survivor must stay held. Use `mousetest` for motion, three buttons,
+   drawing and lock; unknown wheel layouts remain undecoded until established.
+3. Unplug/replug individual low/full-speed leaves after boot, without removing
+   their hubs. Check held-key removal, held-button lock revocation, buttonless
+   survivor lock preservation and no held-at-attachment activation before release.
+4. Check input during existing USB storage/Bluetooth work, capturing ktrace for
+   admission or loss. A switch flip that removes a hub subtree can still require
+   reboot; do not count that accepted limit as ordinary leaf survival.
+
+Steam Deck lizard mode requires actual boot interfaces; neither it nor later
+Bluetooth HID is qualified by these USB checks. Record native behavior and costs
+before closing the milestone.

@@ -1385,16 +1385,13 @@ full transport, encrypted bond/reconnect and HID/pointer compatibility rule.
 
 ### USB interrupt-IN initial profile and failure retention
 
-The private [interrupt-IN path](devices/usb-interrupt-in.md) keeps HCI at boot-present root-connected full speed, while boot HID supports low/full/high speed on roots
-and supported USB 2 hub paths through at most five external hubs. Runtime attachment is limited to low/full-speed HID leaves on roots or boot-present supported USB 2
-chains. Thirty-two retained HID attachment records per controller include boot claims, failed attempts and retired generations; exhaustion refuses further attachment
-until reboot. HID receive capacity is 1024 bytes; HCI/hub capacities remain 257, with independent endpoint pools. There is no general HID report interpreter, runtime
-high-speed/HCI admission, new hub topology or USB 3 periodic support; revisit these profiles with a concrete device and bounded lifetime design.
+The private [interrupt-IN path](devices/usb-interrupt-in.md) supports boot HID on USB 2 paths and bounded low/full-speed leaf hotplug; HCI remains root/full-speed.
+Runtime high-speed/HCI attachment, new hubs, USB 3 periodic input and general HID reports remain unavailable. The 32 retained HID admissions can exhaust until reboot.
+Revisit broader profiles or reusable resources for a concrete device, with a bounded lifetime design.
 
-Ordinary HID leaf retirement proves endpoint and Disable Slot fences before numeric slot reuse, retaining all old DMA/TD backing. FIFO loss and HID transport errors
-release that source; unowned/corrupt events, failed fences and unsupported subtree removal can quarantine the whole controller and stop unrelated storage/Bluetooth.
-HCI active removal retains that quarantine policy and no automatic interrupt STALL recovery is supplied. Revisit broader subtree retirement, recovery and resource
-reclamation separately; confirmed halt alone does not change retention, and the original HCI qualification record does not establish native HID/periodic coverage.
+Ordinary HID leaves have fenced slot retirement. Failed fences, unowned events, active non-HID removal and hub-subtree loss can still disable the whole controller,
+including storage/Bluetooth, until reboot; automatic interrupt STALL recovery is absent. Revisit recovery and subtree retirement separately, preserving DMA ownership.
+The [HID qualification record](wip/usb-hid.md#qemu-qualification--2026-10-10) does not establish native periodic-transfer coverage.
 
 ## USB descriptor bounds and per-port preparation
 
@@ -1487,10 +1484,9 @@ hardware is available, keeping trust claims separate from the health and RFC che
 
 The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
 packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
-would catch, or a target routes IRQ 12 elsewhere. Only that stream is supported: the ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger
-input and TrackPoint motion arrives mixed into the same stream; Synaptics absolute mode is a revisit for gestures or scrolling. USB HID mice need a HID boot-protocol driver
-on the private interrupt-IN path (root-connected full-speed only, see [USB interrupt-IN](#usb-interrupt-in-initial-profile-and-failure-retention)), and Doom has no mouse
-support.
+would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
+revisit Synaptics absolute mode for gestures or scrolling. [USB boot mice](devices/usb-hid.md) are independent sources; unknown native wheel extensions remain undecoded
+until their report layout is established. Doom has no mouse support.
 
 ## Lua build runtime limits
 

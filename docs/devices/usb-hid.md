@@ -9,6 +9,8 @@ initial userspace waits on the BSP for the first keyboard or the end of boot
 USB discovery, checking every 10 ms. A present PS/2 keyboard keeps direct startup.
 Discovery waits hold no input lock; console unavailable errors are unchanged,
 and startup does not wait for a device attached after discovery completes.
+A USB-only pre-scheduler debug checkpoint precedes initial process creation;
+the deferred startup worker creates it after scheduling begins.
 
 ## Binding and ownership
 
