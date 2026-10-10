@@ -124,10 +124,12 @@ thread-stack work, retaining the owner's small plain-program default.
 Private memory and DISPLAY mapping mutations run on BSP under process VM
 admission; pending drainage uses a worker without blocking the common executor.
 Other serial services and shared kernel range reuse still need their own handoff
-and invalidation contracts. Round trips cost more than former local MEMORY calls;
+and invalidation contracts. The owner accepts the remaining BSP MEMORY round
+trip (native A/B averages about 1.6–4.2 microseconds added per mutation);
 see [task 4 qualification](development/experiments/threads-task4/README.md).
-Revisit worker placement when native latency is material; preserve acknowledged
-root departure, admitted activity and guaranteed cleanup storage.
+Keep the generic zero-root/borrower fast path; no task-count bypass. Revisit
+handoff/worker placement when native allocation latency is material, preserving
+BSP mutation ownership, acknowledged root departure and guaranteed cleanup storage.
 
 ## PMM first-fit search under its lock
 

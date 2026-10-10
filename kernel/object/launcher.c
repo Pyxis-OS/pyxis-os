@@ -332,19 +332,14 @@ static const char *capture_string(struct launch_capture *capture, uintptr_t addr
   }
   char *text = (char *)capture->data + capture->used;
   size_t remaining = sizeof(capture->data) - capture->used;
-  for (size_t length = 0; length < remaining; ++length) {
-    if (length > UINTPTR_MAX - address ||
-        !copy_from_user(text + length, address + length, 1)) {
-      capture->error = CALL_BAD_BUFFER;
-      return NULL;
-    }
-    if (!text[length]) {
-      capture->used += length + 1;
-      return text;
-    }
+  size_t copied;
+  enum user_string_result result = copy_string_from_user(text, address, remaining, &copied);
+  if (result != USER_STRING_OK) {
+    capture->error = result == USER_STRING_BAD_BUFFER ? CALL_BAD_BUFFER : CALL_BAD_REQUEST;
+    return NULL;
   }
-  capture->error = CALL_BAD_REQUEST;
-  return NULL;
+  capture->used += copied;
+  return text;
 }
 
 static struct process_binding *capture_bindings(struct launch_capture *capture,

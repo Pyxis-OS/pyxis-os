@@ -405,7 +405,7 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     file_end_operation(file);
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (!user_buffer_check(reply_address, sizeof(reply) + count, USER_BUFFER_WRITE)) {
+  if (!user_buffer_check_leased(&lease, reply_address, sizeof(reply) + count, USER_BUFFER_WRITE)) {
     user_buffer_lease_release(&lease);
     file_end_operation(file);
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
@@ -418,11 +418,10 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     memcpy((void *)data_address, (const uint8_t *)file->data + request->offset, count);
   }
   reply.read = count;
-  bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+  memcpy((void *)reply_address, &reply, sizeof(reply));
   user_buffer_lease_release(&lease);
   file_end_operation(file);
-  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER,
-    copied ? sizeof(reply) + reply.read : 0};
+  return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
 }
 
 static struct syscall_result write_file(struct file_object *file, uint64_t rights,

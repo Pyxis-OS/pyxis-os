@@ -29,6 +29,11 @@ enum user_buffer_access {
 bool user_buffer_check(uintptr_t address, size_t bytes,
                         enum user_buffer_access access);
 
+/* Caller owns this live lease through validation and any bounded copy/commit.
+ * Does not acquire another borrower or extend the lease across a wait. */
+bool user_buffer_check_leased(const struct user_buffer_lease *lease,
+    uintptr_t address, size_t bytes, enum user_buffer_access access);
+
 /* Validate the entire range under a short mapping lease before copying. Failure
  * leaves the destination untouched. Kernel buffers must be valid and not alias
  * user ranges; zero bytes touches neither buffer. Input contents remain untrusted
@@ -37,6 +42,20 @@ bool user_buffer_check(uintptr_t address, size_t bytes,
  * and revalidate final outputs, preserving already committed effects on failure. */
 bool copy_from_user(void *destination, uintptr_t source, size_t bytes);
 bool copy_to_user(uintptr_t destination, const void *source, size_t bytes);
+
+enum user_string_result {
+  USER_STRING_OK,
+  USER_STRING_BAD_BUFFER,
+  USER_STRING_TOO_LONG,
+};
+
+/* One short lease, validating each page only as needed. Copy through the first
+ * NUL without reading beyond it; copied includes NUL on success and is zero on
+ * failure. Kernel destination may contain a partial string on failure. Capacity
+ * is the caller's bounded storage budget; zero capacity touches no user address.
+ * Destination and copied are valid kernel storage and do not alias the source. */
+enum user_string_result copy_string_from_user(char *destination, uintptr_t source,
+    size_t capacity, size_t *copied);
 
 /* Validate both destinations under one lease, then copy data followed by reply.
  * Overlapping user destinations retain that order; kernel sources must not alias
