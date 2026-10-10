@@ -1,16 +1,18 @@
 # Shared-address-space user threads
 
-Owner-requested proposal, 2026-10-10. Task 1, process lifetime, is merged in
+Owner-accepted defaults, 2026-10-10, subject to the native-kernel condition below.
+Task 1, process lifetime, is merged in
 [#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); exactly one user task per
-process remains. Later implementation is unassigned. This refresh inspects Pyxis
+process remains. Task 2 requires a separate owner go; later implementation is
+unassigned. This refresh inspects Pyxis
 `4236efc7` and userland `51bcb56b`; it adds no code, compile probe or runtime
 measurement. Existing [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
 
 The owner already accepted parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault,
-and process-private address wait/wake. Those directions remain settled. Details
-below are proposed refinements, not implemented APIs. Moving kernel services
+and process-private address wait/wake. Those directions and the three defaults
+below are settled; detailed interfaces remain proposals, not implemented APIs. Moving kernel services
 [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
 ## Current gaps
@@ -160,7 +162,7 @@ sibling creation closes space affinity setup, which currently assumes a sole
 init task. No per-thread affinity, priorities or CPU-time fairness change: more
 runnable threads currently gain more round-robin shares.
 
-Propose libc's default as **1 MiB eager RW/NX backing plus one reserved unmapped
+Accepted libc default: **1 MiB eager RW/NX backing plus one reserved unmapped
 lower guard**, independently allocated per sibling; no fixed arena or demand
 fault growth. #617's 8 MiB eager initial-stack experiment increased memory and
 launch costs, so that is not the default. Initially accept explicit libc sizes
@@ -177,7 +179,7 @@ from its trampoline. An unjoined record counts against capacity; final process
 teardown reclaims remaining backing. Guards do not prevent a large stack jump
 from skipping their page.
 
-Proposed initial resource policy: **64 live/retiring native threads and 64
+Accepted initial resource policy: **64 live/retiring native threads and 64
 unreclaimed libc context records per process**, both including the initial
 thread. Reserve before publication and release each count only at its respective
 completion/reclamation boundary. Exhaustion returns a real limit/allocation
@@ -244,18 +246,25 @@ nested-VM evidence from owner-native results. Kernel/ABI/SDK changes belong in
 Pyxis, libc/libpyxis/startup in userland, adapters in ports; publish dependency
 PRs before gitlinks. This docs PR changes no pin or compiler container.
 
-## Owner decisions requested
+## Accepted owner decisions (2026-10-10)
 
 The earlier accepted execution, lifetime and parking directions remain unchanged.
-The three defaults below remain proposals pending the owner's separate decisions.
+The owner accepted all three defaults with this condition, recorded verbatim:
 
-1. **Stack/admission policy — default:** eager guarded 1 MiB libc stacks, explicit
-   1–8 MiB sizes, and both 64-entry bounds above. Lazy growth needs a separate
-   demand-fault/backing contract; native caller-owned stack sizes remain independent.
-2. **TLS boundary — default:** static executable local-exec TLS plus runtime keys;
+> as long as we don't implement posix threads in the kernel and still keep things pyxis native
+
+The kernel exposes native thread, parking and TLS primitives only. Pthreads and
+C11 threads are userland libc layers over them, like the rest of libc. No
+POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
+does not assign implementation; task 2 still requires a separate owner go.
+
+1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
+   1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK
+   contract. Native caller-owned stack sizes remain independent.
+2. **TLS boundary — accepted:** static executable local-exec TLS plus runtime keys;
    settle template/FS bootstrap with a focused compiler probe before changing the
    fork, prefer ordinary load segments when possible. Dynamic/module TLS is later.
-3. **First runtime profile — default:** joinable threads and the implemented
-   C11/pthread subset, with workers joined before orderly process finalizers.
+3. **First runtime profile — accepted:** joinable threads and only the C11/pthread
+   subset implemented by its delivery task, with workers joined before orderly process finalizers.
    Detach/automatic collection and asynchronous cancellation stay unadvertised
    until their lifetime/recovery contracts are separately accepted and qualified.
