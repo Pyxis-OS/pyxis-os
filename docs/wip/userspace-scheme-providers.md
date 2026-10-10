@@ -194,30 +194,10 @@ partial or still-arriving bodies cannot satisfy another open.
 
 ## Compiler experiment
 
-A future compiler could resolve:
-
-```c
-#include "https://example.com/foo.h"
-```
-
-through its granted namespace. A motivating example is fetching a raw GitHub
-header such as `stb_image.h` and including it in a TCC-built program. Use the raw
-content endpoint rather than GitHub's rendered source page; a URI shaped like
-`https://raw.githubusercontent.com/nothings/stb/<commit>/stb_image.h` pins the
-selected revision when `<commit>` is replaced with its actual commit ID.
-Neither `cat` nor the compiler should require an upfront HTTP length to consume
-a response that finishes within the provider's limits.
-
-Compiler include lookup would need URI handling,
-relative includes based on the containing resource, and defined file identity.
-`fopen` support alone does not guarantee that an unchanged compiler accepts or
-resolves these names correctly. The caller still needs provider authority.
-
-Direct fetching could serve interactive experiments. Repeatable builds should
-pin content and use controlled dependency storage; a time-limited response cache
-does not itself make a moving URL reproducible. The
-[TCC URI include proposal](tcc-uri-includes.md) records what already works and
-the decisions for a small TCC patch.
+Implemented: TCC resolves `#include "https://…"` through the caller's namespace;
+see [includes by URI](../userland/tcc.md#includes-by-uri). Repeatable builds pin
+immutable URIs; a time-limited response cache would not make a moving URL
+reproducible.
 
 ## SQLite views and query results
 
