@@ -26,6 +26,7 @@ struct readiness_request {
   size_t count;
   uint64_t deadline;
   enum call_status status;
+  bool watches_pipe;
   struct readiness_interest interests[WAIT_MAX_INTERESTS];
 };
 
@@ -39,5 +40,7 @@ void readiness_submit(struct readiness_request *request);
 /* Any CPU, IF=0, after publishing readiness state and releasing its lock. A
  * notification is remembered across observation and worker wait publication. */
 void readiness_notify(void);
+/* Pipe state transitions need no worker wake without an admitted pipe wait. */
+void readiness_pipe_notify(void);
 
 #endif

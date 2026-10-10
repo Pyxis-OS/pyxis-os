@@ -82,7 +82,7 @@ static void destroy_pipe_end(struct kernel_object *object)
   }
   bool finished = pair->reader_closed && pair->writer_closed;
   unlock_pipe(pair);
-  readiness_notify();
+  readiness_pipe_notify();
   if (finished) {
     kfree(pair);
   }
@@ -251,7 +251,7 @@ static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
       *read = length;
       unlock_pipe(pair);
       if (writable) {
-        readiness_notify();
+        readiness_pipe_notify();
       }
       return CALL_OK;
     }
@@ -296,7 +296,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
       wake_all(&pair->readers);
       unlock_pipe(pair);
       if (readable) {
-        readiness_notify();
+        readiness_pipe_notify();
       }
       return CALL_OK;
     }
