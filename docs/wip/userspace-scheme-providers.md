@@ -215,8 +215,9 @@ resolves these names correctly. The caller still needs provider authority.
 
 Direct fetching could serve interactive experiments. Repeatable builds should
 pin content and use controlled dependency storage; a time-limited response cache
-does not itself make a moving URL reproducible. No compiler or toolchain changes
-are assigned by this idea.
+does not itself make a moving URL reproducible. The
+[TCC URI include proposal](tcc-uri-includes.md) records what already works and
+the decisions for a small TCC patch.
 
 ## SQLite views and query results
 
