@@ -171,7 +171,9 @@ background command reports launch, not its later exit. Recognized builtins,
 including invalid builtin arguments, report builtin success (0) or failure (1);
 `session` and `service` remain builtin transactions even though they launch
 processes, and `exit` or a successful `session` handoff reports success before
-the shell leaves. Parse errors, command-form errors such as a builtin in a
+the shell leaves (after the successor wait in a remote handoff). The successor's
+outcome is propagated to shell exit, not the builtin status. Parse errors,
+command-form errors such as a builtin in a
 pipeline or with redirection, and submitted line-limit rejection report
 rejection. Diagnostics are written before the completion. This outcome is
 reporting only: script stopping, `exit` and fatal handling are unchanged.
@@ -645,7 +647,8 @@ when held; it cannot restore an omitted grant.
 ## Session handoff
 
 `session program [arguments...]` launches a successor in the same space and on
-its assigned CPU, then exits the calling shell successfully without waiting.
+its assigned CPU. Local callers exit successfully without waiting; remote
+callers park until the successor completes, as described below.
 For example, an init script can finish with `session boot://shell.pxe`. The
 command also works interactively; failed launch returns to the prompt, while
 script mode reports the script name/line and exits with failure as usual.
@@ -662,19 +665,27 @@ not forwarded. Launching another script supplies that target's own READ script
 grant through `program_launch`.
 
 Successful launch ends script execution immediately: later lines do not run,
-and the caller never reads terminal input again. Closing its process observer
-and exiting releases only the caller's references; the successor keeps its own
+and the caller never reads terminal input again. A local caller closes its process
+observer and exits, releasing only its own references; the successor keeps its own
 references and can read input and launch programs after the caller is reclaimed.
 There is no wait for application readiness: success means the launch was
 accepted, not that the new program will initialize successfully. A later exit or
 fault does not bring back the original shell or restart the session.
 
-This is explicit delegation followed by caller exit, not process replacement
-or a terminal ownership protocol. It does not add supervision or `exec`.
+The remote server initializes the private `PYXIS_SESSION_WAIT=1` runtime policy.
+Each shell captures it at startup and forwards it only to `session` successors,
+including shebang scripts; ordinary commands, background jobs and services do
+not inherit it. The marker creates no authority. A waiting caller keeps the
+successor's observer, propagates its signed normal exit status and maps fault or
+termination to failure. Script handoffs also propagate this outcome. No waiting
+shell arms foreground interruption or reads input again, and `terminal_events`
+is never forwarded. One shell remains parked per chained handoff, retaining its
+stack, heap and grants until completion or disconnect cleanup.
 
-In a remote session, root-shell exit causes the server to terminate all remaining
-group members, including a session successor. Remote `session` handoff therefore
-cannot keep a successor running after that shell exits.
+This is explicit delegation with caller exit or a parked caller, without process
+replacement or application readiness acknowledgment. The remote server still
+terminates remaining descendants on root-shell exit and the entire group on
+disconnect; the parked root lets a successor finish before that exit.
 
 ## Power-off and restart
 
