@@ -304,21 +304,16 @@ Interrupts, three surfaces and blanking stay deferred.
 
 The [flip backend](kernel/renoir-flip.md) is opt-in and natively qualified for
 normal flips and Quake/Chocolate Quake play (`9254f5c8`, owner, 2026-10-10).
-Unqualified on the ThinkPad: timeout recovery, native panic visibility, remote
-screenshots with a visible cursor and selection, and the owner's ordinary input
+Unqualified on the ThinkPad: timeout recovery, remote screenshots with a visible cursor and selection, and the owner's ordinary input
 checks (tabs, selection, layers, lock and relock) not reported in that run. The
 paired disabled/enabled boots with camera clips, compose/copy costs and poll
-counts were not taken as a set. No native timeout injection or panic trigger is
-authorized. Revisit when the backend is proposed as a default, or after a change
+counts were not taken as a set. No native timeout injection is authorized. Revisit when the backend is proposed as a default, or after a change
 to its failure, panic or capture paths; the paired steps are in the
 [backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
-Owner decision, 2026-10-10: flips stay opt-in for now. Before they become the
-default, one deliberate native panic with flips on must show the panic message
-on the display, using an unmerged probe build like the network debugger's
-[panic probe](development/experiments/network-debugger/README.md); the owner
-authorized that deliberate panic the same day. The owner has seen no unintended
-native panic since bring-up, so this path has never run on hardware.
+Owner decision, 2026-10-10: flips stay opt-in for now. The prerequisite set for
+a default, one deliberate native panic with flips on showing its message, passed
+the same day; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
 
 ## Native Renoir presentation qualification
 
