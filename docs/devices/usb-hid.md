@@ -91,5 +91,6 @@ References: [USB HID 1.11](https://www.usb.org/sites/default/files/hid1_11.pdf),
 [queue capacity](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/include/hw/input/hid.h)
 and [USB descriptors](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/hw/usb/dev-hid.c).
 Protocol constants and descriptor bytes identify those layouts; no upstream
-implementation code is copied. Qualification and the owner's native batch are
-tracked in [the milestone](../wip/usb-hid.md).
+implementation code is copied. The [qualification record](../development/experiments/usb-hid/README.md)
+holds the QEMU and native results, and [technical debt](../technical-debt.md#usb-hid-native-coverage)
+the coverage still open.

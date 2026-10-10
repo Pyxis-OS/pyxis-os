@@ -377,8 +377,9 @@ after claiming/draining direct writers, without GPU access. Capture publishes
 only after confirmation or completed fallback. The owner qualified normal native
 flips and tear-free Quake/Chocolate Quake play at `9254f5c8`, 2026-10-10;
 timeout recovery, panic visibility and unreported capture/input checks remain
-unqualified. The [backend record](../development/experiments/renoir-flip-backend/README.md)
-contains limits, pitch reasoning, MIT provenance, QEMU checks and exact native steps.
+unqualified. The [flip reference](renoir-flip.md) gives the design and the
+[backend record](../development/experiments/renoir-flip-backend/README.md)
+the limits, pitch reasoning, MIT provenance, QEMU checks and exact native steps.
 
 `DISPLAY_FLIP_METRICS=1` independently enables info-level cost/confirmation
 reports for matched disabled/enabled boots. Neither flag adds default-boot logs.

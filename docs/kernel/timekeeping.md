@@ -65,6 +65,28 @@ about three wraps, with the clock holding; see the
 [target notes](../targets/t14-gen1-amd/notes.md#native-status). The extension
 keeps its maintenance only while the HPET is the clock.
 
+## Clock reads in timer handling
+
+A monotonic read is an HPET MMIO exit under virtualization, so timer handling
+takes as few readings as it can:
+
+- **One reading per timer interrupt.** The LAPIC timer handler reads the clock once
+  and passes that value to expiry of timed waits, BSP sleeper wakeup and the re-arm.
+  Expiring against a reading taken moments earlier can only leave a just-due wait for
+  the next interrupt, which the re-arm schedules at the minimum count; no deadline is
+  treated as passed early.
+- **Re-arm only for an earlier target.** Each CPU remembers the absolute time its
+  armed countdown targets, cleared when the timer interrupt runs. A re-arm whose
+  target is not earlier writes nothing and reads no clock. A later deadline leaves the
+  earlier interrupt armed; it finds nothing due and re-arms.
+
+Kernel workers that call `task_deadline_expired` repeatedly in one pass, such as ARP
+and IPv4, still read the clock per call; with the TSC that is cheap, with the HPET it
+is not. The [measurements](../development/experiments/timer-clock-reads/README.md)
+cover the nested-QEMU network and audio effect, and the
+[clock-source debt](../technical-debt.md#wall-clock-time-and-clock-source-performance)
+the remaining costs.
+
 ## TSC selection
 
 Accepted by the owner 2026-10-09: invariant TSC on every CPU, no kvmclock and
