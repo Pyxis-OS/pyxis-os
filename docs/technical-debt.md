@@ -208,7 +208,18 @@ flushed). Accepted limits:
 - The flush-failure, firmware-failure and reset-fallback paths were checked by code inspection only.
 - **A button press or `poweroff` during an Update powers off at once without asking**, while the installer rewrites a stick's ESP
   through unflushed raw writes, which could leave the stick unbootable. The installer could hold off power operations while it
-  writes; revisit with installer work.
+  writes; revisit with installer work. The Ctrl+Alt+Delete overlay behaves the same.
+
+## Power overlay limits
+
+The [Ctrl+Alt+Delete power overlay](wip/system-power-overlay.md#emergency-coverage) is an emergency screen with accepted limits:
+
+- The presenter task reads the chord. A presenter that never returns to its input loop (a CPU holding the output lock forever, the
+  BSP stuck with interrupts off, a kernel fault) cannot open it; neither can panic or a stopped debugger. Use the power button.
+  Revisit with bounded output-lock waits in the presenter, which need a decision because they change ordinary presentation.
+- A stuck ACPI worker or pool flush leaves it at "flushing pools" with no time limit and no forced reset.
+- A display resize waits while it is open. Its text is ASCII in the kernel font, and the failure shows a numeric status.
+- Natively, the installed-system flush is unchecked until the next stick update ([native results](development/experiments/power-overlay/README.md#native-results)).
 
 ## Embedded controller and battery limits
 

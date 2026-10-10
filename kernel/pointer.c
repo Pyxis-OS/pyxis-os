@@ -8,6 +8,7 @@
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
 #include <kernel/volume_ui.h>
+#include <kernel/ui/power_overlay.h>
 #include <kernel/space.h>
 
 enum destination_kind { DESTINATION_NONE, DESTINATION_TERMINAL, DESTINATION_GRAPHICS };
@@ -130,7 +131,7 @@ static void clamp_position(void)
 static struct pointer_destination hit_test(void)
 {
   struct space *space = space_pointer_active();
-  if (volume_ui_pointer_over(position_x, position_y)) {
+  if (power_overlay_shown() || volume_ui_pointer_over(position_x, position_y)) {
     return (struct pointer_destination){0};
   }
   if (position_y < (int64_t)space_pointer_content_y()) {
@@ -150,7 +151,7 @@ static struct pointer_destination hit_test(void)
 
 bool pointer_surface_focused(struct pointer_object *pointer)
 {
-  return pointer->space == space_pointer_active() &&
+  return !power_overlay_shown() && pointer->space == space_pointer_active() &&
       (pointer_is_terminal(pointer) ? !pointer->space->display->visible :
           pointer->space->display->visible);
 }
@@ -264,8 +265,8 @@ void pointer_space_changed(struct space *space)
     pointer_surface_unlock(space->pointer, true);
     space->pointer->activation_ready = false;
   }
-  if (drag.space == space &&
-      (space != space_pointer_active() ||
+  if (drag.space == space && (power_overlay_shown() ||
+      space != space_pointer_active() ||
        (drag.kind == DESTINATION_GRAPHICS) != space->display->visible)) {
     cancel_local_drag(space);
     drag = (struct pointer_destination){0};
@@ -395,6 +396,17 @@ void pointer_handle_input(const struct pointer_input_report *event)
 {
   KASSERT(arch_cpu_index() == 0);
   uint32_t pressed = event->buttons & ~device_buttons & ~event->suppressed_buttons;
+  if (power_overlay_shown()) {
+    const struct framebuffer *layout = display_layout();
+    position_x = clamped_move(position_x, event->dx, layout->width);
+    position_y = clamped_move(position_y, event->dy, layout->height);
+    device_buttons = event->buttons;
+    consumed_buttons &= device_buttons;
+    pressed &= ~consumed_buttons;
+    power_overlay_pointer_input(position_x, position_y, pressed);
+    consumed_buttons |= pressed;
+    return;
+  }
   if (locked_pointer) {
     device_buttons = event->buttons;
     consumed_buttons &= device_buttons;

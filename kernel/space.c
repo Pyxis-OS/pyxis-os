@@ -37,6 +37,7 @@
 #include <kernel/pointer_present.h>
 #include <kernel/display_capture.h>
 #include <kernel/volume_ui.h>
+#include <kernel/ui/power_overlay.h>
 #include "display/presentation.h"
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
@@ -929,9 +930,57 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
   }
 }
 
+/* Composed from the overlay alone: no space frame or TTY, no bar and no
+ * output lock, so a wedged program or TTY writer cannot hold it back. */
+static void present_power_overlay(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  power_overlay_update();
+  drawn_nav_valid = false;
+  cpu_restore_interrupts(flags);
+  screen_capture_begin(screen, caelum_space->tty->geometry_generation);
+  if (!display_begin_frame()) {
+    flags = cpu_save_interrupts();
+    volume_ui_end_frame(false);
+    cpu_restore_interrupts(flags);
+    screen_capture_finish(false);
+    return;
+  }
+  flags = cpu_save_interrupts();
+  struct pointer_frame pointer;
+  pointer_frame_snapshot(&pointer);
+  cpu_restore_interrupts(flags);
+  for (size_t top = 0; top < screen->height; top += cursor_row_fb->height) {
+    power_overlay_draw_band(cursor_row_fb, top, screen->width, screen->height);
+    size_t rows = MIN(cursor_row_fb->height, screen->height - top);
+    pointer_present_copy(screen, &pointer, top * screen->pitch,
+        (const void *)cursor_row_fb->address, rows * screen->pitch);
+  }
+  bool presented = display_end_frame(&pointer);
+  while (display_frame_pending()) {
+    presented = display_frame_poll();
+    if (display_frame_pending()) {
+      handle_space_input();
+      space_pointer_sync_input();
+      kernel_task_sleep_until(arch_monotonic_ns() + FLIP_POLL_INTERVAL_NS);
+    }
+  }
+  flags = cpu_save_interrupts();
+  volume_ui_end_frame(false);
+  cpu_restore_interrupts(flags);
+  screen_capture_finish(presented);
+  flags = cpu_save_interrupts();
+  pointer_frame_release(&pointer);
+  cpu_restore_interrupts(flags);
+}
+
 void space_present()
 {
   if (!presenting && !begin_presenting()) {
+    return;
+  }
+  if (power_overlay_shown()) {
+    present_power_overlay();
     return;
   }
   const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
@@ -1107,6 +1156,8 @@ static void handle_space_input_locked(void)
   static bool navigation_held[KEY_COUNT];
   static bool volume_held[KEY_COUNT];
   static bool escape_held;
+  static bool delete_held;
+  static bool overlay_held[KEY_COUNT];
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
 
@@ -1114,7 +1165,8 @@ static void handle_space_input_locked(void)
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
       memset(volume_held, 0, sizeof(volume_held));
-      escape_held = false;
+      memset(overlay_held, 0, sizeof(overlay_held));
+      escape_held = delete_held = false;
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
       clipboard_key_event(active_space, &event);
@@ -1133,6 +1185,45 @@ static void handle_space_input_locked(void)
       /* Physical releases retire clipboard/Enter guards even while an overlay
        * consumes content input. Releases cannot admit a clipboard action. */
       clipboard_release = clipboard_key_event(active_space, &event);
+    }
+    /* Ctrl+Alt+Delete opens the power overlay. Like Super+Escape, the press,
+     * its repeats and its release are consumed even if the modifiers go first. */
+    if (event.key == KEY_DELETE || event.key == KEY_KP_PERIOD) {
+      if (delete_held) {
+        if (event.action == KEY_RELEASE) {
+          delete_held = false;
+        }
+        continue;
+      }
+      if (event.action == KEY_PRESS &&
+          (event.modifiers & (KEY_MOD_CONTROL | KEY_MOD_ALT)) ==
+            (KEY_MOD_CONTROL | KEY_MOD_ALT)) {
+        delete_held = true;
+        if (presenting) {
+          uint64_t flags = cpu_save_interrupts();
+          power_overlay_open(active_space);
+          cpu_restore_interrupts(flags);
+        }
+        continue;
+      }
+    }
+    /* The overlay takes every key; keys it saw pressed stay consumed until
+     * their release, after it closes too. */
+    if (power_overlay_shown() || overlay_held[event.key]) {
+      if (event.action == KEY_RELEASE) {
+        overlay_held[event.key] = navigation_held[event.key] = volume_held[event.key] = false;
+        if (event.key == KEY_ESCAPE) {
+          escape_held = false;
+        }
+      } else {
+        overlay_held[event.key] = true;
+      }
+      if (power_overlay_shown()) {
+        uint64_t flags = cpu_save_interrupts();
+        power_overlay_keyboard_input(&event);
+        cpu_restore_interrupts(flags);
+      }
+      continue;
     }
     if (event.key == KEY_ESCAPE) {
       if ((event.modifiers & KEY_MOD_SUPER) && event.action == KEY_PRESS) {
@@ -1282,7 +1373,8 @@ void space_present_task(void *argument)
     handle_space_input();
     space_pointer_sync_input();
     if (available) {
-      if (presenting || begin_presenting()) {
+      /* A resize takes the output lock; it waits until the overlay closes. */
+      if ((presenting || begin_presenting()) && !power_overlay_shown()) {
         resize_display();
       }
       space_present();
