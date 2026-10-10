@@ -1155,7 +1155,7 @@ void space_present()
           row_start - copied);
       if (selected) {
         for (size_t column = first; column <= last; ++column) {
-          tty_plot_char_styled(cursor_row_fb, font, (char)selection_row_cells[column].glyph,
+          tty_plot_char_styled(cursor_row_fb, font, (char)terminal_character_glyph(selection_row_cells[column].character),
               column * font->width, 0, scheme->selection, scheme->selection_background,
               selection_row_cells[column].attributes);
         }

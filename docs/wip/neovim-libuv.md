@@ -20,7 +20,7 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Task 1 adds pipe readiness and native try operations** ([pipes](../interfaces/pipes.md#readiness)); libc streams remain blocking, file and provider opens cannot be waited on, and there are no completion tokens. |
 | 2 | User threads | **Unchanged for this purpose** | [Task 1 and later gates](threads.md#delivery-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Native create/join, TLS, the pthread profile and thread-safe libc remain later unassigned gates. |
 | 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `fcntl`, `mktime`, `iconv`. Proved `realpath`, `fdopen` and `dup` are delivered by task 6 slice 2. Shared [working path and environment](../userland/process-state.md) are delivered by task 6's first slice. |
-| 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: non-ASCII input and drawing (the alternate screen, scroll regions and saved cursor came with task 3), and a PTY-style session for child terminals. |
+| 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: non-ASCII input, combining/wide layout and drawing beyond the [bounded UTF-8 set](../userland/terminal.md#tty-output-controls), plus a PTY-style child session. The Neovim profile follow-up is separate. |
 | 5 | libuv backend | **Native task 4 slice** | Pinned libuv 1.52.1 has a Pyxis platform layer for loop/timers/async, console/pipe streams, explicit child launch/completion and synchronous libc filesystem operations. Excluded workers, async fs, sockets, watches, signals and module loading fail honestly; the [adapter limits](../../ports/libuv/README.md) remain gates for luv/Neovim. |
 | 6 | Dependency closure | **Lua side added by task 5** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; libuv 1.52.1 is added by task 4, and Lua 5.1.5, LPeg, luv and lua-compat-5.3 by task 5 ([`lua51`](../../ports/lua51/README.md)); utf8proc, tree-sitter and iconv remain absent. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
 
@@ -89,7 +89,7 @@ without Neovim.
 5. [x] **Lua 5.1.5 with luv.** Lua 5.1.5 with its standard libraries, LPeg, luv and
    lua-compat-5.3 as one recipe set. The owner can run Lua scripts with timers
    and child processes through luv. Implemented as the [`lua51` recipe](../../ports/lua51/README.md)
-   and the `boot://share/lua51/lua5.1.pxb` bundle;
+   and the `bin://lua5.1.pxb` bundle;
    [qualification](../development/experiments/lua51-luv/README.md).
 6. [x] **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
    tree-sitter library, iconv) with host generators kept native, plus the libc
@@ -311,10 +311,10 @@ this task) and `raw-github` for the others; each matched the SHA-256 above
 before patching.
 
 1. **Delivery and authority.** The interpreter is the development bundle
-   `boot://share/lua51/lua5.1.pxb`, requesting memory, clock (read and sleep),
+   `bin://lua5.1.pxb`, requesting memory, clock (read and sleep),
    launcher and pipe creation, with random optional. libuv's loop needs pipe
-   creation, which plain programs do not receive. It is not in the default
-   command catalog; the Lua 5.5 `lua` is unchanged.
+   creation, which plain programs do not receive. Bare `lua5.1` selects its default without a catalog; the Lua 5.5 `lua`
+   is unchanged. Earlier qualification used its former archive share path.
 2. **Standard library profile.** What libc cannot do is left out or reported:
    no `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` or
    C modules; `os.time(table)` is rejected; strings compare bytewise;

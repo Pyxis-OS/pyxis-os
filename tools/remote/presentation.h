@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <terminal/style.h>
+#include <terminal/text.h>
 
 struct presentation {
   struct byte_buffer *output;
@@ -21,10 +22,13 @@ struct presentation {
   unsigned parameter_index;
   bool private_csi;
   struct terminal_style style;
+  struct terminal_utf8 utf8;
 };
 
 void presentation_begin(struct presentation *screen);
 void presentation_data(struct presentation *screen, const unsigned char *data, size_t length);
 void presentation_fresh_line(struct presentation *screen);
+/* Intercepted OSC controls still interrupt pending text bytes. */
+void presentation_text_boundary(struct presentation *screen);
 
 #endif

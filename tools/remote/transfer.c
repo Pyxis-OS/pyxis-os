@@ -796,6 +796,9 @@ void transfer_output(struct file_transfer *transfer, struct presentation *screen
     struct byte_buffer *outgoing, unsigned char byte, int64_t now)
 {
   static const unsigned char prefix[] = "\x1b]5113;";
+  if (!transfer->osc_length && byte == 27) {
+    presentation_text_boundary(screen);
+  }
   if (!transfer->osc_length) {
     if (byte != 27) {
       presentation_data(screen, &byte, 1);

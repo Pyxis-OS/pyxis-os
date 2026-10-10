@@ -25,9 +25,9 @@ machine-hostname: ../build/tools/machine-hostname
 	@mkdir -p $(@D)
 	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) $< -o $@
 
-../build/tools/pyxis-remote: remote/main.c remote/listen.c remote/listen.h remote/presentation.c remote/transfer.c remote/paste.c remote/paste.h remote/transfer.h remote/sha256.h remote/vendor/sha256.c remote/presentation.h remote/buffer.h ../include/remote/terminal.h ../include/remote/beacon.h ../include/terminal/style.h ../lib/terminal_style.c
+../build/tools/pyxis-remote: remote/main.c remote/listen.c remote/listen.h remote/presentation.c remote/transfer.c remote/paste.c remote/paste.h remote/transfer.h remote/sha256.h remote/vendor/sha256.c remote/presentation.h remote/buffer.h ../include/remote/terminal.h ../include/remote/beacon.h ../include/terminal/style.h ../lib/terminal_style.c ../include/terminal/text.h ../lib/terminal_text.c
 	@mkdir -p $(@D)
-	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) remote/main.c remote/listen.c remote/presentation.c remote/transfer.c remote/paste.c remote/vendor/sha256.c ../lib/terminal_style.c -o $@
+	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) remote/main.c remote/listen.c remote/presentation.c remote/transfer.c remote/paste.c remote/vendor/sha256.c ../lib/terminal_style.c ../lib/terminal_text.c -o $@
 
 clean:
 	rm -rf ../build/tools

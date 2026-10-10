@@ -29,7 +29,7 @@ struct terminal_style {
 struct terminal_cell {
   terminal_color foreground;
   terminal_color background;
-  unsigned char glyph;
+  uint16_t character; /* Supported Unicode scalar, not an atlas index. */
   uint8_t attributes;
 };
 

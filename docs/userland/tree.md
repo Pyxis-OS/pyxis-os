@@ -1,6 +1,6 @@
 # Directory trees
 
-`tree [-L LEVELS] [--] [DIRECTORY...]` lists a directory and everything below it,
+`tree [--ascii] [-L LEVELS] [--] [DIRECTORY...]` lists a directory and everything below it,
 defaulting to the working directory. It uses the caller's own grants and
 resolves each path as `ls` does.
 
@@ -8,18 +8,22 @@ resolves each path as `ls` does.
 tree
 tree -L 2 home://
 tree boot://sdk -L 1
-tree home://src | less
+tree --ascii home://src | less
 ```
 
-Each operand is printed as written, then its entries with ASCII branch marks:
+Each operand is printed as written, then its entries with UTF-8 box drawing:
 
 ```text
 home://
-|-- docs/
-|   `-- notes.txt
-`-- build.sh
+├── docs/
+│   └── notes.txt
+└── build.sh
 ```
 
+- **Branch encoding.** UTF-8 is the default for terminals, pipes and files.
+  `--ascii` selects `|--`, `` `-- `` and `|   ` prefixes for byte-oriented
+  consumers such as the current less, whose wrapping can split UTF-8 glyphs.
+  It changes branch marks, not filename bytes. There is no automatic fallback.
 - **Order and names.** Entries are sorted by unsigned byte order within each
   directory, dot names included, with `/` after directories. This is the
   [`ls`](ls.md) listing code, so names, kinds and colors match: blue

@@ -252,6 +252,33 @@ static bool scalar_utf8(const uint8_t *bytes, size_t length)
   return true;
 }
 
+/* Copy can retain Unicode; terminal Paste still uses the ASCII validator. */
+static bool normalize_terminal_copy(struct clipboard_item *item)
+{
+  if (!scalar_utf8(item->bytes, item->length)) {
+    return false;
+  }
+  size_t output = 0;
+  bool ascii = true;
+  for (size_t i = 0; i < item->length; ++i) {
+    uint8_t byte = item->bytes[i];
+    if (byte == '\r') {
+      if (i + 1 < item->length && item->bytes[i + 1] == '\n') {
+        ++i;
+      }
+      byte = '\n';
+    }
+    if ((byte < 0x20 && byte != '\n' && byte != '\t') || byte == 0x7f) {
+      return false;
+    }
+    ascii &= byte < 0x80;
+    item->bytes[output++] = byte;
+  }
+  item->length = output;
+  item->terminal_safe = ascii;
+  return true;
+}
+
 /* Store items are immutable. Retain before dropping the lock; terminal
  * conversion owns separate storage and is charged to the aggregate bound. */
 static enum call_status terminal_snapshot(struct clipboard_store *store,
@@ -1002,7 +1029,7 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   geometry = tty->geometry_generation;
   anchor = tty->selection_anchor;
   endpoint = tty->selection_endpoint;
-  bool previous_row = false, valid = true;
+  bool previous_row = false, ascii = true;
   for (size_t row = 0; row < tty->height; ++row) {
     if (!tty_selection_row(tty, row, &first, &last)) {
       continue;
@@ -1011,20 +1038,19 @@ static void local_copy(struct space *space, struct clipboard_store *store)
       ++length;
     }
     previous_row = true;
-    for (size_t column = first; column <= last; ++column) {
-      uint8_t glyph = tty->cells[row * tty->width + column].glyph;
-      if (glyph < 0x20 || glyph > 0x7e) {
-        valid = false;
-      }
-    }
     size_t end = last + 1;
-    while (end > first && tty->cells[row * tty->width + end - 1].glyph == ' ') {
+    while (end > first && tty->cells[row * tty->width + end - 1].character == ' ') {
       --end;
     }
-    length += end - first;
+    for (size_t column = first; column < end; ++column) {
+      char bytes[3];
+      uint16_t character = tty->cells[row * tty->width + column].character;
+      length += terminal_character_encode(character, bytes);
+      ascii &= character <= 0x7e;
+    }
   }
   log_end(output_locked);
-  if (!valid || length > CLIPBOARD_TEXT_MAX) {
+  if (length > CLIPBOARD_TEXT_MAX) {
     ktrace("clipboard copy: unsupported selection or text limit\n");
     return;
   }
@@ -1049,11 +1075,15 @@ static void local_copy(struct space *space, struct clipboard_store *store)
       }
       previous_row = true;
       size_t end = last + 1;
-      while (end > first && tty->cells[row * tty->width + end - 1].glyph == ' ') {
+      while (end > first && tty->cells[row * tty->width + end - 1].character == ' ') {
         --end;
       }
       for (size_t column = first; column < end; ++column) {
-        item->bytes[offset++] = tty->cells[row * tty->width + column].glyph;
+        char bytes[3];
+        size_t count = terminal_character_encode(
+            tty->cells[row * tty->width + column].character, bytes);
+        memcpy(item->bytes + offset, bytes, count);
+        offset += count;
       }
     }
     same = offset == length;
@@ -1064,7 +1094,7 @@ static void local_copy(struct space *space, struct clipboard_store *store)
     ktrace("clipboard copy: selection changed\n");
     return;
   }
-  item->terminal_safe = true;
+  item->terminal_safe = ascii;
   lock_clipboard();
   struct clipboard_item *previous = store->item;
   store->item = item;
@@ -1692,7 +1722,7 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   if (item) {
     if (!copy_from_user(item->bytes, payload[3], item->length)) {
       status = CALL_BAD_BUFFER;
-    } else if (!normalize_terminal_text(item)) {
+    } else if (!normalize_terminal_copy(item)) {
       status = CALL_BAD_REQUEST;
     }
     /* Retained accounting charges the allocation, not merely normalized length. */

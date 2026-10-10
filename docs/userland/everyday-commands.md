@@ -12,7 +12,7 @@ The text filters `grep`, `wc`, `tail`, `sort` and `uniq` are sbase ports in the 
 | `echo [-n] [ARG...]` | Space-separated arguments and a newline; an exact first `-n` suppresses the newline. No escape processing. | [Shell quoting and streams](shell.md#commands-and-quoting) |
 | `cp [--] SOURCE... DESTINATION` | Files within or across roots; several sources require an existing destination directory. Exclusive sibling staging followed by replacement rename. | [cp authority and recovery limits](cp.md) |
 | `ls [-1l] [--] [DIRECTORY...]` | Byte-sorted names, terminal columns and kind colors; plain names in pipes/files. `-l` adds kinds and sizes, with no timestamps. | [ls options and limits](ls.md) |
-| `tree [-L N] [--] [DIRECTORY...]` | Recursive listing with ASCII branches, sorted and colored like `ls`; `-L` limits the depth. | [tree](tree.md) |
+| `tree [--ascii] [-L N] [--] [DIRECTORY...]` | Recursive listing with UTF-8 box branches (`--ascii` for byte-oriented consumers), sorted and colored like `ls`; `-L` limits the depth. | [tree](tree.md) |
 | `mv [--] SOURCE... DESTINATION` | Renames files, or moves them into a destination directory. Files only. | [mv](mv.md) |
 | `grep [-EFHchilnqrsvwx] [-e PATTERN] [-f FILE] [PATTERN] [FILE...]` | Prints matching lines; `-r` searches directories through the native listing. Status 0 selected, 1 none, 2 error. An sbase port, not native. | [grep](grep.md) |
 

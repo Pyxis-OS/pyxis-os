@@ -4,10 +4,14 @@ The [recipe](../../ports/neovim/README.md) packages Neovim 0.12.5 as a native
 terminal bundle. From a local shell with launcher and pipe authority:
 
 ```text
-boot://share/neovim/nvim.pxb file.c
+nvim file.c
 ```
 
-A configured catalog may name the same bundle `nvim`. Ordinary commands and
+Bare `nvim` selects `bin://nvim.pxb` on live media and in an installed revision,
+without a catalog. `bin://nvim.pxb file.c` explicitly selects the same default
+entry. Port notes and source provenance live under `app/metadata/`; application
+and linked-dependency notices live under `app/metadata/licenses/`; read them at
+`bin://nvim.pxb/app/metadata/`. Ordinary commands and
 bundles do not inherit authority the shell lacks. The bundle needs memory,
 clock READ/SLEEP, launcher and pipe CREATE, plus a console and the directory
 roots for the files being edited. Its read-only `nvim_runtime://` resource
@@ -43,14 +47,27 @@ survives independently. Redirected stdin requiring fd 3 is refused before launch
 
 ## Saving and limits
 
+File selection proves the existing parent directory with native `realpath`, then
+joins the final component to that absolute scheme path. A new file needs no
+identity of its own yet; an absent, stale or unprovable parent refuses selection.
+The selected name stays fixed across `:cd`, including `:e!`. Force does not
+bypass parent proof or grant write authority.
+
+A buffer without an original creates exclusively: a file that appeared meanwhile
+is refused by ordinary `:w`; `:w!` selects the current writable target before
+truncation. `:w newname` and `:saveas` to a new name also create exclusively;
+an existing destination needs force. Changing names drops the old origin;
+a successful save establishes the new one. Plain `:w >> missing` refuses,
+following upstream; `:w! >> missing` creates and appends, without truncation.
+
 Each loaded file buffer retains a reference until unload. Before ordinary `:w`
 truncates, it compares fresh, valid identity and modification time on that
 reference and the actual writable target. Replacement, changed time or missing
 comparison metadata requires `:w!`; force selects the current native target and
 still needs write authority. Failed force invalidates the comparison baseline.
 A successful save establishes the selected target for later ordinary saves.
-`:saveas` of an existing loaded buffer conservatively needs force; writing a new
-name creates exclusively. The [backing validity table](../wip/neovim-groundwork.md#slice-4-contract-accepted-2026-10-10)
+`:saveas` keeps the selected new name even if writing fails, as upstream does.
+The [backing validity table](../wip/neovim-groundwork.md#slice-4-contract-accepted-2026-10-10)
 explains RAM, npfs, host and archive cases. This comparison is not a mutation
 lease: concurrent changes remain possible, and equal times do not prove equal
 bytes. Saving retains the existing checked write/sync path.
@@ -88,5 +105,6 @@ query's native source.
 
 [First-slice qualification](../development/experiments/neovim-first-slice/README.md)
 and [static-parser qualification](../development/experiments/neovim-static-parsers/README.md)
-record editing, highlighting, safe-save checks, startup time and cleanup.
+record editing, highlighting, safe-save checks, startup time and cleanup,
+including [new-name saves](../development/experiments/neovim-first-slice/README.md#new-name-saves-2026-10-10).
 Native qualification is the milestone's next slice.

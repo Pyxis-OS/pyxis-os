@@ -15,18 +15,26 @@ inside `app/`. Recognition validates the layout and metadata; the suffix alone
 confers no authority. Ordinary plain programs continue to use their existing
 launch path and receive no implicit `app://`.
 
-Shell and Lua launch lookup read the explicit `PYXIS_BUNDLE_CATALOG` environment
-variable. Its value is a native FILE URI containing UTF-8 JSON data:
+Shell and Lua share libpyxis `program_open`: bare `NAME` tries
+`bin://NAME.pxe`, then the default of `bin://NAME.pxb`, then an optional
+development catalog, then `boot://NAME.pxe`. Only candidate absence permits
+fallback; denied, malformed or incomplete selected candidates fail visibly.
+A direct bin hit enumerates no directory and parses no unrelated manifest or
+catalog. The filename selects a bundle independently of its ID/command names.
+See [bin placement and installation](../userland/system-layout.md).
+
+The explicit `PYXIS_BUNDLE_CATALOG` environment variable names a native FILE URI
+containing UTF-8 JSON data:
 
 ```json
 {"format":1,"bundles":["boot://bundles/sample.pxb"]}
 ```
 
 The catalog has exactly these fields, accepts at most eight explicit bundle
-URIs, and does not enumerate an installation directory. Bare commands retain
-the ordinary plain `bin://NAME.pxe` fast path. After that file is missing,
-bundle lookup may select a registered command before ordinary rescue lookup.
-Explicit logical `bin://` aliases use the same catalog. An explicit `.pxb`
+URIs, and does not enumerate an installation directory. It remains a development
+facility for secondary commands and bundles outside bin; there is no default
+catalog listing installed bundles. Logical `bin://NAME` tries a literal FILE
+first, then the same `.pxe`/`.pxb` candidates and catalog, without rescue fallback. An explicit `.pxb`
 path selects its default entry without requiring a catalog; a trailing directory
 slash is accepted. Selected command names remain available as `argv[0]`.
 There is no filesystem directory adapter, executable copy or symlink behind
@@ -135,12 +143,13 @@ its actual startup resources/roots and queries actual handle rights; a manifest
 request never synthesizes a successful grant. This policy is
 [temporary technical debt](../technical-debt.md#temporary-bundle-grant-policy).
 
-Publish a complete revision before activating its catalog registration. Do not
+Publish a complete development revision before activating its catalog registration. Do not
 mutate or delete a published development tree. Retained native handles keep their
 backing alive but do not freeze a writable tree or establish a snapshot; normal
 caller roots may include writable aliases. Publisher discipline supplies
-revision immutability in this slice. There is no revision garbage collector or
-archive adapter. App/resource handles delegated to a child retain backing after
+revision immutability in this slice. Development trees have no revision garbage collector or archive adapter.
+Installed bundles instead follow the [offline update boundary](../userland/system-updates.md#program-stage),
+with recursive current/previous revision retention; online updates remain future work. App/resource handles delegated to a child retain backing after
 the launching process closes its own view. The manifest is launch policy metadata,
 not a universal restriction on independently delegated FILE/launcher capabilities.
 

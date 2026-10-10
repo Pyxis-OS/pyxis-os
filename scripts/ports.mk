@@ -50,8 +50,8 @@ LIBUV_INPUTS := $(wildcard ports/libuv/*.lua ports/libuv/Makefile ports/libuv/PO
                          ports/libuv/include/uv/*.h ports/libuv/pyxis/*.c \
                          ports/libuv/pyxis/*.h ports/libuv/examples/* \
                          ports/libuv/patches/*.patch) ports/ports.lua ports/build.lua
-LUA51_INPUTS := $(wildcard ports/lua51/*.lua ports/lua51/Makefile ports/lua51/manifest.json \
-                         ports/lua51/patches/*.patch) ports/ports.lua ports/build.lua
+LUA51_INPUTS := $(wildcard ports/lua51/*.lua ports/lua51/*.md ports/lua51/Makefile ports/lua51/manifest.json \
+                         ports/lua51/patches/*.patch) ports/ports.lua ports/build.lua ports/LICENSE
 
 UTF8PROC_INPUTS := $(wildcard ports/utf8proc/*.lua ports/utf8proc/Makefile ports/utf8proc/PORT-NOTICE) \
                    ports/ports.lua ports/build.lua
@@ -61,7 +61,7 @@ TREE_SITTER_INPUTS := $(wildcard ports/tree-sitter/*.lua ports/tree-sitter/Makef
 NEOVIM_INPUTS := $(wildcard ports/neovim/*.lua ports/neovim/*.json ports/neovim/*.md \
                            ports/neovim/host/*.lua ports/neovim/runtime/*.vim \
                            ports/neovim/runtime/colors/*.vim ports/neovim/patches/*.patch) \
-                ports/ports.lua ports/build.lua
+                ports/ports.lua ports/build.lua ports/LICENSE
 
 LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile \
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \

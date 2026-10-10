@@ -41,11 +41,12 @@ starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has a `system` volume with an empty regular root marker,
 a `bin` volume and an empty `home` volume. The installer formats the pool and
 writes the GPT, releases its whole-disk claim, then creates `home` through the
-disk handle, mounts the pool and writes the executables outside the archive's rescue list into `bin/REVISION`, as
+disk handle, mounts the pool and copies non-rescue root `.pxe` files and complete
+root `.pxb` trees into `bin/REVISION`, as
 [Update's program stage](system-updates.md#program-stage) does. Only then does
 it claim the ESP partition and write it. Limine is at `EFI/BOOT/BOOTX64.EFI`;
 the original kernel, the rescue boot archive (the live archive without the
-moved executables), the configuration and a newline-terminated kernel
+moved program roots and bundle descendants), the configuration and a newline-terminated kernel
 `revision` record are under `boot`. The installed configuration fills the packaged
 template with a three-second timeout and the new disk GUID, and omits the
 installer entry and any global `default_entry`. It has two entries:

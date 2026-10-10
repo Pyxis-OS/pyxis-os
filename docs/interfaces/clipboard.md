@@ -28,8 +28,10 @@ Paste uses the focused live pane; keyboard focus changes do not retarget an
 already admitted operation. Paste from a history view refuses without changing
 view or focus. Caelum's log can be copied but has no application paste receiver.
 
-Export maps selected printable ASCII glyphs 0x20..0x7e to their exact bytes.
-Any other selected glyph refuses the whole Copy. Physical rows are joined with
+Export encodes retained terminal scalars as UTF-8, including U+FFFD replacement
+cells, under the existing 64 KiB byte limit. Over-limit Copy refuses the whole
+operation. Unicode Copy does not broaden safe terminal Paste: it still refuses
+non-ASCII items. Physical rows are joined with
 LF and each selected row loses trailing spaces, including intentional ones.
 There is no inferred soft wrap or reconstruction of original tabs. A real
 selection that trims to nothing publishes an empty item; no selection refuses.
