@@ -18,7 +18,12 @@ Select the first supported configuration, with at most one boot keyboard and
 one boot mouse interface per device, including composite dongles. Existing
 storage and Bluetooth class owners take priority; a configuration mixing those
 classes with HID is not partly claimed. Each interface needs one interrupt IN
-endpoint, successful SET_PROTOCOL(boot), and an initial GET_REPORT snapshot.
+endpoint and successful SET_PROTOCOL(boot). Initial GET_REPORT supplies a
+snapshot when supported; a STALL starts that interface with no held keys or
+buttons, without rejecting its composite sibling. Before continuing, xHCI
+resets halted EP0, clears the owning transaction translator when applicable,
+and advances the dequeue pointer past the failed transfer. Failed recovery or
+other GET_REPORT errors still fail closed.
 Keyboard SET_IDLE(0) is required; a mouse may stall it. General report-protocol
 HID, tablets, gamepads, media keys and keyboard LED updates are unsupported.
 
@@ -65,14 +70,15 @@ supported only for the established QEMU four-byte layout, checked against its
 identity, endpoint and exact report descriptor. An unrecognized native wheel
 extension requires descriptor evidence before it is decoded.
 
-Initial holds supply no new presses; release all attachment-time keys/buttons
-before that source can activate input. Standard devices provide their current
-state through GET_REPORT. QEMU's established keyboard and mouse profiles instead
-consume buffered input: keyboard priming takes sixteen snapshots; mouse priming
-takes sixteen zero-motion snapshots, since a large movement can retain a queue
-head. Only the final state is published. The existing binding deadline bounds
-priming and refuses an unresolved snapshot or timeout. This also consumes
-invisible extended-key prefixes before deciding that a keyboard is all-up.
+Holds observed in a successful initial snapshot supply no new presses; release
+those keys/buttons before that source can activate input. A device that stalls
+GET_REPORT instead starts all-up; its first interrupt report can supply presses,
+since attachment-time holds are unknown. QEMU's established keyboard and mouse
+profiles instead consume buffered input: keyboard priming takes sixteen snapshots;
+mouse priming takes sixteen zero-motion snapshots, since a large movement can
+retain a queue head. Only the final state is published. The existing binding
+deadline bounds priming and refuses an unresolved snapshot or timeout. This also
+consumes invisible extended-key prefixes before deciding that a keyboard is all-up.
 
 These adapters implement the accepted per-source button aggregation and
 conditional loss rule in the pointer reference. Bluetooth HID remains a separate

@@ -1,6 +1,6 @@
 # USB HID boot keyboards and mice
 
-Status: **QEMU qualified; native keyboard passed, ASUS mouse investigation open**.
+Status: **QEMU qualified; native keyboard passed, ASUS mouse recheck pending**.
 Implemented behavior and limits live in [USB boot input](../devices/usb-hid.md).
 No public input ABI or task-owned dependency pin changes are needed.
 
@@ -33,11 +33,21 @@ editing without it. GDB confirmed the Home bytes `1b 5b 48`. Native recheck rema
 LED output is still outside scope.
 
 ASUS `1ea7:0066` on `07:00.4`, full speed, advertises keyboard `03/01/01` and
-mouse `03/01/02`, one endpoint each, but supplied no mouse input. Diagnosis is
-pending the temporary ASUS-only info probe `probe/usb-hid-native` at `3e684a0d`
-(selected interfaces, bind stages/EP0 completions and eight distinct report
-prefixes per interface). Probe code is not part of this PR. No report layout or
-failed stage is inferred from the inventory alone; native closure remains open.
+mouse `03/01/02`, one endpoint each, but supplied no mouse input. The owner's
+`3e684a0d` probe confirmed both interfaces configured successfully, then keyboard
+GET_REPORT stalled on boot and replug, rejecting the whole composite. Owner
+accepted the correction: either interface's initial GET_REPORT STALL starts
+empty after EP0 recovery and does not reject its sibling. Other errors remain
+fatal; mouse SET_IDLE retains its optional-STALL rule. Recovery ordering is
+source-inspected; native operation after this fix remains to be checked. The
+throwaway info probe is not part of this PR.
+
+The correction's ordinary kernel/image build passed with current SDK/app/ports
+bundles. A matched four-CPU QEMU root keyboard/mouse boot still bound both;
+typing ran `hostname`, and `mousetest` acquired relative lock and a left-button
+press. GDB confirmed live sources, idle EP0 and a healthy controller. This QEMU
+fixture supplies successful GET_REPORT; the STALL fallback is source-inspected
+and awaits the owner's dongle boot/replug recheck.
 
 ## QEMU qualification — 2026-10-10
 
@@ -133,7 +143,8 @@ shows the boot snapshot, not post-boot devices.
    drawing and lock; unknown wheel layouts remain undecoded until established.
 3. Unplug/replug individual low/full-speed leaves after boot, without removing
    their hubs. Check held-key removal, held-button lock revocation, buttonless
-   survivor lock preservation and no held-at-attachment activation before release.
+   survivor lock preservation. Successful initial snapshots quarantine observed
+   attachment holds until release; GET_REPORT-stalling devices start empty.
 4. Check input during existing USB storage/Bluetooth work, capturing ktrace for
    admission or loss. A switch flip that removes a hub subtree can still require
    reboot; do not count that accepted limit as ordinary leaf survival.

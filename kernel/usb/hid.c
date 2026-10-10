@@ -402,7 +402,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
   bool optional_stall = completion.result == USB_STALL &&
       ((binding->stage == HID_IDLE && interface->protocol == USB_PROTOCOL_MOUSE) ||
-       binding->stage == HID_PROFILE_DESCRIPTOR);
+       binding->stage == HID_PROFILE_DESCRIPTOR || binding->stage == HID_INITIAL);
   if ((completion.result != USB_OK && !optional_stall) ||
       (!setup.length && completion.bytes)) {
     return bind_failed(binding, completion.result == USB_OK ? USB_IO : completion.result);
@@ -415,7 +415,15 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       completion.bytes == sizeof(qemu_keyboard_descriptor) &&
       !memcmp(report, qemu_keyboard_descriptor, sizeof(qemu_keyboard_descriptor));
   } else if (binding->stage == HID_INITIAL) {
-    if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
+    if (completion.result == USB_STALL) {
+      /* Control polling has fenced the stalled EP0 transfer before take.
+       * A device without GET_REPORT starts from an empty input snapshot. */
+      if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
+        memset(binding->initial_keys, 0, sizeof(binding->initial_keys));
+      } else {
+        binding->initial_buttons = 0;
+      }
+    } else if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
       bool unresolved;
       if (!keyboard_snapshot(report, completion.bytes, binding->initial_keys, &unresolved)) {
         return bind_failed(binding, USB_IO);
