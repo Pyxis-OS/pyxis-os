@@ -50,9 +50,10 @@ has one composition and one CPU scanout copy.
 
 Idle B has **480 service ticks and 480 skips**, with zero compose/copy total
 increase in each window. Motion B has 480 services, 448 skips and 32 frames:
-about four frames/s rather than the control's about 60/s. One B3 motion report
-coalesced before rendering. All runs route 96 moves over their complete two
-motion windows. Compose-plus-copy totals during the interior motion windows
+about four frames/s rather than the control's about 60/s. One interior B3
+window has 33 input reports against 32 completed frames: input counters include
+current service while completed-frame counters end at the prior tick. All runs
+route and render 96 moves over their complete two motion windows. Compose-plus-copy totals during the interior motion windows
 fall from 351–412 ms for A to 23–34 ms for B. Shared-host variation is visible
 in A3's second idle window and B3's first motion window; sparse B frames are not
 consistently cheaper per frame. The demonstrated gain is avoided pixel work,
@@ -99,6 +100,12 @@ adds no new lines. The complete [native-option steps](#native-qualification--lun
 below cover the remaining host qualification.
 
 ## Native qualification — Luna stages, owner checks
+
+Local candidate `build/frame-skip-native/` seals code `0c22b18e`, the same kernel
+hash as B above. Its initrd has no Quake data. Luna should build control A with
+the owner's existing game data/configuration and use that identical initrd for
+both A and B kernels, or rebuild equivalent matched sets and record their hashes.
+Alpha does not stage PXE.
 
 Ask the orchestrator to have Luna stage **A then B then A then B**, preserving
 rollback. A is `4b6550a6`; B is the reviewed code head. Build both with:
