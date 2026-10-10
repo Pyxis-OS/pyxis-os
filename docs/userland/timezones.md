@@ -6,8 +6,10 @@ requires Lua. Monotonic deadlines are unaffected.
 
 ## Selection and authority
 
-`TZ` comes from the process's startup environment. Absent or empty `TZ` means
-UTC and needs no filesystem capability or allocation. A nonempty value is an
+`TZ` comes from the [mutable process environment](process-state.md), seeded
+from startup. Absent or empty `TZ` means UTC and needs no zone-file capability
+or allocation. Initial environment copying may allocate; lookup failure is
+reported rather than treated as absence. A nonempty value is an
 IANA name such as `Europe/Bucharest`, `Pacific/Auckland` or `Etc/UTC`. Libc reads
 `boot://share/zoneinfo/<name>` through the process's existing `boot` directory
 capability. Names allow ASCII letters, digits, `_`, `-`, `+` and nonempty
@@ -21,7 +23,7 @@ Invalid selections report errors on each conversion, never the previous zone or
 a silent UTC fallback. Files are not watched or reloaded while the name remains
 unchanged. The cache assumes the current one-thread-per-process runtime.
 
-The shell forwards its startup environment to children. There is no new shell
+The shell forwards an explicit snapshot of its current environment to children. There is no new shell
 assignment command or timezone syscall. The default [session configuration](session-configuration.md)
 explicitly selects Bucharest and supplies `TZ` when starting the shell.
 Startup that bypasses the session launcher still uses UTC when `TZ` is absent
@@ -41,6 +43,34 @@ valid until a successful cache replacement or process exit.
 NULL on failure without changing the destination. `localtime` uses its own
 static result, overwritten by its next successful call. Existing `gmtime` and
 `gmtime_r` remain allocation-free UTC conversions and ignore `TZ`.
+
+`mktime(struct tm *)` is the inverse of `localtime` in the zone `TZ` currently
+selects. Month, day, hour, minute and second may lie outside their ranges and
+are normalized with the pinned calendar arithmetic; `tm_wday`, `tm_yday`,
+`tm_gmtoff` and `tm_zone` are ignored. Libc tries every UTC offset the zone can
+report and keeps each instant whose `localtime` offset matches:
+
+- **One match:** the result, unless a nonnegative `tm_isdst` disagrees with it.
+  Then, as C specifies and glibc and musl do, the wall time is read in the
+  requested kind of time, using the UTC offset of the nearest period of that
+  kind in the zone data: within the footer's rules, the rule's other offset;
+  otherwise the closest earlier or later table period, the earlier on a tie.
+  July noon with `tm_isdst` 0 in Bucharest is therefore 12:00 EET, shown as
+  13:00 EEST, and Lord Howe's half-hour DST shifts by 30 minutes. A zone with
+  no period of that kind, such as UTC, keeps the match; glibc instead assumes
+  a one-hour difference there.
+- **A fold** (the wall time occurs more than once): a nonnegative `tm_isdst`
+  selects the only candidate whose daylight flag matches. Without one, and in
+  folds where both candidates have the same flag, such as a standard-offset
+  change, `mktime` fails with `ENOTSUP`.
+- **A gap** (the wall time is skipped): `ENOTSUP`. Other libraries move the
+  time across the gap instead.
+
+These `ENOTSUP` cases are a stated profile restriction, not overflow. Zone
+errors are `localtime`'s. A result that cannot be represented fails with
+`EOVERFLOW`. Success stores the normalized `localtime` result, preserving
+errno; failure returns -1 and leaves the structure unchanged. Since -1 is also
+a valid time, callers distinguish failure by setting errno first.
 
 File and allocation failures retain their corresponding errno. Invalid names,
 malformed TZif and unsupported file formats use `EINVAL`; unspecified local
@@ -81,7 +111,7 @@ Invalid formats report EINVAL; insufficient output space returns zero. Format
 flags and field widths are not supported. `difftime` subtracts timestamps before
 conversion to double, retaining small intervals at large timestamps.
 
-Reverse conversion (`mktime`), ambiguous/nonexistent local input, locale,
+Ambiguous and nonexistent local input fail as described for `mktime`; locale,
 per-user policy and live configuration reload remain outside this interface. TCC's existing calendar
 macros continue to use UTC. Firmware-clock precision and synchronization limits
 remain as described in [wall-clock support](../kernel/wall-clock.md).

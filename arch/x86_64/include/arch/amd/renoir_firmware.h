@@ -11,4 +11,7 @@ void renoir_inventory_firmware(struct pci_address address);
  * allocations/training; unknown or changed reservations refuse this backend. */
 bool renoir_firmware_qualifies(struct pci_address address, uint64_t gpu_base);
 
+/* Opt-in cursor inventory only; numeric ATOM dce_info, never a clock change. */
+uint32_t renoir_cursor_reference_clock(struct pci_address address);
+
 #endif

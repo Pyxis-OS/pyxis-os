@@ -264,7 +264,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     .environment_count = source->environment_count,
     .argc = source->argc,
     .argv = address + sizes->metadata,
-    .namespace = source->namespace,
+    .namespace_handle = source->namespace,
   };
   memcpy(info->streams, source->streams, sizeof(info->streams));
 

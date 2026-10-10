@@ -118,7 +118,8 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-10): [Neovim task 4](neovim-libuv.md#task-4-preflight),
   native libuv backend. Tasks 1–3 are merged.
 - **Codex alpha** (2026-10-10): [Renoir hardware cursor](renoir-hardware-cursor.md),
-  proposal first; scaled game planes need a separate decision.
+  task 1: read-only cursor inventory and software baseline; no cursor writes.
+  Scaled game planes need a separate decision.
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
   the small first step is implemented and qualified; review before merge.
 - **Codex delta** (2026-10-10): [threads task 2](threads.md#shared-capability-and-vm-ownership),
@@ -127,9 +128,11 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Claude** (2026-10-10): [system power overlay](system-power-overlay.md),
-  a kernel-drawn Ctrl+Alt+Delete emergency screen with Shut down, Reboot and
-  Cancel; task 1 in #659, natively checked except the installed-system flush.
+- **Claude** (2026-10-10): [Neovim task 6 slice 3](neovim-groundwork.md#delivered-slices),
+  libc `mktime`, `iconv` and the numeric/string closure; Lua 5.1's
+  `os.time(table)` uses `mktime`. Task 5 (#672) and the
+  [system power overlay](system-power-overlay.md) (#659) are merged; the
+  overlay's installed-system flush check is pending.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its

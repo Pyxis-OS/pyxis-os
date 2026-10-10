@@ -84,6 +84,7 @@
 #include <kernel/mm/scanout.h>
 #include <kernel/panic.h>
 #include "renoir_state.h"
+#include "renoir_cursor_inventory.h"
 
 #define RENOIR_VENDOR 0x1002
 #define RENOIR_DEVICE 0x1636
@@ -122,6 +123,7 @@ static struct {
   phys_addr_t bar;
   unsigned power, hubp, front, requested, request_polls;
   uint64_t submitted, deadline;
+  size_t occupied_end;
   bool prepared, submitted_once, metrics;
   uint64_t submissions, confirmations, polls, timeouts, wait_total, wait_max;
   uint64_t validation_count, validation_total, validation_max;
@@ -588,6 +590,7 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
   flip.surfaces[1].address = spare.address;
   flip.addresses[0] = gpu_base;
   flip.addresses[1] = gpu_base + spare.offset;
+  flip.occupied_end = spare.offset + spare.bytes;
   flip.prepared = true;
   flip.metrics = metrics;
   flip.state = RENOIR_FLIP_READY;
@@ -624,6 +627,24 @@ refuse:
   renoir_unmap_registers();
   klog("renoir-flip: refused: route/layout/translation/reservation proof; keeping GOP copy\n");
   return false;
+}
+
+void renoir_flip_cursor_inventory(const struct boot_info *boot)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!arch_cpu_count());
+  if (!flip.prepared || flip.state != RENOIR_FLIP_READY) {
+    klog("renoir-cursor-inventory: unavailable: qualified flip owner absent; no register reads or cursor allocation\n");
+    return;
+  }
+  struct hubp_state hubp;
+  bool unstable;
+  if (!current_state(&hubp, &unstable) || unstable) {
+    klog("renoir-cursor-inventory: unavailable: device/route/layout changed; no cursor allocation\n");
+    return;
+  }
+  renoir_cursor_inventory(boot, flip.claim.device->address, &flip.inherited.registers,
+      flip.hubp, flip.occupied_end);
 }
 
 void renoir_flip_cancel_prepare(void)

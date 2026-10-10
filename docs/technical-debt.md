@@ -32,8 +32,9 @@ the owner deferred it for much later (2026-10-10).
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
 (owner decision, 2026-10-08) and read the source twice because the digest is announced first. Data moves in a 64 KiB window of
-2 KiB chunks ([measurements](development/experiments/xfer-pipelining/README.md)); native rates after windowing await the owner's
-batch. Before it, 15 MiB took 6.5 s up and 7.5 s down natively. In nested QEMU both directions are bound by BSP work per frame.
+2 KiB chunks ([measurements](development/experiments/xfer-pipelining/README.md)). Natively, 700 MiB now takes about 19.5 s up and
+28 s down (36 and 25 MiB/s); before windowing, 15 MiB took 6.5 s up and 7.5 s down. The native bound is unattributed. In nested QEMU
+both directions are bound by BSP work per frame.
 Guest names are limited to 200 UTF-8 bytes and host paths to 1024.
 
 The mandatory SHA-256 extension excludes stock kitty peers, and transfers are single regular files without resume, compression or
@@ -304,21 +305,16 @@ Interrupts, three surfaces and blanking stay deferred.
 
 The [flip backend](kernel/renoir-flip.md) is opt-in and natively qualified for
 normal flips and Quake/Chocolate Quake play (`9254f5c8`, owner, 2026-10-10).
-Unqualified on the ThinkPad: timeout recovery, native panic visibility, remote
-screenshots with a visible cursor and selection, and the owner's ordinary input
+Unqualified on the ThinkPad: timeout recovery, remote screenshots with a visible cursor and selection, and the owner's ordinary input
 checks (tabs, selection, layers, lock and relock) not reported in that run. The
 paired disabled/enabled boots with camera clips, compose/copy costs and poll
-counts were not taken as a set. No native timeout injection or panic trigger is
-authorized. Revisit when the backend is proposed as a default, or after a change
+counts were not taken as a set. No native timeout injection is authorized. Revisit when the backend is proposed as a default, or after a change
 to its failure, panic or capture paths; the paired steps are in the
 [backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
-Owner decision, 2026-10-10: flips stay opt-in for now. Before they become the
-default, one deliberate native panic with flips on must show the panic message
-on the display, using an unmerged probe build like the network debugger's
-[panic probe](development/experiments/network-debugger/README.md); the owner
-authorized that deliberate panic the same day. The owner has seen no unintended
-native panic since bring-up, so this path has never run on hardware.
+Owner decision, 2026-10-10: flips stay opt-in for now. The prerequisite set for
+a default, one deliberate native panic with flips on showing its message, passed
+the same day; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
 
 ## Native Renoir presentation qualification
 
@@ -453,6 +449,14 @@ that daemon with a diagnostic), one reverse session runs at a time, and the host
 to about a second after discovery opens plus network, scheduling and cleanup delays. Reverse discovery and log following passed the
 owner's ThinkPad PXE check; macOS listener behavior is unqualified ([qualification](development/remote-debugging.md#qualification)).
 Revisit if a multi-host or unattended workflow needs more.
+
+## Parked remote handoff shells
+
+Remote [`session` handoffs](userland/shell.md#session-handoff) retain one parked
+shell with its stack, heap and grants per chained handoff, as accepted by the
+owner. Disconnect still reclaims the whole execution group. Revisit with an
+acknowledged observer transfer to the daemon if deep or long-lived chains make
+the retained resources material; no handoff-depth quota is supplied.
 
 ## Kernel log retention and LAN visibility
 
@@ -1639,9 +1643,31 @@ editing or deleting a live revision is unsupported.
 ## Native libuv first-slice limits
 
 The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
-stream/process interests per loop and synchronous filesystem calls. Child cwd,
+stream/process interests per loop and synchronous filesystem calls. Child
 bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
-APIs are omitted. Luv/Neovim must consume native stat validity and exit reasons,
-handle unsupported PIDs/signals, and close remaining libc/API gaps. Revisit in
-[Neovim tasks 5 and 6](wip/neovim-libuv.md#tasks); serving providers in a libuv
-loop needs a receiver adapter. Shared-process threads require a separate milestone.
+APIs are omitted. Luv consumes the native exit reasons and reports unsupported
+PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
+Neovim must still consume native stat validity and close remaining libc/API gaps
+in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
+receiver adapter. Shared-process threads require a separate milestone.
+
+## Calendar and encoding profile
+
+Libc's [`mktime`](userland/timezones.md#c-interface) fails with ENOTSUP for wall times in a DST gap and for folds that a
+nonnegative `tm_isdst` cannot settle, including standard-offset changes. Callers that expect glibc's adjustment across
+gaps or its choice in folds get an error instead. [`iconv`](kernel/userspace.md#foundational-libc)
+converts only UTF-8, ASCII, ISO-8859-1 and UTF-16LE/BE: Neovim reports other `fileencoding` values as unconvertible
+(it converts Latin-1, Latin-9 and the Unicode forms itself), and Git's BOM-detecting `UTF-16` working-tree encoding fails.
+There is no transliteration. Revisit when a port or user needs another encoding or gap normalization; each addition
+imports its musl table or rule explicitly.
+
+## Lua 5.1 and luv limits
+
+The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
+`io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
+`popen`/`system`, `clock`, locales, `setvbuf` and dynamic loading. `os.time(table)` returns `nil` for DST gaps and unsettled
+folds ([calendar limits](#calendar-and-encoding-profile)). The Lua 5.5 `lua` port still refuses calendar tables and compares
+with `strcmp`; switching it to libc's `mktime` and `strcoll` is a small follow-up. luv reports TCP, UDP, DNS, watches, signals, work queues,
+callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
+descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
+[task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.

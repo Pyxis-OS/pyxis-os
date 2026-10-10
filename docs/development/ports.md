@@ -300,6 +300,22 @@ collation and uses libc's unstable `qsort`. Libc gained `bsearch` for them. See
 the [reference](../userland/wc-tail-sort.md) for behavior, limits and validation,
 and the [recipe notes](../../ports/sbase/README.md) for the adaptation.
 
+## Searching text with sbase grep
+
+The shell resolves `grep` to `bin://grep.pxe`:
+
+```text
+grep -n main host://notes.c
+grep -rl TODO home://src
+cat host://words | grep -vc '^#'
+```
+
+It is upstream sbase grep with `-r` added over libc `opendir`/`readdir`, `fmemopen`
+replaced by line splitting, name prefixes on `-c`, and block output. Patterns
+use libc's regex engine, so classes and case folding are ASCII-only. See the
+[reference](../userland/grep.md) for behavior, limits and validation, and the
+[recipe notes](../../ports/sbase/README.md#grep) for the adaptation.
+
 ## SHA-256 digests with sbase sha256sum
 
 The shell resolves `sha256sum` to `bin://sha256sum.pxe`:
@@ -490,3 +506,22 @@ clock, memory, launcher and pipe creation explicitly. The bounded one-thread
 platform layer uses native readiness and libc descriptors; excluded APIs fail
 with unsupported errors. See [Neovim task 4](../wip/neovim-libuv.md#task-4-preflight)
 and its [qualification](experiments/libuv-native/README.md).
+
+## Lua 5.1 with LPeg and luv
+
+The [`lua51` recipe](../../ports/lua51/README.md) builds PUC Lua 5.1.5, LPeg, luv
+and lua-compat-5.3 over the native libuv. It exports `ports-dev/lua51`
+(`liblua5.1.a`, `liblpeg.a`, `libluv.a` and headers under `include/lua5.1` and
+`include/luv`) for Neovim, and stages the interpreter as
+`boot://share/lua51/lua5.1.pxb`:
+
+```text
+boot://share/lua51/lua5.1.pxb script.lua [args]
+```
+
+The bundle requests memory, clock, launcher and pipe creation, which luv's loop
+and child processes need, and random for temporary files. Missing libc
+behaviour is left out of the standard libraries rather than imitated, and luv
+reports unsupported libuv families, PIDs and signals as ENOSYS; exit callbacks
+receive the native exit reason. See [Neovim task 5](../wip/neovim-libuv.md#task-5-decisions)
+and its [qualification](experiments/lua51-luv/README.md).

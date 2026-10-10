@@ -18,6 +18,7 @@ struct boot_options {
   bool display_timing_metrics;
   bool display_inventory;
   bool display_flip, display_flip_metrics;
+  bool display_cursor_probe;
 };
 
 /* BSP, IF=0: call once before display/AP initialization. Copies the command

@@ -27,6 +27,17 @@ one outstanding request, kernel-owned two-surface state and sleeping completion.
 No Linux DRM/BO/VM infrastructure, allocator or ATOM command executor is imported.
 No upstream source is downloaded by the build.
 
+The opt-in read-only cursor inventory adds definition subsets from the same
+DCN2.1 offset/mask headers: cursor/HUBPREQ, CNVC cursor, per-OPP lock, MPC
+pending/taken/ack and OTG update/position fields, plus BASE_IDX1 REFCLK/DP DTO.
+Reference-clock candidate arithmetic adapts dc/dccg/dcn20/dcn20_dccg.c and
+dc/hubbub/dcn20/dcn20_hubbub.c; the VUPDATE candidate calculation adapts
+dc/hwss/dcn10/dcn10_hwseq.c. Numeric ATOM dce_info decoding uses atomfirmware.h
+and dc/bios/bios_parser2.c field interpretation. No cursor programming, power
+operation, firmware call, latch/retirement predicate or Linux allocator is copied.
+dc/dce/dce_clock_source.c is cited research for raw DTO provenance, not imported
+clock programming. These diagnostics neither allocate nor map cursor backing.
+
 Complete notices from those definition headers follow.
 
 /*
@@ -251,3 +262,34 @@ dcn10_dpp_dscl.c
  * Authors: AMD
  *
  */
+
+dcn20_dccg.c
+
+/*
+ * Copyright 2018 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors: AMD
+ */
+
+The dcn20_hubbub.c and dcn10_hwseq.c adaptations retain the complete
+Copyright 2016 AMD MIT notice above; bios_parser2.c field interpretation retains
+the complete Copyright 2012-15 AMD MIT notice above. No upstream code is fetched
+by the build.

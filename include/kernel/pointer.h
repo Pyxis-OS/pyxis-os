@@ -33,6 +33,12 @@ struct pointer_image {
   uint8_t pixels[];
 };
 
+struct pointer_probe_stats {
+  uint64_t reports, relative_motion, screen_moves;
+};
+/* BSP/IF=0, opt-in diagnostics. Counts routed reports, not device packets. */
+struct pointer_probe_stats pointer_probe_snapshot(void);
+
 /* BSP/IF=0. No allocation in routing/snapshot. */
 void pointer_init(void);
 void pointer_handle_input(const struct pointer_input_report *event);

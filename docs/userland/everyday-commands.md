@@ -5,6 +5,7 @@ rescue archive retains `echo`, `cp`, `ls` and `mv`, so configuration text can be
 written, files copied or moved and directories inspected while repairing the
 system. See
 [system layout](system-layout.md#programs) for `bin://` and rescue fallback.
+The text filters `grep`, `wc`, `tail`, `sort` and `uniq` are sbase ports in the normal image.
 
 | Command | Behavior | Reference |
 | --- | --- | --- |
@@ -13,12 +14,14 @@ system. See
 | `ls [-1l] [--] [DIRECTORY...]` | Byte-sorted names, terminal columns and kind colors; plain names in pipes/files. `-l` adds kinds and sizes, with no timestamps. | [ls options and limits](ls.md) |
 | `tree [-L N] [--] [DIRECTORY...]` | Recursive listing with ASCII branches, sorted and colored like `ls`; `-L` limits the depth. | [tree](tree.md) |
 | `mv [--] SOURCE... DESTINATION` | Renames files, or moves them into a destination directory. Files only. | [mv](mv.md) |
+| `grep [-EFHchilnqrsvwx] [-e PATTERN] [-f FILE] [PATTERN] [FILE...]` | Prints matching lines; `-r` searches directories through the native listing. Status 0 selected, 1 none, 2 error. An sbase port, not native. | [grep](grep.md) |
 
 ```text
 echo hi > home://note.txt
 cp home://note.txt home://copy.txt
 ls -l home://
 ls boot:// | less
+grep -rn TODO home://src
 ```
 
 ## Shell scripts as commands
