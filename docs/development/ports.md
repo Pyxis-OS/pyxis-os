@@ -480,3 +480,13 @@ GPL license. Terms and NOTICE are packaged under `boot://share/licenses/usbids/`
 [lsusb](../userland/lsusb.md) uses the data only for descriptive names and falls
 back to numeric IDs when names are unavailable. Updating the database requires
 no compiler-container rebuild. See [recipe notes](../../ports/usbids/README.md).
+
+## Native libuv
+
+The [libuv recipe](../../ports/libuv/README.md) exports `ports-dev/libuv` and
+stages `boot://share/libuv/uv-relay.pxb`. Run the bundle from Development to relay
+a child's output with a timer and responsive console input. It requests native
+clock, memory, launcher and pipe creation explicitly. The bounded one-thread
+platform layer uses native readiness and libc descriptors; excluded APIs fail
+with unsupported errors. See [Neovim task 4](../wip/neovim-libuv.md#task-4-preflight)
+and its [qualification](experiments/libuv-native/README.md).

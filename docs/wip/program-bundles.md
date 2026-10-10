@@ -96,7 +96,9 @@ parent-navigation escape from those views. Source, output and writable user data
 remain outside the bundle and use explicitly delegated ordinary capabilities.
 
 The launcher preserves explicit streams, cwd, environment, namespace and other
-directory roots. Named ordinary resources come from the manifest's requests;
+directory roots. `pipe/create` is an ordinary manifest request available to foreground bundles
+when their supplying shell holds the pipe service. Plain foreground programs
+still receive no pipe-creation grant. Named ordinary resources come from the manifest's requests;
 unused source resource grants are omitted. Caller-selected authority supplies
 requests, and a shell supplies its delegated child launcher rather than its own
 supervision launcher. The kernel still prevents increasing the supplier's rights

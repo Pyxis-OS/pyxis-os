@@ -18,7 +18,7 @@ failure unwinding remain BSP-owned.
 
 The application input handle permits CONSOLE READ and SIZE, plus
 [interrupt arming](terminal.md#interrupt-arming-and-passthrough); the output handle
-permits WRITE, SIZE, FRESH_LINE and SET_TAB_WIDTH. Application grants cannot
+permits WRITE, TRY_WRITE, SIZE, FRESH_LINE and SET_TAB_WIDTH. Application grants cannot
 inject input, intercept output or hang up the terminal. Attachment rights are
 separate: INJECT permits input injection and END_INPUT; DRAIN permits output
 collection; HANGUP controls disconnection; RESIZE changes character dimensions. Copies refer to the same attachment;
@@ -48,6 +48,14 @@ output blocks until the whole call, at most 4 KiB, fits as one record, so a
 continuous writer cannot fill the queue with fragments each sized to the space
 just drained. Concurrent calls serialize accepted chunks and complete controls;
 whole multi-call messages are not atomic. No terminal queue silently drops data under backpressure.
+
+`console_try_write` never waits for output capacity: it admits a positive short
+DATA record from the available bytes after accounting for its header, or returns
+WOULD_BLOCK without enqueueing. A validated zero-length write is a no-op. Output
+WRITABLE/WRITE_CLOSED interests require WRITE; readiness reserves no capacity.
+Hangup reports ERROR and writes fail ENDPOINT_CLOSED. Framebuffer consoles have
+no output queue or close operation: try-write renders a bounded chunk under the
+shared output lock, and WRITABLE means the output TTY is initialized.
 
 Libpyxis exposes creation, `terminal_try_inject`, `terminal_try_drain`,
 `terminal_end_input`, `terminal_hangup` and `terminal_command_complete` in

@@ -1,8 +1,8 @@
 # Neovim on Pyxis
 
 Status: **milestone decisions accepted 2026-10-10; tasks 1–3 merged in #651, #656 and #657.**
-Task 4 is assigned; its [native contract](#task-4-preflight) is accepted and
-implementation and qualification are in progress.
+Task 4 is implemented for review; its [native contract](#task-4-preflight) and
+[qualification](../development/experiments/libuv-native/README.md) describe the bounded slice.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -19,17 +19,18 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | 2 | User threads | **Unchanged for this purpose** | [Task 1](threads.md#first-task-and-later-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Create/join, TLS, `pthread.h` and thread-safe libc are tasks 2 to 4, unassigned. |
 | 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
 | 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: non-ASCII input and drawing (the alternate screen, scroll regions and saved cursor came with task 3), and a PTY-style session for child terminals. |
-| 5 | libuv backend | **Unchanged** | No libuv, luv or Neovim recipe exists in `ports`. Libc still lacks `pthread.h`, `poll.h`, `termios.h`, `dlfcn.h`, `sys/socket.h`, `sys/mman.h` and `iconv.h`, so upstream `uv.h` does not compile; the backend needs its own platform layer, not those headers. |
-| 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; none of Lua 5.1, LPeg, luv, libuv, utf8proc, tree-sitter or iconv exists. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
+| 5 | libuv backend | **Native task 4 slice** | Pinned libuv 1.52.1 has a Pyxis platform layer for loop/timers/async, console/pipe streams, explicit child launch/completion and synchronous libc filesystem operations. Excluded workers, async fs, sockets, watches, signals and module loading fail honestly; the [adapter limits](../../ports/libuv/README.md) remain gates for luv/Neovim. |
+| 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; libuv 1.52.1 is added by task 4; Lua 5.1, LPeg, luv, utf8proc, tree-sitter and iconv remain absent. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
 
 Two findings change the plan. A pipe pair that `wait_many` can watch is also the
 cross-thread wake that libuv's `uv_async` needs, so no new wake object is
 required. And the first slice can avoid threads: libuv creates its pool only
 when work is submitted, and Neovim's own file calls mostly pass no callback and
 are synchronous, so the
-backend can refuse pool and thread requests with an error. This is the plan's main bet and is unverified: whether Neovim's startup,
-opening a file or `:w` touches the pool or other thread APIs. Task 4 checks it
-early, before the expensive task 6.
+backend refuses pool and thread requests with an error. The
+[task 4 audit](#early-neovim-pool-audit) found no mandatory pool/thread submission
+or callback-style file call in bounded startup, opening and `:w`. Excluded Lua
+configuration can invoke those APIs; this is not a native Neovim runtime result.
 
 ## Milestone proposal
 
@@ -68,7 +69,7 @@ without Neovim.
    a tab and in a pane. Implemented as the [`pyxis` profile](../userland/terminal.md#tty-output-controls),
    with vi, less, Kilo and Links moved onto the alternate screen;
    [qualification and matched costs](../development/experiments/terminal-profile/README.md).
-4. [ ] **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
+4. [x] **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
    async wake over a pipe pair, console and pipe streams, synchronous file calls,
    and child launch through the launcher. Pool, threads, sockets, file watches,
    `dlopen` and signals return an unsupported error; mutex, once and key
@@ -118,7 +119,7 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
 
 ### Task 4 preflight
 
-**Defaults accepted 2026-10-10; implementation authorized, not yet implemented.**
+**Defaults accepted 2026-10-10; implemented for review.**
 The source audit inspected main `6f318e0c`; task work starts from `7766dae0`.
 The first task remains the native loop/child-output relay with a timer. Pool,
 worker creation/join, asynchronous filesystem submissions, sockets, watches,
@@ -137,40 +138,31 @@ Inspection copies are not build sources; recipes use the verified owner mirror.
 
 **Accepted contract:**
 
-1. **Complete native console output readiness/try operations here.** Application
-   console/output currently has no WRITABLE interest, and terminal output WRITE
-   waits when its record queue is full ([wait implementation](../../kernel/user/wait.c),
-   [terminal queue](../../kernel/object/terminal.c)). Add bounded
-   `CONSOLE_TRY_WRITE` and matching WRITABLE/WRITE_CLOSED observation, returning
-   short progress or WOULD_BLOCK with wake-before-park ordering. Record overhead
-   counts toward capacity; blocking WRITE retains its existing behavior. This
-   adds a native prerequisite and qualification for tabs, mux and remote output.
-2. **Pipe creation is explicit bundle authority.** Ordinary foreground commands
-   currently receive a child launcher where available, but pipe CREATE is
-   session-only ([shell delegation](../../userspace/shell/launch.c)). Add a
-   recognized `pipe/create` bundle request and make it available to requested
-   foreground bundles when the supplying shell holds it. Plain-program
-   delegation stays as today; missing required authority rejects admission.
-   Package the relay sample as an unpacked bundle requesting memory, clock,
-   launcher and pipe grants. Child launch forwards explicit stdio and a selected
-   ordinary application profile within the caller's actual authority; it does
-   not copy session/system authority indiscriminately.
-3. **Expose native result validity rather than invent Unix metadata/results.**
-   Add Pyxis validity to libuv stat results, preserving known type/size and each
-   available domain/object/mtime; other Unix fields remain explicitly unknown.
-   Expose the native EXITED/FAULTED/TERMINATED reason on the process handle.
-   Ordinary exits retain their status; fault/termination callbacks report -1
-   with term_signal zero and the distinct native reason, never a fabricated
-   Unix signal or successful status zero. Keep the real observer internally;
-   numeric PID fields/accessors have a documented unavailable/unsupported value
-   (negative UV_ENOSYS), not an invented PID. Later luv/Neovim adapters must
-   consume these native fields/errors. Closing a libuv process handle stops
-   observation, not the child; signal/kill APIs remain unsupported.
+1. **Native console try-write and output readiness.** `CONSOLE_TRY_WRITE`
+   returns bounded short progress or WOULD_BLOCK; terminal record headers count
+   toward capacity. WRITABLE/WRITE_CLOSED use WRITE authority and the existing
+   wake-before-park machinery. Framebuffer output remains synchronous under its
+   shared output lock. Blocking WRITE keeps whole-record admission.
+2. **Explicit bundle pipe authority.** `pipe/create` is a recognized manifest
+   request, supplied only to requesting foreground bundles when the shell holds
+   it; missing required authority rejects admission. Plain-program delegation is
+   unchanged. The relay bundle requests memory, clock, launcher and pipe. Its
+   plain children receive explicit stdio and selected memory/clock/launcher
+   grants, inherited directories excluding app, and attenuated namespace lookup.
+   Pipe creation and session/system controls are not forwarded.
+3. **Native result fidelity.** `uv_stat_t.stat_valid` preserves libc's optional
+   domain/object/mtime bits; type/size are known and other Unix fields remain
+   unknown. `uv_process_t.exit_reason` distinguishes EXITED/FAULTED/TERMINATED.
+   Normal signed exit status is preserved; fault/termination report -1 with
+   term_signal zero. PID fields/accessors return negative UV_ENOSYS. Closing a
+   process handle releases observation and does not terminate it. Later luv and
+   Neovim adapters must consume these native fields and unsupported errors.
 
 Implementation follows existing ownership and bounds: libc owns `uv_file`
-integer descriptors. A small native libc bridge must adopt handles atomically
-and provide descriptor-aware try I/O; no competing fd table or raw-handle bypass
-of read-ahead. Stream-open transfers descriptor responsibility. Unsupported
+integer descriptors. The native libc bridge adopts handles atomically
+and provides descriptor-aware PIPE/CONSOLE try I/O. FILE try I/O is ENOTSUP;
+ordinary file calls remain synchronous. There is no second fd table or bypass of
+read-ahead. Stream-open transfers descriptor responsibility. Unsupported
 extra stdio slots, duplex pipes, shared FILE cursor inheritance and unsupported
 spawn options reject before launch. Submitted writes borrow buffers until one
 terminal callback; close cancels remaining writes before its close callback.
@@ -214,9 +206,21 @@ uses byte pipes. Synchronous FILE client calls may invoke a provider and block
 (as their API permits); callback-style fs is rejected. Serving provider requests
 inside a libuv loop would require receiver readiness and remains a separate task.
 
-Work order: baseline on the selected main, userland bridge
-and native console prerequisite, then ports backend/sample, matched QEMU/GDB
-qualification and dependency-first PRs. No later milestone task starts here.
+The pinned [ports adapter](../../ports/libuv/README.md) documents the implemented
+API subset, transfer ownership and errors. Every opened stream/observed process,
+including inactive ones, reserves admission. Child spawn supports explicit
+native images and up to three directional streams; cwd selection, child bundle
+paths, FILE cursor inheritance and unsupported flags reject before launch. A
+failed spawn leaves a closable inactive process handle. A supplied filesystem
+callback rejects before effects; ordinary libc file/directory operations run
+synchronously. Unsupported filesystem operations and value-only peripheral
+APIs remain gaps for the later consumer tasks.
+
+Owner command in the Development shell: `boot://share/libuv/uv-relay.pxb`.
+The sample relays six child chunks while a timer and console input stay active.
+See the [qualification record](../development/experiments/libuv-native/README.md)
+for matched costs, capacity/cleanup and native result inspection. Tasks 5 and 6
+still require separate owner assignments.
 
 ### Mirrors the owner must provide
 
