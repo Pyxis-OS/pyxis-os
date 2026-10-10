@@ -190,6 +190,7 @@ void input_source_initial_keyboard(struct input_source *source, const bool keys[
   for (size_t key = 1; key < KEY_COUNT; ++key) {
     source->keys[key] = keys[key];
     source->suppressed_keys[key] = keys[key];
+    source->keyboard_initial_hold |= keys[key];
   }
   source->repeat_key = KEY_NONE;
 }
@@ -214,6 +215,20 @@ void input_keyboard_snapshot(struct input_source *source, const bool keys[KEY_CO
   assert_input_owner();
   KASSERT(source && source->keyboard_live && keys);
   drain_ps2_keyboard();
+  if (source->keyboard_initial_hold) {
+    bool any_held = false;
+    for (size_t key = 1; key < KEY_COUNT; ++key) {
+      any_held |= keys[key];
+      if (source->keys[key] && !keys[key]) {
+        change_key(source, key, false, false, 0);
+      } else if (keys[key]) {
+        source->keys[key] = true;
+        source->suppressed_keys[key] = true;
+      }
+    }
+    source->keyboard_initial_hold = any_held;
+    return;
+  }
   uint64_t now = arch_monotonic_ns();
   if (source->keyboard_unresolved) {
     source->keyboard_unresolved = false;
@@ -259,7 +274,7 @@ void input_keyboard_unresolved(struct input_source *source)
 static bool keyboard_sources_resolved(void)
 {
   for (const struct input_source *source = sources; source; source = source->next) {
-    if (source->keyboard_live && source->keyboard_unresolved) {
+    if (source->keyboard_live && (source->keyboard_unresolved || source->keyboard_initial_hold)) {
       return false;
     }
   }
@@ -352,6 +367,7 @@ void input_source_initial_pointer(struct input_source *source, uint32_t buttons)
   KASSERT(source && source->pointer_live);
   source->pending_buttons = buttons & INPUT_BUTTONS;
   source->suppressed_buttons = source->pending_buttons;
+  source->pointer_initial_hold = source->pending_buttons != 0;
   queue_pointer((struct pending_pointer){.source = source,
       .report = {.buttons = source->pending_buttons}});
 }
@@ -443,7 +459,12 @@ void input_pointer_drain(void)
       }
     } else if (source->pointer_live) {
       source->buttons = pending.report.buttons;
-      source->suppressed_buttons &= source->buttons;
+      if (source->pointer_initial_hold) {
+        source->pointer_initial_hold = source->buttons != 0;
+        source->suppressed_buttons = source->buttons;
+      } else {
+        source->suppressed_buttons &= source->buttons;
+      }
       pending.report.buttons = pointer_buttons(false);
       pending.report.suppressed_buttons = pointer_buttons(true);
       pointer_handle_input(&pending.report);

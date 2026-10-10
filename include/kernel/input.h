@@ -11,6 +11,7 @@ struct input_source {
   struct input_source *next;
   bool registered, keyboard_live, pointer_live;
   bool keys[KEY_COUNT], suppressed_keys[KEY_COUNT], keyboard_unresolved;
+  bool keyboard_initial_hold, pointer_initial_hold;
   enum key_code repeat_key;
   uint64_t repeat_deadline;
   uint32_t buttons, pending_buttons, suppressed_buttons;

@@ -9,6 +9,9 @@ Status: **baseline captured; implementation in progress**. Owner decisions accep
   US text mapping. Per-device held state prevents one device releasing another's
   key. USB host repeat starts after 500 ms, then repeats every 33 ms; PS/2
   typematic stays unchanged. Repeat and unchanged reports create no activation.
+  If attachment observes held keys/buttons, release them all before that source
+  supplies new presses; queued pre-bind state cannot create activation. Keyboard
+  rollover resets accepted input and quarantines recovered holds until release.
 - Boot-subclass keyboard and mouse interfaces include composite dongles, with
   one keyboard and one mouse interface per device. Select boot protocol; decode
   the eight-byte keyboard and three-byte mouse reports. Wheel needs an established
