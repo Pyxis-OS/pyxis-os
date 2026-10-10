@@ -302,15 +302,6 @@ authorized. Revisit when the backend is proposed as a default, or after a change
 to its failure, panic or capture paths; the paired steps are in the
 [backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
-## Renoir steady-state validation cost
-
-The [native flip run](development/experiments/renoir-flip-backend/README.md#native-success--2026-10-10)
-spends roughly 3 ms cumulative validation elapsed per frame (about 8 polls at 369 µs
-mean). Full double-snapshot PCI/route/layout checks on every poll occupy the BSP.
-Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-polling.md):
-light reads are hints; full validation must guard writes, retirement, capture and
-fallback. Detection cadence needs owner acceptance; no optimization is implemented.
-
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)

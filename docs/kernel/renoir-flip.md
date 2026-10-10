@@ -86,6 +86,42 @@ Renoir's register segment 2 starts at DWORD `0x34c0`; the BAR byte offset is
 holds update lock `0x1`, flip type `0x2`, pending `0x100`, stereo mode `0x3000`
 and stereo sync `0x10000`.
 
+## Pending-poll validation
+
+PENDING polls take two observations of flip control and earliest-in-use low/high
+(six MMIO reads). Stable pending-bit/address observations are hints: they can
+only keep the request waiting. Both observed addresses must belong to the owned
+pair and non-status control must match the inherited value under the existing
+pending/immediate exclusions. An unexpected observation remains latched for
+FAILED even if subsequent full samples recover; a torn light sample is not
+claimed as proof of persistent hardware ownership loss.
+
+READY and FALLBACK always run full device, route, immutable-layout and owned-set
+validation. Submission independently revalidates after the fenced back copy.
+Possible completion or either timeout bound also requires the full check. Full
+validation therefore guards the first back-surface pixel write, every GPU
+submission, front retirement, capture publication, timeout fallback and every
+fallback copy. Completion verifies stable primary **and** earliest addresses
+against the request with pending clear. Light reads authorize no write, release,
+reuse or capture publication.
+
+Layout-loss detection during the write-free PENDING interval is bounded by
+candidate completion or the existing 50 ms/50-poll deadline; the owner accepted
+this cadence on 2026-10-10. One outstanding request, 1 ms sleeps, pinned FAILED
+surfaces, status masks and the three-register write allowlist are unchanged.
+
+Metrics-gated reports retain full-poll validation mean/max/count/total and add
+submission-validation and light-observation mean/max/count/total. Cumulative
+observation elapsed per confirmed frame includes BSP clock, interrupt and
+preemption overhead, excludes sleeping between polls, and is not separately
+profiled CPU execution time. The [poll-cost record](../development/experiments/renoir-poll-cost/README.md)
+records the owner-run ThinkPad A–B–A–B qualification: BSP observation elapsed
+per frame fell from 3.393–3.415 ms to 1.116 ms (about 67%), with zero timeouts
+or FAILED and tear-free native Quake/Chocolate Quake. The owner found B more
+responsive. These whole-boot metrics include preemption and are not CPU profiling;
+B2 had one reported maximum of 48.121 ms, close to the unchanged 50 ms deadline,
+whose cause and frequency cannot be determined from the final totals.
+
 ## Surfaces and memory
 
 The validated 512 MiB UMA range is owned by the kernel driver except the GOP/VGA
@@ -160,5 +196,6 @@ optc blank helpers are not vendored.
   scenarios are unqualified. A framebuffer screenshot or an FPS figure does not
   establish a tear-free panel.
 - Three surfaces, display interrupts and OTG blanking are deferred.
-- About 3 ms of cumulative validation elapsed per frame is spent on polling; a
-  [cheaper-polling proposal](../wip/renoir-flip-polling.md) is separate.
+- Light polling is qualified on the ThinkPad, with whole-boot cost measurements.
+  Per-game cost splits, the cause of the 48.121 ms confirmation-wait maximum and
+  separately profiled CPU execution time are not established.

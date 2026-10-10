@@ -68,5 +68,6 @@ Not started and not authorized; this is the contract the accepted direction impl
   timedemo. Camera clips or owner observation decide visible tearing; FPS and
   screenshots alone cannot.
 
-Open items outside step 3: the cheaper [flip polling](renoir-flip-polling.md)
-follow-up and the [flip backend's remaining native qualification](../technical-debt.md#renoir-flip-backend-qualification).
+The cheaper [flip polling](../kernel/renoir-flip.md#pending-poll-validation) is
+qualified; the [flip backend's remaining native qualification](../technical-debt.md#renoir-flip-backend-qualification)
+is separate from step 3.
