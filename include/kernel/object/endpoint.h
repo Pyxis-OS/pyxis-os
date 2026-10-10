@@ -48,6 +48,13 @@ void endpoint_handle_close(struct kernel_object *object);
  * Releases logical delivery ownership; backing destruction remains on BSP. */
 void endpoint_receipt_release(struct kernel_object *object);
 
+/* BSP, IF=0. Register each retained receiver interest before its first scan;
+ * unregister before releasing that interest's object reference. */
+void endpoint_readiness_register(struct endpoint *receiver);
+void endpoint_readiness_unregister(struct endpoint *receiver);
+/* Observe under the endpoint lock without consuming or reserving delivery. */
+uint64_t endpoint_receiver_ready(struct endpoint *receiver, uint64_t events);
+
 struct syscall_result endpoint_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size, uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result endpoint_call(struct kernel_object *object, handle_t handle,

@@ -114,6 +114,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
+  the small first step is implemented and qualified; review before merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.

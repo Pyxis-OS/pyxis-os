@@ -1206,23 +1206,24 @@ stream consumption, without silently discarding read-ahead. Multi-file headers a
 
 ## Endpoint cancellation and capacity
 
-[Endpoints](interfaces/endpoints.md) have no external cancellation, wait sets or wait-for-capacity, and admission to a full endpoint fails immediately. The
+[Endpoints](interfaces/endpoints.md) have no external cancellation or wait-for-capacity, and admission to a full endpoint fails immediately. Receivers support
+mixed readiness waits, which reserve no delivery. The
 live-work limit is sixteen delivery records: queued messages, unfinished provider receipts and CALL outcomes awaiting collection use them, and genuine
 exhaustion reports QUEUE_FULL (completed work is reclaimed synchronously at final receipt release, which fixed the earlier throughput failures recorded in
 the [I/O and IPC baseline](development/io-ipc-baselines.md)). A provider can hold all sixteen slots by leaving receipts unfinished, a deadline releases the caller
 but not a delivered receipt or the provider's attachment handles, and calls without a deadline can wait forever (including self-calls or cycles between
 blocked single-task processes). Control notifications stay deliverable at full capacity if the provider finishes the retained work. Revisit with asynchronous
-service scheduling and explicit cancellation and wait APIs, preserving delivery and outcome reporting and receipt ownership, never revoking delivered
+service scheduling and explicit cancellation and capacity waits, preserving delivery and outcome reporting and receipt ownership, never revoking delivered
 attachments silently, and without retrying or pacing away admission failures. Group termination already cancels its callers and detaches receivers while
 preserving outside provider receipts.
 
 ## Service startup failure before publication
 
 The namespace publication command waits on the provider's registration endpoint. Providers can report setup failure before registering (the launcher
-acknowledges it and optional startup continues), but if a launched provider exits or faults without reporting, the parent cannot wait for either IPC or
-process exit and startup can stay blocked; a provider CALL deadline bounds its own wait, not the parent's RECEIVE. The manually invoked pipe and IPC
+acknowledges it and optional startup continues), but if a launched provider exits or faults without reporting, the parent still uses blocking RECEIVE
+and startup can stay blocked; a provider CALL deadline bounds its own wait, not the parent's RECEIVE. The manually invoked pipe and IPC
 benchmarks have the same limit (a companion faulting before its readiness or result message leaves the coordinator in RECEIVE). Revisit with endpoint and
-process wait sets or a bounded receive facility, never inferring readiness from launch success, adding automatic restart, or describing a CALL deadline as
+process readiness together (now available through `wait_many`) or a bounded receive facility, never inferring readiness from launch success, adding automatic restart, or describing a CALL deadline as
 process termination (see [process termination](#process-termination-and-ctrl-c) and [I/O and IPC baselines](development/io-ipc-baselines.md)).
 
 ## Provider calls through synchronous file helpers
