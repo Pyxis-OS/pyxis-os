@@ -19,6 +19,9 @@ mount authority. Native create/remove/file rename, writes, resizing and sync run
 on the sole kernel filesystem worker. Native FILE_SIZE accepts READ or WRITE.
 The tree internals below describe the archive/RAM backends.
 
+`DIRECTORY_INFO` samples the held object's [identity and modification time](file-metadata.md)
+without additional content rights; it is separate from filesystem-capacity information.
+
 ## Scoped filesystem information
 
 `DIRECTORY_FILESYSTEM_INFO` accepts a complete zeroed directory message and

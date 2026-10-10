@@ -261,12 +261,26 @@ when a failure appears.
 ## Renoir inherited pitch and firmware reservations
 
 [Native flip inventory](development/experiments/renoir-flip-inventory/README.md)
-confirms BAR0/GOP correlation and the 512 MiB UMA range. Raw pitch `0x780` remains
-unexplained against GOP 7680 bytes and Linux's pixels-minus-one convention;
-qualify effective row stride before any write-backend layout. The owner accepted
+confirms BAR0/GOP correlation and the 512 MiB UMA range. The owner accepted
+the unsheared native GOP image as evidence of a 7680-byte effective stride for
+raw pitch `0x780` on 2026-10-09. Preserve that register; the Linux convention
+would normally write `0x77f`. Other inherited modes remain unqualified. The owner accepted
 Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
 reservations if new firmware/client ranges appear; retain the low prefix and
-last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers.
+last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers. The [task-2 backend](development/experiments/renoir-flip-backend/README.md)
+is opt-in: normal completion and game play were natively qualified at `9254f5c8`
+on 2026-10-10. Timeout recovery, panic visibility and unreported capture/input
+checks remain unqualified; revisit in task 3. Interrupts, three surfaces and
+blanking stay deferred.
+
+## Renoir steady-state validation cost
+
+The [native flip run](development/experiments/renoir-flip-backend/README.md#native-success--2026-10-10)
+spends roughly 3 ms cumulative validation elapsed per frame (about 8 polls at 369 µs
+mean). Full double-snapshot PCI/route/layout checks on every poll occupy the BSP.
+Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-presentation.md#proposed-cheaper-steady-state-polling):
+light reads are hints; full validation must guard writes, retirement, capture and
+fallback. Detection cadence needs owner acceptance; no optimization is implemented.
 
 ## Native Renoir presentation qualification
 
@@ -284,9 +298,10 @@ phasing, sleeping or polling. The existing period estimator remains inaccurate;
 EDID anchoring and its overhaul were dropped by the owner. Default remains
 unsynchronized `observe`. Run the
 [two-boot safety recheck](development/experiments/renoir-presentation/README.md#native-safety-recheck)
-before claiming the scheduling/logging regression resolved. Reduced tearing,
-accurate native timing and GPU flip presentation remain unqualified; revisit
-through the owner's separate flip proposal, not default timed-copy enablement.
+before claiming the scheduling/logging regression resolved. The observer’s
+tearing effect and counter-derived timing remain unqualified. The separately qualified
+opt-in flip backend does not qualify the observer; revisit its safety recheck
+without default timed-copy enablement.
 
 Register-window identity bounds access without PCI sizing writes; native BAR
 allocation length and GOP/HUBP routing are not independently decoded. Only the
@@ -507,10 +522,6 @@ and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [
 are absent: a consumer needs a separately agreed extension, and duplication must first settle shared open-state and cursor ownership.
 Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
-`read` returns one native transfer, under 4 KiB from a file, so a regular file can return less than the count before its end. POSIX code
-expects whole reads there: EDuke32 silently truncated its data checksum and scripts until its port looped `Bread`. Ports needing whole
-reads loop for now; decide whether file reads loop in libc when another port hits it.
-
 Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
 support). Public O_APPEND is absent, so tee rejects -a, and atomic append needs a native operation
 ([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics, buffered output,
@@ -575,8 +586,9 @@ asynchronous release, deciding who owns the capability before adding retries or 
 ## Narrow libc file metadata
 
 Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`lstat`/`fstat` for ports such as [Links](userland/links.md), but native
-objects report only a kind and (for files) a size, so `struct stat` has only `st_mode` type bits and `st_size`; code reading other fields
-fails to compile rather than seeing invented values.
+objects report type/size plus independently valid identity and modification time
+([metadata contract](interfaces/file-metadata.md)). Callers must check `st_valid`;
+ownership, mode permissions and access/change times remain absent.
 
 - **Sizing opens the file** with READ (or WRITE if READ is denied), so a file with neither right cannot be sized, and on a provider URI
   it performs the request (Links sends provider URIs straight to `fopen`). Review proposed failing with ENODEV there, as `opendir` does.
@@ -587,16 +599,17 @@ fails to compile rather than seeing invented values.
   [accepted contract](userland/libc-portability.md#native-path-checks-and-removal).
 - **Listings** omit `.` and `..`, and a detected concurrent change ends one with EAGAIN. The first ls and mkdir still use libpyxis helpers.
 
-Revisit when native objects gain timestamps or other metadata, a port needs `readlink`, or a port calls `stat` on provider URIs; add
+Revisit when a port needs other metadata, `readlink`, or calls `stat` on provider URIs; add
 fields only for values the native layer reports.
 
 ## File identity across capability paths
 
-The filesystem protocol cannot tell whether two opened file handles name the same file, and path strings cannot (different roots and
-directory paths can reach one object, and a descriptive path is not authority). This blocks reliable `#pragma once` in native TCC, which
-rejects the directive for now ([TCC contract](userland/tcc.md#remaining-limits)); include guards work. Revisit an identity operation when
-needed, defining comparison scope, lifetime and behavior across mounts and replacement, rather than normalizing paths or adding
-`realpath` for TCC.
+The [metadata protocol](interfaces/file-metadata.md) compares live native objects
+while an original reference is held. HOST bind aliases, cross-session comparison
+and continuity after full close remain excluded; unknown provider identity can
+prevent safe comparisons. [TCC](userland/tcc.md#remaining-limits) retains once
+streams and diagnoses unavailable identity. Revisit stronger backing support
+when a consumer needs these excluded comparisons; path normalization cannot supply it.
 
 ## Program location
 
@@ -828,8 +841,9 @@ loguru without its flush thread or signal handlers, smmalloc's per-thread cache 
 tasks left out, and minicoro without multithreading (see [SDL game ports](development/sdl-game-ports.md#behaviour)). Revisit with
 userspace threads, together with sound. The port also works around [libc gaps](../ports/eduke32/README.md#libc-gaps) that need decisions
 first: it keeps its own working directory (no `chdir` or `getcwd`), loops reads because libc `read` returns one native transfer, under
-4 KiB, where POSIX code expects whole reads from files, and matches its data cache on size because `stat` has no modification time.
-Revisit if more ports need a working directory or whole reads. Pyxis displays report no refresh rate, so its frame limiter assumes 60 Hz.
+4 KiB, where POSIX code expects whole reads from files, and still matches its data cache on size;
+it has not adopted the new optional modification time. Revisit timestamp-aware caching when this port is next changed,
+and working directories or whole reads if more ports need them. Pyxis displays report no refresh rate, so its frame limiter assumes 60 Hz.
 
 ## SDL game ports native qualification
 
@@ -1123,10 +1137,11 @@ resource bounds are system-wide, not per space.
 ## Shell redirection side effects and file aliases
 
 File redirection opens all targets before truncating outputs, but creation, truncation and launch are separate operations with no rollback: a failed
-open can leave newly created files and a failed resize or later launch can leave truncated outputs. Redirecting an output onto an input file destroys its
-contents before the child reads them, even through different path aliases, because no same-file identity check exists. stdout and stderr keep independent
+open can leave newly created files and a failed resize or later launch can leave truncated outputs. The shell now proves explicit outputs distinct from
+every stage's FILE stdin before resizing, including capability-path aliases.
+Argument files remain outside this check (`cat file > file` can destroy input). stdout and stderr keep independent
 offsets when both name one file, so their writes can overwrite each other (descriptor duplication and merged output are not implemented). Accepted for the
-first redirection scope; revisit if alias-safe copying or shared-position output becomes a requirement, noting that batch launch promises no filesystem
+redirection scope; revisit argument-file protection or shared-position output when required, noting that batch launch promises no filesystem
 rollback ([shell redirection](userland/shell.md#file-redirection-and-stdin)).
 
 ## Pipe scheduling and resource limits

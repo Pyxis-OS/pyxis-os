@@ -25,6 +25,7 @@
 #define ATOM_VRAM_FLAGS_SHIFT 30u
 #define ATOM_VRAM_NO_RESERVATION 1u
 #define ATOM_VRAM_SRIOV_RESERVATION 2u
+#define ATOM_CAP_POSTED 1u
 #define ATOM_FIRMWARE_V3_1_BYTES 72u
 #define ATOM_FIRMWARE_V3_4_BYTES 108u
 #define ATOM_FIRMWARE_V3_5_BYTES 172u
@@ -389,4 +390,37 @@ void renoir_inventory_firmware(struct pci_address address)
     }
   }
   klog("renoir-inventory: host ATOM scratch is not VRAM; allocator ownership unknown\n");
+}
+
+bool renoir_firmware_qualifies(struct pci_address address, uint64_t gpu_base)
+{
+  if (!inventory.captured || inventory.state != METADATA_OK || inventory.image_limit) {
+    return false;
+  }
+  const struct image_metadata *image = NULL;
+  for (unsigned i = 0; i < inventory.count; ++i) {
+    const struct image_metadata *candidate = &inventory.images[i];
+    if (candidate->address.bus == address.bus && candidate->address.device == address.device &&
+        candidate->address.function == address.function) {
+      if (image) {
+        return false;
+      }
+      image = candidate;
+    }
+  }
+  if (!image || image->rom.state != METADATA_OK || image->master.state != METADATA_OK) {
+    return false;
+  }
+  const struct firmware_metadata *f = &image->firmware;
+  const struct vram_metadata *v = &image->vram;
+  /* Only the inventoried ROM/master/firmware/usage revisions are qualified.
+   * Capability 1 is posted; training or other new capabilities require a new
+   * reservation audit. Never treat unfamiliar metadata as an empty table. */
+  return image->rom.format == 2 && image->rom.content == 2 &&
+    image->master.format == 2 && image->master.content == 1 &&
+    f->table.state == METADATA_OK && f->table.format == 3 && f->table.content == 2 &&
+    f->capability == ATOM_CAP_POSTED && f->mc_base == gpu_base &&
+    v->table.state == METADATA_OK && v->table.format == 2 && v->table.content == 1 &&
+    !v->firmware_flags && !v->firmware_start_kb && !v->firmware_size_kb &&
+    v->driver_start_known && !v->driver_start_kb && !v->driver_size_kb;
 }

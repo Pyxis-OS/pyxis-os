@@ -362,7 +362,11 @@ snapshot or a multi-call transaction.
 `kernel/fs/hostfs.c` connects the client to the existing directory and file
 protocols. Each successful native lookup creates an independently owned wrapper
 with one FUSE lookup reference. It acquires independent read-only and write-only
-open handles lazily as needed; size uses fresh GETATTR. A write never requires
+open handles lazily as needed; size and modification time use fresh GETATTR.
+[Native identity](../interfaces/file-metadata.md) uses a session domain and a
+live mapping of the complete node incarnation. Same-mount hardlinks and repeated
+roots match while held; mapping entries retire with their last native wrapper.
+CREATE/MKDIR reserve local identity storage before mutating the host. A write never requires
 host read permission, nor does a read require write permission. Copying or
 granting a capability retains the same native object. Closing a parent does not invalidate
 children. No host path, node ID or wire structure becomes an application request.

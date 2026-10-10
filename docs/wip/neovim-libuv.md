@@ -1,6 +1,7 @@
 # Neovim on Pyxis
 
-Status: **owner decisions accepted 2026-10-10; task 1 implemented in this PR.**
+Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651.**
+Task 2 is implemented in the current review, with its accepted contract and qualification linked below.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -15,7 +16,7 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | --- | --- | --- | --- |
 | 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Task 1 adds pipe readiness and native try operations** ([pipes](../interfaces/pipes.md#readiness)); libc streams remain blocking, file and provider opens cannot be waited on, and there are no completion tokens. |
 | 2 | User threads | **Unchanged for this purpose** | [Task 1](threads.md#first-task-and-later-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Create/join, TLS, `pthread.h` and thread-safe libc are tasks 2 to 4, unassigned. |
-| 3 | File metadata and identity | **Mostly unchanged** | Libc now has `sys/stat.h` (type and size only), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Still missing: object identity, modification time and ownership ([debt](../technical-debt.md#file-identity-across-capability-paths)), `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
+| 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
 | 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: alternate screen, scroll regions and saved cursor ([TTY subset](../userland/terminal.md#tty-output-controls); mux adds no alternate-screen protocol), non-ASCII input and drawing, and a PTY-style session for child terminals. |
 | 5 | libuv backend | **Unchanged** | No libuv, luv or Neovim recipe exists in `ports`. Libc still lacks `pthread.h`, `poll.h`, `termios.h`, `dlfcn.h`, `sys/socket.h`, `sys/mman.h` and `iconv.h`, so upstream `uv.h` does not compile; the backend needs its own platform layer, not those headers. |
 | 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; none of Lua 5.1, LPeg, luv, libuv, utf8proc, tree-sitter or iconv exists. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
@@ -49,16 +50,16 @@ without Neovim.
    TCP model. The owner can pipe a slow producer into a viewer that shows output
    as it arrives and keeps answering keys, such as `less` following its input;
    today [`less`](../userland/less.md) blocks on a pipe read and has no live
-   refresh. This PR supplies the native operations and helpers, without changing
+   refresh. Task 1 supplies the native operations and helpers, without changing
    consumers. [Qualification and matched costs](../development/experiments/pipe-readiness/README.md)
    cover one and four CPUs, a responsive scratch child-output viewer, and mixed
    pipe/console/process/TCP waits.
-2. [ ] **File identity and modification stamp.** A short contract first (scope across
-   RAM, host and native volumes, lifetime, replacement), then the native query
-   and the libc `stat` fields where a backend reports them. The owner can see
-   the shell refuse to redirect output onto an input file reached by another
-   path ([redirection debt](../technical-debt.md)), and TCC honour
-   `#pragma once`.
+2. [x] **File identity and modification stamp.** Native FILE/DIRECTORY queries
+   and libc validity fields report backend identity/time. The owner can see
+   the shell refuse output onto an aliased FILE stdin, and TCC honour
+   `#pragma once`. See the [accepted contract](#task-2-contract),
+   [metadata reference](../interfaces/file-metadata.md) and
+   [qualification and matched costs](../development/experiments/file-identity/README.md).
 3. [ ] **Terminal profile for a full-screen editor.** Alternate screen, scroll
    region and saved cursor in the framebuffer TTY and the multiplexer, and the
    `TERM` name that advertises exactly what is supported. ASCII only. The owner
@@ -92,6 +93,25 @@ Later, each with its own proposal: swap and backup recovery (needs task 2 and a
 lease policy), jobs and `system()` (extra stream delegation and group stop),
 `:terminal`, UTF-8 rendering, user threads and the pool, tree-sitter parsers,
 LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
+
+### Task 2 contract
+
+**Accepted 2026-10-10; implemented in this review.** The
+[metadata reference](../interfaces/file-metadata.md) is authoritative.
+
+1. Boot-scoped backend domain/object IDs compare while an original reference is
+   held. Rename preserves identity; replacement distinguishes. HOST same-mount
+   hardlinks and repeated roots match; bind aliases and after-full-close
+   comparison are excluded.
+2. Native FILE/DIRECTORY queries preserve independent field validity in libc
+   stat. Real backend modification times only; npfs needs no format change.
+   Unknown metadata leaves type/size stat usable.
+3. Before truncation, the shell proves explicit outputs distinct from every
+   stage's FILE stdin. Different known domains suffice without object IDs;
+   same-domain unavailable identity, unknown domains and query failure refuse.
+   TCC retains one stream per once object until normal/error translation-unit
+   cleanup; borrowed stdin remains caller-owned. Argument files are outside
+   shell protection; identity supplies no mutation lease.
 
 ### Mirrors the owner must provide
 

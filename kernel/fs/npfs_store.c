@@ -4,6 +4,7 @@
 #include <abi/mount.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <kernel/fs/metadata.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -35,6 +36,7 @@ struct npfs_store_volume {
   struct npfs_store_volume *next;
   struct npfs_store_pool *pool;
   struct npfs_volume record;
+  uint64_t domain;
   unsigned slot;
   struct store_free_slot *free_slots;
   struct npfs_store_inode *inodes;
@@ -44,7 +46,7 @@ struct npfs_store_inode {
   struct npfs_store_inode *next;
   struct npfs_store_volume *volume;
   struct npfs_inode record, durable;
-  uint64_t number, generation, durable_size;
+  uint64_t number, generation, durable_size, identity;
   size_t references;
   bool size_dirty;
   struct store_free_slot recycled_slot;
@@ -114,6 +116,14 @@ static void discard_idle_inode(struct npfs_store_inode *, bool);
 static void require_owner(void)
 {
   npfs_require_worker();
+}
+
+static bool allocate_identity(uint64_t *identity)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool allocated = fs_metadata_allocate_id(identity);
+  cpu_restore_interrupts(flags);
+  return allocated;
 }
 
 static void *store_allocate(size_t bytes)
@@ -1195,7 +1205,7 @@ static enum call_status inode_get(struct npfs_store_context *context, struct npf
     store_free(inode);
     return status;
   }
-  if (next_generation == UINT64_MAX) {
+  if (next_generation == UINT64_MAX || !allocate_identity(&inode->identity)) {
     store_free(inode);
     return CALL_LIMIT;
   }
@@ -1239,6 +1249,10 @@ static enum call_status volume_mount(struct npfs_store_context *context, struct 
   struct npfs_store_volume *volume = store_allocate(sizeof(*volume));
   if (!volume) {
     return CALL_NO_MEMORY;
+  }
+  if (!allocate_identity(&volume->domain)) {
+    store_free(volume);
+    return CALL_LIMIT;
   }
   volume->pool = pool;
   volume->slot = slot;
@@ -1351,6 +1365,20 @@ uint64_t npfs_store_kind(const struct npfs_store_inode *inode)
 uint64_t npfs_store_size(const struct npfs_store_inode *inode)
 {
   return inode->record.size;
+}
+
+void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply *info)
+{
+  require_owner();
+  *info = (struct file_info_reply){
+    .valid = FILE_INFO_SIZE_VALID | FILE_INFO_DOMAIN_VALID | FILE_INFO_OBJECT_VALID,
+    .size = inode->record.size,
+    .domain = inode->volume->domain,
+    .object = inode->identity,
+  };
+  if (inode->record.flags & NPFS_TIME_MODIFIED_VALID) {
+    fs_metadata_mtime(inode->record.modified_ns, info);
+  }
 }
 
 bool npfs_store_same_volume(const struct npfs_store_inode *a, const struct npfs_store_inode *b)
@@ -2034,6 +2062,10 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   if (status != CALL_NOT_FOUND) {
     return status == CALL_OK ? CALL_ALREADY_EXISTS : status;
   }
+  uint64_t identity;
+  if (!allocate_identity(&identity)) {
+    return CALL_LIMIT;
+  }
   struct npfs_inode parent_previous = directory->record;
   struct npfs_volume volume_previous = volume->record;
   uint64_t free_previous = pool->free_blocks;
@@ -2121,6 +2153,7 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   }
   child->durable = child->record;
   child->durable_size = 0;
+  child->identity = identity;
   child->generation = ++next_generation;
   directory->durable = directory->record;
   directory->durable_size = directory->record.size;

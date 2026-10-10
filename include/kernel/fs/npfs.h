@@ -28,7 +28,7 @@ struct capability_table;
 
 enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
-  NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_CREATE, NPFS_REMOVE,
+  NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_INFO, NPFS_CREATE, NPFS_REMOVE,
   NPFS_RENAME, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
   NPFS_RAW_INFO, NPFS_RAW_OPEN, NPFS_RAW_READ, NPFS_RAW_WRITE,
   NPFS_RAW_FLUSH, NPFS_RAW_RELEASE, NPFS_RAW_CLAIM,
@@ -44,7 +44,8 @@ enum npfs_job_state {
  * successful ROOT/LOOKUP transfers one object reference, failure transfers none.
  * CAPTURE transfers an owned BSP-only image_capture; captured.size is its byte
  * count. Failure leaves it empty; backing is outside the native wrapper cap. FILESYSTEM_INFO
- * copies retained metadata without disk reads. READ/ENUMERATE publish data
+ * copies retained metadata without disk reads. INFO samples current inode data
+ * for either kind; directory self-metadata needs no content rights. READ/ENUMERATE publish data
  * only on success. CREATE_VOLUME takes the device, partition, name and a
  * caller-generated volume ID in data. Format/backing diagnostics belong to this
  * operation alone. */
@@ -69,6 +70,7 @@ struct npfs_job {
   union {
     uint8_t data[DISK_IO_MAX_BYTES];
     struct directory_filesystem_info info;
+    struct file_info_reply file_info;
     struct disk_info disk_info;
   };
   enum call_status status;

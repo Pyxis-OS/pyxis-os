@@ -595,6 +595,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   case NPFS_READ:
   case NPFS_CAPTURE: required = FILE_RIGHT_READ; break;
   case NPFS_SIZE: required = FILE_RIGHTS; break;
+  case NPFS_INFO: required = directory ? 0 : FILE_RIGHTS; break;
   case NPFS_WRITE:
   case NPFS_RESIZE: required = FILE_RIGHT_WRITE; break;
   case NPFS_SYNC: required = directory ? DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE :
@@ -606,10 +607,11 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
       job->operation == NPFS_REMOVE || job->operation == NPFS_RENAME ||
       job->operation == NPFS_FILESYSTEM_INFO;
   if ((directory_operation && !directory) ||
-      (!directory_operation && job->operation != NPFS_SYNC && directory)) {
+      (!directory_operation && job->operation != NPFS_SYNC &&
+       job->operation != NPFS_INFO && directory)) {
     return CALL_WRONG_TYPE;
   }
-  if (!(job->rights & required)) {
+  if (required && !(job->rights & required)) {
     return CALL_DENIED;
   }
   switch (job->operation) {
@@ -630,6 +632,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   case NPFS_SIZE:
     job->offset = npfs_store_size(node->inode);
+    return CALL_OK;
+  case NPFS_INFO:
+    npfs_store_file_info(node->inode, &job->file_info);
     return CALL_OK;
   case NPFS_CAPTURE: return capture_file(context, job);
   case NPFS_WRITE: {
@@ -714,6 +719,7 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_ENUMERATE:
   case NPFS_READ:
   case NPFS_SIZE:
+  case NPFS_INFO:
   case NPFS_CAPTURE:
   case NPFS_FILESYSTEM_INFO:
   case NPFS_RAW_INFO:
