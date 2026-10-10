@@ -1,8 +1,9 @@
 # Neovim on Pyxis
 
-Status: **proposal, 2026-10-10, awaiting owner decisions.** Nothing here
-authorizes code or a port. The owner wants Neovim as the development editor
-(vi bindings now, clangd later) instead of patching BusyBox vi. The re-check
+Status: **owner decisions accepted 2026-10-10; nothing implemented.** Task 1 is
+assigned to a Codex agent; later tasks start only on the owner's go. The owner
+wants Neovim as the development editor (vi bindings now, clangd later) instead
+of patching BusyBox vi. The re-check
 below is code and document inspection of `origin/main` at `dc91a4c6`; nothing
 was built or booted.
 
@@ -112,20 +113,20 @@ slice builds with `ENABLE_UNIBILIUM=OFF` and `ENABLE_LIBINTL=OFF`. Task 6 also
 needs a native host Lua 5.1 or LuaJIT for Neovim's generators, which the build
 host provides, not the image.
 
-### Owner decisions
+### Accepted decisions
 
-1. **Lua runtime.** Default: PUC Lua 5.1.5, an upstream-supported choice. It
-   needs no executable memory or JIT support, but it is slower and plugins that
-   need LuaJIT's `jit` or FFI will not run. The alternative is LuaJIT, which
-   waits for a native executable-memory transition.
-2. **Event model.** Default: readiness plus try operations, extending `wait_many`
-   as for console, terminals and TCP. It matches libuv's own model and reuses
-   the accepted contract. The alternative is a submission and completion
-   interface, which is larger and would be a second I/O model.
-3. **First-slice scope.** Default: the narrow slice above, with swap and backup
-   off in the packaged configuration, ASCII only and no threads. The alternative
-   adds swap and backup, which needs the identity contract and a lease and
-   recovery policy first.
+1. **Lua runtime.** PUC Lua 5.1.5. It needs no executable memory or JIT support;
+   it is slower, and plugins that need LuaJIT's `jit` or FFI will not run.
+   LuaJIT waits for a native executable-memory transition.
+2. **Event model.** Readiness plus try operations, extending `wait_many` as for
+   console, terminals and TCP. There is no second submission and completion I/O
+   model.
+3. **First-slice scope.** The narrow slice above: ASCII only, swap and backup off
+   in the packaged configuration, and no threads, jobs or `:terminal`. BusyBox
+   vi stays until the owner accepts the slice. Swap and backup need the identity
+   contract and a lease and recovery policy first.
+
+The thread-free bet is checked early, in task 4, not task 6.
 
 ## Investigation of 2026-09-29
 
