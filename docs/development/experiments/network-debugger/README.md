@@ -76,3 +76,13 @@ After bridge/client exit, independent QEMU inspection 119.967 seconds after the
 last valid peer traffic still showed COMPLETE/terminal generation 2, resume
 generation 1 and retained NIC gate 8/generation 2. All probe jobs were stopped;
 this probe stays unmerged.
+
+Unmerged AP probe `c5dd814f` (based on `db71d37a`), ELF SHA-256
+`29a8bd91d34cd4558da71a3d665e412a7457c96a6e167e57ec9e53537d8bcdef`:
+two AP scheduler callers panic after the checkpoint releases, without a barrier.
+On four-CPU Q35/KVM, CPU 1 owned terminal generation 2; CPU 2's backtrace showed
+`await_entry -> enter_stop -> panic`, proving a second terminal origin joined.
+All four CPUs acknowledged generation 2 with no missing flags; continue returned
+E01. At 44 seconds of host wall time after bridge exit, COMPLETE/terminal,
+resume generation 1 and retained NIC gate 8/generation 2 persisted. A separate
+`LOG_UDP=1` repeat is pending to check enabled legacy-fatal coexistence.

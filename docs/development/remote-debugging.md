@@ -115,8 +115,10 @@ stays parked because its setup is fragile; the
 remain available if it is revisited.
 
 The opt-in [network kernel debugger](../wip/network-debugger.md) adds a separate
-read-only all-stop GDB bridge on UDP 2326/localhost TCP 1235. It replaces no
-terminal or log path; early/unsafe faults retain the existing fatal fallback.
+read-only all-stop GDB bridge on UDP 2326/localhost TCP 1235. Healthy boots keep
+terminal/log services. A successful terminal debugger takeover owns the NIC
+and precedes formatted panic/fatal UDP output; early/unsafe faults retain the
+existing fatal fallback.
 
 ## Qualification
 
