@@ -74,8 +74,9 @@ struct endpoint_state {
 };
 
 /* IF=0. Endpoint -> scheduler/retirement locks, never the reverse. No
- * allocation, user copies or parking while held. All published data lives in
- * persistent heap mappings, not another CPU's private kernel stack. */
+ * allocation or parking while held. RECEIVE's bounded user copy holds a short
+ * mapping lease through validation and publication. All published data lives
+ * in persistent heap mappings, not another CPU's private kernel stack. */
 static void lock_endpoint(struct endpoint_state *state)
 {
   while (atomic_exchange_explicit(&state->locked, true, memory_order_acquire)) {
@@ -1049,7 +1050,7 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
 }
 
 static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
-    uintptr_t reply_address, uint8_t *data)
+    uintptr_t reply_address)
 {
   struct endpoint_state *state = endpoint->state;
   struct capability_reservation reservation = {0};
@@ -1155,9 +1156,19 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
       output.grants[i].rights = grants[i + 1].rights;
       output.grants[i].transport = grants[i + 1].transport;
     }
+    struct user_buffer_lease lease;
+    if (!user_buffer_lease_acquire(&lease)) {
+      end_endpoint_update(state, ready_before);
+      capability_reservation_release(&reservation, slots);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (!user_buffer_check(reply_address, sizeof(output) + output.size, USER_BUFFER_WRITE)) {
+      end_endpoint_update(state, ready_before);
+      user_buffer_lease_release(&lease);
+      capability_reservation_release(&reservation, slots);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     handle_t handles[ENDPOINT_GRANTS_MAX + 1];
-    /* Capture bytes before publishing a receipt that a sibling can close. */
-    memcpy(data, record->request, record->request_size);
     /* Move the queue's initial receipt reference and captured attachment grants
      * into the claimed slots. No logical retain runs under the endpoint lock. */
     capability_install_reserved(&reservation, slots, grants, count + 1, handles);
@@ -1174,8 +1185,17 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     record->state = DELIVERY_RECEIVED;
     record->delivered = true;
     record->receipt_handle = output.receipt = handles[0];
+    /* The guard keeps the published receipt from retiring/reusing this record
+     * until its bounded copy finishes; the lease keeps both outputs mapped. */
+    bool copied = copy_reply_to_user(reply_address, &output, sizeof(output),
+        reply_address + sizeof(output), record->request, output.size);
     end_endpoint_update(state, ready_before);
-    return write_packet(reply_address, &output, data, CALL_OK);
+    user_buffer_lease_release(&lease);
+    if (!copied) {
+      capability_close_returned(&process_current()->capabilities, handles, count + 1);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    return (struct syscall_result){CALL_OK, sizeof(output) + output.size};
   }
 }
 
@@ -1190,12 +1210,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
   state->receiving = true;
   unlock_endpoint(state);
 
-  uint8_t *data = kmalloc(ENDPOINT_DATA_MAX);
-  struct syscall_result result = {CALL_NO_MEMORY, 0};
-  if (data) {
-    result = receive_endpoint_owned(endpoint, reply_address, data);
-    kfree(data);
-  }
+  struct syscall_result result = receive_endpoint_owned(endpoint, reply_address);
   lock_endpoint(state);
   state->receiving = false;
   unlock_endpoint(state);

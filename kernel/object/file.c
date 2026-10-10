@@ -102,18 +102,18 @@ static bool fill_holes(struct file_object *file, size_t first, size_t last)
   return true;
 }
 
-/* Copies between the file's pages and a kernel buffer, page by page,
- * through this CPU's scratch slot. Holes read as zeros. */
+/* Copies through this CPU's scratch slot; holes read as zeros. The destination
+ * is kernel storage or a fully validated user range held under a mapping lease. */
 static void copy_out_pages(const struct file_object *file, size_t offset, size_t count,
-    uint8_t *kernel)
+    uint8_t *destination)
 {
   while (count) {
     size_t page = offset / PAGE_SIZE, within = offset % PAGE_SIZE;
     size_t chunk = PAGE_SIZE - within < count ? PAGE_SIZE - within : count;
     phys_addr_t frame = page < file->page_capacity ? file->pages[page] : 0;
     const uint8_t *source = frame ? arch_frame_map(frame) : zero_page;
-    memcpy(kernel, source + within, chunk);
-    kernel += chunk;
+    memcpy(destination, source + within, chunk);
+    destination += chunk;
     if (frame) {
       arch_frame_unmap();
     }
@@ -390,12 +390,7 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
 
-  uint8_t *data = request->capacity ? kmalloc(request->capacity) : NULL;
-  if (request->capacity && !data) {
-    return (struct syscall_result){CALL_NO_MEMORY, 0};
-  }
   if (!file_begin_operation(file)) {
-    kfree(data);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   size_t count = 0;
@@ -405,17 +400,27 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
       count = request->capacity;
     }
   }
-  if (count && file->backing == FILE_RAM) {
-    copy_out_pages(file, request->offset, count, data);
-  } else if (count) {
-    memcpy(data, (const uint8_t *)file->data + request->offset, count);
+  struct user_buffer_lease lease;
+  if (!user_buffer_lease_acquire(&lease)) {
+    file_end_operation(file);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  file_end_operation(file);
-
+  if (!user_buffer_check(reply_address, sizeof(reply) + count, USER_BUFFER_WRITE)) {
+    user_buffer_lease_release(&lease);
+    file_end_operation(file);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  /* Ownership keeps file bytes stable; the short lease keeps the complete
+   * output mapped across all page copies. Neither boundary schedules. */
+  if (count && file->backing == FILE_RAM) {
+    copy_out_pages(file, request->offset, count, (uint8_t *)data_address);
+  } else if (count) {
+    memcpy((void *)data_address, (const uint8_t *)file->data + request->offset, count);
+  }
   reply.read = count;
-  bool copied = copy_reply_to_user(reply_address, &reply, sizeof(reply),
-      data_address, data, count);
-  kfree(data);
+  bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+  user_buffer_lease_release(&lease);
+  file_end_operation(file);
   return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER,
     copied ? sizeof(reply) + reply.read : 0};
 }
