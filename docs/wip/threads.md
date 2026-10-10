@@ -7,7 +7,9 @@ process remains. Task 2, admitted call references and CLOSE, is merged in
 [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
 [qualification](../development/experiments/threads-task2/README.md) records its
 build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
-owner-assigned and implemented on this branch; qualification is in progress. The
+owner-assigned and implemented on this branch;
+[qualification](../development/experiments/threads-task3/README.md) records the
+matched comparison and 1/4-CPU inspection. The
 remaining proposal originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
@@ -234,7 +236,7 @@ merely completion of task 2.
 2. [x] **Admitted call references and CLOSE.** Atomic handle resolution into owned storage/rights, detached-generation close and audited logical close effects; one user task and no public API change. See [qualification](../development/experiments/threads-task2/README.md).
 
    Owner can inspect call/close lifetime and run ordinary applications without borrowed-slot storage surviving a call.
-3. [ ] **Shared-table delivery.** Growth/atomic installations, reply slot reservations, readiness/COPY and BSP table-loan replacement; still one user task.
+3. [x] **Shared-table delivery.** Growth/atomic installations, reply slot reservations, readiness/COPY and BSP table-loan replacement; still one user task. See [qualification](../development/experiments/threads-task3/README.md).
 
    Owner can inspect preserved authority, delivery-capacity admission and failure unwind before siblings are enabled.
 4. [ ] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task.
