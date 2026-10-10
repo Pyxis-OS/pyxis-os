@@ -183,7 +183,8 @@ prerequisites and result are clear.
   Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 - [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
   [Go runtime investigation](go-runtime.md) and the
-  [Neovim/libuv investigation](neovim-libuv.md).
+  [Neovim milestone proposal](neovim-libuv.md), with its re-check of the libuv
+  investigation.
 - [Building software on Pyxis](source-builds.md): after hosted Clang, ports and
   non-rescue userland build from source on the installed system, Gentoo style,
   until a package manager exists.
