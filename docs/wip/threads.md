@@ -3,10 +3,12 @@
 Owner-accepted defaults, 2026-10-10, subject to the native-kernel condition below.
 Task 1, process lifetime, is merged in
 [#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); exactly one user task per
-process remains. Task 2, admitted call references and CLOSE, is implemented in
-this change; [qualification](../development/experiments/threads-task2/README.md)
-records its build, debugger and matched-workload evidence. Task 3 still needs a
-separate owner go. The remaining proposal originally inspected Pyxis `4236efc7`
+process remains. Task 2, admitted call references and CLOSE, is merged in
+[#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
+[qualification](../development/experiments/threads-task2/README.md) records its
+build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
+owner-assigned; its accepted contracts below are not yet implemented. The
+remaining proposal originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
@@ -90,6 +92,18 @@ sleeping, consuming or releasing that reservation exactly once. A free-slot
 count is not a reservation. Preserve atomic bulk installation/rollback and
 existing uncertain-outcome rules; do not turn a committed endpoint reply into
 an impossible CAP_FULL assertion or silently discard grants.
+
+**Task 3 accepted details, 2026-10-10.** COPY, launch sources and endpoint
+attachments retain prospective grant authority outside the table guard, then
+recheck exact source generation, object and authority under it. Stale sources
+fail and unwind; successful capture owns a grant surviving later source CLOSE.
+Ordinary CALL/readiness keep storage-only references. Successful REPLY validates
+destination policy before committing completion, then moves already-owned grants
+into reserved slots without another retain. Rejection leaves the receipt for
+correction; successful REPLY cannot fail collection for capacity. This never
+implicitly rolls back provider mutations and preserves timeout/closure
+uncertainty. [Task 3 qualification](../development/experiments/threads-task3/README.md)
+records the baseline and later implementation evidence separately.
 
 **VM admission.** Track root activation and kernel mapping borrowers per process.
 Short checked copies hold a mapping lease; fixed inputs are captured once and
