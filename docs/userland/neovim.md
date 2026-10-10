@@ -73,6 +73,23 @@ the automatic socket listener is omitted. Legacy Vimscript syntax needs no
 parser modules. Arbitrary plugins can encounter these limits. Font rendering
 remains the terminal's ASCII profile.
 
+`vim.uv.os_uname()` reports `Pyxis`, the running kernel's source commit and
+name, and `x86_64`, and `vim.uv.os_gethostname()` the boot's hostname, both from
+the optional SYSTEM_INFO grant in the bundle manifest (without it the commit and
+name are empty). `os_homedir()` and `os_tmpdir()` return `home://` and `tmp://`
+when the shell passed those roots. They are scheme roots: joining a name with a
+slash gives `home:///name`. `os_get_passwd()`, process and user IDs and
+priorities, CPU, memory and load queries are refused and return nil, and the
+runtime tolerates that where it checks. Neovim's insert-mode Tab mapping loads
+`vim.snippet` and with it `vim.lsp`, which index `os_uname()` while loading;
+the LSP client still has no TCP or file-watch support. The editor server
+receives SYSTEM_INFO from the client, since Lua runs there. `vim.fs.normalize('~')`
+returns `home:/`, because that function strips one trailing slash from the home
+root, and `:checkhealth` stops early with E5009 because runtime scheme paths do
+not match in `vim.fs.relpath`. The
+[libuv notes](../../ports/libuv/README.md#operating-system-queries) list each
+query's native source.
+
 [First-slice qualification](../development/experiments/neovim-first-slice/README.md)
 and [static-parser qualification](../development/experiments/neovim-static-parsers/README.md)
 record editing, highlighting, safe-save checks, startup time and cleanup.
