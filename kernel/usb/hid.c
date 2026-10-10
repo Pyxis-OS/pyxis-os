@@ -166,7 +166,7 @@ static bool keyboard_snapshot(const uint8_t *report, size_t bytes, bool keys[KEY
                                bool *unresolved)
 {
   *unresolved = false;
-  if (bytes != USB_HID_KEYBOARD_BYTES || report[1]) {
+  if (bytes != USB_HID_KEYBOARD_BYTES) {
     return false;
   }
   memset(keys, 0, KEY_COUNT * sizeof(*keys));

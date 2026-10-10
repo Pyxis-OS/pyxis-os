@@ -430,13 +430,14 @@ void input_pointer_drain(void)
     --pointer_count;
     struct input_source *source = pending.source;
     if (pending.loss) {
+      uint32_t previous_buttons = pointer_buttons(false) | source->buttons;
       source->buttons = 0;
       if (pending.revoke) {
         for (struct input_source *other = sources; other; other = other->next) {
           other->suppressed_buttons |= other->buttons;
         }
         pointer_source_lost(pointer_buttons(false));
-      } else {
+      } else if (previous_buttons != pointer_buttons(false)) {
         pointer_handle_input(&(struct pointer_input_report){
             .buttons = pointer_buttons(false), .suppressed_buttons = pointer_buttons(true)});
       }
