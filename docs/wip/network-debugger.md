@@ -249,7 +249,10 @@ allocate no debugger stacks, snapshots, windows or identity task; the ordinary
 worker has no debugger iteration polling. New normal log lines are absent.
 Unexpected NMIs retain fatal reporting.
 
-A GS-independent self-NMI captures the BSP return frame and moves service onto
+A single atomic PREPARED-to-PENDING transition claims entry before publishing
+its generation. Secondary terminal origins join the active stop; after a
+recoverable release they retry their preserved fault instead of taking the
+legacy NIC path. A GS-independent self-NMI captures the BSP return frame and moves service onto
 its IST; no GS-base rewrite occurs. A terminal origin may forward from an AP,
 retaining its actual fault frame, root, GS bases and CR2 separately from the NMI
 return frame. The BSP sends NMIs to peers. COMPLETE requires every CPU's matching
@@ -333,6 +336,8 @@ Unsupported widths, addresses, writes and control requests return errors.
 Normal `continue` has no address/signal argument; GDB waits for the next terminal
 stop in the same boot/image. Running Ctrl+C is unavailable in task 3. GDB/bridge
 exit stops heartbeats, allowing ordinary idle release; detach/kill remain refused.
+A bound terminal stop retains its session until reboot: losing the bridge/client
+requires a fresh PXE boot for another attachment, and never resumes the kernel.
 Retries use 250 ms stop-and-wait transport and a separate command identity/cache,
 so retransmitted device reads are not reissued. RELEASED gets a bounded 750 ms
 notice opportunity; unreachable peers cannot prevent expiry. Hardware restoration

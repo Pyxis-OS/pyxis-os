@@ -48,3 +48,28 @@ before kernel entry with QEMU's default CD I/O path; it was excluded from kernel
 results. A fresh CD drive with `aio=threads` booted normally.
 
 Raw interactive records: `pyxis-debug-network/build/qualification/`.
+
+One-CPU Q35/KVM passed admitted RNG MMIO (status 0x0f independently checked),
+known physical RAM and PCI reads, and refusals of the selected transport's
+BAR/DMA/PCI function, unknown MMIO, invalid configuration offsets and null virtual
+RAM. A 46-second quiet attached interval stayed COMPLETE. Pausing the bridge for
+16 seconds retained an unacknowledged reply and recovered one reported result
+on restart; hardware-read executions were not counted. Bridge exit subsequently
+restored PREPARED, NIC ownership zero, no outstanding debug TX and successful
+ordinary remote echo. These are functional checks, not performance measurements.
+
+Corrected code `e05a3e71` builds normally (ELF SHA-256
+`b04f5ebfb63db91f2c8871b2d1db9c3c10a82b1e54b5248f3a2b79dddef8966c`);
+four-CPU attachment, MMIO, addressed/signal-continue refusals and ordinary
+continue/network recovery passed again. RSP memory capacity now matches its
+advertised packet budget. Entry uses one atomic phase authority; secondary
+terminal origins cannot claim the legacy fatal NIC during publication/rearming.
+
+Unmerged BSP panic probe `probe/debug-network-panic-bsp` at `7ba11977`, same
+code plus a one-line panic after the checkpoint resumes, ELF SHA-256
+`2375ae4fc6f6272c92eb595272edf02672f36786f5f3f0d9d7f934a9b7cf65eb`:
+checkpoint generation 1 continued; the same GDB connection rediscovered terminal
+generation 2 and reported SIGABRT. Four CPU frames and the genuine panic call
+stack were readable. A 1024-byte snapshot dump matched an independent QEMU GDB
+dump byte-for-byte, spanning pages/chunks. Terminal continue was refused.
+Transport-loss terminal retention is being inspected before stopping this probe.
