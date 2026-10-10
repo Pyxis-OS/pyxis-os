@@ -2384,10 +2384,9 @@ bool usb_host_hid_root_present(const struct usb_host_controller *controller, uns
     return false;
   }
   uint32_t status = read32(port_register(controller, port), 0);
-  unsigned speed = (status >> XHCI_PORT_SPEED_SHIFT) & XHCI_PORT_SPEED_MASK;
-  enum usb_speed classified = controller->ports[port].speeds[speed].link.speed;
-  return (status & XHCI_PORT_CONNECTED) && !(status & XHCI_PORT_OVER_CURRENT) &&
-    (classified == USB_SPEED_UNKNOWN || classified == USB_SPEED_LOW || classified == USB_SPEED_FULL);
+  /* USB 2 Port Speed is invalid before reset, including nonzero values.
+   * Attachment classifies the reset link before admitting a device slot. */
+  return (status & XHCI_PORT_CONNECTED) && !(status & XHCI_PORT_OVER_CURRENT);
 }
 
 enum usb_result usb_host_hid_claim(struct usb_host_device *device)
