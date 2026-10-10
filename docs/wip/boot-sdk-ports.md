@@ -25,7 +25,8 @@ status belong in the milestone document and the PR.
   two-surface GOP page flips (#631, #632, #638, #647); normal flips and
   Quake and Chocolate Quake play natively qualified, default off, with the
   [remaining qualification](../technical-debt.md#renoir-flip-backend-qualification)
-  and a separate [cheaper-polling proposal](renoir-flip-polling.md). Presentation
+  and [poll-cost qualification](../development/experiments/renoir-poll-cost/README.md)
+  (about 67% less BSP observation elapsed per frame, owner-run A–B–A–B). Presentation
   [timing and pacing](presentation-timing.md) keeps its unassigned step 3.
 - [Cheaper timekeeping](../kernel/timekeeping.md#clock-reads-in-timer-handling),
   2026-10-10: fewer clock reads per timer event (#571) and the TSC with HPET

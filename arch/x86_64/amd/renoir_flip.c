@@ -125,6 +125,8 @@ static struct {
   bool prepared, submitted_once, metrics;
   uint64_t submissions, confirmations, polls, timeouts, wait_total, wait_max;
   uint64_t validation_count, validation_total, validation_max;
+  uint64_t submit_validation_count, submit_validation_total, submit_validation_max;
+  uint64_t light_count, light_total, light_max;
 } flip;
 
 static void snapshot_layout(struct layout_state *s)
@@ -650,7 +652,15 @@ enum renoir_flip_state renoir_flip_submit(void)
   KASSERT(flip.state == RENOIR_FLIP_READY);
   struct hubp_state h;
   bool unstable;
-  if (!current_state(&h, &unstable) || unstable || (h.flip & FLIP_PENDING) ||
+  uint64_t started = flip.metrics ? arch_monotonic_ns() : 0;
+  bool valid = current_state(&h, &unstable);
+  if (flip.metrics) {
+    uint64_t elapsed = arch_monotonic_ns() - started;
+    ++flip.submit_validation_count;
+    flip.submit_validation_total += elapsed;
+    flip.submit_validation_max = MAX(flip.submit_validation_max, elapsed);
+  }
+  if (!valid || unstable || (h.flip & FLIP_PENDING) ||
       h.primary != flip.addresses[flip.front] || h.earliest != flip.addresses[flip.front]) {
     fail("submission ownership/layout changed", "submit");
     return flip.state;
@@ -683,11 +693,60 @@ enum renoir_flip_state renoir_flip_submit(void)
   return flip.state;
 }
 
+struct flip_observation {
+  uint32_t control;
+  uint64_t earliest;
+};
+
+static struct flip_observation observe_flip(void)
+{
+  unsigned offset = flip.hubp * HUBP_STRIDE;
+  uint32_t control = renoir_read_register(HUBP_FLIP_CONTROL + offset);
+  uint32_t low = renoir_read_register(HUBP_EARLIEST_LOW + offset);
+  uint32_t high = renoir_read_register(HUBP_EARLIEST_HIGH + offset);
+  return (struct flip_observation){
+    .control = control,
+    .earliest = low | ((uint64_t)(high & ADDRESS_HIGH_MASK) << 32),
+  };
+}
+
 enum renoir_flip_state renoir_flip_poll(void)
 {
   if (flip.state != RENOIR_FLIP_PENDING && flip.state != RENOIR_FLIP_FALLBACK &&
       flip.state != RENOIR_FLIP_READY) {
     return flip.state;
+  }
+  bool unexpected = false;
+  if (flip.state == RENOIR_FLIP_PENDING) {
+    ++flip.polls;
+    ++flip.request_polls;
+    uint64_t started = flip.metrics ? arch_monotonic_ns() : 0;
+    struct flip_observation a = observe_flip();
+    struct flip_observation b = observe_flip();
+    bool stable = a.earliest == b.earliest && !((a.control ^ b.control) & FLIP_PENDING);
+    uint32_t inherited = flip.inherited.registers.hubp[flip.hubp].flip;
+    bool expected = owns(a.earliest) && owns(b.earliest) &&
+      !((a.control ^ inherited) & ~(FLIP_PENDING | FLIP_IMMEDIATE)) &&
+      !((b.control ^ inherited) & ~(FLIP_PENDING | FLIP_IMMEDIATE));
+    unexpected = !expected;
+    uint64_t now = arch_monotonic_ns();
+    if (flip.metrics) {
+      uint64_t elapsed = now - started;
+      ++flip.light_count;
+      flip.light_total += elapsed;
+      flip.light_max = MAX(flip.light_max, elapsed);
+      if (unexpected) {
+        klog("renoir-flip: check=light_observation unexpected control=%x/%x inherited=%x earliest=%lx/%lx owned=%lx/%lx\n",
+            a.control, b.control, inherited, a.earliest, b.earliest,
+            flip.addresses[0], flip.addresses[1]);
+      }
+    }
+    /* A light observation can only keep a write-free request pending. Every
+     * completion, timeout or unexpected tuple still needs the full check. */
+    if (expected && now < flip.deadline && flip.request_polls < RENOIR_POLL_LIMIT &&
+        (!stable || (b.control & FLIP_PENDING) || b.earliest != flip.addresses[flip.requested])) {
+      return flip.state;
+    }
   }
   struct hubp_state h;
   bool unstable;
@@ -699,7 +758,7 @@ enum renoir_flip_state renoir_flip_poll(void)
     flip.validation_total += elapsed;
     flip.validation_max = MAX(flip.validation_max, elapsed);
   }
-  if (!valid) {
+  if (!valid || unexpected) {
     fail("poll ownership/layout changed", "poll");
     return flip.state;
   }
@@ -710,12 +769,12 @@ enum renoir_flip_state renoir_flip_poll(void)
     }
     return flip.state;
   }
-  ++flip.polls;
   if (flip.state == RENOIR_FLIP_FALLBACK) {
+    ++flip.polls;
     return flip.state;
   }
   uint64_t now = arch_monotonic_ns();
-  if (now >= flip.deadline || ++flip.request_polls >= RENOIR_POLL_LIMIT) {
+  if (now >= flip.deadline || flip.request_polls >= RENOIR_POLL_LIMIT) {
     flip.state = RENOIR_FLIP_FALLBACK;
     ++flip.timeouts;
     klog("renoir-flip: timeout; GPU writes stopped; both surfaces pinned; dual unsynchronized copies\n");
@@ -735,8 +794,18 @@ enum renoir_flip_state renoir_flip_poll(void)
       klog("renoir-flip: metrics submitted=%lu confirmed=%lu polls=%lu timeouts=%lu wait-mean=%lu ns wait-max=%lu ns front=%lx\n",
           flip.submissions, flip.confirmations, flip.polls, flip.timeouts,
           flip.wait_total / flip.confirmations, flip.wait_max, h.earliest);
-      klog("renoir-flip: metrics validation-count=%lu validation-mean=%lu ns validation-max=%lu ns\n",
-          flip.validation_count, flip.validation_total / flip.validation_count, flip.validation_max);
+      klog("renoir-flip: metrics validation-count=%lu validation-mean=%lu ns validation-max=%lu ns validation-total=%lu ns\n",
+          flip.validation_count, flip.validation_total / flip.validation_count, flip.validation_max,
+          flip.validation_total);
+      klog("renoir-flip: metrics submit-validation-count=%lu submit-validation-mean=%lu ns submit-validation-max=%lu ns submit-validation-total=%lu ns\n",
+          flip.submit_validation_count, flip.submit_validation_total / flip.submit_validation_count,
+          flip.submit_validation_max, flip.submit_validation_total);
+      klog("renoir-flip: metrics light-count=%lu light-mean=%lu ns light-max=%lu ns light-total=%lu ns\n",
+          flip.light_count, flip.light_count ? flip.light_total / flip.light_count : 0,
+          flip.light_max, flip.light_total);
+      klog("renoir-flip: metrics poll-observation-per-frame=%lu ns bsp-observation-per-frame=%lu ns\n",
+          (flip.validation_total + flip.light_total) / flip.confirmations,
+          (flip.validation_total + flip.light_total + flip.submit_validation_total) / flip.confirmations);
     }
   }
   return flip.state;
