@@ -69,7 +69,11 @@ name; the caller owns its removal. Reserved names are never automatically delete
 A failure to unlink a temporary file fails the operation and can leave a named
 file behind; abrupt death can also leave one between creation and removal.
 
-`os.time()` returns wall-clock seconds; a calendar table argument is rejected.
+`os.time()` returns wall-clock seconds. `os.time(table)` converts a date table
+with libc's [`mktime`](timezones.md#c-interface) and normalizes its fields, as
+upstream does; a wall time in a DST gap, or in a fold that `isdst` does not
+settle, raises upstream's "time result cannot be represented" error. Strings
+compare with libc's `strcoll`, in byte order.
 `os.date` formats through real C-locale `strftime`, including UTC with `!`, date
 tables with `*t`, numeric offsets and actual timezone abbreviations. Local time
 uses the inherited `TZ` and packaged [TZif data](timezones.md). Clock or zone
