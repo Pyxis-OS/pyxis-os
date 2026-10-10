@@ -64,6 +64,18 @@ static void handle_space_input(void);
 static size_t viewport_first;
 /* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
 static bool battery_shown;
+static atomic_uint_fast64_t navigation_generation;
+static bool observed_battery_valid, observed_battery_present;
+static uint8_t observed_battery_percent;
+
+struct presentation_generations {
+  struct space *space;
+  uint64_t navigation, tty, graphics, background, pointer, volume, power, geometry;
+  size_t viewport;
+  bool overlay;
+};
+static struct presentation_generations presented_generations;
+static bool generations_presented;
 
 static struct framebuffer *spaces_nav_fb;
 /* One text row of the space area. The cursor's row is composed here, cursor
@@ -332,6 +344,7 @@ struct space *space_create(const char *name, const char *title, uint64_t *ceilin
    * complete node at the tail. */
   __atomic_store_n(&last_space->next, space, __ATOMIC_RELEASE);
   last_space = space;
+  atomic_fetch_add(&navigation_generation, 1);
   return space;
 }
 
@@ -386,8 +399,11 @@ bool space_set_title(struct space *space, const char *title, size_t length)
 
   uint64_t flags = cpu_save_interrupts();
   lock_title(space);
-  memcpy(space->title, title, length);
-  space->title[length] = '\0';
+  if (strlen(space->title) != length || memcmp(space->title, title, length)) {
+    memcpy(space->title, title, length);
+    space->title[length] = '\0';
+    atomic_fetch_add(&navigation_generation, 1);
+  }
   unlock_title(space);
   cpu_restore_interrupts(flags);
   return true;
@@ -932,7 +948,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
 
 /* Composed from the overlay alone: no space frame or TTY, no bar and no
  * output lock, so a wedged program or TTY writer cannot hold it back. */
-static void present_power_overlay(void)
+static bool present_power_overlay(const struct pointer_frame *pointer)
 {
   uint64_t flags = cpu_save_interrupts();
   power_overlay_update();
@@ -944,19 +960,15 @@ static void present_power_overlay(void)
     volume_ui_end_frame(false);
     cpu_restore_interrupts(flags);
     screen_capture_finish(false);
-    return;
+    return false;
   }
-  flags = cpu_save_interrupts();
-  struct pointer_frame pointer;
-  pointer_frame_snapshot(&pointer);
-  cpu_restore_interrupts(flags);
   for (size_t top = 0; top < screen->height; top += cursor_row_fb->height) {
     power_overlay_draw_band(cursor_row_fb, top, screen->width, screen->height);
     size_t rows = MIN(cursor_row_fb->height, screen->height - top);
-    pointer_present_copy(screen, &pointer, top * screen->pitch,
+    pointer_present_copy(screen, pointer, top * screen->pitch,
         (const void *)cursor_row_fb->address, rows * screen->pitch);
   }
-  bool presented = display_end_frame(&pointer);
+  bool presented = display_end_frame(pointer);
   while (display_frame_pending()) {
     presented = display_frame_poll();
     if (display_frame_pending()) {
@@ -969,9 +981,64 @@ static void present_power_overlay(void)
   volume_ui_end_frame(false);
   cpu_restore_interrupts(flags);
   screen_capture_finish(presented);
-  flags = cpu_save_interrupts();
-  pointer_frame_release(&pointer);
+  return presented;
+}
+
+/* Sample under each input's existing owner. Only the captured generations are
+ * acknowledged after successful completion; intervening writers stay dirty. */
+static bool presentation_snapshot(struct presentation_generations *generation,
+    struct pointer_frame *pointer, bool *capture)
+{
+  uint64_t flags = cpu_save_interrupts();
+  power_overlay_update();
+  volume_ui_update();
+  *generation = (struct presentation_generations){
+    .power = power_overlay_generation(),
+    .geometry = caelum_space->tty->geometry_generation,
+    .overlay = power_overlay_shown(),
+  };
+  pointer_frame_snapshot(pointer);
+  generation->pointer = pointer->generation;
+  *capture = screen_capture_pending();
+  if (!generation->overlay) {
+    struct acpi_battery_status battery = acpi_battery_status();
+    if (!observed_battery_valid || observed_battery_present != battery.present ||
+        (battery.present && observed_battery_percent != battery.percent)) {
+      atomic_fetch_add(&navigation_generation, 1);
+      observed_battery_valid = true;
+      observed_battery_present = battery.present;
+      observed_battery_percent = battery.percent;
+    }
+    generation->space = active_space;
+    generation->navigation = atomic_load(&navigation_generation);
+    generation->viewport = viewport_first;
+    generation->volume = volume_ui_generation();
+    bool locked = log_begin();
+    if (!locked) {
+      pointer_frame_release(pointer);
+      cpu_restore_interrupts(flags);
+      return false;
+    }
+    if (active_space->display->visible) {
+      generation->graphics = active_space->display->visual_generation;
+      generation->background = active_space->tty->background_generation;
+    } else {
+      generation->tty = active_space->tty->visual_generation;
+    }
+    log_end(locked);
+  }
   cpu_restore_interrupts(flags);
+  return true;
+}
+
+static bool presentation_unchanged(const struct presentation_generations *g)
+{
+  const struct presentation_generations *p = &presented_generations;
+  return generations_presented && g->space == p->space &&
+      g->navigation == p->navigation && g->viewport == p->viewport &&
+      g->tty == p->tty && g->graphics == p->graphics && g->background == p->background &&
+      g->pointer == p->pointer && g->volume == p->volume &&
+      g->power == p->power && g->geometry == p->geometry && g->overlay == p->overlay;
 }
 
 void space_present()
@@ -979,8 +1046,30 @@ void space_present()
   if (!presenting && !begin_presenting()) {
     return;
   }
-  if (power_overlay_shown()) {
-    present_power_overlay();
+  struct presentation_generations generation;
+  struct pointer_frame pointer_snapshot;
+  bool capture;
+  if (!presentation_snapshot(&generation, &pointer_snapshot, &capture)) {
+    return;
+  }
+  if (!capture && presentation_unchanged(&generation)) {
+    if (!display_skip_frame()) {
+      generations_presented = false;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    pointer_frame_release(&pointer_snapshot);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  if (generation.overlay) {
+    bool presented = present_power_overlay(&pointer_snapshot);
+    generations_presented = presented;
+    if (presented) {
+      presented_generations = generation;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    pointer_frame_release(&pointer_snapshot);
+    cpu_restore_interrupts(flags);
     return;
   }
   const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
@@ -994,13 +1083,15 @@ void space_present()
     drawn_nav_valid = false;
     volume_ui_end_frame(false);
     screen_capture_finish(false);
+    generations_presented = false;
+    uint64_t flags = cpu_save_interrupts();
+    pointer_frame_release(&pointer_snapshot);
+    cpu_restore_interrupts(flags);
     return;
   }
   uint64_t flags = cpu_save_interrupts();
-  struct space *space = active_space;
+  struct space *space = generation.space;
   struct display_frame *frame = display_snapshot(space->display);
-  struct pointer_frame pointer_snapshot;
-  pointer_frame_snapshot(&pointer_snapshot);
   const struct pointer_frame *pointer = &pointer_snapshot;
   cpu_restore_interrupts(flags);
   volume_ui_present_copy(screen, pointer, 0,
@@ -1092,6 +1183,10 @@ frame_done:
     drawn_nav_width = nav_width;
   }
   drawn_nav_valid = presented;
+  generations_presented = presented;
+  if (presented) {
+    presented_generations = generation;
+  }
   volume_ui_end_frame(presented);
   cpu_restore_interrupts(flags);
   if (frame) {
@@ -1108,6 +1203,7 @@ frame_done:
 void space_display_changed(struct space *space, bool discard_input)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  atomic_fetch_add(&navigation_generation, 1);
   bool terminal_layer = space->display->presented && !space->display->visible;
   keyboard_set_layer(space->keyboard, terminal_layer, discard_input);
   pointer_space_changed(space);
@@ -1123,6 +1219,7 @@ static void switch_space(struct space *next)
     keyboard_focus(active_space->keyboard, false);
     struct space *previous = active_space;
     active_space = next;
+    atomic_fetch_add(&navigation_generation, 1);
     keyboard_focus(next->keyboard, true);
     pointer_space_changed(previous);
     pointer_space_changed(next);
@@ -1372,6 +1469,9 @@ void space_present_task(void *argument)
   for (;;) {
     handle_space_input();
     space_pointer_sync_input();
+    if (available) {
+      available = display_service();
+    }
     if (available) {
       /* A resize takes the output lock; it waits until the overlay closes. */
       if ((presenting || begin_presenting()) && !power_overlay_shown()) {

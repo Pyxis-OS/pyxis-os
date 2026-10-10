@@ -86,9 +86,11 @@ static void draw_cell(struct tty *tty, uint8_t glyph, uint16_t style, size_t x, 
 static void put_cell(struct tty *tty, char c, size_t x, size_t y, uint16_t style)
 {
   uint8_t glyph = glyph_index(tty->font, c);
+  bool changed = true;
   if (tty->cells) {
     KASSERT(x < tty->width && y < tty->height);
     size_t index = y * tty->width + x;
+    changed = tty->cells[index] != glyph || tty->styles[index] != style;
     if ((tty->selection_valid || tty->selection_dragging) && tty->cells[index] != glyph) {
       size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
       size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
@@ -100,6 +102,9 @@ static void put_cell(struct tty *tty, char c, size_t x, size_t y, uint16_t style
     tty->styles[index] = style;
   }
   draw_cell(tty, glyph, style, x, y);
+  if (changed) {
+    ++tty->visual_generation;
+  }
 }
 
 static void blank_rows(struct tty *tty, size_t first, size_t end)
@@ -124,6 +129,9 @@ static void move_rows(struct tty *tty, size_t destination, size_t source, size_t
         count * tty->width);
     memmove(tty->styles + destination * tty->width, tty->styles + source * tty->width,
         count * tty->width * sizeof(*tty->styles));
+  }
+  if (count && destination != source) {
+    ++tty->visual_generation;
   }
 }
 
@@ -276,6 +284,7 @@ static void select_screen(struct tty *tty, bool alternate)
   tty->other_cells = cells;
   tty->other_styles = styles;
   tty->alternate = alternate;
+  ++tty->visual_generation;
   tty_selection_clear(tty);
   reset_region(tty);
   tty->wrap_pending = false;
@@ -444,7 +453,7 @@ static void execute_escape(struct tty *tty, unsigned char byte)
   }
 }
 
-void tty_put_char(struct tty *tty, char c)
+static void put_char(struct tty *tty, char c)
 {
   unsigned char byte = (unsigned char)c;
   if (byte == 0x1b) {
@@ -521,6 +530,22 @@ void tty_put_char(struct tty *tty, char c)
   }
 }
 
+void tty_put_char(struct tty *tty, char c)
+{
+  uint16_t x = tty->x;
+  uint16_t y = tty->y;
+  bool visible = tty->cursor_visible;
+  uint32_t background = tty->bg;
+  put_char(tty, c);
+  if (visible != tty->cursor_visible ||
+      (tty->cursor_visible && (x != tty->x || y != tty->y))) {
+    ++tty->visual_generation;
+  }
+  if (background != tty->bg) {
+    ++tty->background_generation;
+  }
+}
+
 void tty_attach_storage(struct tty *tty, uint8_t *storage)
 {
   size_t cells = (size_t)tty->width * tty->height;
@@ -545,6 +570,9 @@ void tty_attach_storage(struct tty *tty, uint8_t *storage)
 
 void tty_clear(struct tty *tty)
 {
+  if (tty->cursor_visible && (tty->x || tty->y)) {
+    ++tty->visual_generation;
+  }
   blank_rows(tty, 0, tty->height);
   tty->x = 0;
   tty->y = 0;
@@ -554,9 +582,14 @@ void tty_clear(struct tty *tty)
 
 void tty_fresh_line(struct tty *tty)
 {
+  uint16_t x = tty->x;
+  uint16_t y = tty->y;
   tty->escape_state = TTY_TEXT;
   if (tty->x || tty->wrap_pending) {
     tty_newline(tty);
+  }
+  if (tty->cursor_visible && (x != tty->x || y != tty->y)) {
+    ++tty->visual_generation;
   }
 }
 
@@ -644,10 +677,14 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
   reset_region(tty);
   tty->wrap_pending = false;
   ++tty->geometry_generation;
+  ++tty->visual_generation;
 }
 
 void tty_selection_clear(struct tty *tty)
 {
+  if (tty->selection_valid) {
+    ++tty->visual_generation;
+  }
   tty->selection_anchor = 0;
   tty->selection_endpoint = 0;
   tty->selection_valid = false;
@@ -700,11 +737,16 @@ void tty_selection_input(struct tty *tty, int64_t x, int64_t y, bool pressed, bo
   bool same_cell = x >= 0 && y >= 0 &&
       (uint64_t)x / tty->font->width == tty->selection_anchor % tty->width &&
       (uint64_t)y / tty->font->height == tty->selection_anchor / tty->width;
+  bool valid = tty->selection_valid;
+  size_t old_endpoint = tty->selection_endpoint;
   if (held && !same_cell) {
     tty->selection_valid = true;
   }
   if (tty->selection_valid) {
     tty->selection_endpoint = endpoint;
+    if (!valid || old_endpoint != endpoint) {
+      ++tty->visual_generation;
+    }
   }
   if (!held) {
     if (tty->selection_valid) {

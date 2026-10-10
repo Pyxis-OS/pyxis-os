@@ -20,6 +20,7 @@ struct pointer_input_report {
 /* Immutable image lease, retained until the matching frame has finished.
  * Static kernel defaults have no image reference. Coordinates are physical. */
 struct pointer_frame {
+  uint64_t generation;
   int64_t x, y;
   const uint8_t *pixels;
   uint32_t width, height, hotspot_x, hotspot_y;
@@ -51,6 +52,7 @@ void pointer_surface_ended(struct space *space);
 void pointer_subscription_started(struct pointer_object *pointer);
 void pointer_subscription_ended(struct pointer_object *pointer);
 void pointer_terminal_view_changed(struct pointer_object *pointer);
+/* Snapshot generation advances only when visible pointer pixels change. */
 void pointer_frame_snapshot(struct pointer_frame *frame);
 void pointer_frame_release(struct pointer_frame *frame);
 void pointer_image_release(struct pointer_image *image);

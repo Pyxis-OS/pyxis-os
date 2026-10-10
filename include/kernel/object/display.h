@@ -54,6 +54,7 @@ struct display_object {
   struct display_frame *current;
   uintptr_t user_address; /* Slot 0; slot i follows at i times the slot size. */
   uint64_t mapping_identity; /* Advances on each acquisition/REPLACE, never reused. */
+  uint64_t visual_generation; /* BSP-only; read without taking a pending frame. */
   bool presented; /* First SUBMIT makes the session available as a layer. */
   bool visible; /* User's per-session choice, independent of space selection. */
 };

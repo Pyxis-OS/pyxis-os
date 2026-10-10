@@ -8,6 +8,7 @@
 #include <kernel/fb/tty.h>
 #include <kernel/format.h>
 #include <kernel/keyboard.h>
+#include <kernel/memory.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
@@ -60,10 +61,16 @@ static struct space *focus_space;
 static enum choice selected, hovered;
 static enum acpi_power_action running_action;
 static char status_text[STATUS_TEXT_BYTES];
+static uint64_t visual_generation;
 
 bool power_overlay_shown(void)
 {
   return state != OVERLAY_CLOSED;
+}
+
+uint64_t power_overlay_generation(void)
+{
+  return visual_generation;
 }
 
 /* Centered in the screen; the panel's top is a whole number of font rows, so
@@ -112,6 +119,7 @@ void power_overlay_open(struct space *space)
     return;
   }
   state = OVERLAY_CHOOSING;
+  ++visual_generation;
   focus_space = space;
   selected = CHOICE_CANCEL;
   hovered = CHOICE_COUNT;
@@ -127,6 +135,7 @@ static void close_overlay(void)
 {
   struct space *space = focus_space;
   state = OVERLAY_CLOSED;
+  ++visual_generation;
   focus_space = NULL;
   keyboard_set_overlay(space->keyboard, false);
   pointer_space_changed(space);
@@ -143,12 +152,18 @@ static void activate(void)
   enum call_status status = acpi_power_local(action);
   if (status == CALL_OK) {
     state = OVERLAY_RUNNING;
+    ++visual_generation;
     running_action = action;
     status_text[0] = '\0';
     return;
   }
-  sprintf(status_text, "%s", status == CALL_BUSY ? "Another power operation is running." :
-      "Power control is unavailable on this machine.");
+  const char *message = status == CALL_BUSY ? "Another power operation is running." :
+      "Power control is unavailable on this machine.";
+  size_t length = strlen(message);
+  if (strlen(status_text) != length || memcmp(status_text, message, length)) {
+    sprintf(status_text, "%s", message);
+    ++visual_generation;
+  }
 }
 
 void power_overlay_keyboard_input(const struct key_event *event)
@@ -159,6 +174,7 @@ void power_overlay_keyboard_input(const struct key_event *event)
     return;
   }
   bool press = event->action == KEY_PRESS;
+  enum choice previous_selected = selected;
   switch (event->key) {
     case KEY_LEFT:
     case KEY_UP:
@@ -187,6 +203,9 @@ void power_overlay_keyboard_input(const struct key_event *event)
     default:
       break;
   }
+  if (selected != previous_selected) {
+    ++visual_generation;
+  }
 }
 
 void power_overlay_pointer_input(int64_t x, int64_t y, uint32_t pressed)
@@ -196,8 +215,15 @@ void power_overlay_pointer_input(int64_t x, int64_t y, uint32_t pressed)
     hovered = CHOICE_COUNT;
     return;
   }
-  hovered = button_at(x, y);
+  enum choice next_hovered = button_at(x, y);
+  if (hovered != next_hovered) {
+    hovered = next_hovered;
+    ++visual_generation;
+  }
   if (hovered != CHOICE_COUNT && (pressed & POINTER_BUTTON_LEFT)) {
+    if (selected != hovered) {
+      ++visual_generation;
+    }
     selected = hovered;
     activate();
   }
@@ -211,6 +237,7 @@ void power_overlay_update(void)
     return;
   }
   state = OVERLAY_CHOOSING;
+  ++visual_generation;
   selected = CHOICE_CANCEL;
   sprintf(status_text, "%s failed (status %d); the system stays up.",
       running_action == ACPI_POWER_OFF ? "Shutdown" : "Restart", (int)status);

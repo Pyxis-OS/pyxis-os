@@ -7,6 +7,7 @@
 static bool composed, sampled, visible, previous_visible;
 static int64_t x, y, previous_x, previous_y;
 static uint64_t started, compositions, copies, moved_frames, visible_frames;
+static uint64_t services, skips;
 
 void cursor_probe_begin(void)
 {
@@ -38,7 +39,7 @@ void cursor_probe_pointer(const struct pointer_frame *frame)
   }
 }
 
-void cursor_probe_record(uint64_t frames, uint64_t compose_total, uint64_t copy_total)
+void cursor_probe_record(void)
 {
   if (visible) {
     ++visible_frames;
@@ -48,14 +49,27 @@ void cursor_probe_record(uint64_t frames, uint64_t compose_total, uint64_t copy_
   previous_y = y;
   previous_visible = visible;
   sampled = true;
-  if (frames % 120) {
+}
+
+void cursor_probe_skip(void)
+{
+  ++skips;
+}
+
+void cursor_probe_service(uint64_t frames, uint64_t compose_total, uint64_t copy_total)
+{
+  if (!started) {
+    started = arch_monotonic_ns();
+  }
+  /* Report through the prior frame even when every recent tick was skipped. */
+  if (++services % 120) {
     return;
   }
   uint64_t flags = cpu_save_interrupts();
   struct pointer_probe_stats input = pointer_probe_snapshot();
   cpu_restore_interrupts(flags);
-  klog("display-cursor-probe: elapsed=%lu ns frames=%lu compositions=%lu cpu-scanout-copies=%lu reports=%lu relative-motion=%lu screen-moves=%lu moved-frames=%lu visible-frames=%lu\n",
-      arch_monotonic_ns() - started, frames, compositions, copies, input.reports,
+  klog("display-cursor-probe: elapsed=%lu ns services=%lu skips=%lu frames=%lu compositions=%lu cpu-scanout-copies=%lu reports=%lu relative-motion=%lu screen-moves=%lu moved-frames=%lu visible-frames=%lu\n",
+      arch_monotonic_ns() - started, services, skips, frames, compositions, copies, input.reports,
       input.relative_motion, input.screen_moves, moved_frames, visible_frames);
   klog("display-cursor-probe: compose-total=%lu ns copy-total=%lu ns; cumulative elapsed includes preemption; no cursor writes\n",
       compose_total, copy_total);

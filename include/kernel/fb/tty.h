@@ -54,6 +54,8 @@ struct tty
   uint16_t height;
   uint16_t tab_width; /* Nonzero; changes share the TTY output lock. */
   uint64_t geometry_generation; /* Starts at one; output lock protects geometry. */
+  uint64_t visual_generation; /* Output lock; raster, caret and selection changes. */
+  uint64_t background_generation; /* Output lock; exposed graphics margin color. */
 
   /* Colors use 0xRRGGBB, independent of the framebuffer channel layout.
    * They follow the palette indices, which cells record. */

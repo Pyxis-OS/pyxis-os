@@ -1050,6 +1050,24 @@ static bool complete_cursor(bool wait)
   }
 }
 
+bool virtio_gpu_service(void)
+{
+  assert_presenter_context();
+  if (!virtio_gpu_available()) {
+    return false;
+  }
+  KASSERT(!gpu.queue.outstanding);
+  if (common_config()->device_status != GPU_ACTIVE_STATUS) {
+    stop_transport("device status changed during display service");
+    return false;
+  }
+  if (!complete_cursor(false)) {
+    stop_transport(gpu.failure);
+    return false;
+  }
+  return !display_is_panicking();
+}
+
 static struct gpu_rectangle cursor_clip(const struct pointer_frame *frame)
 {
   int64_t left = frame->x - frame->hotspot_x;

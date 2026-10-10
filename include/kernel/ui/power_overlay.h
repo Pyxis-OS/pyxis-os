@@ -18,6 +18,7 @@ struct space;
  * Everything here is BSP, IF=0, from the presenter task. */
 
 bool power_overlay_shown(void);
+uint64_t power_overlay_generation(void);
 
 /* Show the overlay over SPACE, the active space. Does nothing while shown. */
 void power_overlay_open(struct space *space);
@@ -29,7 +30,8 @@ void power_overlay_keyboard_input(const struct key_event *event);
  * Consumed buttons remain suppressed by pointer routing. */
 void power_overlay_pointer_input(int64_t x, int64_t y, uint32_t pressed);
 
-/* Once per overlay frame, before drawing: collects a failed power operation. */
+/* Once per service tick, before deciding whether to compose: collects a failed
+ * power operation even when ordinary output is locked. */
 void power_overlay_update(void);
 
 /* Draw the overlay's rows [TOP, TOP + BAND->height) of a WIDTH x HEIGHT

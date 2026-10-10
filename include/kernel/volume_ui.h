@@ -30,6 +30,10 @@ void volume_ui_present_copy(const struct framebuffer *layout,
     const struct pointer_frame *pointer, size_t offset, const void *pixels, size_t bytes);
 void volume_ui_end_frame(bool presented);
 
+/* BSP, IF=0, once per service tick before deciding whether to compose. */
+void volume_ui_update(void);
+uint64_t volume_ui_generation(void);
+
 /* BSP, IF=0. Consumed physical buttons remain suppressed by pointer routing. */
 bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
     uint32_t buttons, uint32_t pressed, bool content_drag);
