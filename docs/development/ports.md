@@ -512,12 +512,19 @@ and its [qualification](experiments/libuv-native/README.md).
 The [`lua51` recipe](../../ports/lua51/README.md) builds PUC Lua 5.1.5, LPeg, luv
 and lua-compat-5.3 over the native libuv. It exports `ports-dev/lua51`
 (`liblua5.1.a`, `liblpeg.a`, `libluv.a` and headers under `include/lua5.1` and
-`include/luv`) for Neovim, and stages the interpreter as
-`boot://share/lua51/lua5.1.pxb`:
+`include/luv`) for Neovim, and stages the interpreter as `bin://lua5.1.pxb`.
+Bare lookup selects its default entry without a catalog on live and installed
+systems:
 
 ```text
-boot://share/lua51/lua5.1.pxb script.lua [args]
+lua5.1 script.lua [args]
 ```
+
+An explicit `bin://lua5.1.pxb` selects the same default entry. Port notes and
+source provenance travel under `app/metadata/`, with Lua, LPeg, luv,
+lua-compat-5.3, libuv, libc and compiler-runtime notices under
+`app/metadata/licenses/`. The development prefixes retain their own notices and
+provenance for static-library consumers.
 
 The bundle requests memory, clock, launcher and pipe creation, which luv's loop
 and child processes need, and random for temporary files. Missing libc
@@ -531,7 +538,12 @@ and its [qualification](experiments/lua51-luv/README.md).
 The ordinary ports build includes Neovim 0.12.5, utf8proc and tree-sitter.
 Native host Lua generators build source/help files; target linking uses real
 Lua 5.1/luv/LPeg/libuv and SDK libc iconv. The staged unpacked bundle is
-`boot://share/neovim/nvim.pxb`; it stays outside the default command catalog.
+`bin://nvim.pxb`; run `nvim file.c` without a catalog on live or installed systems.
+Its runtime and application/dependency notices travel in the same complete
+bundle tree, with port notes and provenance under `app/metadata/` and licenses
+under `app/metadata/licenses/`. The old bundle-only `boot://share/neovim/` and
+`boot://share/lua51/` paths are absent. Historical qualification records retain
+the paths used at their measured revisions.
 See the [editor reference](../userland/neovim.md) for authority, runtime/config,
 16-colour C highlighting and unsupported features, and the
 [qualification record](experiments/neovim-first-slice/README.md) for QEMU evidence.
