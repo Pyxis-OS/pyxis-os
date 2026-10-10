@@ -93,6 +93,15 @@ inventory at info level; default `0` adds no inventory output. Native task 1 use
 `DISPLAY_TIMING=off LOG_UDP=1` with that flag, so the previous timing observer
 cannot interfere. It never allocates scanout storage or enables flips.
 
+For [Renoir cursor task 1](experiments/renoir-cursor-inventory/README.md),
+`DISPLAY_CURSOR_PROBE=1` adds `display.cursor.probe=1`: opt-in info-level,
+read-only cursor/clock inventory and cumulative software motion/frame/copy
+counters. Default `0` adds no probe logging or extra clock-register mapping.
+Native inventory requires `DISPLAY_FLIP=1 DISPLAY_FLIP_METRICS=1
+DISPLAY_TIMING=off LOG_UDP=1`, with info logging. It allocates no cursor backing
+and adds no cursor or GPU write authority; absent/refused hardware retains normal
+presentation and reports the cursor inventory unavailable.
+
 `BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds,
 default `0`. It configures the generated Limine menu independently of kernel
 Kconfig. Ordinary development boots immediately into the normal entry. For

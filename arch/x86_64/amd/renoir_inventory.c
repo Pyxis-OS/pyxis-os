@@ -7,6 +7,7 @@
 #include <arch/pci.h>
 #include <arch/smp.h>
 #include <kernel/log.h>
+#include <kernel/boot/options.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
@@ -21,6 +22,7 @@
 static const uint32_t register_pages[] = {
   0x3000, 0xa000, 0xe000, 0xf000, 0x11000,
   0x10000, 0x12000, 0x13000, 0x14000, 0x19000, 0x6a000,
+  0,
 };
 #define REGISTER_PAGE_COUNT (sizeof(register_pages) / sizeof(register_pages[0]))
 static uintptr_t windows[REGISTER_PAGE_COUNT];
@@ -77,6 +79,9 @@ void renoir_unmap_registers(void)
 bool renoir_map_registers(const struct boot_info *boot, phys_addr_t bar)
 {
   for (size_t i = 0; i < REGISTER_PAGE_COUNT; ++i) {
+    if (!register_pages[i] && !boot_options_get()->display_cursor_probe) {
+      continue;
+    }
     uintptr_t base;
     if (!page_available(boot, bar + register_pages[i]) ||
         vm_reserve(vm_kernel_space(), PAGE_SIZE, PAGE_SIZE, &base) != MM_OK) {
