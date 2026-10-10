@@ -54,7 +54,7 @@ radio/input qualification limits. Later tasks require
 explicit assignment.
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
-proposals. Files in [wip](wip/) describe unfinished work or design directions;
+proposals, and [completed milestones](wip/completed.md) for finished ones. Files in [wip](wip/) describe unfinished work or design directions;
 they do not establish implemented behavior. Existing costs and revisit conditions
 belong in [technical debt](technical-debt.md).
 
