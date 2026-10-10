@@ -16,7 +16,6 @@
 struct debug_stop_state arch_debug_stop ARCH_DEBUG_DATA;
 bool arch_debug_enabled ARCH_DEBUG_DATA;
 static struct debug_cpu_snapshot *by_apic[XAPIC_CPU_LIMIT] ARCH_DEBUG_DATA;
-static atomic_bool entry_claim ARCH_DEBUG_DATA;
 static atomic_bool incomplete_claim ARCH_DEBUG_DATA;
 static atomic_bool bsp_requested ARCH_DEBUG_DATA;
 static bool origin_frame_saved ARCH_DEBUG_DATA;
@@ -112,7 +111,7 @@ static ARCH_DEBUG_CODE bool all_acknowledged(void)
     enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
     for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
       /* A pending claimant has not published its generation or any frames. */
-      arch_debug_stop.cpus[i].missing = phase == DEBUG_STOP_PREPARED ||
+      arch_debug_stop.cpus[i].missing = phase == DEBUG_STOP_PENDING ||
         atomic_load_explicit(&arch_debug_stop.cpus[i].ack_generation,
           memory_order_acquire) != arch_debug_stop.generation;
     }
@@ -136,11 +135,19 @@ static ARCH_DEBUG_CODE void advance_phase(enum debug_stop_phase from,
   }
 }
 
-static ARCH_DEBUG_CODE void request_bsp(void)
+static ARCH_DEBUG_CODE void request_bsp(uint64_t generation)
 {
+  if (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != DEBUG_STOP_REQUESTED ||
+      arch_debug_stop.generation != generation) {
+    return;
+  }
   bool expected = false;
   if (!atomic_compare_exchange_strong_explicit(&bsp_requested, &expected, true,
         memory_order_acq_rel, memory_order_acquire)) {
+    return;
+  }
+  if (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != DEBUG_STOP_REQUESTED ||
+      arch_debug_stop.generation != generation) {
     return;
   }
   while (!apic_try_send_nmi(arch_debug_stop.cpus[0].lapic_id)) {
@@ -232,7 +239,7 @@ uint64_t arch_debug_nmi_handler(const struct exception_frame *frame)
     service_stop(generation);
   } else {
     if (phase == DEBUG_STOP_REQUESTED) {
-      request_bsp();
+      request_bsp(generation);
     }
     while (atomic_load_explicit(&arch_debug_stop.resume_generation, memory_order_acquire) != generation) {
       __asm__ volatile("pause");
@@ -260,39 +267,57 @@ static ARCH_DEBUG_CODE void finish_entry(uint64_t generation)
       __asm__ volatile("pause");
     }
   }
-  atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_PREPARED, memory_order_release);
-  atomic_store_explicit(&entry_claim, false, memory_order_release);
+  advance_phase(DEBUG_STOP_RELEASED, DEBUG_STOP_PREPARED);
 }
 
 static ARCH_DEBUG_CODE void await_entry(struct debug_cpu_snapshot *snapshot)
 {
+  uint64_t exit_generation = atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire);
   uint64_t pending_deadline = deadline_after(DEBUG_ACQUIRE_NS);
-  while (atomic_load_explicit(&entry_claim, memory_order_acquire)) {
-    enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
+  for (;;) {
     arch_clock_maintain();
+    uint64_t now = arch_monotonic_ns();
+    uint64_t exited = atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire);
+    if (exited != exit_generation) {
+      /* This caller may have parked through a whole generation. A new pending
+       * claimant must receive its own budget, not the expired pre-NMI value. */
+      pending_deadline = deadline_after(DEBUG_ACQUIRE_NS);
+      exit_generation = exited;
+    }
+    enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
+    if (phase == DEBUG_STOP_PREPARED) {
+      return;
+    }
     if (phase == DEBUG_STOP_INCOMPLETE) {
       incomplete_stop();
     }
-    if (phase == DEBUG_STOP_PREPARED) {
-      if (arch_monotonic_ns() >= pending_deadline) {
+    if (phase == DEBUG_STOP_PENDING) {
+      if (now >= pending_deadline &&
+          atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire) == exit_generation &&
+          atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) == DEBUG_STOP_PENDING) {
         incomplete_stop();
       }
     } else if (phase == DEBUG_STOP_REQUESTED || phase == DEBUG_STOP_ACQUIRING) {
-      if (arch_monotonic_ns() >= arch_debug_stop.acquire_deadline) {
+      uint64_t generation = arch_debug_stop.generation;
+      uint64_t deadline = arch_debug_stop.acquire_deadline;
+      if (atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire) != exit_generation ||
+          atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != phase ||
+          arch_debug_stop.generation != generation) {
+        continue;
+      }
+      if (now >= deadline) {
         incomplete_stop();
       }
-      /* A secondary BSP can service the first AP origin. APs await the BSP's
-       * acquisition NMI; self-entry before ACQUIRING would be an unexpected NMI. */
+      /* Only the BSP may help a captured AP origin request service. AP callers
+       * await the BSP's acquisition NMI instead of entering REQUESTED themselves. */
       if (phase == DEBUG_STOP_REQUESTED && snapshot == arch_debug_stop.cpus &&
-          atomic_load_explicit(&snapshot->ack_generation, memory_order_acquire) !=
-            arch_debug_stop.generation &&
+          atomic_load_explicit(&snapshot->ack_generation, memory_order_acquire) != generation &&
           atomic_load_explicit(&arch_debug_stop.cpus[arch_debug_stop.origin_cpu].ack_generation,
-            memory_order_acquire) == arch_debug_stop.generation) {
-        request_bsp();
+            memory_order_acquire) == generation) {
+        request_bsp(generation);
       }
     }
-    /* COMPLETE may last until ordinary continue/idle loss, or forever terminally.
-     * RELEASED waits for exit ACKs and rearming, not the acquisition deadline. */
+    /* COMPLETE and RELEASED have no acquisition expiry. */
     __asm__ volatile("pause");
   }
 }
@@ -309,29 +334,27 @@ static ARCH_DEBUG_CODE bool enter_stop(const struct exception_frame *frame, uint
     return false;
   }
   for (;;) {
-    if (atomic_load_explicit(&entry_claim, memory_order_acquire)) {
-      if (reason == DEBUG_STOP_CHECKPOINT) {
+    enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
+    if (phase != DEBUG_STOP_PREPARED) {
+      if (phase == DEBUG_STOP_DISABLED || reason == DEBUG_STOP_CHECKPOINT) {
         cpu_restore_interrupts(flags);
         return false;
       }
-      /* Keep this caller's original frame/reason until the first generation
-       * releases coherently. Never hand its pending NIC to fatal logging. */
+      /* Keep this caller's original frame/reason until confirmed rearming. */
       await_entry(snapshot);
       continue;
     }
-    if (!debug_network_ready() ||
-        atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != DEBUG_STOP_PREPARED) {
+    if (!debug_network_ready()) {
       cpu_restore_interrupts(flags);
       return false;
     }
-    bool expected = false;
-    if (atomic_compare_exchange_strong_explicit(&entry_claim, &expected, true,
+    if (atomic_compare_exchange_strong_explicit(&arch_debug_stop.phase, &phase, DEBUG_STOP_PENDING,
           memory_order_acq_rel, memory_order_acquire)) {
       break;
     }
   }
   if (arch_debug_stop.generation == UINT64_MAX) {
-    atomic_store_explicit(&entry_claim, false, memory_order_release);
+    advance_phase(DEBUG_STOP_PENDING, DEBUG_STOP_PREPARED);
     cpu_restore_interrupts(flags);
     return false;
   }
@@ -348,13 +371,13 @@ static ARCH_DEBUG_CODE bool enter_stop(const struct exception_frame *frame, uint
     if (debug_stop_retained()) {
       incomplete_stop();
     }
-    atomic_store_explicit(&entry_claim, false, memory_order_release);
+    advance_phase(DEBUG_STOP_PENDING, DEBUG_STOP_PREPARED);
     cpu_restore_interrupts(flags);
     return false;
   }
   arch_debug_stop.acquire_deadline = deadline_after(DEBUG_ACQUIRE_NS);
   atomic_store_explicit(&bsp_requested, snapshot == arch_debug_stop.cpus, memory_order_relaxed);
-  advance_phase(DEBUG_STOP_PREPARED, DEBUG_STOP_REQUESTED);
+  advance_phase(DEBUG_STOP_PENDING, DEBUG_STOP_REQUESTED);
   while (!apic_try_send_nmi(snapshot->lapic_id)) {
     arch_clock_maintain();
     if (arch_monotonic_ns() >= arch_debug_stop.acquire_deadline) {
@@ -362,9 +385,17 @@ static ARCH_DEBUG_CODE bool enter_stop(const struct exception_frame *frame, uint
     }
     __asm__ volatile("pause");
   }
-  while (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != DEBUG_STOP_RELEASED) {
+  for (;;) {
     arch_clock_maintain();
-    if (arch_monotonic_ns() >= arch_debug_stop.acquire_deadline) {
+    uint64_t now = arch_monotonic_ns();
+    enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
+    if (phase == DEBUG_STOP_RELEASED) {
+      break;
+    }
+    if (phase == DEBUG_STOP_INCOMPLETE ||
+        ((phase == DEBUG_STOP_REQUESTED || phase == DEBUG_STOP_ACQUIRING) &&
+         now >= arch_debug_stop.acquire_deadline &&
+         atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) == phase)) {
       incomplete_stop();
     }
     __asm__ volatile("pause");
