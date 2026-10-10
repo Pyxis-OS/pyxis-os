@@ -24,8 +24,9 @@ cross-thread wake that libuv's `uv_async` needs, so no new wake object is
 required. And the first slice can avoid threads: libuv creates its pool only
 when work is submitted, and Neovim's own file calls mostly pass no callback and
 are synchronous, so the
-backend can refuse pool and thread requests with an error. Whether Neovim's
-startup touches other thread APIs is unverified until the first build.
+backend can refuse pool and thread requests with an error. This is the plan's main bet and is unverified: whether Neovim's startup,
+opening a file or `:w` touches the pool or other thread APIs. Task 4 checks it
+early, before the expensive task 6.
 
 ## Milestone proposal
 
@@ -63,8 +64,15 @@ without Neovim.
    async wake over a pipe pair, console and pipe streams, synchronous file calls,
    and child launch through the launcher. Pool, threads, sockets, file watches,
    `dlopen` and signals return an unsupported error; mutex, once and key
-   primitives are correct for one thread only. The owner can run a small libuv
-   program that relays a child's output with a timer.
+   primitives are correct for one thread only. The task also checks the
+   thread-free bet early, so task 6 does not discover it: a host build of
+   Neovim 0.12.5 against a libuv whose pool, thread and async file entry points
+   log and refuse the way the backend will, run through startup, opening a file
+   and `:w`, or failing that a source audit of the calls those paths reach. The
+   result lists every thread, pool or callback-style file call Neovim makes. If
+   startup needs the pool, this task reports it and the plan changes here. The
+   owner can run a small libuv program that relays a child's output with a
+   timer.
 5. **Lua 5.1.5 with luv.** Lua 5.1.5 with its standard libraries, LPeg, luv and
    lua-compat-5.3 as one recipe set. The owner can run Lua scripts with timers
    and child processes through luv.
