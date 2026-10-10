@@ -84,6 +84,10 @@ enum usb_result usb_host_update_packet(struct usb_host_device *device, uint16_t 
  * Abandoned active work and unresolved DMA spans cannot be recycled. */
 enum usb_result usb_host_control_submit(struct usb_host_device *device, const struct usb_setup *setup,
                                         const void *outbound, uint64_t deadline, struct usb_ticket *ticket);
+/* Outer worker only. Poll leaves active work posted; an owned STALL performs
+ * the existing bounded retirement fence before collection. */
+enum usb_result usb_host_control_poll(struct usb_host_device *device, struct usb_ticket ticket,
+                                      uint64_t deadline);
 enum usb_result usb_host_control_wait(struct usb_host_device *device, struct usb_ticket ticket,
                                       uint64_t deadline);
 enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb_ticket ticket,
