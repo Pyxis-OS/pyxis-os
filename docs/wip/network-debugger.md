@@ -458,8 +458,8 @@ confirm normal network/log operation; inspect a planned terminal panic. Check
 quiet attached inspection, idle-loss release from ordinary stops and no release
 from panic. Repeat PXE boots, stale-session refusal and cable/bridge loss. Task 4
 adds patch/step, typed writes and detach/kill restoration; qualify a deliberate
-ordinary breakpoint before any GPU register write. No native result is claimed
-here. Early boot/IF-clear hangs and a failed NIC remain outside this initial
+ordinary breakpoint before any GPU register write. Owner-run task 3 results
+are recorded in the linked qualification record. Early boot/IF-clear hangs and a failed NIC remain outside this initial
 coverage; keep physical reset available.
 
 ## Accepted owner decisions (2026-10-09; task 4 not implemented)
