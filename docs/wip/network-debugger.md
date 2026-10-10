@@ -1,10 +1,11 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Tasks 1–2 are implemented. Task 3 code, QEMU qualification and the interleaved
-option-off comparison are complete (2026-10-10). Native RTL8111 checkpoint,
-register/RAM/device reads and client-loss release were reported by the owner;
-terminal panic, PXE identity changes and cable/bridge loss checks remain pending.
+Tasks 1–2 are implemented. Task 3 core QEMU qualification, the interleaved
+option-off comparison and owner-run native RTL8111 qualification are complete
+(2026-10-10). The local panic display follow-up shows the complete message
+before BSP terminal entry. AP entry can lose the published readiness window
+while drawing and use the accepted pre-ownership fatal fallback instead.
 Task 4 remains unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
@@ -161,6 +162,13 @@ rather than promise network-delivered NMI to a wedged service CPU.
 Recognized #BP/#DB and the readiness checkpoint enter the recoverable path.
 Panic/kernel-fault entry must be intercepted before irreversible log/NIC panic
 handoff, capture what is safe and serve **read-only terminal inspection**.
+With debugging enabled, `panic()` first attempts local-only direct framebuffer
+text, without entering the log or fatal UDP paths. Other terminal origins
+boundedly wait for that message to finish before stopping its writer. This
+requires no clock, heap, GS or ordinary lock. A fault during rendering cancels
+the message and retains fault inspection: a failing display may show partial
+text, a stale frame or nothing. No panic-time GPU reset or scanout programming
+is attempted; a selected VirtIO GPU has no direct panic target.
 Fault/panic continue, step and mutation are rejected; detach leaves it stopped.
 Fatal recursion or unsafe transport retains uncertain storage and falls back
 to best-effort reporting. Once debug mode owns the NIC, fatal text must use that
@@ -268,6 +276,10 @@ ACKs precede register restoration/IRET; they are not proof IRET executed. The
 origin waits for all exit ACKs before rearming a new generation. Terminal stops
 never return. Before transport ownership, unsafe/unavailable entry falls back
 to existing fatal reporting; retained uncertainty stays quiet and terminal.
+Readiness is an opportunity, not a reservation: an AP can finish panic drawing
+then find the BSP has entered ordinary network work. That entry is refused
+before taking the NIC; AP panic attachment is not guaranteed. Stronger
+availability would need a separately designed BSP coherence reservation.
 `debug.checkpoint`, `release_generation` and the inspection mailbox were task 1–2
 scaffolding and are removed, with no compatibility option. Their historical
 qualification remains in [checkpoint](../development/experiments/debug-checkpoint/README.md)
@@ -356,7 +368,7 @@ source evidence, not native 32-bit HPET/NMI reentry qualification.
 
 ## Accepted task split and qualification
 
-Tasks 1–2 are complete; task 3 native qualification is pending, task 4 awaits assignment.
+Tasks 1–3 are complete. Task 4 awaits assignment.
 Historical accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
@@ -390,7 +402,7 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    Dedicated translation/copy windows and fault fixup, RAM classification and
    integer register export; no network attach yet.
 
-3. [ ] **VirtIO and RTL8111 transport, bridge and native read-only attach.**
+3. [x] **VirtIO and RTL8111 transport, bridge and native read-only attach.**
 
    Owner can then use GDB on the ThinkPad at `debug.wait` or a terminal panic,
    inspecting CPU threads/registers, guarded RAM and documented safe Renoir registers.

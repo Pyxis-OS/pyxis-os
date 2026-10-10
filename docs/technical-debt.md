@@ -248,6 +248,9 @@ during reset or drawing also revoke screen output, and VirtIO panic output stays
 frame). A serial port that stops accepting output stays latched off for the boot so a stuck port cannot block early boot or panic
 output. Revisit stronger CPU-stop and takeover coordination with measured native failures, and the retry policy when reliable late
 serial recovery is needed.
+An enabled network debugger attempts local panic text before takeover, but these
+same display limits can leave partial or absent text; successful GDB inspection
+remains independent and does not invoke fatal UDP concurrently.
 
 ## Space-layer qualification
 

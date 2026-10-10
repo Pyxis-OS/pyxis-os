@@ -2,7 +2,7 @@
 
 QEMU and the final interleaved option-off comparison completed, 2026-10-10.
 Native RTL8111 checkpoint, inspection, loss and terminal-panic checks were
-completed by the owner. Local panic-display follow-up is being qualified in QEMU.
+completed by the owner. Local panic-display follow-up was qualified in QEMU.
 
 ## Before-code baseline
 
@@ -204,3 +204,46 @@ visible. The owner also observed three power-LED flashes at debugger stops;
 no EC diagnosis was performed. The local-output correction is qualified below,
 not claimed as a new native screen result. Probe branches remain unmerged.
 Native 32-bit HPET wrap/reentry remains unqualified; timer entry stays in task 4.
+
+## Local panic display follow-up
+
+Ordinary builds passed at `3847b75a`, then at `7395ffab` after integrating main
+`dad9de93` with its current SDK, userland `89c520b6` and ports `9397093c`.
+The formatter gained a direct-display sink; the default-off panic path is
+unchanged. Five fresh interleaved option-off pairs isolate that formatter
+change: A `ab894fe9`, B `3847b75a`, the earlier identical archive/pins and
+SCSI-CD/TAP configuration above. These are not performance measurements of
+the newer main integration.
+
+| Workload | A median (range) | B median (range) |
+| --- | --- | --- |
+| HPET ready, ms | 234.492 (225.377–236.354) | 223.306 (214.246–315.975) |
+| Echo, s | 0.04 (0.04–0.10) | 0.04 (0.04–0.04) |
+| Lua100, s | 0.58 (0.56–0.70) | 0.56 (0.55–0.82) |
+
+All outputs, 100 launches and final statuses verified. Disabled-state GDB
+inspection confirmed no debugger preparation/IST/driver activation. Paired
+directions varied and ranges overlapped: no consistent slowdown or speedup is
+established. An independent owner's VM was active throughout; another ran
+during the final B sample. UTC 09:47:55–09:51:03, no idle-host/native claim.
+Raw commands, identities and samples remain in
+`pyxis-debug-net-baseline/build/panic-comparison/{notes.md,parsed-results.json}`.
+
+Integrated four-CPU QEMU, standard VGA/boot framebuffer, `LOG_UDP=1`:
+unmerged BSP probe `1677d12b` passed checkpoint continue to terminal generation
+2. The screenshot shows the complete formatted panic message. All CPU frames
+were available; guarded RAM/register reads passed and terminal continue was
+refused. Independent QEMU GDB observed message completion, debugger-owned NIC
+gate/generation, and no log/fatal UDP takeover. The earlier pre-integration BSP
+run separately retained terminal ownership after 58 seconds of bridge loss.
+
+Concurrent AP probe `1a2f0c96` showed the complete local message but failed
+debugger attachment: generation 2 was admitted, then released before peer
+acquisition and followed by legacy fatal fallback. No successful AP attach is
+claimed for this correction. Focused QEMU GDB inspection at `debug_stop_begin`
+confirmed readiness was false, NIC gate/generation zero, and no driver takeover
+was attempted. This is the accepted unavailable-context refusal. Readiness is
+not reserved while drawing; the extra AP wait was removed rather than adding
+a new BSP ownership contract. No native screen requalification is claimed.
+Frozen hashes, screenshots and state captures remain in
+`pyxis-debug-network/build/qualification/local-panic-integrated-notes.md`.
