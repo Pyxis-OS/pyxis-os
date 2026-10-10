@@ -34,4 +34,7 @@ struct syscall_result pipe_call(struct pipe_end *end, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
 
+/* Observe a retained endpoint under the pair lock; no readiness reservation. */
+uint64_t pipe_ready(struct pipe_end *end, uint64_t events);
+
 #endif

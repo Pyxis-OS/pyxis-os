@@ -12,6 +12,8 @@
 #define PIPE_RIGHT_WRITE (UINT64_C(1) << 1)
 #define PIPE_READ UINT64_C(1)
 #define PIPE_WRITE UINT64_C(2)
+#define PIPE_TRY_READ UINT64_C(3)
+#define PIPE_TRY_WRITE UINT64_C(4)
 
 #define PIPE_CAPACITY 65536
 #define PIPE_READ_MAX_BYTES 4096
@@ -53,6 +55,12 @@ struct pipe_write_reply {
  * buffer validation, regardless of peer closure. Errors transfer no bytes and
  * leave both the data and reply outputs unchanged. There are no message or
  * atomic-write boundaries and no fairness guarantee among copied endpoints. */
+
+/* TRY_READ/TRY_WRITE use the same request/reply layouts, rights and limits.
+ * They return available progress, EOF or peer closure without waiting for
+ * data or space. Empty/full live pipes return WOULD_BLOCK with no transfer or
+ * pending operation. Zero-length behavior is unchanged. Readiness reserves
+ * nothing; another endpoint copy may consume it before a try operation. */
 
 _Static_assert(sizeof(struct pipe_create_reply) == 16, "pipe create reply layout");
 _Static_assert(offsetof(struct pipe_read_request, buffer) == 16, "pipe read request layout");
