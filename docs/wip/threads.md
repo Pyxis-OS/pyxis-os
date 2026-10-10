@@ -3,9 +3,11 @@
 Owner-accepted defaults, 2026-10-10, subject to the native-kernel condition below.
 Task 1, process lifetime, is merged in
 [#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); exactly one user task per
-process remains. Task 2 requires a separate owner go; later implementation is
-unassigned. This refresh inspects Pyxis `4236efc7` and userland `51bcb56b`;
-it adds no code, compile probe or runtime measurement. Existing
+process remains. Task 2, admitted call references and CLOSE, is implemented in
+this change; [qualification](../development/experiments/threads-task2/README.md)
+records its build, debugger and matched-workload evidence. Task 3 still needs a
+separate owner go. The remaining proposal originally inspected Pyxis `4236efc7`
+and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
 
@@ -21,7 +23,7 @@ is independent.
 | Inspected source | Remaining gate |
 | --- | --- |
 | [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns group membership and lifetime, but its task/retiring-storage fields and terminal-result writer are still singular. |
-| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Calls borrow table entries/objects; growth replaces storage. Lookup, CLOSE and delayed installation need shared-table admission and owned call references. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Calls own storage/rights snapshots and CLOSE detaches exact generations before logical release. Growth, installation/reservation and BSP loans still require exclusive table ownership; task 3 replaces that contract. |
 | [Endpoint replies](../../kernel/object/endpoint.c) | Preflight counts free slots before sleeping; collection assumes they remain free. Sibling installation would invalidate that guarantee. |
 | [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Check then memcpy and local mapping mutation assume the sole task. Stable mappings must cover copies and retained borrowers. |
 | [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Parking one caller currently lends its table or inactive VM exclusively. A sibling invalidates that loan, even on one CPU. |
@@ -63,15 +65,24 @@ siblings. No asynchronous cancellation, per-thread fault isolation or signals.
 
 ## Shared capability and VM ownership
 
-**Capability admission.** Under short table exclusion, resolve the exact handle
-generation into an immutable rights snapshot and an owned object-storage
-reference. Keep no entry pointer across growth or blocking. Plain storage
-references must not invent grants: final controller CLOSE still stops its group,
-and terminal/endpoint close effects still occur. CLOSE atomically detaches the
-slot, then applies logical close/grant release outside table exclusion using
-owned storage. Review table/object/group lock order; never wait or allocate under
-a table spinlock. Prepare growth storage outside exclusion, then recheck,
-copy and publish. Process teardown waits for admitted users.
+**Capability admission — task 2 implemented.** Under short table exclusion,
+`capability_acquire` resolves the exact generation into immutable rights and
+transport snapshots plus an owned object-storage reference. Dispatch, secondary
+handles and blocking cleanup retain no entry pointer. Storage references add no
+grant authority: controller, terminal, console and endpoint logical close effects
+remain separate. Pipe grants now count open directions independently of storage.
+CLOSE detaches the slot and advances its generation under the guard, then uses
+the detached grant's existing ownership for logical close and grant release
+outside it. It needs no additional retain that could fail at saturation.
+Table teardown uses the same close effects after detachment. No table guard spans
+an object callback, allocation, user copy, wait or scheduling.
+
+Growth prepares storage outside the guard and copies/publishes under it, but
+still requires the sole-task/BSP-exclusive loan. Installation and teardown also
+remain exclusive; this guard alone does not admit siblings. Storage references
+drain before `task_syscall_leave`; existing stop/unwind and task retirement retain
+the process/table lifetime. A future shared process must additionally drain
+admitted activity before teardown.
 
 Replace BSP table loans with owned inputs and synchronized installation.
 Grant-returning operations reserve their required slots before committing or
@@ -191,11 +202,12 @@ The 1 MiB default and 64/64 bounds are tunable implementation policy, not ABI
 or SDK contracts. Consumers must handle real limit/allocation errors rather
 than assume these values; Go or libuv may need different tuning later.
 
-## Small next task and delivery gates
+## Delivery gates
 
 Each gate needs its own owner assignment, baseline where costs change, ordinary
 build and interactive QEMU/debugger qualification. No new test infrastructure.
-The following split refines the former broad task 2; it authorizes no code.
+The following split refines the former broad task 2; completed gates do not
+authorize the next one.
 Tasks 2–4 are ownership plumbing with no new runnable thread feature. The first
 owner-runnable siblings arrive at task 5; ordinary threaded C arrives at task 8.
 SDL audio callbacks and libuv workers require their later consumer tasks, not
@@ -204,7 +216,7 @@ merely completion of task 2.
 1. [x] **Process lifetime (#612).** Independent process/group ownership and task retirement, still one user task.
 
    Owner can inspect process completion after task/process reclamation and group completion after deferred cleanup using existing programs.
-2. [ ] **Small first task: admitted call references and CLOSE.** Atomic handle resolution into owned storage/rights, detached-generation close and audited logical close effects; keep one user task and no public API change.
+2. [x] **Admitted call references and CLOSE.** Atomic handle resolution into owned storage/rights, detached-generation close and audited logical close effects; one user task and no public API change. See [qualification](../development/experiments/threads-task2/README.md).
 
    Owner can inspect call/close lifetime and run ordinary applications without borrowed-slot storage surviving a call.
 3. [ ] **Shared-table delivery.** Growth/atomic installations, reply slot reservations, readiness/COPY and BSP table-loan replacement; still one user task.
@@ -257,7 +269,8 @@ The owner accepted all three defaults with this condition, recorded verbatim:
 The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
-does not assign implementation; task 2 still requires a separate owner go.
+does not assign later implementation; task 2 was separately assigned and task 3
+still requires an owner go.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK

@@ -1467,17 +1467,18 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
        sizeof(struct console_paste_register_reply), USER_BUFFER_WRITE))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  struct kernel_object *output = NULL;
-  uint64_t output_rights;
-  if (operation == CONSOLE_PASTE_REGISTER &&
-      capability_resolve(&process->capabilities, payload[0], CONSOLE_RIGHT_WRITE, 0,
-          &output, &output_rights, NULL) != CAP_OK) {
-    return (struct syscall_result){CALL_DENIED, 0};
+  struct capability_reference output = {0};
+  if (operation == CONSOLE_PASTE_REGISTER) {
+    enum capability_result result = capability_acquire(&process->capabilities,
+        payload[0], CONSOLE_RIGHT_WRITE, 0, &output);
+    if (result != CAP_OK) {
+      return (struct syscall_result){result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED, 0};
+    }
   }
   struct clipboard_request *request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
   request->process = process;
   request->object = input;
-  request->output = output;
+  request->output = output.object;
   request->operation = operation;
   request->epoch = payload[0];
   request->transaction_id = payload[1];
@@ -1485,6 +1486,7 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
   enum call_status status = request->status;
   uint64_t epoch = request->epoch;
   bsp_request_release(&request->request);
+  capability_release(&output);
   if (status == CALL_OK && operation == CONSOLE_PASTE_REGISTER) {
     struct console_paste_register_reply reply = {.epoch = epoch};
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
@@ -1613,10 +1615,13 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
     }
   }
   struct process *process = process_current();
-  struct kernel_object *attachment = NULL;
-  if (operation == CLIPBOARD_PASTE && capability_resolve(&process->capabilities,
-      payload[3], TERMINAL_RIGHT_INJECT, 0, &attachment, NULL, NULL) != CAP_OK) {
-    precheck = CALL_DENIED;
+  struct capability_reference attachment = {0};
+  if (operation == CLIPBOARD_PASTE) {
+    enum capability_result result = capability_acquire(&process->capabilities,
+        payload[3], TERMINAL_RIGHT_INJECT, 0, &attachment);
+    if (result != CAP_OK) {
+      precheck = result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+    }
   }
   if (operation == CLIPBOARD_PUBLISH && (payload[4] > CLIPBOARD_TEXT_MAX ||
       !user_buffer_check(payload[3], payload[4], USER_BUFFER_READ))) {
@@ -1625,7 +1630,7 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   struct clipboard_request *request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
   request->process = process;
   request->object = object;
-  request->attachment = attachment;
+  request->attachment = attachment.object;
   request->operation = operation == CLIPBOARD_PUBLISH ? CLIPBOARD_ALLOCATE : operation;
   request->action_id = payload[0];
   request->generation = payload[1];
@@ -1637,6 +1642,7 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   uint64_t transaction_id = request->transaction_id;
   struct clipboard_item *item = operation == CLIPBOARD_PUBLISH && status == CALL_OK ? request->item : NULL;
   bsp_request_release(&request->request);
+  capability_release(&attachment);
   if (item) {
     KASSERT(copy_from_user(item->bytes, payload[3], item->length));
     if (!normalize_terminal_text(item)) {

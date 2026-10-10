@@ -109,12 +109,16 @@ records live in task metadata and are detached before wake; no pipe lock spans
 user memory access or a context switch.
 
 Read and write endpoints have independent ownership. Each owns the shared storage,
-which does not retain either endpoint. A blocked operation keeps its own endpoint
-alive through its process's existing handle, without retaining the peer. Any
-storage bookkeeping reference must not count as an open reader or writer.
-Allocation and final destruction follow the kernel's BSP rules. Final handle
-release schedules deferred destruction; EOF/EPIPE wakeups do not promise to have
-completed synchronously when close returns.
+which does not retain either endpoint. A blocked operation owns a storage
+reference to its endpoint, without retaining the peer. Capability and transfer
+grants count open directions separately, including attenuated zero-right grants;
+CALL/readiness bookkeeping references do not postpone EOF or EPIPE. Final grant
+release marks closure and detaches/notifies waiters synchronously under the pair
+lock, with readiness notification after unlocking. Notification does not mean
+those tasks have run before close returns.
+Allocation and final destruction follow the kernel's BSP rules. Physical pair
+storage remains until both endpoints are destroyed, independently of logical
+closure; the last storage release schedules deferred destruction.
 
 Normal exit and faults release remaining process grants through existing cleanup.
 Closing only one of several copies does not close that direction. A launcher or

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <abi/handle.h>
 #include <kernel/service/request.h>
+#include <kernel/spinlock.h>
 
 struct kernel_object;
 struct capability_entry;
@@ -26,13 +27,23 @@ enum capability_result {
  * the BSP before submission/after retirement, otherwise the executing user
  * task with IF=0. During growth, launch, network-open, host-create or screen
  * capture requests the task lends
- * the table to the BSP until completion. No concurrent lookup, close, install or teardown. */
+ * the table to the BSP until completion. The guard orders lookup/detachment and
+ * structural publication, not concurrent growth, installation or teardown;
+ * those still require this exclusive ownership. */
 struct capability_table {
+  /* IF=0; nests no object, scheduler or allocator lock. */
+  struct spinlock lock;
   struct capability_entry *entries;
   size_t capacity;
   /* Immutable admission policy, borrowed from the owning process's group.
    * Set before its first grant; NULL for ordinary ungrouped processes. */
   struct execution_group *execution_group;
+};
+
+struct capability_reference {
+  struct kernel_object *object; /* Owned storage, not grant authority. */
+  uint64_t rights;
+  uint64_t transport;
 };
 
 struct capability_growth_request {
@@ -67,7 +78,7 @@ enum capability_result capability_insert(struct capability_table *table,
 
 /* IF=0, exclusive table ownership. Counts empty slots whose generation has
  * not retired. A NULL table has no free slots. */
-size_t capability_free_slots(const struct capability_table *table);
+size_t capability_free_slots(struct capability_table *table);
 
 /* IF=0, exclusive table ownership. Installs at most CAPABILITY_BATCH_MAX
  * objects without allocating. The caller owns a reference to each object;
@@ -91,16 +102,20 @@ enum capability_result capability_grant(struct capability_table *destination,
     struct capability_table *source, handle_t handle, uint64_t rights,
     uint64_t transport, handle_t *result);
 
-/* IF=0, exclusive table ownership (including a BSP loan). Resolve returns a borrowed object, valid only until
- * that entry closes or the table is destroyed; failure clears *object.
- * Both required masks must be present. Optional outputs receive the granted
- * masks on success, zero on failure. A handle has meaning only in its table. */
-enum capability_result capability_resolve(struct capability_table *table,
+/* IF=0; caller keeps the table alive. Atomically validates the exact generation
+ * and required masks, captures rights/transport and retains object storage.
+ * Failure clears reference; CAP_LIMIT means storage-reference saturation.
+ * CLOSE may end logical ownership while admitted storage remains safe to use.
+ * The caller releases after its operation and blocking continuations finish. */
+enum capability_result capability_acquire(struct capability_table *table,
     handle_t handle, uint64_t required_rights, uint64_t required_transport,
-    struct kernel_object **object, uint64_t *rights, uint64_t *transport);
+    struct capability_reference *reference);
+/* IF=0; consumes and clears an owned reference. An empty reference is allowed. */
+void capability_release(struct capability_reference *reference);
 
 /* IF=0, exclusive table ownership; no allocation or backing destruction. Makes
- * the handle stale before release; receipt ownership ends synchronously. */
+ * the exact generation stale before applying close effects outside the guard;
+ * receipt ownership ends synchronously. No new storage reference is required. */
 enum capability_result capability_close(struct capability_table *table,
                                          handle_t handle);
 

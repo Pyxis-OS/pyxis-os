@@ -47,12 +47,6 @@ static struct syscall_result close_handle(handle_t handle)
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
 
-  struct kernel_object *object;
-  if (capability_resolve(&process->capabilities, handle, 0, 0,
-        &object, NULL, NULL) != CAP_OK) {
-    return (struct syscall_result){CALL_BAD_HANDLE, 0};
-  }
-  endpoint_handle_close(object);
   enum capability_result result = capability_close(&process->capabilities, handle);
   if (result == CAP_BAD_HANDLE) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
@@ -68,17 +62,20 @@ static struct syscall_result handle_info(handle_t handle, uintptr_t destination)
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
 
-  struct kernel_object *object;
-  struct handle_info info;
-  enum capability_result result = capability_resolve(&process->capabilities,
-      handle, 0, 0, &object, &info.rights, &info.transport);
-  if (result == CAP_BAD_HANDLE) {
-    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  struct capability_reference reference;
+  enum capability_result result = capability_acquire(&process->capabilities,
+      handle, 0, 0, &reference);
+  if (result != CAP_OK) {
+    KASSERT(result == CAP_BAD_HANDLE || result == CAP_LIMIT);
+    return (struct syscall_result){result == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE, 0};
   }
-  KASSERT(result == CAP_OK);
-  info.protocol = object_protocol(object);
-  info.kind = object->type == OBJECT_ENDPOINT_EXPORT ?
-      HANDLE_KIND_EXPORTED : HANDLE_KIND_NATIVE;
+  struct handle_info info = {
+    .protocol = object_protocol(reference.object),
+    .kind = reference.object->type == OBJECT_ENDPOINT_EXPORT ? HANDLE_KIND_EXPORTED : HANDLE_KIND_NATIVE,
+    .rights = reference.rights,
+    .transport = reference.transport,
+  };
+  capability_release(&reference);
   if (!copy_to_user(destination, &info, sizeof(info))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
@@ -100,28 +97,28 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  struct kernel_object *object;
-  uint64_t granted;
-  uint64_t granted_transport;
-  enum capability_result result = capability_resolve(&process->capabilities,
-      source, rights, transport, &object, &granted, &granted_transport);
+  struct capability_reference reference;
+  enum capability_result result = capability_acquire(&process->capabilities,
+      source, rights, transport, &reference);
   if (result != CAP_OK) {
-    KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED);
-    return (struct syscall_result){result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED, 0};
+    KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED || result == CAP_LIMIT);
+    enum call_status status = result == CAP_LIMIT ? CALL_LIMIT :
+        result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
+    return (struct syscall_result){status, 0};
   }
-  if (object->type == OBJECT_ENDPOINT_RECEIPT || object->type == OBJECT_ENDPOINT_RECEIVER) {
+  if (reference.object->type == OBJECT_ENDPOINT_RECEIPT ||
+      reference.object->type == OBJECT_ENDPOINT_RECEIVER) {
+    capability_release(&reference);
     return (struct syscall_result){CALL_DENIED, 0};
   }
   if (flags & HANDLE_COPY_SAME_RIGHTS) {
-    rights = granted;
-    transport = granted_transport;
+    rights = reference.rights;
+    transport = reference.transport;
   }
 
-  /* The source slot keeps the object alive across a BSP table-growth loan.
-   * Keep no entry pointer: growth replaces the table's storage. */
   handle_t handle;
   for (;;) {
-    result = capability_insert(&process->capabilities, object, rights,
+    result = capability_insert(&process->capabilities, reference.object, rights,
         transport, &handle);
     if (result != CAP_FULL) {
       break;
@@ -131,6 +128,7 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
       break;
     }
   }
+  capability_release(&reference);
   if (result != CAP_OK) {
     KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
     return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
@@ -140,25 +138,10 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
   return (struct syscall_result){CALL_OK, sizeof(handle)};
 }
 
-static struct syscall_result call_object(handle_t handle,
-    uintptr_t message_address, size_t message_size, uintptr_t reply_address,
-    size_t reply_capacity)
+static struct syscall_result dispatch_object(handle_t handle, struct kernel_object *object,
+    uint64_t rights, uint64_t transport, uintptr_t message_address, size_t message_size,
+    uintptr_t reply_address, size_t reply_capacity)
 {
-  struct process *process = process_current();
-  if (!process) {
-    return (struct syscall_result){CALL_BAD_HANDLE, 0};
-  }
-
-  struct kernel_object *object;
-  uint64_t rights;
-  uint64_t transport;
-  enum capability_result lookup = capability_resolve(&process->capabilities,
-      handle, 0, 0, &object, &rights, &transport);
-  if (lookup == CAP_BAD_HANDLE) {
-    return (struct syscall_result){CALL_BAD_HANDLE, 0};
-  }
-  KASSERT(lookup == CAP_OK);
-
   struct message_header header;
   if (message_size < sizeof(header)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -433,6 +416,28 @@ static struct syscall_result call_object(handle_t handle,
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
+}
+
+static struct syscall_result call_object(handle_t handle,
+    uintptr_t message_address, size_t message_size, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  struct process *process = process_current();
+  if (!process) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+  struct capability_reference reference;
+  enum capability_result lookup = capability_acquire(&process->capabilities,
+      handle, 0, 0, &reference);
+  if (lookup != CAP_OK) {
+    KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT);
+    return (struct syscall_result){lookup == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE, 0};
+  }
+  struct syscall_result result = dispatch_object(handle, reference.object,
+      reference.rights, reference.transport, message_address, message_size,
+      reply_address, reply_capacity);
+  capability_release(&reference);
+  return result;
 }
 
 static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
