@@ -80,6 +80,9 @@ static DEBUG_CODE void prepare_identity(void *argument)
 
 DEBUG_CODE void debug_prepare(const struct boot_info *boot, const struct boot_options *options)
 {
+  if (!options->debug_net) {
+    return;
+  }
   settings = options;
   net_driver_debug_enable();
   arch_debug_enable(boot);
