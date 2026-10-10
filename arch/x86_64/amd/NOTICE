@@ -19,6 +19,9 @@ dc/hubp/dcn10/dcn10_hubp.c completion and pitch/crossbar decoding,
 dc/hubp/dcn20/dcn20_hubp.c state/latch ordering, dc/optc/dcn20/dcn20_optc.c
 ODM routing, dc/mpc/dcn10/dcn10_mpc.c and dcn20/dcn20_mpc.c route decoding,
 dc/dpp/dcn10/dcn10_dpp_dscl.c scaler-bypass decoding and dc/inc/hw/mpc.h enums.
+The inherited unity RGB scaler gate additionally reads ratio/phase/tap/control
+fields from the same DCN2.1 headers and dcn10_dpp_dscl.c manual mode selection.
+No scaler programming is imported or performed.
 Local changes: narrow three-register write allowlist, inherited fields retained,
 one outstanding request, kernel-owned two-surface state and sleeping completion.
 No Linux DRM/BO/VM infrastructure, allocator or ATOM command executor is imported.

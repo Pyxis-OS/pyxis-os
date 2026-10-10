@@ -98,9 +98,16 @@
 #define RENOIR_POLL_LIMIT 50u
 #define RENOIR_METRIC_FRAMES 120u
 
+struct scaler_state {
+  uint32_t h_ratio, v_ratio, h_ratio_c, v_ratio_c;
+  uint32_t h_init, v_init, h_init_c, v_init_c, v_init_bottom, v_init_bottom_c;
+  uint32_t taps, control, two_tap_control, replicate_control;
+};
+
 struct layout_state {
   struct inventory_state registers;
   uint32_t scaler_mode[RENOIR_PIPES], scaler_autocal[RENOIR_PIPES];
+  struct scaler_state scaler[RENOIR_PIPES];
   uint32_t recout_start[RENOIR_PIPES], recout_size[RENOIR_PIPES], mpc_size[RENOIR_PIPES];
   uint32_t stereo[RENOIR_PIPES], lock[RENOIR_PIPES], gsl[RENOIR_PIPES];
   uint32_t mpcc_stereo[RENOIR_MPCCS], flip_interrupt[RENOIR_PIPES];
@@ -127,6 +134,22 @@ static void snapshot_layout(struct layout_state *s)
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
     unsigned d = i * DSCL_STRIDE, t = i * OTG_STRIDE;
     s->flip_interrupt[i] = renoir_read_register(HUBP_FLIP_INTERRUPT + i * HUBP_STRIDE);
+    s->scaler[i] = (struct scaler_state){
+      .h_ratio = renoir_read_register(DSCL_H_RATIO + d),
+      .v_ratio = renoir_read_register(DSCL_V_RATIO + d),
+      .h_ratio_c = renoir_read_register(DSCL_H_RATIO_C + d),
+      .v_ratio_c = renoir_read_register(DSCL_V_RATIO_C + d),
+      .h_init = renoir_read_register(DSCL_H_INIT + d),
+      .v_init = renoir_read_register(DSCL_V_INIT + d),
+      .h_init_c = renoir_read_register(DSCL_H_INIT_C + d),
+      .v_init_c = renoir_read_register(DSCL_V_INIT_C + d),
+      .v_init_bottom = renoir_read_register(DSCL_V_INIT_BOTTOM + d),
+      .v_init_bottom_c = renoir_read_register(DSCL_V_INIT_BOTTOM_C + d),
+      .taps = renoir_read_register(DSCL_TAPS + d),
+      .control = renoir_read_register(DSCL_CONTROL + d),
+      .two_tap_control = renoir_read_register(DSCL_TWO_TAP_CONTROL + d),
+      .replicate_control = renoir_read_register(DSCL_REPLICATE_CONTROL + d),
+    };
     s->scaler_mode[i] = renoir_read_register(DSCL_MODE + d);
     s->scaler_autocal[i] = renoir_read_register(DSCL_AUTOCAL + d);
     s->recout_start[i] = renoir_read_register(DSCL_RECOUT_START + d);
@@ -151,6 +174,22 @@ static bool active_extent(uint32_t total_register, uint32_t blank, size_t active
   unsigned total = (total_register & OTG_TIMING_MASK) + 1;
   unsigned start = blank & OTG_TIMING_MASK, end = (blank >> 16) & OTG_TIMING_MASK;
   return end < start && start < total && start - end == active;
+}
+
+static bool qualified_scaler(const struct layout_state *s, unsigned hubp)
+{
+  if (!(s->scaler_mode[hubp] & SCALER_MODE_MASK)) {
+    return true;
+  }
+  const struct scaler_state *scale = &s->scaler[hubp];
+  /* Linux may keep RGB scaling enabled at unity. Accept only the captured
+   * manual state, with measured ratios; equal rectangles alone are no proof. */
+  return s->scaler_mode[hubp] == SCALER_RGB_ENABLE &&
+    s->scaler_autocal[hubp] == SCALER_NATIVE_AUTOCAL &&
+    (scale->h_ratio & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY &&
+    (scale->v_ratio & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY &&
+    (scale->h_ratio_c & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY &&
+    (scale->v_ratio_c & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY;
 }
 
 static int qualified_route(const struct layout_state *s)
@@ -202,7 +241,7 @@ static int qualified_route(const struct layout_state *s)
       (h->flip & (FLIP_LOCK | FLIP_MASTER_LOCK | FLIP_STEREO)) ||
       (h->flip2 & (FLIP_GSL | FLIP_TRIPLE)) ||
       (s->flip_interrupt[hubp] & HUBP_FLIP_INTERRUPT_ENABLE) ||
-      (s->scaler_mode[hubp] & SCALER_MODE_MASK) || (s->scaler_autocal[hubp] & SCALER_AUTOCAL_MASK) ||
+      !qualified_scaler(s, hubp) || (s->scaler_autocal[hubp] & SCALER_AUTOCAL_MASK) ||
       (s->recout_start[hubp] & RECOUT_ORIGIN_MASK) ||
       !dimensions(s->recout_size[hubp], RENOIR_NATIVE_WIDTH, RENOIR_NATIVE_HEIGHT) ||
       !dimensions(s->mpc_size[hubp], RENOIR_NATIVE_WIDTH, RENOIR_NATIVE_HEIGHT) ||
@@ -242,7 +281,10 @@ static void static_layout(struct layout_state *s)
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
     s->registers.hubp[i].control &= ~HUBP_REQUEST_STATUS;
     s->registers.hubp[i].clock &= ~HUBP_CLOCK_STATUS;
-    s->scaler_mode[i] &= ~SCALER_CURRENT_BANK;
+    if (!(s->scaler_mode[i] & SCALER_MODE_MASK)) {
+      s->scaler_mode[i] &= ~SCALER_CURRENT_BANK;
+      s->scaler[i] = (struct scaler_state){0};
+    }
     s->flip_interrupt[i] &= ~HUBP_FLIP_INTERRUPT_STATUS;
   }
   for (unsigned i = 0; i < RENOIR_MPCCS; ++i) {
@@ -304,6 +346,17 @@ static void fail(const char *reason)
 {
   flip.state = RENOIR_FLIP_FAILED;
   klog("renoir-flip: unavailable: %s; surfaces pinned, GPU writes stopped\n", reason);
+}
+
+static void print_scaler(const struct layout_state *state, unsigned pipe)
+{
+  const struct scaler_state *s = &state->scaler[pipe];
+  klog("renoir-flip: scaler pipe=%u ratios H=%x V=%x HC=%x VC=%x; unity=%x mask=%x\n",
+      pipe, s->h_ratio, s->v_ratio, s->h_ratio_c, s->v_ratio_c,
+      SCALER_RATIO_UNITY, SCALER_RATIO_MASK);
+  klog("renoir-flip: scaler pipe=%u taps=%x control=%x two-tap=%x replicate=%x init H=%x V=%x HC=%x VC=%x VB=%x VBC=%x\n",
+      pipe, s->taps, s->control, s->two_tap_control, s->replicate_control,
+      s->h_init, s->v_init, s->h_init_c, s->v_init_c, s->v_init_bottom, s->v_init_bottom_c);
 }
 
 bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer *gop, bool metrics)
@@ -393,6 +446,7 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
   klog("renoir-flip: prepared HUBP%u; two surfaces; inherited pitch raw=%x effective=%zu; spare offset=%lx\n",
       flip.hubp, h->pitch, gop->pitch, spare.offset);
   if (metrics) {
+    print_scaler(&second, hubp);
     klog("renoir-flip: GPU=%lx/%lx CPU spare=%lx WC; BAR0=%lx BAR5=%lx; payload=%zu backing=%zu\n",
         flip.addresses[0], flip.addresses[1], spare.physical, flip.aperture.base, flip.bar,
         gop->size, spare.bytes);
@@ -409,6 +463,7 @@ refuse:
         state->mc_base, state->mc_top, state->memsize);
     for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
       const struct hubp_state *plane = &state->hubp[i];
+      print_scaler(&second, i);
       klog("renoir-flip: refusal pipe=%u OTG=%x HUBP=%x clock=%x primary=%lx earliest=%lx flip=%x/%x\n",
           i, state->otg[i].control, plane->control, plane->clock,
           plane->primary, plane->earliest, plane->flip, plane->flip2);
