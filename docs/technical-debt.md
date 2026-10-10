@@ -501,10 +501,6 @@ and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [
 are absent: a consumer needs a separately agreed extension, and duplication must first settle shared open-state and cursor ownership.
 Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
-`read` returns one native transfer, under 4 KiB from a file, so a regular file can return less than the count before its end. POSIX code
-expects whole reads there: EDuke32 silently truncated its data checksum and scripts until its port looped `Bread`. Ports needing whole
-reads loop for now; decide whether file reads loop in libc when another port hits it.
-
 Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
 support). Public O_APPEND is absent, so tee rejects -a, and atomic append needs a native operation
 ([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics, buffered output,

@@ -21,8 +21,9 @@ the old object. A rename to the same entry is a successful no-op.
 `directory_remove` and `directory_rename` expose native component operations;
 `path_remove` and `path_rename` resolve parents using caller-owned scratch space.
 Libc provides `remove` and file-only `rename`. The `rm`, `rmdir` and `mv` utilities
-exercise these interfaces; `mv` takes an exact destination file path, without
-appending a source basename or falling back to copy-and-delete.
+exercise these interfaces; `mv` names each file's destination in userspace,
+appending the source's last name when the destination is a directory, and never
+falls back to copy-and-delete.
 
 [Doom saves](../userland/doom.md#saves) use these operations to write and close a temporary
 save, then atomically replace the selected slot under

@@ -5,7 +5,7 @@ default [init script](init.md) and [session launcher](session-configuration.md),
 which by default start separate shells in the Development and Read-only spaces,
 with shared `home://` as their working directory. Boot starts on Caelum's tab;
 use Super+Right to select Development before typing. The normal initrd contains init,
-shell, ls, cat, echo, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
+shell, ls, tree, cat, echo, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
 home is initially empty. On live boots it is RAM and its contents disappear on
 reboot; installed systems keep it in the pool's `home` volume.
 
@@ -105,6 +105,28 @@ that shell stops saving.
 
 Searching history with Ctrl+R is [deferred](../technical-debt.md#initial-terminal-editor).
 
+**Tab completion.** Tab completes the command name: the first word of the line
+or of a pipeline stage after `|`. The candidates are the shell builtins and the
+programs in `bin://` and `boot://` (each `NAME.pxe` offered as `NAME`), sorted
+and without duplicates. Names that need quoting to type are not offered, and
+`bin://` entries added by a development bundle catalog are not either.
+
+- **One match** replaces the word and adds a space.
+- **Several matches** extend the word to their common prefix when that is longer.
+  Otherwise Tab lists them in columns under the line and draws the prompt and
+  line again. Tab on an empty line lists every command.
+- **Nothing** happens in argument position, after a redirection operator, inside
+  quotes, or when the word contains `/`, `:` or another byte a bare name cannot
+  hold. Paths and arguments are not completed.
+- A completion that would exceed the line limit changes nothing and marks the
+  line as full. The shell lists `bin://` and `boot://` with its own grants; if
+  either cannot be listed, it offers fewer names.
+
+The local shell, a [multiplexer](multiplexer.md) pane and the
+[remote terminal](remote-terminal.md) shell complete the same way; the quiet
+(`--no-echo`) editor and script mode do not. The editor interface is
+[`term_read_line_completing`](terminal.md#tab-completion).
+
 There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
 argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
 below; `|` connects foreground external commands as described under pipelines.
@@ -187,11 +209,12 @@ parent pruning or wildcard expansion. Existing handles survive removal, and
 removing an empty directory makes it unavailable for new children even through
 an older handle. See [the directory contract](../interfaces/directories.md#removal).
 
-`mv source-file destination-file` renames a file and replaces an existing file
-at the exact destination path. It accepts exactly two operands, has no options,
-and does not append a basename when the destination is a directory. Directory
-moves and cross-filesystem copying are unsupported. It uses libc rename and
-reports failure without deleting the source or destination itself.
+`mv [--] source... destination` renames files with libc `rename`: to the
+destination path, replacing an existing file, or, when the destination is a
+directory, into it under each source's last name. Several sources need a
+destination directory. Directory moves and cross-filesystem copying are
+unsupported. It continues after a failed source and reports failure without
+deleting the source or destination itself. See [mv](mv.md).
 
 [`cp [--] source-file... destination`](cp.md) copies files within or across roots.
 A directory destination receives each source's basename; several sources require
