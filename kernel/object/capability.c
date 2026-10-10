@@ -256,24 +256,6 @@ enum capability_result capability_insert(struct capability_table *table,
   return capability_insert_batch(table, &object, &rights, &transport, 1, handle);
 }
 
-size_t capability_free_slots(struct capability_table *table)
-{
-  if (!table) {
-    return 0;
-  }
-
-  spin_lock(&table->lock);
-  size_t free_slots = 0;
-  for (size_t i = 0; i < table->capacity; ++i) {
-    if (!table->entries[i].object && !table->entries[i].reserved &&
-        table->entries[i].generation) {
-      ++free_slots;
-    }
-  }
-  spin_unlock(&table->lock);
-  return free_slots;
-}
-
 enum capability_result capability_insert_batch(struct capability_table *table,
     struct kernel_object *const *objects, const uint64_t *rights,
     const uint64_t *transport, size_t count, handle_t *handles)
@@ -471,45 +453,6 @@ enum capability_result capability_close(struct capability_table *table,
   spin_unlock(&table->lock);
   release_closed_grant(object, rights);
   return CAP_OK;
-}
-
-enum capability_result capability_grant(struct capability_table *destination,
-    struct capability_table *source, handle_t handle, uint64_t rights,
-    uint64_t transport, handle_t *result)
-{
-  KASSERT(arch_cpu_index() == 0);
-  if (!result) {
-    return CAP_INVALID;
-  }
-  *result = HANDLE_INVALID;
-  struct capability_grant grant;
-  enum capability_result status = capability_grant_acquire(source, handle, rights,
-      transport, &grant);
-  if (status != CAP_OK) {
-    return status;
-  }
-  status = capability_validate_grants(destination, &grant, 1);
-  if (status != CAP_OK) {
-    capability_grant_release(&grant);
-    return status;
-  }
-  struct capability_reservation reservation;
-  struct capability_reserved_slot slot;
-  for (;;) {
-    status = capability_reserve(destination, 1, &reservation, &slot);
-    if (status != CAP_FULL) {
-      break;
-    }
-    status = capability_grow(destination);
-    if (status != CAP_OK) {
-      break;
-    }
-  }
-  if (status == CAP_OK) {
-    capability_install_reserved(&reservation, &slot, &grant, 1, result);
-  }
-  capability_grant_release(&grant);
-  return status;
 }
 
 void capability_table_destroy(struct capability_table *table)

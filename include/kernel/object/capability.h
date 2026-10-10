@@ -129,10 +129,6 @@ enum capability_result capability_insert(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, uint64_t transport,
     handle_t *handle);
 
-/* IF=0. Observes unclaimed empty slots whose generation has not retired;
- * this count does not reserve capacity. A NULL table has no free slots. */
-size_t capability_free_slots(struct capability_table *table);
-
 /* IF=0, admitted table activity. Installs at most CAPABILITY_BATCH_MAX
  * objects without allocating. The caller owns a reference to each object;
  * successful insertion adds one reference per entry, including duplicates.
@@ -146,13 +142,6 @@ enum capability_result capability_insert_batch(struct capability_table *table,
 /* BSP, IF=0; caller keeps the table alive.
  * Preserves entries, generations and references; failure leaves them intact. */
 enum capability_result capability_grow(struct capability_table *table);
-
-/* BSP, IF=0; caller keeps both tables alive. Copies with equal or
- * reduced resource and transport authority; source remains valid. Failure clears
- * the result handle and changes neither table's entries nor object references. */
-enum capability_result capability_grant(struct capability_table *destination,
-    struct capability_table *source, handle_t handle, uint64_t rights,
-    uint64_t transport, handle_t *result);
 
 /* IF=0; caller keeps the table alive. Atomically validates the exact generation
  * and required masks, captures rights/transport and retains object storage.
