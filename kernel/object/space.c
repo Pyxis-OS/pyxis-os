@@ -296,6 +296,8 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK || unstarted) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &child, sizeof(child)));
+  if (!copy_to_user(reply_address, &child, sizeof(child))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(child)};
 }

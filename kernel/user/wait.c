@@ -212,7 +212,9 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
       KASSERT(!request->interests[i].object);
       events[i] = request->interests[i].ready;
     }
-    KASSERT(copy_to_user(output, events, output_size));
+    if (!copy_to_user(output, events, output_size)) {
+      status = CALL_BAD_BUFFER;
+    }
   }
   bsp_request_release(&request->request);
   return (struct syscall_result){status, status == CALL_OK ? output_size : 0};

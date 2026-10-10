@@ -48,6 +48,8 @@ struct syscall_result profile_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK || !returns_snapshot) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, size));
+  if (!copy_to_user(reply_address, &reply, size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, size};
 }

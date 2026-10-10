@@ -42,7 +42,9 @@ struct syscall_result log_call(uint64_t rights, uint64_t operation,
     if (!log_ring_snapshot(&snapshot)) {
       return (struct syscall_result){CALL_UNAVAILABLE, 0};
     }
-    KASSERT(copy_to_user(reply_address, &snapshot, sizeof(snapshot)));
+    if (!copy_to_user(reply_address, &snapshot, sizeof(snapshot))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(snapshot)};
   }
   struct {
@@ -72,6 +74,8 @@ struct syscall_result log_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){status, 0};
   }
   size_t bytes = sizeof(reply.header) + reply.header.size;
-  KASSERT(copy_to_user(reply_address, &reply, bytes));
+  if (!copy_to_user(reply_address, &reply, bytes)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, bytes};
 }

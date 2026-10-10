@@ -76,10 +76,11 @@ struct syscall_result net_config_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* The blocked task keeps its grant and mappings alive until completion. */
   if (reply_size) {
     const void *snapshot = inventory ? (const void *)&controller_reply : (const void *)&reply;
-    KASSERT(copy_to_user(reply_address, snapshot, reply_size));
+    if (!copy_to_user(reply_address, snapshot, reply_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
   }
   return (struct syscall_result){CALL_OK, reply_size};
 }

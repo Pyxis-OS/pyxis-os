@@ -51,7 +51,8 @@ struct syscall_result random_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* The live grant and the sole task's checked output mapping survived sleep. */
-  KASSERT(copy_to_user(reply_address, bytes, request.length));
+  if (!copy_to_user(reply_address, bytes, request.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, request.length};
 }

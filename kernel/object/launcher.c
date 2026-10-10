@@ -693,14 +693,19 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &child, sizeof(child)));
+  if (!copy_returned_handles_to_user(reply_address, &child, sizeof(child), &child, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(child)};
 }
 
 static struct syscall_result batch_reply(uintptr_t address,
     const struct launch_batch_reply *reply, enum call_status status)
 {
-  KASSERT(copy_to_user(address, reply, sizeof(*reply)));
+  if (!copy_returned_handles_to_user(address, reply, sizeof(*reply),
+      reply->children, LAUNCH_BATCH_MAX)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){status, sizeof(*reply)};
 }
 
@@ -792,7 +797,10 @@ static struct syscall_result create_group(size_t request_size,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  handle_t handles[] = {reply.supervision, reply.launcher};
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), handles, 2)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
