@@ -1,8 +1,8 @@
 # Neovim on Pyxis
 
 Status: **milestone decisions accepted 2026-10-10; tasks 1 and 2 merged in #651 and #656.**
-Task 4 is assigned; its [preflight](#task-4-preflight) awaits the source mirror and
-the material decisions below before code. Task 3 remains unassigned.
+Task 4 is assigned; its [preflight](#task-4-preflight) defaults are accepted and
+implementation is authorized, with a baseline before code. Task 3 remains unassigned.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -116,7 +116,8 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
 
 ### Task 4 preflight
 
-**Inspected 2026-10-10 at main `6f318e0c`; no implementation or runtime qualification.**
+**Defaults accepted 2026-10-10; implementation authorized, not yet implemented.**
+The source audit inspected main `6f318e0c`; task work starts from `7766dae0`.
 The first task remains the native loop/child-output relay with a timer. Pool,
 worker creation/join, asynchronous filesystem submissions, sockets, watches,
 loading modules and signals return unsupported errors.
@@ -125,12 +126,14 @@ The requested mirror is the existing manifest pin: libuv **v1.52.1**, commit
 `1cfa32ff59c076ffb6ed735bbc8c18361558661f`, archive
 `https://github.com/libuv/libuv/archive/v1.52.1.tar.gz`, SHA-256
 `478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c`.
-The checksum is recorded in Neovim's pinned `cmake.deps/deps.txt`; it has not
-been recomputed against an owner mirror. Preserve upstream `LICENSE` (MIT) and
+The owner mirror is
+`https://repo.internal/repository/raw-github/libuv/libuv/archive/v1.52.1.tar.gz`.
+Its downloaded archive matches that SHA-256, independently checked before code.
+The checksum also matches Neovim's pinned `cmake.deps/deps.txt`. Preserve upstream `LICENSE` (MIT) and
 `LICENSE-extra` (including BSD-2-Clause tree.h and ISC inet routines where used).
-Inspection copies are not build sources; builds wait for the owner mirror.
+Inspection copies are not build sources; recipes use the verified owner mirror.
 
-**Proposed material defaults; not accepted:**
+**Accepted contract:**
 
 1. **Complete native console output readiness/try operations here.** Application
    console/output currently has no WRITABLE interest, and terminal output WRITE
@@ -140,8 +143,6 @@ Inspection copies are not build sources; builds wait for the owner mirror.
    short progress or WOULD_BLOCK with wake-before-park ordering. Record overhead
    counts toward capacity; blocking WRITE retains its existing behavior. This
    adds a native prerequisite and qualification for tabs, mux and remote output.
-   Accepting blocking output instead would let backpressure stall timers and
-   child reads, contradicting the requested responsive stream behavior.
 2. **Pipe creation is explicit bundle authority.** Ordinary foreground commands
    currently receive a child launcher where available, but pipe CREATE is
    session-only ([shell delegation](../../userspace/shell/launch.c)). Add a
@@ -151,8 +152,7 @@ Inspection copies are not build sources; builds wait for the owner mirror.
    Package the relay sample as an unpacked bundle requesting memory, clock,
    launcher and pipe grants. Child launch forwards explicit stdio and a selected
    ordinary application profile within the caller's actual authority; it does
-   not copy session/system authority indiscriminately. The smaller alternative
-   is session-handoff-only qualification, postponing ordinary bundle launch.
+   not copy session/system authority indiscriminately.
 3. **Expose native result validity rather than invent Unix metadata/results.**
    Add Pyxis validity to libuv stat results, preserving known type/size and each
    available domain/object/mtime; other Unix fields remain explicitly unknown.
@@ -212,7 +212,7 @@ uses byte pipes. Synchronous FILE client calls may invoke a provider and block
 (as their API permits); callback-style fs is rejected. Serving provider requests
 inside a libuv loop would require receiver readiness and remains a separate task.
 
-Resume after decisions/mirror: baseline on the selected main, userland bridge
+Work order: baseline on the selected main, userland bridge
 and native console prerequisite, then ports backend/sample, matched QEMU/GDB
 qualification and dependency-first PRs. No later milestone task starts here.
 
