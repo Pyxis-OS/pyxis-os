@@ -1,7 +1,7 @@
 # ThinkPad pointer input quality
 
-Proposal, assigned 2026-10-10; **no implementation authorized yet**. Two device
-tracks can proceed in parallel after acceptance and explicit assignment. Scope:
+Plan accepted 2026-10-10; **implementation tasks require a separate owner go**.
+Two device tracks can proceed in parallel when assigned. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -11,7 +11,7 @@ Accepted 2026-10-10: **natural scrolling is the default for both sources**, with
 independent mouse and touchpad direction settings. Natural means finger motion
 or pulling the wheel toward the user moves displayed content toward the user;
 traditional reverses that relationship. Apply direction to both axes once in kernel source normalization, not again
-in each application. With the proposed viewport-positive axes, a natural wheel
+in each application. With the accepted viewport-positive axes, a natural wheel
 pull/downward finger stroke gives negative `scroll_y` (content down, viewport
 up); fingers right give negative `scroll_x` (content right, viewport left).
 Traditional reverses these. API coordinate conversion, such as SDL positive-up,
@@ -33,13 +33,27 @@ disables them. Their application scrolling needs the separate terminal-mouse
 follow-up: xterm modes 1000/1002 and SGR 1006 in local TTY, mux and remote.
 Device decoding alone cannot claim those consumers work.
 
-## Owner decisions — pending
+## Accepted contract (owner, 2026-10-10)
 
-| Decision | Recommended default | Alternative and cost |
-| --- | --- | --- |
-| 1. Shared scroll representation and buttons | Replace the single wheel field with signed `scroll_x`/`scroll_y`, 120 units per conventional detent; positive means scrolling the viewport right/down. Preserve fractional conversion residue per source/axis, and expose Button usages 1–32 in the existing mask, without global back/forward shortcuts. Update SDK and consumers together. | Q16.16 detents on both axes; finer per-event precision but a different scaling convention for every adapter. |
-| 2. Touchpad rejection and recovery | Reject strong palms until lift; suppress touch motion/scroll while typing and for an initial 500 ms after the last non-modifier physical press/repeat, from either keyboard path. Contacts begun while suppressed require lift. Physical clicks and TrackPoint remain independent. Relative fallback on a Synaptics device is permitted only with established tap-off; otherwise report the touchpad unavailable, retaining a verified guest path if possible. | Reconsider typing-blocked contacts after the interval using fresh classification/baselines; less lifting, more risk of resting palms resuming motion. Tap-off remains required. |
-| 3. Settings authority and application integration | Boot-only validated machine keys, read by stock boot init and installed once through a boot-init-only input-policy right; ordinary programs cannot change policy. No new writer/service. Deliver the two device tasks and shared-event consumers, while recording Links/Neovim wheel qualification as dependent on the separately assigned terminal-mouse work. | A live trusted input-policy control tool as well; easier tuning without reboot but adds mutable authority and live contact-state invalidation to this milestone. |
+1. **Shared scroll representation and buttons.** Replace the single wheel field
+   with signed `scroll_x`/`scroll_y`, 120 units per conventional detent; positive
+   means scrolling the viewport right/down. Preserve fractional conversion
+   residue per source and axis, and expose Button usages 1–32 in the existing
+   mask, without global back/forward shortcuts. Update SDK and consumers together.
+2. **Touchpad rejection and recovery.** Reject strong palms until lift; suppress
+   touch motion/scroll while typing and for an initial 500 ms after the last
+   non-modifier physical press/repeat, from either keyboard path. Contacts begun
+   while suppressed require lift. Physical clicks and TrackPoint remain
+   independent. Relative fallback on a Synaptics device is permitted only with
+   established tap-off; otherwise report the touchpad unavailable, retaining a
+   verified guest path if possible.
+3. **Settings authority and application integration.** Boot-only validated
+   machine keys, read by stock boot init and installed once through a
+   boot-init-only input-policy right; ordinary programs cannot change policy.
+   Keep natural defaults with independent mouse/touchpad direction settings;
+   changes apply next boot. No live tool, new writer or service. Deliver the two
+   device tasks and shared-event consumers; Links/Neovim wheel qualification
+   depends on the separately assigned terminal-mouse work.
 
 The 500 ms interval and parser/filter budgets below are starting tuning, not
 hardware truths or permanent architectural limits. Native evidence may change
@@ -67,7 +81,7 @@ converts vertical movement to existing history rows and does not reinterpret
 horizontal movement as vertical. Volume controls keep their discrete steps.
 Unsupported horizontal actions remain explicit consumer limits.
 
-Proposed keys: `system://config/machine/input/mouse/scroll-direction` and
+Planned machine keys: `system://config/machine/input/mouse/scroll-direction` and
 `input/touchpad/scroll-direction`, enums `natural` / `traditional`. Missing or
 invalid values use the accepted natural defaults, with an opt-in diagnostic.
 Use the [plain store convention](../userland/machine-settings.md), shared schema
