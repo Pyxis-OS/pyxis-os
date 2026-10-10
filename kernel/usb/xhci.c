@@ -3084,7 +3084,7 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
   context[2] = (uint32_t)interrupt->ring.physical | XHCI_TRB_CYCLE;
   context[3] = interrupt->ring.physical >> 32;
   context[4] = receive_bytes | (payload << XHCI_ENDPOINT_ESIT_SHIFT);
-  controller->command.admission = kind != USB_INTERRUPT_HCI;
+  controller->command.admission = true;
   enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
   controller->command.admission = false;
   if (result == USB_OK) {
