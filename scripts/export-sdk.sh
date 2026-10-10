@@ -11,10 +11,11 @@ case "${1:-}" in
     rm -rf "$staging"
     trap 'rm -rf "$staging"' EXIT
     trap 'exit 1' HUP INT TERM
-    mkdir -p "$staging/abi" "$staging/pxe" "$staging/remote" "$sdk/sysroot/usr" "$sdk/share/pyxis"
+    mkdir -p "$staging/abi" "$staging/pxe" "$staging/remote" "$staging/terminal" "$sdk/sysroot/usr" "$sdk/share/pyxis"
     cp include/abi/*.h "$staging/abi/"
     cp include/pxe/*.h "$staging/pxe/"
     cp include/remote/*.h "$staging/remote/"
+    cp include/terminal/*.h "$staging/terminal/"
     cp userspace/include/*.h "$staging/"
     cp -R userspace/libc/include/. "$staging/"
     cp -R fs/include/pyxis_fs "$staging/"
@@ -29,6 +30,7 @@ case "${1:-}" in
     fi
     install -C -m 644 lib/shebang.c "$sdk/share/pyxis/shebang.c"
     install -C -m 644 lib/key_layout.c "$sdk/share/pyxis/key_layout.c"
+    install -C -m 644 lib/terminal_style.c "$sdk/share/pyxis/terminal_style.c"
     mkdir -p "$sdk/share/pyxis/machine_settings"
     install -C -m 644 userspace/include/machine_settings.h userspace/lib/machine_settings.c "$sdk/share/pyxis/machine_settings/"
     install -C -m 644 cmake/pyxis.cmake "$sdk/share/pyxis.cmake"
