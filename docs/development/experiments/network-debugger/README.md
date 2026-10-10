@@ -1,7 +1,7 @@
 # Network debugger task 3 qualification
 
-In progress, 2026-10-10. Native RTL8111/PXE and the final interleaved option-off
-comparison are pending. No native result is claimed.
+QEMU and the final interleaved option-off comparison completed, 2026-10-10.
+Native RTL8111/PXE qualification remains pending; no native result is claimed.
 
 ## Before-code baseline
 
@@ -88,3 +88,78 @@ resume generation 1 and retained NIC gate 8/generation 2 persisted. The same pro
 reservation, all four ACKs, retained debugger ownership and legacy fatal owner
 zero. This time CPU 2 owned entry and CPU 1 joined; admitted MMIO worked and
 terminal continue was refused. Both probe jobs were stopped.
+
+## Final option-off comparison
+
+Five fresh pairs in order A1/B1 through A5/B5, A `dc91a4c6`, B `ab894fe9`.
+Both use the frozen launch archive above, client, firmware, dependency pins,
+kernel configuration and static TAP profile. Installed QEMU 10.2.2, nested KVM,
+Q35/CPU max/four CPUs/512 MiB, inactive audio, no profiling. Each boot has fresh
+OVMF variables. Both use VirtIO SCSI CD, following the
+[existing launch configuration](../threads-task1/README.md#inputs-and-configuration),
+with direct TAP instead of user networking. Earlier AHCI starts failed before
+kernel entry and are retained separately, without performance samples; their
+cause was not established. The final set contains ten successful SCSI boots.
+
+Final inspection found unconditional debugger preparation; `ab894fe9` adds the
+missing `debug.net` guard. B1 independently showed `arch_debug_enabled=false`,
+null settings/snapshots, zero CPU count, DISABLED phase, NMI IST 0, no translation
+windows/cache metadata, no entropy worker or driver handoff enablement. Ordinary
+network-worker code remains unchanged; no normal klog line was added.
+
+All valid samples are retained, including slower A1. Each cell gives A / B:
+
+| Pair | HPET ready (ms) | Echo (s) | Lua100 (s) | TCP 16 MiB (s) |
+| --- | --- | --- | --- | --- |
+| 1 | 230.29527 / 226.65784 | 0.13 / 0.04 | 1.09 / 0.54 | 5.946057 / 4.377602 |
+| 2 | 216.56810 / 229.27170 | 0.04 / 0.04 | 0.55 / 0.57 | 4.470799 / 4.450922 |
+| 3 | 239.71438 / 234.54287 | 0.04 / 0.04 | 0.56 / 0.55 | 4.473284 / 4.478575 |
+| 4 | 226.10012 / 228.17156 | 0.04 / 0.04 | 0.58 / 0.55 | — |
+| 5 | 240.19259 / 212.87884 | 0.04 / 0.04 | 0.55 / 0.57 | — |
+
+A/B medians: ready 230.29527/228.17156 ms; echo 0.04/0.04 s;
+Lua100 0.56/0.55 s; TCP 4.473284/4.450922 s. Ready ranges are
+216.56810–240.19259 / 212.87884–234.54287 ms; Lua 0.55–1.09 / 0.54–0.57 s;
+TCP 4.470799–5.946057 / 4.377602–4.478575 s. Paired directions vary and ranges
+overlap: no consistent option-off slowdown was measurable in this bounded set.
+This establishes neither speedup nor idle-host/native performance. Another
+owner's VM began during A2 and remained through B5; snapshots record its presence.
+Capture window 08:42:25–08:47:16 UTC. GDB detached before client timing; HPET
+ready samples retain hardware-breakpoint observation and exclude firmware.
+
+Workloads use existing commands: remote `echo launch-baseline`,
+`lua -e 'for i=1,100 do assert(pyxis.run{"boot://echo.pxe", "ipi-baseline"} == 0) end'`,
+and `ttcp -t -n 2048 -l 8192 192.168.77.1`, each followed by shell `exit`.
+Host `/usr/bin/time -f '%e'` measures echo/Lua sessions at 0.01 s resolution;
+guest ttcp timing includes orderly closure. One-shot host socat receives on
+192.168.77.1:5001. All ten echo/Lua outputs and command/FINAL statuses verified;
+all six TCP captures contain exactly 16,777,216 bytes with the full source-defined
+pattern. Content inspection followed timing. No new runner or tests were added.
+
+B ELF SHA-256 `6ad0964b5291bb5d19d7d2dc46cdb2fb639e1ee10edc978a0ff1b387d331f949`;
+both images contain the same archive hash recorded above. Exact build/QEMU/GDB
+and client commands, firmware/client hashes, raw samples and process snapshots:
+`pyxis-debug-net-baseline/build/comparison/notes.md`, `parsed-results.json` and
+`final-identities.sha256`. Worktrees and raw records remain local and unmerged.
+
+## Final enabled build and native gate
+
+Clean `ab894fe9`, same ELF as the option-off comparison, ordinary image build
+with `DEBUG_NET=qemu-delta DEBUG_WAIT=1` passed bundle verification without
+warnings. Image SHA-256
+`7501aab0b89398717be656a104a33c378dfb2e1199e188ea94a021802e108031`.
+Four-CPU SCSI-CD/TAP inspection passed enabled COMPLETE generation 1, all CPU
+RIP/RSP/CR3 exports, guarded RAM and admitted MMIO, and transport/unknown/null
+refusals. Continue restored PREPARED/resume 1, NIC gate/debug generation/TX mask
+zero, no failure and active networking. Remote echo exited 0 with complete drain.
+Raw commands/results: `pyxis-debug-network/build/qualification/final-enabled-notes.md`.
+All task-owned QEMU, bridge and GDB jobs were stopped.
+
+Native gate: Luna stages the ordinary PR image and separate unmerged BSP panic
+probe through the owner, with matching ELF/config digests. The bridge runs on
+horse. Follow [task 3 operation](../../../wip/network-debugger.md#task-3-operation-and-qualification)
+and check exact image binding, CPU/register/RAM reads, owner-chosen safe Renoir
+MMIO, refusal paths, ordinary continue/network recovery, paired idle release,
+and terminal panic attach/no release after bridge loss. Return hashes/results
+before checking task 3 complete. Native RTL8111, Renoir read admission and 32-bit
+HPET behavior remain unmeasured here.

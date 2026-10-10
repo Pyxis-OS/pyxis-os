@@ -1,8 +1,9 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Tasks 1–2 are implemented. Task 3 code is present; qualification is in progress
-(2026-10-10), including owner-run RTL8111/PXE checks.
+Tasks 1–2 are implemented. Task 3 code, QEMU qualification and the interleaved
+option-off comparison are complete (2026-10-10); owner-run RTL8111/PXE checks
+remain pending.
 Task 4 remains unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
@@ -351,7 +352,7 @@ source evidence, not native 32-bit HPET/NMI reentry qualification.
 
 ## Accepted task split and qualification
 
-Tasks 1–2 are complete; task 3 qualification is pending, task 4 awaits assignment.
+Tasks 1–2 are complete; task 3 native qualification is pending, task 4 awaits assignment.
 Historical accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
