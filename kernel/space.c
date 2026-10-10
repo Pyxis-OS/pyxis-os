@@ -1090,8 +1090,12 @@ void space_present()
     return;
   }
   uint64_t flags = cpu_save_interrupts();
-  struct space *space = generation.space;
+  struct space *space = active_space;
   struct display_frame *frame = display_snapshot(space->display);
+  /* The decision observed pointer changes without consuming an application
+   * slot. Freeze the chosen frame and pointer together after successful begin. */
+  pointer_frame_release(&pointer_snapshot);
+  pointer_frame_snapshot(&pointer_snapshot);
   const struct pointer_frame *pointer = &pointer_snapshot;
   cpu_restore_interrupts(flags);
   volume_ui_present_copy(screen, pointer, 0,
