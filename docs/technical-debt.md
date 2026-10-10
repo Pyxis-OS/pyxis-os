@@ -856,6 +856,9 @@ for behavior, measured/manual evidence and validation limits.
   ASCII spaces, including intentional whitespace. Tabs, soft wraps and unsupported
   source scalars cannot be reconstructed from retained cells. Revisit with
   terminal text/provenance work; safe Paste remains ASCII-only.
+- **Mux receiver qualification:** ASCII Paste reports no opted-in reader in the
+  [UTF-8 control/changed fixtures](development/experiments/terminal-utf8/README.md).
+  Revisit receiver registration before claiming successful Paste there.
 - **Storage:** One current item per local/shared layer; RAM only, no history,
   lost at reboot. Revisit history/persistence as separate owner-chosen work.
 - **Admission:** 64 KiB text and 8 MiB aggregate current/staging/active-snapshot

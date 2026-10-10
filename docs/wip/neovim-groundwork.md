@@ -293,9 +293,9 @@ not injected. Scheme configuration and a broader Unicode repertoire remain defer
 
 ## Terminal UTF-8 first slice
 
-Owner decisions accepted 2026-10-10; implementation in progress.
+Owner decisions accepted and implemented 2026-10-10.
 
-- [ ] Deliver bounded UTF-8 in kernel TTY, mux and interactive remote, UTF-8
+- [x] Deliver bounded UTF-8 in kernel TTY, mux and interactive remote, UTF-8
   selection Copy and tree box drawing, with matched terminal qualification.
 
 Keep the Bizcat atlas and advertise only the exact
@@ -305,7 +305,10 @@ outlined placeholder, distinct from `?`. Partial sequences survive writes;
 unsupported scalars produce one cell, invalid bytes one replacement each, and
 raw controls retain their meaning. Supported scalars stay in 12-byte cells;
 Copy exports UTF-8 under the existing byte limit. Safe Paste and line editing
-stay ASCII-only. The Neovim Unicode profile change is a separate follow-up.
+stay ASCII-only. Tree defaults to UTF-8, with explicit `--ascii` branches for
+byte-oriented less wrapping. [Qualification and measured costs](../development/experiments/terminal-utf8/README.md)
+include the existing mux receiver-availability limitation. The Neovim Unicode
+profile change is a separate follow-up.
 
 Far-future owner direction, 2026-10-10 (unassigned): scalable fonts, choosing
 TTF/OTF/WOFF by implementation ease, for example an stb_truetype-style rasterizer

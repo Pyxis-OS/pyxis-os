@@ -63,7 +63,8 @@ one-per-scalar/invalid-byte cell counts. A three-write vertical glyph decodes
 once; interrupted prefixes and explicit fresh-line boundaries flush pending
 bytes. `E0 80` displays two replacements while the program remains blocked,
 before a newline or exit. Unicode survives the alternate-screen roundtrip.
-Tree renders connected branches. Tab and mux Copy each publish the selected
+Tree renders connected branches. Its explicit `--ascii` fallback is checked
+through less, which still wraps by bytes. Tab and mux Copy each publish the selected
 23 UTF-8 bytes, marked non-ASCII; safe Paste refuses them without inserting text.
 Copy and alternate-screen snapshots are at `de2f9600`; their paths are unchanged
 by the strict-prefix refinement at `26c6a137`.
@@ -75,6 +76,15 @@ output and an approved transfer preserve 509 bytes, SHA-256
 `e207032606de8cb72adaf7efdcb2ce5e32229b1d7a505f0ccec3334dde3d6bf4`.
 Machine exit is zero with complete draining; interactive close is acknowledged.
 Host glyph appearance was not viewed.
+
+Final dependency refresh `5672f311`, userland `d2674ca` and ports `df3210b`,
+preserves the bin-bundle, TCC, static-parser and new-file Neovim changes. Its
+ordinary image build and tab glyphs, pane split output and both tree modes
+(including `--ascii | less`) pass again. The rendering patch is unchanged; the
+timing table remains on its frozen revisions. ASCII Copy is verified as five
+bytes with the safe flag. Successful mux ASCII Paste is unqualified: both the
+control and changed fresh fixtures report no opted-in line reader. Unicode
+Paste refusal and the unchanged ASCII validator do not prove that registration.
 
 Cells remain 12 bytes; each stream adds eight bytes of decoder state. Screen/
 history copy volume, 1,024-row history and cell creation/resize backing/rollback
