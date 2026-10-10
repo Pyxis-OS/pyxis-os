@@ -1364,7 +1364,9 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
       result = usb_host_interrupt_start(hub->hub_stream);
     }
     if (result != USB_OK) {
-      hub->monitor_failed = true;
+      /* Refused monitor admission leaves boot traversal and class owners live.
+       * Only an admitted stream has runtime notification ownership to lose. */
+      hub->monitor_failed = hub->hub_stream != NULL;
       ktrace("usb HID: boot hub notification unavailable (result %u)\n", (unsigned)result);
     }
   }
