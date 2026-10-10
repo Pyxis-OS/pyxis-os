@@ -1,5 +1,6 @@
 #include <kernel/log.h>
 #include <kernel/format.h>
+#include <kernel/fb/early_console.h>
 #include <arch/cpu.h>
 #include <limits.h>
 #include <stdint.h>
@@ -17,12 +18,15 @@ enum integer_length {
 struct format_output {
   char *buffer;
   size_t length;
+  bool panic_display;
 };
 
 static void put_char(struct format_output *output, char c)
 {
   if (output->buffer) {
     output->buffer[output->length] = c;
+  } else if (output->panic_display) {
+    early_console_panic_putc(c);
   } else {
     log_putc(c);
   }
@@ -160,6 +164,18 @@ void kvlog(const char *format, va_list args)
   format_output(&output, format, args);
   log_end(locked);
   cpu_restore_interrupts(flags);
+}
+
+void early_console_panic_vprintf(const char *format, va_list args)
+{
+  if (!early_console_panic_message_begin()) {
+    return;
+  }
+  struct format_output output = {.panic_display = true};
+  put_string(&output, "\nCaelum panic: ");
+  format_output(&output, format, args);
+  put_char(&output, '\n');
+  early_console_panic_message_end();
 }
 
 int vsprintf(char *buffer, const char *format, va_list args)

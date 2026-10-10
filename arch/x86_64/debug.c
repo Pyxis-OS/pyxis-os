@@ -6,6 +6,7 @@
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/debug.h>
+#include <kernel/fb/early_console.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
@@ -416,6 +417,9 @@ bool arch_debug_terminal(const struct exception_frame *frame, uint64_t fault_add
   if (frame && (frame->vector == EXCEPTION_NMI ||
       frame->vector == EXCEPTION_DOUBLE_FAULT || frame->vector == EXCEPTION_MACHINE_CHECK)) {
     return false;
+  }
+  if (arch_debug_enabled) {
+    early_console_panic_message_wait();
   }
   return enter_stop(frame, fault_address, reason);
 }

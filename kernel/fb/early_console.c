@@ -17,6 +17,9 @@
  * the panic. Expiry leaves the panic serial-only. */
 #define EARLY_CONSOLE_DRAW_WAIT_LIMIT 1000000
 #define EARLY_CONSOLE_NO_OWNER UINT32_MAX
+/* Whole-message reclaim includes clearing the screen, rather than one glyph.
+ * This is a finite poll budget, not a wall-clock guarantee. */
+#define EARLY_CONSOLE_MESSAGE_WAIT_LIMIT 100000000
 
 enum early_console_state {
   EARLY_CONSOLE_OFF,
@@ -34,6 +37,10 @@ static _Atomic uint32_t panic_owner = EARLY_CONSOLE_NO_OWNER;
 /* Owner-only: set while the panic owner draws, to recognize a fault raised by
  * drawing itself. */
 static volatile bool panic_rendering;
+/* Whole-message publication precedes reclaim/formatting, including operations
+ * that can fault before panic_owner is published or between glyphs. */
+static _Atomic uint32_t message_owner = EARLY_CONSOLE_NO_OWNER;
+static atomic_bool message_finished;
 
 /* Rendering state, changed only by the current rendering owner. */
 static uintptr_t address;
@@ -279,6 +286,49 @@ void early_console_panic_putc(char character)
     render(character, true);
     cpu_store_fence();
     panic_rendering = false;
+  }
+}
+
+bool early_console_panic_message_begin(void)
+{
+  uint32_t self = cpu_initial_apic_id();
+  uint32_t expected = EARLY_CONSOLE_NO_OWNER;
+  if (!atomic_compare_exchange_strong(&message_owner, &expected, self)) {
+    return false;
+  }
+  early_console_panic_begin();
+  if (atomic_load(&panic_owner) != self) {
+    atomic_store_explicit(&message_finished, true, memory_order_release);
+    return false;
+  }
+  return true;
+}
+
+void early_console_panic_message_end(void)
+{
+  cpu_store_fence();
+  atomic_store_explicit(&message_finished, true, memory_order_release);
+}
+
+void early_console_panic_message_wait(void)
+{
+  uint32_t owner = atomic_load(&message_owner);
+  if (owner == EARLY_CONSOLE_NO_OWNER ||
+      atomic_load_explicit(&message_finished, memory_order_acquire)) {
+    return;
+  }
+  if (owner == cpu_initial_apic_id()) {
+    /* A fault interrupted reclaim, formatting or drawing. Preserve its fault
+     * frame for the debugger and abandon the framebuffer, never wait on self. */
+    atomic_store(&panic_owner, EARLY_CONSOLE_NO_OWNER);
+    atomic_store_explicit(&message_finished, true, memory_order_release);
+    return;
+  }
+  for (unsigned polls = 0; polls < EARLY_CONSOLE_MESSAGE_WAIT_LIMIT; ++polls) {
+    if (atomic_load_explicit(&message_finished, memory_order_acquire)) {
+      return;
+    }
+    __asm__ volatile("pause");
   }
 }
 
