@@ -1,4 +1,5 @@
 #include <arch/acpi.h>
+#include <arch/amd/renoir_debug.h>
 #include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -16,6 +17,8 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/net/debug.h>
+#include <kernel/pci/registers.h>
 
 #define PTE_PRESENT UINT64_C(1)
 #define PTE_WRITE (UINT64_C(1) << 1)
@@ -548,6 +551,11 @@ void arch_frame_unmap(void)
 #define MTRR_VALID (UINT64_C(1) << 11)
 #define MTRR_COUNT_MASK 0xff
 #define CACHE_WRITE_BACK 6
+#define DEBUG_RENOIR_VENDOR_ID 0x1002
+#define DEBUG_RENOIR_DEVICE_ID 0x1636
+#define DEBUG_ECAM_BUS_SHIFT 20
+#define DEBUG_ECAM_DEVICE_SHIFT 15
+#define DEBUG_ECAM_FUNCTION_SHIFT 12
 #define CR0_CACHE_DISABLE (UINT64_C(1) << 30)
 #define CR0_NOT_WRITE_THROUGH (UINT64_C(1) << 29)
 #define FIXED_MTRR_END UINT64_C(0x100000)
@@ -556,21 +564,142 @@ struct debug_mtrr {
   uint64_t base, mask;
 };
 
-static const struct boot_info *debug_boot;
-static uintptr_t debug_windows[SCRATCH_SLOT_COUNT];
-static volatile uint64_t *debug_leaves[SCRATCH_SLOT_COUNT];
-static struct debug_mtrr *debug_mtrrs;
-static unsigned debug_mtrr_count;
-static uint64_t debug_mtrr_default;
-static uint64_t debug_fixed_mtrrs[11];
-static bool debug_cache_ready;
+static const struct boot_info *debug_boot ARCH_DEBUG_DATA;
+static uintptr_t debug_windows[SCRATCH_SLOT_COUNT] ARCH_DEBUG_DATA;
+static volatile uint64_t *debug_leaves[SCRATCH_SLOT_COUNT] ARCH_DEBUG_DATA;
+static struct debug_mtrr *debug_mtrrs ARCH_DEBUG_DATA;
+static unsigned debug_mtrr_count ARCH_DEBUG_DATA;
+static uint64_t debug_mtrr_default ARCH_DEBUG_DATA;
+static uint64_t debug_fixed_mtrrs[11] ARCH_DEBUG_DATA;
+static bool debug_cache_ready ARCH_DEBUG_DATA;
+static bool debug_uc_ready ARCH_DEBUG_DATA;
+static bool debug_inspect_ready ARCH_DEBUG_DATA;
+static bool debug_transport_ready ARCH_DEBUG_DATA;
+static struct net_debug_device debug_transport ARCH_DEBUG_DATA;
+struct debug_range { phys_addr_t physical; uint64_t bytes; };
+static struct debug_range *debug_devices ARCH_DEBUG_DATA;
+static struct debug_range *debug_exclusions ARCH_DEBUG_DATA;
+static size_t debug_device_count ARCH_DEBUG_DATA;
+static size_t debug_device_capacity ARCH_DEBUG_DATA;
+static size_t debug_exclusion_count ARCH_DEBUG_DATA;
+static size_t debug_exclusion_capacity ARCH_DEBUG_DATA;
+extern char __debug_text_start[], __debug_text_end[];
+extern char __debug_data_start[], __debug_data_end[];
+
+static ARCH_DEBUG_CODE bool debug_overlap(phys_addr_t first, uint64_t bytes,
+                           phys_addr_t other, uint64_t extent)
+{
+  return bytes && extent && (bytes > UINT64_MAX - first || extent > UINT64_MAX - other ||
+    (first < other + extent && other < first + bytes));
+}
+
+static ARCH_DEBUG_CODE bool debug_device_range(const struct boot_info *boot, phys_addr_t physical, uint64_t bytes)
+{
+  if (!bytes || bytes > SIZE_MAX || physical >= physical_limit ||
+      bytes > physical_limit - physical) {
+    return false;
+  }
+  phys_addr_t first = physical & ~(phys_addr_t)(PAGE_SIZE - 1);
+  uint64_t end = physical + bytes;
+  if (end > physical_limit - (PAGE_SIZE - 1)) {
+    return false;
+  }
+  end = (end + PAGE_SIZE - 1) & ~(phys_addr_t)(PAGE_SIZE - 1);
+  uint64_t extent = end - first;
+  /* Cache aliases classify whole mapped pages, even for a sub-page BAR. */
+  if (!arch_pci_mmio_available(first, extent)) {
+    return false;
+  }
+  for (size_t i = 0; i < boot->region_count; ++i) {
+    const struct boot_region *region = &boot->regions[i];
+    if (region->type != BOOT_RESERVED &&
+        debug_overlap(first, extent, region->base, region->length)) {
+      return false;
+    }
+  }
+  return !debug_overlap(first, extent, boot->framebuffer.physical, boot->framebuffer.size);
+}
+
+static ARCH_DEBUG_CODE void debug_add_device(const struct boot_info *boot, phys_addr_t physical, uint64_t bytes)
+{
+  if (debug_device_count < debug_device_capacity && debug_device_range(boot, physical, bytes)) {
+    debug_devices[debug_device_count++] = (struct debug_range){ physical, bytes };
+  }
+}
+
+static ARCH_DEBUG_CODE void debug_prepare_devices(const struct boot_info *boot)
+{
+  size_t count = pci_device_count();
+  if (count > (SIZE_MAX / sizeof(*debug_devices) - 1) / PCI_BAR_COUNT) {
+    return;
+  }
+  debug_device_capacity = count * PCI_BAR_COUNT + 1;
+  debug_devices = kmalloc(debug_device_capacity * sizeof(*debug_devices));
+  if (!debug_devices) {
+    panic("cannot allocate debugger device bounds");
+  }
+  for (size_t i = 0; i < count; ++i) {
+    const struct pci_device *device = pci_device_at(i);
+    if (device->owner && !device->owner->reserved) {
+      for (unsigned bar = 0; bar < PCI_BAR_COUNT; ++bar) {
+        debug_add_device(boot, device->owner->bars[bar].physical, device->owner->bars[bar].bytes);
+      }
+    }
+  }
+  struct pci_device *renoir;
+  if (pci_select_device(DEBUG_RENOIR_VENDOR_ID, DEBUG_RENOIR_DEVICE_ID, &renoir) != PCI_SELECTION_UNIQUE ||
+      renoir->owner || !(pci_read16(renoir->address, PCI_COMMAND) & PCI_COMMAND_MEMORY) ||
+      !(pci_read16(renoir->address, PCI_STATUS) & PCI_STATUS_CAPABILITIES)) {
+    return;
+  }
+  bool visited[PCI_CONVENTIONAL_BYTES / PCI_REGISTER_BYTES] = {0};
+  unsigned power = 0;
+  unsigned offset = pci_read8(renoir->address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
+  while (offset) {
+    if (offset < PCI_CAP_FIRST || offset > PCI_CONVENTIONAL_BYTES - PCI_REGISTER_BYTES ||
+        visited[offset / PCI_REGISTER_BYTES]) {
+      return;
+    }
+    visited[offset / PCI_REGISTER_BYTES] = true;
+    if (pci_read8(renoir->address, offset) == PCI_CAP_POWER) {
+      if (power || offset > PCI_CONVENTIONAL_BYTES - PCI_POWER_BYTES) {
+        return;
+      }
+      power = offset;
+    }
+    offset = pci_read8(renoir->address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
+  }
+  if (!power || visited[(power + PCI_REGISTER_BYTES) / PCI_REGISTER_BYTES] ||
+      (pci_read16(renoir->address, power + PCI_POWER_CONTROL) & PCI_POWER_STATE_MASK) != PCI_POWER_D0) {
+    return;
+  }
+  for (unsigned bar = 0; bar < RENOIR_DEBUG_REGISTER_BAR; ++bar) {
+    uint32_t low = pci_read32(renoir->address, PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES);
+    if (!(low & PCI_BAR_IO) && (low & PCI_BAR_MEMORY_TYPE_MASK) == PCI_BAR_MEMORY_64 &&
+        ++bar == RENOIR_DEBUG_REGISTER_BAR) {
+      return;
+    }
+  }
+  uint32_t bar = pci_read32(renoir->address, PCI_BAR_FIRST + RENOIR_DEBUG_REGISTER_BAR * PCI_REGISTER_BYTES);
+  phys_addr_t physical = bar & PCI_BAR_MEMORY_ADDRESS_MASK;
+  if (!physical || (physical & (PAGE_SIZE - 1)) ||
+      (bar & (PCI_BAR_IO | PCI_BAR_MEMORY_TYPE_MASK | PCI_BAR_PREFETCHABLE)) ||
+      physical > UINT64_C(0x100000000) - RENOIR_DEBUG_WINDOW_OFFSET - RENOIR_DEBUG_WINDOW_BYTES) {
+    return;
+  }
+  debug_add_device(boot, physical + RENOIR_DEBUG_WINDOW_OFFSET, RENOIR_DEBUG_WINDOW_BYTES);
+}
+
 
 void arch_debug_inspect_prepare(const struct boot_info *boot)
 {
   KASSERT(active && arch_debug_enabled);
   debug_boot = boot;
+  debug_prepare_devices(boot);
   uint32_t eax, ebx, ecx, edx;
   cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  debug_uc_ready = (edx & CPUID_FEATURE_PAT) &&
+    ((read_msr(IA32_PAT) >> (PAT_DEVICE_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) == PAT_UNCACHEABLE;
   if ((edx & (CPUID_FEATURE_MTRR | CPUID_FEATURE_PAT)) ==
         (CPUID_FEATURE_MTRR | CPUID_FEATURE_PAT) &&
       !(read_cr0() & (CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH)) &&
@@ -624,7 +753,101 @@ void arch_debug_inspect_prepare(const struct boot_info *boot)
   pmm_free(temporary, 1);
 }
 
-static bool debug_wb_frame(phys_addr_t physical)
+static ARCH_DEBUG_CODE size_t debug_pages(uintptr_t address, size_t bytes)
+{
+  return bytes ? ((address & (PAGE_SIZE - 1)) + bytes + PAGE_SIZE - 1) / PAGE_SIZE : 0;
+}
+
+static ARCH_DEBUG_CODE void debug_exclude_virtual(uintptr_t address, size_t bytes)
+{
+  uintptr_t page = address & ~(uintptr_t)(PAGE_SIZE - 1);
+  size_t count = debug_pages(address, bytes);
+  for (size_t i = 0; i < count; ++i) {
+    struct page_translation translation;
+    if (arch_page_query(arch_kernel_space(), page + i * PAGE_SIZE, &translation) != MM_OK) {
+      panic("cannot classify debugger storage");
+    }
+    if (debug_exclusion_count == debug_exclusion_capacity) {
+      panic("debugger exclusion storage exhausted");
+    }
+    debug_exclusions[debug_exclusion_count++] = (struct debug_range){ translation.physical, PAGE_SIZE };
+  }
+}
+
+void arch_debug_inspect_finish(void)
+{
+  if (!arch_debug_enabled) {
+    return;
+  }
+  size_t snapshot_bytes = arch_debug_stop.cpu_count * sizeof(*arch_debug_stop.cpus);
+  size_t cache_bytes = debug_mtrr_count * sizeof(*debug_mtrrs);
+  size_t device_bytes = debug_device_capacity * sizeof(*debug_devices);
+  size_t text_bytes = __debug_text_end - __debug_text_start;
+  size_t data_bytes = __debug_data_end - __debug_data_start;
+  size_t capacity = arch_debug_stop.cpu_count * (DEBUG_STACK_BYTES / PAGE_SIZE) +
+    debug_pages((uintptr_t)arch_debug_stop.cpus, snapshot_bytes) +
+    debug_pages((uintptr_t)debug_mtrrs, cache_bytes) +
+    debug_pages((uintptr_t)debug_devices, device_bytes) +
+    debug_pages((uintptr_t)__debug_text_start, text_bytes) +
+    debug_pages((uintptr_t)__debug_data_start, data_bytes) + SCRATCH_SLOT_COUNT;
+  /* The list itself is private debugger storage, including its own pages. */
+  size_t allocation = (capacity + 2) * sizeof(*debug_exclusions);
+  capacity += allocation / (PAGE_SIZE - sizeof(*debug_exclusions)) + 2;
+  debug_exclusion_capacity = capacity;
+  debug_exclusions = kmalloc(capacity * sizeof(*debug_exclusions));
+  if (!debug_exclusions) {
+    panic("cannot allocate debugger exclusions");
+  }
+  for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
+    debug_exclude_virtual(arch_debug_stop.cpus[i].stack_base + PAGE_SIZE, DEBUG_STACK_BYTES);
+  }
+  debug_exclude_virtual((uintptr_t)arch_debug_stop.cpus, snapshot_bytes);
+  debug_exclude_virtual((uintptr_t)debug_mtrrs, cache_bytes);
+  debug_exclude_virtual((uintptr_t)debug_devices, device_bytes);
+  debug_exclude_virtual((uintptr_t)__debug_text_start, text_bytes);
+  debug_exclude_virtual((uintptr_t)__debug_data_start, data_bytes);
+  for (unsigned slot = 0; slot < SCRATCH_SLOT_COUNT; ++slot) {
+    debug_exclude_virtual((uintptr_t)debug_leaves[slot], sizeof(*debug_leaves[slot]));
+  }
+  debug_exclude_virtual((uintptr_t)debug_exclusions, capacity * sizeof(*debug_exclusions));
+  KASSERT(debug_exclusion_count <= capacity);
+  debug_inspect_ready = true;
+}
+
+void arch_debug_inspect_transport(const struct net_debug_device *device)
+{
+  debug_transport_ready = false;
+  if (device->dma_count > sizeof(device->dma) / sizeof(*device->dma)) {
+    return;
+  }
+  debug_transport = *device;
+  debug_transport_ready = true;
+}
+
+static ARCH_DEBUG_CODE bool debug_monitor_allowed(phys_addr_t physical, uint64_t bytes)
+{
+  if (!debug_inspect_ready || !debug_transport_ready) {
+    return false;
+  }
+  for (size_t i = 0; i < debug_exclusion_count; ++i) {
+    if (debug_overlap(physical, bytes, debug_exclusions[i].physical, debug_exclusions[i].bytes)) {
+      return false;
+    }
+  }
+  for (unsigned i = 0; i < PCI_BAR_COUNT; ++i) {
+    if (debug_overlap(physical, bytes, debug_transport.bars[i].physical, debug_transport.bars[i].bytes)) {
+      return false;
+    }
+  }
+  for (unsigned i = 0; i < debug_transport.dma_count; ++i) {
+    if (debug_overlap(physical, bytes, debug_transport.dma[i].physical, debug_transport.dma[i].bytes)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static ARCH_DEBUG_CODE bool debug_wb_frame(phys_addr_t physical)
 {
   if (!debug_cache_ready || !physical_valid(physical) ||
       physical_limit - physical < PAGE_SIZE ||
@@ -694,17 +917,18 @@ static bool debug_wb_frame(phys_addr_t physical)
   return matched || (debug_mtrr_default & PAT_TYPE_MASK) == CACHE_WRITE_BACK;
 }
 
-static void debug_clear_window(unsigned slot)
+static ARCH_DEBUG_CODE void debug_clear_window(unsigned slot)
 {
   __asm__ volatile("" : : : "memory");
   *debug_leaves[slot] = 0;
   invlpg(debug_windows[slot]);
 }
 
-static bool debug_load(uintptr_t address, uint8_t *output)
+static ARCH_DEBUG_CODE bool debug_load(uintptr_t address, uint8_t *output)
 {
   arch_debug_probe.address = address;
   arch_debug_probe.generation = arch_debug_stop.generation;
+  arch_debug_probe.width = 8;
   arch_debug_probe.active = true;
   __asm__ volatile("" : : : "memory");
   bool success = arch_debug_load8(address, output, &arch_debug_probe);
@@ -713,7 +937,7 @@ static bool debug_load(uintptr_t address, uint8_t *output)
   return success;
 }
 
-static bool debug_table_entry(phys_addr_t table, unsigned index, uint64_t *entry)
+static ARCH_DEBUG_CODE bool debug_table_entry(phys_addr_t table, unsigned index, uint64_t *entry)
 {
   *debug_leaves[SCRATCH_TABLE] = table | PTE_PRESENT | PTE_NX;
   invlpg(debug_windows[SCRATCH_TABLE]);
@@ -730,7 +954,7 @@ static bool debug_table_entry(phys_addr_t table, unsigned index, uint64_t *entry
   return success;
 }
 
-static enum debug_inspect_status debug_translate(uint64_t root,
+static ARCH_DEBUG_CODE enum debug_inspect_status debug_translate(uint64_t root,
     uintptr_t address, phys_addr_t *physical)
 {
   if (root & ~PTE_ADDRESS_MASK) {
@@ -762,7 +986,7 @@ static enum debug_inspect_status debug_translate(uint64_t root,
   return DEBUG_INSPECT_OK;
 }
 
-enum debug_inspect_status arch_debug_read_ram(uint64_t root, uintptr_t address,
+static ARCH_DEBUG_CODE enum debug_inspect_status debug_read_ram(uint64_t root, uintptr_t address,
                                               uint8_t *output, size_t bytes)
 {
   if (!bytes || bytes > DEBUG_READ_BYTES || bytes - 1 > UINTPTR_MAX - address ||
@@ -793,6 +1017,164 @@ enum debug_inspect_status arch_debug_read_ram(uint64_t root, uintptr_t address,
     address += count;
     output += count;
     bytes -= count;
+  }
+  return DEBUG_INSPECT_OK;
+}
+
+static ARCH_DEBUG_CODE bool debug_read_context(void)
+{
+  return atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) == DEBUG_STOP_COMPLETE &&
+    cpu_initial_apic_id() == arch_debug_stop.cpus[0].lapic_id;
+}
+
+enum debug_inspect_status arch_debug_read_ram(uint64_t root, uintptr_t address,
+                                              uint8_t *output, size_t bytes)
+{
+  if (!debug_read_context() || !bytes || bytes > DEBUG_READ_BYTES) {
+    return DEBUG_INSPECT_BAD_REQUEST;
+  }
+  enum debug_inspect_status status = debug_read_ram(root, address, output, bytes);
+  if (status != DEBUG_INSPECT_OK) {
+    memset(output, 0, bytes);
+  }
+  return status;
+}
+
+static ARCH_DEBUG_CODE bool debug_read_extent(phys_addr_t address, unsigned width, size_t count,
+                               size_t capacity, size_t *bytes)
+{
+  if (!debug_read_context() || (width != 8 && width != 16 && width != 32 && width != 64)) {
+    return false;
+  }
+  size_t unit = width / 8;
+  if (!count || count > DEBUG_READ_BYTES / unit || count > capacity / unit ||
+      address % unit || count * unit > UINT64_MAX - address) {
+    return false;
+  }
+  *bytes = count * unit;
+  return true;
+}
+
+static ARCH_DEBUG_CODE bool debug_load_width(uintptr_t address, unsigned width, uint8_t *output)
+{
+  union { uint8_t byte; uint16_t word; uint32_t dword; uint64_t qword; } value = {0};
+  arch_debug_probe.address = address;
+  arch_debug_probe.generation = arch_debug_stop.generation;
+  arch_debug_probe.width = width;
+  arch_debug_probe.active = true;
+  __asm__ volatile("" : : : "memory");
+  bool success;
+  switch (width) {
+  case 8:
+    success = arch_debug_load8(address, &value.byte, &arch_debug_probe);
+    break;
+  case 16:
+    success = arch_debug_load16(address, &value.word, &arch_debug_probe);
+    break;
+  case 32:
+    success = arch_debug_load32(address, &value.dword, &arch_debug_probe);
+    break;
+  case 64:
+    success = arch_debug_load64(address, &value.qword, &arch_debug_probe);
+    break;
+  default:
+    success = false;
+    break;
+  }
+  __asm__ volatile("" : : : "memory");
+  arch_debug_probe.active = false;
+  if (success) {
+    memcpy(output, &value, width / 8);
+  }
+  return success;
+}
+
+static ARCH_DEBUG_CODE enum debug_inspect_status debug_read_physical(phys_addr_t address,
+    unsigned width, size_t bytes, uint8_t *output, bool mmio)
+{
+  size_t offset = 0;
+  while (offset < bytes) {
+    phys_addr_t physical = address + offset;
+    size_t page_offset = physical & (PAGE_SIZE - 1);
+    *debug_leaves[SCRATCH_DATA] = (physical - page_offset) | PTE_PRESENT | PTE_NX |
+      (mmio ? PTE_CACHE_DISABLE | PTE_WRITE_THROUGH : 0);
+    invlpg(debug_windows[SCRATCH_DATA]);
+    if (!debug_load_width(debug_windows[SCRATCH_DATA] + page_offset, width, output + offset)) {
+      debug_clear_window(SCRATCH_DATA);
+      memset(output, 0, bytes);
+      return DEBUG_INSPECT_FAULT;
+    }
+    debug_clear_window(SCRATCH_DATA);
+    offset += width / 8;
+  }
+  return DEBUG_INSPECT_OK;
+}
+
+enum debug_inspect_status arch_debug_read_phys(phys_addr_t address, unsigned width,
+    size_t count, uint8_t *output, size_t capacity)
+{
+  size_t bytes;
+  if (!debug_read_extent(address, width, count, capacity, &bytes) ||
+      !debug_monitor_allowed(address, bytes)) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  for (phys_addr_t page = address & ~(phys_addr_t)(PAGE_SIZE - 1);
+       page < address + bytes; page += PAGE_SIZE) {
+    if (!debug_wb_frame(page)) {
+      return DEBUG_INSPECT_BAD_ADDRESS;
+    }
+  }
+  return debug_read_physical(address, width, bytes, output, false);
+}
+
+enum debug_inspect_status arch_debug_read_mmio(phys_addr_t address, unsigned width,
+    size_t count, uint8_t *output, size_t capacity)
+{
+  size_t bytes;
+  if (!debug_uc_ready || !debug_read_extent(address, width, count, capacity, &bytes) ||
+      !debug_monitor_allowed(address, bytes)) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  bool covered = false;
+  for (size_t i = 0; i < debug_device_count; ++i) {
+    const struct debug_range *range = &debug_devices[i];
+    if (address >= range->physical && address - range->physical < range->bytes &&
+        bytes <= range->bytes - (address - range->physical)) {
+      covered = true;
+      break;
+    }
+  }
+  return covered ? debug_read_physical(address, width, bytes, output, true) : DEBUG_INSPECT_BAD_ADDRESS;
+}
+
+enum debug_inspect_status arch_debug_read_pci(unsigned segment,
+    struct pci_address address, unsigned offset, unsigned width,
+    uint8_t *output, size_t capacity)
+{
+  size_t bytes;
+  if (segment || width == 64 || !debug_read_extent(offset, width, 1, capacity, &bytes) ||
+      offset > PCI_CONFIG_BYTES - bytes || !debug_transport_ready ||
+      (address.bus == debug_transport.pci.bus && address.device == debug_transport.pci.device &&
+       address.function == debug_transport.pci.function)) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  bool discovered = false;
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *device = pci_device_at(i);
+    if (device->address.bus == address.bus && device->address.device == address.device &&
+        device->address.function == address.function) {
+      discovered = true;
+      break;
+    }
+  }
+  if (!discovered || address.bus >= arch_pci_bus_count()) {
+    return DEBUG_INSPECT_BAD_ADDRESS;
+  }
+  uintptr_t virtual = PCI_ECAM_BASE + ((uintptr_t)address.bus << DEBUG_ECAM_BUS_SHIFT) +
+    ((uintptr_t)address.device << DEBUG_ECAM_DEVICE_SHIFT) + ((uintptr_t)address.function << DEBUG_ECAM_FUNCTION_SHIFT) + offset;
+  if (!debug_load_width(virtual, width, output)) {
+    memset(output, 0, bytes);
+    return DEBUG_INSPECT_FAULT;
   }
   return DEBUG_INSPECT_OK;
 }

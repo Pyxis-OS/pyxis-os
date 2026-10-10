@@ -1,20 +1,32 @@
 #include <arch/descriptors.h>
 
-.section .text
-.global arch_debug_load8
-.type arch_debug_load8, @function
-arch_debug_load8:
+.section .text.debug,"ax",@progbits
+.macro DEBUG_LOAD name, width, load, store
+.global \name
+.type \name, @function
+\name:
   mov %rsp, (%rdx)
-.global arch_debug_load8_unsafe
-arch_debug_load8_unsafe:
-  movzbl (%rdi), %eax
-  mov %al, (%rsi)
+.global \name\()_unsafe
+\name\()_unsafe:
+  .if \width == 32
+    \load (%rdi), %eax
+  .else
+    \load (%rdi), %rax
+  .endif
+  \store
   mov $1, %eax
   ret
-arch_debug_load8_error:
+.size \name, . - \name
+.endm
+
+/* Each instruction issues one access of the requested bus width. */
+DEBUG_LOAD arch_debug_load8, 8, movzbq, "mov %al, (%rsi)"
+DEBUG_LOAD arch_debug_load16, 16, movzwq, "mov %ax, (%rsi)"
+DEBUG_LOAD arch_debug_load32, 32, movl, "mov %eax, (%rsi)"
+DEBUG_LOAD arch_debug_load64, 64, movq, "mov %rax, (%rsi)"
+arch_debug_load_error:
   xor %eax, %eax
   ret
-.size arch_debug_load8, . - arch_debug_load8
 
 .macro DEBUG_FAULT name, vector
 .global \name
@@ -65,7 +77,7 @@ arch_debug_load8_error:
   pushq 32(%rsp)
   popfq
   mov 40(%rsp), %rsp
-  jmp arch_debug_load8_error
+  jmp arch_debug_load_error
 .Lordinary_\name:
   mov %rbx, %rsp
   pop %r15
