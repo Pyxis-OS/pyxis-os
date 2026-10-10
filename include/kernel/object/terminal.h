@@ -33,7 +33,7 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights);
 /* Any CPU, preserves IF. Snapshot under the lock; reserves no queue capacity. */
 uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events);
 /* Any CPU, preserves IF. Application input/output snapshot; input admission
- * reserves no reader slot. Geometry is independent and stays at generation 1. */
+ * reserves no reader slot or output capacity. Geometry is independent. */
 uint64_t terminal_application_ready(struct kernel_object *object, uint64_t events,
     uint64_t observed_generation, struct process *caller);
 

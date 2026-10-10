@@ -1,7 +1,8 @@
 # Neovim on Pyxis
 
-Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651 and task 2 in #656.**
-Task 3 is implemented in the current review, with its decisions and qualification linked below.
+Status: **milestone decisions accepted 2026-10-10; tasks 1–3 merged in #651, #656 and #657.**
+Task 4 is implemented for review; its [native contract](#task-4-preflight) and
+[qualification](../development/experiments/libuv-native/README.md) describe the bounded slice.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -18,17 +19,18 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | 2 | User threads | **Unchanged for this purpose** | [Task 1 and later gates](threads.md#small-next-task-and-delivery-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Native create/join, TLS, the pthread profile and thread-safe libc remain later unassigned gates. |
 | 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
 | 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: non-ASCII input and drawing (the alternate screen, scroll regions and saved cursor came with task 3), and a PTY-style session for child terminals. |
-| 5 | libuv backend | **Unchanged** | No libuv, luv or Neovim recipe exists in `ports`. Libc still lacks `pthread.h`, `poll.h`, `termios.h`, `dlfcn.h`, `sys/socket.h`, `sys/mman.h` and `iconv.h`, so upstream `uv.h` does not compile; the backend needs its own platform layer, not those headers. |
-| 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; none of Lua 5.1, LPeg, luv, libuv, utf8proc, tree-sitter or iconv exists. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
+| 5 | libuv backend | **Native task 4 slice** | Pinned libuv 1.52.1 has a Pyxis platform layer for loop/timers/async, console/pipe streams, explicit child launch/completion and synchronous libc filesystem operations. Excluded workers, async fs, sockets, watches, signals and module loading fail honestly; the [adapter limits](../../ports/libuv/README.md) remain gates for luv/Neovim. |
+| 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; libuv 1.52.1 is added by task 4; Lua 5.1, LPeg, luv, utf8proc, tree-sitter and iconv remain absent. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
 
 Two findings change the plan. A pipe pair that `wait_many` can watch is also the
 cross-thread wake that libuv's `uv_async` needs, so no new wake object is
 required. And the first slice can avoid threads: libuv creates its pool only
 when work is submitted, and Neovim's own file calls mostly pass no callback and
 are synchronous, so the
-backend can refuse pool and thread requests with an error. This is the plan's main bet and is unverified: whether Neovim's startup,
-opening a file or `:w` touches the pool or other thread APIs. Task 4 checks it
-early, before the expensive task 6.
+backend refuses pool and thread requests with an error. The
+[task 4 audit](#early-neovim-pool-audit) found no mandatory pool/thread submission
+or callback-style file call in bounded startup, opening and `:w`. Excluded Lua
+configuration can invoke those APIs; this is not a native Neovim runtime result.
 
 ## Milestone proposal
 
@@ -67,7 +69,7 @@ without Neovim.
    a tab and in a pane. Implemented as the [`pyxis` profile](../userland/terminal.md#tty-output-controls),
    with vi, less, Kilo and Links moved onto the alternate screen;
    [qualification and matched costs](../development/experiments/terminal-profile/README.md).
-4. [ ] **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
+4. [x] **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
    async wake over a pipe pair, console and pipe streams, synchronous file calls,
    and child launch through the launcher. Pool, threads, sockets, file watches,
    `dlopen` and signals return an unsupported error; mutex, once and key
@@ -114,6 +116,112 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
    TCC retains one stream per once object until normal/error translation-unit
    cleanup; borrowed stdin remains caller-owned. Argument files are outside
    shell protection; identity supplies no mutation lease.
+
+### Task 4 preflight
+
+**Defaults accepted 2026-10-10; implemented for review.**
+The source audit inspected main `6f318e0c`; task work starts from `7766dae0`.
+The first task remains the native loop/child-output relay with a timer. Pool,
+worker creation/join, asynchronous filesystem submissions, sockets, watches,
+loading modules and signals return unsupported errors.
+
+The requested mirror is the existing manifest pin: libuv **v1.52.1**, commit
+`1cfa32ff59c076ffb6ed735bbc8c18361558661f`, archive
+`https://github.com/libuv/libuv/archive/v1.52.1.tar.gz`, SHA-256
+`478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c`.
+The owner mirror is
+`https://repo.internal/repository/raw-github/libuv/libuv/archive/v1.52.1.tar.gz`.
+Its downloaded archive matches that SHA-256, independently checked before code.
+The checksum also matches Neovim's pinned `cmake.deps/deps.txt`. Preserve upstream `LICENSE` (MIT) and
+`LICENSE-extra` (including BSD-2-Clause tree.h and ISC inet routines where used).
+Inspection copies are not build sources; recipes use the verified owner mirror.
+
+**Accepted contract:**
+
+1. **Native console try-write and output readiness.** `CONSOLE_TRY_WRITE`
+   returns bounded short progress or WOULD_BLOCK; terminal record headers count
+   toward capacity. WRITABLE/WRITE_CLOSED use WRITE authority and the existing
+   wake-before-park machinery. Framebuffer output remains synchronous under its
+   shared output lock. Blocking WRITE keeps whole-record admission.
+2. **Explicit bundle pipe authority.** `pipe/create` is a recognized manifest
+   request, supplied only to requesting foreground bundles when the shell holds
+   it; missing required authority rejects admission. Plain-program delegation is
+   unchanged. The relay bundle requests memory, clock, launcher and pipe. Its
+   plain children receive explicit stdio and selected memory/clock/launcher
+   grants, inherited directories excluding app, and attenuated namespace lookup.
+   Pipe creation and session/system controls are not forwarded.
+3. **Native result fidelity.** `uv_stat_t.stat_valid` preserves libc's optional
+   domain/object/mtime bits; type/size are known and other Unix fields remain
+   unknown. `uv_process_t.exit_reason` distinguishes EXITED/FAULTED/TERMINATED.
+   Normal signed exit status is preserved; fault/termination report -1 with
+   term_signal zero. PID fields/accessors return negative UV_ENOSYS. Closing a
+   process handle releases observation and does not terminate it. Later luv and
+   Neovim adapters must consume these native fields and unsupported errors.
+
+Implementation follows existing ownership and bounds: libc owns `uv_file`
+integer descriptors. The native libc bridge adopts handles atomically
+and provides descriptor-aware PIPE/CONSOLE try I/O. FILE try I/O is ENOTSUP;
+ordinary file calls remain synchronous. There is no second fd table or bypass of
+read-ahead. Stream-open transfers descriptor responsibility. Unsupported
+extra stdio slots, duplex pipes, shared FILE cursor inheritance and unsupported
+spawn options reject before launch. Submitted writes borrow buffers until one
+terminal callback; close cancels remaining writes before its close callback.
+
+The loop admits at most the native 32 interests, reserving one for its coalesced
+async wake reader: reject excess admission with UV_ENOSPC before activating I/O
+or publishing a child, rather than splitting an atomic wait into polling batches.
+Timers use no interest; waits longer than 30 seconds are capped and recomputed.
+`uv_async_send` supports this one-thread process only, without claiming thread
+or signal safety. Mutexes include real recursive depth; once/key state and
+`uv_thread_self`/equality work for the sole thread. Creation/join/pool work fail.
+
+#### Early Neovim pool audit
+
+Inspected exact Neovim/luv/libuv pins from the table below. Core startup, ordinary
+native file opening and `:w`, with swap/backup off and excluded APIs absent from
+configuration, reached **no pool submission, worker creation/join or callback-style
+filesystem request**. This is a source audit, not an instrumented host run or a
+claim that unmodified Neovim already starts on this backend.
+
+- [loop_init][N-loop] initializes mutex, async wake and timers; runtime search
+  uses a mutex and logging needs a recursive mutex. [Lua initialization][N-lua]
+  calls luaopen_luv and uv_thread_self. Luv [work initialization][L-work]
+  creates mutex/once/key state and allocates Lua-state slots, without submitting
+  work; refusing those initializers aborts startup.
+- [C filesystem wrappers][N-fs], including open/close/stat/fstat/fsync and
+  [regular-file streams][N-read]/[N-write], pass NULL callbacks. File read/save
+  also use libc read/write. Luv src/fs.c selects a NULL callback when no Lua
+  callback is supplied; libuv's [fs dispatch][U-fs-code] runs those synchronously.
+- Lua package initialization requires vim._init_packages and core modules;
+  default callbacks use timers without work submissions. The optional Lua
+  loader's file calls are synchronous. vim._watch.watchdirs uses callback-style
+  fs_stat when watching; explicit luv work/thread APIs submit work/create threads.
+  Watches, those APIs and arbitrary configuration invoking them are excluded.
+- Signal initialization is unconditional in upstream loop_init; unsupported
+  signals still need a Neovim platform adaptation in task 6. The audit establishes
+  the pool conclusion, not closure of every native startup dependency.
+
+**Endpoint receivers need no new readiness in this slice.** Child/editor RPC
+uses byte pipes. Synchronous FILE client calls may invoke a provider and block
+(as their API permits); callback-style fs is rejected. Serving provider requests
+inside a libuv loop would need a receiver adapter, which remains outside this
+slice. Native endpoint receiver readiness is now available from #663.
+
+The pinned [ports adapter](../../ports/libuv/README.md) documents the implemented
+API subset, transfer ownership and errors. Every opened stream/observed process,
+including inactive ones, reserves admission. Child spawn supports explicit
+native images and up to three directional streams; cwd selection, child bundle
+paths, FILE cursor inheritance and unsupported flags reject before launch. A
+failed spawn leaves a closable inactive process handle. A supplied filesystem
+callback rejects before effects; ordinary libc file/directory operations run
+synchronously. Unsupported filesystem operations and value-only peripheral
+APIs remain gaps for the later consumer tasks.
+
+Owner command in the Development shell: `boot://share/libuv/uv-relay.pxb`.
+The sample relays six child chunks while a timer and console input stay active.
+See the [qualification record](../development/experiments/libuv-native/README.md)
+for matched costs, capacity/cleanup and native result inspection. Tasks 5 and 6
+still require separate owner assignments.
 
 ### Mirrors the owner must provide
 

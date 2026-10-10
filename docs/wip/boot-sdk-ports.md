@@ -115,6 +115,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex epsilon** (2026-10-10): [Neovim task 4](neovim-libuv.md#task-4-preflight),
+  native libuv backend. Tasks 1–3 are merged.
 - **Codex alpha** (2026-10-10): [Renoir hardware cursor](renoir-hardware-cursor.md),
   proposal first; scaled game planes need a separate decision.
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),

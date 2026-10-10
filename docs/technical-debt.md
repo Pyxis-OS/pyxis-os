@@ -1628,3 +1628,13 @@ publisher leaving a selected revision unchanged and retained. Read-only app/root
 grants and held native handles do not freeze writable aliases or protect unopened
 assets from deletion. Revisit with installation/update lifetime and revision GC;
 editing or deleting a live revision is unsupported.
+
+## Native libuv first-slice limits
+
+The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
+stream/process interests per loop and synchronous filesystem calls. Child cwd,
+bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
+APIs are omitted. Luv/Neovim must consume native stat validity and exit reasons,
+handle unsupported PIDs/signals, and close remaining libc/API gaps. Revisit in
+[Neovim tasks 5 and 6](wip/neovim-libuv.md#tasks); serving providers in a libuv
+loop needs a receiver adapter. Shared-process threads require a separate milestone.

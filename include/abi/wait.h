@@ -65,6 +65,13 @@ struct wait_interest {
  * buffered input before interpreting a zero-byte read as EOF. Ordinary input
  * readiness excludes an active reader and reserves no FIFO admission. Input
  * loss reports ERROR for console READABLE; terminal hangup reports ERROR.
+ * Console and terminal output WRITABLE/WRITE_CLOSED require WRITE; WRITABLE
+ * automatically includes WRITE_CLOSED. Terminal output is writable when at
+ * least one DATA byte and its record header fit; closed output reports
+ * WRITE_CLOSED, never WRITABLE. Framebuffer output has no close operation:
+ * WRITABLE means an initialized output TTY, ERROR means unavailable output.
+ * Framebuffer rendering still serializes through its shared output lock;
+ * readiness promises neither lock-free rendering nor reserved capacity.
  * INTERRUPT requires ARMED and observes the Ctrl+C latch without consuming it.
  * Console RESIZED requires READ or WRITE;
  * terminal input/output RESIZED requires READ/WRITE respectively. Explicit

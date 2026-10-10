@@ -74,12 +74,17 @@ static enum call_status interest_authority(const struct kernel_object *object,
     uint64_t allowed = WAIT_READABLE | WAIT_INTERRUPT | WAIT_RESIZED;
     if (object->type == OBJECT_TERMINAL_INPUT) {
       allowed |= WAIT_PEER_FIN;
+    } else {
+      allowed |= WAIT_WRITABLE | WAIT_WRITE_CLOSED;
     }
     if (events & ~allowed) {
       return CALL_BAD_REQUEST;
     }
     if (events & (WAIT_READABLE | WAIT_PEER_FIN)) {
       required |= CONSOLE_RIGHT_READ;
+    }
+    if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
+      required |= CONSOLE_RIGHT_WRITE;
     }
     if (events & WAIT_INTERRUPT) {
       required |= CONSOLE_RIGHT_ARMED;
@@ -88,7 +93,7 @@ static enum call_status interest_authority(const struct kernel_object *object,
       return CALL_DENIED;
     }
   } else if (object->type == OBJECT_TERMINAL_OUTPUT) {
-    if (events != WAIT_RESIZED) {
+    if (events & ~(WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_RESIZED)) {
       return CALL_BAD_REQUEST;
     }
     required = CONSOLE_RIGHT_WRITE;

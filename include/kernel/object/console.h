@@ -63,7 +63,8 @@ void console_authority_release(struct kernel_object *object, uint64_t rights);
 /* Any CPU, preserves IF. WAIT_INTERRUPT while the latch is set, otherwise zero. */
 uint64_t console_interrupt_ready(struct console_interrupt *interrupt);
 /* Any CPU, preserves IF. Input admission and geometry are separate snapshots;
- * no reader slot is reserved. RESIZED observes under the output lock. */
+ * no reader slot is reserved. WRITABLE/RESIZED observe under the output lock;
+ * framebuffer readiness does not promise lock-free rendering. */
 uint64_t console_ready(struct console_object *console, uint64_t events,
     uint64_t observed_generation, struct process *caller);
 
