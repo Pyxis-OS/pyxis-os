@@ -29,8 +29,8 @@ stubs. Existing ports are not retroactively rewritten by this milestone.
 
 Owner decision, 2026-10-04: libc provides ISO C plus extensions that have proven
 useful, such as POSIX `mkdir`, implemented with native constructs. A port that
-needs such a function gets it added here, resolving paths through startup roots
-and the working directory like `fopen`, `remove` and `rename`. The port then
+needs such a function gets it added here, resolving paths through current root bindings
+and libc's retained working directory like `fopen`, `remove` and `rename`. The port then
 calls the standard function rather than its own capability code.
 
 The test is whether the function maps onto objects and operations that already
@@ -300,8 +300,8 @@ allocation-failure paths were not qualified by these RAM-file observations.
 ## Native path checks and removal
 
 Owner decision, 2026-10-09: `access` reports a minimal native authority check,
-not Unix mode/owner permission checks. It resolves through the caller's startup
-roots and working-directory grants and releases each temporary owned handle
+not Unix mode/owner permission checks. It resolves through the caller's current root bindings
+and retained working-directory grants and releases each temporary owned handle
 immediately using the validated [close policy](#close-failure-and-cleanup).
 
 | Request | File rights | Directory rights |
@@ -526,3 +526,6 @@ absent interfaces and their revisit points. [Console EOF](../technical-debt.md#c
 remain explicit limits. General process semantics, polling/nonblocking I/O,
 signals and cross-process shared offsets require separate design work; this
 milestone does not select a successor or promise full POSIX coverage.
+
+Shared `chdir`/`getcwd`, mutable environment and explicit child snapshots are
+documented in [process state](process-state.md). `realpath` is the next slice.

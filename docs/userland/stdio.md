@@ -18,11 +18,10 @@ grants; it creates no authority. `a+` starts reading at offset zero;
 `a` starts at the existing end. Seeking never disables append-on-write.
 
 Paths use the existing [capability path rules](paths.md), including scheme roots
-such as `tmp://notes.txt` and the initial working-directory chain for relative
-paths. No process-global chdir or implicit filesystem authority is added. The
-startup roots/chain are borrowed during lookup: explicitly closing those native
-grants can make later fopen calls fail. An already open stream retains its own
-handle independently.
+such as `tmp://notes.txt` and libc's retained [current working chain](process-state.md)
+for relative paths. `chdir` affects later path operations, not already open
+streams. Lookup adds no authority; roots are borrowed and cwd handles retained.
+An open stream owns its handle independently.
 
 Only the final file may be created; intermediate directories must exist. Lookup
 of an existing writable file does not require CREATE. A competing creator is
@@ -147,7 +146,7 @@ closes remaining descriptors, including opens without FILE wrappers.
 
 `remove(path)` removes a file or empty directory through the native parent
 capability, returning zero on success or -1 with errno on failure. It uses the
-same startup roots and initial working-directory chain as fopen. Selection and
+same root bindings and current working-directory chain as fopen. Selection and
 removal happen in one kernel operation, without first probing the child type.
 Existing FILE streams keep their original object after removal; reopening the
 name fails unless another entry has been created there. Roots and final `.` or
@@ -162,7 +161,7 @@ adapter. See [path qualification](libc-portability.md#path-and-byte-order-qualif
 ## Directory creation
 
 `mkdir(path, mode)` from `<sys/stat.h>` creates one directory through the
-parent's CREATE right, using the same startup roots and initial directory chain
+parent's CREATE right, using the same root bindings and current directory chain
 as fopen. `mode` has no effect: native directories carry no permission bits. A
 trailing slash is accepted. An existing name of either kind fails with EEXIST,
 as does a root or a final `.` or `..` that names an existing directory. A
@@ -172,7 +171,7 @@ missing parent fails with ENOENT; parents are not created. The new directory's h
 
 `rename(old_path, new_path)` performs atomic file rename/replacement through the
 native directory protocol. It returns zero on success or -1 with errno on
-failure, using startup roots and the initial directory chain just like fopen.
+failure, using current root bindings and directory chain just like fopen.
 The destination is an exact file path; an existing directory is not interpreted
 as a request to append the old basename. Directory moves, trailing separators,
 roots and final `.`/`..` are unsupported. No copy-and-delete fallback exists.

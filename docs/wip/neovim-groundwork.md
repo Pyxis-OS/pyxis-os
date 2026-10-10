@@ -1,9 +1,21 @@
 # Neovim task 6 groundwork
 
-**Owner accepted the three defaults on 2026-10-10; implementation is unassigned.**
+**Owner accepted the three defaults on 2026-10-10. Working path and environment
+are implemented in the first slice; later slices remain unassigned.**
 This splits [task 6](neovim-libuv.md#tasks); task 5's Lua/luv delivery remains a
 prerequisite. The shared libc work also serves [hosted Clang](hosted-clang.md)
 and [Git](git-on-pyxis.md). Existing first-slice exclusions remain in force.
+
+## First implementation slice
+
+The [process-state reference](../userland/process-state.md) describes shared libc
+`chdir`/`getcwd`, copied mutable environment and explicit child snapshots, with
+shell and port consumers updated together. [Qualification](../development/experiments/process-state/README.md)
+records the fresh-main baseline, matched launch costs and QEMU child-snapshot run.
+The bounded proved `realpath` is deliberately the next slice, requiring live
+identity validation of the returned spelling. Stdio, calendar, encoding and the
+Neovim recipe remain later work. The probe inventory below describes its original
+baseline, not current availability of the delivered cwd/environment APIs.
 
 ## Probe and limits
 

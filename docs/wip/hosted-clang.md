@@ -61,8 +61,10 @@ grants and refuses X_OK/providers; lstat cannot inspect symlinks; open creation
 accepts only 0666. LLVM temp files often request 0600 and executable output
 requests execute bits. Use native private-directory authority and launch READ,
 with a documented adapter; do not weaken libc's policy to satisfy those modes.
-Getenv exists for startup variables. Mutable environment/environ and implicit
-child inheritance do not; forward an explicit environment instead.
+Shared [working path and environment](../userland/process-state.md) now supply
+`chdir`, `getcwd`, `getenv`, `setenv` and `unsetenv`, with explicit child snapshots.
+The table preserves the earlier probe results; those functions are delivered.
+There is no writable `environ`; proved `realpath` is the next slice.
 
 ## Process boundary
 

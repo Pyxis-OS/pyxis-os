@@ -1,4 +1,6 @@
 #include <kernel/object/clipboard.h>
+#include <kernel/boot/options.h>
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/display.h>
 #include <kernel/mm/heap.h>
@@ -18,6 +20,8 @@ struct pointer_destination {
 };
 
 static int64_t position_x, position_y;
+static bool probe_enabled;
+static struct pointer_probe_stats probe_stats;
 static uint32_t device_buttons, consumed_buttons, drag_buttons;
 static struct pointer_destination drag;
 static struct pointer_object *hover;
@@ -92,6 +96,7 @@ static void default_image(uint8_t *pixels, size_t width,
 
 void pointer_init(void)
 {
+  probe_enabled = boot_options_get()->display_cursor_probe;
   KASSERT(arch_cpu_index() == 0);
   const struct framebuffer *layout = display_layout();
   position_x = layout->width / 2;
@@ -395,6 +400,10 @@ void pointer_source_lost(uint32_t physical_buttons)
 void pointer_handle_input(const struct pointer_input_report *event)
 {
   KASSERT(arch_cpu_index() == 0);
+  if (probe_enabled) {
+    ++probe_stats.reports;
+    probe_stats.relative_motion += event->dx != 0 || event->dy != 0;
+  }
   uint32_t pressed = event->buttons & ~device_buttons & ~event->suppressed_buttons;
   if (power_overlay_shown()) {
     const struct framebuffer *layout = display_layout();
@@ -419,8 +428,12 @@ void pointer_handle_input(const struct pointer_input_report *event)
     return;
   }
   const struct framebuffer *layout = display_layout();
+  int64_t previous_x = position_x, previous_y = position_y;
   position_x = clamped_move(position_x, event->dx, layout->width);
   position_y = clamped_move(position_y, event->dy, layout->height);
+  if (probe_enabled) {
+    probe_stats.screen_moves += position_x != previous_x || position_y != previous_y;
+  }
   device_buttons = event->buttons;
   consumed_buttons &= device_buttons;
   pressed &= ~consumed_buttons;
@@ -489,6 +502,12 @@ void pointer_handle_input(const struct pointer_input_report *event)
     drag = (struct pointer_destination){0};
     update_hover(target);
   }
+}
+
+struct pointer_probe_stats pointer_probe_snapshot(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  return probe_stats;
 }
 
 enum call_status pointer_surface_warp(struct pointer_object *pointer,

@@ -2,6 +2,7 @@
 #include <arch/amd/renoir_firmware.h>
 #include <arch/amd/renoir_inventory.h>
 #include <kernel/log.h>
+#include <kernel/boot/options.h>
 
 #define RENOIR_VENDOR_ID 0x1002u
 #define RENOIR_DEVICE_ID 0x1636u
@@ -20,6 +21,8 @@
 #define ATOM_COMMON_HEADER_BYTES 4u
 #define ATOM_MASTER_FIRMWARE_INDEX 4u
 #define ATOM_MASTER_VRAM_INDEX 11u
+#define ATOM_MASTER_DCE_INDEX 27u
+#define ATOM_DCE_REFERENCE_OFFSET 12u
 #define ATOM_MASTER_MIN_BYTES 28u
 #define ATOM_VRAM_ADDRESS_MASK 0x3fffffffu
 #define ATOM_VRAM_FLAGS_SHIFT 30u
@@ -72,6 +75,8 @@ struct image_metadata {
   struct table_metadata rom, master;
   struct vram_metadata vram;
   struct firmware_metadata firmware;
+  struct table_metadata dce;
+  uint16_t dce_reference_10khz;
 };
 
 static struct {
@@ -245,6 +250,22 @@ static void parse_atom(const uint8_t *image, struct image_metadata *metadata)
   const uint8_t *vram = table_at(image, metadata->bytes, vram_offset, &metadata->vram.table);
   if (vram) {
     parse_vram(vram, &metadata->vram);
+  }
+  if (boot_options_get()->display_cursor_probe) {
+    size_t entry = ATOM_COMMON_HEADER_BYTES + 2 * ATOM_MASTER_DCE_INDEX;
+    metadata->dce.state = METADATA_MISSING;
+    if (fits(metadata->master.bytes, entry, 2)) {
+      const uint8_t *dce = table_at(image, metadata->bytes, read_le16(master + entry), &metadata->dce);
+      if (dce) {
+        if (metadata->dce.format != 4 || metadata->dce.content < 1 || metadata->dce.content > 3) {
+          metadata->dce.state = METADATA_UNSUPPORTED;
+        } else if (!fits(metadata->dce.bytes, ATOM_DCE_REFERENCE_OFFSET, 2)) {
+          metadata->dce.state = METADATA_MALFORMED;
+        } else {
+          metadata->dce_reference_10khz = read_le16(dce + ATOM_DCE_REFERENCE_OFFSET);
+        }
+      }
+    }
   }
 }
 
@@ -423,4 +444,30 @@ bool renoir_firmware_qualifies(struct pci_address address, uint64_t gpu_base)
     v->table.state == METADATA_OK && v->table.format == 2 && v->table.content == 1 &&
     !v->firmware_flags && !v->firmware_start_kb && !v->firmware_size_kb &&
     v->driver_start_known && !v->driver_start_kb && !v->driver_size_kb;
+}
+
+uint32_t renoir_cursor_reference_clock(struct pci_address address)
+{
+  const struct image_metadata *image = NULL;
+  if (inventory.captured && inventory.state == METADATA_OK && !inventory.image_limit) {
+    for (unsigned i = 0; i < inventory.count; ++i) {
+      const struct image_metadata *candidate = &inventory.images[i];
+      if (candidate->address.bus == address.bus && candidate->address.device == address.device &&
+          candidate->address.function == address.function) {
+        if (image) {
+          klog("renoir-cursor-inventory: ATOM dce_info unavailable: ambiguous image\n");
+          return 0;
+        }
+        image = candidate;
+      }
+    }
+  }
+  if (!image || image->rom.state != METADATA_OK || image->master.state != METADATA_OK) {
+    klog("renoir-cursor-inventory: ATOM dce_info unavailable: VFCT/ROM/master\n");
+    return 0;
+  }
+  klog("renoir-cursor-inventory: ATOM dce_info state=%s format=%u content=%u bytes=%u crystal=%u kHz\n",
+      state_name(image->dce.state), (unsigned)image->dce.format, (unsigned)image->dce.content,
+      (unsigned)image->dce.bytes, (unsigned)image->dce_reference_10khz * 10);
+  return image->dce.state == METADATA_OK ? (uint32_t)image->dce_reference_10khz * 10 : 0;
 }

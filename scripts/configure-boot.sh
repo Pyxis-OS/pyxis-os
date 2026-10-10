@@ -87,6 +87,12 @@ case "$display_flip_metrics" in
   1) command_line="$command_line display.flip.metrics=1" ;;
   *) echo 'DISPLAY_FLIP_METRICS must be 0 or 1.' >&2; exit 1 ;;
 esac
+display_cursor_probe=${DISPLAY_CURSOR_PROBE:-0}
+case "$display_cursor_probe" in
+  0) ;;
+  1) command_line="$command_line display.cursor.probe=1" ;;
+  *) echo 'DISPLAY_CURSOR_PROBE must be 0 or 1.' >&2; exit 1 ;;
+esac
 rescue_line=
 mount_disk=${MOUNT_DISK:-}
 if [ -n "$mount_disk" ]; then
@@ -112,6 +118,7 @@ PYXIS_BEACON_NAME="$remote_beacon" PYXIS_DISPLAY_SIZE="$display_size" PYXIS_DISP
 PYXIS_DEBUG_NAME="$debug_net" \
 PYXIS_DISPLAY_TIMING_METRICS="$display_timing_metrics" PYXIS_DISPLAY_INVENTORY="$display_inventory" \
 PYXIS_DISPLAY_FLIP="$display_flip" PYXIS_DISPLAY_FLIP_METRICS="$display_flip_metrics" \
+PYXIS_DISPLAY_CURSOR_PROBE="$display_cursor_probe" \
 awk -v timeout="$BOOT_MENU_TIMEOUT" '
   BEGIN {
     normal = ENVIRON["PYXIS_NORMAL_LINE"]; rescue = ENVIRON["PYXIS_RESCUE_LINE"]
@@ -123,6 +130,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     inventory = ENVIRON["PYXIS_DISPLAY_INVENTORY"] == "1"
     flip = ENVIRON["PYXIS_DISPLAY_FLIP"] == "1"
     flip_metrics = ENVIRON["PYXIS_DISPLAY_FLIP_METRICS"] == "1"
+    cursor_probe = ENVIRON["PYXIS_DISPLAY_CURSOR_PROBE"] == "1"
     normal_bytes = length(normal)
     if (beacon != "") normal_bytes += length(beacon) - length("${PYXIS_REMOTE_BEACON}")
     if (debug_name != "") normal_bytes += length(debug_name) - length("${PYXIS_DEBUG_NET}")
@@ -134,6 +142,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (flip) install_bytes += length(" display.flip=1")
     if (flip_metrics) install_bytes += length(" display.flip.metrics=1")
     if (inventory) install_bytes += length(" display.inventory=1")
+    if (cursor_probe) install_bytes += length(" display.cursor.probe=1")
     if (normal_bytes > 4095 || install_bytes > 4095 ||
         (rescue != "" && normal_bytes + length(" boot.default_config=1") > 4095)) {
       print "Kernel command line must fit within 4095 bytes." > "/dev/stderr"
@@ -156,6 +165,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (flip) line = line " display.flip=1"
     if (flip_metrics) line = line " display.flip.metrics=1"
     if (inventory) line = line " display.inventory=1"
+    if (cursor_probe) line = line " display.cursor.probe=1"
     print line; next
   }
   { print }

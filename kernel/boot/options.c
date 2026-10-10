@@ -129,6 +129,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *display_timing = NULL, *display_timing_metrics = NULL, *display_inventory = NULL;
   const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
   const char *display_flip = NULL, *display_flip_metrics = NULL;
+  const char *display_cursor_probe = NULL;
 
   char *cursor = command_line_storage;
   while (*cursor) {
@@ -183,6 +184,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&display_flip_metrics, key, value);
     } else if (same_text(key, "display.inventory")) {
       take_option(&display_inventory, key, value);
+    } else if (same_text(key, "display.cursor.probe")) {
+      take_option(&display_cursor_probe, key, value);
     } else {
       panic("unknown kernel option: %s", key);
     }
@@ -232,6 +235,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.display_flip = display_flip && flag_option("display.flip", display_flip);
   options.display_flip_metrics = display_flip_metrics &&
     flag_option("display.flip.metrics", display_flip_metrics);
+  options.display_cursor_probe = display_cursor_probe &&
+    flag_option("display.cursor.probe", display_cursor_probe);
   return &options;
 }
 

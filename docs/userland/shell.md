@@ -105,22 +105,46 @@ that shell stops saving.
 
 Searching history with Ctrl+R is [deferred](../technical-debt.md#initial-terminal-editor).
 
-**Tab completion.** Tab completes the command name: the first word of the line
-or of a pipeline stage after `|`. The candidates are the shell builtins and the
-programs in `bin://` and `boot://` (each `NAME.pxe` offered as `NAME`), sorted
-and without duplicates. Names that need quoting to type are not offered, and
-`bin://` entries added by a development bundle catalog are not either.
+**Tab completion.** Tab completes the word before the cursor, read with the
+parser's quoting rules.
 
-- **One match** replaces the word and adds a space.
+- **Command names:** the first word of the line or of a pipeline stage after `|`,
+  typed bare. The candidates are the shell builtins and the programs in `bin://`
+  and `boot://` (each `NAME.pxe` offered as `NAME`), sorted and without duplicates.
+  Names that need quoting to type are not offered, and `bin://` entries added by
+  a development bundle catalog are not either.
+- **Paths:** any other word, including a redirection target. Everything up to the
+  last `/` is the directory, opened as `cd` and `ls` open one: relative to the
+  working directory, or by a `scheme://` root, with the shell's own grants. A
+  directory it cannot open offers nothing. Files and directories are offered,
+  whatever the command. A directory ends in `/` and a lone one gets no space, so
+  the next Tab goes deeper. Names that start with `.` are offered only after a
+  typed `.`. A word that begins with a partial root name, such as `ho` or `home:`,
+  also offers the caller's roots as `name://`, taken from the shell's own root
+  bindings.
+- **Quoting follows how the word began.** Unquoted, the inserted text escapes a
+  space, `'`, `"`, `\`, `|`, `<`, `>` and `&` with a backslash (`two\ words`). Inside
+  quotes the name is inserted raw, with `"` and `\` escaped in double quotes, and a
+  lone file match closes the quote. A name holding `'` is not offered inside single
+  quotes. A word that mixes quoted and unquoted pieces is written again in the
+  quote state at the cursor.
+- **Not offered:** names with non-ASCII or control bytes, `http://` and
+  `https://` words (Tab never starts a network request), and the contents of a
+  directory with more than 4096 entries.
+
+Matches behave the same for both kinds:
+
+- **One match** replaces the word and adds a space, or nothing after a directory.
 - **Several matches** extend the word to their common prefix when that is longer.
   Otherwise Tab lists them in columns under the line and draws the prompt and
-  line again. Tab on an empty line lists every command.
-- **Nothing** happens in argument position, after a redirection operator, inside
-  quotes, or when the word contains `/`, `:` or another byte a bare name cannot
-  hold. Paths and arguments are not completed.
+  line again. Tab on an empty command position lists every command, and on an
+  empty argument position the working directory and the roots.
+- **Nothing** happens after a background `&`, for a command word that is quoted
+  or holds `/`, `:` or another byte a bare name cannot hold, and when nothing
+  matches.
 - A completion that would exceed the line limit changes nothing and marks the
-  line as full. The shell lists `bin://` and `boot://` with its own grants; if
-  either cannot be listed, it offers fewer names.
+  line as full. The shell lists `bin://` and `boot://` and path directories with
+  its own grants; what it cannot list it leaves out.
 
 The local shell, a [multiplexer](multiplexer.md) pane and the
 [remote terminal](remote-terminal.md) shell complete the same way; the quiet
@@ -630,7 +654,7 @@ launch. The `session` word is removed from the child's arguments.
 
 The successor receives copies of the usual terminal and memory grants, the
 explicit selected root list and working-directory grants, current working-path
-metadata and initial environment, plus an explicit `launcher` resource preserving
+metadata and current environment, plus an explicit `launcher` resource preserving
 the caller's LAUNCH and any CREATE_GROUP authority. An optional `child_launcher`
 is forwarded separately with LAUNCH alone. Other startup
 resources, including the caller's `script`, `host_mount` and `native_mount`, are
@@ -699,9 +723,9 @@ launcher through this policy. Trusted `session` handoff preserves
 `child_launcher` as a distinct resource. If Remote explicitly opts in, that grant
 is bound to the remote session's execution group.
 
-An initial directory chain is copied from startup, preserving its navigation
-boundary. A supplied chain requires a descriptive working path beginning with a
-`NAME://` scheme for prompt display. The path is not resolved to replace the
+The shell uses libc's retained [working-path context](process-state.md), seeded
+from startup with its navigation boundary. Unknown descriptive spelling leaves
+lookup usable and shows `[cwd unavailable]` in the prompt. The path is not resolved to replace the
 chain: actual handles remain authoritative, and insufficient grants
 fail normally. With no initial chain the shell starts at `tmp://`. Explicit
 scheme changes use the bound root's actual grant; each descendant lookup retains
@@ -723,12 +747,11 @@ launch authority follows the separate `child_launcher` policy above. When
 available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.
-The immutable initial environment is forwarded in full using
-libpyxis's borrowed environment-array accessors. No environment mutation or PWD
-maintenance is implemented. Children receive the full current working-path
-display string alongside their directory handles. Display normalization removes
-redundant separators and dot components, but lookup still walks the original
-input: `missing/..` fails rather than skipping the missing directory.
+An owned snapshot of libc's current environment is forwarded explicitly, with
+the existing network overlay. No shell assignment command or automatic PWD
+maintenance is added. Children receive current working-path metadata alongside
+independent directory grants. Display normalization removes redundant separators
+and dot components; lookup still walks the original input, so `missing/..` fails.
 
 The shell never reads terminal input while waiting. Successful wait means child
 resources have been reclaimed; it closes the observers, reports nonzero exits or
