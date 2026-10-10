@@ -19,7 +19,7 @@ Require actual active dimensions, current master enable, scaler bypass or the
 verified inherited unity RGB state described below, matching recout/MPC/viewport, no stereo/update lock/GSL/triple buffering, disabled flip/flip-away interrupt
 enables (read only, never changed), opaque MPCC global alpha/gain,
 linear ARGB8888 with matching crossbar, no DCC/TMZ/VM translation, and stable
-BAR/MC/DCN/GOP correspondence. Mask live request/clock/coefficient-bank status
+BAR/MC/DCN/GOP correspondence. Mask live request/clock and unused bypass coefficient-bank status
 from immutable comparisons. Generic INUSE is not the completion address.
 
 The owner accepted the unsheared native GOP display as proof of a **7680-byte
@@ -27,6 +27,17 @@ effective stride**, 2026-10-09. Raw PITCH stays `0x780`; Linux normally programs
 1920 pixels as `0x77f`. This first slice requires the observed raw value and GOP
 1920x1080/7680/32-bit RGB shifts 16/8/0. It does not generalize the discrepancy.
 Every format, pitch, tiling, blend and delay field remains firmware-owned.
+
+The owner accepted the inherited firmware scaler as-is on 2026-10-10: the
+correctly displayed unscaled panel proves this sampling state, and address-only
+flips never change it. Require captured DSCL mode1/AutoCal0x100, exactly unity
+H/V luma ratio fields and matching viewport/RECOUT/MPC rectangles. Do not require
+chroma ratios/inits or tap controls to reproduce Linux's programming. Compare
+the complete active scaler state against the boot snapshot on every validation,
+including all ratios, phases, taps, boundary, two-tap, replicate and coefficient
+bank fields. These fields remain read-only. This acceptance does not assert that
+any particular chroma or two-tap field is unused, and does not generalize to a
+new firmware layout. Native positive flips still require qualification.
 
 The 512 MiB UMA bounds are recomputed from DCN/MMHUB/GC/NBIF and correlated
 through stable BAR0 to original GOP offset zero. Require supported, uniquely
@@ -158,7 +169,9 @@ Pinned Linux v6.19.10 evidence:
 
 The added gate accepts only the captured raw mode1/AutoCal0x100 combination,
 existing mono/nonrotated RGB layout checks, matching viewport/RECOUT/MPC and
-**all four independently read ratio fields equal unity**. Preserve mode-zero
+**H/V luma ratio fields equal unity**, per the accepted firmware evidence
+standard above. Chroma ratios/inits and taps need no Linux-canonical values.
+Preserve mode-zero
 acceptance. Freeze ratios, phase/init (including bottom fields), taps, boundary,
 two-tap and replicate controls during the existing double-snapshot and runtime
 layout validation. Do not impose invented canonical tap/phase values: Linux
@@ -172,7 +185,7 @@ changes surface addresses independently of DPP scaler programming. All scaler
 registers remain RO in their existing audited pages; no new mappings, write
 allowlist entries, modeset or IRQ changes. Metrics-gated preparation/refusal
 records now include the read ratios and inherited phase/control state. Missing
-or non-unity ratios still refuse, even with equal dimensions. Native success
+or non-unity H/V ratios still refuse, even with equal dimensions. Native success
 remains pending a restaged boot; it is not inferred from the old dump.
 
 ## RGB chroma refusal — 2026-10-10
@@ -210,19 +223,21 @@ The owner's requested temporary host check compiled the actual `dimensions`,
 from the working source with the actual structures/constants. The fixture uses
 the complete new scaler dump and earlier `inventory-638b.log` route/VM/DMCUB
 fields. Unlogged OTG stereo/lock/GSL and MPCC stereo fields were explicitly zero
-assumptions, not measured new-boot values. The captured C-zero fixture returns
-`-1`; changing only HC/VC to unity returns HUBP0. Thus the known state has no
+assumptions, not measured new-boot values. Before owner acceptance, the captured C-zero fixture returned
+`-1`; changing only HC/VC to unity returned HUBP0. Thus the known state has no
 additional tap/two-tap rejection hiding behind the ratio failure. This is a
 conditional host precheck, not a new native full-route measurement or positive
 memory/write qualification. No persistent test or synthetic hardware was added.
 
-The gate remains unchanged pending evidence or an explicit owner decision on
-accepting this exact inherited RGB state with that residual uncertainty. Default:
-retain refusal until hardware documentation establishes the C-field semantics.
-An alternative is owner-authorized acceptance based on the working inherited
-native display, keeping H/V exactly unity, HC/VC limited to zero or unity only
-for qualified ARGB8888, and every scaler register frozen. The latter is not
-accepted or implemented here. Restaging the unchanged gate would refuse again.
+Owner acceptance on 2026-10-10 replaces the chroma-unity prerequisite with
+the firmware evidence standard beside the pitch reasoning above. The rerun
+of the actual whole gate admits the captured C-zero, taps0, two-tap0x1110111,
+all-init0x01000000 state as HUBP0, using the same explicitly conditional earlier
+route fixture. Unity C also admits; non-unity H/V, YUV format, unsupported mode or
+AutoCal and mismatched rectangles refuse. The actual `same_layout` comparison
+rejects a mutation to every scaler ratio/init/tap/control field and active
+coefficient bank. The host check does not establish a fresh native route,
+allocation or successful flip; the next native boot remains decisive.
 
 ## Paired native qualification — Luna stages, owner judges
 
@@ -242,7 +257,7 @@ reboot and existing UDP capture on horse.
    checksums must match the disabled set. Luna stages it after the disabled run.
 3. Per boot, capture startup and at least60s idle/moving-pointer metrics. Enabled
    must report prepared with recomputed spare0x900000, inherited raw0x780/effective
-   7680, all four ratio fields `0x01000000`, captured mode1/AutoCal0x100 (or
+   7680, H/V ratio fields `0x01000000`, captured mode1/AutoCal0x100 (or
    the pre-existing bypass path), correct addresses and many matching confirmations
    with no timeout/loss.
    Refusal is a safe negative result: retain its numeric metrics dump, do not

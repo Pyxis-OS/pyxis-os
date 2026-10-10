@@ -176,6 +176,17 @@ not establish a general decoder for other firmware modes. The first backend
 requires precisely this width/height/pitch/format, recalculates translations and
 exclusions at boot, and refuses other layouts or unfamiliar/nonzero reservations.
 
+The owner accepted the inherited firmware scaler as-is on 2026-10-10: the
+correctly displayed unscaled panel proves this sampling state, and address-only
+flips never change it. Require captured DSCL mode1/AutoCal0x100, exactly unity
+H/V luma ratio fields and matching viewport/RECOUT/MPC rectangles. Do not require
+chroma ratios/inits or tap controls to reproduce Linux's programming. Compare
+the complete active scaler state against the boot snapshot on every validation,
+including all ratios, phases, taps, boundary, two-tap, replicate and coefficient
+bank fields. These fields remain read-only. This acceptance does not assert that
+any particular chroma or two-tap field is unused, and does not generalize to a
+new firmware layout. Native positive flips still require qualification.
+
 Task 2 is authorized. `DISPLAY_FLIP=1` adds `display.flip=1`; omission is off.
 Default remains today's GOP copy. The [task-2 record](../development/experiments/renoir-flip-backend/README.md)
 covers qualification gates, lifetime, QEMU evidence and paired native steps.

@@ -182,14 +182,12 @@ static bool qualified_scaler(const struct layout_state *s, unsigned hubp)
     return true;
   }
   const struct scaler_state *scale = &s->scaler[hubp];
-  /* Linux may keep RGB scaling enabled at unity. Accept only the captured
-   * manual state, with measured ratios; equal rectangles alone are no proof. */
+  /* The correctly displayed GOP proves this inherited sampling state. Address
+   * flips preserve it; same_layout compares every scaler field at runtime. */
   return s->scaler_mode[hubp] == SCALER_RGB_ENABLE &&
     s->scaler_autocal[hubp] == SCALER_NATIVE_AUTOCAL &&
     (scale->h_ratio & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY &&
-    (scale->v_ratio & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY &&
-    (scale->h_ratio_c & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY &&
-    (scale->v_ratio_c & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY;
+    (scale->v_ratio & SCALER_RATIO_MASK) == SCALER_RATIO_UNITY;
 }
 
 static int qualified_route(const struct layout_state *s)
