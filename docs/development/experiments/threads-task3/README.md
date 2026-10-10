@@ -173,3 +173,53 @@ no stable causal overhead is established. Native A/B remains owner qualification
 stage the same initrd into both kernels and use the four-command remote loop at
 256 messages/100 rounds. No optimization is included merely to improve these
 nested results.
+
+
+## Current-main integration
+
+Merged main `2a1e4f99` into branch head `3aa47f1b`, retaining the frozen A/B
+inputs above. Verified SDK/userland/ports bundles from successful exact-main
+[#1755](https://git.internal/PyxisOS/pyxis-os/actions/runs/1755); inherited ports
+pin is now `4047297dbc9342b8986867122d6e4c24ee6a57a2`, with the other pins unchanged.
+Ordinary source kernel/image build with the same compiler and
+`PREBUILT="sdk userspace ports"` passed warning-free. Integration ELF SHA-256
+`9e5154c51e3f414151986e70ba0f0f8cf560e0cf56f8e75b3da02125e57313b5`,
+ISO `abc80f1a25f08a98cb277daec2b4a5610ef602271e1801380b7684f5915e9af6`,
+initrd `58ae5de4d3eb2a90e21cd9ddd61187d5b157eec247b2c6c40cf6134bd71647d0`.
+These are integration inputs, not another performance comparison.
+
+Fresh interactive QEMU boots used the same 1/4-CPU configuration. One CPU
+verified CALL64 (eight messages, one round) and the 1 MiB pipe warmup/sample;
+four CPUs verified SEND4096 (eight messages, one round), provider text, a
+pipeline and RAM redirect/read/removal. Screenshot succeeded and a normal Lua
+reader verified its eight-byte PNG signature before removal. Denied boot-archive
+creation was followed by Not found, and removal from that archive was refused.
+All sessions ended with FINAL 0/complete; expected refusals retained their own
+nonzero command status. No kernel fault or panic. The initial attempt to list a
+PNG as a directory was refused; it was replaced by the signature check above.
+
+Independent source review confirmed main's frame-skipping integration: pending
+capture forces composition, arrival after the snapshot remains pending for the
+next pass, failures release claims, and success moves the snapshot grant once.
+Prior matching-ELF GDB observations remain the inspection evidence. Integration
+captures are in ignored `build/task3-integration`; all owned VM/client/debugger
+jobs were stopped. No attached HOST/NPFS/raw-disk or native result is added.
+
+For native A/B, keep the same staged initrd for A and B and run this on horse
+once per fresh PXE boot, using a separate output directory for each run:
+
+```sh
+run_dir="$HOME/xf/task3/A1" # change for each fresh boot
+mkdir -p "$run_dir"
+for mode in call send; do
+  for size in 64 4096; do
+    printf 'session bin://ipcbench.pxe %s --size %s --messages 256 --rounds 100\n' "$mode" "$size" |
+      pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323 >"$run_dir/$mode-$size.jsonl"
+  done
+done
+```
+
+No sleep or guest `exit` follows the session command: stdin EOF closes the parked
+shell only after its successor finishes, and the client drains through FINAL.
+Check each JSONL for 100 verified passes, zero failure/rejection and FINAL status
+0/drain complete; client exit alone is not the benchmark result.

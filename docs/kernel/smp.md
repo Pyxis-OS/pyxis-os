@@ -281,8 +281,8 @@ table guard covers acquisition, CLOSE detachment, slot claims and structural
 publication; growth prepares backing on BSP outside it. CLOSE invokes logical effects
 and releases its detached grant outside that guard. These storage references
 drain during syscall cleanup before `task_syscall_leave` and retirement; they do
-not prolong controller authority or pipe open directions. Grant-producing capture additionally retains logical authority and rechecks the
-source generation/masks. Shared-table delivery is implemented; sibling activity
+not prolong controller authority or pipe open directions. Grant-producing capture
+additionally retains logical authority and rechecks the source generation/masks. Shared-table delivery is implemented; sibling activity
 and VM admission remain [later thread gates](../wip/threads.md).
 
 A wake that precedes parking only records notification; it sends no IPI and
@@ -321,8 +321,8 @@ producer.
 
 Capability tables use admitted process lifetime and short IF=0 exclusion. The
 BSP installs entries before submission; admitted user/service activity captures,
-claims, installs or detaches entries under the same guard. A last object release normally queues its embedded retirement link without
-touching the heap. Endpoint receipts instead release logical delivery ownership
+claims, installs or detaches entries under the same guard. A last object release
+normally queues its embedded retirement link without touching the heap. Endpoint receipts instead release logical delivery ownership
 synchronously under the endpoint lock; their reusable embedded objects never
 enter the retirement list. The BSP scheduler drains this separate list after
 task cleanup and runs destruction callbacks outside its lock. Pending objects
@@ -473,10 +473,11 @@ latency. The scheduler does not know about display timing. See
 
 [Screen capture](../interfaces/screen-capture.md) uses deferred publication after
 the caller leaves its stack and private root. It reserves the returned FILE
-slot before submission; the shared request owns this claim until completion. The executor forwards admission to the presenter without waiting for
-a frame. The presenter copies with IF=1, while pending/active ownership changes,
+slot before submission; the shared request owns this claim until completion. The
+executor forwards admission to the presenter without waiting for a frame. The presenter copies with IF=1, while pending/active ownership changes,
 allocation and READ-only FILE installation remain BSP/IF=0 work outside the output
-lock. It clears all presenter references and unconsumed claims before waking the caller.
+lock. It clears all presenter references and unconsumed claims before waking the
+caller.
 
 ## Memory and output boundaries
 
