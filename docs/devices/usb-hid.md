@@ -4,7 +4,11 @@ The BSP USB worker binds HID boot-subclass keyboard and mouse interfaces to
 [the shared keyboard path](keyboard.md) and
 [system pointer](../interfaces/pointer.md#input-source-coordination). Existing
 input grants, focus and process ownership apply; there is no raw USB grant or
-new public input ABI. PS/2 stays available alongside USB.
+new public input ABI. PS/2 stays available alongside USB. On a USB-only boot,
+initial userspace waits on the BSP for the first keyboard or the end of boot
+USB discovery, checking every 10 ms. A present PS/2 keyboard keeps direct startup.
+Discovery waits hold no input lock; console unavailable errors are unchanged,
+and startup does not wait for a device attached after discovery completes.
 
 ## Binding and ownership
 
