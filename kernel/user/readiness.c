@@ -9,6 +9,7 @@
 #include <kernel/object/keyboard.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/pipe.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
@@ -25,6 +26,9 @@ static struct bsp_request *active;
 static atomic_bool worker_locked;
 static struct task_wait *worker_wait;
 static bool worker_notified;
+/* BSP/IF=0 registers before the first pair-lock observation and unregisters
+ * before dropping request references. Producers only observe this count. */
+static atomic_size_t pipe_requests;
 
 static void lock_worker(void)
 {
@@ -52,10 +56,23 @@ void readiness_notify(void)
   net_worker_notify();
 }
 
+void readiness_pipe_notify(void)
+{
+  /* The first scan either sees a preceding transfer or publishes registration
+   * through the pair lock before a later producer tests this count. */
+  if (atomic_load_explicit(&pipe_requests, memory_order_acquire)) {
+    readiness_notify();
+  }
+}
+
 void readiness_complete(struct readiness_request *request, enum call_status status)
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (request->watches_pipe) {
+    atomic_fetch_sub_explicit(&pipe_requests, 1, memory_order_release);
+    request->watches_pipe = false;
+  }
   struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
   for (size_t i = 0; i < request->count; ++i) {
     object_release(request->interests[i].object);
@@ -98,6 +115,9 @@ bool readiness_service(struct bsp_request **active_list)
     for (size_t i = 0; !stopped && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
+      case OBJECT_PIPE:
+        interest->ready = pipe_ready((struct pipe_end *)interest->object, interest->events);
+        break;
       case OBJECT_TCP:
       case OBJECT_TCP_LISTENER:
         interest->ready = tcp_readiness_events(interest);
@@ -187,12 +207,21 @@ void readiness_submit(struct readiness_request *request)
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_FORWARDED && !request->request.next);
+  request->watches_pipe = false;
+  bool watches_tcp = false;
   for (size_t i = 0; i < request->count; ++i) {
     enum object_type type = request->interests[i].object->type;
+    request->watches_pipe |= type == OBJECT_PIPE;
     if (type == OBJECT_TCP || type == OBJECT_TCP_LISTENER) {
-      net_readiness_submit(request);
-      return;
+      watches_tcp = true;
     }
+  }
+  if (request->watches_pipe) {
+    atomic_fetch_add_explicit(&pipe_requests, 1, memory_order_release);
+  }
+  if (watches_tcp) {
+    net_readiness_submit(request);
+    return;
   }
   if (incoming_tail) {
     incoming_tail->next = &request->request;

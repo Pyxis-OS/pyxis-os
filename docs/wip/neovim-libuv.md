@@ -1,11 +1,11 @@
 # Neovim on Pyxis
 
-Status: **owner decisions accepted 2026-10-10; nothing implemented.** Task 1 is
-assigned to a Codex agent; later tasks start only on the owner's go. The owner
+Status: **owner decisions accepted 2026-10-10; task 1 implemented in this PR.**
+Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
-of patching BusyBox vi. The re-check
-below is code and document inspection of `origin/main` at `dc91a4c6`; nothing
-was built or booted.
+of patching BusyBox vi. The initial re-check used code and document inspection
+of `origin/main` at `dc91a4c6`; the task 1 update and linked qualification
+record distinguish implemented behavior and measured costs.
 
 ## Re-check against current main
 
@@ -13,7 +13,7 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 
 | # | Original milestone | State | What exists and what is missing |
 | --- | --- | --- | --- |
-| 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Pipes have no readiness, no nonblocking mode and no try operations** ([pipes](../interfaces/pipes.md#transfers)), file and provider opens cannot be waited on, and there are no completion tokens. |
+| 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Task 1 adds pipe readiness and native try operations** ([pipes](../interfaces/pipes.md#readiness)); libc streams remain blocking, file and provider opens cannot be waited on, and there are no completion tokens. |
 | 2 | User threads | **Unchanged for this purpose** | [Task 1](threads.md#first-task-and-later-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Create/join, TLS, `pthread.h` and thread-safe libc are tasks 2 to 4, unassigned. |
 | 3 | File metadata and identity | **Mostly unchanged** | Libc now has `sys/stat.h` (type and size only), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Still missing: object identity, modification time and ownership ([debt](../technical-debt.md#file-identity-across-capability-paths)), `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
 | 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: alternate screen, scroll regions and saved cursor ([TTY subset](../userland/terminal.md#tty-output-controls); mux adds no alternate-screen protocol), non-ASCII input and drawing, and a PTY-style session for child terminals. |
@@ -44,24 +44,27 @@ until the owner accepts the slice, and receives no further editor work.
 Each task is a focused PR after the owner's go. The first two are useful
 without Neovim.
 
-1. **Pipe readiness and try operations.** `wait_many` gains pipe READABLE,
+1. [x] **Pipe readiness and try operations.** `wait_many` gains pipe READABLE,
    WRITABLE and closure, and pipes gain try read and try write, following the
    TCP model. The owner can pipe a slow producer into a viewer that shows output
    as it arrives and keeps answering keys, such as `less` following its input;
    today [`less`](../userland/less.md) blocks on a pipe read and has no live
-   refresh.
-2. **File identity and modification stamp.** A short contract first (scope across
+   refresh. This PR supplies the native operations and helpers, without changing
+   consumers. [Qualification and matched costs](../development/experiments/pipe-readiness/README.md)
+   cover one and four CPUs, a responsive scratch child-output viewer, and mixed
+   pipe/console/process/TCP waits.
+2. [ ] **File identity and modification stamp.** A short contract first (scope across
    RAM, host and native volumes, lifetime, replacement), then the native query
    and the libc `stat` fields where a backend reports them. The owner can see
    the shell refuse to redirect output onto an input file reached by another
    path ([redirection debt](../technical-debt.md)), and TCC honour
    `#pragma once`.
-3. **Terminal profile for a full-screen editor.** Alternate screen, scroll
+3. [ ] **Terminal profile for a full-screen editor.** Alternate screen, scroll
    region and saved cursor in the framebuffer TTY and the multiplexer, and the
    `TERM` name that advertises exactly what is supported. ASCII only. The owner
    can run a full-screen program that finds the shell screen intact on exit, in
    a tab and in a pane.
-4. **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
+4. [ ] **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
    async wake over a pipe pair, console and pipe streams, synchronous file calls,
    and child launch through the launcher. Pool, threads, sockets, file watches,
    `dlopen` and signals return an unsupported error; mutex, once and key
@@ -74,10 +77,10 @@ without Neovim.
    startup needs the pool, this task reports it and the plan changes here. The
    owner can run a small libuv program that relays a child's output with a
    timer.
-5. **Lua 5.1.5 with luv.** Lua 5.1.5 with its standard libraries, LPeg, luv and
+5. [ ] **Lua 5.1.5 with luv.** Lua 5.1.5 with its standard libraries, LPeg, luv and
    lua-compat-5.3 as one recipe set. The owner can run Lua scripts with timers
    and child processes through luv.
-6. **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
+6. [ ] **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
    tree-sitter library, iconv) with host generators kept native, plus the libc
    functions its build finds missing. The owner can run `nvim file`, edit with vi
    keys, save, and quit in a tab and a pane. Expect this task to split once the
