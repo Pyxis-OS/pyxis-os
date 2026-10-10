@@ -85,8 +85,9 @@ enum usb_result usb_bluetooth_bind(struct usb_bluetooth_binding *binding,
       usb_host_async_bulk_capacity() < BLUETOOTH_HCI_ACL_MAX) {
     return USB_UNSUPPORTED;
   }
+  struct usb_host_interrupt *event;
   enum usb_result result = usb_host_configure_interrupt_in(device,
-      &binding->event, HCI_EVENT_BYTES, deadline);
+      &binding->event, HCI_EVENT_BYTES, USB_INTERRUPT_HCI, deadline, &event);
   if (result == USB_OK) {
     result = usb_host_configure_async_bulk(device, &binding->acl_in,
         &binding->acl_out, BLUETOOTH_HCI_ACL_MAX, deadline);
@@ -118,12 +119,12 @@ enum usb_result usb_bluetooth_bind(struct usb_bluetooth_binding *binding,
   if (completion.result != USB_OK || completion.bytes) {
     return completion.result == USB_OK ? USB_IO : completion.result;
   }
-  result = usb_host_interrupt_start(device);
+  result = usb_host_interrupt_start(event);
   if (result == USB_OK) {
     result = usb_host_async_bulk_start(device);
   }
   if (result == USB_OK) {
-    bluetooth_hci_attach(controller, device, AX200_INTERFACE);
+    bluetooth_hci_attach(controller, device, AX200_INTERFACE, event);
   }
   return result;
 }

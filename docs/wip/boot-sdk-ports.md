@@ -101,8 +101,9 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-09): [machine settings, task 1](machine-settings.md#task-1-contract),
-  hostname store/validation, boot selection, native query and print-only command.
+- **Codex** (2026-10-10): [USB HID boot keyboards and mice](usb-hid.md),
+  shared physical input, USB 2 hub chains and bounded leaf hotplug. QEMU and
+  ThinkPad keyboard/composite mouse input are qualified; #654 ready to merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
@@ -154,8 +155,6 @@ Other candidates; current assignments are listed above.
 - [Network kernel debugger](network-debugger.md): owner-requested planning for
   opt-in LAN GDB during native PXE bring-up; checkpoint foundation assigned,
   transport and later tasks await assignment.
-- USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
-  boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after
   the completed analog playback milestone.
 - [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture

@@ -23,11 +23,20 @@ static const struct {
   [KEY_SPACE] = {' ', ' '}, [KEY_ENTER] = {'\n', '\n'},
   [KEY_KP_ENTER] = {'\n', '\n'}, [KEY_TAB] = {'\t', '\t'},
   [KEY_BACKSPACE] = {'\b', '\b'}, [KEY_ESCAPE] = {'\x1b', '\x1b'},
+  [KEY_KP_DIVIDE] = {'/', '/'}, [KEY_KP_MULTIPLY] = {'*', '*'},
+  [KEY_KP_MINUS] = {'-', '-'}, [KEY_KP_PLUS] = {'+', '+'},
+  [KEY_KP_0] = {'0', '0'}, [KEY_KP_1] = {'1', '1'}, [KEY_KP_2] = {'2', '2'},
+  [KEY_KP_3] = {'3', '3'}, [KEY_KP_4] = {'4', '4'}, [KEY_KP_5] = {'5', '5'},
+  [KEY_KP_6] = {'6', '6'}, [KEY_KP_7] = {'7', '7'}, [KEY_KP_8] = {'8', '8'},
+  [KEY_KP_9] = {'9', '9'}, [KEY_KP_PERIOD] = {'.', '.'},
 };
 
 char key_layout_character(enum key_code key, unsigned modifiers)
 {
   if (key <= KEY_NONE || key >= KEY_COUNT) {
+    return 0;
+  }
+  if (key >= KEY_KP_0 && key <= KEY_KP_PERIOD && !(modifiers & KEY_MOD_NUM_LOCK)) {
     return 0;
   }
   char plain = characters[key].plain;

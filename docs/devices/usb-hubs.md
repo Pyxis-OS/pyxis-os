@@ -1,23 +1,23 @@
-# USB boot hub inventory
+# USB hub inventory and HID leaf notifications
 
 Caelum traverses boot-present USB 2 and USB 3 hubs on every prepared xHCI controller
 for the immutable [USB inventory](usb-enumeration.md), including nested hubs.
-USB 2 supports low/full/high-speed children; USB 3 supports standard symmetric
-Gen1/Gen2 links with one or two lanes. Hotplug, power management and storage
-binding remain outside this slice. The first
-[owner-reported ThinkPad run](../targets/t14-gen1-amd/usb-bringup.md) exercised
-full-speed descendants behind high-speed hubs. A later owner-reported run also
-traversed the dock's SuperSpeedPlus hub and completed reads from a SuperSpeed
-storage descendant. Recovery and broader native qualification remain pending.
+USB 2 supports low/full/high-speed boot children; USB 3 supports standard
+symmetric Gen1/Gen2 links with one or two lanes. Boot-present supported USB 2
+hubs also supply notification streams for bounded low/full-speed HID leaf
+hotplug. New hub topology, USB 3 hotplug and power management remain outside
+this implementation. [Storage binding](usb-storage.md) is a separate class
+consumer, and hardware qualification remains in its own records.
 
 The core activates the first fully checked ordinary hub configuration in
 descriptor order, with one interface and a hub interrupt IN endpoint. USB 3 hubs
 use device protocol 3 and default interface protocol 0, with an endpoint companion.
 Multi-TT
 hubs use their required single-TT default alternate; no SET_INTERFACE is sent.
-Other classes remain outside hub traversal; supported storage has a separate
-[read-only probe](usb-storage.md). Hub activation gives system_info READ clients no
-transfer or reset authority.
+Class binding stays separate from hub traversal: supported storage uses the
+[BOT/SCSI probe](usb-storage.md), and boot keyboard/mouse reports use the private
+[interrupt-IN path](usb-interrupt-in.md). Hub activation gives system_info READ
+clients no transfer or reset authority.
 
 Hub class requests use EP0. The core checks the variable-length USB 2 hub
 descriptor, requiring room for both bitmaps while accepting extra compatibility
@@ -29,9 +29,14 @@ candidates before resetting any child. Observed candidates survive later failure
 as unidentified/incomplete records. Each candidate has a stable connection
 interval, reset completion and recovery wait before addressing. Initial change
 bits are acknowledged explicitly; later connection changes make traversal partial.
-Final status checks include empty ports and power. No hub interrupt endpoint is
-configured: boot polling supplies this snapshot, without runtime monitoring of
-hub descendants.
+Final status checks include empty ports and power. Boot polling supplies the
+snapshot. Supported USB 2 hubs with representable child paths additionally
+configure their checked interrupt-IN endpoint after Slot metadata is established,
+then start retained notifications. This uses a separate 32-stream pool per
+controller and a receive length covering both the notification bitmap and the
+endpoint packet, within the 257-byte capacity. An unsupported endpoint or
+exhausted notification pool leaves that hub unavailable for runtime monitoring;
+it does not replace successful boot traversal with a fabricated monitor.
 
 The boot log reports each retained device's full physical path, numeric IDs and
 inspection detail. Hub lines are emitted after traversal so partial branch
@@ -71,7 +76,9 @@ Roots are inspected first, followed by an iterative breadth-first hub walk.
 USB requests remain in core; xHCI owns routing, Slot commands, speed identities,
 contexts and DMA. Children inherit the physical root port and discovered path.
 Low/full-speed children behind high-speed hubs name the nearest transaction
-translator, including through full-speed hubs. Routing follows xHCI's five route
+translator, including through full-speed hubs. A root hub device has depth zero;
+hub depths zero through four permit a leaf at depth five, so supported USB 2 HID
+paths can contain at most five external hubs. Routing follows xHCI's five route
 fields and port encoding; an unrepresentable path reports unsupported.
 
 Before AP startup, each controller reserves a descendant device pool capped by
@@ -79,9 +86,38 @@ its remaining advertised Slot capacity and `USB_DESCENDANT_BUDGET`, initially
 32 in `kernel/usb/settings.h`. Potential root reservations take precedence.
 One owned DMA arena supplies page-strided contexts, EP0 rings and control buffers.
 Children borrow slices; they never own or free the arena. No runtime allocation
-or mapping occurs. Backing and admitted Slot identities remain until reboot.
-Root removal retires descendant Slots before the root; active requests quarantine
-the controller under the existing unresolved-DMA rule.
+or mapping occurs. Backing remains until reboot. Independently prepared HID
+records allow fenced numeric Slot reuse while retaining old context, ring and
+TD identities. Active non-HID or unsupported hub-subtree removal can quarantine
+the controller under the unresolved-DMA policy.
+
+## Bounded HID leaf hotplug
+
+The bounded report-progress pass collects hub bitmaps without class requests or
+waits. A queued downstream change releases the affected HID source's held input
+before the outer worker inspects port status. Status/change acknowledgment,
+connection debounce, reset and recovery run on the owning controller worker.
+This monitor never mutates the immutable boot inventory.
+
+Only low/full-speed HID leaves may attach after boot, on roots or ports of
+boot-present supported USB 2 hub chains. The topology stays fixed: runtime hub
+insertion, high-speed leaf admission, storage/Bluetooth attachment and USB 3
+monitoring are excluded. Boot HID admission independently supports
+low/full/high-speed devices on the supported USB 2 paths.
+
+The controller's 32 HID attachment records include boot claims, failed runtime
+attempts and retired generations; endpoint and hub notification pools are
+separate from storage and HCI. A new runtime generation uses fresh prepared
+EP0/context/DMA slices. Hardware slots and periodic bandwidth remain independent
+limits, and admission refusal does not imply that the old generation is reusable.
+
+Ordinary HID leaf removal suppresses rearm, proves endpoint retirement and
+completes Disable Slot before releasing numeric slot ownership. Old DMA and TD
+owners stay retained until reboot. A failed fence, monitor failure or unsupported
+hub-subtree removal releases affected input and can quarantine the entire
+controller, stopping unrelated storage/HCI. This fail-closed behavior does not
+promise survival across USB switch or mixed-subtree removal; see
+[technical debt](../technical-debt.md#usb-switch-subtree-removal).
 
 Budgets and deadlines are implementation choices, not machine topology. Existing
 descriptor/interface budgets and the controller startup deadline also bound
