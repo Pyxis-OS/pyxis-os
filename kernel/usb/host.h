@@ -31,6 +31,8 @@ enum usb_result {
 
 struct usb_host_controller;
 struct usb_host_device;
+struct usb_host_interrupt;
+enum usb_interrupt_kind { USB_INTERRUPT_HCI, USB_INTERRUPT_HID, USB_INTERRUPT_HUB };
 struct usb_setup {
   uint8_t request_type, request;
   uint16_t value, index, length;
@@ -42,7 +44,7 @@ struct usb_bulk_endpoint {
   uint16_t packet;
 };
 struct usb_interrupt_endpoint {
-  uint8_t address, interval;
+  uint8_t address, interval, transactions;
   uint16_t packet;
 };
 struct usb_interrupt_completion {
@@ -91,23 +93,40 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
 /* BSP/IF=0. Notify the owning controller worker without allocating. */
 void usb_host_notify(struct usb_host_controller *controller);
 
-/* One retained root/full-speed stream per device, owned by its BSP worker.
- * Configure host contexts before the class selects its USB configuration; start
- * afterwards. Receive length is bounded by the prepared capacity, independently
- * of the endpoint's packet size. No caller destination survives a call.
- * Wait expiry leaves receives posted. Rejected take preserves the queue head.
- * Terminal stream failure takes precedence over queued data and stops rearm;
- * posted/stalled DMA remains retained. Owned SUCCESS or SHORT_PACKET with a
- * bounded residual retires exactly requested minus residual bytes, including
- * zero. There is no cancellation or recovery. */
+/* Separate prepared HCI, HID and hub pools. Each handle names one IN endpoint;
+ * slot, DCI and physical TD identity retain hardware ownership. Configure before
+ * SET_CONFIGURATION, start afterwards. HID supports boot USB 2 profiles and
+ * claimed runtime LS/FS leaves; hubs are boot-present USB 2 only.
+ * Wait expiry leaves receives posted. Take borrows no destination beyond return.
+ * Terminal failure precedes queued data; ack_loss follows class source release.
+ * Prepared and retired backing is retained until reboot. */
 size_t usb_host_interrupt_capacity(void);
 enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
                                                 const struct usb_interrupt_endpoint *endpoint,
-                                                size_t receive_bytes, uint64_t deadline);
-enum usb_result usb_host_interrupt_start(struct usb_host_device *device);
-enum usb_result usb_host_interrupt_wait(struct usb_host_device *device, uint64_t deadline);
-enum usb_result usb_host_interrupt_take(struct usb_host_device *device, void *destination,
+                                                size_t receive_bytes, enum usb_interrupt_kind kind,
+                                                uint64_t deadline, struct usb_host_interrupt **stream);
+enum usb_result usb_host_interrupt_start(struct usb_host_interrupt *stream);
+enum usb_result usb_host_interrupt_wait(struct usb_host_interrupt *stream, uint64_t deadline);
+enum usb_result usb_host_interrupt_take(struct usb_host_interrupt *stream, void *destination,
                                         size_t capacity, struct usb_interrupt_completion *completion);
+void usb_host_interrupt_ack_loss(struct usb_host_interrupt *stream);
+
+/* One controller budget covers boot claims and runtime attempts, including
+ * failed/retired generations. Runtime attempts use fresh prepared EP0/context
+ * slices, never recycle old DMA, and only admit LS/FS leaves. Hub topology is
+ * fixed at boot. Port generations advance on consumed connection changes. */
+enum usb_result usb_host_hid_claim(struct usb_host_device *device);
+enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
+                                        unsigned port, uint64_t deadline, struct usb_host_device **device);
+enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsigned port,
+                                         const struct usb_link *link, uint64_t deadline,
+                                         struct usb_host_device **device);
+enum usb_result usb_host_hid_retire(struct usb_host_device *device, uint64_t deadline);
+bool usb_host_device_present(const struct usb_host_device *device);
+bool usb_host_hid_root_present(const struct usb_host_controller *controller, unsigned port);
+uint64_t usb_host_port_generation(const struct usb_host_controller *controller, unsigned port);
+/* BSP/IF=0. Conservative freshness observation, no USB operation. */
+bool usb_host_hid_input_complete(const struct usb_host_controller *controller);
 
 /* Private root/full-speed bulk stream, prepared separately from storage. Host
  * configuration precedes class configuration; start follows it. Receive/take
