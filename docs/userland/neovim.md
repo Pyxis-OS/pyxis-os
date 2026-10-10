@@ -24,6 +24,16 @@ profile follow-up. Input retains a native RAW passthrough grant; resize observes
 console geometry generations, including mux panes. Exit restores the shell
 screen and releases input ownership.
 
+The bundle statically links Neovim's seven bundled Tree-sitter grammars: C,
+Lua, Vim, Vimdoc, query, Markdown and Markdown inline. `language.add()` registers
+real language objects with ABI validation, without module loading. Upstream
+ftplugins start Tree-sitter for Lua, Markdown, help and query; C and Vim keep
+legacy syntax by default. Their parsers are available to explicit
+`vim.treesitter.start()`. An unavailable language returns no parser from
+`language.add()`/`get_parser()`; highlighting start quietly preserves/restores
+legacy syntax. Explicit dynamic parser paths remain unsupported. The exact
+pins and MIT/Apache-2.0 notices are in the recipe and staged provenance.
+
 `:cd` uses the [shared working path](process-state.md), affecting the editor
 server and its future child snapshots, not the shell. Filename expansion keeps
 native schemes; a descriptive cwd is never accepted as a proved `realpath`.
@@ -54,11 +64,12 @@ and `host://`, and a `host://` symbolic link is never followed
 ([name limits and links](libc-portability.md#name-limits-and-symbolic-links)).
 External jobs, `system()`, `:terminal`, PTYs, listeners, signals, numeric PIDs,
 workers, asynchronous filesystem calls, file watches, dynamic Lua modules and
-tree-sitter grammar loading remain unavailable. Explicit requests return errors;
+dynamic tree-sitter grammar loading remain unavailable. Explicit requests return errors;
 the automatic socket listener is omitted. Legacy Vimscript syntax needs no
 parser modules. Arbitrary plugins can encounter these limits. Font rendering
 remains the terminal's ASCII profile.
 
-[QEMU qualification](../development/experiments/neovim-first-slice/README.md)
-records editing, highlighting, safe-save checks, startup time and cleanup.
+[First-slice qualification](../development/experiments/neovim-first-slice/README.md)
+and [static-parser qualification](../development/experiments/neovim-static-parsers/README.md)
+record editing, highlighting, safe-save checks, startup time and cleanup.
 Native qualification is the milestone's next slice.
