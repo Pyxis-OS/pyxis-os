@@ -114,6 +114,10 @@ stays parked because its setup is fragile; the
 [ThinkPad findings](../targets/t14-gen1-amd/notes.md#dash-management-controller-parked)
 remain available if it is revisited.
 
+The opt-in [network kernel debugger](../wip/network-debugger.md) adds a separate
+read-only all-stop GDB bridge on UDP 2326/localhost TCP 1235. It replaces no
+terminal or log path; early/unsafe faults retain the existing fatal fallback.
+
 ## Qualification
 
 On 2026-10-07, the owner qualified reverse connection discovery and `log -f`
