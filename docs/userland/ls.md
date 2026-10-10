@@ -3,6 +3,7 @@
 The native `ls` command lists the current working directory or explicit
 directory paths. It includes dot names and sorts by unsigned byte order.
 Directories keep their trailing `/`; multiple operands have path headings.
+For a recursive listing, see [tree](tree.md).
 
 ```text
 ls boot://

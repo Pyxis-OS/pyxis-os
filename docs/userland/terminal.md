@@ -70,7 +70,7 @@ The line editor ignores Escape and Page Up/Down. With a caller-owned
 recall submitted lines with Up/Down and set `recorded` when they appended the
 line; other entry points ignore them. `term_history_add` applies the same
 recording rules, for example to lines loaded from a file.
-Tab and non-ASCII input are ignored; Unicode widths remain later work. `CALL_INPUT_LOST` abandons the
+Non-ASCII input is ignored, and so is Tab unless the reader has [completion](#tab-completion); Unicode widths remain later work. `CALL_INPUT_LOST` abandons the
 line and returns a distinct result, so the caller can explain the loss and retry.
 On an output failure, the screen/cursor may be partially updated and must not be
 assumed to match the discarded line.
@@ -91,6 +91,20 @@ Kilo uses the event reader with a remaining monotonic deadline to expire
 transient status messages while idle. Resize redraws the editor or active
 search prompt without a key; search prompts do not expire. It retains its
 minimum of two columns and three rows. No periodic redraw or polling is needed.
+
+## Tab completion
+
+`term_read_line_completing(term, prompt, history, completion, marked, buffer, capacity)`
+is the history or marked reader with an optional `struct term_completion`. Tab
+calls its `candidates` function with the text left of the cursor; the function
+returns heap strings (ascending, unique, printable ASCII without spaces) and the
+offset where the word to replace starts. One name replaces that word and adds a
+space unless one follows. Several extend it to their common prefix if that is
+longer; otherwise they are listed in columns below the finished line and the
+prompt and line are drawn again. A replacement that does not fit the buffer
+changes nothing and sets `limit_reached`. The editor frees the strings. Without a
+`completion`, in the quiet reader and in the older entry points, Tab is ignored
+as before. The [shell](shell.md#commands-and-quoting) completes command names.
 
 ## TTY output controls
 
