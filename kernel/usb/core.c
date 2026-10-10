@@ -157,7 +157,7 @@ struct usb_device_record {
   uint8_t hub_configuration;
   struct usb_interrupt_endpoint hub_endpoint;
   struct usb_host_interrupt *hub_stream;
-  uint8_t hub_pending[USB_BITSET_BYTES], hub_ports;
+  uint8_t hub_pending[USB_BITSET_BYTES], hub_rebind[USB_BITSET_BYTES], hub_ports;
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
   bool present, incomplete, runtime, monitor_failed, retired;
@@ -1810,6 +1810,25 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
       for (size_t byte = 0; byte < bytes; ++byte) {
         device->hub_pending[byte] |= bitmap[byte];
       }
+      if (discovery->runtime_ready) {
+        for (size_t child_index = 0;
+             child_index < discovery->device_count + discovery->runtime_count; ++child_index) {
+          struct usb_device_record *child = live_record(discovery, child_index);
+          unsigned port = child->info.parent_port;
+          if (child->parent != device || child->retired || !port || port / 8 >= bytes ||
+              !(bitmap[port / 8] & (1u << (port % 8)))) {
+            continue;
+          }
+          if (child->hid.active) {
+            /* A queued port change cannot leave old holds authoritative while
+             * another leaf's EP0 request completes. Verify/rebind later. */
+            usb_hid_lost(&child->hid);
+            device->hub_rebind[port / 8] |= 1u << (port % 8);
+          } else if (child->hub_stream) {
+            lose_subtree(child);
+          }
+        }
+      }
     }
   }
 }
@@ -1987,6 +2006,7 @@ static void runtime_hub_status(struct usb_discovery *discovery)
   }
   struct usb_device_record *old = find_child(discovery, runtime->hub, runtime->port);
   bool changed = runtime->change & USB_HUB_CHANGE_CONNECTION;
+  bool rebind = runtime->hub->hub_rebind[runtime->port / 8] & (1u << (runtime->port % 8));
   if (old && (changed || !runtime_hub_connected(runtime))) {
     if (!retire_record(old)) {
       runtime_end(discovery, false);
@@ -1995,14 +2015,16 @@ static void runtime_hub_status(struct usb_discovery *discovery)
     old = NULL;
   }
   if (!runtime_hub_connected(runtime)) {
+    runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
     runtime_ack(runtime, USB_RUNTIME_IDLE);
     return;
   }
   switch (runtime->stage) {
   case USB_RUNTIME_HUB_STATUS:
-    if (old || !changed) {
+    if (old || (!changed && !rebind)) {
       runtime_ack(runtime, USB_RUNTIME_IDLE);
     } else {
+      runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
       runtime->stable = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
       runtime->wake = task_deadline_after_ms(USB_HUB_POLL_MS);
       runtime_ack(runtime, USB_RUNTIME_HUB_DEBOUNCE);

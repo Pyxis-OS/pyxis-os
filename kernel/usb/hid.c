@@ -226,7 +226,7 @@ enum usb_result usb_hid_begin(struct usb_hid_binding *binding,
     return USB_UNSUPPORTED;
   }
   for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
-    if (binding->interfaces[index].receive_bytes > usb_host_interrupt_capacity()) {
+    if (binding->interfaces[index].receive_bytes > usb_host_hid_interrupt_capacity()) {
       return USB_UNSUPPORTED;
     }
   }
@@ -370,7 +370,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   if (result != USB_OK) {
     return bind_failed(binding, result);
   }
-  uint8_t report[USB_INTERRUPT_BYTES];
+  uint8_t report[USB_HID_INTERRUPT_BYTES];
   struct usb_completion completion;
   result = usb_host_control_take(binding->host, binding->ticket, report, sizeof(report), &completion);
   if (result != USB_OK) {
@@ -444,7 +444,7 @@ void usb_hid_collect(struct usb_hid_binding *binding)
       continue;
     }
     for (unsigned packet = 0; packet < USB_INTERRUPT_COMPLETIONS; ++packet) {
-      uint8_t report[USB_INTERRUPT_BYTES];
+      uint8_t report[USB_HID_INTERRUPT_BYTES];
       struct usb_interrupt_completion completion;
       enum usb_result result = usb_host_interrupt_take(interface->stream, report,
                                                       sizeof(report), &completion);
