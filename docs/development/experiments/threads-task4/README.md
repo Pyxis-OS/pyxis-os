@@ -98,8 +98,8 @@ median 838.523). `4937b053` removes that unnecessary handoff: ready transactions
 execute directly in the BSP executor, preserving the same gate and final-copy
 ownership; unready ones remain asynchronously drainable. Preliminary artifacts
 and samples are retained in `build/task4-preliminary`. Remaining round-trip cost
-is inherent in the accepted BSP ownership here; native evidence is pending, and
-it must be assessed before concurrent entry. No allocator batching/API change.
+comes with the accepted BSP ownership here; the native comparison below
+measures its practical cost. No allocator batching/API change.
 
 ## Interactive inspection and limits
 
@@ -154,12 +154,84 @@ passed. These runs are functional qualification, not additional timing samples.
 Integration captures remain in ignored `build/task4-integration`; owned VMs,
 debuggers and clients were stopped.
 
-## Native hands-free comparison (pending)
+## Native ThinkPad comparison
 
-Use main `97336d9a` as A and the submitted integration head as B, one matching
-current initrd for both, fresh PXE boots A/B/A/B, client on horse. This is a new
-native comparison, distinct from frozen nested-QEMU A/B above. Four sessions,
-redirect each JSONL to a distinct file:
+Owner-run ThinkPad, 12 CPUs, AC, PXE, fresh A1/B1/A2/B2 boots. A main
+`97336d9a` (owner-reported ELF SHA-256 prefix `67154e97`), B `b7a00f7d`
+(`75964d51`); main `97336d9a`'s initrd for all runs. Same commands below;
+launch wall time is horse-client time including discovery. Raw JSONL in
+`/shared/present/batch2/ab700/700{A1,B1,A2,B2}/`, wall times in each
+`launch-times.txt`. Local inspection verified all 1,600 timed IPC passes, all
+12 page runs (800 allocations/releases, no failures), all 12 1,024-child launches
+and all FINAL 0/complete records. No profiled measurements or samples filtered.
+
+Milliseconds except launch seconds; IPC cells are medians of 100 samples:
+
+| Workload | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| Pages, three runs | 35.369 / 35.892 / 35.335 | 41.600 / 42.326 / 42.093 | 35.952 / 35.392 / 35.369 | 38.037 / 37.970 / 37.978 |
+| 1024 launches, three runs, s | 1.342 / 1.525 / 1.449 | 1.572 / 1.781 / 1.720 | 1.465 / 1.597 / 1.353 | 1.699 / 1.895 / 1.453 |
+| CALL64 complete | 1.253 | 1.644 | 1.233 | 1.316 |
+| CALL4096 complete | 1.874 | 2.108 | 2.080 | 2.231 |
+| SEND64 admit / complete | 0.0785 / 0.490 | 0.099 / 0.553 | 0.063 / 0.351 | 0.090 / 0.482 |
+| SEND4096 admit / complete | 0.2185 / 1.143 | 0.2655 / 1.038 | 0.2305 / 1.224 | 0.277 / 1.020 |
+
+Paired per-boot medians: pages +19.0% / +7.3%, launch +18.7% / +16.0%,
+CALL64 +31.2% / +6.7%, CALL4096 +12.5% / +7.3%; SEND4096 completion
+-9.1% / -16.6%, despite higher admission. Individual IPC ranges overlap:
+CALL64 A 0.854–3.702 / B 0.989–3.970 ms, CALL4096 A 1.033–4.055 /
+B 1.193–4.728 ms, SEND64 A 0.293–1.376 / B 0.377–2.046 ms,
+SEND4096 A 0.406–1.928 / B 0.544–1.877 ms. Clock-read calibration A
+136–148 ns, B 190–194 ns except B2 CALL64 435 ns; not subtracted. The
+consistent pages/launch cost is real and much smaller than nested KVM.
+
+**Attribution by code inspection, not a timed phase decomposition.** Pages makes
+800 MEMORY ALLOCATE and 800 RELEASE calls. Each now saves/parks its caller,
+reloads kernel CR3 before acknowledging departure and publishing the deferred
+request, executes on BSP, then resumes on the private root for final reply.
+`memory_call` / `bsp_request_submit_and_wait` / `process_vm_mutation_forward`
+implement that new round trip. All page/frame work remains in `vm_alloc/free`;
+new admission guards, borrower leases and ALLOCATE output revalidation add work.
+The paired page deltas are 2.6–6.7 ms, or about 1.6–4.2 microseconds per mutation
+averaged across the full workload, not isolated scheduler/CR3 timings. With the
+sole task parked and no retained borrowers, the existing ready path observes
+zero roots/borrowers and executes directly in the BSP executor: no peer drain,
+NMI/IPI acknowledgement round or VM-worker timeout wait is added here.
+AP-to-BSP notification and caller wakeup still belong to the round trip; page
+work also moves CPU/cache locality. The captures do not isolate those components.
+
+Launch does not newly hand off each child mapping. `user/spawn.c`, `load.c`
+and `startup.c` still prepare unpublished children exclusively on BSP. Lua's
+pinned `lua/pyxis.c` and libpyxis `program.c` perform lookup, authority queries,
+prefix reads, launch, wait and cleanup; these now pay syscall/root accounting
+and copy leases repeatedly. Parent mallocs reuse retained TLSF pools; `echo -n`
+uses static stdio and copies allocator authority at startup, without inherently
+allocating a heap pool. Therefore MEMORY round trips cannot explain every child.
+A concrete amplification is `launcher.c:capture_string`: one `copy_from_user`
+per character for argv, resource/root names, environment and cwd now acquires
+and releases a guarded borrower for every byte. This is avoidable. No native
+trace apportions the observed roughly 229–265 microseconds extra per launch
+among string capture, other accounting, occasional heap growth and client time.
+
+**Recommendation, awaiting owner decision:** fix bounded string capture before
+merge: one short lease, page-aware validation, stop at NUL, retain the capture
+budget/overflow/error rules and release before allocation or any wait. Consider
+collapsing nested FILE/endpoint leases as a separate small follow-up, retaining
+one global outer borrower and balanced task-local nesting. Batch child mappings
+is already the preparation ownership model and saves no new task-4 transaction.
+Skipping drain by task count or restoring AP/current-root MEMORY mutation would
+weaken the accepted BSP/departure contract; the generic zero-activity fast path
+already works when siblings later appear. Accept remaining MEMORY handoff cost
+with the recorded latency follow-up after owner review; do not add a single-task
+bypass. Rerun matched native pages/launch after the string fix before claiming its
+benefit. Existing `allocbench ... --profile` can separate service from total,
+which now also includes handoff/drain/resumption, but cannot isolate every phase.
+No code changed for this analysis.
+
+### Hands-free commands
+
+For another comparison, keep a matching initrd and fresh A/B/A/B boots. Four
+sessions, redirect each JSONL to a distinct file:
 
 ```sh
 for mode in call send; do
@@ -178,4 +250,4 @@ EOF drains a session successor; do not send `exit` to a session or sleep waiting
 for its output. Repeat pages/launch three times with separate output files;
 precede launches with the same command using 16 children. Time launch client wall
 time externally, as above, including discovery. Record exact kernel/ELF/initrd
-identities and complete FINAL status. Native results will be added separately.
+identities and complete FINAL status. Preserve the original native captures.
