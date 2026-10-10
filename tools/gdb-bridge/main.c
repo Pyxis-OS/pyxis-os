@@ -550,7 +550,7 @@ static void receive_udp(struct bridge *bridge, uint64_t now)
         !memcmp(packet.payload, bridge->completed.bytes, packet.length)));
   if (bridge->phase == BRIDGE_STOPPED && packet.kind == DEBUG_DATA &&
       packet.sequence && rsp_valid(packet.payload, packet.length) &&
-      (!packet.command || packet.command == bridge->pending_command || completed_reply)) {
+      ((bridge->pending_command && packet.command == bridge->pending_command) || completed_reply)) {
     if (packet.sequence == bridge->rx_sequence + 1 && bridge->rx_sequence != UINT64_MAX) {
       bool new_reply = packet.payload[0] == '$';
       bool forward = !completed_reply;
@@ -599,6 +599,8 @@ static void receive_udp(struct bridge *bridge, uint64_t now)
     valid = true;
   } else if (packet.kind == DEBUG_RELEASED && packet.length == 1 && packet.sequence &&
              packet.payload[0] <= DEBUG_RELEASE_IDLE &&
+             (packet.payload[0] == DEBUG_RELEASE_IDLE ? !packet.command :
+              bridge->pending_command && packet.command == bridge->pending_command) &&
              (packet.sequence == bridge->rx_sequence ||
               (bridge->rx_sequence != UINT64_MAX && packet.sequence == bridge->rx_sequence + 1))) {
     struct debug_packet ack = packet_header(bridge, DEBUG_ACK);
