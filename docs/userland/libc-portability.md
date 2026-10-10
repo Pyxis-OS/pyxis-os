@@ -437,6 +437,10 @@ through the shell and Neovim.
 - **Neovim:** `writefile(['x'], 'home://wp/a/b.txt', 'p')` created both
   directories and the file. Upstream maps that flag to O_CREAT only when
   O_NOFOLLOW is defined, so without it a new file could not be created.
+- **libuv:** `uv_fs_open` passes O_NOFOLLOW through to `open`. Its private
+  placeholders for unsupported flags start above libc's flags; one had shared
+  O_NOFOLLOW's bit. Before that fix, Neovim's ShaDa merge (`:wshada` with an
+  existing file) failed with "function not implemented".
 
 ## Close failure and cleanup
 

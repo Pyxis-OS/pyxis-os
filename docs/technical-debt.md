@@ -600,8 +600,7 @@ O_CREAT accepts only mode 0666 as a request for native creation policy; it insta
 other modes (including restrictive ones such as 0600, and opens of existing files) fail with ENOTSUP before lookup. Virtio-fs keeps its
 0644 creation request under the host-service identity. This is the accepted policy for the first writable public opens (used by tee).
 Revisit with a file permission system, users and ownership, defining mode enforcement and umask together rather than silently discarding
-requests callers expect to restrict access. Neovim's persistent undo passes the edited file's permission bits (none, since `stat`
-reports only the type) or 0600 for a new file, so it fails with E828 ([Neovim limits](userland/neovim.md#saving-and-limits)).
+requests callers expect to restrict access.
 
 ## Non-atomic stdio append
 
