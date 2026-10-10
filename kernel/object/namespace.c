@@ -279,10 +279,21 @@ static enum call_status lookup_binding(struct namespace_object *namespace,
     const char *name, handle_t *handle)
 {
   *handle = HANDLE_INVALID;
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+  if (reserved != CAP_OK) {
+    return grant_status(reserved);
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return CALL_ENDPOINT_CLOSED;
+  }
   lock_namespace(namespace);
   struct namespace_binding *binding = find_binding(namespace, name);
   if (!binding) {
     unlock_namespace(namespace);
+    capability_reservation_release(&reservation, &slot);
     return CALL_NOT_FOUND;
   }
   struct kernel_object *client = binding->client;
@@ -290,23 +301,26 @@ static enum call_status lookup_binding(struct namespace_object *namespace,
   bool retained = object_retain(client);
   unlock_namespace(namespace);
   if (!retained) {
+    capability_reservation_release(&reservation, &slot);
     return CALL_LIMIT;
   }
   /* Capture is lookup's linearization point. Replacement/removal after this
    * point cannot change the returned object or its retained authority. */
   enum call_status status = CALL_ENDPOINT_CLOSED;
   if (endpoint_export_available(client)) {
-    struct capability_table *table = &process_current()->capabilities;
-    enum capability_result result;
-    while ((result = capability_insert(table, client, rights, transport, handle)) == CAP_FULL) {
-      result = capability_request_growth();
-      if (result != CAP_OK) {
-        break;
-      }
+    struct capability_grant grant;
+    enum capability_result result = capability_grant_retain(client, rights, transport, &grant);
+    if (result == CAP_OK) {
+      result = capability_validate_grants(reservation.table, &grant, 1);
     }
+    if (result == CAP_OK) {
+      capability_install_reserved(&reservation, &slot, &grant, 1, handle);
+    }
+    capability_grant_release(&grant);
     status = grant_status(result);
   }
   object_release(client);
+  capability_reservation_release(&reservation, &slot);
   return status;
 }
 

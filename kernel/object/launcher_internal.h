@@ -43,8 +43,9 @@ struct launch_capture {
 };
 
 /* BSP, IF=0. Caller transfers a reservation and an in-memory file operation
- * or owned external bytes. Releases the file operation on every path. Prepares reply
- * handle before submission; failure unwinds child resources. Capture and external
+ * or owned external bytes. Releases the file operation on every path. Reply
+ * capacity precedes preparation; observer publication after task submission is
+ * infallible. Earlier failure unwinds child resources. Capture and external
  * bytes remain owned by the launch service until it frees both. */
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
     size_t parent_cpu, struct execution_group *execution_group,
