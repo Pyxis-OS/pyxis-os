@@ -9,15 +9,13 @@
 #include <arch/cpu_local.h>
 
 const struct color_scheme aardvark_scheme = {
-    .palette = {0x222734, 0xc26265, 0x52aa60, 0xad9b49, 0x487fd4, 0xaf5bd1,
-                0x269d9a, 0x5a6377, 0x3a4152, 0xe48383, 0x75cf84, 0xc7b461,
-                0x76a8f2, 0xd58bf0, 0x52c4c0, 0xdfe5ee},
-    .foreground = 0xb4bcca,
-    .background = 0x0f141f,
-    .cursor = 0xb4bcca,
-    .cursor_text = 0x0f141f,
-    .selection = 0x0f141f,
-    .selection_background = 0xb4bcca
+    .palette = TERMINAL_AARDVARK_PALETTE,
+    .foreground = TERMINAL_AARDVARK_FOREGROUND,
+    .background = TERMINAL_AARDVARK_BACKGROUND,
+    .cursor = TERMINAL_AARDVARK_FOREGROUND,
+    .cursor_text = TERMINAL_AARDVARK_BACKGROUND,
+    .selection = TERMINAL_AARDVARK_BACKGROUND,
+    .selection_background = TERMINAL_AARDVARK_FOREGROUND
 };
 
 struct tty global_tty = {.geometry_generation = 1};
@@ -53,61 +51,88 @@ void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
   cpu_store_fence();
 }
 
-static uint32_t style_color(const struct tty *tty, unsigned index, bool foreground)
+void tty_plot_char_styled(const struct framebuffer *fb, const struct font *font,
+    char c, size_t x, size_t y, uint32_t fg, uint32_t bg, uint8_t attributes)
 {
-  if (index < 16) {
-    return tty->scheme->palette[index];
+  if (!(attributes & (TERMINAL_ATTR_BOLD | TERMINAL_ATTR_ITALIC | TERMINAL_ATTR_UNDERLINE))) {
+    tty_plot_char_raw(fb, font, c, x, y, fg, bg);
+    return;
   }
-  return foreground ? tty->scheme->foreground : tty->scheme->background;
+  const uint8_t *glyph = font->data + (size_t)glyph_index(font, c) * font->stride;
+  uint32_t foreground = framebuffer_color(fb, fg);
+  uint32_t background = framebuffer_color(fb, bg);
+
+  for (size_t row = 0; row < font->height; ++row) {
+    uint8_t bits = glyph[row];
+    if (attributes & TERMINAL_ATTR_ITALIC) {
+      unsigned shift = 2 - row * 3 / font->height;
+      bits = (uint8_t)(bits << shift);
+    }
+    if (attributes & TERMINAL_ATTR_BOLD) {
+      bits |= (uint8_t)(bits << 1);
+    }
+    if ((attributes & TERMINAL_ATTR_UNDERLINE) && row == font->height - 1) {
+      bits = UINT8_MAX;
+    }
+    volatile uint32_t *pixel_row =
+        (volatile uint32_t *)((uint8_t *)fb->address + (y + row) * fb->pitch);
+    for (size_t col = 0; col < font->width; ++col) {
+      pixel_row[x + col] = ((bits >> (col % 8)) & 1) ? foreground : background;
+    }
+  }
+  cpu_store_fence();
 }
 
-static uint16_t current_style(const struct tty *tty, bool reverse)
+static struct terminal_cell styled_cell(const struct tty *tty, char c, uint8_t attributes)
 {
-  return (uint16_t)(tty->foreground |
-      (unsigned)tty->background << TTY_STYLE_BACKGROUND_SHIFT |
-      (reverse ? TTY_STYLE_REVERSE : 0));
+  return (struct terminal_cell){
+    .foreground = tty->style.foreground,
+    .background = tty->style.background,
+    .glyph = glyph_index(tty->font, c),
+    .attributes = attributes,
+  };
 }
 
-static void draw_cell(struct tty *tty, uint8_t glyph, uint16_t style, size_t x, size_t y)
+static void draw_cell(struct tty *tty, struct terminal_cell cell, size_t x, size_t y)
 {
-  uint32_t fg = style_color(tty, style & TTY_STYLE_FOREGROUND_MASK, true);
-  uint32_t bg = style_color(tty,
-      (style & TTY_STYLE_BACKGROUND_MASK) >> TTY_STYLE_BACKGROUND_SHIFT, false);
-  if (style & TTY_STYLE_REVERSE) {
+  uint32_t fg = terminal_color_rgb(cell.foreground, tty->scheme->palette,
+      tty->scheme->foreground);
+  uint32_t bg = terminal_color_rgb(cell.background, tty->scheme->palette,
+      tty->scheme->background);
+  if (cell.attributes & TERMINAL_ATTR_REVERSE) {
     uint32_t swap = fg;
     fg = bg;
     bg = swap;
   }
-  tty_plot_char_raw(tty->fb, tty->font, (char)glyph, x * tty->font->width,
-      y * tty->font->height, fg, bg);
+  tty_plot_char_styled(tty->fb, tty->font, (char)cell.glyph, x * tty->font->width,
+      y * tty->font->height, fg, bg, cell.attributes);
 }
 
 /* Record and draw one cell of the active screen. */
-static void put_cell(struct tty *tty, char c, size_t x, size_t y, uint16_t style)
+static void put_cell(struct tty *tty, struct terminal_cell cell, size_t x, size_t y)
 {
-  uint8_t glyph = glyph_index(tty->font, c);
   if (tty->cells) {
     KASSERT(x < tty->width && y < tty->height);
     size_t index = y * tty->width + x;
-    if ((tty->selection_valid || tty->selection_dragging) && tty->cells[index] != glyph) {
+    if ((tty->selection_valid || tty->selection_dragging) &&
+        tty->cells[index].glyph != cell.glyph) {
       size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
       size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
       if (index >= first && index <= last) {
         tty_selection_clear(tty);
       }
     }
-    tty->cells[index] = glyph;
-    tty->styles[index] = style;
+    tty->cells[index] = cell;
   }
-  draw_cell(tty, glyph, style, x, y);
+  draw_cell(tty, cell, x, y);
 }
 
 static void blank_rows(struct tty *tty, size_t first, size_t end)
 {
-  uint16_t style = current_style(tty, false);
+  struct terminal_cell blank = styled_cell(tty, ' ', 0);
   for (size_t y = first; y < end; ++y) {
     for (size_t x = 0; x < tty->width; ++x) {
-      put_cell(tty, ' ', x, y, style);
+      put_cell(tty, blank, x, y);
     }
   }
 }
@@ -121,9 +146,7 @@ static void move_rows(struct tty *tty, size_t destination, size_t source, size_t
   memmove(pixels + destination * row_bytes, pixels + source * row_bytes, count * row_bytes);
   if (tty->cells) {
     memmove(tty->cells + destination * tty->width, tty->cells + source * tty->width,
-        count * tty->width);
-    memmove(tty->styles + destination * tty->width, tty->styles + source * tty->width,
-        count * tty->width * sizeof(*tty->styles));
+        count * tty->width * sizeof(*tty->cells));
   }
 }
 
@@ -172,43 +195,14 @@ static void reverse_index(struct tty *tty)
 
 static void tty_draw_cell(struct tty *tty, char c, size_t x, size_t y)
 {
-  put_cell(tty, c, x, y, current_style(tty, tty->reverse));
+  put_cell(tty, styled_cell(tty, c, tty->style.attributes), x, y);
 }
 
 static void erase_cells(struct tty *tty, size_t first, size_t end)
 {
+  struct terminal_cell blank = styled_cell(tty, ' ', 0);
   for (size_t cell = first; cell < end; ++cell) {
-    tty_draw_cell(tty, ' ', cell % tty->width, cell / tty->width);
-  }
-}
-
-static void set_colors(struct tty *tty, unsigned foreground, unsigned background)
-{
-  tty->foreground = (uint8_t)foreground;
-  tty->background = (uint8_t)background;
-  tty->fg = style_color(tty, foreground, true);
-  tty->bg = style_color(tty, background, false);
-}
-
-static void select_style(struct tty *tty, unsigned parameter)
-{
-  if (parameter == 0) {
-    set_colors(tty, TTY_DEFAULT_COLOR, TTY_DEFAULT_COLOR);
-    tty->reverse = false;
-  } else if (parameter == 7 || parameter == 27) {
-    tty->reverse = parameter == 7;
-  } else if (parameter == 39) {
-    set_colors(tty, TTY_DEFAULT_COLOR, tty->background);
-  } else if (parameter == 49) {
-    set_colors(tty, tty->foreground, TTY_DEFAULT_COLOR);
-  } else if (parameter >= 30 && parameter <= 37) {
-    set_colors(tty, parameter - 30, tty->background);
-  } else if (parameter >= 40 && parameter <= 47) {
-    set_colors(tty, tty->foreground, parameter - 40);
-  } else if (parameter >= 90 && parameter <= 97) {
-    set_colors(tty, parameter - 90 + 8, tty->background);
-  } else if (parameter >= 100 && parameter <= 107) {
-    set_colors(tty, tty->foreground, parameter - 100 + 8);
+    put_cell(tty, blank, cell % tty->width, cell / tty->width);
   }
 }
 
@@ -217,9 +211,7 @@ static void save_cursor(struct tty *tty)
   tty->saved[tty->alternate] = (struct tty_saved_cursor){
     .x = tty->x,
     .y = tty->y,
-    .foreground = tty->foreground,
-    .background = tty->background,
-    .reverse = tty->reverse,
+    .style = tty->style,
     .wrap_pending = tty->wrap_pending,
   };
 }
@@ -229,16 +221,14 @@ static void restore_cursor(struct tty *tty)
   const struct tty_saved_cursor *saved = &tty->saved[tty->alternate];
   tty->x = MIN(saved->x, tty->width - 1u);
   tty->y = MIN(saved->y, tty->height - 1u);
-  set_colors(tty, saved->foreground, saved->background);
-  tty->reverse = saved->reverse;
+  tty->style = saved->style;
   tty->wrap_pending = saved->wrap_pending && tty->x == tty->width - 1u;
 }
 
 static void reset_saved_cursor(struct tty_saved_cursor *saved)
 {
   *saved = (struct tty_saved_cursor){
-    .foreground = TTY_DEFAULT_COLOR,
-    .background = TTY_DEFAULT_COLOR,
+    .style = {.foreground = TERMINAL_COLOR_DEFAULT, .background = TERMINAL_COLOR_DEFAULT},
   };
 }
 
@@ -253,7 +243,7 @@ static void redraw_screen(struct tty *tty)
   for (size_t y = 0; y < tty->height; ++y) {
     for (size_t x = 0; x < tty->width; ++x) {
       size_t index = y * tty->width + x;
-      draw_cell(tty, tty->cells[index], tty->styles[index], x, y);
+      draw_cell(tty, tty->cells[index], x, y);
     }
   }
 }
@@ -269,12 +259,9 @@ static void select_screen(struct tty *tty, bool alternate)
   if (alternate) {
     save_cursor(tty);
   }
-  uint8_t *cells = tty->cells;
-  uint16_t *styles = tty->styles;
+  struct terminal_cell *cells = tty->cells;
   tty->cells = tty->other_cells;
-  tty->styles = tty->other_styles;
   tty->other_cells = cells;
-  tty->other_styles = styles;
   tty->alternate = alternate;
   tty_selection_clear(tty);
   reset_region(tty);
@@ -319,9 +306,8 @@ static void execute_csi(struct tty *tty, unsigned char command)
     return;
   }
   if (command == 'm') {
-    for (size_t i = 0; i <= tty->parameter_index; ++i) {
-      select_style(tty, tty->parameters[i]);
-    }
+    terminal_sgr_apply(&tty->style, tty->parameters, tty->parameters_present,
+        tty->parameter_index + 1);
     return;
   }
   if (command == 'r') {
@@ -424,6 +410,7 @@ static void begin_escape(struct tty *tty)
 {
   tty->escape_state = TTY_ESCAPE;
   tty->parameter_index = 0;
+  tty->parameters_present = 0;
   tty->private_csi = false;
   memset(tty->parameters, 0, sizeof(tty->parameters));
 }
@@ -494,6 +481,7 @@ void tty_put_char(struct tty *tty, char c)
       unsigned value = tty->parameters[tty->parameter_index];
       if (byte >= '0' && byte <= '9' && value * 10 + byte - '0' <= UINT16_MAX) {
         tty->parameters[tty->parameter_index] = value * 10 + byte - '0';
+        tty->parameters_present |= (uint16_t)(1u << tty->parameter_index);
       } else if (byte == ';' && tty->parameter_index + 1 < TTY_CSI_PARAMETERS) {
         ++tty->parameter_index;
       } else {
@@ -525,21 +513,17 @@ void tty_attach_storage(struct tty *tty, uint8_t *storage)
 {
   size_t cells = (size_t)tty->width * tty->height;
   tty->storage = storage;
-  tty->cells = storage;
-  tty->other_cells = storage + cells;
-  tty->styles = (uint16_t *)(storage + 2 * cells);
-  tty->other_styles = tty->styles + cells;
+  tty->cells = (struct terminal_cell *)storage;
+  tty->other_cells = tty->cells + cells;
   tty->alternate = false;
   reset_region(tty);
   reset_saved_cursor(&tty->saved[0]);
   reset_saved_cursor(&tty->saved[1]);
 
-  uint16_t style = current_style(tty, false);
-  memset(tty->cells, ' ', cells);
-  memset(tty->other_cells, ' ', cells);
+  struct terminal_cell blank = styled_cell(tty, ' ', 0);
   for (size_t i = 0; i < cells; ++i) {
-    tty->styles[i] = style;
-    tty->other_styles[i] = style;
+    tty->cells[i] = blank;
+    tty->other_cells[i] = blank;
   }
 }
 
@@ -561,18 +545,16 @@ void tty_fresh_line(struct tty *tty)
 }
 
 /* Copy a screen's cells into new storage, keeping the rows from first_row. */
-static void copy_screen(uint8_t *cells, uint16_t *styles, size_t width, size_t height,
-    const uint8_t *old_cells, const uint16_t *old_styles, size_t old_width,
-    size_t first_row, size_t rows, size_t columns, uint16_t blank)
+static void copy_screen(struct terminal_cell *cells, size_t width, size_t height,
+    const struct terminal_cell *old_cells, size_t old_width, size_t first_row,
+    size_t rows, size_t columns, struct terminal_cell blank)
 {
-  memset(cells, ' ', width * height);
   for (size_t i = 0; i < width * height; ++i) {
-    styles[i] = blank;
+    cells[i] = blank;
   }
   for (size_t y = 0; y < rows; ++y) {
-    memcpy(cells + y * width, old_cells + (first_row + y) * old_width, columns);
-    memcpy(styles + y * width, old_styles + (first_row + y) * old_width,
-        columns * sizeof(*styles));
+    memcpy(cells + y * width, old_cells + (first_row + y) * old_width,
+        columns * sizeof(*cells));
   }
 }
 
@@ -594,7 +576,8 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
   size_t first_row = kept_first_row(tty->y, height);
   size_t rows = MIN((size_t)tty->height - first_row, height);
   size_t columns = MIN((size_t)tty->width, width);
-  uint32_t background = framebuffer_color(fb, tty->bg);
+  uint32_t background = framebuffer_color(fb, terminal_color_rgb(tty->style.background,
+      tty->scheme->palette, tty->scheme->background));
   for (size_t y = 0; y < fb->height; ++y) {
     uint32_t *pixels = (uint32_t *)(fb->address + y * fb->pitch);
     for (size_t x = 0; x < fb->width; ++x) {
@@ -611,26 +594,21 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
 
   /* The hidden screen keeps the rows around its saved cursor. */
   size_t cells = width * height;
-  uint8_t *new_cells = storage;
-  uint8_t *new_other_cells = storage + cells;
-  uint16_t *new_styles = (uint16_t *)(storage + 2 * cells);
-  uint16_t *new_other_styles = new_styles + cells;
-  uint16_t blank = current_style(tty, false);
+  struct terminal_cell *new_cells = (struct terminal_cell *)storage;
+  struct terminal_cell *new_other_cells = new_cells + cells;
+  struct terminal_cell blank = styled_cell(tty, ' ', 0);
   const struct tty_saved_cursor *hidden = &tty->saved[!tty->alternate];
   size_t other_first_row = kept_first_row(hidden->y, height);
-  copy_screen(new_cells, new_styles, width, height, tty->cells, tty->styles, tty->width,
+  copy_screen(new_cells, width, height, tty->cells, tty->width,
       first_row, rows, columns, blank);
-  copy_screen(new_other_cells, new_other_styles, width, height, tty->other_cells,
-      tty->other_styles, tty->width, other_first_row,
-      MIN((size_t)tty->height - other_first_row, height), columns, blank);
+  copy_screen(new_other_cells, width, height, tty->other_cells, tty->width,
+      other_first_row, MIN((size_t)tty->height - other_first_row, height), columns, blank);
 
   tty_selection_clear(tty);
   tty->fb = fb;
   tty->storage = storage;
   tty->cells = new_cells;
-  tty->styles = new_styles;
   tty->other_cells = new_other_cells;
-  tty->other_styles = new_other_styles;
   tty->width = width;
   tty->height = height;
   tty->x = MIN((size_t)tty->x, width - 1);

@@ -261,6 +261,11 @@ The presentation tracks the native TTY subset across output records: LF resets
 the column, tabs move without erasing and clamp to the edge, wrapping is delayed,
 and FRESH_LINE cancels an incomplete escape. Non-ASCII output is displayed as
 one `?` cell; machine mode preserves every byte.
+Interactive SGR uses the shared [colour and attribute rules](terminal.md#tty-output-controls):
+bold, italic, underline, reverse, 256 indices and semicolon RGB, with atomic
+rejection of malformed or oversized sequences. It resolves indices using
+Aardvark and emits RGB and glyph attributes for the host font. Transfer controls
+are intercepted before presentation as before; machine output remains byte-exact.
 
 Machine mode requires no controlling terminal:
 

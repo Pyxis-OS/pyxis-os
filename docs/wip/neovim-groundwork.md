@@ -194,24 +194,23 @@ Package the runtime Vimscript and core Lua modules under a delegated native
 Retain runtime search/source/autocommand support; `.h` defaults to C++ unless
 `g:c_syntax_for_h` selects C. Task 5 is still needed for core Lua/filetype loading.
 
-Both [kernel TTY and mux](../userland/terminal.md#tty-output-controls) support **16 palette
-colours, defaults and reverse**, not 256-colour/RGB SGR or bold/italic/underline.
-Extended SGR is not safely interchangeable: `38;5;7` can activate reverse and
-five-parameter RGB sequences exceed the four-parameter parser bound.
+Both [kernel TTY and mux](../userland/terminal.md#tty-output-controls) support
+256 palette entries, semicolon RGB, defaults, reverse and synthetic
+bold/italic/underline. The bounded SGR interpreter is shared with the interactive
+remote client; malformed colour groups change no attributes.
 
 Upstream has no `pyxis` built-in terminfo and falls back to eight-colour ANSI
-(`tui/terminfo.c:71–125`). Add a truthful static entry matching task 3, including
-bright SGR and alternate screen, with no unsupported attributes/colour capability.
-Use `notermguicolors` and a small 16-colour Vimscript scheme explicitly assigning
-Comment/Statement/Type/PreProc/Constant/String groups with `cterm=NONE`; upstream's
+(`tui/terminfo.c:71–125`). The task 6 static entry must advertise the implemented
+sequence table, including indexed/RGB colour controls and the rendered styles.
+Neovim can use `termguicolors` on this profile; a small Vimscript scheme can assign
+Comment/Statement/Type/PreProc/Constant/String groups explicitly. Upstream's
 default dark groups do not all assign a terminal foreground.
 
 Suppress unsupported Pyxis DCS/OSC probes (`tui/tui.c:482–495`): both current
 parsers otherwise draw query payload as text. Set upstream's `NVIM_NOTTYFAST=1`
 **before startup**, since setting `nottyfast` in user configuration is too late;
 leave `COLORTERM` unset. This is a bounded port profile, not a renderer expansion.
-Later terminal OSC/DCS consumption, 256/truecolour and Unicode rendering remain
-separate work.
+Later terminal OSC/DCS consumption and Unicode rendering remain separate work.
 
 ## Remaining delivery slices
 
@@ -222,11 +221,24 @@ then the full target link and manual tab/pane qualification. Re-run against task
 Keep save durability/identity validity, child pipe authority, unsupported features
 and cleanup in that qualification. Each remaining slice needs its own assignment.
 
-## Later work
+## Terminal SGR follow-up
 
-**Queued owner direction, 2026-10-10; not assigned:** grow SGR in both the kernel
-TTY and mux panes: underline for diagnostics, bold and italic as the font allows,
-and a 256-colour palette. Entries 0–15 come from the active scheme (the owner
-uses Aardvark from the terminal colour-scheme collection); 16–255 use the standard
-colour cube and greys. Once implemented, the Neovim profile can advertise these
-capabilities. True colour requires a separate owner decision.
+Accepted and implemented 2026-10-10.
+
+- [x] Deliver the shared SGR profile in the kernel TTY, mux pane emulator and
+  interactive pyxis-remote, with matched before/after qualification.
+
+The [sequence table](../userland/terminal.md#tty-output-controls) now advertises
+bold, italic, underline, 256 palette indices and semicolon RGB, enabling the
+Neovim static profile to use `termguicolors`. Colon forms are rejected, the
+16-parameter bound remains, and malformed groups change no attributes.
+Per-TTY palette entries 0–15 use the active scheme (Aardvark everywhere today,
+shared with the host); the remaining entries use the xterm cube and greys.
+The bitmap styles are synthetic and stay within 8×16 cells.
+
+Cells use tagged index/default/RGB colours in 12 bytes; mux retains 1,024
+history rows per pane and the existing eager creation/resize rollback.
+[Qualification and measured costs](../development/experiments/terminal-sgr/README.md)
+cover tab, pane, remote transfer and live resize, including the backing increase
+and small measured output costs. Allocation-failure rollback is inspected,
+not injected. Scheme configuration and Unicode rendering remain deferred.

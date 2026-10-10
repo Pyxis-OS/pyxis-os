@@ -988,13 +988,13 @@ static void local_copy(struct space *space, struct clipboard_store *store)
     }
     previous_row = true;
     for (size_t column = first; column <= last; ++column) {
-      uint8_t glyph = tty->cells[row * tty->width + column];
+      uint8_t glyph = tty->cells[row * tty->width + column].glyph;
       if (glyph < 0x20 || glyph > 0x7e) {
         valid = false;
       }
     }
     size_t end = last + 1;
-    while (end > first && tty->cells[row * tty->width + end - 1] == ' ') {
+    while (end > first && tty->cells[row * tty->width + end - 1].glyph == ' ') {
       --end;
     }
     length += end - first;
@@ -1025,11 +1025,12 @@ static void local_copy(struct space *space, struct clipboard_store *store)
       }
       previous_row = true;
       size_t end = last + 1;
-      while (end > first && tty->cells[row * tty->width + end - 1] == ' ') {
+      while (end > first && tty->cells[row * tty->width + end - 1].glyph == ' ') {
         --end;
       }
-      memcpy(item->bytes + offset, tty->cells + row * tty->width + first, end - first);
-      offset += end - first;
+      for (size_t column = first; column < end; ++column) {
+        item->bytes[offset++] = tty->cells[row * tty->width + column].glyph;
+      }
     }
     same = offset == length;
   }

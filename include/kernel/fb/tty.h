@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <kernel/fb/fb.h>
+#include <terminal/style.h>
 
 #include "font.h"
 
@@ -19,29 +20,19 @@ enum tty_escape_state {
   TTY_CSI_IGNORE,
 };
 
-#define TTY_CSI_PARAMETERS 4
+#define TTY_CSI_PARAMETERS TERMINAL_CSI_PARAMETERS
 #define TTY_DEFAULT_TAB_WIDTH 8
 
-/* A cell's stored style: palette indices 0..15, or TTY_DEFAULT_COLOR for the
- * scheme's separate foreground/background, plus reverse video. */
-#define TTY_DEFAULT_COLOR 16u
-#define TTY_STYLE_FOREGROUND_MASK 0x001fu
-#define TTY_STYLE_BACKGROUND_SHIFT 5
-#define TTY_STYLE_BACKGROUND_MASK 0x03e0u
-#define TTY_STYLE_REVERSE 0x0400u
-
-/* Bytes of cell storage for a width * height screen: glyphs and styles for
+/* Bytes of cell storage for a width * height screen: whole cells for
  * the primary and alternate screens. */
-#define TTY_STORAGE_BYTES_PER_CELL (2 * (sizeof(uint8_t) + sizeof(uint16_t)))
+#define TTY_STORAGE_BYTES_PER_CELL (2 * sizeof(struct terminal_cell))
 
 /* DECSC state, one per screen. */
 struct tty_saved_cursor
 {
   uint16_t x;
   uint16_t y;
-  uint8_t foreground;
-  uint8_t background;
-  bool reverse;
+  struct terminal_style style;
   bool wrap_pending;
 };
 
@@ -55,21 +46,16 @@ struct tty
   uint16_t tab_width; /* Nonzero; changes share the TTY output lock. */
   uint64_t geometry_generation; /* Starts at one; output lock protects geometry. */
 
-  /* Colors use 0xRRGGBB, independent of the framebuffer channel layout.
-   * They follow the palette indices, which cells record. */
-  uint32_t fg;
-  uint32_t bg;
-  uint8_t foreground;
-  uint8_t background;
+  struct terminal_style style;
 
   bool initialized;
-  bool reverse;
   bool wrap_pending;
   bool cursor_visible;
 
   /* Output calls can split a sequence; parser state belongs to the TTY. */
   enum tty_escape_state escape_state;
   uint16_t parameters[TTY_CSI_PARAMETERS];
+  uint16_t parameters_present;
   size_t parameter_index;
   bool private_csi;
 
@@ -80,20 +66,17 @@ struct tty
   uint16_t region_top;
   uint16_t region_bottom;
   /* The alternate screen is showing. Its cells and the primary's swap with
-   * other_cells/other_styles; the framebuffer holds only the active screen. */
+   * other_cells; the framebuffer holds only the active screen. */
   bool alternate;
   struct tty_saved_cursor saved[2]; /* Indexed by alternate. */
 
   /* Local TTYs attach checked, BSP-allocated storage of
    * width * height * TTY_STORAGE_BYTES_PER_CELL bytes before initialization;
-   * raw/early drawing needs none and has no alternate screen. cells holds the
-   * active screen's packed glyphs and styles its cell styles. The output lock
-   * protects cells, styles, selection and raster changes together. */
+   * raw/early drawing needs none and has no alternate screen. The output lock
+   * protects cells, selection and raster changes together. */
   uint8_t *storage;
-  uint8_t *cells;
-  uint16_t *styles;
-  uint8_t *other_cells;
-  uint16_t *other_styles;
+  struct terminal_cell *cells;
+  struct terminal_cell *other_cells;
   size_t selection_anchor;
   size_t selection_endpoint;
   bool selection_valid;
@@ -119,6 +102,8 @@ extern const struct color_scheme aardvark_scheme;
 
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
     char c, size_t x, size_t y, uint32_t fg, uint32_t bg);
+void tty_plot_char_styled(const struct framebuffer *fb, const struct font *font,
+    char c, size_t x, size_t y, uint32_t fg, uint32_t bg, uint8_t attributes);
 
 /* Attach STORAGE (see struct tty) and clear both screens. */
 void tty_attach_storage(struct tty *tty, uint8_t *storage);

@@ -16,7 +16,7 @@ there is no extra link library. See
 
 | SDK path | Contents |
 | --- | --- |
-| `sysroot/usr/include` | libc, libpyxis and libterm headers, public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
+| `sysroot/usr/include` | libc, libpyxis and libterm headers, public `abi/`, `pxe/`, `terminal/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
 | `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis.cmake` | Relocatable [CMake toolchain file](#cmake) |
@@ -24,6 +24,7 @@ there is no extra link library. See
 | `share/pyxis/machine_settings` | The shared userspace hostname validator/header for host image assembly, also compiled into libpyxis |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/pyxis/key_layout.c` | The US key layout shared with the kernel's terminal text, compiled into libpyxis as `key_layout_character` (`pxe/key_layout.h`) |
+| `share/pyxis/terminal_style.c` | Shared bounded SGR interpretation and palette resolution (`terminal/style.h`), compiled into libpyxis, the kernel and host remote client |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
 | `share/toolchain` | Installed toolchain provenance: the LLVM fork revision, the toolchain README and the LLVM license |
 | `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, runtime hash and host identity |
