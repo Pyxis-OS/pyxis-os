@@ -119,7 +119,9 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Claude** (2026-10-09): no milestone after closing SDL game ports.
+- **Claude** (2026-10-10): [system power overlay proposal](system-power-overlay.md),
+  a kernel-drawn Ctrl+Alt+Delete overlay with Shut down, Reboot and Cancel;
+  docs only until the owner accepts its decisions.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its
