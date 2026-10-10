@@ -146,57 +146,50 @@ static uint64_t entry_kind(const struct directory_entry *entry)
 
 static enum call_status check_name(uintptr_t address, size_t length)
 {
+  const char *name = (const void *)address;
+  if (!length || (length == 1 && name[0] == '.') ||
+      (length == 2 && name[0] == '.' && name[1] == '.')) {
+    return CALL_BAD_REQUEST;
+  }
+  for (size_t i = 0; i < length; ++i) {
+    if (!name[i] || name[i] == '/') {
+      return CALL_BAD_REQUEST;
+    }
+  }
+  return CALL_OK;
+}
+
+static enum call_status capture_name(uintptr_t address, size_t length, char **result)
+{
+  *result = NULL;
   if (!length) {
     return CALL_BAD_REQUEST;
   }
   if (!user_buffer_check(address, length, USER_BUFFER_READ)) {
     return CALL_BAD_BUFFER;
   }
-
-  /* Names have no fixed ABI length limit. Copy bounded chunks on the private
-   * syscall stack; the single user task cannot modify this input concurrently. */
-  char buffer[256];
-  for (size_t offset = 0; offset < length;) {
-    size_t count = length - offset;
-    if (count > sizeof(buffer)) {
-      count = sizeof(buffer);
-    }
-    KASSERT(copy_from_user(buffer, address + offset, count));
-    if (!offset && ((length == 1 && buffer[0] == '.') ||
-        (length == 2 && buffer[0] == '.' && buffer[1] == '.'))) {
-      return CALL_BAD_REQUEST;
-    }
-    for (size_t i = 0; i < count; ++i) {
-      if (!buffer[i] || buffer[i] == '/') {
-        return CALL_BAD_REQUEST;
-      }
-    }
-    offset += count;
+  char *name = kmalloc(length);
+  if (!name) {
+    return CALL_NO_MEMORY;
   }
+  if (!copy_from_user(name, address, length)) {
+    kfree(name);
+    return CALL_BAD_BUFFER;
+  }
+  enum call_status status = check_name((uintptr_t)name, length);
+  if (status != CALL_OK) {
+    kfree(name);
+    return status;
+  }
+  *result = name;
   return CALL_OK;
 }
 
-static struct directory_entry *find_user_entry(struct directory_object *directory,
-                                                uintptr_t name, size_t length)
+static struct directory_entry *find_named_entry(struct directory_object *directory,
+    uintptr_t name, size_t length)
 {
-  char buffer[256];
   for (struct directory_entry *entry = directory->first; entry; entry = entry->next) {
-    if (entry->name_length != length) {
-      continue;
-    }
-    size_t offset = 0;
-    while (offset < length) {
-      size_t count = length - offset;
-      if (count > sizeof(buffer)) {
-        count = sizeof(buffer);
-      }
-      KASSERT(copy_from_user(buffer, name + offset, count));
-      if (memcmp(buffer, entry->name + offset, count)) {
-        break;
-      }
-      offset += count;
-    }
-    if (offset == length) {
+    if (entry->name_length == length && !memcmp((const void *)name, entry->name, length)) {
       return entry;
     }
   }
@@ -310,7 +303,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     pending->job.child_rights = request->rights;
     pending->job.kind = request->kind;
     pending->job.count = request->name_length;
-    KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    memcpy(pending->job.name, (const void *)request->name, request->name_length);
     pending->job.name[request->name_length] = 0;
     npfs_request_submit_and_wait(pending);
     status = pending->job.status;
@@ -322,7 +315,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
-    KASSERT(copy_from_user(pending->name, request->name, request->name_length));
+    memcpy(pending->name, (const void *)request->name, request->name_length);
     hostfs_request_submit_and_wait(pending);
     status = pending->status;
     object = pending->object;
@@ -330,7 +323,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     hostfs_request_release(pending);
   } else {
     lock_directory(directory);
-    struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
+    struct directory_entry *entry = find_named_entry(directory, request->name, request->name_length);
     if (!entry) {
       status = CALL_NOT_FOUND;
     } else if (entry_kind(entry) != request->kind) {
@@ -360,8 +353,9 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* Checked private mappings stay writable while the sole task is blocked. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.handle, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -412,7 +406,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     pending->job.reservation = reservation;
     pending->job.slot = slot;
     reservation = (struct capability_reservation){0};
-    KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    memcpy(pending->job.name, (const void *)request->name, request->name_length);
     pending->job.name[request->name_length] = 0;
     npfs_request_submit_and_wait(pending);
     status = pending->job.status;
@@ -421,9 +415,10 @@ static struct syscall_result create_child(struct directory_object *directory, ui
       return (struct syscall_result){status, 0};
     }
     struct directory_child_reply reply = {.handle = pending->job.handle};
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    bool copied = copy_returned_handles_to_user(reply_address, &reply, sizeof(reply),
+        &reply.handle, 1);
     npfs_request_release(pending);
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
   }
   if (directory->backing == DIRECTORY_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CREATE);
@@ -434,7 +429,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     pending->slot = slot;
     reservation = (struct capability_reservation){0};
     pending->rights = request->rights;
-    KASSERT(copy_from_user(pending->name, request->name, request->name_length));
+    memcpy(pending->name, (const void *)request->name, request->name_length);
     hostfs_request_submit_and_wait(pending);
     status = pending->status;
     if (status != CALL_OK) {
@@ -442,14 +437,15 @@ static struct syscall_result create_child(struct directory_object *directory, ui
       return (struct syscall_result){status, 0};
     }
     struct directory_child_reply reply = {.handle = pending->handle};
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    bool copied = copy_returned_handles_to_user(reply_address, &reply, sizeof(reply),
+        &reply.handle, 1);
     hostfs_request_release(pending);
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
   }
 
   lock_directory(directory);
   bool detached = directory->detached;
-  bool exists = find_user_entry(directory, request->name, request->name_length) != NULL;
+  bool exists = find_named_entry(directory, request->name, request->name_length) != NULL;
   unlock_directory(directory);
   if (detached || exists) {
     capability_reservation_release(&reservation, &slot);
@@ -463,7 +459,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   }
   /* The BSP never reads an AP's user address or private syscall stack. Its
    * allocation is unpublished; this task fills the already-validated name. */
-  KASSERT(copy_from_user(entry->name, request->name, request->name_length));
+  memcpy(entry->name, (const void *)request->name, request->name_length);
   entry->name[entry->name_length] = 0;
   struct capability_grant grant = {0};
   status = prepare_child_grant(&reservation, entry->object, request->rights, &grant);
@@ -498,7 +494,9 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     ramfs_request_discard(entry);
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.handle, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -522,7 +520,7 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
     pending->job.rights = rights;
     pending->job.kind = request->kind;
     pending->job.count = request->name_length;
-    KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    memcpy(pending->job.name, (const void *)request->name, request->name_length);
     pending->job.name[request->name_length] = 0;
     npfs_request_submit_and_wait(pending);
     status = pending->job.status;
@@ -537,7 +535,7 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
-    KASSERT(copy_from_user(pending->name, request->name, request->name_length));
+    memcpy(pending->name, (const void *)request->name, request->name_length);
     hostfs_request_submit_and_wait(pending);
     status = pending->status;
     hostfs_request_release(pending);
@@ -549,7 +547,7 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
 
   lock_mutation();
   lock_directory(directory);
-  struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
+  struct directory_entry *entry = find_named_entry(directory, request->name, request->name_length);
   if (!entry) {
     status = CALL_NOT_FOUND;
   } else if (request->kind != DIRECTORY_KIND_ANY && entry_kind(entry) != request->kind) {
@@ -591,8 +589,8 @@ static enum call_status check_rename(struct directory_object *source,
     const struct directory_rename_request *request,
     struct directory_entry **old, struct directory_entry **replaced)
 {
-  *old = find_user_entry(source, request->source_name, request->source_length);
-  *replaced = find_user_entry(destination, request->destination_name,
+  *old = find_named_entry(source, request->source_name, request->source_length);
+  *replaced = find_named_entry(destination, request->destination_name,
       request->destination_length);
   if (source->detached || destination->detached || !*old) {
     return CALL_NOT_FOUND;
@@ -656,10 +654,9 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     pending->job.count = request->source_length;
     pending->job.destination_length = request->destination_length;
     pending->job.replace = request->policy == DIRECTORY_RENAME_REPLACE;
-    KASSERT(copy_from_user(pending->job.name, request->source_name, request->source_length));
+    memcpy(pending->job.name, (const void *)request->source_name, request->source_length);
     pending->job.name[request->source_length] = 0;
-    KASSERT(copy_from_user(pending->job.destination_name, request->destination_name,
-        request->destination_length));
+    memcpy(pending->job.destination_name, (const void *)request->destination_name, request->destination_length);
     pending->job.destination_name[request->destination_length] = 0;
     /* The caller retains both directories through worker completion. */
     npfs_request_submit_and_wait(pending);
@@ -687,9 +684,8 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     pending->count = request->source_length;
     pending->destination_length = request->destination_length;
     pending->replace = replace;
-    KASSERT(copy_from_user(pending->name, request->source_name, request->source_length));
-    KASSERT(copy_from_user(pending->destination_name, request->destination_name,
-        request->destination_length));
+    memcpy(pending->name, (const void *)request->source_name, request->source_length);
+    memcpy(pending->destination_name, (const void *)request->destination_name, request->destination_length);
     hostfs_request_submit_and_wait(pending);
     status = pending->status;
     hostfs_request_release(pending);
@@ -716,7 +712,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
   if (!entry) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
-  KASSERT(copy_from_user(entry->name, request->destination_name, entry->name_length));
+  memcpy(entry->name, (const void *)request->destination_name, entry->name_length);
   entry->name[entry->name_length] = 0;
 
   lock_parents(source, destination);
@@ -803,14 +799,13 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
       npfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
-    if (pending->job.entry.outcome == DIRECTORY_ENTRY) {
-      KASSERT(pending->job.entry.name_size <= sizeof(pending->job.name) &&
-          pending->job.entry.name_size <= request->capacity);
-      KASSERT(copy_to_user(request->name, pending->job.name, pending->job.entry.name_size));
-    }
-    KASSERT(copy_to_user(reply_address, &pending->job.entry, sizeof(pending->job.entry)));
+    size_t name_size = pending->job.entry.outcome == DIRECTORY_ENTRY ?
+        pending->job.entry.name_size : 0;
+    KASSERT(name_size <= sizeof(pending->job.name) && name_size <= request->capacity);
+    bool copied = copy_reply_to_user(reply_address, &pending->job.entry,
+        sizeof(pending->job.entry), request->name, pending->job.name, name_size);
     npfs_request_release(pending);
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
   }
   if (directory->backing == DIRECTORY_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_ENUMERATE);
@@ -823,12 +818,11 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
       hostfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
-    if (pending->entry.outcome == DIRECTORY_ENTRY) {
-      KASSERT(copy_to_user(request->name, pending->name, pending->entry.name_size));
-    }
-    KASSERT(copy_to_user(reply_address, &pending->entry, sizeof(pending->entry)));
+    size_t name_size = pending->entry.outcome == DIRECTORY_ENTRY ? pending->entry.name_size : 0;
+    bool copied = copy_reply_to_user(reply_address, &pending->entry, sizeof(pending->entry),
+        request->name, pending->name, name_size);
     hostfs_request_release(pending);
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
   }
   if (!request->cursor.generation && request->cursor.position) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -862,14 +856,12 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
       }
     }
   }
-  /* Stable, checked private mappings make this copy nonblocking. Keep the
-   * lock until it finishes so removal cannot reclaim the selected name. */
-  if (reply.outcome == DIRECTORY_ENTRY) {
-    KASSERT(copy_to_user(request->name, entry->name, reply.name_size));
-  }
+  /* The directory owns the name through this nonblocking leased copy. */
+  size_t name_size = reply.outcome == DIRECTORY_ENTRY ? reply.name_size : 0;
+  bool copied = copy_reply_to_user(reply_address, &reply, sizeof(reply), request->name,
+      name_size ? entry->name : NULL, name_size);
   unlock_directory(directory);
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
 }
 
 static struct syscall_result filesystem_info(struct directory_object *directory, uint64_t rights,
@@ -887,7 +879,9 @@ static struct syscall_result filesystem_info(struct directory_object *directory,
   npfs_request_submit_and_wait(pending);
   enum call_status status = pending->job.status;
   if (status == CALL_OK) {
-    KASSERT(copy_to_user(reply_address, &pending->job.info, sizeof(pending->job.info)));
+    if (!copy_to_user(reply_address, &pending->job.info, sizeof(pending->job.info))) {
+      status = CALL_BAD_BUFFER;
+    }
   }
   npfs_request_release(pending);
   return (struct syscall_result){status, status == CALL_OK ? sizeof(struct directory_filesystem_info) : 0};
@@ -910,7 +904,9 @@ static struct syscall_result query_info(struct directory_object *directory, uint
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
     if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &pending->job.file_info, sizeof(reply)));
+      if (!copy_to_user(reply_address, &pending->job.file_info, sizeof(reply))) {
+        status = CALL_BAD_BUFFER;
+      }
     }
     npfs_request_release(pending);
     return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
@@ -921,7 +917,9 @@ static struct syscall_result query_info(struct directory_object *directory, uint
     hostfs_request_submit_and_wait(pending);
     enum call_status status = pending->status;
     if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &pending->info, sizeof(reply)));
+      if (!copy_to_user(reply_address, &pending->info, sizeof(reply))) {
+        status = CALL_BAD_BUFFER;
+      }
     }
     hostfs_request_release(pending);
     return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
@@ -929,8 +927,54 @@ static struct syscall_result query_info(struct directory_object *directory, uint
   lock_directory(directory);
   fs_metadata_info(&directory->metadata, &reply);
   unlock_directory(directory);
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
+}
+
+static struct syscall_result directory_operation(struct directory_object *directory,
+    uint64_t rights, uint64_t operation, const union directory_payload *input,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  union directory_payload request = *input;
+  if (operation == DIRECTORY_INFO) {
+    return query_info(directory, rights, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_FILESYSTEM_INFO) {
+    return filesystem_info(directory, rights, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_LOOKUP) {
+    return lookup(directory, rights, &request.lookup, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_CREATE) {
+    return create_child(directory, rights, &request.create, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_REMOVE) {
+    return remove_child(directory, rights, &request.remove);
+  }
+  if (operation == DIRECTORY_RENAME) {
+    return rename_child(directory, rights, &request.rename);
+  }
+  if (operation == DIRECTORY_SYNC) {
+    if (directory->backing == DIRECTORY_NPFS) {
+      struct npfs_request *pending = npfs_request_prepare(NPFS_SYNC);
+      pending->job.node = directory->npfs;
+      pending->job.rights = rights;
+      npfs_request_submit_and_wait(pending);
+      enum call_status status = pending->job.status;
+      npfs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    if (directory->backing == DIRECTORY_HOST) {
+      struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SYNC);
+      pending->node = directory->host;
+      hostfs_request_submit_and_wait(pending);
+      enum call_status status = pending->status;
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    return (struct syscall_result){directory->backing == DIRECTORY_RAM ? CALL_OK : CALL_READ_ONLY, 0};
+  }
+  return enumerate(directory, rights, &request.enumerate, reply_address, reply_capacity);
 }
 
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
@@ -980,43 +1024,35 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (operation == DIRECTORY_INFO) {
-    return query_info(directory, rights, reply_address, reply_capacity);
-  }
-  if (operation == DIRECTORY_FILESYSTEM_INFO) {
-    return filesystem_info(directory, rights, reply_address, reply_capacity);
-  }
-  if (operation == DIRECTORY_LOOKUP) {
-    return lookup(directory, rights, &request.lookup, reply_address, reply_capacity);
-  }
-  if (operation == DIRECTORY_CREATE) {
-    return create_child(directory, rights, &request.create, reply_address, reply_capacity);
-  }
-  if (operation == DIRECTORY_REMOVE) {
-    return remove_child(directory, rights, &request.remove);
-  }
-  if (operation == DIRECTORY_RENAME) {
-    return rename_child(directory, rights, &request.rename);
-  }
-  if (operation == DIRECTORY_SYNC) {
-    if (directory->backing == DIRECTORY_NPFS) {
-      struct npfs_request *pending = npfs_request_prepare(NPFS_SYNC);
-      pending->job.node = directory->npfs;
-      pending->job.rights = rights;
-      npfs_request_submit_and_wait(pending);
-      enum call_status status = pending->job.status;
-      npfs_request_release(pending);
-      return (struct syscall_result){status, 0};
+  char *source = NULL, *destination = NULL;
+  enum call_status status = CALL_OK;
+  /* Only private name fields are rewritten. Enumeration's destination remains
+   * a user address; all named operations consume one immutable kernel capture. */
+  if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
+    status = capture_name(request.lookup.name, request.lookup.name_length, &source);
+    request.lookup.name = (uintptr_t)source;
+  } else if (operation == DIRECTORY_REMOVE) {
+    status = capture_name(request.remove.name, request.remove.name_length, &source);
+    request.remove.name = (uintptr_t)source;
+  } else if (operation == DIRECTORY_RENAME) {
+    status = capture_name(request.rename.source_name, request.rename.source_length, &source);
+    if (status == CALL_OK) {
+      status = capture_name(request.rename.destination_name,
+          request.rename.destination_length, &destination);
     }
-    if (directory->backing == DIRECTORY_HOST) {
-      struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SYNC);
-      pending->node = directory->host;
-      hostfs_request_submit_and_wait(pending);
-      enum call_status status = pending->status;
-      hostfs_request_release(pending);
-      return (struct syscall_result){status, 0};
-    }
-    return (struct syscall_result){directory->backing == DIRECTORY_RAM ? CALL_OK : CALL_READ_ONLY, 0};
+    request.rename.source_name = (uintptr_t)source;
+    request.rename.destination_name = (uintptr_t)destination;
   }
-  return enumerate(directory, rights, &request.enumerate, reply_address, reply_capacity);
+  struct syscall_result result = {status, 0};
+  if (status == CALL_OK) {
+    result = directory_operation(directory, rights, operation, &request,
+        reply_address, reply_capacity);
+  }
+  if (source) {
+    kfree(source);
+  }
+  if (destination) {
+    kfree(destination);
+  }
+  return result;
 }
