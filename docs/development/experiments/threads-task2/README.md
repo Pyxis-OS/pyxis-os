@@ -233,6 +233,85 @@ session. Calibration means were never subtracted. These correlated changes are
 not proof of the cause. Broad ranges, differing paired directions and unrelated
 host QEMU activity prevent a stable causal-overhead or speedup conclusion;
 this record does **not** establish zero overhead. No performance optimization
-or owner-native qualification is implied. Raw captures/all samples remain in
+is implied by these nested-VM results. Raw captures/all samples remain in
 the baseline worktree's ignored `build/task2-baseline` and `build/task2-pairs`;
 integrated build/debugger captures remain in `build/task2-integrated`.
+
+## Native interleaved A/B
+
+Owner-run ThinkPad T14, 12 CPUs, AC power, fresh PXE boots in order A1/B1/A2/B2.
+Luna built A `d71e4dfd` (ELF digest prefix `f5683c13`) and B `ea39ff9f`
+(`eaf58495`). All four used the same main `1ef20a1c` initrd (`6e45fbd3`),
+including the fixed remote session lifetime from userland #203. Digest prefixes
+are owner-supplied, not full hashes independently verified here. The four IPC
+commands above ran hands-free through `pyxis-remote --machine`.
+
+Raw captures: `/shared/present/batch2/ab671/{A1,B1,A2,B2}/{call,send}-{64,4096}.jsonl`.
+Independent decoding confirmed the reported medians, 80 timed passes (five per
+workload/boot) plus verified warmups, status 0, verified payload, zero failed
+CALLs/rejected SENDs, and all 16 FINAL records exited 0/drain complete. Native
+launch/IPI timings are not part of this run.
+
+Median milliseconds per 256-message pass:
+
+| Workload | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 completion | 1.254 | 1.438 | 1.848 | 1.230 |
+| CALL4096 completion | 1.384 | 1.026 | 0.989 | 1.898 |
+| SEND64 completion | 0.547 | 0.929 | 0.371 | 1.175 |
+| SEND64 admission | 0.092 | 0.129 | 0.060 | 0.131 |
+| SEND4096 completion | 1.083 | 1.362 | 1.240 | 1.265 |
+| SEND4096 admission | 0.189 | 0.251 | 0.229 | 0.231 |
+
+CALL changes direction across pairs; no stable difference is resolved. SEND64
+admission is higher in both B runs: A 0.234–0.359 µs/send versus B
+0.504–0.512 µs/send from the rounded medians, an increase of about 0.145/0.277
+µs/send in the two pairs. SEND64 completion also rises. SEND4096 is slightly
+higher with overlap. Ranges remain wide: SEND64 admission A1 0.055–0.131,
+B1 0.057–0.157, A2 0.059–0.068, B2 0.062–0.153 ms; even B includes low passes.
+Clock calibration is 130/134 ns/read in A1, 130 in A2 and 136 in both B runs,
+reported without subtraction. These sub-millisecond/millisecond native costs
+supersede the nested-VM percentages as practical cost evidence; they do not
+isolate instruction cost or prove zero overhead.
+
+### SEND cost attribution — source inspection
+
+The zero-attachment **raw SEND** benchmark reaches `call_object` in
+`kernel/syscall.c`: old borrowed `capability_resolve` is replaced by
+`capability_acquire`, dispatch and `capability_release`. Per SEND, the new path
+adds table exclusion (atomic exchange and release store), saturating object
+retain (CAS), object release (atomic decrement), and rights/transport snapshot
+and cleanup stores. On the uncontended successful path that is three atomic
+read-modify-write operations; no new per-message heap allocation. The IF=0 guard
+assertion also reads flags and executes CLI. Retain/release implementations
+already existed; the additional invocation per syscall is new.
+
+`send_endpoint`/`admit_message` record selection, queue locking, payload copy and
+publication are unchanged for this zero-grant path. The exported-client
+delivery reference already existed and is not used by raw SEND. No detached
+generation bookkeeping runs inside the SEND interval; receipt CLOSE/release and
+receiver DRAIN occur outside it. Completion includes those receiver/acknowledgment
+paths and scheduling, so it cannot be assigned to SEND dispatch alone.
+
+Each pass times 32 groups of eight using 64 boundary CLOCK calls. Their new
+capability admission also contributes: the start read's post-timestamp release
+and end read's pre-timestamp acquire fall inside each interval. Therefore the
+measured admission increase is consistent with the added guards/references,
+but its exact share is unprofiled; dividing by 256 is an amortized batch figure,
+not isolated SEND latency.
+
+**Recommendation:** retain this small per-message cost for the accepted owned
+admission contract. Removing the guard or retain/release would restore borrowed
+lifetime or weaken saturation/authority guarantees. No demonstrated cheap fix
+recovers the observed increase. A non-mutating flags read could avoid the
+redundant CLI in the guard assertion, but changes the shared lock helper and
+does not remove the required atomics; defer unless profiling establishes value.
+No optimization or changed benchmark bound is included in this PR.
+
+The current benchmark accepts at most 256 messages and 100 rounds. For optional
+stronger sampling without a code change, run the same hands-free loop from
+[remote terminal](../../../userland/remote-terminal.md#consumers-and-limits)
+with `--messages 256 --rounds 100`, on fresh A1/B1/A2/B2 boots. That adds samples
+with fresh receivers; it does not lengthen an individual admission interval.
+Longer per-pass `--messages` needs a separately scoped benchmark change. Another
+native run is not required for this recommendation.
