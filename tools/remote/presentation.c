@@ -14,25 +14,23 @@ static void position(struct presentation *screen)
   buffer_append(screen->output, text, (size_t)length);
 }
 
-static void style(struct presentation *screen, bool reverse)
+static void style(struct presentation *screen, uint8_t attributes)
 {
-  static const uint32_t palette[16] = {
-    0x222734, 0xc26265, 0x52aa60, 0xad9b49, 0x487fd4, 0xaf5bd1, 0x269d9a, 0x5a6377,
-    0x3a4152, 0xe48383, 0x75cf84, 0xc7b461, 0x76a8f2, 0xd58bf0, 0x52c4c0, 0xdfe5ee
-  };
-  uint32_t foreground = screen->foreground == 39 ? 0xb4bcca :
-                        palette[screen->foreground >= 90 ? screen->foreground - 90 + 8 :
-                                screen->foreground - 30];
-  uint32_t background = screen->background == 49 ? 0x0f141f :
-                        palette[screen->background >= 100 ? screen->background - 100 + 8 :
-                                screen->background - 40];
-  if (reverse) {
+  static const uint32_t palette[16] = TERMINAL_AARDVARK_PALETTE;
+  uint32_t foreground = terminal_color_rgb(screen->style.foreground, palette,
+      TERMINAL_AARDVARK_FOREGROUND);
+  uint32_t background = terminal_color_rgb(screen->style.background, palette,
+      TERMINAL_AARDVARK_BACKGROUND);
+  if (attributes & TERMINAL_ATTR_REVERSE) {
     uint32_t previous_foreground = foreground;
     foreground = background;
     background = previous_foreground;
   }
   char text[80];
-  int length = snprintf(text, sizeof(text), "\x1b[38;2;%u;%u;%u;48;2;%u;%u;%um",
+  int length = snprintf(text, sizeof(text), "\x1b[0%s%s%s;38;2;%u;%u;%u;48;2;%u;%u;%um",
+                        attributes & TERMINAL_ATTR_BOLD ? ";1" : "",
+                        attributes & TERMINAL_ATTR_ITALIC ? ";3" : "",
+                        attributes & TERMINAL_ATTR_UNDERLINE ? ";4" : "",
                         foreground >> 16, foreground >> 8 & 255, foreground & 255,
                         background >> 16, background >> 8 & 255, background & 255);
   buffer_append(screen->output, text, (size_t)length);
@@ -41,10 +39,11 @@ static void style(struct presentation *screen, bool reverse)
 void presentation_begin(struct presentation *screen)
 {
   screen->tab_width = 8;
-  screen->foreground = 39;
-  screen->background = 49;
+  screen->style = (struct terminal_style){
+    .foreground = TERMINAL_COLOR_DEFAULT, .background = TERMINAL_COLOR_DEFAULT
+  };
   emit(screen, "\x1b[?1049h\x1b[?7l\x1b[0m");
-  style(screen, false);
+  style(screen, 0);
   emit(screen, "\x1b[2J\x1b[4 q\x1b[?25h");
   char text[32];
   int length = snprintf(text, sizeof(text), "\x1b[1;%ur", screen->rows);
@@ -60,13 +59,13 @@ static void newline(struct presentation *screen)
     ++screen->y;
   } else {
     position(screen);
-    /* Native scrolling clears the new row with the non-reversed background. */
-    if (screen->reverse) {
-      style(screen, false);
+    /* Newly blank native cells keep the colours, with no glyph attributes. */
+    if (screen->style.attributes) {
+      style(screen, 0);
     }
     emit(screen, "\x1b" "D");
-    if (screen->reverse) {
-      style(screen, true);
+    if (screen->style.attributes) {
+      style(screen, screen->style.attributes);
     }
   }
   position(screen);
@@ -84,6 +83,9 @@ static void erase(struct presentation *screen, unsigned first, unsigned end)
 {
   unsigned saved_x = screen->x;
   unsigned saved_y = screen->y;
+  if (screen->style.attributes) {
+    style(screen, 0);
+  }
   while (first < end) {
     screen->x = first % screen->columns;
     screen->y = first / screen->columns;
@@ -99,24 +101,10 @@ static void erase(struct presentation *screen, unsigned first, unsigned end)
   }
   screen->x = saved_x;
   screen->y = saved_y;
-  position(screen);
-}
-
-static void select_style(struct presentation *screen, unsigned parameter)
-{
-  if (parameter == 0) {
-    screen->foreground = 39;
-    screen->background = 49;
-    screen->reverse = false;
-  } else if (parameter == 7 || parameter == 27) {
-    screen->reverse = parameter == 7;
-  } else if (parameter == 39 || (parameter >= 30 && parameter <= 37) ||
-             (parameter >= 90 && parameter <= 97)) {
-    screen->foreground = parameter;
-  } else if (parameter == 49 || (parameter >= 40 && parameter <= 47) ||
-             (parameter >= 100 && parameter <= 107)) {
-    screen->background = parameter;
+  if (screen->style.attributes) {
+    style(screen, screen->style.attributes);
   }
+  position(screen);
 }
 
 static void execute_csi(struct presentation *screen, unsigned char command)
@@ -135,10 +123,10 @@ static void execute_csi(struct presentation *screen, unsigned char command)
     return;
   }
   if (command == 'm') {
-    for (unsigned i = 0; i <= screen->parameter_index; ++i) {
-      select_style(screen, screen->parameters[i]);
+    if (terminal_sgr_apply(&screen->style, screen->parameters, screen->parameters_present,
+        screen->parameter_index + 1)) {
+      style(screen, screen->style.attributes);
     }
-    style(screen, screen->reverse);
     return;
   }
   if (screen->parameter_index > (command == 'H' ? 1u : 0u)) {
@@ -191,6 +179,7 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
     if (byte == 0x1b) {
       screen->state = PRESENT_ESCAPE;
       screen->parameter_index = 0;
+      screen->parameters_present = 0;
       screen->private_csi = false;
       memset(screen->parameters, 0, sizeof(screen->parameters));
       continue;
@@ -233,7 +222,8 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
         unsigned value = screen->parameters[screen->parameter_index];
         if (byte >= '0' && byte <= '9' && value * 10 + byte - '0' <= UINT16_MAX) {
           screen->parameters[screen->parameter_index] = (uint16_t)(value * 10 + byte - '0');
-        } else if (byte == ';' && screen->parameter_index + 1 < 4) {
+          screen->parameters_present |= (uint16_t)(1u << screen->parameter_index);
+        } else if (byte == ';' && screen->parameter_index + 1 < TERMINAL_CSI_PARAMETERS) {
           ++screen->parameter_index;
         } else {
           screen->state = PRESENT_CSI_IGNORE;
