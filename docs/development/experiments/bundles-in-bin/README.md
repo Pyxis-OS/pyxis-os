@@ -29,8 +29,8 @@ cores/one thread per core, UTC RTC, standard VGA at 1280x800, modern VirtIO
 SCSI CD/RNG/network, fresh matching OVMF variables per boot. Both images use
 identical staged live configuration: Remote has launcher authority and a Mux
 space has launcher/multiplexer authority and writable home. These are local
-qualification inputs, not changed shipped defaults. No other task VM, build or
-GDB session ran during timing. Logging remains the ordinary info level.
+qualification inputs, not changed shipped defaults. The task’s installer VM was paused, no task build ran, and GDB was detached
+during timing. Logging remains the ordinary info level.
 
 After 16 warmup children, time a fresh machine remote session with the existing
 client, including command startup, transport, exit and final drain:
@@ -43,7 +43,7 @@ exit
 Use `build/tools/pyxis-remote --machine --no-shell-echo --columns 80 --rows 24
 127.0.0.1 24675` with newline-terminated input. All runs completed 1,024 children,
 exited zero and reported `drain=complete`. Each pair uses fresh boots, before
-then after. Neovim opens a four-byte `test` file with `--startuptime`; the before
+then after. Neovim opens a file containing a `test` line with `--startuptime`; the before
 entry is its former explicit archive path, after is bare `nvim`. The logfile
 reports separate UI-client and embedded-server clocks; do not sum them. These
 internal times exclude the shell's lookup/load and command typing.
@@ -113,6 +113,8 @@ CPUs/512 MiB. Bare Neovim and Lua 5.1 launch from npfs; `nvim_runtime://`, bundl
 provenance/notices and a deliberately empty bundle directory are reachable.
 Offline extraction of the verified ESP archive finds neither bundle tree but
 retains a `nvim.pxb-prefix-marker` neighbor. Installed `:help` reads help text;
-the vimdoc tree-sitter parser error is being compared against the frozen baseline.
+the same missing-vimdoc-parser warning also occurs on the frozen baseline and live
+image; after acknowledging it, help text is readable. This existing editor profile
+limit is independent of bundle placement.
 Same-revision rerun, two successive real-revision updates, recursive cleanup,
 mounted-target refusal and interrupted program-copy/rerun checks remain in progress.
