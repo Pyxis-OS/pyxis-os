@@ -71,3 +71,39 @@ Insert C with vi keys, save, reopen, inspect `:syntax`, change cwd with
 selected writable native backing, replace a loaded target, confirm ordinary
 write refusal and explicit force. Native qualification and the richer terminal
 profile remain separate steps.
+
+## New-name saves (2026-10-10)
+
+Baseline Pyxis `6ff8671e`, userland `796087b1`, ports `5e98894`: valid-parent
+new-file creation already worked; loaded-buffer `:saveas` to a missing name
+reproduced EINVAL. The owner's native report identified wrong-parent selection;
+that exact native session was not reproduced. Inspection found the unproved
+cwd-text fallback and the old-name reference surviving save-as.
+
+Implementation matrix used ports `22ee343`; rebase onto ports main `43eec19`
+changed no Neovim input. Published head `fb42736` and parent base `476b2a33`
+passed the ordinary image build and a final quick reopen/save. No kernel/libc
+changes or compiler rebuild. Same four-CPU/8-GiB nested-KVM/VGA/OVMF configuration
+as above, with VirtIO block and a disposable GPT disk: partition 2 contains a
+128 MiB npfs pool, 8 MiB journal, system/home volumes. A local stored boot config
+adds a second shell and a shared RAM volume; no configuration changes are in
+the PR. Run the editor through `boot://share/neovim/nvim.pxb`.
+
+| Manual check | npfs `home://` / shared RAM |
+| --- | --- |
+| New and existing names | `expand('%:p')` stayed absolute across `:cd`; new `:w` created, and `:e!` reloaded the same target. |
+| File appears before first save | Second shell created the target. Plain `:w` refused and preserved creator contents; `:w!` replaced them; the next plain save succeeded. RAM force also removed the tail of a longer original. |
+| Different name | `:w newname` and `:saveas` created missing destinations. Existing save-as refused without force, then succeeded with force. |
+| Append to missing name | `:w >>` refused; `:w! >>` created and appended. |
+| Invalid parent | A doubled relative prefix after `:cd` refused immediately; the selected buffer/name remained unchanged. |
+
+After guest sync and shutdown, host structural checking passed and the npfs
+inspector read the expected new-file/save-as contents. Final-image quick checks
+reopened the persistent header, repeated cwd/save and existing-target save-as,
+created a RAM file across cwd change, and opened help. Native recheck remains
+for the owner: from `home://`, open a new `jvm/include/...` file with its parent
+present, inspect `%:p`, change to `home://jvm`, then save/reload; from that cwd
+use `include/...`, not another `jvm/` prefix. Repeat the second-shell appearance,
+plain refusal/force, new-name/save-as and append checks. Creation races,
+unavailable identity, allocation failure and rename/reference lifetimes were
+inspected, not injected. Raw screenshots/logs remain local.
