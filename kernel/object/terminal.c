@@ -522,11 +522,11 @@ static struct syscall_result application_read(struct terminal_session *session,
 }
 
 static enum call_status enqueue_output(struct terminal_session *session,
-    uint64_t type, const void *bytes, size_t length, size_t *written)
+    uint64_t type, const void *bytes, size_t length, size_t *written, bool try)
 {
   *written = 0;
   for (;;) {
-    struct task_wait_link *writer = task_wait_link_prepare();
+    struct task_wait_link *writer = try ? NULL : task_wait_link_prepare();
     lock_session(session);
     if (task_stop_requested() || session->hung_up || session->output_closed) {
       unlock_session(session);
@@ -536,12 +536,19 @@ static enum call_status enqueue_output(struct terminal_session *session,
       unlock_session(session);
       return CALL_LIMIT;
     }
-    /* A write waits until its whole record fits. Admitting the space a drain
-     * just freed would split a continuous writer into tiny records, and the
+    /* A blocking write waits until its whole record fits. Admitting the space
+     * a drain just freed would split a continuous writer into tiny records; the
      * drainer then pays one round per fragment. Writes are at most
      * TERMINAL_TRANSFER_MAX bytes, a small part of the queue. */
     size_t available = TERMINAL_OUTPUT_CAPACITY - session->output_count;
     size_t required = sizeof(struct terminal_record) + length;
+    if (try && available > sizeof(struct terminal_record)) {
+      size_t capacity = available - sizeof(struct terminal_record);
+      if (length > capacity) {
+        length = capacity;
+        required = sizeof(struct terminal_record) + length;
+      }
+    }
     if (available >= required) {
       size_t count = length;
       struct terminal_record record = {.type = type, .length = count};
@@ -565,6 +572,10 @@ static enum call_status enqueue_output(struct terminal_session *session,
       unlock_session(session);
       readiness_notify();
       return CALL_OK;
+    }
+    if (try) {
+      unlock_session(session);
+      return CALL_WOULD_BLOCK;
     }
     writer->next = session->writers;
     session->writers = writer;
@@ -592,7 +603,7 @@ static enum call_status enqueue_output(struct terminal_session *session,
 
 static struct syscall_result application_write(struct terminal_session *session,
     const struct console_write_request *request, uintptr_t reply_address,
-    size_t reply_capacity)
+    size_t reply_capacity, bool try)
 {
   if (reply_capacity < sizeof(struct console_write_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -605,7 +616,8 @@ static struct syscall_result application_write(struct terminal_session *session,
   }
   size_t written = 0;
   if (length) {
-    enum call_status status = enqueue_output(session, TERMINAL_RECORD_DATA, bytes, length, &written);
+    enum call_status status = enqueue_output(session, TERMINAL_RECORD_DATA,
+        bytes, length, &written, try);
     if (status != CALL_OK) {
       return (struct syscall_result){status, 0};
     }
@@ -627,6 +639,7 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   switch (operation) {
   case CONSOLE_READ: required = CONSOLE_RIGHT_READ; break;
   case CONSOLE_WRITE:
+  case CONSOLE_TRY_WRITE:
   case CONSOLE_FRESH_LINE:
   case CONSOLE_SET_TAB_WIDTH: required = CONSOLE_RIGHT_WRITE; break;
   case CONSOLE_SIZE: required = CONSOLE_RIGHTS; break;
@@ -652,8 +665,9 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   if (operation == CONSOLE_READ) {
     return application_read(session, &request.read, reply_address, reply_capacity);
   }
-  if (operation == CONSOLE_WRITE) {
-    return application_write(session, &request.write, reply_address, reply_capacity);
+  if (operation == CONSOLE_WRITE || operation == CONSOLE_TRY_WRITE) {
+    return application_write(session, &request.write, reply_address, reply_capacity,
+        operation == CONSOLE_TRY_WRITE);
   }
   if (operation == CONSOLE_SIZE) {
     if (reply_capacity < sizeof(struct console_size_reply)) {
@@ -681,7 +695,8 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
     length = sizeof(request.tab_width.columns);
   }
   size_t written;
-  enum call_status status = enqueue_output(session, type, &request.tab_width.columns, length, &written);
+  enum call_status status = enqueue_output(session, type, &request.tab_width.columns,
+      length, &written, false);
   return (struct syscall_result){status, 0};
 }
 
@@ -728,7 +743,7 @@ struct syscall_result terminal_events_call(struct kernel_object *object,
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   size_t written;
   enum call_status status = enqueue_output(session, TERMINAL_RECORD_COMMAND_COMPLETE,
-      &completion, sizeof(completion), &written);
+      &completion, sizeof(completion), &written, false);
   return (struct syscall_result){status, 0};
 }
 
@@ -934,6 +949,13 @@ uint64_t terminal_application_ready(struct kernel_object *object, uint64_t event
   }
   if ((events & (WAIT_READABLE | WAIT_PEER_FIN)) && session->input_closed) {
     ready |= WAIT_PEER_FIN;
+  }
+  if ((events & WAIT_WRITABLE) && !session->hung_up && !session->output_closed &&
+      TERMINAL_OUTPUT_CAPACITY - session->output_count > sizeof(struct terminal_record)) {
+    ready |= WAIT_WRITABLE;
+  }
+  if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) && session->output_closed) {
+    ready |= WAIT_WRITE_CLOSED;
   }
   if (events & WAIT_INTERRUPT) {
     ready |= console_interrupt_ready(&session->interrupt);

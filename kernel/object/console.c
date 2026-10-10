@@ -287,12 +287,21 @@ uint64_t console_ready(struct console_object *console, uint64_t events,
   if (events & WAIT_INTERRUPT) {
     ready |= console_interrupt_ready(&console->interrupt);
   }
-  if (events & WAIT_RESIZED) {
+  if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_RESIZED)) {
     bool locked = log_begin();
     if (!locked) {
       ready |= WAIT_ERROR;
-    } else if (console->tty->geometry_generation != observed_generation) {
-      ready |= WAIT_RESIZED;
+    } else {
+      if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
+        if (!console->tty->initialized) {
+          ready |= WAIT_ERROR;
+        } else {
+          ready |= events & WAIT_WRITABLE;
+        }
+      }
+      if ((events & WAIT_RESIZED) && console->tty->geometry_generation != observed_generation) {
+        ready |= WAIT_RESIZED;
+      }
     }
     log_end(locked);
   }
@@ -586,6 +595,7 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   uint64_t required;
   switch (operation) {
   case CONSOLE_WRITE:
+  case CONSOLE_TRY_WRITE:
   case CONSOLE_FRESH_LINE:
   case CONSOLE_SET_TAB_WIDTH:
     required = CONSOLE_RIGHT_WRITE;
@@ -616,7 +626,7 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (operation == CONSOLE_WRITE) {
+  if (operation == CONSOLE_WRITE || operation == CONSOLE_TRY_WRITE) {
     return write_console(console, &request.write, reply_address, reply_capacity);
   }
   if (operation == CONSOLE_READ) {

@@ -30,6 +30,7 @@
 #define CONSOLE_PASTE_READ UINT64_C(9)
 #define CONSOLE_PASTE_ACK UINT64_C(10)
 #define CONSOLE_PASTE_RELEASE UINT64_C(11)
+#define CONSOLE_TRY_WRITE UINT64_C(12)
 
 #define CONSOLE_PASTE_INPUT UINT64_C(1)
 #define CONSOLE_PASTE_BEGIN UINT64_C(2)
@@ -79,6 +80,18 @@ struct console_paste_release_request {
 struct console_write_request {
   uint64_t address;
   uint64_t length;
+};
+
+/* TRY_WRITE uses WRITE authority and the same fixed-size payload as WRITE.
+ * A nonempty request makes bounded positive progress or returns WOULD_BLOCK
+ * without output. Independent sessions admit one short DATA record, counting
+ * its header against queue capacity; hangup/closed output is ENDPOINT_CLOSED.
+ * Framebuffer consoles render synchronously under the shared output lock;
+ * unavailable output is UNAVAILABLE.
+ * A validated zero-length request succeeds without probing output liveness.
+ * Try operations never wait for I/O readiness, but may serialize output. */
+struct console_try_write_reply {
+  uint64_t written;
 };
 
 /* READ waits for available bytes, without echo or editing. Independent terminal
@@ -172,6 +185,7 @@ _Static_assert(sizeof(struct console_read_reply) == 8, "console read reply layou
 _Static_assert(sizeof(struct console_size_reply) == 24, "console size reply layout");
 _Static_assert(sizeof(struct console_write_request) == 16, "console request layout");
 _Static_assert(sizeof(struct console_write_reply) == 8, "console reply layout");
+_Static_assert(sizeof(struct console_try_write_reply) == 8, "console try write reply layout");
 _Static_assert(offsetof(struct console_message, body) == 16, "console payload offset");
 _Static_assert(sizeof(struct console_message) == 40, "console message layout");
 
