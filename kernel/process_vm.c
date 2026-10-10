@@ -148,6 +148,8 @@ void process_vm_unhold(struct process *process, struct task *task)
   }
 }
 
+static void finish_mutation(struct process *process, bool expired);
+
 static void refuse_mutation(struct bsp_request *request)
 {
   if (request->service == BSP_SERVICE_MEMORY) {
@@ -184,14 +186,23 @@ void process_vm_mutation_forward(struct bsp_request *request)
   /* The scheduler has already dropped this caller's root. Surrender its
    * continuation so the transaction cannot wait for its own final reply. */
   task_vm_set_continuation(mutator, false);
-  process->vm.phase = PROCESS_VM_DRAINING;
+  bool drained = !process->vm.roots && !process->vm.borrowers;
+  process->vm.phase = drained ? PROCESS_VM_MUTATING : PROCESS_VM_DRAINING;
   process->vm.mutator = mutator;
   process->vm.pending = request;
-  uint64_t now = arch_monotonic_ns();
-  process->vm.deadline = now > UINT64_MAX - VM_QUIESCENCE_NS ?
-    UINT64_MAX : now + VM_QUIESCENCE_NS;
+  if (!drained) {
+    uint64_t now = arch_monotonic_ns();
+    process->vm.deadline = now > UINT64_MAX - VM_QUIESCENCE_NS ?
+      UINT64_MAX : now + VM_QUIESCENCE_NS;
+  }
   spin_unlock(&process->vm.lock);
   request->state = BSP_REQUEST_FORWARDED;
+  if (drained) {
+    /* Admission is closed and every departure already acknowledged. Execute
+     * the bounded service here; only waiting for drainage needs a worker. */
+    finish_mutation(process, false);
+    return;
+  }
   struct process **tail = &pending_processes;
   while (*tail) {
     tail = &(*tail)->vm.next_pending;
