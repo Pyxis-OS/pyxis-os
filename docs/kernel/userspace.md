@@ -93,7 +93,8 @@ WRITE or file READ. Kernel and userspace are rebuilt together against the
 shared ABI headers. Older layouts are not supported.
 
 The [file wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) query size, read/write at explicit
-offsets, resize and synchronize files. FILE payloads contain copied bytes rather
+offsets, resize and synchronize files, and sample [file metadata](../interfaces/file-metadata.md).
+FILE payloads contain copied bytes rather
 than caller buffer addresses. Each wrapper performs one bounded transfer: reads
 return at most 4,088 bytes and writes submit at most 4,080 bytes, leaving room for
 metadata within the 4 KiB payload limit. Larger requests may return short counts;

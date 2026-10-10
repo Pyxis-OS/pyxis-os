@@ -82,9 +82,12 @@ Clang's private headers. `-print-search-dirs` displays the configured paths.
   are unsupported. Strong unresolved symbols fail the link.
 - JIT/`-run`, archive creation, compiler subprocess dispatch, dependency generation,
   bounds checking, coverage and runtime backtraces are not provided.
-- Native `#pragma once` is rejected until the filesystem provides
-  [file identity](../technical-debt.md#file-identity-across-capability-paths).
-  Use include guards.
+- Native `#pragma once` compares [live file identity](../interfaces/file-metadata.md),
+  including differently named aliases. One stream per once header remains open
+  until translation-unit cleanup, including error cleanup. Replacing a pathname
+  identifies a new header. Missing identity at the directive or on an include
+  requiring comparison produces a diagnostic; handle/backing limits can fail
+  compilation. Borrowed stdin remains caller-owned. Include guards still work.
 - `__DATE__` and `__TIME__` use [UTC wall time](../kernel/wall-clock.md), preserving C's
   macro spelling. Missing time or dates outside years 0000–9999 are diagnosed.
   `-bench` uses monotonic elapsed time and upstream floating-point output. Both

@@ -569,8 +569,9 @@ asynchronous release, deciding who owns the capability before adding retries or 
 ## Narrow libc file metadata
 
 Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`lstat`/`fstat` for ports such as [Links](userland/links.md), but native
-objects report only a kind and (for files) a size, so `struct stat` has only `st_mode` type bits and `st_size`; code reading other fields
-fails to compile rather than seeing invented values.
+objects report type/size plus independently valid identity and modification time
+([metadata contract](interfaces/file-metadata.md)). Callers must check `st_valid`;
+ownership, mode permissions and access/change times remain absent.
 
 - **Sizing opens the file** with READ (or WRITE if READ is denied), so a file with neither right cannot be sized, and on a provider URI
   it performs the request (Links sends provider URIs straight to `fopen`). Review proposed failing with ENODEV there, as `opendir` does.
@@ -581,16 +582,17 @@ fails to compile rather than seeing invented values.
   [accepted contract](userland/libc-portability.md#native-path-checks-and-removal).
 - **Listings** omit `.` and `..`, and a detected concurrent change ends one with EAGAIN. The first ls and mkdir still use libpyxis helpers.
 
-Revisit when native objects gain timestamps or other metadata, a port needs `readlink`, or a port calls `stat` on provider URIs; add
+Revisit when a port needs other metadata, `readlink`, or calls `stat` on provider URIs; add
 fields only for values the native layer reports.
 
 ## File identity across capability paths
 
-The filesystem protocol cannot tell whether two opened file handles name the same file, and path strings cannot (different roots and
-directory paths can reach one object, and a descriptive path is not authority). This blocks reliable `#pragma once` in native TCC, which
-rejects the directive for now ([TCC contract](userland/tcc.md#remaining-limits)); include guards work. Revisit an identity operation when
-needed, defining comparison scope, lifetime and behavior across mounts and replacement, rather than normalizing paths or adding
-`realpath` for TCC.
+The [metadata protocol](interfaces/file-metadata.md) compares live native objects
+while an original reference is held. HOST bind aliases, cross-session comparison
+and continuity after full close remain excluded; unknown provider identity can
+prevent safe comparisons. [TCC](userland/tcc.md#remaining-limits) retains once
+streams and diagnoses unavailable identity. Revisit stronger backing support
+when a consumer needs these excluded comparisons; path normalization cannot supply it.
 
 ## Program location
 
@@ -822,8 +824,9 @@ loguru without its flush thread or signal handlers, smmalloc's per-thread cache 
 tasks left out, and minicoro without multithreading (see [SDL game ports](development/sdl-game-ports.md#behaviour)). Revisit with
 userspace threads, together with sound. The port also works around [libc gaps](../ports/eduke32/README.md#libc-gaps) that need decisions
 first: it keeps its own working directory (no `chdir` or `getcwd`), loops reads because libc `read` returns one native transfer, under
-4 KiB, where POSIX code expects whole reads from files, and matches its data cache on size because `stat` has no modification time.
-Revisit if more ports need a working directory or whole reads. Pyxis displays report no refresh rate, so its frame limiter assumes 60 Hz.
+4 KiB, where POSIX code expects whole reads from files, and still matches its data cache on size;
+it has not adopted the new optional modification time. Revisit timestamp-aware caching when this port is next changed,
+and working directories or whole reads if more ports need them. Pyxis displays report no refresh rate, so its frame limiter assumes 60 Hz.
 
 ## SDL game ports native qualification
 
@@ -1117,10 +1120,11 @@ resource bounds are system-wide, not per space.
 ## Shell redirection side effects and file aliases
 
 File redirection opens all targets before truncating outputs, but creation, truncation and launch are separate operations with no rollback: a failed
-open can leave newly created files and a failed resize or later launch can leave truncated outputs. Redirecting an output onto an input file destroys its
-contents before the child reads them, even through different path aliases, because no same-file identity check exists. stdout and stderr keep independent
+open can leave newly created files and a failed resize or later launch can leave truncated outputs. The shell now proves explicit outputs distinct from
+every stage's FILE stdin before resizing, including capability-path aliases.
+Argument files remain outside this check (`cat file > file` can destroy input). stdout and stderr keep independent
 offsets when both name one file, so their writes can overwrite each other (descriptor duplication and merged output are not implemented). Accepted for the
-first redirection scope; revisit if alias-safe copying or shared-position output becomes a requirement, noting that batch launch promises no filesystem
+redirection scope; revisit argument-file protection or shared-position output when required, noting that batch launch promises no filesystem
 rollback ([shell redirection](userland/shell.md#file-redirection-and-stdin)).
 
 ## Pipe scheduling and resource limits

@@ -1,7 +1,7 @@
 # Neovim on Pyxis
 
 Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651.**
-Task 2 is assigned; its contract is accepted and implementation authorized.
+Task 2 is implemented in the current review, with its accepted contract and qualification linked below.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -16,7 +16,7 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | --- | --- | --- | --- |
 | 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Task 1 adds pipe readiness and native try operations** ([pipes](../interfaces/pipes.md#readiness)); libc streams remain blocking, file and provider opens cannot be waited on, and there are no completion tokens. |
 | 2 | User threads | **Unchanged for this purpose** | [Task 1](threads.md#first-task-and-later-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Create/join, TLS, `pthread.h` and thread-safe libc are tasks 2 to 4, unassigned. |
-| 3 | File metadata and identity | **Mostly unchanged** | Libc now has `sys/stat.h` (type and size only), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Still missing: object identity, modification time and ownership ([debt](../technical-debt.md#file-identity-across-capability-paths)), `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
+| 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
 | 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: alternate screen, scroll regions and saved cursor ([TTY subset](../userland/terminal.md#tty-output-controls); mux adds no alternate-screen protocol), non-ASCII input and drawing, and a PTY-style session for child terminals. |
 | 5 | libuv backend | **Unchanged** | No libuv, luv or Neovim recipe exists in `ports`. Libc still lacks `pthread.h`, `poll.h`, `termios.h`, `dlfcn.h`, `sys/socket.h`, `sys/mman.h` and `iconv.h`, so upstream `uv.h` does not compile; the backend needs its own platform layer, not those headers. |
 | 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; none of Lua 5.1, LPeg, luv, libuv, utf8proc, tree-sitter or iconv exists. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
@@ -54,12 +54,12 @@ without Neovim.
    consumers. [Qualification and matched costs](../development/experiments/pipe-readiness/README.md)
    cover one and four CPUs, a responsive scratch child-output viewer, and mixed
    pipe/console/process/TCP waits.
-2. [ ] **File identity and modification stamp.** A short contract first (scope across
-   RAM, host and native volumes, lifetime, replacement), then the native query
-   and the libc `stat` fields where a backend reports them. The owner can see
-   the shell refuse to redirect output onto an input file reached by another
-   path ([redirection debt](../technical-debt.md)), and TCC honour
-   `#pragma once`. See the [pending task 2 contract](#task-2-contract).
+2. [x] **File identity and modification stamp.** Native FILE/DIRECTORY queries
+   and libc validity fields report backend identity/time. The owner can see
+   the shell refuse output onto an aliased FILE stdin, and TCC honour
+   `#pragma once`. See the [accepted contract](#task-2-contract),
+   [metadata reference](../interfaces/file-metadata.md) and
+   [qualification and matched costs](../development/experiments/file-identity/README.md).
 3. [ ] **Terminal profile for a full-screen editor.** Alternate screen, scroll
    region and saved cursor in the framebuffer TTY and the multiplexer, and the
    `TERM` name that advertises exactly what is supported. ASCII only. The owner
@@ -96,84 +96,22 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
 
 ### Task 2 contract
 
-**Accepted 2026-10-10; implementation authorized, not yet implemented.**
+**Accepted 2026-10-10; implemented in this review.** The
+[metadata reference](../interfaces/file-metadata.md) is authoritative.
 
-1. **Identity — live backend objects within one boot, using a comparable
-   64-bit domain/object pair.** Domains follow backing instances/volumes, not
-   root grants. A reserved common domain for provider-private byte snapshots
-   is explicitly disjoint from native backing; it supplies no object identity.
-   Generic exports/proxies must report their actual domain or remain unknown.
-   Delegated paths share RAM/archive object identities; native
-   wrappers for one mounted volume/inode compare equal, different volumes
-   unequal. HOST maps the session and complete FUSE node incarnation losslessly
-   into native IDs, never using wrapper IDs, pointers, hashes or a libc cache.
-   Mapping storage follows live references; allocation/exhaustion fails without
-   collisions or wrapping. These are Pyxis IDs, not raw host st_dev/st_ino.
-
-   Comparison requires keeping one reference to the original object alive.
-   Rename preserves identity; held replacement victims remain old objects while
-   new lookups see the replacement. After final release, native slots can reuse
-   and HOST can assign a new ID even to an unchanged file. No cross-boot or
-   historical identity promise. HOST repeated roots and same-mount hardlinks
-   match while held; bind-mount aliases and cross-session comparison are excluded.
-   Stronger HOST identity needs additional backing support.
-
-2. **Metadata — native FILE/DIRECTORY queries with independent identity/mtime
-   validity, preserved in libc.** FILE requires READ or WRITE, like SIZE;
-   DIRECTORY self-metadata needs no additional content rights, preserving
-   stat's zero-right directory handles. No traversal or new authority results.
-
-   HOST samples real Unix time through fresh GETATTR; npfs reports its current
-   inode's modified_ns/validity, including accepted cached writes. RAM records
-   real wall time at creation/content changes, with validity clear when time is
-   unavailable. Authored archive times remain unknown. No disk-format change,
-   invented epoch time or generation-as-timestamp. Time can repeat or move
-   backwards; equality does not prove unchanged content.
-
-   Libc adds st_dev/st_ino/st_mtim plus explicit validity bits; unknown fields
-   have no usable value, rather than zero meaning absence. Identity is lossless,
-   nanoseconds normalized. Partial type/size stat remains successful, including
-   providers and special objects. Only unsupported-query BAD_OPERATION permits
-   fallback to SIZE; operational/malformed failures remain errors.
-
-3. **Consumers — refuse a redirect only when distinctness cannot be proved; retain
-   TCC once-header streams until translation-unit cleanup.** Before any resize,
-   the shell compares every explicit output with every stage's final FILE stdin,
-   including inherited input. Domain availability is independent of object-ID
-   availability: objects in proven different domains are distinct even if an
-   object ID is unavailable (for example a private HTTP snapshot and a home
-   volume file). Within one domain, an alias or unavailable identity aborts
-   before truncation. Unknown domain or failed required query cannot prove
-   distinctness and aborts too; no FILE input/output pair needs no comparison. Created
-   outputs may remain, and later resize/launch failure has no rollback. Argument
-   files are outside this check: `cat < input > alias` is covered,
-   `cat input > alias` is not.
-
-   TCC compares opened candidates with all once-marked identities, including
-   differently named aliases; no pathname-only once shortcut. Keeping one opened
-   stream per once object prevents final-FORGET discontinuity and inode reuse,
-   at the cost of handles and stream backing. Existing allocation/descriptor
-   limits produce a diagnostic. Missing identity at once, or on a candidate
-   needing comparison, is a diagnostic. Borrowed stdin remains caller-owned;
-   include guards need no once cache.
-
-Evidence: [RAM](../../kernel/object/file.c),
-[npfs lifetime/time](../../kernel/fs/npfs_store.c),
-[format validity](../../fs/include/pyxis_fs/npfs.h),
-[HOST](../../include/kernel/virtio/fs.h). FUSE guarantees
-[node-incarnation uniqueness](https://github.com/torvalds/linux/blob/v6.3/include/uapi/linux/fuse.h#L577),
-not continuity after final FORGET; [virtiofsd](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/passthrough/inode_store.rs)
-uses host inode/device/mount internally, but GETATTR omits the filesystem device.
-
-Capture baseline before code: existing small-file iobench
-open/read rounds, include-heavy TCC preprocessing and a bounded manual open/stat
-workload on RAM, HOST and installed-image npfs. Repeat matched samples and record
-ranges/configuration; end-to-end costs are not isolated stat latency. No new
-benchmark infrastructure. QEMU/GDB checks cover aliases, rename/replacement with
-held handles, cross-volume IDs, valid/unknown times, HOST external edits,
-redirection preservation and once aliases/replacement. Userland/ports PRs precede
-the integration PR; pin their published heads, update consumer docs/debt, and
-check task 2 only after qualification.
+1. Boot-scoped backend domain/object IDs compare while an original reference is
+   held. Rename preserves identity; replacement distinguishes. HOST same-mount
+   hardlinks and repeated roots match; bind aliases and after-full-close
+   comparison are excluded.
+2. Native FILE/DIRECTORY queries preserve independent field validity in libc
+   stat. Real backend modification times only; npfs needs no format change.
+   Unknown metadata leaves type/size stat usable.
+3. Before truncation, the shell proves explicit outputs distinct from every
+   stage's FILE stdin. Different known domains suffice without object IDs;
+   same-domain unavailable identity, unknown domains and query failure refuse.
+   TCC retains one stream per once object until normal/error translation-unit
+   cleanup; borrowed stdin remains caller-owned. Argument files are outside
+   shell protection; identity supplies no mutation lease.
 
 ### Mirrors the owner must provide
 
