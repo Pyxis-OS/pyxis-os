@@ -163,7 +163,8 @@ port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
 base and guest SDK. [Chocolate Doom](../userland/chocolate-doom.md) and
 [Chocolate Quake](../userland/chocolate-quake.md) link it into ordinary images,
 with SDL2's licence beside their own;
-[DevilutionX](../userland/devilutionx.md) is an opt-in consumer.
+[DevilutionX](../userland/devilutionx.md) and [EDuke32](../userland/eduke32.md)
+are opt-in consumers.
 
 ## TLS development libraries
 

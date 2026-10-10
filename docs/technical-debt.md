@@ -505,6 +505,10 @@ and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [
 are absent: a consumer needs a separately agreed extension, and duplication must first settle shared open-state and cursor ownership.
 Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
+`read` returns one native transfer, under 4 KiB from a file, so a regular file can return less than the count before its end. POSIX code
+expects whole reads there: EDuke32 silently truncated its data checksum and scripts until its port looped `Bread`. Ports needing whole
+reads loop for now; decide whether file reads loop in libc when another port hits it.
+
 Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
 support). Public O_APPEND is absent, so tee rejects -a, and atomic append needs a native operation
 ([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics, buffered output,
@@ -791,7 +795,9 @@ acquired pointer and display readiness ([qualification](development/sdl2-event-w
 missing or nonwaitable sessions and failed waits, and enabling threads needs a real wakeup sender and a revisit of the readiness cache.
 Missing: **audio** (the [PCM grant](interfaces/audio.md) and [QEMU HDA engine](devices/hda.md) exist, but SDL2 has no backend; revisit with a
 playback consumer task), **threads** (`SDL_INIT_TIMER` timers and `SDL_CreateThread` fail until userspace threads), **windows** beyond one
-fullscreen window, and **text** beyond the shared US layout. Pointer position, program images, show/hide, bounded warp and relative lock use
+fullscreen window, and **text** beyond the shared US layout. Displays report no **refresh rate**, so SDL gives 0 (unknown); EDuke32's frame
+limiter divided by it and hung until its port assumed 60 Hz. Revisit when a display reports its mode timing. Without audio, the
+[SDL game ports](development/sdl-game-ports.md) are silent; their sound and music need this backend first. Pointer position, program images, show/hide, bounded warp and relative lock use
 the [native pointer contract](interfaces/pointer.md). Key repeat is not covered by validation because QEMU's injected PS/2 input has no
 typematic repeat.
 
@@ -811,6 +817,29 @@ over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurem
 [standalone bundle](userland/devilutionx.md#standalone-bundle) with retail data on the installed stick is unchecked natively; the owner
 deferred it (the shareware result is enough, and 692 MB at the measured native 2.5 MiB/s is roughly 4½ minutes). Revisit when the owner
 wants to play the retail data.
+
+## EDuke32 port limits
+
+[EDuke32](userland/eduke32.md) is personal-use only, an opt-in build that images, CI and bundles never contain. It has no sound, network
+play, controllers or OpenGL renderers. Its [recipe](../ports/eduke32/README.md) patches threaded code to run in Pyxis's one thread:
+loguru without its flush thread or signal handlers, smmalloc's per-thread cache and the audio library's lock flag as globals, its async
+tasks left out, and minicoro without multithreading (see [SDL game ports](development/sdl-game-ports.md#behaviour)). Revisit with
+userspace threads, together with sound. The port also works around [libc gaps](../ports/eduke32/README.md#libc-gaps) that need decisions
+first: it keeps its own working directory (no `chdir` or `getcwd`), loops reads because libc `read` returns one native transfer, under
+4 KiB, where POSIX code expects whole reads from files, and matches its data cache on size because `stat` has no modification time.
+Revisit if more ports need a working directory or whole reads. Pyxis displays report no refresh rate, so its frame limiter assumes 60 Hz.
+
+## SDL game ports native qualification
+
+The owner checked the [SDL game ports](development/sdl-game-ports.md) on the ThinkPad on 2026-10-09 (PXE build of #646's head `0bb9731f`
+with `DUKE3D_DATA`, info logging, wired, AC, 1920x1080). The SDL path cost about 2.0 ms per frame in Chocolate Quake's timedemo (about 1.2 ms in
+QEMU) and about 1.6 ms in Chocolate Doom's, from an earlier batch ([Quake](development/experiments/chocolate-quake/README.md#native-results),
+[Doom](development/experiments/chocolate-doom/README.md#native-results)). Chocolate Quake played, with clearly more tearing than native Quake:
+about three drifting tear lines at once, an input to the [Renoir flip qualification](wip/renoir-flip-presentation.md#tasks-and-native-qualification).
+EDuke32 played smoothly at the native resolution with smooth pointer motion; its SDL cursor showed through the system pointer, some tearing
+appeared, and a mouse suits it better than the trackpad. Still pending natively: Chocolate Doom's matched configuration and a play
+check, and EDuke32's level load time, frame rates capped and uncapped, and save, load and quit. Revisit when the owner
+next batches native checks.
 
 ## Quake port limits
 

@@ -4,6 +4,7 @@
 #include <abi/message.h>
 
 #define SYSTEM_INFO_RIGHT_READ (UINT64_C(1) << 0)
+#define SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE (UINT64_C(1) << 1)
 #define SYSTEM_INFO_IDENTITY UINT64_C(1)
 #define SYSTEM_INFO_CPU UINT64_C(2)
 #define SYSTEM_INFO_MEMORY UINT64_C(3)
@@ -15,6 +16,7 @@
 #define SYSTEM_INFO_USB_INTERFACE UINT64_C(9)
 #define SYSTEM_INFO_POWER UINT64_C(10)
 #define SYSTEM_INFO_BATTERY UINT64_C(11)
+#define SYSTEM_INFO_HOSTNAME UINT64_C(12)
 
 #define SYSTEM_INFO_USB_UNAVAILABLE UINT64_C(1)
 #define SYSTEM_INFO_USB_INITIALIZING UINT64_C(2)
@@ -49,6 +51,25 @@ struct system_info_identity {
   char architecture[16];
   char build_revision[48]; /* Running kernel source commit, not SDK/userland. */
 };
+
+/* HOSTNAME with only a message_header requires READ and returns this record.
+ * Before the first successful set, it is "pyxis". Unused bytes are zero. */
+struct system_info_hostname {
+  char name[64];
+};
+
+/* HOSTNAME with this payload requires SET_HOSTNAME_ONCE and returns no bytes.
+ * The name must contain 1..63 printable ASCII bytes followed by NUL. The kernel
+ * clears unused bytes; userspace owns the hostname schema. A successful set
+ * consumes the boot-wide opportunity; later sets fail CALL_DENIED. Invalid
+ * requests fail CALL_BAD_REQUEST without consuming it. */
+struct system_info_hostname_set_request {
+  struct message_header header;
+  struct system_info_hostname value;
+};
+
+_Static_assert(sizeof(struct system_info_hostname) == 64, "hostname reply layout");
+_Static_assert(sizeof(struct system_info_hostname_set_request) == 80, "hostname set layout");
 
 struct system_info_cpu {
   uint64_t online_count; /* Online logical CPUs, not cores or caller affinity. */

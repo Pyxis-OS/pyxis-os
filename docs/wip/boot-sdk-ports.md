@@ -17,6 +17,11 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [SDL game ports](../development/sdl-game-ports.md), 2026-10-09: Chocolate
+  Doom and Chocolate Quake in ordinary images and EDuke32 as an opt-in
+  personal build, all without sound (#623, #634, #646); QEMU comparisons
+  recorded, native timedemos and play checked, with
+  [remaining native checks](../technical-debt.md#sdl-game-ports-native-qualification).
 - [Volume controls](../userland/audio-volume.md), 2026-10-09: master/per-space
   gain and bar widgets; native listening, mute and reboot default checked.
   [Remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).
@@ -96,17 +101,16 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-09): [SDL2 clipboard](clipboard.md#graphics-activation),
-  accepted graphics authority/activation, SDL adapter and opt-in manual qualification tool.
-- **Codex epsilon** (2026-10-09): [program bundles, first slice](program-bundles.md),
-  shared 128 MiB selected-image capture ceiling and failure rollback qualification,
-  using reclaimable BSP-owned pages. ZIP requires separate owner authorization.
+- **Codex** (2026-10-09): [machine settings, task 1](machine-settings.md#task-1-contract),
+  hostname store/validation, boot selection, native query and print-only command.
+- **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
+  prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
+  Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
   task 2 qualified two-surface backend authorized, implemented for review, default off.
   Task 1 and exclusion/stride decisions complete; paired native qualification pending.
-- **Claude** (2026-10-09): [SDL game ports](sdl-game-ports.md): Chocolate
-  Doom, Chocolate Quake and EDuke32 without audio; decisions accepted, task 1
-  (Chocolate Doom) merged in #623, task 2 (Chocolate Quake) in progress. Presentation timing steps 1 and 2 (#610, #618),
+- **Claude** (2026-10-09): no milestone after closing SDL game ports.
+  Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).

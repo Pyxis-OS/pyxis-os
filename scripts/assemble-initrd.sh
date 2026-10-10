@@ -33,13 +33,36 @@ if [ -n "${DIABLO_DATA:-}" ]; then
     exit 1
   }
 fi
+# DUKE3D_DATA is a private directory holding the owner's duke3d.grp.
+duke3d_grp=
+if [ -n "${DUKE3D_DATA:-}" ]; then
+  for name in duke3d.grp DUKE3D.GRP; do
+    [ -f "$DUKE3D_DATA/$name" ] && duke3d_grp=$DUKE3D_DATA/$name && break
+  done
+  [ -n "$duke3d_grp" ] || {
+    echo "DUKE3D_DATA=$DUKE3D_DATA has no duke3d.grp" >&2
+    exit 1
+  }
+  [ -f build/ports/eduke32/stage/bin/eduke32.pxe ] || {
+    echo "DUKE3D_DATA is set but EDuke32 is not built: run make ports with it." >&2
+    exit 1
+  }
+fi
+live_config=
+if [ "${PYXIS_IMAGE_HOSTNAME_SET:-}" = 1 ]; then
+  build/tools/machine-hostname build/userspace-root/config/live.lua "$PYXIS_IMAGE_HOSTNAME" > build/live.lua.tmp
+  mv build/live.lua.tmp build/live.lua
+  live_config=build/live.lua
+fi
 cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifest.txt
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
+  "live_config=$live_config" \
   "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
   "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1" \
-  "diablo_spawn=$diablo_spawn" devilutionx=build/ports/devilutionx/stage
+  "diablo_spawn=$diablo_spawn" devilutionx=build/ports/devilutionx/stage \
+  "duke3d_grp=$duke3d_grp" eduke32=build/ports/eduke32/stage
 # Installed systems keep only these executables in boot://; the rest go to bin://.
 while IFS= read -r program; do
   [ -f "build/initrd-root/$program" ] || {

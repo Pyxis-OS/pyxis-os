@@ -33,6 +33,9 @@ return function(inputs)
   if inputs.network_config ~= "" then
     entries[#entries + 1] = { file = inputs.network_config, at = "config/network.lua", replace = true }
   end
+  if inputs.live_config ~= "" then
+    entries[#entries + 1] = { file = inputs.live_config, at = "config/live.lua", replace = true }
+  end
 
   local wad = inputs.wad
   if wad == "" then
@@ -71,6 +74,15 @@ return function(inputs)
     entries[#entries + 1] = { tree = inputs.devilutionx .. "/bin", at = "" }
     entries[#entries + 1] = { tree = inputs.devilutionx .. "/share", at = "share" }
     entries[#entries + 1] = { file = inputs.diablo_spawn, at = "share/diablo/spawn.mpq" }
+  end
+
+  -- DUKE3D_DATA opts in to EDuke32 with the owner's duke3d.grp, staged alone.
+  -- The Build engine's licence and the retail data make it a personal build,
+  -- so ordinary and CI images never contain it.
+  if inputs.duke3d_grp ~= "" then
+    entries[#entries + 1] = { tree = inputs.eduke32 .. "/bin", at = "" }
+    entries[#entries + 1] = { tree = inputs.eduke32 .. "/share", at = "share" }
+    entries[#entries + 1] = { file = inputs.duke3d_grp, at = "share/duke3d/duke3d.grp" }
   end
   return entries
 end

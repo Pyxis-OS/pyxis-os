@@ -202,7 +202,8 @@ floating conversion is added by these functions.
 `atof` is `strtod` without an end pointer. `rand` returns 0 through `RAND_MAX`
 (32767) from ISO C's example linear congruential generator; the sequence starts
 as if `srand(1)` had been called. It suits games and simple sampling, not
-security. `strcat` appends to an existing NUL-terminated string.
+security. `strcat` appends to an existing NUL-terminated string; `strncat`
+appends at most a count of bytes, then a NUL.
 
 `qsort` is an in-place, unstable heapsort: O(n log n) comparisons, constant
 stack use, no allocation or recursion. Comparators receive pointers to array
@@ -235,10 +236,14 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
-The `<math.h>` subset provides `floor`, `ceil`, `ceilf`, `round`, `roundf`,
-`modf`, `fmod`, `pow`, `powf`, `log`, `log10`, `sqrt`, `sqrtf`, `sin`, `cos`, `tan`, `atan`, `atan2`,
-`frexp`, `ldexp`, `scalbn`, `fabs`, `scalbnl`, `ldexpl`, `fmodl`, `fabsl`,
-`copysignl` and `frexpl`, built from pinned musl sources. `round` and `roundf`
+The `<math.h>` subset provides `floor`, `floorf`, `ceil`, `ceilf`, `round`, `roundf`,
+`rintf`, `lrint`, `lrintf`, `llrintf`, `modf`, `fmod`, `fmodf`, `pow`, `powf`,
+`expf`, `log`, `logf`, `log10`, `log10f`, `sqrt`, `sqrtf`, `sin`,
+`sinf`, `cos`, `cosf`, `tan`, `tanf`, `acosf`, `atan`, `atanf`, `atan2`,
+`atan2f`, `frexp`, `ldexp`, `scalbn`, `fabs`, `fabsf`, `scalbnl`, `ldexpl`,
+`fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources,
+and POSIX's `M_*` constants with musl's values. The `rint` family rounds in the
+current rounding mode. `round` and `roundf`
 round halfway cases away from zero. `sqrt` and `sqrtf` use SSE2 `sqrtsd` and
 `sqrtss`; the trigonometric functions take radians and reduce
 arguments of any magnitude exactly modulo pi/2. They are in libc and need no `-lm`. The SDK uses SSE2

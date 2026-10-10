@@ -60,7 +60,7 @@ the boot configuration lacks `remote`. See [reverse connections](remote-terminal
 ## Boot configuration
 
 Boot init reads `boot://config/live.lua`, or `boot://config/installed.lua` when
-`mount.disk` is bound. Each file returns named `volumes` and a list of `spaces`:
+`mount.disk` is bound. Each archive file returns a `hostname` default, named `volumes` and a list of `spaces`:
 
 ```lua
 return {
@@ -178,10 +178,18 @@ tab and the log say why, and the other spaces start. If no space starts, boot
 init creates a `rescue` space running `boot://shell.pxe` with only `boot://`,
 `tmp://` and `bin://`, starting in `tmp://`; it cannot repair the pool.
 
+The archive `hostname` defaults to `pyxis` and follows the
+[machine-settings label schema](machine-settings.md#hostname-schema). Installed
+boots select the persistent key after mounting system, including rescue boots;
+`boot.lua` cannot override it. Boot init sets the kernel name once before creating
+spaces and forwards only system-information READ authority. Live image builds
+may override the archive value with `make image HOSTNAME=NAME`.
+
 ### Pool override
 
 Installed boots also read `system://config/boot.lua` from the default `system`
-volume. It has the same shape. An entry with a default's name replaces it
+volume. It accepts only `volumes` and `spaces`; `hostname` belongs to the archive
+default/store and is rejected here. An entry with a default's name replaces it
 whole, new names follow the defaults, and nothing can be removed. It cannot
 redefine the `system` volume. Roots may name volumes from either file. A
 missing override is reported and the default boots. An invalid override (a Lua

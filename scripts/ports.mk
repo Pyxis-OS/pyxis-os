@@ -72,6 +72,11 @@ CHOCOLATE_QUAKE_INPUTS := $(wildcard ports/chocolate-quake/*.lua ports/chocolate
                                     ports/chocolate-quake/patches/*.patch) \
                           ports/ports.lua ports/build.lua
 
+# EDuke32 is built only when DUKE3D_DATA asks for it; see its PORT-NOTICE.
+EDUKE32_INPUTS := $(wildcard ports/eduke32/*.lua ports/eduke32/Makefile \
+                            ports/eduke32/PORT-NOTICE ports/eduke32/patches/*.patch) \
+                  ports/ports.lua ports/build.lua
+
 # DevilutionX is built only when DIABLO_DATA asks for it; see its PORT-NOTICE.
 DEVILUTIONX_INPUTS := $(wildcard ports/devilutionx/*.lua ports/devilutionx/Makefile \
                                 ports/devilutionx/PORT-NOTICE ports/devilutionx/patches/*.patch) \
@@ -99,6 +104,7 @@ MBEDTLS_OUTPUTS := $(call port_outputs,mbedtls)
 DEVILUTIONX_OUTPUTS := $(call port_outputs,devilutionx)
 CHOCOLATE_DOOM_OUTPUTS := $(call port_outputs,chocolate-doom)
 CHOCOLATE_QUAKE_OUTPUTS := $(call port_outputs,chocolate-quake)
+EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
@@ -107,6 +113,9 @@ all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPU
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 ifneq ($(DIABLO_DATA),)
 all: $(DEVILUTIONX_OUTPUTS)
+endif
+ifneq ($(DUKE3D_DATA),)
+all: $(EDUKE32_OUTPUTS)
 endif
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
@@ -209,6 +218,11 @@ $(CHOCOLATE_DOOM_OUTPUTS) &: $(CHOCOLATE_DOOM_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPU
 	rm -rf build/ports/chocolate-doom
 	$(LUA) ports/build.lua chocolate-doom --sdk $(abspath build/sdk) \
 	  --work $(abspath build/ports/chocolate-doom) --sdl2 $(abspath build/ports/sdl2/stage/dev)
+
+$(EDUKE32_OUTPUTS) &: $(EDUKE32_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/eduke32
+	$(LUA) ports/build.lua eduke32 --sdk $(abspath build/sdk) \
+	  --work $(abspath build/ports/eduke32) --sdl2 $(abspath build/ports/sdl2/stage/dev)
 
 $(CHOCOLATE_QUAKE_OUTPUTS) &: $(CHOCOLATE_QUAKE_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/chocolate-quake

@@ -3,7 +3,7 @@
 The explicitly delegated `system_info` resource supplies synchronous queries
 through [the system-information ABI](../../include/abi/system_info.h).
 One READ right authorizes system-wide identity, CPU, allocator, PCI and USB inventory
-observations, and battery and AC state.
+observations, battery/AC state and the running hostname.
 There is no ambient query or acquisition syscall. Kernel bootstrap creates the
 stateless authority for trusted init; ordinary local and remote launch paths
 forward it explicitly. Restricted launches can omit it, and shell-launched
@@ -17,6 +17,7 @@ and zeroed unused bytes.
 
 | Query | Reply | Meaning |
 | --- | --- | --- |
+| `SYSTEM_INFO_HOSTNAME` | `system_info_hostname` | The boot-selected hostname, in a zero-padded 64-byte NUL-terminated record |
 | `SYSTEM_INFO_IDENTITY` | `system_info_identity` | `Pyxis OS`, `Caelum`, `x86_64`, and the source commit embedded in the running kernel |
 | `SYSTEM_INFO_CPU` | `system_info_cpu` | Guest-visible BSP brand and online logical CPU count after successful SMP boot |
 | `SYSTEM_INFO_MEMORY` | `system_info_memory` | Coherent allocator total, allocated and free bytes |
@@ -48,6 +49,27 @@ Identity, CPU and PCI inventory data are immutable before scheduler startup
 publishes them to user tasks; their queries need no BSP request. The object retains no process or
 user-buffer pointer. Ordinary object references govern its lifetime and BSP
 retirement frees it after its final reference ends.
+
+## Hostname
+
+Header-only `SYSTEM_INFO_HOSTNAME` requires READ and returns
+`struct system_info_hostname { char name[64]; }`. Before publication it is
+`pyxis`; boot init selects and publishes the configured name before any space
+starts. The [store and fallback policy](../userland/machine-settings.md) lives
+in userspace. Queries acquire the publication flag and copy an immutable record;
+they perform no allocation or filesystem read.
+
+The same operation with `system_info_hostname_set_request` (header plus the
+64-byte record) requires the independent `SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE`
+right and returns no bytes. Only the canonical stock boot-init entry receives
+it; installer/custom init and every child get READ alone. The BSP validates
+1–63 printable ASCII bytes plus NUL, clears padding and publishes once. Invalid
+input does not consume the opportunity; after successful publication, later sets
+return `CALL_DENIED`. Kernel admission does not duplicate the userspace schema.
+
+Libpyxis provides `system_info_get_hostname()` and the boot-init-only
+`system_info_set_hostname_once()` helper. The native interface has no live rename,
+POSIX-shaped syscall or general machine-settings API.
 
 ## PCI inventory
 
