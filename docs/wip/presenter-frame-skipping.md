@@ -1,8 +1,9 @@
 # Presenter whole-frame skipping
 
 Owner-authorized 2026-10-10 after #670. Implemented on the task branch;
-QEMU qualification is complete; native interleaved qualification awaits
-Luna staging. Renoir hardware cursor task 2 remains separately unassigned.
+QEMU and owner-run native interleaved counter qualification are complete; the
+short native functional pass is pending. Renoir hardware cursor task 2 remains
+separately unassigned.
 
 ## Accepted defaults — 2026-10-10
 
@@ -59,10 +60,16 @@ adds no lines. There is no new ABI, write allowlist or input authority.
 - [x] Matched QEMU A–B–A–B plus boot/Bochs/VirtIO transition/capture checks
   and ordinary default build; [record](../development/experiments/presenter-frame-skipping/README.md).
 - [ ] Exact-head CI and implementation review.
-- [ ] Owner-run native interleaved control/change boots via Luna, using the
-  existing flip-on metrics entry; review responsiveness, tearing and counters.
+- [x] Owner-run native interleaved control/change counter boots via Luna,
+  A1–B1–A2–B2 with identical initrd and synthetic motion; about 99% less idle
+  compose/copy work, continuous motion still presents full frames.
+- [ ] Owner's short native B functional pass: responsiveness, visual behaviour,
+  capture and transitions. Integration with current main and final review remain.
 
-After implementation review the owner can stage the candidate and compare its
-idle work against the control. Native performance is not inferred from QEMU.
+The native counter record demonstrates avoided idle pixel work, independently
+of the QEMU measurements. The measured candidate is `87e03014` plus the
+opt-in synthetic tool; the native functional result is still pending. Current
+main conflicts in `kernel/fb/tty.c`; that integration is not part of the measured
+revision or this documentation update.
 [Dirty regions](../technical-debt.md#presenter-dirty-regions) remain later work,
 after measuring the work left by whole-frame skipping.

@@ -99,43 +99,87 @@ idle validation. Local raw captures/GDB output remain in `/tmp`. Default logging
 adds no new lines. The complete [native-option steps](#native-qualification--luna-stages-owner-checks)
 below cover the remaining host qualification.
 
-## Native qualification — Luna stages, owner checks
+## Native A–B–A–B result — 2026-10-10
 
-Local candidate `build/frame-skip-native/` seals code `0c22b18e`, the same kernel
-hash as B above. Its initrd has no Quake data. Luna should build control A with
-the owner's existing game data/configuration and use that identical initrd for
-both A and B kernels, or rebuild equivalent matched sets and record their hashes.
-Alpha does not stage PXE.
+Owner-run ThinkPad on AC, 1920×1080 GOP, four fresh PXE boots in order
+**A1, B1, A2, B2**. Nobody touched the laptop during these windows. Luna built
+A from `4b6550a6` and B from reviewed #676 head `87e03014`, each with the same
+synthetic tool code commit `dc237005c9171cf4e3f463fcd4a5c44f1b50f225` cherry-picked.
+The [tool and hands-free procedure](https://git.internal/PyxisOS/pyxis-os/pulls/682)
+are separate from this implementation; the tool does not change the skip rule.
+No compiler or consumer change is part of B.
 
-Ask the orchestrator to have Luna stage **A then B then A then B**, preserving
-rollback. A is `4b6550a6`; B is the reviewed code head. Build both with:
+Reported kernel SHA256 prefixes: A `228d15f8…`, B `9e8fb752…`. **A's identical
+initrd, prefix `21db2ccf…`, was used for all four boots**; Luna's independently
+built B initrd differed due to non-reproducible payloads and was excluded.
+Only hash prefixes and pre-cherry-pick revisions were supplied; they are not
+full artifact identities or Luna's final cherry-pick commit IDs. Local sealed
+hashes above are not hashes of these native builds.
 
-```sh
-make -j16 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
-  DISPLAY_FLIP_METRICS=1 DISPLAY_TIMING=off DISPLAY_CURSOR_PROBE=1
+Build flags: `LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 DISPLAY_FLIP_METRICS=1
+ DISPLAY_TIMING=off DISPLAY_CURSOR_PROBE=1 POINTER_SYNTHETIC=1`. PXE options:
+
+```text
+display.flip=1 display.flip.metrics=1 display.cursor.probe=1 pointer.synthetic=schedule display.timing=off log.udp=1
 ```
 
-Use the existing flip-on metrics PXE entry, on AC, same 1920x1080 GOP,
-`display.flip=1 display.flip.metrics=1 display.cursor.probe=1 display.timing=off
- log.udp=1`. Record exact kernel/initrd hashes. Keep one verified identical
-initrd across all boots, retaining the owner's existing Quake/Chocolate Quake
-data and consumer configuration; Luna stages, Alpha does not. Owner warms ten seconds
-at the Development prompt, then 30 seconds each idle/motion/idle/motion using
-PS/2 touchpad/TrackPoint within the body, without clicks or space changes.
-Note UTC boundaries; use complete interior 120-tick samples and cumulative
-counter differences. Retain masked startup and metrics logs.
+The source stayed on Caelum's terminal body (1920×1048 below the 32-pixel bar),
+centre (960,556), radius 128. Each boot settled ten seconds, then ran thirty
+seconds each idle, motion, idle, motion, and stopped. There were no synthetic
+clicks, buttons, wheel or space changes. The masked logs remain at
+`/shared/present/batch2/ab676-{A1,B1,A2,B2}.log`, not in Git.
 
-Require backend=flip, no timeout/FAILED, identical visible content and unchanged
-tearing. Compare frames/compositions/copies/flips per second, service/skip counts,
-reports/screen moves, compose/copy totals per window and remaining validation
-costs. Idle B should keep about 60 service ticks/s with no unchanged frames;
-continuous visible motion still requires full frames. Compare responsiveness
-with native Quake and Chocolate Quake, then return to an idle prompt. No claim of
-native improvement until the owner reports this paired evidence.
+These are independently checked differences of the boundary lines' cumulative
+counters. A boundary names the window **starting** there: idle-1 is bounded by
+`idle-1`→`motion-1`, motion-1 by `motion-1`→`idle-2`, idle-2 by
+`idle-2`→`motion-2`, and motion-2 by `motion-2`→`done`. Setup/settle is excluded.
+Each table label names the measured interval, not the literal closing marker.
+Every confirmed frame has one composition and one scanout copy in these runs.
 
-Check key echo after idle, pointer motion/shape/hide and lock/unlock, selection,
-tabs and layer changes, local output and mux in an explicitly configured
-`multiplexer = true` space, volume and power-overlay open/cancel,
-and `screenshot tmp://idle.png` from an unchanged screen. Capture must complete
-and include its retained pointer. No forced timeout/panic/wedged-writer exercise
-is added. Native results are pending.
+| Run | Interval | Wall seconds | Frames/compositions/copies | Compose total, ms | Copy total, ms | Screen moves |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| A1 | idle-1 | 29.998 | 1784 | 2185.7 | 1703.0 | 0 |
+| A1 | motion-1 | 30.001 | 1786 | 2236.5 | 1670.7 | 1788 |
+| A1 | idle-2 | 30.000 | 1786 | 2276.6 | 1670.7 | 0 |
+| A1 | motion-2 | 30.000 | 1785 | 2197.4 | 1675.1 | 1790 |
+| B1 | idle-1 | 29.992 | 16 | 21.2 | 16.3 | 0 |
+| B1 | motion-1 | 29.994 | 1767 | 2188.8 | 1617.6 | 1779 |
+| B1 | idle-2 | 30.015 | 18 | 21.7 | 16.3 | 0 |
+| B1 | motion-2 | 29.985 | 1774 | 2166.5 | 1626.7 | 1789 |
+| A2 | idle-1 | 30.000 | 1786 | 2173.4 | 1677.4 | 0 |
+| A2 | motion-1 | 30.002 | 1786 | 2219.5 | 1659.2 | 1792 |
+| A2 | idle-2 | 29.998 | 1785 | 2229.8 | 1670.9 | 0 |
+| A2 | motion-2 | 30.001 | 1786 | 2248.4 | 1698.5 | 1789 |
+| B2 | idle-1 | 30.002 | 16 | 19.4 | 14.5 | 0 |
+| B2 | motion-1 | 29.992 | 1769 | 2181.8 | 1625.7 | 1780 |
+| B2 | idle-2 | 30.004 | 18 | 21.7 | 16.3 | 0 |
+| B2 | motion-2 | 29.996 | 1779 | 2170.6 | 1631.0 | 1791 |
+
+Idle A presents 59.47–59.54 frames/s and spends 3.85–3.95 seconds of measured
+compose-plus-copy elapsed time in each thirty-second window. Idle B presents
+0.53–0.60 frames/s, spending 33.9–38.0 ms: about **99% less measured idle pixel
+work** and 99% fewer presented frames. B's 16–18 frames are expected visible
+metrics/boundary-log redraws on Caelum, not unchanged-frame submissions.
+These windows mean no pointer motion, not no content changes.
+
+Continuous motion still requires full frames: A 59.5 frames/s, B 58.9–59.3,
+with similar composition/copy cost per frame. B avoids idle work rather than
+making individual frames faster. Integer pixel rounding, coalescing and pending
+frame snapshots account for differences between routed moves and rendered
+frames. Boundary input counters can advance while the completed-frame counter
+still refers to the previous presentation.
+
+All four logs contain the complete schedule with no abort, FAILED, pinned-failure
+or nonzero timeout line; all presenter metrics report `backend=flip`. Renoir
+validation, input/device service and normal pacing remain active while idle.
+Compose/copy spans are elapsed measurements, including preemption/log overhead;
+this result is not a total BSP CPU measurement. It does not qualify forced
+failure/panic/wedged-writer paths.
+
+**Native counter qualification is complete.** The owner is doing the short
+functional pass on the running B2 boot after the source stopped. Responsiveness,
+visual behaviour, capture and transition results remain pending and must be
+recorded before claiming that pass succeeded or removing the PR's draft state.
+The branch now has a `kernel/fb/tty.c` conflict against current main after the
+terminal style work; this result records the measured `87e03014` implementation,
+not an unqualified integration revision. This update changes documentation only.
