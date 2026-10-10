@@ -45,7 +45,10 @@ static struct syscall_result listen_service(uint64_t rights,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    capability_close_returned(&process_current()->capabilities, &reply.handle, 1);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -81,8 +84,10 @@ struct syscall_result tcp_service_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* The sole task keeps its checked mappings and table alive while parked. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    capability_close_returned(&process_current()->capabilities, &reply.handle, 1);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -122,13 +127,18 @@ struct syscall_result tcp_listener_call(struct kernel_object *object, uint64_t r
     status = net_tcp_accept(object, &process_current()->capabilities, deadline,
         operation == TCP_TRY_ACCEPT, &reply);
     if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+      if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+        capability_close_returned(&process_current()->capabilities, &reply.handle, 1);
+        status = CALL_BAD_BUFFER;
+      }
     }
   } else {
     struct tcp_listener_info reply;
     status = net_tcp_listener_inspect(object, &reply);
     if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+      if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+        status = CALL_BAD_BUFFER;
+      }
     }
   }
   return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};
@@ -165,8 +175,10 @@ static struct syscall_result read_stream(struct kernel_object *object, bool nonb
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(request.buffer, data, reply.length));
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request.buffer, data, reply.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -197,7 +209,9 @@ static struct syscall_result write_stream(struct kernel_object *object, bool non
     return (struct syscall_result){status, 0};
   }
   /* Input is already captured; an overlapping count output is harmless. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -248,7 +262,9 @@ struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
     return (struct syscall_result){status, 0};
   }
   if (reply_size) {
-    KASSERT(copy_to_user(reply_address, &reply, reply_size));
+    if (!copy_to_user(reply_address, &reply, reply_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
   }
   return (struct syscall_result){CALL_OK, reply_size};
 }
