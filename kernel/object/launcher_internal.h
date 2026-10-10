@@ -3,6 +3,7 @@
 
 #include <abi/space.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/capability.h>
 #include <kernel/user/startup.h>
 #include <kernel/user/image_capture.h>
 
@@ -23,12 +24,15 @@ struct launch_space {
 /* Heap storage shared with BSP, never a remote task stack. Bindings/directory
  * entries initially hold grant indices; optional namespace holds index + 1.
  * BSP replaces them with child handles.
- * Source handles are borrowed from the blocked caller's table. The capture
+ * Source grants own logical authority before image capture can wait. The capture
  * owns image storage independently of its optional file operation. */
 struct launch_capture {
   struct process_startup startup;
   struct launch_grant *grants;
   size_t grant_count;
+  struct capability_grant *owned_grants;
+  struct capability_reserved_slot *child_slots;
+  handle_t *child_handles;
   size_t initial_stack_bytes; /* Validated, with the default resolved. */
   struct file_object *image; /* Owned storage reference until capture discard. */
   struct image_capture captured_image;
@@ -38,12 +42,14 @@ struct launch_capture {
   _Alignas(uint64_t) unsigned char data[LAUNCH_CAPTURE_MAX_SIZE];
 };
 
-/* BSP, IF=0. Caller lends its table and either an in-memory file operation or
- * owned external bytes. Releases the file operation on every path. Prepares reply
+/* BSP, IF=0. Caller transfers a reservation and an in-memory file operation
+ * or owned external bytes. Releases the file operation on every path. Prepares reply
  * handle before submission; failure unwinds child resources. Capture and external
  * bytes remain owned by the launch service until it frees both. */
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-    size_t parent_cpu, struct execution_group *execution_group, handle_t *result);
+    size_t parent_cpu, struct execution_group *execution_group,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots,
+    handle_t *result);
 
 /* BSP, IF=0. Creates the space CAPTURE describes. Without an image the space
  * shows its reason and has no CPUs. Otherwise the child is prepared and
@@ -51,6 +57,7 @@ enum call_status launcher_start(struct launch_capture *capture, struct process *
  * failure after creation leaves the space without CPUs, showing the status.
  * A taken name creates nothing. Releases any file operation on every path. */
 enum call_status launcher_create_space(struct launch_capture *capture, struct process *parent,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots,
     handle_t *result);
 
 /* Current user task, IF=0. Caller-side capture for space creation. capture_request
@@ -67,8 +74,11 @@ enum call_status launcher_submit_space(struct launch_capture *capture, handle_t 
 void launcher_capture_discard(struct launch_capture *capture);
 
 /* BSP service internals. A group owns prepared processes and task stacks until
- * publication; abort removes provisional observers and all child grants. */
+ * publication; observers stay private until publication. Abort releases all
+ * reserved slots, observer grants and child grants. */
 struct launch_preparation *launcher_batch_create(void);
+/* Current user task, before preparing another BSP request. */
+enum capability_result launcher_batch_reserve(struct launch_preparation *group, size_t count);
 enum call_status launcher_batch_prepare(struct launch_preparation *group,
     struct launch_capture *capture, struct process *parent, size_t parent_cpu,
     struct execution_group *execution_group);

@@ -32,13 +32,15 @@
 struct launch_prepared {
   struct process *process;
   struct task *task;
-  handle_t observer;
 };
 
 struct launch_preparation {
   struct process *parent;
   struct execution_group *execution_group;
   size_t count;
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[LAUNCH_BATCH_MAX];
+  struct capability_grant observers[LAUNCH_BATCH_MAX];
   struct launch_prepared stages[LAUNCH_BATCH_MAX];
 };
 
@@ -54,19 +56,30 @@ static enum call_status capability_status(enum capability_result result)
   }
 }
 
-static enum call_status install_grants(struct launch_capture *capture,
-    struct process *parent, struct process *child)
+static enum call_status install_grants(struct launch_capture *capture, struct process *child)
 {
-  for (size_t i = 0; i < capture->grant_count; ++i) {
-    struct launch_grant *grant = &capture->grants[i];
-    /* Capture switches from parent source handles to installed child handles;
-     * the actual parent grants survive both success and failure. */
-    enum capability_result result = capability_grant(&child->capabilities,
-        &parent->capabilities, grant->source, grant->rights,
-        grant->transport, &grant->source);
+  enum capability_result result = capability_validate_grants(&child->capabilities,
+      capture->owned_grants, capture->grant_count);
+  if (result != CAP_OK) {
+    return capability_status(result);
+  }
+  struct capability_reservation reservation = {0};
+  if (capture->grant_count) {
+    while ((result = capability_reserve(&child->capabilities, capture->grant_count,
+        &reservation, capture->child_slots)) == CAP_FULL) {
+      result = capability_grow(&child->capabilities);
+      if (result != CAP_OK) {
+        break;
+      }
+    }
     if (result != CAP_OK) {
       return capability_status(result);
     }
+    capability_install_reserved(&reservation, capture->child_slots,
+        capture->owned_grants, capture->grant_count, capture->child_handles);
+  }
+  for (size_t i = 0; i < capture->grant_count; ++i) {
+    capture->grants[i].source = capture->child_handles[i];
   }
 
   struct process_binding *resources = (void *)capture->startup.resources;
@@ -98,11 +111,12 @@ static void launcher_batch_abort(struct launch_preparation *group)
   struct execution_group *previous = object_cleanup_enter(group->execution_group);
   for (size_t i = group->count; i > 0; --i) {
     struct launch_prepared *stage = &group->stages[i - 1];
-    KASSERT(capability_close(&group->parent->capabilities, stage->observer) == CAP_OK);
+    capability_grant_release(&group->observers[i - 1]);
     user_task_discard_prepared(stage->task);
     KASSERT(process_destroy(stage->process) == MM_OK);
   }
   group->count = 0;
+  capability_reservation_release(&group->reservation, group->slots);
   object_cleanup_leave(previous);
 }
 
@@ -114,6 +128,13 @@ struct launch_preparation *launcher_batch_create(void)
     *group = (struct launch_preparation){0};
   }
   return group;
+}
+
+enum capability_result launcher_batch_reserve(struct launch_preparation *group, size_t count)
+{
+  KASSERT(group && !group->count && !group->reservation.count);
+  KASSERT(count && count <= LAUNCH_BATCH_MAX);
+  return capability_request_reservation(count, &group->reservation, group->slots);
 }
 
 /* Kernel-added resources for a new space's first process. */
@@ -230,6 +251,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
   KASSERT(group && group->count < LAUNCH_BATCH_MAX);
   KASSERT(!group->parent || group->parent == parent);
   KASSERT(!group->count || group->execution_group == execution_group);
+  KASSERT(group->reservation.table == &parent->capabilities);
+  KASSERT(group->count < group->reservation.count);
   group->parent = parent;
   group->execution_group = execution_group;
   struct process *child;
@@ -262,7 +285,7 @@ static enum call_status prepare_child(struct launch_preparation *group,
     child->execution_group = execution_group;
     child->capabilities.execution_group = execution_group;
   }
-  status = install_grants(capture, parent, child);
+  status = install_grants(capture, child);
   if (status != CALL_OK) {
     goto fail;
   }
@@ -288,15 +311,14 @@ static enum call_status prepare_child(struct launch_preparation *group,
     goto fail;
   }
 
-  handle_t observer;
-  enum capability_result installed = capability_install(&parent->capabilities,
-      &child->control->object, PROCESS_RIGHTS, 0, &observer);
-  if (installed != CAP_OK) {
+  enum capability_result retained = capability_grant_retain(&child->control->object,
+      PROCESS_RIGHTS, 0, &group->observers[group->count]);
+  if (retained != CAP_OK) {
     user_task_discard_prepared(task);
-    status = capability_status(installed);
+    status = capability_status(retained);
     goto fail;
   }
-  group->stages[group->count++] = (struct launch_prepared){child, task, observer};
+  group->stages[group->count++] = (struct launch_prepared){child, task};
   return CALL_OK;
 
 fail:
@@ -320,16 +342,24 @@ enum call_status launcher_batch_publish(struct launch_preparation *group, handle
   struct task *tasks[LAUNCH_BATCH_MAX];
   size_t count = group->count;
   for (size_t i = 0; i < count; ++i) {
-    children[i] = group->stages[i].observer;
     tasks[i] = group->stages[i].task;
   }
-  enum call_status status = execution_group_publish(group->execution_group, tasks, count);
+  enum capability_result validated = capability_validate_grants(&group->parent->capabilities,
+      group->observers, count);
+  enum call_status status = capability_status(validated);
+  if (status == CALL_OK) {
+    status = execution_group_publish(group->execution_group, tasks, count);
+  }
   if (status != CALL_OK) {
     for (size_t i = 0; i < count; ++i) {
       children[i] = HANDLE_INVALID;
     }
     return status;
   }
+  /* No failing step remains after the tasks become runnable. Observer grants
+   * remain private through preparation and appear together under one table guard. */
+  capability_install_reserved(&group->reservation, group->slots, group->observers,
+      count, children);
   group->count = 0;
   return CALL_OK;
 }
@@ -342,9 +372,13 @@ void launcher_batch_discard(struct launch_preparation *group)
 }
 
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-    size_t parent_cpu, struct execution_group *execution_group, handle_t *result)
+    size_t parent_cpu, struct execution_group *execution_group,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots,
+    handle_t *result)
 {
-  struct launch_preparation group = {0};
+  struct launch_preparation group = {.reservation = *reservation};
+  group.slots[0] = slots[0];
+  *reservation = (struct capability_reservation){0};
   *result = HANDLE_INVALID;
   enum call_status status = launcher_batch_prepare(&group, capture, parent, parent_cpu,
       execution_group);
@@ -358,6 +392,7 @@ enum call_status launcher_start(struct launch_capture *capture, struct process *
 }
 
 enum call_status launcher_create_space(struct launch_capture *capture, struct process *parent,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots,
     handle_t *result)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -393,7 +428,9 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
 
   /* The creator's CPU says nothing about the new space: no placement preference,
    * so ties fall to the lowest AP, as for any unrelated task. */
-  struct launch_preparation group = {0};
+  struct launch_preparation group = {.reservation = *reservation};
+  group.slots[0] = slots[0];
+  *reservation = (struct capability_reservation){0};
   status = prepare_child(&group, capture, parent, space, SIZE_MAX, NULL, true);
   if (status == CALL_OK) {
     status = launcher_batch_publish(&group, result);
