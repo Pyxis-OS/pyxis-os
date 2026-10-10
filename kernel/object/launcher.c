@@ -99,6 +99,9 @@ static void create_execution_group(struct launcher_request *request)
 static void discard_capture(struct launch_capture *capture)
 {
   image_capture_release(&capture->captured_image);
+  if (capture->image) {
+    object_release(&capture->image->object);
+  }
   kfree(capture);
 }
 
@@ -392,16 +395,19 @@ static void capture_streams(struct launch_capture *capture,
       return;
     }
 
-    struct kernel_object *object;
-    enum capability_result found = capability_resolve(&process_current()->capabilities,
+    struct capability_reference reference;
+    enum capability_result found = capability_acquire(&process_current()->capabilities,
         capture->grants[stream->grant].source, rights,
-        capture->grants[stream->grant].transport, &object, NULL, NULL);
+        capture->grants[stream->grant].transport, &reference);
     if (found != CAP_OK) {
-      capture->error = found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
+      capture->error = found == CAP_LIMIT ? CALL_LIMIT :
+          found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
       return;
     }
-    if (!object_stream_valid(object, stream->protocol,
-        capture->grants[stream->grant].transport)) {
+    bool valid = object_stream_valid(reference.object, stream->protocol,
+        capture->grants[stream->grant].transport);
+    capability_release(&reference);
+    if (!valid) {
       capture->error = CALL_WRONG_TYPE;
       return;
     }
@@ -425,14 +431,17 @@ static void capture_namespace(struct launch_capture *capture, uint64_t namespace
     capture->error = CALL_BAD_REQUEST;
     return;
   }
-  struct kernel_object *object;
-  enum capability_result found = capability_resolve(&process_current()->capabilities,
-      grant->source, grant->rights, 0, &object, NULL, NULL);
+  struct capability_reference reference;
+  enum capability_result found = capability_acquire(&process_current()->capabilities,
+      grant->source, grant->rights, 0, &reference);
   if (found != CAP_OK) {
-    capture->error = found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
+    capture->error = found == CAP_LIMIT ? CALL_LIMIT :
+        found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
     return;
   }
-  if (object->type != OBJECT_NAMESPACE) {
+  bool valid = reference.object->type == OBJECT_NAMESPACE;
+  capability_release(&reference);
+  if (!valid) {
     capture->error = CALL_WRONG_TYPE;
     return;
   }
@@ -492,21 +501,26 @@ enum call_status launcher_capture_request(const struct launch_request *request,
   if (user_initial_stack_size(request->initial_stack_bytes, &initial_stack_bytes) != MM_OK) {
     return CALL_BAD_REQUEST;
   }
-  struct kernel_object *image;
-  uint64_t image_rights;
-  enum capability_result lookup = capability_resolve(&process_current()->capabilities,
-      request->image, FILE_RIGHT_READ, 0, &image, &image_rights, NULL);
+  struct capability_reference image;
+  enum capability_result lookup = capability_acquire(&process_current()->capabilities,
+      request->image, FILE_RIGHT_READ, 0, &image);
   if (lookup != CAP_OK) {
-    return lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
+    return lookup == CAP_LIMIT ? CALL_LIMIT :
+        lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
   }
-  if (image->type != OBJECT_FILE) {
+  if (image.object->type != OBJECT_FILE) {
+    capability_release(&image);
     return CALL_WRONG_TYPE;
   }
 
   struct launch_capture *capture = allocate_launch_capture();
   if (!capture) {
+    capability_release(&image);
     return CALL_NO_MEMORY;
   }
+  uint64_t image_rights = image.rights;
+  capture->image = (struct file_object *)image.object;
+  image.object = NULL;
   capture->initial_stack_bytes = initial_stack_bytes;
   if (task_stop_requested()) {
     discard_launch_capture(capture);
@@ -518,7 +532,6 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     discard_launch_capture(capture);
     return error;
   }
-  capture->image = (struct file_object *)image;
   if (capture->image->backing == FILE_NPFS) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_CAPTURE);
     pending->job.node = capture->image->npfs;

@@ -187,20 +187,20 @@ struct syscall_result namespace_service_call(uint64_t rights, uint64_t operation
 static enum call_status bind_client(struct namespace_object *namespace,
     uint64_t operation, const struct namespace_bind_message *message)
 {
-  struct kernel_object *client;
-  enum capability_result result = capability_resolve(&process_current()->capabilities,
-      message->client, message->rights, message->transport, &client, NULL, NULL);
+  struct capability_reference reference;
+  enum capability_result result = capability_acquire(&process_current()->capabilities,
+      message->client, message->rights, message->transport, &reference);
   if (result != CAP_OK) {
     return grant_status(result);
   }
+  struct kernel_object *client = reference.object;
   if (client->type != OBJECT_ENDPOINT_EXPORT) {
+    capability_release(&reference);
     return CALL_WRONG_TYPE;
   }
   if (!endpoint_export_available(client)) {
+    capability_release(&reference);
     return CALL_ENDPOINT_CLOSED;
-  }
-  if (!object_retain(client)) {
-    return CALL_LIMIT;
   }
 
   struct kernel_object *old = NULL;
@@ -228,12 +228,11 @@ static enum call_status bind_client(struct namespace_object *namespace,
       binding->rights = message->rights;
       binding->transport = message->transport;
       binding->client = client;
+      reference.object = NULL;
     }
   }
   unlock_namespace(namespace);
-  if (status != CALL_OK) {
-    object_release(client);
-  }
+  capability_release(&reference);
   if (old) {
     object_release(old);
   }

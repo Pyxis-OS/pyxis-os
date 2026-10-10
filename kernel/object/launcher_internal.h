@@ -23,13 +23,14 @@ struct launch_space {
 /* Heap storage shared with BSP, never a remote task stack. Bindings/directory
  * entries initially hold grant indices; optional namespace holds index + 1.
  * BSP replaces them with child handles.
- * Source handles and image are borrowed from the blocked caller's table. */
+ * Source handles are borrowed from the blocked caller's table. The capture
+ * owns image storage independently of its optional file operation. */
 struct launch_capture {
   struct process_startup startup;
   struct launch_grant *grants;
   size_t grant_count;
   size_t initial_stack_bytes; /* Validated, with the default resolved. */
-  struct file_object *image;
+  struct file_object *image; /* Owned storage reference until capture discard. */
   struct image_capture captured_image;
   size_t used;
   enum call_status error;

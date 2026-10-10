@@ -570,25 +570,10 @@ static enum call_status check_rename(struct directory_object *source,
   return CALL_OK;
 }
 
-static struct syscall_result rename_child(struct directory_object *source, uint64_t rights,
+static struct syscall_result rename_to_directory(struct directory_object *source,
+    uint64_t rights, struct directory_object *destination, uint64_t destination_rights,
     const struct directory_rename_request *request)
 {
-  if (request->policy != DIRECTORY_RENAME_NO_REPLACE &&
-      request->policy != DIRECTORY_RENAME_REPLACE) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
-  }
-  struct kernel_object *object;
-  uint64_t destination_rights;
-  enum capability_result result = capability_resolve(&process_current()->capabilities,
-      request->destination, DIRECTORY_RIGHT_CREATE, 0, &object,
-      &destination_rights, NULL);
-  if (result != CAP_OK) {
-    return (struct syscall_result){result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE, 0};
-  }
-  if (object->type != OBJECT_DIRECTORY) {
-    return (struct syscall_result){CALL_WRONG_TYPE, 0};
-  }
-  struct directory_object *destination = (struct directory_object *)object;
   if (destination->backing == DIRECTORY_NPFS && (destination_rights & ~DIRECTORY_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -625,8 +610,7 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
     KASSERT(copy_from_user(pending->job.destination_name, request->destination_name,
         request->destination_length));
     pending->job.destination_name[request->destination_length] = 0;
-    /* Both capability entries remain alive while their sole task is blocked;
-     * no replaceable table-entry pointer crosses to the worker. */
+    /* The caller retains both directories through worker completion. */
     npfs_request_submit_and_wait(pending);
     status = pending->job.status;
     npfs_request_release(pending);
@@ -676,8 +660,7 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
     return (struct syscall_result){status, 0};
   }
 
-  /* The caller's sole task keeps both directory capabilities alive while BSP
-   * allocates. No entry pointer or lock survives the wait; recheck both names. */
+  /* Owned directory references survive allocation; recheck both names. */
   struct directory_entry *entry = ramfs_request_name(request->destination_length);
   if (!entry) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};
@@ -715,6 +698,30 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
     }
   }
   return (struct syscall_result){status, 0};
+}
+
+static struct syscall_result rename_child(struct directory_object *source, uint64_t rights,
+    const struct directory_rename_request *request)
+{
+  if (request->policy != DIRECTORY_RENAME_NO_REPLACE &&
+      request->policy != DIRECTORY_RENAME_REPLACE) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct capability_reference destination;
+  enum capability_result result = capability_acquire(&process_current()->capabilities,
+      request->destination, DIRECTORY_RIGHT_CREATE, 0, &destination);
+  if (result != CAP_OK) {
+    enum call_status status = result == CAP_LIMIT ? CALL_LIMIT :
+        result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE;
+    return (struct syscall_result){status, 0};
+  }
+  struct syscall_result reply = {CALL_WRONG_TYPE, 0};
+  if (destination.object->type == OBJECT_DIRECTORY) {
+    reply = rename_to_directory(source, rights,
+        (struct directory_object *)destination.object, destination.rights, request);
+  }
+  capability_release(&destination);
+  return reply;
 }
 
 static struct syscall_result enumerate(struct directory_object *directory, uint64_t rights,

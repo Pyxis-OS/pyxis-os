@@ -58,10 +58,14 @@ static bool measure_bindings(struct process *process,
         return false;
       }
     }
-    struct kernel_object *object;
-    if (capability_resolve(&process->capabilities, binding->handle, 0, 0,
-          &object, NULL, NULL) != CAP_OK ||
-        (directories && object->type != OBJECT_DIRECTORY)) {
+    struct capability_reference reference;
+    if (capability_acquire(&process->capabilities, binding->handle, 0, 0,
+          &reference) != CAP_OK) {
+      return false;
+    }
+    bool valid = !directories || reference.object->type == OBJECT_DIRECTORY;
+    capability_release(&reference);
+    if (!valid) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
@@ -96,12 +100,15 @@ static bool validate_streams(struct process *process,
       return false;
     }
 
-    struct kernel_object *object;
-    uint64_t rights, transport;
-    if (capability_resolve(&process->capabilities, stream->handle, expected_rights,
-          0, &object, &rights, &transport) != CAP_OK ||
-        !object_stream_valid(object, stream->protocol, transport) ||
-        rights != expected_rights) {
+    struct capability_reference reference;
+    if (capability_acquire(&process->capabilities, stream->handle, expected_rights,
+          0, &reference) != CAP_OK) {
+      return false;
+    }
+    bool valid = object_stream_valid(reference.object, stream->protocol,
+        reference.transport) && reference.rights == expected_rights;
+    capability_release(&reference);
+    if (!valid) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
@@ -131,34 +138,10 @@ static bool validate_streams(struct process *process,
   return true;
 }
 
-static bool measure_startup(struct process *process,
-                             const struct process_startup *source,
-                             struct startup_sizes *sizes)
+static bool measure_startup_contents(struct process *process,
+    const struct process_startup *source, struct kernel_object *namespace,
+    struct startup_sizes *sizes)
 {
-  if (!source ||
-      source->working_directory_count > STARTUP_MAX_SIZE / sizeof(handle_t) ||
-      (source->working_directory_count && !source->working_directories) ||
-      (!source->working_directory_count && source->working_path) ||
-      source->resource_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
-      source->root_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
-      source->environment_count > STARTUP_MAX_SIZE / sizeof(struct startup_variable) ||
-      source->argc >= STARTUP_MAX_SIZE / sizeof(uint64_t) ||
-      (source->resource_count && !source->resources) ||
-      (source->root_count && !source->roots) ||
-      (source->environment_count && !source->environment) ||
-      (source->argc && !source->argv) ||
-      !validate_streams(process, source)) {
-    return false;
-  }
-
-  struct kernel_object *namespace = NULL;
-  if (source->namespace &&
-      (capability_resolve(&process->capabilities, source->namespace,
-          NAMESPACE_RIGHT_LOOKUP, 0, &namespace, NULL, NULL) != CAP_OK ||
-       namespace->type != OBJECT_NAMESPACE)) {
-    return false;
-  }
-
   sizes->metadata = sizeof(struct startup_info) +
                     source->resource_count * sizeof(struct startup_binding) +
                     source->root_count * sizeof(struct startup_binding) +
@@ -177,9 +160,14 @@ static bool measure_startup(struct process *process,
   }
 
   for (size_t i = 0; i < source->working_directory_count; ++i) {
-    struct kernel_object *object;
-    if (capability_resolve(&process->capabilities, source->working_directories[i],
-          0, 0, &object, NULL, NULL) != CAP_OK || object->type != OBJECT_DIRECTORY) {
+    struct capability_reference reference;
+    if (capability_acquire(&process->capabilities, source->working_directories[i],
+          0, 0, &reference) != CAP_OK) {
+      return false;
+    }
+    bool valid = reference.object->type == OBJECT_DIRECTORY;
+    capability_release(&reference);
+    if (!valid) {
       return false;
     }
   }
@@ -214,6 +202,41 @@ static bool measure_startup(struct process *process,
   sizes->metadata = (sizes->metadata + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
   sizes->arguments = (sizes->arguments + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
   return sizes->arguments <= STARTUP_MAX_SIZE - sizes->metadata;
+}
+
+static bool measure_startup(struct process *process,
+    const struct process_startup *source, struct startup_sizes *sizes)
+{
+  if (!source ||
+      source->working_directory_count > STARTUP_MAX_SIZE / sizeof(handle_t) ||
+      (source->working_directory_count && !source->working_directories) ||
+      (!source->working_directory_count && source->working_path) ||
+      source->resource_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
+      source->root_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
+      source->environment_count > STARTUP_MAX_SIZE / sizeof(struct startup_variable) ||
+      source->argc >= STARTUP_MAX_SIZE / sizeof(uint64_t) ||
+      (source->resource_count && !source->resources) ||
+      (source->root_count && !source->roots) ||
+      (source->environment_count && !source->environment) ||
+      (source->argc && !source->argv) ||
+      !validate_streams(process, source)) {
+    return false;
+  }
+
+  struct capability_reference namespace = {0};
+  if (source->namespace) {
+    if (capability_acquire(&process->capabilities, source->namespace,
+          NAMESPACE_RIGHT_LOOKUP, 0, &namespace) != CAP_OK) {
+      return false;
+    }
+    if (namespace.object->type != OBJECT_NAMESPACE) {
+      capability_release(&namespace);
+      return false;
+    }
+  }
+  bool valid = measure_startup_contents(process, source, namespace.object, sizes);
+  capability_release(&namespace);
+  return valid;
 }
 
 static uint64_t copy_string(uint8_t *buffer, size_t *offset, uintptr_t address,

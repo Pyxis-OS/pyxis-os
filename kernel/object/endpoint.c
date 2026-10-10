@@ -536,17 +536,19 @@ static enum call_status endpoint_export_create(struct process *owner,
       (request->transport & ~HANDLE_TRANSPORT_CALL)) {
     return CALL_BAD_REQUEST;
   }
-  struct kernel_object *object;
-  enum capability_result result = capability_resolve(&owner->capabilities,
-      request->receiver, ENDPOINT_RECEIVER_RIGHT_CONTROL, 0, &object, NULL, NULL);
+  struct capability_reference reference;
+  enum capability_result result = capability_acquire(&owner->capabilities,
+      request->receiver, ENDPOINT_RECEIVER_RIGHT_CONTROL, 0, &reference);
   if (result != CAP_OK) {
     return grant_status(result);
   }
-  if (object->type != OBJECT_ENDPOINT_RECEIVER) {
+  if (reference.object->type != OBJECT_ENDPOINT_RECEIVER) {
+    capability_release(&reference);
     return CALL_WRONG_TYPE;
   }
-  struct endpoint *receiver = (struct endpoint *)object;
+  struct endpoint *receiver = (struct endpoint *)reference.object;
   if (receiver->owner != owner) {
+    capability_release(&reference);
     return CALL_DENIED;
   }
   struct endpoint_state *state = receiver->state;
@@ -556,16 +558,19 @@ static enum call_status endpoint_export_create(struct process *owner,
       state->export_count == ENDPOINT_EXPORTS_MAX ? CALL_LIMIT : CALL_OK;
   unlock_endpoint(state);
   if (status != CALL_OK) {
+    capability_release(&reference);
     return status;
   }
   while (!capability_free_slots(&owner->capabilities)) {
     result = capability_grow(&owner->capabilities);
     if (result != CAP_OK) {
+      capability_release(&reference);
       return grant_status(result);
     }
   }
   struct endpoint_export *export = kmalloc(sizeof(*export));
   if (!export) {
+    capability_release(&reference);
     return CALL_NO_MEMORY;
   }
   memset(export, 0, sizeof(*export));
@@ -586,6 +591,7 @@ static enum call_status endpoint_export_create(struct process *owner,
   if (result != CAP_OK) {
     object_release(&export->client);
     object_release(&export->storage);
+    capability_release(&reference);
     return grant_status(result);
   }
   /* Creation is BSP-owned while this process lends its table; the owned
@@ -598,6 +604,7 @@ static enum call_status endpoint_export_create(struct process *owner,
   export->linked = true;
   unlock_endpoint(state);
   object_release(&export->client);
+  capability_release(&reference);
   return CALL_OK;
 }
 
@@ -727,25 +734,29 @@ static enum call_status capture_grants(const struct endpoint_message *message,
     struct kernel_object **objects, uint64_t *rights, uint64_t *transport)
 {
   for (size_t i = 0; i < message->grant_count; ++i) {
-    struct kernel_object *object;
-    enum capability_result result = capability_resolve(&process_current()->capabilities,
+    struct capability_reference reference;
+    enum capability_result result = capability_acquire(&process_current()->capabilities,
         message->grants[i].handle, message->grants[i].rights,
-        message->grants[i].transport, &object, NULL, NULL);
+        message->grants[i].transport, &reference);
     if (result != CAP_OK) {
       release_grants(objects, rights, i);
       return grant_status(result);
     }
+    struct kernel_object *object = reference.object;
     if (object->type == OBJECT_ENDPOINT_RECEIPT || object->type == OBJECT_ENDPOINT_RECEIVER) {
+      capability_release(&reference);
       release_grants(objects, rights, i);
       return CALL_DENIED;
     }
     if (!object_grant_retain(object, message->grants[i].rights)) {
+      capability_release(&reference);
       release_grants(objects, rights, i);
       return CALL_LIMIT;
     }
     objects[i] = object;
     rights[i] = message->grants[i].rights;
     transport[i] = message->grants[i].transport;
+    capability_release(&reference);
   }
   return CALL_OK;
 }
