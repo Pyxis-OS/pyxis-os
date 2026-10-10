@@ -5,11 +5,11 @@
 #include <abi/file_info.h>
 #include <abi/syscall.h>
 #include <kernel/service/request.h>
+#include <kernel/object/capability.h>
 #include <kernel/user/image_capture.h>
 #include <kernel/virtio/fs.h>
 
 struct kernel_object;
-struct capability_table;
 struct hostfs_node;
 
 enum hostfs_operation {
@@ -61,9 +61,11 @@ struct hostfs_request {
   bool replace;
   enum call_status status;
   struct kernel_object *object;
-  /* CREATE exclusively lends the blocked caller's table to the BSP worker.
-   * Install the result before host mutation; no fallible local work follows. */
-  struct capability_table *table;
+  /* CREATE owns a claimed slot and preflights its grant before host mutation.
+   * Completion consumes or releases both before returning the request. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  struct capability_grant grant;
   uint64_t rights;
   handle_t handle;
   struct directory_enumerate_reply entry;

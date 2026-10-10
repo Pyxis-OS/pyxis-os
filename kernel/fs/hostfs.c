@@ -158,7 +158,8 @@ void hostfs_request_submit_and_wait(struct hostfs_request *request)
 
 void hostfs_request_release(struct hostfs_request *request)
 {
-  KASSERT(request && !request->next && !request->node && !request->destination && !request->table);
+  KASSERT(request && !request->next && !request->node && !request->destination &&
+      !request->reservation.table && !request->grant.object);
   KASSERT(!request->captured.address && !request->captured.size &&
       !request->captured.backing_bytes && !request->object);
   bsp_request_release(&request->request);
@@ -173,13 +174,14 @@ void hostfs_request_published(struct hostfs_request *request)
   }
 }
 
-/* Detach every worker reference and input loan before returning ownership. */
+/* Drain slot/grant ownership and detach borrowed inputs before completion. */
 static void complete_request(struct hostfs_request *request)
 {
   request->next = NULL;
   request->node = NULL;
   request->destination = NULL;
-  request->table = NULL;
+  capability_grant_release(&request->grant);
+  capability_reservation_release(&request->reservation, &request->slot);
   bsp_request_complete(&request->request);
 }
 
@@ -412,6 +414,9 @@ static enum call_status create_node(struct hostfs_request *request)
 
 static enum call_status create_child(struct hostfs_request *request)
 {
+  if (!request->reservation.table) {
+    return CALL_BAD_REQUEST;
+  }
   bool directory = request->kind == DIRECTORY_KIND_DIRECTORY;
   if (directory && next_identity == UINT64_MAX) {
     return CALL_LIMIT;
@@ -448,17 +453,22 @@ static enum call_status create_child(struct hostfs_request *request)
     cpu_restore_interrupts(flags);
     return CALL_NO_MEMORY;
   }
-  enum capability_result installed = capability_install(request->table, node->object,
-      request->rights, 0, &request->handle);
-  cpu_restore_interrupts(flags);
-  if (installed != CAP_OK) {
-    KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);
-    destroy_node(node);
-    return installed == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+  enum capability_result prepared = capability_grant_retain(node->object,
+      request->rights, 0, &request->grant);
+  if (prepared == CAP_OK) {
+    prepared = capability_validate_grants(request->reservation.table, &request->grant, 1);
   }
+  if (prepared != CAP_OK) {
+    capability_grant_release(&request->grant);
+    cpu_restore_interrupts(flags);
+    destroy_node(node);
+    KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT);
+    return prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+  }
+  cpu_restore_interrupts(flags);
 
-  /* The sole caller is parked and cannot use the installed handle until the
-   * worker wakes it. All local storage/slot allocation precedes host creation. */
+  /* Capacity, wrapper storage and grant ownership precede host creation. A
+   * transport failure still does not prove that the host mutation rolled back. */
   enum virtio_fs_result result;
   if (directory) {
     result = virtio_fs_mkdir(&request->node->node, request->name, request->count, &node->node);
@@ -468,7 +478,7 @@ static enum call_status create_child(struct hostfs_request *request)
   }
   if (result != VIRTIO_FS_OK) {
     flags = cpu_save_interrupts();
-    KASSERT(capability_close(request->table, request->handle) == CAP_OK);
+    capability_grant_release(&request->grant);
     cpu_restore_interrupts(flags);
     request->handle = HANDLE_INVALID;
     destroy_node(node);
@@ -476,8 +486,10 @@ static enum call_status create_child(struct hostfs_request *request)
   }
   flags = cpu_save_interrupts();
   attach_identity(node);
+  capability_install_reserved(&request->reservation, &request->slot,
+      &request->grant, 1, &request->handle);
+  object_release(node->object); /* The moved capability owns the wrapper. */
   cpu_restore_interrupts(flags);
-  object_release(node->object); /* Only the installed capability owns it now. */
   return CALL_OK;
 }
 
