@@ -84,6 +84,16 @@ and libuv integration. The implementation rebased cleanly to `b4ec367c`; source
 review preserved the new readiness paths. Frozen comparison revisions remain
 unchanged to isolate this task from those unrelated merges.
 
+Final integration includes main `d71e4dfd`. Clean `d02159c7` built the ordinary
+image without warnings using verified SDK/userland/ports bundles from successful
+main workflow [#1707](https://git.internal/PyxisOS/pyxis-os/actions/runs/1707).
+These pin userland `fbce73bfaae710ed5dcaa0e5fd3f7fb8416befd0` and ports
+`4326582e4bfaad3833b8311f66aedc1f5308f90d`; fs/lwIP and effective config remain
+as above. These are inherited main pins, not task 2 gitlink changes.
+ELF SHA-256 is `1526850522c780b7dda470dac201e6bdd0d97e82e662bc807cd39eff9f8f5d0d`;
+ISO is `53d00d22d1ebbb495b5f4d6f13d5916012426ead3d33411d47d6d6a225df9c5f`.
+Subsequent edits only complete this documentation; submitted-head CI is separate.
+
 ## Manual qualification
 
 Interactive QEMU/GDB inspection used the matching B ELF with
@@ -116,6 +126,14 @@ Process-stop/fault injection, saturation and concurrent sibling CLOSE were not
 run; siblings are not enabled. Error/stop reference pairing and callback lock
 order were inspected in source. Task-owned QEMU/debugger jobs were stopped before
 timing and after qualification.
+
+The final integrated ordinary image was booted separately on both CPU counts:
+1-CPU CALL64 warmup/pass verified eight round trips, and the full pipe warmup/pass
+again verified 1 MiB with zero errors. Four-CPU SEND4096 warmup/pass verified eight
+messages/32 KiB; GDB observed receiver references=2, rights=1, transport=2 on CPU 2.
+Remote `rm boot://share/iobench.bin` was denied and `cat tmp://missing-task2`
+reported not found (both status 1); subsequent echo and shell exit were status 0
+with complete drain. These are functional checks, not additional cost samples.
 
 ## Matched workloads
 
@@ -156,4 +174,65 @@ Five IPC samples per row/CPU and three launch sessions; every IPC sample verifie
 exited 0 with complete drain. One interrupted preliminary capture was rerun and
 excluded; all complete samples remain.
 
-Interleaved A/B results and final integrated build qualification are pending.
+## Interleaved comparison
+
+Measured 11:11–11:31 UTC on 2026-10-10. Run order was three A/B pairs on one CPU,
+then three A/B pairs on four CPUs, then the focused one-CPU SEND4096 A/B/A/B
+follow-up. Each full profile ran launch warmup/timed session first, then CALL64,
+SEND64, CALL4096, SEND4096, with a fresh OS boot between IPC commands. One pair's
+CALL64 input lost a keyboard character and launched no benchmark; its invalid
+capture was kept separately and the command rerun after SEND64. No complete
+sample was filtered. The debugger only read terminal output after completion.
+
+All 52 IPC invocations verified their warmup and five timed passes: **260 timed
+passes**, each 256 messages, status 0, verified payload and zero failed CALLs or
+rejected SENDs. All 12 timed launch sessions counted exactly 1024, verified the
+following `echo task2-launch-complete`, exited both commands 0 and drained
+completely; all 12 warmups counted 16. Existing commands/tools only, no saved
+benchmark/input runner. Task-owned jobs stopped before the integrated build.
+
+Full-profile median (min..max), 15 IPC samples per cell; launch has three samples,
+seconds. Initial baseline and focused follow-up are separate.
+
+| Workload | 1 CPU A | 1 CPU B | 4 CPUs A | 4 CPUs B |
+| --- | --- | --- | --- | --- |
+| CALL64 complete | 92.735 (88.525..113.924) | 88.713 (79.710..96.274) | 107.498 (98.912..126.857) | 99.654 (76.034..127.819) |
+| SEND64 admit | 1.341 (1.089..4.696) | 1.252 (1.183..2.152) | 1.218 (1.180..1.575) | 1.260 (1.068..1.805) |
+| SEND64 complete | 14.046 (11.917..44.606) | 14.078 (13.087..17.770) | 15.925 (12.186..22.589) | 17.915 (11.932..25.348) |
+| CALL4096 complete | 91.938 (88.386..113.023) | 90.435 (88.501..98.129) | 98.426 (76.118..123.309) | 108.418 (95.845..350.169) |
+| SEND4096 admit | 1.303 (1.243..2.091) | 1.334 (1.264..4.649) | 1.387 (1.250..1.839) | 1.402 (1.263..2.928) |
+| SEND4096 complete | 14.219 (13.275..14.867) | 14.530 (13.452..54.595) | 18.129 (13.028..23.936) | 17.345 (12.173..33.034) |
+| 1024 launches + echo, seconds | 3.50 (3.42..3.51) | 3.43 (3.42..3.52) | 3.90 (3.25..6.50) | 3.42 (3.32..3.87) |
+
+Per-pair completion medians A→B (ms), launch seconds:
+
+| CPUs / pair | CALL64 | SEND64 | CALL4096 | SEND4096 | Launch |
+| --- | --- | --- | --- | --- | --- |
+| 1 / 1 | 111.820→80.639 | 27.039→14.381 | 108.064→90.435 | 14.172→14.153 | 3.50→3.43 |
+| 1 / 2 | 89.846→88.713 | 12.105→13.925 | 88.483→89.208 | 14.219→14.134 | 3.51→3.42 |
+| 1 / 3 | 92.203→93.860 | 14.046→14.251 | 91.938→91.536 | 14.358→47.367 | 3.42→3.52 |
+| 4 / 1 | 114.515→78.527 | 16.078→17.915 | 112.447→99.567 | 17.605→15.852 | 3.90→3.32 |
+| 4 / 2 | 107.017→107.014 | 12.943→18.354 | 109.855→216.135 | 21.768→21.038 | 3.25→3.87 |
+| 4 / 3 | 108.681→104.286 | 15.925→16.670 | 83.723→108.418 | 17.598→17.884 | 6.50→3.42 |
+
+The four-CPU aggregate B CALL4096 median is **10.2% higher**, SEND64 completion
+**12.5% higher**. These observed increases and the slow valid samples remain.
+B's one-CPU SEND4096 pair 3 had completion median 47.367 ms and admission 3.956 ms;
+its independent clock calibration was 96,143 ns/read versus A's 41,243. The
+focused fresh-boot follow-up did not repeat it:
+
+| Pair | A complete ms (range) | B complete ms (range) | A/B admit median ms | A/B clock calibration ns/read |
+| --- | --- | --- | --- | --- |
+| 1 | 14.298 (13.156..14.568) | 14.627 (12.986..15.427) | 1.288 / 1.353 | 39,946 / 41,199 |
+| 2 | 14.074 (13.428..16.938) | 14.050 (13.224..14.908) | 1.329 / 1.289 | 41,545 / 41,456 |
+
+Four-CPU B CALL4096 pair 2 calibration was 139,629 ns/read versus A's 37,335;
+pair 3's extreme did not repeat, but B was still 29.5% slower than paired A.
+Unchanged A also had SEND64 calibration 380,600 ns/read and a 6.50-second launch
+session. Calibration means were never subtracted. These correlated changes are
+not proof of the cause. Broad ranges, differing paired directions and unrelated
+host QEMU activity prevent a stable causal-overhead or speedup conclusion;
+this record does **not** establish zero overhead. No performance optimization
+or owner-native qualification is implied. Raw captures/all samples remain in
+the baseline worktree's ignored `build/task2-baseline` and `build/task2-pairs`;
+integrated build/debugger captures remain in `build/task2-integrated`.
