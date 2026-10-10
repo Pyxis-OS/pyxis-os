@@ -50,7 +50,8 @@ struct directory_object *directory_create(enum directory_backing backing);
  * destruction retires the node; it does not free the directory separately. */
 void directory_init_npfs(struct directory_object *directory, struct npfs_node *node);
 
-/* Current user task, IF=0, with a live reference and stable private mappings.
+/* Current user task, IF=0, with a live reference. Named operations capture and
+ * validate immutable input before waits; outputs use short mapping leases.
  * Native operations forward actual rights and copied names to the worker;
  * CREATE reserves returned-handle capacity before submitting its namespace
  * edit and preflights owned grant authority before mutation. RENAME borrows both

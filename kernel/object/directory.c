@@ -224,7 +224,7 @@ static enum call_status check_child_request(struct directory_object *directory, 
   if (request->rights & ~allowed) {
     return CALL_DENIED;
   }
-  return check_name(request->name, request->name_length);
+  return CALL_OK;
 }
 
 static enum call_status child_capability_status(enum capability_result result)
@@ -457,8 +457,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
-  /* The BSP never reads an AP's user address or private syscall stack. Its
-   * allocation is unpublished; this task fills the already-validated name. */
+  /* The immutable capture survives the BSP's unpublished entry allocation. */
   memcpy(entry->name, (const void *)request->name, request->name_length);
   entry->name[entry->name_length] = 0;
   struct capability_grant grant = {0};
@@ -989,9 +988,6 @@ static struct syscall_result directory_operation(struct directory_object *direct
   if (operation == DIRECTORY_REMOVE) {
     return remove_child(directory, rights, &request.remove);
   }
-  if (operation == DIRECTORY_RENAME) {
-    return rename_child(directory, rights, &request.rename);
-  }
   if (operation == DIRECTORY_SYNC) {
     if (directory->backing == DIRECTORY_NPFS) {
       struct npfs_request *pending = npfs_request_prepare(NPFS_SYNC);
@@ -1073,6 +1069,12 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   char *source = NULL;
   enum call_status status = CALL_OK;
+  if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
+    status = check_child_request(directory, rights, &request.lookup, reply_address, reply_capacity);
+    if (status != CALL_OK) {
+      return (struct syscall_result){status, 0};
+    }
+  }
   /* Only private name fields are rewritten. Enumeration's destination remains
    * a user address; all named operations consume one immutable kernel capture. */
   if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
