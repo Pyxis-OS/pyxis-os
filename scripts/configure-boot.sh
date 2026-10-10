@@ -93,6 +93,12 @@ case "$display_cursor_probe" in
   1) command_line="$command_line display.cursor.probe=1" ;;
   *) echo 'DISPLAY_CURSOR_PROBE must be 0 or 1.' >&2; exit 1 ;;
 esac
+pointer_synthetic=${POINTER_SYNTHETIC:-0}
+case "$pointer_synthetic" in
+  0) ;;
+  1) command_line="$command_line pointer.synthetic=schedule" ;;
+  *) echo 'POINTER_SYNTHETIC must be 0 or 1.' >&2; exit 1 ;;
+esac
 rescue_line=
 mount_disk=${MOUNT_DISK:-}
 if [ -n "$mount_disk" ]; then
