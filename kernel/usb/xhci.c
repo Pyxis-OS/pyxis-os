@@ -37,6 +37,7 @@
 #define USB_TT_BULK_TYPE 2
 #define USB_ADDRESS_MASK 0xff
 #define USB_ADDRESS_MAX 127
+#define XHCI_EVENT_BABBLE 3
 #define XHCI_TRB_STOP_ENDPOINT 15
 #define XHCI_EVENT_RESOURCE 7
 #define XHCI_EVENT_BANDWIDTH 8
@@ -1287,7 +1288,8 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
     }
     return true;
   }
-  if (interrupt->kind == USB_INTERRUPT_HID && residue <= interrupt->receive_bytes) {
+  if (interrupt->kind == USB_INTERRUPT_HID && residue <= interrupt->receive_bytes &&
+      (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
     mark_hid_retiring(interrupt->device);
     return true;
   }
@@ -1601,7 +1603,8 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
   /* An early error does not retire the rest of the control TD sequence. */
   device->request.result = USB_IO;
   device->request.state = CONTROL_HELD;
-  if (device->hid && residue <= device->request.requested) {
+  if (device->hid && residue <= device->request.requested &&
+      (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
     mark_hid_retiring(device);
     return true;
   }
@@ -1665,6 +1668,7 @@ static bool drain_events(struct usb_host_controller *controller)
   /* The class tick is bounded: it copies/collects and can publish transfers,
    * but cannot wait or recursively drain the event ring. */
   bluetooth_hci_drain_progress(controller);
+  usb_hid_drain_progress(controller);
   return controller->running && !controller->failed;
 }
 
@@ -1998,6 +2002,7 @@ static void stop_controller(struct usb_host_controller *controller)
     }
   }
   bluetooth_hci_transport_failed(controller);
+  usb_hid_controller_failed(controller);
   klog("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
        controller->address.bus, controller->address.device, controller->address.function,
        controller->failure, halted, interrupts_disabled);
@@ -3823,6 +3828,7 @@ static void controller_worker(void *argument)
       return;
     }
     usb_storage_process(controller->discovery);
+    usb_hid_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;
     }
