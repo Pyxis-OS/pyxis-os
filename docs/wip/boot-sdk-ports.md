@@ -116,6 +116,9 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
   the small first step is implemented and qualified; review before merge.
+- **Codex delta** (2026-10-10): [shared-address-space threads proposal](threads.md),
+  docs only after merged process-lifetime task #612; capability/VM ownership,
+  native lifecycle, TLS, stacks and libc/runtime gates. Implementation unassigned.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
@@ -169,8 +172,7 @@ Other candidates; current assignments are listed above.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
-- [Multiple threads per process](threads.md) and
-  [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
+- [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 - Physical GPU drivers, after the [display milestone](../kernel/display.md);
   the owner prepares the hardware.
 - [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).

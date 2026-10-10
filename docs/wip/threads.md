@@ -1,461 +1,253 @@
-# Multiple threads in one process
+# Shared-address-space user threads
 
-Status: the owner accepted all three defaults on 2026-10-09. No thread
-implementation is provided by the investigation in
-[#567](https://git.internal/PyxisOS/pyxis-os/pulls/567), now merged. Task 1's
-process-lifetime split is implemented and delivered for review, with
-[matched qualification](../development/experiments/threads-task1/README.md).
-Exactly one user task per process remains; later tasks are unassigned.
-Detailed thread interfaces below remain proposals to refine within those
-accepted boundaries. This is separate from moving kernel services off the BSP in
-[SMP follow-ups](scheduling-and-threads.md).
+Owner-requested proposal, 2026-10-10. Task 1, process lifetime, is merged in
+[#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); exactly one user task per
+process remains. Later implementation is unassigned. This refresh inspects Pyxis
+`4236efc7` and userland `51bcb56b`; it adds no code, compile probe or runtime
+measurement. Existing [task 1 qualification](../development/experiments/threads-task1/README.md)
+and [stack qualification](../kernel/program-loading.md) remain separate evidence.
 
-## Evidence and scope
+The owner already accepted parallel siblings, process-wide quiescence with
+BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault,
+and process-private address wait/wake. Those directions remain settled. Details
+below are proposed refinements, not implemented APIs. Moving kernel services
+[off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
-Inspected Pyxis `26770a0c`, with pinned userland
-`fe6f3efb0847cc500a68cb782304eab781bdff58` and ports
-`a642f07382e14bd233ac1be2b6a814e95c32d835`. The prior runtime SMP closure
-[#430](https://git.internal/PyxisOS/pyxis-os/pulls/430) is merged; its contracts
-are now in [SMP](../kernel/smp.md) and [private memory](../kernel/memory.md).
-Investigation used source inspection and one compile-only TLS rejection probe,
-described below. No boot, timing or native hardware measurement was performed.
-Performance costs below are expectations to measure, not measured regressions or
-speedups. Source paths describe these revisions.
+## Current gaps
 
-Consumers are hosted Clang, SDL2 worker/timer threads and later audio callbacks,
-C++ `std::thread`, and libvncserver-style workers. Their shared pointers require
-one address space; separate processes are not a thread substitute. This
-investigation does not establish a complete hosted Clang or libvncserver port.
-See [toolchains](toolchains-and-runtimes.md), [SDL2 limits](../technical-debt.md#sdl2-port-limits)
-and [C++ limits](../technical-debt.md#c-runtime-subset).
-
-## What already exists, and what changes
-
-The scheduler already has distinct task stacks, register/FP state, CPU placement,
-wait records, deadlines and reusable BSP request storage. Those are useful thread
-building blocks. The missing boundary is shared process ownership, not another
-ready queue.
-
-The table records assumptions at the investigation revision above. Task 1 replaces
-task-owned process lifetime and task-targeted process/group observation; the VM,
-table and buffer safety work remains for task 2. Current task-1 behavior is in
-[SMP ownership](../kernel/smp.md#scheduling-and-ownership).
-
-| Inspected code and present invariant | Required change |
+| Inspected source | Remaining gate |
 | --- | --- |
-| [process](../../include/kernel/process.h), [task preparation and reaping](../../kernel/task.c): one task solely owns its process; every completed user task destroys it | A process owns a live/retiring thread set; task retirement and process destruction become separate operations |
-| [private allocations](../../kernel/mm/private.c), [memory calls](../../kernel/object/memory.c): IF=0 protects a caller's sole-use VM and allocation list | Serialize VM metadata and coordinate every CPU and kernel borrower of that process |
-| [paging](../../arch/x86_64/paging.c): unmap/protect invalidate locally; active-space checks inspect this CPU only | Track shared-root activity and prevent reclamation or permission completion before all relevant translations are invalidated |
-| [user copies](../../kernel/user_memory.c): check page tables, then plain `memcpy` | Stable mapping leases across each check/copy; a second check alone cannot close the race |
-| [capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c): resolved objects are borrowed from stable table slots | Synchronized table access and owned object references across blocking calls, close and table growth |
-| [BSP requests](../../kernel/service/request.c): parking the sole caller during selected requests lends its table or VM exclusively | Task-local request ownership remains; process/table/VM loans need explicit shared-state exclusion |
-| [process control](../../include/kernel/object/process.h): one borrowed task link, completion after its reclamation | Process stop targets every live thread; process completion follows final process/thread reclamation |
-| [startup](../../kernel/user/startup.c), [user entry](../../kernel/task.c): each task enters with process startup in RDI | Only the initial thread runs process startup; siblings enter a runtime trampoline with a thread argument |
+| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns group membership and lifetime, but its task/retiring-storage fields and terminal-result writer are still singular. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Calls borrow table entries/objects; growth replaces storage. Lookup, CLOSE and delayed installation need shared-table admission and owned call references. |
+| [Endpoint replies](../../kernel/object/endpoint.c) | Preflight counts free slots before sleeping; collection assumes they remain free. Sibling installation would invalidate that guarantee. |
+| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Check then memcpy and local mapping mutation assume the sole task. Stable mappings must cover copies and retained borrowers. |
+| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Parking one caller currently lends its table or inactive VM exclusively. A sibling invalidates that loan, even on one CPU. |
+| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | FS is saved per task, but starts at zero; no public FS setup or sibling entry exists. |
+| [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
 
-### Scheduling, spaces and VM
+## Native lifecycle
 
-Each thread should inherit its process's space and obey that space's ceiling and
-effective CPU set. Reuse least-load placement, user-mode migration and the rule
-that a blocked syscall resumes on its assigned CPU. Threads add runnable tasks,
-so they add round-robin shares; CPU sets are placement constraints, not CPU-time
-budgets or thread-count limits. This does not introduce per-process fairness,
-priorities or per-thread affinity. Creating a sibling must close affinity setup:
-`task_space_set_affinity()` currently assumes the space's sole init task is the
-caller while setup remains open.
+A native thread-management grant applies to the calling process, like MEMORY;
+transferring it confers no control over the sender's process. CREATE supplies an
+executable trampoline, argument, disjoint writable stack/context ranges and
+initial user FS base. Validate mappings under the VM protocol, reserve task and
+observer storage and reply capacity, then publish membership and runnable state
+atomically against process/group stopping. Failure publishes nothing and returns
+all provisional ownership. Siblings run the trampoline, never process startup or
+constructors again. Per-task FP state remains separate, with the creator's
+floating-point environment inherited, including exception flags.
 
-The PMM, heap and per-CPU scratch slots already support allocation on any CPU.
-General kernel VM mutation, task-stack allocation/reclamation, workers and the
-request executor still have BSP ownership. Shared userspace VM needs its own
-protocol; adding an allocator lock does not establish it.
+Thread EXIT records a machine-word result and retires only that task. Returning
+from its runtime trampoline runs ordinary thread destructors, then EXIT. Native
+completion is waitable and repeatable: it publishes the result with
+release/acquire ordering only after the task has left its root/stack and kernel
+continuations, registrations and storage have been reclaimed. The observer owns
+completion storage, not a surviving VM or borrowed task pointer. Closing it does
+not kill the thread. Libc adds a single join claim, self-join refusal and runtime
+stack/TLS release after completion; it need not detect arbitrary join cycles.
 
-Three VM approaches have different scope:
+Process EXIT, returning from main, foreground termination and fatal user faults
+stop every sibling. Propose one fault-safe atomic election/publication of the
+first process-wide terminal reason, without taking the lifetime lock in fault
+entry. Later events preserve it. Last ordinary thread exit supplies process
+status zero only if no process-wide result exists. Process completion follows
+all thread/process reclamation and admitted process activity. Deferred device
+cleanup may remain worker-owned afterward; it delays group completion through
+attributed cleanup tokens, not process completion.
+Group membership stays per process; SEAL prevents new processes but not internal
+threads of an existing member. Stopping closes CREATE admission before sampling
+siblings. No asynchronous cancellation, per-thread fault isolation or signals.
 
-| Option | Benefit | Cost and limitation |
-| --- | --- | --- |
-| One executing thread per process, even on an SMP machine | Avoids simultaneous user-root activity | Gives concurrency only through blocking; still needs protection against parked kernel continuations, BSP loans and retained buffers. It does not make today's table loans safe |
-| Process-wide quiescence for mapping mutation | Keeps BSP mutation of an inactive shared root and simple page-table ownership | Pauses siblings for mutation; needs dispatch/admission exclusion and safe draining of kernel borrowers |
-| Concurrent mapping mutation plus per-range leases/pins and targeted shootdown | Can preserve unrelated sibling execution | Larger initial protocol: active-CPU membership, activation races, partial mutation, pins, reclamation and permission changes |
+## Shared capability and VM ownership
 
-Accepted starting point: parallel user execution, with **process-wide quiescence
-for VM mutation**. Preserve the BSP as the mutation owner while bringing up the
-protocol; local shared-VM mutation can be reconsidered with evidence later.
-This revisits the existing local private-memory fast path deliberately.
+**Capability admission.** Under short table exclusion, resolve the exact handle
+generation into an immutable rights snapshot and an owned object-storage
+reference. Keep no entry pointer across growth or blocking. Plain storage
+references must not invent grants: final controller CLOSE still stops its group,
+and terminal/endpoint close effects still occur. CLOSE atomically detaches the
+slot, then applies logical close/grant release outside table exclusion using
+owned storage. Review table/object/group lock order; never wait or allocate under
+a table spinlock. Prepare growth storage outside exclusion, then recheck,
+copy and publish. Process teardown waits for admitted users.
 
-A mutation first closes dispatch and new VM-borrow admission for that process.
-Executing siblings reach safe scheduler boundaries; kernel copies and loans
-drain or finish with their mappings retained. Each participating CPU leaves the
-private root and acknowledges after its CR3 reload. Only then may the BSP mutate
-page tables and free backing, before reopening dispatch. A parked thread with
-an outstanding operation is not automatically quiescent: its service may still
-use the VM or it may later copy into a retained reply buffer. Capture/staging or
-an explicit mapping lease must cover that interval.
+Replace BSP table loans with owned inputs and synchronized installation.
+Grant-returning operations reserve their required slots before committing or
+sleeping, consuming or releasing that reservation exactly once. A free-slot
+count is not a reservation. Preserve atomic bulk installation/rollback and
+existing uncertain-outcome rules; do not turn a committed endpoint reply into
+an impossible CAP_FULL assertion or silently discard grants.
 
-Do not hold a spinlock while waiting for siblings or service completion. A caller
-requesting mutation must itself park and relinquish its root. Drain must allow
-admitted continuations to finish; a gate which blocks their completion can
-deadlock. Waiting on join, a mutex or an I/O condition must not hold a global
-process execution lock that prevents the sibling which can satisfy it running.
+**VM admission.** Track root activation and kernel mapping borrowers per process.
+Short checked copies hold a mapping lease; fixed inputs are captured once and
+remain untrusted. Blocking operations stage data where possible. An operation
+retaining user backing must declare its lease duration, output/commit behavior
+and stop cleanup; a second pointer check cannot prevent unmap during memcpy.
 
-For fully quiesced user roots, PCID/global pages being disabled and CR3 reloads
-provide translation invalidation; a new IPI shootdown is not inherently required
-for this first approach. The acknowledgments and dispatch gate are still required
-for every CPU, including the BSP. Any later mutation while siblings remain active
-must invalidate affected translations on all active CPUs and order activation
-against the mutation generation. Unmap must delay frame/page-table reuse until
-acknowledgment; protect must not report success while a CPU can use stale
-permissions. Failure to quiesce cannot be treated as success or authorize freeing
-backing. Retain ownership and keep unsafe execution excluded until recovery.
+For mutation, close new dispatch/root/borrow admission, park the mutating caller
+and drain admitted continuations. Every CPU, including BSP, acknowledges leaving
+the root after CR3 reload. Only then may BSP mutate or reclaim and reopen
+execution. PCID/global pages are currently disabled; root departure removes
+translations, but does not replace the admission protocol. The existing kernel
+TLB-flush IPI is not process quiescence. Never hold a lock while awaiting peers.
+Allow already admitted continuations to finish their final copies, or draining
+can deadlock against its own closed gate. Do not keep a mapping lease over an
+indefinite mutex, join or I/O wait. Failed quiescence never authorizes reuse.
 
-The existing `arch_kernel_flush_remote()` in
-[smp.c](../../arch/x86_64/smp.c) is narrower: BSP kernel task, IF=1, kernel root,
-all online CPUs, and already quiesced shared kernel ranges. It flushes CR3 but
-does not change page tables or stop refills. It is evidence of an interrupt/ACK
-mechanism, not an existing general userspace shootdown API. Synchronous IPI waits
-from IF=0 syscall paths would block delivery on peers also inside syscalls.
+Audit every syscall and deferred worker before exposing CREATE: keyboard/pointer
+readers, clipboard/HCI sessions, endpoint ownership, display/capture replies,
+audio, HOST/native files and network operations. Session observations are not
+reservations; capture/recheck generations. Unsupported competing operations
+must refuse before a side effect, not assert sole ownership. Device sessions
+stay process-owned and release at final process teardown, not each thread EXIT.
 
-### Syscalls, shared tables and retained observations
+## TLS and runtime synchronization
 
-Two separate races need fixing. A sibling can change input bytes while they are
-copied, even with stable mappings: capture fixed requests once and treat
-userspace data as untrusted. A sibling can also release backing between a buffer
-check and copy, or during `memcpy`; this can currently become a kernel fault.
-Replacing `KASSERT(copy_to_user(...))` with an error branch addresses neither
-plain-copy fault recovery nor rollback of already committed side effects.
+Propose static executable TLS: initialized template, zero tail and alignment,
+with an x86-64 local-exec layout and FS-addressed libc thread record. Establish
+the initial FS/errno record through allocation-free bootstrap before TLS-using C,
+malloc or constructors; siblings receive prepared FS before user entry. Kernel
+validates user addresses/lifetime; libc owns the TCB layout. Kernel GS remains
+CPU-local; user FSGSBASE stays disabled. errno becomes per thread.
 
-Proposed rule: short user access obtains a VM read lease; mutation waits for it.
-Blocking operations capture inputs and hold object references. Their output
-lifetime must be chosen explicitly: retain a mapping lease, or release it and
-revalidate output under a fresh lease, with defined lost-reply/committed-operation
-behavior. Retaining arbitrary buffers across unbounded waits can prevent RELEASE
-indefinitely. Prefer owned staging and short final-copy leases where the protocol
-permits; audit committing operations individually. A mapping lease protects
-backing, not contents from sibling writes.
+A focused compiler/LLD probe must settle template bounds, relocations and
+bootstrap order before implementation. Prefer template bytes/bounds in ordinary
+load segments if valid; do not assume a P1F change is necessary. Language TLS
+requires an owner-published LLVM fork/container. Dynamic TLS/modules are later.
+Runtime keys and bounded ordinary-exit destructor passes are separate from
+language TLS. Forced exit/fault promises no user destructor execution.
 
-The capability table remains process-wide. Lookup must atomically capture rights
-and a reference; CLOSE removes a slot but cannot destroy an object still used by
-an admitted call. Table growth and bulk installation need exclusion, with no
-borrowed entry pointer retained across reallocations. Allocate replacement storage
-outside the lock, then lock, recheck capacity/state, copy current entries and
-publish; discard/retry stale preparations. Alternatively use a sleepable exclusive
-table lease for the existing BSP loan. No spinlock may remain held across a
-resource wait. Handle
-reuse and rights snapshots must preserve the existing generational authority
-contract. A sibling closing one handle must not accidentally release another
-sibling's admitted operation.
+Native WAIT compares an aligned word and enrolls atomically under wait-bucket
+exclusion; mismatch never sleeps. Keys include process, address and mapping
+incarnation. Sleeping releases mapping leases; unmap, timeout, stop and wake
+remove registrations before notification/address reuse. Native deadlines are
+monotonic, with overflow checks. Wake does not transfer ownership; callers
+recheck predicates. No cross-process futex ABI, requeue or priority inheritance.
 
-Storage references and grant references are different: `object_grant_retain()`
-also accounts for console/terminal authority and execution-group controllers.
-Proposed default: an admitted call retains an immutable rights snapshot and object
-storage, without automatically retaining grant accounting. Protocol close may
-cancel or end logical ownership while retained storage permits safe unwinding;
-endpoint receipt/receiver close already changes logical ownership synchronously.
-Atomically detach the table slot, then perform close effects using retained
-storage. Grant retention must be deliberate where a protocol requires it;
-otherwise final CLOSE must still apply hangup/controller release without
-destroying an active continuation. Table borrowers include launch/group creation, HOST/native CREATE,
-TCP open/listen/accept and capture FILE installation, as well as growth.
-
-Wait records and request areas are already **per task**, not per process.
-`readiness_request.caller` in [wait.c](../../kernel/user/wait.c) is a borrowed
-process identity for ownership observations; its wait identifies the calling
-task. Preserve one outstanding request and one wait per thread, and keep process
-identity alive until registrations and workers detach. Workers must still make
-no request access after publishing completion/wake.
-
-### Device ownership audit
-
-Process ownership can stay unchanged without treating sibling operations as
-exclusive. Existing boundaries need the following corrections before use:
-
-| Code | Inspected single-thread dependency | Required invariant |
-| --- | --- | --- |
-| [keyboard](../../kernel/object/keyboard.c), [pointer](../../kernel/object/pointer.c) | A second blocked READ asserts that the reader slot is empty; RELEASE and resumed reads assume no competing sibling | One blocked reader with explicit BUSY admission is the small option; a waiter queue is larger. RELEASE must refuse safely or cancel/detach readers, and resumed reads must tolerate changed sessions |
-| [Bluetooth HCI](../../kernel/bluetooth/hci.c) | One `adapter.reader`; RECEIVE and process-exit cleanup assert sole-reader ownership | Protect reader admission and session lifetime; tear down only after readers detach |
-| [display](../../kernel/object/display.c) | Pixel snapshots retain frame backing, but deferred requests lend an inactive process VM; REPLACE excludes its own reply range only | Keep retained-frame lifetime, coordinate all sibling mappings/buffers, and serialize session mutation without a raw process/table loan |
-
-Readiness snapshots keyed by process still answer whether the **process** owns
-a session. They are observations, not reservations for a particular thread.
-Delayed operations must capture a session generation and recheck admission; a
-second sibling can release and reacquire the same process-owned session.
-
-Audio sessions were in open
-[#557](https://git.internal/PyxisOS/pyxis-os/pulls/557) during source inspection at
-`4281d372d54be8877fee6fee7886435df8555f75`; they are absent from this main baseline.
-Before handoff, #557 merged as `c2407b6019a91df0dc231f18bf47e25e3d5ecf4a`.
-The diff between those revisions for `kernel/object/audio.c`,
-`include/kernel/object/audio.h`, `include/abi/audio.h` and
-`kernel/user/readiness.c` is empty, so the following audio findings also describe
-the merged code. The rest of this investigation
-retains its original baseline and dependency pins.
-Its `kernel/object/audio.c` uses locked process-owner/free-capacity snapshots,
-request generations, copied PCM and process-exit invalidation. Preserve those
-contracts. `audio_request.audio` still relies on the caller's capability
-for storage lifetime; siblings require operation references and safe copies.
-Run `audio_process_exit()` at final process teardown, not each thread's exit.
-Nothing here qualifies that PR's playback behavior or changes its device policy.
-
-Startup metadata and named grants belong to the process and are prepared once.
-Each thread shares the table and namespace; it receives no automatic new device
-authority. Runtime caches and startup-resource handle ownership must be audited
-alongside the table. Copying startup for each thread would duplicate initialization
-and create competing owners for shared resources.
-
-## Proposed native lifecycle
-
-Names here describe operations, not assigned syscall numbers or a final wire ABI.
-
-- A native thread-management grant acts on the **calling process**, as MEMORY
-  does; transferring it must not authorize editing the sender's process. CREATE
-  supplies executable entry/trampoline, argument, disjoint writable stack and
-  initial FS base. Admission validates mappings under VM protection and reserves
-  kernel metadata before publication. Failed creation publishes no task or
-  observer, releases allocations/references, and preserves caller-owned memory.
-- Every task holds process lifetime until its kernel continuation, registrations
-  and loans have returned. The process owns shared VM, capability table, startup,
-  endpoints, device sessions and execution-group association. Publication must
-  serialize with process/group stopping; CREATE after stopping begins fails.
-  Ordinary group SEAL closes process-launch admission but still lets an existing
-  process create internal threads under process-level membership. A process
-  cannot gain a surviving sibling after its stop set is sampled.
-- Thread EXIT records a machine-word result and retires only that thread.
-  Returning from the trampoline runs runtime/TLS destructors before thread EXIT.
-  Existing process EXIT, including returning from `main`, stops the whole process.
-  Fatal user faults stop all siblings; isolation within a corrupted shared heap
-  is not offered. The last ordinary thread exit completes the process with status
-  zero if no process-wide reason was recorded. The first accepted process-wide
-  terminal reason/status is retained under lifetime synchronization.
-- A waitable thread observer retains result storage, not the address space or a
-  raw task pointer after retirement. Completion means the task has left its root
-  and stack and its kernel loans/registrations/storage have been reclaimed. Native
-  observation may have multiple waiters; libc implements the single successful
-  join claim, rejects self-join, and distinguishes join from detach. Result
-  publication has release/acquire ordering so join observes stores preceding
-  exit. Stop/error unwinds the waiter without losing the target's completion or
-  join ownership.
-- Closing the observer does not kill the thread. Detached execution still keeps
-  the process alive. Runtime-owned user stack/TLS cannot be freed by the exiting
-  thread on its own stack: join releases them after completion. Detach needs an
-  internal observer retained by libc and collection after completion (for example
-  at subsequent thread operations), or retirement-owned regions in a later
-  native design. Do not promise immediate detached-stack reclamation with merely
-  a CLOSE operation; final process destruction reclaims remaining backing.
-- Ctrl+C remains foreground application termination, not an asynchronous signal
-  injected into an arbitrary sibling. The inspected shell's `wait_or_interrupt()`
-  in [launch.c](../../userspace/shell/launch.c) calls PROCESS_TERMINATE for every
-  foreground pipeline stage. Process-control TERMINATE and
-  group stop mark all threads, wake interruptible waits, and prevent user return
-  only after each continuation unwinds safely. Published BSP/HOST loans remain
-  uninterruptible until completion. Process observation and group completion
-  differ: process observation completes after all process/thread execution
-  resources are reclaimed; group completion additionally waits for attributed
-  deferred object/device cleanup, including retained display pixels.
-
-Execution groups currently embed a member in each task and store the group
-reference in its process. Default direction: retain process-level application
-membership and fan stop out through the process thread set. Tracking each thread
-as an independent member is possible, but needs independent member references
-and creation/sealing admission; reusing the process's one reference for multiple
-task completions would undercount lifetime. No change to foreground shell
-authority or group completion meaning is proposed.
-
-Per-thread cancellation, signals, alternate signal stacks, fork, arbitrary
-suspension and scheduling policy are outside this contract. C++ uncaught exceptions
-retain process-wide termination; ordinary exception handling remains per thread.
-
-## Synchronization proposal
-
-| Native primitive | Tradeoff |
+| Libc primitive | Required behavior |
 | --- | --- |
-| Process-private wait on an aligned atomic word, plus wake | Cheap uncontended userspace locks; one small kernel park protocol can support mutexes, conditions, once and runtime guards. Requires atomic check/enqueue and VM/key lifetime coordination |
-| Waitable synchronization object handles | Explicit object lifetime and authority; avoids an address-key registry. More handles, allocation and calls for many runtime locks |
+| Mutex | Acquire/release fast path, real contended parking, explicit destruction/busy rules; no lock bootstrap allocation. |
+| Condition | Capture the wake sequence while holding the mutex, unlock, then compare-and-park without a lost wake; predicate loop and mutex reacquisition on wake or timeout. Match advertised pthread clock semantics, never reinterpret wall time as monotonic. |
+| Semaphore | Atomic bounded count, overflow refusal and real timed waiting. |
+| Once | One initializer, run callbacks outside internal registry locks, release/acquire publication to all waiters. |
 
-Accepted direction: process-private address wait/wake, not a general Linux futex
-ABI. Key it by process identity and virtual address plus mapping lifetime; a reused
-address must not inherit waiters. WAIT compares an aligned word against the
-expected value under the same wait-bucket synchronization as registration, with
-a VM lease protecting the read. Mismatch returns without sleeping. Wakes and
-deadlines detach registrations safely before notification; recheck the word on
-return. No lost wake is permitted between comparison and park. Spurious wakeups
-are permitted. A wake is notification, not ownership transfer or memory ordering:
-libc uses release/acquire atomics on the word. Process termination removes waits;
-unmap must invalidate/detach registrations before address reuse, without retaining
-a VM lease over indefinite sleep. Shared mappings, cross-process wakes, requeue,
-priority inheritance and robust owner-death mutexes are deferred.
+Pthreads and C11 threads are libc layers over lifecycle and parking, not new
+POSIX-shaped kernel calls. Initially advertise only implemented create/exit/join,
+self/equal, synchronization, keys/destructors and selected attributes. No successful
+no-op locks, cancellation, robust owner-death recovery or scheduling promises.
+Detached threads require a separate bounded collection contract before their
+API or a consumer requiring it is enabled.
 
-Build libc mutexes/conditions/once on this primitive. C11 `thrd_create/exit/join`
-and pthread creation/join map to native lifecycle; return values, detach state and
-thread-specific destructors live in libc. Recursive/error-checking mutex semantics
-can also live there. Do not advertise cancellation or other pthread features
-until implemented. SDL and libc++ must consume that libc/runtime interface rather
-than duplicating capability calls in each port.
+## Libc safety gate
 
-## TLS, libc and C++ runtime
-
-### Inspected configuration and compile evidence
-
-[Architecture user state](../../arch/x86_64/user.c) already saves/restores FS
-base per task, initializes it to zero, and disables user FSGSBASE instructions.
-Creation needs a canonical user FS base, and the **initial thread** also needs a
-way to establish it before TLS-using C code. FS remains thread state; kernel GS
-remains CPU state. Preserve per-thread x87/MXCSR state and specify new-thread
-floating-environment inheritance in the lifecycle ABI.
-
-[Userland linker script](../../userspace/linker.ld) has no explicit TLS template
-or bounds. [P1F](../../include/pxe/p1f.h) represents entry/load segments, with no
-TLS descriptor; the [toolchain](../../toolchain/README.md) rejects language TLS.
-The installed builder produced this compile diagnostic on 2026-10-09:
-
-```sh
-podman run --rm --network=none --entrypoint /bin/sh \
-  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a \
-  -c 'printf "_Thread_local int thread_value;\n" | /opt/cross/bin/x86_64-unknown-pyxis-clang -x c -std=gnu23 -S -o /dev/null -; cat /opt/cross/share/pyxis-toolchain/llvm-revision'
-```
-
-Clang reports `thread-local storage is not supported for the current target`.
-The revision file records fork `49e2c1a1518b3e4687b52ceb6001069c1b6d261e`.
-The compiler exit status and image digest were not captured. This
-measures compiler rejection only, not TLS generation, linking or runtime support.
-
-Proposed first TLS scope: static, executable-owned TLS with one initialized
-template, zero-filled tail and alignment; libc allocates/copies it per thread,
-including a thread-control block and errno. Choose the x86_64 thread-pointer
-layout and supported relocation/model in a focused compiler probe before editing
-the target. Linker symbols and template bytes in ordinary load segments might
-preserve P1F; a format extension is an alternative, not established necessity.
-Dynamic loading, TLS module registration and DTV machinery are outside the first
-scope. Destructors run before ordinary thread exit; process faults/forced stop
-cannot promise user cleanup. A tiny explicit FS-based runtime record could
-support the initial lifecycle slice, but is not language `thread_local` support.
-
-### Shared libc state
-
-| Pinned source | Work before enabling general threaded consumers |
+| Shared state | Work required before ordinary threaded consumers |
 | --- | --- |
-| [errno](../../userspace/libc/errno.c), [header](../../userspace/libc/include/errno.h) | Replace process-global errno with per-thread storage available before allocation and runtime entry |
-| [malloc](../../userspace/libc/malloc.c) | Serialize TLSF metadata and pool growth; support cross-thread free/realloc. Define allocator/VM/diagnostic lock ordering and do not use allocation to bootstrap its own lock |
-| [descriptors](../../userspace/libc/descriptor.c) | Protect table growth and entry lifetime separately from cursor/read-ahead state. Entry pointers survive blocking backend calls today; a short table lock alone is insufficient |
-| [stdio](../../userspace/libc/stdio.c), [stream state](../../userspace/libc/stream.h) | Per-stream operation serialization plus stream-list/open/close lifetime. Coordinate FILE locks with descriptor locks; avoid destruction while another operation uses a FILE |
-| [exit](../../userspace/libc/exit.c), [libc entry](../../userspace/libc/startup.c) | One process initialization/shutdown owner. Protect handler registry, execute callbacks outside internal locks, and quiesce siblings before global finalizers/stdio teardown |
-| [rand](../../userspace/libc/rand.c), [time](../../userspace/libc/time.c), [timezone](../../userspace/libc/timezone.c) | Audit mutable globals individually. `localtime_r` still uses shared timezone cache/designation lifetime; its name alone does not establish safety |
-| [startup lookup](../../userspace/lib/startup.c) | Immutable startup values can remain shared after one-time publication; borrowed handles still require coordinated close/use ownership |
+| malloc/TLSF pools | Allocation-free lock bootstrap, metadata/pool growth exclusion and cross-thread free/realloc; no allocator lock held while quiescence needs its owner to run. |
+| Descriptors | Stable admitted-operation references separate from table storage; close/unwind lifetime plus cursor/read-ahead serialization. No table lock across I/O; preserve uncertain-close behavior. |
+| FILE and DIR | Per-stream serialization and open/list/close lifetime; define FILE-to-descriptor ordering. For DIR, document same-object caller serialization unless operation locking is supplied. |
+| Exit handlers/startup | Initialize once; synchronize registrations and run callbacks outside locks. Require workers joined before orderly process finalizers; force-stopping a mutex owner can deadlock callbacks. Kernel forced teardown cannot depend on them. |
+| Time/timezone/rand | Protect generator/cache publication and borrowed timezone strings; document static time-result lifetimes and provide safe reentrant paths. |
+| C++ runtime | Replace disabled-thread exception state, guards/once, fallback allocator and unwinder assumptions before enabling libc++ threads. |
 
-Serializing every syscall would not protect libc state changed in userspace, and
-locking malloc alone would not make stdio/descriptor entry lifetime safe.
-Orderly libc `exit()` also cannot just stop siblings and run callbacks: a stopped
-sibling may own a runtime/user mutex those callbacks need. Define a cooperative
-runtime shutdown/drain before finalizers, or require orderly callers to join
-their workers first and document the remaining concurrent-exit limit. Kernel
-process EXIT/fault/termination must reclaim safely without depending on user
-destructors; they cannot guarantee callback execution or mutex recovery.
+Immutable startup getenv values and the permanent C-only locale need no invented
+mutable state or new locks. Synchronizing syscalls alone does not protect libc
+userspace state, and synchronizing malloc alone does not protect FILE lifetime.
 
-### C++ and SDL integration limits
+## Placement and stack limits
 
-[cxx-runtime.sh](../../scripts/cxx-runtime.sh) sets libunwind, libc++abi and
-libc++ threading OFF and forces pthread probes off. Merely enabling `<thread>`
-is insufficient: concurrent C++ exception state, exception fallback allocation,
-local-static guards/once and unwinder registration require working synchronization
-and TLS too. Thread-specific keys and exit destructors are needed by runtime
-adapters where language TLS is not used.
+Siblings inherit the process space's effective CPU set and use existing least-load
+placement/user migration. Kernel continuations keep their assigned CPU. First
+sibling creation closes space affinity setup, which currently assumes a sole
+init task. No per-thread affinity, priorities or CPU-time fairness change: more
+runnable threads currently gain more round-robin shares.
 
-Available LLVM runtime implementation source was inspected at older fork
-`41ab6043`, **not the pinned compiler/runtime revision**. In that checkout,
-`libcxxabi/src/cxa_exception_storage.cpp` uses one static exception state when
-threads are disabled; `cxa_guard_impl.h` chooses `NoThreadsGuard`;
-`fallback_malloc.cpp` and `libunwind/src/RWMutex.hpp` disable their locks.
-libc++'s external thread adapter supports mutexes, conditions, once, thread IDs,
-create/join/detach/sleep and TLS keys. These are useful audit targets and an
-adapter option, not proof of identical implementation at `49e2c1a`; recheck that
-pin before changing configuration. Pinned runtime sources were not available
-locally during this investigation.
+Propose libc's default as **1 MiB eager RW/NX backing plus one reserved unmapped
+lower guard**, independently allocated per sibling; no fixed arena or demand
+fault growth. #617's 8 MiB eager initial-stack experiment increased memory and
+launch costs, so that is not the default. Initially accept explicit libc sizes
+using the existing page-aligned 1–8 MiB policy. Native caller-owned regions remain
+available for other runtimes and are not restricted to libc's convenience range.
 
-The exact [SDL config](../../ports/sdl2/SDL_config.h) disables threads; its
-[recipe](../../ports/sdl2/Makefile) selects generic thread backends. Existing
-[SDL docs](../development/sdl2.md) describe failed thread creation/timer callbacks
-and successful no-op synchronization. Upstream generic function bodies were not
-present locally and were not independently inspected. Threaded use needs real
-native/libc thread and synchronization backends; retain generic helpers only
-where their implementation is suitable. The inspected native
-[timer backend](../../ports/sdl2/pyxis/SDL_systimer.c) also has unsynchronized
-clock/start/ticks initialization. DevilutionX's
-[patches](../../ports/devilutionx/patches/) select thread stubs and replace one
-`thread_local` error variable with a global; reverse those assumptions only in a
-separate consumer task. Audio, multiplayer and unrelated port features remain
-outside thread runtime delivery.
+MEMORY currently cannot reserve an unmapped guard; guarded-region admission
+must be supplied deliberately before these stacks are advertised. CREATE pins
+registered stack/TLS context backing until native completion; overlapping RELEASE
+returns BUSY. These lifetime reservations are distinct from short VM access
+leases: unrelated mutation drains root/copy activity, not the thread's lifetime.
+Join then releases libc-owned regions. Never free an exiting thread's own stack
+from its trampoline. An unjoined record counts against capacity; final process
+teardown reclaims remaining backing. Guards do not prevent a large stack jump
+from skipping their page.
 
-Kernel/public ABI/SDK export work belongs in Pyxis; libc/startup/libpyxis work in
-userland; SDL/consumer adapters in ports. Publish and review dependency PRs before
-updating parent gitlinks. Runtime header/configuration changes need SDK rebuilds.
-Enabling language TLS requires the LLVM target change, and possibly LLD changes;
-that means a new fork pin and an owner-built/published compiler container. An
-adapter added to the LLVM fork similarly changes the matched runtime/compiler
-pin. Ordinary SDK or libc changes alone do not require rebuilding LLVM. No new
-external source or mirror entry is introduced by this docs PR.
+Proposed initial resource policy: **64 live/retiring native threads and 64
+unreclaimed libc context records per process**, both including the initial
+thread. Reserve before publication and release each count only at its respective
+completion/reclamation boundary. Exhaustion returns a real limit/allocation
+error. These tunable bounds allow roughly 64 MiB of default user stacks and
+1 MiB of 16 KiB kernel stacks, plus TLS/metadata; they guarantee no physical
+capacity. Large native contexts remain subject to VM/allocation admission.
 
-## First task and later gates
+## Small next task and delivery gates
 
-The [program image and initial stack layout](../kernel/program-loading.md)
-places the fixed eager 1 MiB initial stack high in the lower half, with a reserved
-unmapped guard. Later thread stacks must remain disjoint; their placement and
-guards still belong to this milestone. Capacity work adds no public threads.
+Each gate needs its own owner assignment, baseline where costs change, ordinary
+build and interactive QEMU/debugger qualification. No new test infrastructure.
+The following split refines the former broad task 2; it authorizes no code.
 
-The smallest useful first task is **split process ownership from task retirement**,
-while retaining exactly one submitted user task per process, including blocked
-tasks. CREATE/EXIT/JOIN is
-the first public thread slice only after the safety gates below; combining all
-of them into a supposedly small create syscall would hide the actual work.
+1. [x] **Process lifetime (#612).** Independent process/group ownership and task retirement, still one user task.
 
-- [x] Task 1: move submitted-process ownership, thread membership, process-control
-  stop targeting and terminal result into an explicit process lifetime. Keep
-  current single-task execution and process-exit behavior. Reap task storage
-  separately, and destroy the process once only after its final task and admitted
-  shared activity drain. Update group membership/cleanup attribution together.
-  Add no thread syscall, device behavior, TLS or dependency pin in this task.
-  Implemented 2026-10-09; see [process lifetime and retirement](../kernel/smp.md#scheduling-and-ownership)
-  and the [baseline/qualification record](../development/experiments/threads-task1/README.md).
-- [ ] Task 2: establish process VM activity/quiescence, user-copy leases and
-  synchronized capability/object lifetimes; replace exclusive BSP loans. Audit
-  every blocking/committing syscall and retained reply/input. Unchanged devices
-  must either be safe for siblings or explicitly refuse unsupported concurrent
-  operations before any loan or side effect. One CPU is not an exemption.
-- [ ] Task 3: native same-process CREATE, thread EXIT and waitable completion/join,
-  with caller-provided stack/argument and per-task FS base. Keep process-wide
-  exit/fault/group stop. Start with joinable threads; do not advertise detach or
-  consumer runtime support. No new device semantics. Exercise genuine parallel
-  shared-root execution within existing space CPU limits after task 2.
-- [ ] Task 4: address wait/wake, static TLS/compiler support and thread-safe libc;
-  then C11/pthread subset and C++ runtime integration. Detached collection and
-  thread-specific destructors must have explicit lifetime bounds before enabling
-  their APIs. Enable SDL worker/timer callbacks as a bounded consumer afterward;
-  audio callbacks remain an independent device consumer task.
+   Owner can inspect process completion after task/process reclamation and group completion after deferred cleanup using existing programs.
+2. [ ] **Small first task: admitted call references and CLOSE.** Atomic handle resolution into owned storage/rights, detached-generation close and audited logical close effects; keep one user task and no public API change.
 
-The owner assigned task 1 to Codex epsilon on 2026-10-09, after #567 merged.
-Its exact-main baseline, matched single/four-CPU workloads and interactive
-retirement/failure inspection are recorded in the qualification above. No
-thread syscall, TLS, device behavior or dependency pin changed. Task 1 stops
-for owner review; later tasks need separate assignment and their own focused PRs.
-For later work, compare uncontended locks,
-creation/join, VM mutation pauses and parallel work with repeated samples and
-variation. Use existing programs/probes and interactive QEMU/debugger inspection,
-not new test or boot automation. Inspect normal/fault/group retirement and
-unpublished failure paths; later observe two distinct task stacks/FS bases sharing
-CR3, safe retirement while another sibling runs, and buffer/table loans during
-stop. Those later validation checks remain proposed; task 1 does not validate
-multiple threads, shared-root execution or runtime TLS.
+   Owner can inspect call/close lifetime and run ordinary applications without borrowed-slot storage surviving a call.
+3. [ ] **Shared-table delivery.** Growth/atomic installations, reply slot reservations, readiness/COPY and BSP table-loan replacement; still one user task.
 
-## Owner decisions
+   Owner can inspect preserved authority, delivery-capacity admission and failure unwind before siblings are enabled.
+4. [ ] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task.
 
-The owner accepted all three defaults on 2026-10-09. Alternatives below remain
-unselected; acceptance establishes direction, not implemented behavior.
+   Owner can inspect safe copy/mutation/retirement admission and matched ordinary-workload costs.
+5. [ ] **Native CREATE/EXIT/completion.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only.
 
-1. **Execution and VM scope:** accepted parallel siblings with process-wide
-   quiescence and BSP-owned mapping mutation initially. Serial process execution
-   is smaller for CPU activity but still requires the table/copy/loan audit;
-   concurrent mutation with targeted shootdown is a larger alternative.
-2. **Lifetime and interruption:** accepted thread-local ordinary exit, process-wide
-   explicit exit/fatal fault, and existing foreground Ctrl+C termination; process
-   completion after final reclamation. Per-thread fault isolation or arbitrary
-   asynchronous cancellation would require a different recovery contract.
-3. **Runtime parking:** accepted a process-private address wait/wake with deadlines,
-   mapping-lifetime keys and ordinary stop unwinding. Handle-based synchronization
-   is the alternative when explicit kernel object lifetime outweighs uncontended
-   lock cost; full pthread/Linux futex semantics are outside this proposal.
+   Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
+6. [ ] **Address WAIT/WAKE.** Mapping-incarnation keys, deadlines and wake/stop/unmap races.
+
+   Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
+7. [ ] **Static TLS and errno.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.
+
+   Owner can inspect distinct language TLS/errno and ordinary thread destructors on native siblings.
+8. [ ] **Thread-safe libc and C11/pthread profile.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
+
+   Owner can use the documented thread profile and shared allocation/I/O, without unsupported detach/cancellation promises.
+9. [ ] **Separate consumer tasks.** SDL workers/timers then audio callbacks; libuv pool, Hax and Go each retain their own adapter/qualification scope.
+
+   Owner can enable each qualified consumer independently; threads alone do not complete these ports.
+
+[SDL audio](../development/sdl2.md) gains callbacks, not real-time guarantees. [libuv/Neovim](neovim-libuv.md)
+needs workers and synchronization; Neovim's first slice continues to avoid them.
+[Hax](claude-on-pyxis.md#track-2-hax-inventory-after-the-lua-harness) additionally
+needs timed conditions, drainers and a qualified concurrent TLS transport.
+[Go](go-runtime.md) needs native thread/TLS/parking plus its own stack/GC/VM
+adaptation; GOMAXPROCS=1 does not eliminate OS threads, and cgo-disabled Go need
+not go through pthreads. No consumer is delivered by this proposal.
+
+Qualify later changes with matched/interleaved existing launch/IPI workloads and
+one-/four-CPU QEMU inspection. At native sibling delivery inspect shared CR3,
+distinct stack/FS, final reclamation, concurrent close/reply/unmap,
+process fault/stop and allocation failure. Qualify distinct language TLS/errno
+after task 7. Measure creation/join, uncontended/contended primitives, VM pause
+and consumer workloads, distinguishing
+nested-VM evidence from owner-native results. Kernel/ABI/SDK changes belong in
+Pyxis, libc/libpyxis/startup in userland, adapters in ports; publish dependency
+PRs before gitlinks. This docs PR changes no pin or compiler container.
+
+## Owner decisions requested
+
+The earlier accepted execution, lifetime and parking directions remain unchanged.
+
+1. **Stack/admission policy — default:** eager guarded 1 MiB libc stacks, explicit
+   1–8 MiB sizes, and both 64-entry bounds above. Lazy growth needs a separate
+   demand-fault/backing contract; native caller-owned stack sizes remain independent.
+2. **TLS boundary — default:** static executable local-exec TLS plus runtime keys;
+   settle template/FS bootstrap with a focused compiler probe before changing the
+   fork, prefer ordinary load segments when possible. Dynamic/module TLS is later.
+3. **First runtime profile — default:** joinable threads and the implemented
+   C11/pthread subset, with workers joined before orderly process finalizers.
+   Detach/automatic collection and asynchronous cancellation stay unadvertised
+   until their lifetime/recovery contracts are separately accepted and qualified.
