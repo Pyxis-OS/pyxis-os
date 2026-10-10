@@ -1,6 +1,6 @@
 #include <arch/descriptors.h>
 
-.section .text
+.section .text.debug,"ax",@progbits
 .global arch_debug_nmi_entry
 .type arch_debug_nmi_entry, @function
 arch_debug_nmi_entry:
@@ -28,6 +28,8 @@ arch_debug_nmi_entry:
   mov %rsp, %rbx
   and $-16, %rsp
   call arch_debug_nmi_handler
+  mov %rax, %rdi
+  call arch_debug_nmi_exit
   mov %rbx, %rsp
   pop %r15
   pop %r14

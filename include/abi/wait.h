@@ -15,7 +15,7 @@
 #define WAIT_PEER_FIN (UINT64_C(1) << 3)
 #define WAIT_WRITE_CLOSED (UINT64_C(1) << 4)
 #define WAIT_CLOSED (UINT64_C(1) << 5)
-#define WAIT_ERROR (UINT64_C(1) << 6) /* Output only; automatic for every interest. */
+#define WAIT_ERROR (UINT64_C(1) << 6) /* Output only; relevant terminal failures. */
 #define WAIT_COMPLETE (UINT64_C(1) << 7)
 #define WAIT_INTERRUPT (UINT64_C(1) << 8)
 #define WAIT_RESIZED (UINT64_C(1) << 9)
@@ -48,6 +48,12 @@ struct wait_interest {
  * their closure flag. Final-writer closure preserves buffered readable bytes;
  * drain them before interpreting a zero-length read as EOF. Final-reader closure
  * reports WRITE_CLOSED, never WRITABLE. Ordinary pipe closure does not report ERROR.
+ * Owned endpoint receivers accept READABLE/CLOSED with RECEIVE transport;
+ * CONTROL is not needed. READABLE means a queued message, cancellation or
+ * retirement notice. READABLE automatically reports CLOSED on receiver shutdown,
+ * suppressing READABLE without ERROR. Export withdrawal and last-client closure
+ * do not close the receiver. Readiness neither consumes nor reserves delivery;
+ * a queued CALL may expire before the unchanged blocking RECEIVE operation.
  * Unknown types/interests or zero masks are BAD_REQUEST; stale handles are
  * BAD_HANDLE and insufficient rights are DENIED. Validate the entire list
  * before registration. Repeated handles/copies are separate observations.

@@ -4,14 +4,30 @@
 #include <kernel/memory.h>
 #include <kernel/mm/types.h>
 
-struct debug_inspect_mailbox arch_debug_inspect;
-struct debug_probe arch_debug_probe;
+struct debug_probe arch_debug_probe ARCH_DEBUG_DATA;
 
 bool arch_debug_fixup(const struct exception_frame *frame)
 {
   _Static_assert(offsetof(struct debug_probe, rsp) == 0,
                  "guarded-load assembly writes the saved RSP at offset zero");
-  if (frame->rip != (uintptr_t)arch_debug_load8_unsafe ||
+  uintptr_t instruction;
+  switch (arch_debug_probe.width) {
+  case 8:
+    instruction = (uintptr_t)arch_debug_load8_unsafe;
+    break;
+  case 16:
+    instruction = (uintptr_t)arch_debug_load16_unsafe;
+    break;
+  case 32:
+    instruction = (uintptr_t)arch_debug_load32_unsafe;
+    break;
+  case 64:
+    instruction = (uintptr_t)arch_debug_load64_unsafe;
+    break;
+  default:
+    return false;
+  }
+  if (frame->rip != instruction ||
       !arch_debug_probe.active ||
       atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) !=
         DEBUG_STOP_COMPLETE ||
@@ -32,52 +48,28 @@ bool arch_debug_fixup(const struct exception_frame *frame)
     return false;
   }
   if (frame->vector == EXCEPTION_PAGE_FAULT) {
-    return read_cr2() == arch_debug_probe.address;
+    uint64_t address = read_cr2();
+    return address >= arch_debug_probe.address &&
+      address - arch_debug_probe.address < arch_debug_probe.width / 8;
   }
   return frame->vector == EXCEPTION_GENERAL_PROTECTION && !frame->error;
 }
 
-void arch_debug_inspect_service(void)
+enum debug_inspect_status arch_debug_read_registers(size_t cpu, struct debug_registers *out)
 {
-  uint64_t request = atomic_load_explicit(&arch_debug_inspect.request,
-                                         memory_order_acquire);
-  if (!request || request == atomic_load_explicit(&arch_debug_inspect.completion,
-                                                 memory_order_relaxed)) {
-    return;
+  if (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != DEBUG_STOP_COMPLETE ||
+      cpu_initial_apic_id() != arch_debug_stop.cpus[0].lapic_id ||
+      cpu >= arch_debug_stop.cpu_count ||
+      atomic_load_explicit(&arch_debug_stop.cpus[cpu].ack_generation, memory_order_acquire) !=
+        arch_debug_stop.generation) {
+    return DEBUG_INSPECT_BAD_REQUEST;
   }
-  arch_debug_inspect.bytes = 0;
-  memset(&arch_debug_inspect.registers, 0, sizeof(arch_debug_inspect.registers));
-  memset(arch_debug_inspect.data, 0, sizeof(arch_debug_inspect.data));
-  arch_debug_inspect.status = DEBUG_INSPECT_BAD_REQUEST;
-  size_t cpu = arch_debug_inspect.cpu;
-  if (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) ==
-        DEBUG_STOP_COMPLETE &&
-      arch_debug_inspect.generation == arch_debug_stop.generation &&
-      cpu < arch_debug_stop.cpu_count &&
-      atomic_load_explicit(&arch_debug_stop.cpus[cpu].ack_generation,
-                           memory_order_acquire) == arch_debug_stop.generation) {
-    const struct debug_cpu_snapshot *snapshot = &arch_debug_stop.cpus[cpu];
-    if (arch_debug_inspect.operation == DEBUG_INSPECT_REGISTERS) {
-      arch_debug_inspect.registers = (struct debug_registers){
-        .frame = snapshot->frame,
-        .cr3 = snapshot->cr3,
-        .gs_base = snapshot->gs_base,
-        .kernel_gs_base = snapshot->kernel_gs_base,
-      };
-      arch_debug_inspect.status = DEBUG_INSPECT_OK;
-    } else if (arch_debug_inspect.operation == DEBUG_INSPECT_RAM &&
-               arch_debug_inspect.length &&
-               arch_debug_inspect.length <= DEBUG_READ_BYTES) {
-      arch_debug_inspect.status = arch_debug_read_ram(snapshot->cr3,
-          arch_debug_inspect.address, arch_debug_inspect.data,
-          arch_debug_inspect.length);
-      if (arch_debug_inspect.status == DEBUG_INSPECT_OK) {
-        arch_debug_inspect.bytes = arch_debug_inspect.length;
-      } else {
-        memset(arch_debug_inspect.data, 0, sizeof(arch_debug_inspect.data));
-      }
-    }
-  }
-  atomic_store_explicit(&arch_debug_inspect.completion, request,
-                        memory_order_release);
+  const struct debug_cpu_snapshot *snapshot = &arch_debug_stop.cpus[cpu];
+  *out = (struct debug_registers){
+    .frame = snapshot->frame, .cr3 = snapshot->cr3,
+    .gs_base = snapshot->gs_base, .kernel_gs_base = snapshot->kernel_gs_base,
+    .fs_base = snapshot->fs_base, .ds = snapshot->ds, .es = snapshot->es,
+    .fs = snapshot->fs, .gs = snapshot->gs,
+  };
+  return DEBUG_INSPECT_OK;
 }

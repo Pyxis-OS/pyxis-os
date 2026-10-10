@@ -66,6 +66,31 @@ static struct gpt_guid parse_disk_guid(const char *text)
   return disk;
 }
 
+static void parse_debug_image(const char *text, uint8_t image[32])
+{
+  if (strlen(text) != 64) {
+    panic("debug.image must be a 64-digit SHA-256 hex token");
+  }
+  for (unsigned i = 0; i < 32; ++i) {
+    unsigned byte = 0;
+    for (unsigned half = 0; half < 2; ++half) {
+      char digit = text[i * 2 + half];
+      unsigned value;
+      if (digit >= '0' && digit <= '9') {
+        value = digit - '0';
+      } else if (digit >= 'a' && digit <= 'f') {
+        value = digit - 'a' + 10;
+      } else if (digit >= 'A' && digit <= 'F') {
+        value = digit - 'A' + 10;
+      } else {
+        panic("debug.image contains an invalid hex digit");
+      }
+      byte = byte * 16 + value;
+    }
+    image[i] = byte;
+  }
+}
+
 /* Each option may occur once. FLAG options accept only the value 1. */
 static void take_option(const char **option, const char *key, const char *value)
 {
@@ -102,7 +127,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
   const char *remote_beacon = NULL, *log_udp = NULL, *display_size = NULL;
   const char *display_timing = NULL, *display_timing_metrics = NULL, *display_inventory = NULL;
-  const char *debug_checkpoint = NULL;
+  const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
   const char *display_flip = NULL, *display_flip_metrics = NULL;
 
   char *cursor = command_line_storage;
@@ -140,8 +165,12 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&remote_beacon, key, value);
     } else if (same_text(key, "log.udp")) {
       take_option(&log_udp, key, value);
-    } else if (same_text(key, "debug.checkpoint")) {
-      take_option(&debug_checkpoint, key, value);
+    } else if (same_text(key, "debug.net")) {
+      take_option(&debug_net, key, value);
+    } else if (same_text(key, "debug.wait")) {
+      take_option(&debug_wait, key, value);
+    } else if (same_text(key, "debug.image")) {
+      take_option(&debug_image, key, value);
     } else if (same_text(key, "display.size")) {
       take_option(&display_size, key, value);
     } else if (same_text(key, "display.timing")) {
@@ -162,8 +191,21 @@ const struct boot_options *boot_options_parse(const char *command_line)
     panic("kernel command line must name init");
   }
   options.log_udp = log_udp && flag_option("log.udp", log_udp);
-  options.debug_checkpoint = debug_checkpoint &&
-    flag_option("debug.checkpoint", debug_checkpoint);
+  if ((debug_wait || debug_image) && !debug_net) {
+    panic("debug.wait and debug.image require debug.net");
+  }
+  if (debug_net) {
+    if (!remote_beacon_name_length(debug_net)) {
+      panic("debug.net must name 1..%u printable ASCII bytes without spaces",
+          REMOTE_BEACON_NAME_MAX);
+    }
+    if (!debug_image) {
+      panic("debug.net requires the exact staged ELF debug.image token");
+    }
+    parse_debug_image(debug_image, options.debug_image);
+  }
+  options.debug_net = debug_net;
+  options.debug_wait = debug_wait && flag_option("debug.wait", debug_wait);
   if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
     panic("remote.beacon must name 1..%u printable ASCII bytes without spaces",
         REMOTE_BEACON_NAME_MAX);

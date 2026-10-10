@@ -204,7 +204,8 @@ claim that unmodified Neovim already starts on this backend.
 **Endpoint receivers need no new readiness in this slice.** Child/editor RPC
 uses byte pipes. Synchronous FILE client calls may invoke a provider and block
 (as their API permits); callback-style fs is rejected. Serving provider requests
-inside a libuv loop would require receiver readiness and remains a separate task.
+inside a libuv loop would need a receiver adapter, which remains outside this
+slice. Native endpoint receiver readiness is now available from #663.
 
 The pinned [ports adapter](../../ports/libuv/README.md) documents the implemented
 API subset, transfer ownership and errors. Every opened stream/observed process,

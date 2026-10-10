@@ -1,4 +1,5 @@
 #include <arch/amd/renoir_otg.h>
+#include <arch/amd/renoir_debug.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -11,9 +12,6 @@
 #define RENOIR_VENDOR_ID 0x1002
 #define RENOIR_DEVICE_ID 0x1636
 #define RENOIR_DISPLAY_CLASS 0x03
-#define RENOIR_REGISTER_BAR 5
-#define RENOIR_WINDOW_OFFSET 0x13000u
-#define RENOIR_WINDOW_BYTES (2 * PAGE_SIZE)
 #define RENOIR_OTG_COUNT 4
 #define RENOIR_OTG_STRIDE 0x200u
 
@@ -153,22 +151,22 @@ static bool device_usable(void)
 static bool read_bar(phys_addr_t *physical)
 {
   struct pci_address address = observer.device->address;
-  for (unsigned bar = 0; bar < RENOIR_REGISTER_BAR; ++bar) {
+  for (unsigned bar = 0; bar < RENOIR_DEBUG_REGISTER_BAR; ++bar) {
     uint32_t low = pci_read32(address, PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES);
     if (!(low & PCI_BAR_IO) && (low & PCI_BAR_MEMORY_TYPE_MASK) == PCI_BAR_MEMORY_64) {
-      if (bar + 1 == RENOIR_REGISTER_BAR) {
+      if (bar + 1 == RENOIR_DEBUG_REGISTER_BAR) {
         return refuse("BAR5 is an upper BAR half");
       }
       ++bar;
     }
   }
-  uint32_t bar = pci_read32(address, PCI_BAR_FIRST + RENOIR_REGISTER_BAR * PCI_REGISTER_BYTES);
+  uint32_t bar = pci_read32(address, PCI_BAR_FIRST + RENOIR_DEBUG_REGISTER_BAR * PCI_REGISTER_BYTES);
   if (bar & (PCI_BAR_IO | PCI_BAR_MEMORY_TYPE_MASK | PCI_BAR_PREFETCHABLE)) {
     return refuse("BAR5 is not the expected non-prefetchable 32-bit memory BAR");
   }
   *physical = bar & PCI_BAR_MEMORY_ADDRESS_MASK;
   if (!*physical || (*physical & (PAGE_SIZE - 1)) ||
-      *physical > UINT64_C(0x100000000) - RENOIR_WINDOW_OFFSET - RENOIR_WINDOW_BYTES) {
+      *physical > UINT64_C(0x100000000) - RENOIR_DEBUG_WINDOW_OFFSET - RENOIR_DEBUG_WINDOW_BYTES) {
     return refuse("BAR5 assignment or register extent is invalid");
   }
   return true;
@@ -176,12 +174,12 @@ static bool read_bar(phys_addr_t *physical)
 
 static bool window_available(const struct boot_info *boot, phys_addr_t first)
 {
-  if (!arch_pci_mmio_available(first, RENOIR_WINDOW_BYTES)) {
+  if (!arch_pci_mmio_available(first, RENOIR_DEBUG_WINDOW_BYTES)) {
     return refuse("register window overlaps platform MMIO or a WC display aperture");
   }
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
-    if (overlap(first, RENOIR_WINDOW_BYTES, region->base, region->length) &&
+    if (overlap(first, RENOIR_DEBUG_WINDOW_BYTES, region->base, region->length) &&
         region->type != BOOT_RESERVED) {
       return refuse("register window overlaps RAM or retained boot storage");
     }
@@ -192,7 +190,7 @@ static bool window_available(const struct boot_info *boot, phys_addr_t first)
     return refuse("GOP framebuffer extent overflows");
   }
   size_t fb_extent = (page_offset + fb->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  if (overlap(first, RENOIR_WINDOW_BYTES, fb->physical - page_offset, fb_extent)) {
+  if (overlap(first, RENOIR_DEBUG_WINDOW_BYTES, fb->physical - page_offset, fb_extent)) {
     return refuse("register window overlaps the WC GOP framebuffer");
   }
   for (const struct pci_device *device = pci_device_at(0); device; device = device->next) {
@@ -204,7 +202,7 @@ static bool window_available(const struct boot_info *boot, phys_addr_t first)
       for (size_t offset = 0; offset < mapping->bytes; offset += PAGE_SIZE) {
         struct page_translation page;
         if (vm_query(vm_kernel_space(), mapping->base + offset, &page) != MM_OK ||
-            overlap(first, RENOIR_WINDOW_BYTES, page.physical, PAGE_SIZE)) {
+            overlap(first, RENOIR_DEBUG_WINDOW_BYTES, page.physical, PAGE_SIZE)) {
           return refuse("register window overlaps or cannot exclude another PCI mapping");
         }
       }
@@ -220,17 +218,17 @@ static void unmap_window(uintptr_t base, size_t mapped)
     phys_addr_t physical;
     KASSERT(vm_unmap(vm_kernel_space(), base + mapped, &physical) == MM_OK);
   }
-  KASSERT(vm_release(vm_kernel_space(), base, RENOIR_WINDOW_BYTES) == MM_OK);
+  KASSERT(vm_release(vm_kernel_space(), base, RENOIR_DEBUG_WINDOW_BYTES) == MM_OK);
 }
 
 static bool map_window(phys_addr_t physical)
 {
   uintptr_t base;
-  if (vm_reserve(vm_kernel_space(), RENOIR_WINDOW_BYTES, PAGE_SIZE, &base) != MM_OK) {
+  if (vm_reserve(vm_kernel_space(), RENOIR_DEBUG_WINDOW_BYTES, PAGE_SIZE, &base) != MM_OK) {
     return refuse("cannot reserve register window");
   }
   size_t mapped = 0;
-  while (mapped < RENOIR_WINDOW_BYTES) {
+  while (mapped < RENOIR_DEBUG_WINDOW_BYTES) {
     if (vm_map_mmio(base + mapped, physical + mapped) != MM_OK) {
       unmap_window(base, mapped);
       return refuse("cannot map register window UC");
@@ -248,8 +246,8 @@ static bool map_window(phys_addr_t physical)
 static uint32_t read_register(unsigned otg, unsigned offset)
 {
   KASSERT(otg < RENOIR_OTG_COUNT && !(offset % sizeof(uint32_t)));
-  size_t within = offset - RENOIR_WINDOW_OFFSET + otg * RENOIR_OTG_STRIDE;
-  KASSERT(within <= RENOIR_WINDOW_BYTES - sizeof(uint32_t));
+  size_t within = offset - RENOIR_DEBUG_WINDOW_OFFSET + otg * RENOIR_OTG_STRIDE;
+  KASSERT(within <= RENOIR_DEBUG_WINDOW_BYTES - sizeof(uint32_t));
   return *(const volatile uint32_t *)(observer.window + within);
 }
 
@@ -331,8 +329,8 @@ bool renoir_otg_prepare(const struct boot_info *boot, struct renoir_otg_info *in
     return false;
   }
   phys_addr_t physical;
-  if (!read_bar(&physical) || !window_available(boot, physical + RENOIR_WINDOW_OFFSET) ||
-      !map_window(physical + RENOIR_WINDOW_OFFSET)) {
+  if (!read_bar(&physical) || !window_available(boot, physical + RENOIR_DEBUG_WINDOW_OFFSET) ||
+      !map_window(physical + RENOIR_DEBUG_WINDOW_OFFSET)) {
     return false;
   }
   struct renoir_otg_mode first, second;
@@ -353,7 +351,7 @@ bool renoir_otg_prepare(const struct boot_info *boot, struct renoir_otg_info *in
     }
   }
   if (!valid) {
-    unmap_window(observer.window, RENOIR_WINDOW_BYTES);
+    unmap_window(observer.window, RENOIR_DEBUG_WINDOW_BYTES);
     observer.window = 0;
     return false;
   }

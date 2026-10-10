@@ -2,6 +2,7 @@
 #define KERNEL_FB_EARLY_CONSOLE_H
 
 #include <kernel/boot.h>
+#include <stdarg.h>
 #include <stdint.h>
 
 /* Plain-text boot console drawn directly on the boot framebuffer until the
@@ -25,6 +26,16 @@ void early_console_putc(char c);
 void early_console_panic_begin(void);
 /* Panic output path: draws only on the owning CPU. */
 void early_console_panic_putc(char c);
+
+/* Enabled debugger panic, IF=0 after clock initialization. One CPU streams a
+ * local-only message before terminal entry; no log/NIC path or allocation. */
+void early_console_panic_vprintf(const char *format, va_list args)
+  __attribute__((format(printf, 1, 0)));
+bool early_console_panic_message_begin(void);
+void early_console_panic_message_end(void);
+/* Terminal entrants boundedly await the message. An interrupted owner marks
+ * its own output failed, without retrying a possibly broken framebuffer. */
+void early_console_panic_message_wait(void);
 
 /* Presenter, under the log lock, before the first framebuffer write. True when
  * the console was retired (or never started) and the presenter owns the

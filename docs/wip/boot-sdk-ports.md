@@ -116,6 +116,8 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-10): [Neovim task 4](neovim-libuv.md#task-4-preflight),
   native libuv backend. Tasks 1–3 are merged.
+- **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
+  the small first step is implemented and qualified; review before merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
@@ -157,9 +159,9 @@ Other candidates; current assignments are listed above.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
-- [Network kernel debugger](network-debugger.md): owner-requested planning for
-  opt-in LAN GDB during native PXE bring-up; checkpoint foundation assigned,
-  transport and later tasks await assignment.
+- [Network kernel debugger](network-debugger.md): checkpoint and guarded
+  inspection implemented; task 3 assigned for both NICs, bridge and native
+  read-only LAN attach during PXE bring-up.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after
   the completed analog playback milestone.
 - [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture

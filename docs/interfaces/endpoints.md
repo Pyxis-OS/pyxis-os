@@ -102,6 +102,31 @@ shuts down its endpoint and wakes affected callers with `CALL_ENDPOINT_CLOSED`.
 Process exit has the same effect on every receiver it owns, even while clients
 still hold callable handles. Final object reclamation is deferred to the BSP.
 
+## Receiver readiness
+
+`wait_many` accepts an owned receiver with READABLE and/or CLOSED, requiring
+`HANDLE_TRANSPORT_RECEIVE`; CONTROL remains export-management authority. Client
+handles and receipts are not receiver interests. The existing 32-interest bound,
+zero-deadline poll and absolute deadline apply. Receivers can share a wait with
+console, pipe and TCP interests.
+
+READABLE is level-triggered while an ordinary message, cancellation or retirement
+notice is queued. RECEIVE preserves its cancellation/retirement/message priority.
+Receiver shutdown reports CLOSED automatically with READABLE, suppresses READABLE
+and adds no ERROR. Export withdrawal or final-client closure does not close the
+receiver; retirement remains a receivable notice.
+
+Readiness consumes and reserves nothing. A queued CALL can expire between the
+scan and RECEIVE; RECEIVE retains its existing blocking semantics. Registration
+precedes the first locked scan and is removed before releasing the retained
+receiver. Producers notify the existing readiness workers after unlocking, only
+on a transition to readable or closed while interests are registered. An earlier
+transition is observed by the initial scan; a later transition notifies it, with
+the existing remembered notification covering wake-before-park. Empty receivers
+without interests cause no readiness scan or notification on the IPC path.
+
+## Deadlines and cancellation
+
 CALL accepts an absolute monotonic deadline in nanoseconds; zero means unlimited.
 The deadline uses the same epoch as CLOCK NOW and is supplied to the provider
 in `deadline_ns`. It is never restarted after admission, receipt delivery or
@@ -148,6 +173,8 @@ queued for a later receive attempt. Endpoint state and wait records live in stab
 kernel storage; the endpoint lock may nest the scheduler lock, but no lock spans user copying,
 allocation or parking. See [scheduling ownership](../kernel/smp.md#scheduling-and-ownership).
 
+## Exports and retirement
+
 An endpoint supports up to 64 live or unacknowledged exports, independently of
 its sixteen delivery slots. EXPORT requires service CREATE authority and the
 process's own receiver with CONTROL authority. It fixes a nonzero object ID,
@@ -181,6 +208,8 @@ outlive ACK, but remains attached to an invalid old object even if its ID is
 reused. Receiver closure or provider exit invalidates every export and discards
 control records without waiting for clients or ACKs. Remaining references keep
 only safe backing storage until their final BSP release.
+
+## Examples
 
 The exported counter example runs with `session boot://counter.pxe`. Two objects
 share a receiver and demonstrate authenticated identity/rights, COPY, launch and
@@ -230,8 +259,15 @@ deadline. Received file attachments remain usable after cancellation and receipt
 completion. The existing `--abandon`, `--close` and `--exit` modes cover receipt
 abandonment and provider teardown.
 
+Add `--wait` to a server or standalone counter mode to wait on its receiver and
+console input together. Type a key at the initial prompt to start clients;
+`server --wait --delivered-timeout` accepts further input while awaiting CANCEL.
+`counter --wait --retire-full` observes RETIRE ahead of sixteen queued SENDs.
+The option needs input and clock grants; modes without it keep blocking RECEIVE.
+See [qualification](../development/experiments/endpoint-readiness/README.md).
+
 [Namespace publication](namespaces.md) provides explicit discovery and handoff.
-There is no external cancellation API, wait-set facility or automatic restart.
+There is no external cancellation API or automatic restart.
 A provider can retain all sixteen slots by leaving delivered receipts unfinished; deadlines release callers, not provider
 work. Calls without a deadline can still wait indefinitely, including self-calls
 and cycles between blocked single-task processes. External process termination

@@ -14,12 +14,28 @@ SECTIONS {
   . = KERNEL_LINK_BASE;
   __kernel_start = .;
   __text_start = .;
-  .text : { *(.text .text.*) } :text
+  .text : {
+    *(.text)
+    . = ALIGN(KERNEL_PAGE_SIZE);
+    __debug_text_start = .;
+    *(.text.debug .text.debug.*)
+    . = ALIGN(KERNEL_PAGE_SIZE);
+    __debug_text_end = .;
+    *(.text.*)
+  } :text
   /* Permission boundaries must also be leaf-page boundaries after takeover. */
   . = ALIGN(KERNEL_PAGE_SIZE);
   __text_end = .;
   __rodata_start = .;
-  .rodata : { *(.rodata .rodata.*) } :rodata
+  .rodata : {
+    *(.rodata)
+    . = ALIGN(KERNEL_PAGE_SIZE);
+    __debug_rodata_start = .;
+    *(.rodata.debug .rodata.debug.*)
+    . = ALIGN(KERNEL_PAGE_SIZE);
+    __debug_rodata_end = .;
+    *(.rodata.*)
+  } :rodata
   . = ALIGN(KERNEL_PAGE_SIZE);
   __rodata_end = .;
   __data_start = .;
@@ -30,7 +46,15 @@ SECTIONS {
     KEEP(*(.limine_requests_end))
   } :data
   .data : { *(.data .data.*) } :data
-  .bss : { *(.bss .bss.*) *(COMMON) } :data
+  .bss : {
+    *(.bss)
+    . = ALIGN(KERNEL_PAGE_SIZE);
+    __debug_data_start = .;
+    *(.bss.debug .bss.debug.*)
+    . = ALIGN(KERNEL_PAGE_SIZE);
+    __debug_data_end = .;
+    *(.bss.*) *(COMMON)
+  } :data
   . = ALIGN(KERNEL_PAGE_SIZE);
   __data_end = .;
   __kernel_end = .;

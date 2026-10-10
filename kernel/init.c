@@ -32,6 +32,7 @@
 #include <kernel/service/request.h>
 #include <kernel/space.h>
 #include <kernel/display.h>
+#include <kernel/debug.h>
 #include <kernel-config.h>
 #include "storage/block_registry.h"
 
@@ -83,13 +84,12 @@
   if (options->display_inventory) {
     renoir_inventory(boot);
   }
-  if (options->debug_checkpoint) {
-    arch_debug_enable(boot);
-  }
   display_init(boot, options->display_size, options->display_timing,
       options->display_timing_metrics);
+  debug_prepare(boot, options);
 
   boot_start_cpus();
+  arch_debug_inspect_finish();
   system_info_init();
   arch_clock_maintain();
 
@@ -108,6 +108,7 @@
   klog("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();
   random_start();
+  debug_start();
   audio_start();
   virtio_blk_start();
   gpt_start();
@@ -142,9 +143,6 @@
        heap.retired_bytes);
 
   user_launch_initial(options);
-  if (options->debug_checkpoint) {
-    arch_debug_checkpoint();
-  }
   arch_clock_maintain();
   klog("Caelum ready: starting preemptive userspace\n");
   task_schedule();

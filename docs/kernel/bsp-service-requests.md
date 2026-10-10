@@ -16,7 +16,7 @@ kernel; each service defines its own public operation contract.
 | HOST worker | Blocking filesystem transport and final completion of forwarded requests |
 | Native filesystem worker | Policy/view operations, block waits and final completion of forwarded requests |
 | Network worker | TCP/mixed readiness observation and final completion of forwarded waits |
-| Readiness worker | Terminal-only waits, independent of network-device availability |
+| Readiness worker | Waits without TCP interests, independent of network-device availability |
 | ACPI worker | Power-off and restart, completing forwarded requests only on failure |
 
 The catalog and dispatch are explicit. Adding a service changes its subsystem

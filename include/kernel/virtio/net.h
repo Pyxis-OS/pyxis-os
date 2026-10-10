@@ -3,6 +3,7 @@
 
 #include <kernel/boot.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/debug.h>
 
 struct virtio_net_controller;
 
@@ -60,5 +61,19 @@ bool virtio_net_ready(const struct virtio_net_controller *controller);
 bool virtio_net_panic_begin(struct virtio_net_controller *controller);
 bool virtio_net_panic_transmit(struct virtio_net_controller *controller,
     const void *frame, size_t length);
+
+/* Native debugger owner; same stopped/worker contracts as net/debug.h. */
+bool virtio_net_debug_ready(struct virtio_net_controller *controller,
+    struct net_debug_device *device);
+bool virtio_net_debug_service(struct virtio_net_controller *controller);
+enum net_debug_status virtio_net_debug_begin(struct virtio_net_controller *controller,
+    uint64_t generation);
+enum net_debug_status virtio_net_debug_poll(struct virtio_net_controller *controller,
+    uint64_t generation, void *frame, size_t capacity, size_t *length);
+enum net_debug_status virtio_net_debug_transmit(struct virtio_net_controller *controller,
+    uint64_t generation, const void *frame, size_t length);
+enum net_debug_status virtio_net_debug_restore(struct virtio_net_controller *controller,
+    uint64_t generation);
+bool virtio_net_debug_retained(const struct virtio_net_controller *controller);
 
 #endif

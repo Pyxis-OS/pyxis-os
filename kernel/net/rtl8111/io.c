@@ -21,12 +21,12 @@
 
 static uint64_t panic_section_enter_interrupts(void)
 {
-  return net_log_udp_enabled() ? cpu_save_interrupts() : 0;
+  return net_panic_context_enabled() ? cpu_save_interrupts() : 0;
 }
 
 static void panic_section_leave_interrupts(uint64_t flags)
 {
-  if (net_log_udp_enabled()) {
+  if (net_panic_context_enabled()) {
     cpu_restore_interrupts(flags);
   }
 }
@@ -523,4 +523,256 @@ bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up)
   }
   *up = (status & RTL_PHY_LINK) != 0;
   return true;
+}
+
+bool rtl8111_debug_ready(struct rtl8111_controller *controller,
+    struct net_debug_device *device)
+{
+  if (!rtl8111_available(controller) ||
+      atomic_load_explicit(&controller->panic_gate.state, memory_order_acquire)) {
+    return false;
+  }
+  device->controller_id = controller->controller_id;
+  memcpy(device->mac, controller->mac, sizeof(device->mac));
+  device->pci = controller->claim.device->address;
+  for (unsigned i = 0; i < PCI_BAR_COUNT; ++i) {
+    device->bars[i] = (struct net_debug_range){controller->claim.bars[i].physical,
+      controller->claim.bars[i].bytes};
+  }
+  device->dma[0] = (struct net_debug_range){controller->rx.storage.physical,
+    controller->rx.storage.bytes};
+  device->dma[1] = (struct net_debug_range){controller->tx.storage.physical,
+    controller->tx.storage.bytes};
+  device->dma[2] = (struct net_debug_range){controller->counters.physical,
+    controller->counters.bytes};
+  device->dma_count = 3;
+  return true;
+}
+
+bool rtl8111_debug_service(struct rtl8111_controller *controller)
+{
+  if (!controller) {
+    return false;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool entered = net_panic_gate_pipeline_begin(&controller->panic_gate);
+  cpu_restore_interrupts(flags);
+  if (!entered) {
+    return false;
+  }
+  bool busy = rtl8111_service(controller);
+  flags = cpu_save_interrupts();
+  net_panic_gate_pipeline_end(&controller->panic_gate);
+  cpu_restore_interrupts(flags);
+  return busy;
+}
+
+static enum net_debug_status debug_failed(struct rtl8111_controller *controller)
+{
+  controller->debug.failed = true;
+  return NET_DEBUG_FAILED;
+}
+
+static bool debug_device_valid(const struct rtl8111_controller *controller)
+{
+  if (!controller->active || !controller->prepared || controller->stopping) {
+    return false;
+  }
+  uint8_t chip = rtl_read8(controller, RTL_CHIP_COMMAND);
+  return chip != UINT8_MAX &&
+    (chip & (RTL_COMMAND_RUNNING | RTL_COMMAND_RESET)) == RTL_COMMAND_RUNNING;
+}
+
+static bool debug_ring_valid(const struct rtl_ring *ring)
+{
+  if (!ring->storage.address || !ring->descriptors || ring->producer >= RTL_RING_COUNT ||
+      ring->consumer >= RTL_RING_COUNT || ring->outstanding > RTL_RING_COUNT) {
+    return false;
+  }
+  for (unsigned id = 0; id < RTL_RING_COUNT; ++id) {
+    uint32_t opts = ring->descriptors[id].opts1;
+    if (!descriptor_address_valid(ring, id) ||
+        (opts & RTL_DESCRIPTOR_EOR) != (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0)) {
+      return false;
+    }
+  }
+  return ring->receive || ring->producer ==
+    (ring->consumer + ring->outstanding) % RTL_RING_COUNT;
+}
+
+enum net_debug_status rtl8111_debug_begin(struct rtl8111_controller *controller,
+    uint64_t generation)
+{
+  if (!controller || !generation) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  if (!net_panic_gate_debug_begin(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  memset(&controller->debug, 0, sizeof(controller->debug));
+  if (!debug_device_valid(controller) || !controller->link_up) {
+    return debug_failed(controller);
+  }
+  uint16_t mask = rtl_read16(controller, RTL_INTERRUPT_MASK);
+  if (mask == UINT16_MAX) {
+    return debug_failed(controller);
+  }
+  controller->debug.interrupt_mask = mask;
+  rtl_write16(controller, RTL_INTERRUPT_MASK, 0);
+  if (rtl_read16(controller, RTL_INTERRUPT_MASK) ||
+      !pci_msix_mask_prepared_entry(&controller->msix, RTL_MSIX_IO_ENTRY,
+        &controller->debug.msix_control) ||
+      !debug_ring_valid(&controller->rx) || !debug_ring_valid(&controller->tx)) {
+    return debug_failed(controller);
+  }
+  uint8_t phy = rtl_read8(controller, RTL_PHY_STATUS);
+  if (phy == UINT8_MAX || !(phy & RTL_PHY_LINK)) {
+    return debug_failed(controller);
+  }
+  return NET_DEBUG_OK;
+}
+
+static enum net_debug_status debug_tx_complete(struct rtl8111_controller *controller)
+{
+  if (controller->debug.failed || !debug_device_valid(controller)) {
+    return debug_failed(controller);
+  }
+  struct rtl_ring *tx = &controller->tx;
+  unsigned completed = 0;
+  while (tx->outstanding && completed < RTL_RING_COUNT) {
+    unsigned id = tx->consumer;
+    uint32_t opts = tx->descriptors[id].opts1;
+    if (opts & RTL_DESCRIPTOR_OWN) {
+      break;
+    }
+    dma_read_barrier();
+    if (!descriptor_address_valid(tx, id) ||
+        (opts & RTL_DESCRIPTOR_EOR) != (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0)) {
+      return debug_failed(controller);
+    }
+    controller->debug.tx_owned &= ~(1u << id);
+    tx->consumer = (id + 1) % RTL_RING_COUNT;
+    --tx->outstanding;
+    ++completed;
+    ++controller->completed;
+  }
+  if (tx->outstanding) {
+    dma_full_barrier();
+    rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
+  }
+  return NET_DEBUG_OK;
+}
+
+enum net_debug_status rtl8111_debug_poll(struct rtl8111_controller *controller,
+    uint64_t generation, void *frame, size_t capacity, size_t *length)
+{
+  *length = 0;
+  if (!controller || !net_panic_gate_debug_owned(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  if (debug_tx_complete(controller) != NET_DEBUG_OK) {
+    return NET_DEBUG_FAILED;
+  }
+  if (!frame || capacity < ETHERNET_FRAME_MAX) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  struct rtl_ring *rx = &controller->rx;
+  unsigned id = rx->consumer;
+  uint32_t opts = rx->descriptors[id].opts1;
+  if (opts & RTL_DESCRIPTOR_OWN) {
+    return NET_DEBUG_IDLE;
+  }
+  dma_read_barrier();
+  if (!descriptor_address_valid(rx, id) ||
+      (opts & RTL_DESCRIPTOR_EOR) != (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0)) {
+    return debug_failed(controller);
+  }
+  size_t bytes = opts & RTL_DESCRIPTOR_LENGTH_MASK;
+  bool valid = !(opts & RTL_RX_STATUS_ERRORS) &&
+    (opts & (RTL_DESCRIPTOR_FS | RTL_DESCRIPTOR_LS)) == (RTL_DESCRIPTOR_FS | RTL_DESCRIPTOR_LS) &&
+    bytes >= ETHERNET_HEADER_BYTES + RTL_FCS_BYTES &&
+    bytes <= ETHERNET_FRAME_MAX + RTL_FCS_BYTES;
+  if (valid) {
+    *length = bytes - RTL_FCS_BYTES;
+    memcpy(frame, (const void *)(rx->storage.address + PAGE_SIZE + id * RTL_BUFFER_BYTES), *length);
+    ++controller->received;
+  } else {
+    ++controller->malformed;
+  }
+  rtl_ring_repost_receive(rx, id);
+  rx->consumer = (id + 1) % RTL_RING_COUNT;
+  return valid ? NET_DEBUG_OK : NET_DEBUG_IDLE;
+}
+
+enum net_debug_status rtl8111_debug_transmit(struct rtl8111_controller *controller,
+    uint64_t generation, const void *frame, size_t length)
+{
+  if (!controller || !net_panic_gate_debug_owned(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  if (debug_tx_complete(controller) != NET_DEBUG_OK) {
+    return NET_DEBUG_FAILED;
+  }
+  if (!frame || length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  uint8_t phy = rtl_read8(controller, RTL_PHY_STATUS);
+  if (phy == UINT8_MAX) {
+    return debug_failed(controller);
+  }
+  if (!(phy & RTL_PHY_LINK)) {
+    return NET_DEBUG_PENDING;
+  }
+  struct rtl_ring *tx = &controller->tx;
+  unsigned capacity = net_log_udp_enabled() ? RTL_RING_COUNT - RTL_PANIC_TX_RESERVED : RTL_RING_COUNT;
+  if (tx->outstanding >= capacity) {
+    return NET_DEBUG_PENDING;
+  }
+  unsigned id = tx->producer;
+  if (!panic_publish(tx, id, frame, length)) {
+    return debug_failed(controller);
+  }
+  ++tx->outstanding;
+  tx->producer = (id + 1) % RTL_RING_COUNT;
+  controller->debug.tx_owned |= 1u << id;
+  dma_full_barrier();
+  rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
+  ++controller->transmitted;
+  return NET_DEBUG_OK;
+}
+
+enum net_debug_status rtl8111_debug_restore(struct rtl8111_controller *controller,
+    uint64_t generation)
+{
+  if (!controller || !net_panic_gate_debug_owned(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  if (debug_tx_complete(controller) != NET_DEBUG_OK) {
+    return NET_DEBUG_FAILED;
+  }
+  if (controller->debug.tx_owned) {
+    return NET_DEBUG_PENDING;
+  }
+  if (!debug_ring_valid(&controller->rx) || !debug_ring_valid(&controller->tx)) {
+    return debug_failed(controller);
+  }
+  uint16_t status = rtl_read16(controller, RTL_INTERRUPT_STATUS);
+  if (status == UINT16_MAX) {
+    return debug_failed(controller);
+  }
+  controller->pending_interrupts |= status;
+  rtl_write16(controller, RTL_INTERRUPT_STATUS, status);
+  rtl_write16(controller, RTL_INTERRUPT_MASK, controller->debug.interrupt_mask);
+  if (rtl_read16(controller, RTL_INTERRUPT_MASK) != controller->debug.interrupt_mask ||
+      !pci_msix_restore_prepared_entry(&controller->msix, RTL_MSIX_IO_ENTRY,
+        controller->debug.msix_control)) {
+    return debug_failed(controller);
+  }
+  net_panic_gate_debug_release(&controller->panic_gate);
+  return NET_DEBUG_OK;
+}
+
+bool rtl8111_debug_retained(const struct rtl8111_controller *controller)
+{
+  return controller && net_panic_gate_debug_retained(&controller->panic_gate);
 }

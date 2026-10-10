@@ -14,6 +14,7 @@
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/panic.h>
@@ -22,13 +23,21 @@
 #include <kernel/user/wait.h>
 
 static enum call_status interest_authority(const struct kernel_object *object,
-    struct process *caller, uint64_t rights, uint64_t events)
+    struct process *caller, uint64_t rights, uint64_t transport, uint64_t events)
 {
   if (!events) {
     return CALL_BAD_REQUEST;
   }
   uint64_t required = 0;
-  if (object->type == OBJECT_TCP) {
+  if (object->type == OBJECT_ENDPOINT_RECEIVER) {
+    if (events & ~(WAIT_READABLE | WAIT_CLOSED)) {
+      return CALL_BAD_REQUEST;
+    }
+    const struct endpoint *receiver = (const struct endpoint *)object;
+    if (receiver->owner != caller || !(transport & HANDLE_TRANSPORT_RECEIVE)) {
+      return CALL_DENIED;
+    }
+  } else if (object->type == OBJECT_TCP) {
     if (events & ~(WAIT_READABLE | WAIT_WRITABLE | WAIT_PEER_FIN | WAIT_WRITE_CLOSED)) {
       return CALL_BAD_REQUEST;
     }
@@ -160,13 +169,13 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
   size_t retained = 0;
   enum call_status status = CALL_OK;
   for (size_t i = 0; i < count; ++i) {
-    uint64_t rights;
+    uint64_t rights, transport;
     if (capability_resolve(&caller->capabilities, input[i].handle,
-          0, 0, &objects[i], &rights, NULL) != CAP_OK) {
+          0, 0, &objects[i], &rights, &transport) != CAP_OK) {
       status = CALL_BAD_HANDLE;
       break;
     }
-    status = interest_authority(objects[i], caller, rights, input[i].events);
+    status = interest_authority(objects[i], caller, rights, transport, input[i].events);
     if (status != CALL_OK) {
       break;
     }

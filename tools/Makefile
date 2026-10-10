@@ -2,12 +2,18 @@ HOSTCC ?= cc
 CPPFLAGS := -I../include
 CFLAGS := -std=gnu23 -O2 -g -Wall -Wextra -Wshadow -Wstrict-prototypes
 
-.PHONY: all remote log machine-hostname clean
+.PHONY: all remote log gdb-bridge machine-hostname clean
 all: remote log
 
 remote: ../build/tools/pyxis-remote
 
 log: ../build/tools/pyxis-log
+
+gdb-bridge: ../build/tools/pyxis-gdb-bridge
+
+../build/tools/pyxis-gdb-bridge: gdb-bridge/main.c gdb-bridge/rsp.c gdb-bridge/rsp.h ../include/debug/protocol.h remote/sha256.h remote/vendor/sha256.c
+	@mkdir -p $(@D)
+	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) gdb-bridge/main.c gdb-bridge/rsp.c remote/vendor/sha256.c -o $@
 
 machine-hostname: ../build/tools/machine-hostname
 

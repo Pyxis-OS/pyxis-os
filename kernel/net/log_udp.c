@@ -1,8 +1,10 @@
 #include <arch/cpu.h>
 #include <kernel/log_ring.h>
+#include <kernel/debug.h>
 #include <kernel/memory.h>
 #include <kernel/net/driver.h>
 #include <kernel/net/log_udp.h>
+#include <kernel/net/panic_tx.h>
 #include <kernel/net/ethernet.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/task.h>
@@ -34,6 +36,7 @@ static atomic_bool fatal_busy, fatal_failed;
 
 void net_log_udp_enable(void)
 {
+  net_panic_context_enable();
   worker_cpu = cpu_initial_apic_id();
   uint32_t low, high;
   /* Sample only during boot. This is a grouping hint, not an entropy source
@@ -183,7 +186,7 @@ bool net_log_udp_next_deadline(uint64_t *deadline)
 
 void net_log_udp_panic_begin(void)
 {
-  if (!net_log_udp_enabled()) {
+  if (!net_log_udp_enabled() || debug_stop_retained()) {
     return;
   }
   uint_fast64_t owner = (uint64_t)cpu_initial_apic_id() + 1;

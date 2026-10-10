@@ -261,3 +261,40 @@ bool virtio_net_queue_panic_transmit(struct virtio_net_queue *queue, size_t byte
   queue->panic_failed = true;
   return false;
 }
+
+bool virtio_net_queue_debug_coherent(const struct virtio_net_queue *queue)
+{
+  if (!queue->storage || !queue->ring || queue->outstanding > VIRTIO_NET_QUEUE_SIZE ||
+      queue->ring->available.index != queue->available) {
+    return false;
+  }
+  unsigned owned = 0;
+  for (unsigned id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
+    owned += queue->device_owned[id];
+    if (queue->ring->descriptors[id].address !=
+        queue->physical + PAGE_SIZE + id * VIRTIO_NET_BUFFER_BYTES ||
+        queue->ring->descriptors[id].flags != (queue->receive ? NET_DESCRIPTOR_WRITE : 0) ||
+        queue->ring->descriptors[id].length > VIRTIO_NET_BUFFER_BYTES) {
+      return false;
+    }
+  }
+  return owned == queue->outstanding;
+}
+
+bool virtio_net_queue_debug_post(struct virtio_net_queue *queue,
+    unsigned id, size_t bytes)
+{
+  if (id >= VIRTIO_NET_QUEUE_SIZE || queue->device_owned[id] || !bytes ||
+      bytes > VIRTIO_NET_BUFFER_BYTES || queue->outstanding >= VIRTIO_NET_QUEUE_SIZE ||
+      queue->ring->available.index != queue->available ||
+      (!queue->receive && queue->panic_reserved && id == VIRTIO_NET_PANIC_DESCRIPTOR)) {
+    return false;
+  }
+  queue->ring->descriptors[id].length = bytes;
+  queue->device_owned[id] = true;
+  ++queue->outstanding;
+  queue->ring->available.ring[queue->available % VIRTIO_NET_QUEUE_SIZE] = id;
+  dma_write_barrier();
+  queue->ring->available.index = ++queue->available;
+  return true;
+}
