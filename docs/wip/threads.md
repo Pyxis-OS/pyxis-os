@@ -7,7 +7,7 @@ process remains. Task 2, admitted call references and CLOSE, is merged in
 [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
 [qualification](../development/experiments/threads-task2/README.md) records its
 build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
-owner-assigned and implemented on this branch;
+merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
 [qualification](../development/experiments/threads-task3/README.md) records the
 matched comparison and 1/4-CPU inspection. The
 remaining proposal originally inspected Pyxis `4236efc7`
@@ -107,6 +107,22 @@ correction; successful REPLY cannot fail collection for capacity. This never
 implicitly rolls back provider mutations and preserves timeout/closure
 uncertainty. [Task 3 qualification](../development/experiments/threads-task3/README.md)
 records the baseline and later implementation evidence separately.
+
+**Task 4 accepted contract, 2026-10-10.** MEMORY mutations move to BSP with
+DISPLAY mapping mutations under one process transaction. Drain active roots and
+actual mapping borrowers, acknowledge departure after CR3 reload, and keep
+admission closed through the mutator's final reply copy. Pending quiescence never
+blocks the BSP executor. Bounded failure returns BUSY before effects; retirement
+waits for drainage. This is accepted, not yet implemented.
+
+Use kernel staging and short validation/copy leases, with no mapping lease across
+indefinite I/O. Revalidate output after waits; late failure is BAD_BUFFER without
+rolling back consumed input or committed effects. Publish returned handles under
+the output lease, or release only the operation's exact returned generations.
+Refuse unsupported concurrency with BUSY before effects, per native object or
+session: endpoint RECEIVE/same-receipt REPLY, keyboard/pointer readers and control
+transactions, and clipboard ownership. Preserve existing network guards and
+CLOSE/stop semantics; do not serialize all process syscalls.
 
 **VM admission.** Track root activation and kernel mapping borrowers per process.
 Short checked copies hold a mapping lease; fixed inputs are captured once and
@@ -287,7 +303,7 @@ The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
 does not assign later implementation; tasks 2 and 3 were separately assigned.
-Task 4 still requires an owner go.
+Task 4 is separately owner-assigned; task 5 still requires an owner go.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK
