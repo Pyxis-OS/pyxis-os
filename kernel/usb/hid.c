@@ -34,6 +34,7 @@
 #define USB_QEMU_MOUSE_PACKET 4
 #define USB_QEMU_MOUSE_DESCRIPTOR_BYTES 52
 #define USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES 67
+#define USB_QEMU_KEYBOARD_ADVERTISED_BYTES 63
 #define USB_QEMU_KEYBOARD_PACKET 8
 #define USB_QEMU_QUEUE_ENTRIES 16
 
@@ -173,7 +174,7 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
     product == USB_QEMU_PRODUCT && candidate.configuration == 1 && !keyboard->number &&
     keyboard->endpoint.address == 0x81 && keyboard->endpoint.packet == USB_QEMU_KEYBOARD_PACKET &&
     !keyboard->endpoint.transactions &&
-    keyboard->descriptor_bytes == USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES;
+    keyboard->descriptor_bytes == USB_QEMU_KEYBOARD_ADVERTISED_BYTES;
   struct usb_hid_interface *mouse = &candidate.interfaces[1];
   mouse->qemu_wheel_candidate = mouse->protocol && vendor == USB_QEMU_VENDOR &&
     product == USB_QEMU_PRODUCT && candidate.configuration == 1 && !mouse->number &&
@@ -279,7 +280,8 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
     setup.request_type = USB_REQUEST_INTERFACE_IN;
     setup.request = USB_REQUEST_GET_DESCRIPTOR;
     setup.value = USB_DESCRIPTOR_REPORT << 8;
-    setup.length = interface->descriptor_bytes;
+    setup.length = interface->qemu_keyboard_candidate ?
+      USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES : USB_QEMU_MOUSE_DESCRIPTOR_BYTES;
     break;
   case HID_CONFIGURATION:
     setup = (struct usb_setup){.request = USB_REQUEST_SET_CONFIGURATION,
