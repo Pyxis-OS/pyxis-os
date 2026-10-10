@@ -1,7 +1,7 @@
 # Bundles in bin://
 
-Proposal, 2026-10-10; docs only. The owner accepted the placement and lookup
-direction below. Remaining defaults and task 1 still need acceptance and a go.
+Accepted plan, 2026-10-10; not implemented. The owner accepted both lookup
+decisions below and authorized task 1 to start after #686 merges.
 This sits alongside the accepted, unimplemented
 [ZIP proposal #639](https://git.internal/PyxisOS/pyxis-os/pulls/639);
 it does not authorize its packaging or adapter tasks.
@@ -48,9 +48,9 @@ selects only top-level regular `.pxe` files, filters exact archive names and
 copies/verifies files. Its revision cleanup also assumes files. Moving bundles
 requires complete-tree handling, not just suffix recognition in the shell.
 
-## Lookup and remaining owner decisions
+## Accepted lookup decisions (2026-10-10, not implemented)
 
-1. **Default: direct bin candidates precede the optional development catalog,
+1. **Direct bin candidates precede the optional development catalog,
    and only an absent candidate permits fallback.** Bare lookup becomes
    `.pxe` → `.pxb` → configured catalog → `boot://NAME.pxe` rescue fallback.
    A denied/wrong-type plain candidate, malformed or incomplete selected bundle,
@@ -77,7 +77,7 @@ requires complete-tree handling, not just suffix recognition in the shell.
    Task 1 adds no URI fragment or entry-selector syntax. Share ordered candidate
    selection in libpyxis so shell and Lua do not develop separate precedence.
 
-2. **Default: future `.pxa` is the next same-name candidate after `.pxb`, and
+2. **Future `.pxa` is the next same-name candidate after `.pxb`, and
    shipped revisions reject two bundle forms with the same basename.** Once
    ZIP launch is implemented, bare lookup is `.pxe` → `.pxb` → `.pxa` → catalog
    → rescue. An explicit `bin://NAME.pxa` selects its default. No other archives
@@ -133,7 +133,7 @@ lose lookups if its descendants were removed. Keep the prohibition on modifying
 or deleting published development trees while programs can use them; future
 online/program-only updates must settle revision lifetime separately.
 
-## Small first task after acceptance
+## Assigned first task after #686 merges
 
 - [ ] **Task 1: unpacked bin lookup and relocation of the two existing bundles.**
   Implement shared ordered candidate selection for shell and Lua; move both

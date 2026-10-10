@@ -116,8 +116,8 @@ status belong in the milestone document and the PR.
 Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-10): [bundles in bin://](bundles-in-bin.md),
-  proposal for same-name lookup and relocating the existing editor/interpreter
-  bundles; docs first, implementation needs acceptance and a separate go.
+  accepted same-name lookup and relocation of the editor/interpreter bundles;
+  task 1 starts after the owner merges #686.
 - **Codex alpha** (2026-10-10): [presenter whole-frame skipping](../kernel/presenter-frame-skipping.md),
   implemented with matched QEMU/native counters and the owner's functional pass;
   ready for review before merge. [Renoir cursor](renoir-hardware-cursor.md)
