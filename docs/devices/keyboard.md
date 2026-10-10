@@ -73,8 +73,8 @@ Caelum discards application input on every CPU count.
 The session maps US ASCII key positions, with Shift, Caps Lock and typematic
 repeat. Enter yields newline, Backspace `\b`, Tab `\t`, and Escape `0x1b`.
 Ctrl+letters yield control bytes without signal or EOF meaning. Alt/Super chords,
-modified navigation, function keys and the numeric keypad (except Enter) have no
-text binding yet. Physical key events remain separate from this text mapping.
+modified navigation and function keys have no text binding yet. Physical key
+events remain separate from this text mapping.
 The character table is the shared US layout in
 [`lib/key_layout.c`](../../lib/key_layout.c), which the SDK also exports to
 libpyxis as `key_layout_character`; the SDL2 port's text input uses it, so a
@@ -89,6 +89,17 @@ Unmodified navigation keys produce terminal sequences:
 | Home / End | `ESC [ H` / `ESC [ F` |
 | Delete | `ESC [ 3 ~` |
 | Page Up / Page Down | `ESC [ 5 ~` / `ESC [ 6 ~` |
+
+Num Lock selects keypad digits `0` through `9` and decimal `.`. With Num Lock
+off, keypad `1`, `2`, `3`, `4`, `6`, `7`, `8` and `9` produce the existing End,
+Down, Page Down, Left, Right, Home, Up and Page Up sequences; keypad decimal
+produces Delete. Keypad `0` and `5` have no navigation text binding, matching
+the unsupported Insert and center positions. Keypad operators always produce
+`/`, `*`, `-` and `+`, and keypad Enter always produces newline.
+Shift leaves Num Lock's numeric selection unchanged and suppresses keypad
+navigation as it does other modified navigation. Control keeps its letter-only
+text policy. Num Lock starts off; its state is shared across keyboards. Keyboard
+LED updates remain outside this text mapping.
 
 Each console retains a 4 KiB byte queue, including while its space is inactive.
 A sequence is enqueued whole or rejected whole. Reads can split sequences; a
