@@ -1,12 +1,132 @@
-# Neovim and libuv requirements for native Pyxis applications
+# Neovim on Pyxis
 
-Status: bounded source and SDK investigation, 2026-09-29. This report records findings
-and proposes future work; it does not authorize a port. The separate
-[block-storage foundation](../devices/block-storage.md) is complete. This report
-completes the initial investigation from the 2026-09-29 planning agenda. No
-kernel, userland or port implementation is included.
+Status: **proposal, 2026-10-10, awaiting owner decisions.** Nothing here
+authorizes code or a port. The owner wants Neovim as the development editor
+(vi bindings now, clangd later) instead of patching BusyBox vi. The re-check
+below is code and document inspection of `origin/main` at `dc91a4c6`; nothing
+was built or booted.
 
-## Executive summary
+## Re-check against current main
+
+The 2026-09-29 investigation proposed six milestones. Their state now:
+
+| # | Original milestone | State | What exists and what is missing |
+| --- | --- | --- | --- |
+| 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Pipes have no readiness, no nonblocking mode and no try operations** ([pipes](../interfaces/pipes.md#transfers)), file and provider opens cannot be waited on, and there are no completion tokens. |
+| 2 | User threads | **Unchanged for this purpose** | [Task 1](threads.md#first-task-and-later-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Create/join, TLS, `pthread.h` and thread-safe libc are tasks 2 to 4, unassigned. |
+| 3 | File metadata and identity | **Mostly unchanged** | Libc now has `sys/stat.h` (type and size only), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Still missing: object identity, modification time and ownership ([debt](../technical-debt.md#file-identity-across-capability-paths)), `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
+| 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: alternate screen, scroll regions and saved cursor ([TTY subset](../userland/terminal.md#tty-output-controls); mux adds no alternate-screen protocol), non-ASCII input and drawing, and a PTY-style session for child terminals. |
+| 5 | libuv backend | **Unchanged** | No libuv, luv or Neovim recipe exists in `ports`. Libc still lacks `pthread.h`, `poll.h`, `termios.h`, `dlfcn.h`, `sys/socket.h`, `sys/mman.h` and `iconv.h`, so upstream `uv.h` does not compile; the backend needs its own platform layer, not those headers. |
+| 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; none of Lua 5.1, LPeg, luv, libuv, utf8proc, tree-sitter or iconv exists. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
+
+Two findings change the plan. A pipe pair that `wait_many` can watch is also the
+cross-thread wake that libuv's `uv_async` needs, so no new wake object is
+required. And the first slice can avoid threads: libuv creates its pool only
+when work is submitted, and Neovim's own file calls mostly pass no callback and
+are synchronous, so the
+backend can refuse pool and thread requests with an error. Whether Neovim's
+startup touches other thread APIs is unverified until the first build.
+
+## Milestone proposal
+
+**Scope of the first slice.** Neovim 0.12.5 in its normal terminal mode: the
+client launches an `--embed` server of the same program over pipes, so the
+space needs `launch = true`. It edits and saves native files in a framebuffer
+tab or a multiplexer pane with Vimscript and Lua configuration under `home://`.
+Not in it: swap and backup recovery, jobs and `system()`, `:terminal`, language
+servers, tree-sitter parsers, threads, Unicode beyond ASCII. BusyBox vi stays
+until the owner accepts the slice, and receives no further editor work.
+
+### Tasks
+
+Each task is a focused PR after the owner's go. The first two are useful
+without Neovim.
+
+1. **Pipe readiness and try operations.** `wait_many` gains pipe READABLE,
+   WRITABLE and closure, and pipes gain try read and try write, following the
+   TCP model. The owner can pipe a slow producer into a viewer that shows output
+   as it arrives and keeps answering keys, such as `less` following its input;
+   today [`less`](../userland/less.md) blocks on a pipe read and has no live
+   refresh.
+2. **File identity and modification stamp.** A short contract first (scope across
+   RAM, host and native volumes, lifetime, replacement), then the native query
+   and the libc `stat` fields where a backend reports them. The owner can see
+   the shell refuse to redirect output onto an input file reached by another
+   path ([redirection debt](../technical-debt.md)), and TCC honour
+   `#pragma once`.
+3. **Terminal profile for a full-screen editor.** Alternate screen, scroll
+   region and saved cursor in the framebuffer TTY and the multiplexer, and the
+   `TERM` name that advertises exactly what is supported. ASCII only. The owner
+   can run a full-screen program that finds the shell screen intact on exit, in
+   a tab and in a pane.
+4. **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
+   async wake over a pipe pair, console and pipe streams, synchronous file calls,
+   and child launch through the launcher. Pool, threads, sockets, file watches,
+   `dlopen` and signals return an unsupported error; mutex, once and key
+   primitives are correct for one thread only. The owner can run a small libuv
+   program that relays a child's output with a timer.
+5. **Lua 5.1.5 with luv.** Lua 5.1.5 with its standard libraries, LPeg, luv and
+   lua-compat-5.3 as one recipe set. The owner can run Lua scripts with timers
+   and child processes through luv.
+6. **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
+   tree-sitter library, iconv) with host generators kept native, plus the libc
+   functions its build finds missing. The owner can run `nvim file`, edit with vi
+   keys, save, and quit in a tab and a pane. Expect this task to split once the
+   first full build lists the missing functions, in particular `chdir`,
+   `getcwd`, `setenv`, `mktime`, `fdopen` and `iconv`, each needing its own
+   decision on native objects.
+
+Later, each with its own proposal: swap and backup recovery (needs task 2 and a
+lease policy), jobs and `system()` (extra stream delegation and group stop),
+`:terminal`, UTF-8 rendering, user threads and the pool, tree-sitter parsers,
+LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
+
+### Mirrors the owner must provide
+
+Builds download only from the owner's mirrors. Each source is needed before the
+task that uses it. Hashes are from the Neovim manifest at the pinned commit; the
+Neovim source is a Git pin.
+
+| Task | Source | Upstream | Pin |
+| --- | --- | --- | --- |
+| 4 | libuv 1.52.1 | `https://github.com/libuv/libuv/archive/v1.52.1.tar.gz` | SHA-256 `478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c` |
+| 5 | Lua 5.1.5 | `https://www.lua.org/ftp/lua-5.1.5.tar.gz` | SHA-256 `2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333` |
+| 5 | luv 1.52.1-0 | `https://github.com/luvit/luv/archive/1.52.1-0.tar.gz` | SHA-256 `e8b8774b31d24be4fcf2b021b90599ecccc8e476c61efcc59c3c10cab813a885` |
+| 5 | LPeg 1.1.0 | `https://github.com/neovim/deps/raw/d495ee6f79e7962a53ad79670cb92488abe0b9b4/opt/lpeg-1.1.0.tar.gz` | SHA-256 `4b155d67d2246c1ffa7ad7bc466c1ea899bbc40fef0257cc9c03cecbaed4352a` |
+| 5 | lua-compat-5.3 0.13 | `https://github.com/lunarmodules/lua-compat-5.3/archive/v0.13.tar.gz` | SHA-256 `f5dc30e7b1fda856ee4d392be457642c1f0c259264a9b9bfbcb680302ce88fc2` |
+| 6 | Neovim 0.12.5 | `https://github.com/neovim/neovim.git` | tag `v0.12.5`, commit `5885a30e1e1225349079e7a1c4a3848aa8e43e42` |
+| 6 | utf8proc 2.11.3 | `https://github.com/juliastrings/utf8proc/archive/v2.11.3.tar.gz` | SHA-256 `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
+| 6 | tree-sitter 0.26.13 | `https://github.com/tree-sitter/tree-sitter/archive/v0.26.13.tar.gz` | SHA-256 `ece24c3c5e2a76384075e830c7139b59fce8fb01e4ef8436fab08bbe10444c89` |
+| 6, if libc supplies none | libiconv 1.17 | `https://github.com/neovim/deps/raw/b9bf36eb31f27e8136d907da38fa23518927737e/opt/libiconv-1.17.tar.gz` | SHA-256 `8f74213b56238c85a50a5329f77e06198771e70dd9a739779f4c02f65d971313` |
+
+Unibilium, gettext, the bundled parsers and Wasmtime are not needed: the first
+slice builds with `ENABLE_UNIBILIUM=OFF` and `ENABLE_LIBINTL=OFF`. Task 6 also
+needs a native host Lua 5.1 or LuaJIT for Neovim's generators, which the build
+host provides, not the image.
+
+### Owner decisions
+
+1. **Lua runtime.** Default: PUC Lua 5.1.5, an upstream-supported choice. It
+   needs no executable memory or JIT support, but it is slower and plugins that
+   need LuaJIT's `jit` or FFI will not run. The alternative is LuaJIT, which
+   waits for a native executable-memory transition.
+2. **Event model.** Default: readiness plus try operations, extending `wait_many`
+   as for console, terminals and TCP. It matches libuv's own model and reuses
+   the accepted contract. The alternative is a submission and completion
+   interface, which is larger and would be a second I/O model.
+3. **First-slice scope.** Default: the narrow slice above, with swap and backup
+   off in the packaged configuration, ASCII only and no threads. The alternative
+   adds swap and backup, which needs the identity contract and a lease and
+   recovery policy first.
+
+## Investigation of 2026-09-29
+
+The rest of this document is the original investigation at Pyxis `93031d03`. The
+[re-check](#re-check-against-current-main) supersedes it where they differ,
+and the [milestone](#milestone-proposal) replaces its milestone list and open
+questions.
+
+### Executive summary
 
 Pyxis already has capability-based program launch, standard streams and bounded native
 pipes, explicit-offset file I/O, directory enumeration, atomic file replacement,
@@ -220,96 +340,6 @@ was run. No test suite, new test infrastructure, OS rebuild, package installatio
 toolchain rebuild, port patch, CI change or fake operation was used. The gap map is
 source inspection plus explicitly identified design inference; it is not measured
 performance or proof of a completed port.
-
-## Proposed bounded native milestones
-
-These are ordered proposals with independently useful consumers. Block storage remains
-the active implementation track. These proposals do not start parallel implementation;
-filesystem metadata work should follow the implemented
-[native filesystem](../devices/filesystem-native-adapter.md) and the deferred
-[authority direction](users-and-authority.md). Each step should end with ordinary
-focused builds, manual runtime use and debugger inspection appropriate to its actual
-change.
-
-1. **Wait on native stream activity and completion.** Choose readiness-plus-try-I/O or
-   explicit submission/completion for a first console/pipe/process/deadline slice.
-   Specify registration lifetime, wake-before-park, close, EOF/error, timeout races and
-   bounded queues. Keep network/fs watches outside the first slice. Useful consumers: a
-   responsive pipe relay, child-output viewer, existing shell completion handling and
-   Kilo input/status timing. This produces a reusable event-loop basis before Neovim.
-2. **Multiple user threads in one process and the matching runtime safety.** Start with
-   an explicit CPU-placement policy, stack limits, create/join/exit, TLS keys/errno,
-   mutex/condition/semaphore/once and reliable loop wake. Resolve sibling VM
-   loans/handle growth and process-wide fault/last-thread cleanup before implementation;
-   do not add locks to the old ownership model and hope it holds. Make libc shared state
-   safe. Useful consumers: libuv worker callbacks and Lua background work; eager vs
-   guarded/lazy stacks and cross-CPU execution can be separately bounded decisions.
-   The [runtime SMP milestone](../kernel/smp.md) separated spaces from CPUs,
-   migrates existing single-task processes and made private memory operations
-   local. It does not establish shared-process safety; user threads remain
-   [separate work](scheduling-and-threads.md#multiple-user-threads). Sibling coordination is required even
-   if the first threaded processes stay on one CPU.
-3. **Truthful native file metadata, identity and editor conflict information.** Define
-   identity comparison scope/lifetime, file kind/size, modification indication and
-   actual access/ownership information across RAM/host and the selected
-   native-filesystem direction. Add conventional wrappers only for supported behavior;
-   carry forward existing exclusive creation, rename and file/directory sync. Useful
-   consumers: alias-safe copy, TCC include identity, navigators and editor overwrite
-   checks. General file watches, Unix permissions and broad locking APIs stay deferred
-   until concrete policy is agreed.
-4. **A native terminal-session first slice.** Independent session input/output,
-   dimensions, exclusive/attached use, close/focus/resize events and terminal-state
-   ownership; publish an accurate rendering/input capability set and implement the VT
-   subset needed by consumers. Use raw byte input already available. Useful consumers:
-   shell/Kilo sessions and the first multiplexer pane; a full multiplexer is another
-   task. State an ASCII-first limitation if selected, then add UTF-8/wide/combining/font
-   behavior as focused follow-ups before claiming general Unicode editing. PTY child
-   terminals remain a separate extension.
-5. **A small native libuv backend and controlled child streams.** Map loops/timers/async
-   wake, native pipes/console, synchronous fs operations, worker-completion delivery and
-   launcher/child completion into real libuv behavior. Deliberately expose only
-   supported features. Settle delegated child-control authority and cooperative/forced
-   stop semantics before claiming uv_process_kill or timeout termination; do not
-   implement a global PID kill oracle. Useful consumers: a luv event/job utility and
-   generic stdio RPC. TCP listeners, filesystem watches, PTYs and dynamically loaded
-   code can remain explicit unsupported features.
-6. **Pinned dependency closure and a basic Neovim integration slice.** Choose Lua 5.1
-   interpreter vs LuaJIT, build the needed Lua/LPeg/luv/libuv/utf8proc/iconv/tree-sitter
-   closure and keep host generators separate. Provide consistent capability-root paths,
-   runtime/config/cache/temp locations, and mutable cwd/environment across all adapters.
-   Use the new platform adapters, give TUI/server explicit launch/pipe/file authority,
-   and validate open/edit/save with declared backup/swap, encoding and rendering limits.
-   Useful consumer: Neovim with pure Lua/Vimscript configuration and ordinary native
-   files. Native-code plugins, dynamic tree-sitter parsers, language-server executables
-   and `:terminal` are subsequent consumer-specific tasks, not implicit promises in this
-   slice.
-
-## Decisions to discuss before implementation
-
-- **Event semantics:** readiness or completion, buffer copying/borrowing, how completion
-  survives close/timeout/cancel, event coalescing, short progress and queue quotas.
-  Libuv cancellation need not forcibly interrupt already executing file work; its
-  pending cancellation is not permission to drop the eventual callback.
-- **Thread authority and lifetime:** same-process shared handles vs any restricted
-  thread authority, CPU placement, stack ownership/limits, process-wide faults and exit,
-  TLS ABI/access method, cancellation of blocked operations and the redesigned
-  BSP/private-VM loan rules. Four libuv workers request 8 MiB stacks each; a naive eager
-  implementation would provision 32 MiB just for those requested stacks. This arithmetic
-  is not a measured Neovim memory footprint.
-- **Filesystem policy:** identity across mounts/replacement, modification/timestamp
-  accuracy, native users/ownership and access representation, edit leases/swap
-  ownership, durability order and external host changes. Coordinate with the existing
-  persistent-pool and users/authority discussions; Neovim's Unix st_mode/uid/gid
-  assumptions do not decide them.
-- **Process/session policy:** who can launch/stop children and descendants, extra stream
-  delegation, terminal/session ownership and restoration, attach/detach, focus/resize,
-  cooperative stop vs forced teardown. Numeric IDs needed for diagnostics must not
-  become unchecked control authority.
-- **First consumer boundary:** default swap/backup/recovery or explicitly deferred
-  options, ASCII/Unicode subset, legacy syntax vs dynamic tree-sitter parsers, pure Lua
-  plugins vs native modules/jobs, stdio RPC vs public/local/network listeners. Lua 5.1
-  is an upstream-supported runtime alternative; extending the Lua 5.5 export cannot
-  erase this version choice.
 
 The investigation leaves actual dependency builds/linker closure, end-to-end application
 performance, full Unicode rendering choices, native module ABI and exact process/thread
