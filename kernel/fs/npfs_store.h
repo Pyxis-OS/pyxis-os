@@ -3,6 +3,7 @@
 #define KERNEL_FS_NPFS_STORE_H
 
 #include <abi/directory.h>
+#include <abi/file_info.h>
 #include <abi/syscall.h>
 #include <kernel/block.h>
 #include <kernel/gpt.h>
@@ -62,6 +63,9 @@ enum call_status npfs_store_read(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t offset, void *bytes,
     size_t capacity, size_t *read);
 uint64_t npfs_store_size(const struct npfs_store_inode *inode);
+/* Current inode data, including accepted cached writes. Identity follows live
+ * inode references across wrappers; retired/free slots acquire a new identity. */
+void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply *info);
 /* Namespace edits commit durably without flushing unrelated cached files.
  * Replacement rename first flushes the moved file. Remove and rename replacement
  * detach the last durable target record, retaining unpublished contents for open
