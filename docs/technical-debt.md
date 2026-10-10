@@ -1088,8 +1088,8 @@ memory limits their size. Add an ABI for creating RAM volumes when a second user
 Installed systems run ordinary programs from `bin://`, but the boot archive's rescue set still carries `textfs` and `httpfs`: the init scripts start
 those providers before any shell and a launch failure stops a script, so without them a system whose `bin` volume is missing would get no shell even
 from the rescue entry. Revisit once inits can start providers from `bin://` with a fallback or tolerate a missing provider. Related limits of the
-[program stage](userland/system-updates.md#program-stage): only executables move (`share/`, `sdk/` and configuration stay in `boot://` because programs
-name those paths), builds without a Git revision share `bin/unknown`, the installer holds the boot archive twice in memory while filtering (about
+[program stage](userland/system-updates.md#program-stage): root `.pxe` programs and complete `.pxb` trees move; shared `share/`, `sdk/` and
+configuration stay in `boot://` because programs name those paths, builds without a Git revision share `bin/unknown`, the installer holds the boot archive twice in memory while filtering (about
 90 MiB today), and spaces get `bin://` read-only with only the installer writing it.
 
 ## Interim program revision directories
