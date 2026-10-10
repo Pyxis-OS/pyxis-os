@@ -376,6 +376,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
   bool retained;
   if (object->type == OBJECT_EXECUTION_GROUP) {
     retained = execution_group_authority_retain(object, rights);
+  } else if (object->type == OBJECT_PIPE) {
+    retained = pipe_grant_retain((struct pipe_end *)object);
   } else if (object->type == OBJECT_CONSOLE) {
     retained = console_authority_retain(object, rights);
   } else {
@@ -392,6 +394,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
   if (object->type == OBJECT_EXECUTION_GROUP) {
     execution_group_authority_release(object, rights);
+  } else if (object->type == OBJECT_PIPE) {
+    pipe_grant_release((struct pipe_end *)object);
   } else if (object->type == OBJECT_CONSOLE) {
     console_authority_release(object, rights);
   } else {

@@ -11,12 +11,15 @@
 #include <kernel/user/wait.h>
 #include <kernel/wait.h>
 
+#define PIPE_END_COUNT 2
+
 struct pipe_pair {
   atomic_bool locked;
   struct pipe_end reader, writer;
   struct task_wait_link *readers, *writers;
   size_t head, count;
   bool reader_closed, writer_closed;
+  size_t remaining_ends;
   uint8_t data[PIPE_CAPACITY];
 };
 
@@ -65,22 +68,60 @@ static void detach_waiter(struct task_wait_link **queue, struct task_wait_link *
   record->wait = NULL;
 }
 
+/* Storage references keep the pair alive without keeping a direction open. */
+static void close_end(struct pipe_end *end)
+{
+  struct pipe_pair *pair = end->pair;
+  if (end->reader) {
+    pair->reader_closed = true;
+    wake_all(&pair->writers);
+  } else {
+    pair->writer_closed = true;
+    wake_all(&pair->readers);
+  }
+}
+
+bool pipe_grant_retain(struct pipe_end *end)
+{
+  struct pipe_pair *pair = end->pair;
+  lock_pipe(pair);
+  bool retained = end->grants != SIZE_MAX;
+  if (retained) {
+    ++end->grants;
+  }
+  unlock_pipe(pair);
+  return retained;
+}
+
+void pipe_grant_release(struct pipe_end *end)
+{
+  struct pipe_pair *pair = end->pair;
+  lock_pipe(pair);
+  KASSERT(end->grants);
+  bool closed = --end->grants == 0;
+  if (closed) {
+    close_end(end);
+  }
+  unlock_pipe(pair);
+  if (closed) {
+    readiness_pipe_notify();
+  }
+}
+
 static void destroy_pipe_end(struct kernel_object *object)
 {
   struct pipe_end *end = (struct pipe_end *)object;
   struct pipe_pair *pair = end->pair;
   lock_pipe(pair);
-  /* A blocked operation keeps its own endpoint live through its process handle. */
+  KASSERT(!end->grants && pair->remaining_ends);
   if (end->reader) {
-    KASSERT(!pair->reader_closed && !pair->readers);
-    pair->reader_closed = true;
-    wake_all(&pair->writers);
+    KASSERT(!pair->readers);
   } else {
-    KASSERT(!pair->writer_closed && !pair->writers);
-    pair->writer_closed = true;
-    wake_all(&pair->readers);
+    KASSERT(!pair->writers);
   }
-  bool finished = pair->reader_closed && pair->writer_closed;
+  /* Failed unpublished creation may never have installed any grant. */
+  close_end(end);
+  bool finished = --pair->remaining_ends == 0;
   unlock_pipe(pair);
   readiness_pipe_notify();
   if (finished) {
@@ -99,6 +140,7 @@ static bool pipe_pair_create(struct pipe_end **reader, struct pipe_end **writer)
   }
   memset(pair, 0, sizeof(*pair));
   atomic_init(&pair->locked, false);
+  pair->remaining_ends = PIPE_END_COUNT;
   object_init(&pair->reader.object, OBJECT_PIPE, destroy_pipe_end);
   object_init(&pair->writer.object, OBJECT_PIPE, destroy_pipe_end);
   pair->reader.pair = pair;

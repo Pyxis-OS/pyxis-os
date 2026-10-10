@@ -169,20 +169,21 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
   size_t retained = 0;
   enum call_status status = CALL_OK;
   for (size_t i = 0; i < count; ++i) {
-    uint64_t rights, transport;
-    if (capability_resolve(&caller->capabilities, input[i].handle,
-          0, 0, &objects[i], &rights, &transport) != CAP_OK) {
-      status = CALL_BAD_HANDLE;
+    struct capability_reference reference;
+    enum capability_result lookup = capability_acquire(&caller->capabilities,
+        input[i].handle, 0, 0, &reference);
+    if (lookup != CAP_OK) {
+      KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT);
+      status = lookup == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE;
       break;
     }
-    status = interest_authority(objects[i], caller, rights, transport, input[i].events);
+    status = interest_authority(reference.object, caller, reference.rights,
+        reference.transport, input[i].events);
     if (status != CALL_OK) {
+      capability_release(&reference);
       break;
     }
-    if (!object_retain(objects[i])) {
-      status = CALL_LIMIT;
-      break;
-    }
+    objects[i] = reference.object;
     ++retained;
   }
   if (status != CALL_OK) {
