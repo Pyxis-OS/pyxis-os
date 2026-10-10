@@ -175,6 +175,55 @@ records now include the read ratios and inherited phase/control state. Missing
 or non-unity ratios still refuse, even with equal dimensions. Native success
 remains pending a restaged boot; it is not inferred from the old dump.
 
+## RGB chroma refusal — 2026-10-10
+
+Luna's native retest of `27e4ec8f`, masked local `flip-647b.log`, again stayed
+`backend=ordinary`. The owner reported unchanged tearing and no flicker or
+stutter. H/V were `0x01000000`, but HC/VC were zero: both chroma-unity terms
+fail. Mode1/AutoCal0x100, ARGB8888, equal rectangles and disabled interrupt
+enables still match the earlier capture. No spare mapping or GPU write occurred.
+
+The full scaler dump has taps0, boundary0, replicate0, two-tap`0x1110111`
+and all six phase/init registers`0x01000000`. The pinned DCN2.1 definitions
+encode taps minus one: taps0 means one tap in each field. Two-tap controls have
+H/V hardcoded enable1, sharp enable1 and factor1. These are **not** Linux's
+normal one-tap programming: [filter selection](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/dpp/dcn10/dcn10_dpp_dscl.c#L215-L239)
+returns no coefficient table for one tap; [filter control](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/dpp/dcn10/dcn10_dpp_dscl.c#L280-L373)
+only enables the hardcoded/sharpened two-tap path when both corresponding tap
+counts exceed one. The source does not state how hardware treats these enable
+bits with one-tap counts. The gate has no further tap/control/init rejection
+predicate; all these fields are already inherited and frozen, never rewritten.
+
+ARGB8888 is a single RGB surface: [HUBP2 size/format programming](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn20/dcn20_hubp.c#L328-L374)
+does not program its chroma pitch. The DSCL filter code above selects separate
+chroma coefficients only for video/YUV. That supports an unused-chroma-path
+interpretation, but does **not** establish that C ratio/init registers are
+ignored in enabled RGB mode. [Ratio calculation](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/core/dc_resource.c#L1180-L1232)
+copies H/V into HC/VC even for RGB, and the manual scaler writer programs all
+four ratios and C phases unconditionally. [Phase calculation](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/core/dc_resource.c#L1235-L1282)
+uses `(ratio + taps + 1) / 2`, giving1.5 for unclipped unity/one-tap rather
+than the captured1.0. Firmware can retain a different valid sampling setup;
+Linux's programming sequence alone does not prove its inactive-field semantics.
+
+The owner's requested temporary host check compiled the actual `dimensions`,
+`active_extent`, `qualified_scaler` and **whole** `qualified_route` functions
+from the working source with the actual structures/constants. The fixture uses
+the complete new scaler dump and earlier `inventory-638b.log` route/VM/DMCUB
+fields. Unlogged OTG stereo/lock/GSL and MPCC stereo fields were explicitly zero
+assumptions, not measured new-boot values. The captured C-zero fixture returns
+`-1`; changing only HC/VC to unity returns HUBP0. Thus the known state has no
+additional tap/two-tap rejection hiding behind the ratio failure. This is a
+conditional host precheck, not a new native full-route measurement or positive
+memory/write qualification. No persistent test or synthetic hardware was added.
+
+The gate remains unchanged pending evidence or an explicit owner decision on
+accepting this exact inherited RGB state with that residual uncertainty. Default:
+retain refusal until hardware documentation establishes the C-field semantics.
+An alternative is owner-authorized acceptance based on the working inherited
+native display, keeping H/V exactly unity, HC/VC limited to zero or unity only
+for qualified ARGB8888, and every scaler register frozen. The latter is not
+accepted or implemented here. Restaging the unchanged gate would refuse again.
+
 ## Paired native qualification — Luna stages, owner judges
 
 Use one submitted revision, same kernel/initrd, same GOP mode and boot configuration,
