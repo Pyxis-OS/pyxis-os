@@ -17,6 +17,7 @@ struct debug_stop_state arch_debug_stop ARCH_DEBUG_DATA;
 bool arch_debug_enabled ARCH_DEBUG_DATA;
 static struct debug_cpu_snapshot *by_apic[XAPIC_CPU_LIMIT] ARCH_DEBUG_DATA;
 static atomic_bool entry_claim ARCH_DEBUG_DATA;
+static atomic_bool incomplete_claim ARCH_DEBUG_DATA;
 static bool origin_frame_saved ARCH_DEBUG_DATA;
 static struct debug_registers origin_registers ARCH_DEBUG_DATA;
 
@@ -104,8 +105,9 @@ static ARCH_DEBUG_CODE bool all_acknowledged(void)
 
 [[noreturn]] static ARCH_DEBUG_CODE void incomplete_stop(void)
 {
-  if (atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) !=
-      DEBUG_STOP_INCOMPLETE) {
+  bool expected = false;
+  if (atomic_compare_exchange_strong_explicit(&incomplete_claim, &expected, true,
+        memory_order_acq_rel, memory_order_acquire)) {
     for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
       arch_debug_stop.cpus[i].missing =
         atomic_load_explicit(&arch_debug_stop.cpus[i].ack_generation,
@@ -121,17 +123,27 @@ static ARCH_DEBUG_CODE bool all_acknowledged(void)
   }
 }
 
+static ARCH_DEBUG_CODE void advance_phase(enum debug_stop_phase from,
+                                           enum debug_stop_phase to)
+{
+  if (atomic_load_explicit(&incomplete_claim, memory_order_acquire) ||
+      !atomic_compare_exchange_strong_explicit(&arch_debug_stop.phase, &from, to,
+          memory_order_acq_rel, memory_order_acquire)) {
+    incomplete_stop();
+  }
+}
+
 static ARCH_DEBUG_CODE void service_stop(uint64_t generation)
 {
   if (arch_debug_stop.terminal && !debug_stop_begin(generation, true)) {
     if (debug_stop_retained()) {
       incomplete_stop();
     }
-    atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_RELEASED, memory_order_release);
+    advance_phase(DEBUG_STOP_REQUESTED, DEBUG_STOP_RELEASED);
     atomic_store_explicit(&arch_debug_stop.resume_generation, generation, memory_order_release);
     return;
   }
-  atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_ACQUIRING, memory_order_release);
+  advance_phase(DEBUG_STOP_REQUESTED, DEBUG_STOP_ACQUIRING);
   for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
     struct debug_cpu_snapshot *snapshot = &arch_debug_stop.cpus[i];
     if (atomic_load_explicit(&snapshot->ack_generation, memory_order_acquire) == generation) {
@@ -155,13 +167,13 @@ static ARCH_DEBUG_CODE void service_stop(uint64_t generation)
     }
     __asm__ volatile("pause");
   }
-  atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_COMPLETE, memory_order_release);
+  advance_phase(DEBUG_STOP_ACQUIRING, DEBUG_STOP_COMPLETE);
   debug_stop_run(generation);
   if (arch_debug_stop.terminal) {
     incomplete_stop();
   }
   /* Transport has restored ordinary ownership before any peer can run. */
-  atomic_store_explicit(&arch_debug_stop.phase, DEBUG_STOP_RELEASED, memory_order_release);
+  advance_phase(DEBUG_STOP_COMPLETE, DEBUG_STOP_RELEASED);
   atomic_store_explicit(&arch_debug_stop.resume_generation, generation, memory_order_release);
 }
 
