@@ -1,4 +1,5 @@
 #include <abi/pipe.h>
+#include <abi/wait.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -7,6 +8,7 @@
 #include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
+#include <kernel/user/wait.h>
 #include <kernel/wait.h>
 
 struct pipe_pair {
@@ -80,6 +82,7 @@ static void destroy_pipe_end(struct kernel_object *object)
   }
   bool finished = pair->reader_closed && pair->writer_closed;
   unlock_pipe(pair);
+  readiness_notify();
   if (finished) {
     kfree(pair);
   }
@@ -226,14 +229,13 @@ static void copy_ring_in(struct pipe_pair *pair, const uint8_t *source, size_t l
 }
 
 static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
-    size_t capacity, size_t *read)
+    size_t capacity, size_t *read, bool try)
 {
   *read = 0;
   if (!capacity) {
     return CALL_OK;
   }
   for (;;) {
-    struct task_wait_link *record = task_wait_link_prepare();
     lock_pipe(pair);
     if (task_stop_requested()) {
       unlock_pipe(pair);
@@ -241,14 +243,23 @@ static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
     }
     if (pair->count || pair->writer_closed) {
       size_t length = pair->count < capacity ? pair->count : capacity;
+      bool writable = pair->count == PIPE_CAPACITY && length;
       copy_ring_out(pair, data, length);
       if (length) {
         wake_all(&pair->writers);
       }
       *read = length;
       unlock_pipe(pair);
+      if (writable) {
+        readiness_notify();
+      }
       return CALL_OK;
     }
+    if (try) {
+      unlock_pipe(pair);
+      return CALL_WOULD_BLOCK;
+    }
+    struct task_wait_link *record = task_wait_link_prepare();
     record->next = pair->readers;
     pair->readers = record;
     struct task_wait *wait = record->wait;
@@ -265,14 +276,13 @@ static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
 }
 
 static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
-    size_t length, size_t *written)
+    size_t length, size_t *written, bool try)
 {
   *written = 0;
   if (!length) {
     return CALL_OK;
   }
   for (;;) {
-    struct task_wait_link *record = task_wait_link_prepare();
     lock_pipe(pair);
     if (task_stop_requested() || pair->reader_closed) {
       unlock_pipe(pair);
@@ -280,12 +290,21 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
     }
     if (pair->count < PIPE_CAPACITY) {
       size_t available = PIPE_CAPACITY - pair->count;
+      bool readable = !pair->count;
       *written = length < available ? length : available;
       copy_ring_in(pair, data, *written);
       wake_all(&pair->readers);
       unlock_pipe(pair);
+      if (readable) {
+        readiness_notify();
+      }
       return CALL_OK;
     }
+    if (try) {
+      unlock_pipe(pair);
+      return CALL_WOULD_BLOCK;
+    }
+    struct task_wait_link *record = task_wait_link_prepare();
     record->next = pair->writers;
     pair->writers = record;
     struct task_wait *wait = record->wait;
@@ -303,7 +322,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
 
 static struct syscall_result pipe_read_call(struct pipe_pair *pair,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, bool try)
 {
   struct pipe_read_request request = {0};
   size_t payload_size = sizeof(request) - sizeof(request.header);
@@ -325,7 +344,7 @@ static struct syscall_result pipe_read_call(struct pipe_pair *pair,
 
   uint8_t data[PIPE_READ_MAX_BYTES];
   struct pipe_read_reply reply;
-  enum call_status status = read_pipe(pair, data, capacity, &reply.length);
+  enum call_status status = read_pipe(pair, data, capacity, &reply.length, try);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -336,7 +355,7 @@ static struct syscall_result pipe_read_call(struct pipe_pair *pair,
 
 static struct syscall_result pipe_write_call(struct pipe_pair *pair,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, bool try)
 {
   struct pipe_write_request request = {0};
   size_t payload_size = sizeof(request) - sizeof(request.header);
@@ -354,7 +373,7 @@ static struct syscall_result pipe_write_call(struct pipe_pair *pair,
   }
 
   size_t written;
-  enum call_status status = write_pipe(pair, data, length, &written);
+  enum call_status status = write_pipe(pair, data, length, &written, try);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -367,7 +386,7 @@ struct syscall_result pipe_call(struct pipe_end *end, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation == PIPE_READ) {
+  if (operation == PIPE_READ || operation == PIPE_TRY_READ) {
     if (!(rights & PIPE_RIGHT_READ)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
@@ -375,9 +394,9 @@ struct syscall_result pipe_call(struct pipe_end *end, uint64_t rights,
       return (struct syscall_result){CALL_WRONG_TYPE, 0};
     }
     return pipe_read_call(end->pair, request_address, request_size,
-        reply_address, reply_capacity);
+        reply_address, reply_capacity, operation == PIPE_TRY_READ);
   }
-  if (operation == PIPE_WRITE) {
+  if (operation == PIPE_WRITE || operation == PIPE_TRY_WRITE) {
     if (!(rights & PIPE_RIGHT_WRITE)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
@@ -385,7 +404,33 @@ struct syscall_result pipe_call(struct pipe_end *end, uint64_t rights,
       return (struct syscall_result){CALL_WRONG_TYPE, 0};
     }
     return pipe_write_call(end->pair, request_address, request_size,
-        reply_address, reply_capacity);
+        reply_address, reply_capacity, operation == PIPE_TRY_WRITE);
   }
   return (struct syscall_result){CALL_BAD_OPERATION, 0};
+}
+
+uint64_t pipe_ready(struct pipe_end *end, uint64_t events)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct pipe_pair *pair = end->pair;
+  lock_pipe(pair);
+  uint64_t ready = 0;
+  if (end->reader) {
+    if ((events & WAIT_READABLE) && pair->count) {
+      ready |= WAIT_READABLE;
+    }
+    if ((events & (WAIT_READABLE | WAIT_PEER_FIN)) && pair->writer_closed) {
+      ready |= WAIT_PEER_FIN;
+    }
+  } else {
+    if ((events & WAIT_WRITABLE) && !pair->reader_closed && pair->count < PIPE_CAPACITY) {
+      ready |= WAIT_WRITABLE;
+    }
+    if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) && pair->reader_closed) {
+      ready |= WAIT_WRITE_CLOSED;
+    }
+  }
+  unlock_pipe(pair);
+  cpu_restore_interrupts(flags);
+  return ready;
 }

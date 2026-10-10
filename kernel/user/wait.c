@@ -13,6 +13,7 @@
 #include <kernel/object/keyboard.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/pipe.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/panic.h>
@@ -37,6 +38,14 @@ static enum call_status interest_authority(const struct kernel_object *object,
     if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
       required |= TCP_RIGHT_WRITE;
     }
+  } else if (object->type == OBJECT_PIPE) {
+    const struct pipe_end *end = (const struct pipe_end *)object;
+    uint64_t allowed = end->reader ? WAIT_READABLE | WAIT_PEER_FIN :
+        WAIT_WRITABLE | WAIT_WRITE_CLOSED;
+    if (events & ~allowed) {
+      return CALL_BAD_REQUEST;
+    }
+    required = end->reader ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
   } else if (object->type == OBJECT_TCP_LISTENER) {
     if (events & ~(WAIT_ACCEPTABLE | WAIT_CLOSED)) {
       return CALL_BAD_REQUEST;

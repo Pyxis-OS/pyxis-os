@@ -9,6 +9,7 @@
 #include <kernel/object/keyboard.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
+#include <kernel/object/pipe.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
@@ -98,6 +99,9 @@ bool readiness_service(struct bsp_request **active_list)
     for (size_t i = 0; !stopped && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
+      case OBJECT_PIPE:
+        interest->ready = pipe_ready((struct pipe_end *)interest->object, interest->events);
+        break;
       case OBJECT_TCP:
       case OBJECT_TCP_LISTENER:
         interest->ready = tcp_readiness_events(interest);
