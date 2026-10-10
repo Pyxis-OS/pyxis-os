@@ -1,71 +1,46 @@
 # Terminal SGR costs and qualification
 
-Qualification for the [terminal SGR follow-up](../../../wip/neovim-groundwork.md#terminal-sgr-follow-up)
-and the shared [`pyxis` sequence table](../../../userland/terminal.md#tty-output-controls).
-This changes retained cells and SGR interpretation in the kernel TTY, mux and
-interactive host remote client. It adds no kernel logging or benchmark facility.
+For the [SGR follow-up](../../../wip/neovim-groundwork.md#terminal-sgr-follow-up)
+and [terminal sequence table](../../../userland/terminal.md#tty-output-controls).
 
-## Configuration and method
+## Revisions and method
 
-Initial baseline was captured on main `2f34bb30`, userland `fbce73b`, before
-implementation. Main subsequently merged working-path/environment and cursor
-inventory work. The interleaved comparison uses a rebuilt control at main
-`441fcd4a`, userland `3bd6c21`, against `85a4e8a4`, userland `e742ccb`. Both pin
-ports `be901cf`, filesystem `b427df29` and lwIP `a1aadb91`.
+Baseline preceded implementation on main `2f34bb30`, userland `fbce73b`.
+Matched runs use rebuilt control `441fcd4a` / userland `3bd6c21` and changed
+`85a4e8a4` / userland `e742ccb`; both pin ports `be901cf`, filesystem
+`b427df29` and lwIP `a1aadb91`. Later integration includes upstream runtime
+changes; the figures below describe these frozen revisions.
 
-The final integration also incorporates subsequently merged upstream
-stdio/descriptor, session-lifetime, math and Lua/luv work. The SGR patch is
-unchanged after the dependency rebase. The matched cost and memory figures
-below belong to the frozen revisions above; they are not new measurements of
-the later upstream session/runtime changes.
+Ordinary `make -j16 image` uses builder `pyxis-llvm23.1.3-49e2c1a`.
+QEMU 10.2.2 with the documented AHCI fix: q35, nested KVM, four CPUs, 8 GiB,
+standard VGA 1280×800, display off; tab 160×48, one pane 160×46.
+Both fixtures add the same fifth Mux space. Product configuration is unchanged.
 
-Ordinary `make -j16 image` builds use the cached Pyxis Clang 23.1.3 builder,
-`pyxis-llvm23.1.3-49e2c1a`. No compiler container rebuild is needed.
-QEMU 10.2.2 with the documented AHCI fix runs q35, nested KVM, four CPUs,
-8 GiB, standard VGA at 1280×800, display off. The tab is 160×48 cells and
-one mux pane is 160×46. Both staged images add the same uncommitted fifth Mux
-space; its init starts the text provider and session without configuring the
-network again. Product boot configuration is unchanged.
-
-The scratch console workload reconstructs the byte counts in the earlier
-[terminal-profile experiment](../terminal-profile/README.md); the original
-scratch source is unavailable, so these are fresh controls, not a reproduction
-of its numerical results. Exactly the same linked workload binary is staged
-on both sides: SHA-256
-`2349da985f3f65298ed14ad9715b224de3afe91a36514e4256b5e21602ddc165`.
-It prepares bytes before timing, uses libc `write` with short-progress handling,
-and brackets output with the native monotonic clock. Preparation, prefill,
-footer and result-file append are outside elapsed time.
+The uncommitted console workload reconstructs byte counts from
+[terminal-profile](../terminal-profile/README.md), whose original source is
+unavailable. The same binary runs on both sides (SHA-256
+`2349da985f3f65298ed14ad9715b224de3afe91a36514e4256b5e21602ddc165`).
+Native monotonic timing brackets libc writes with short-progress handling;
+preparation, prefill and results are excluded.
 
 | Command | Timed work |
 | --- | --- |
-| `terminal-bench scroll LABEL` | 5,000 coloured 100-character lines, 550,000 bytes |
-| `terminal-bench redraw LABEL` | 200 frames of 24 positioned 79-character rows with erase-to-end, 468,607 bytes |
-| `terminal-bench region LABEL` | 2,000 bottom-margin writes in rows 2–23, 192,017 bytes |
-| `terminal-bench alternate LABEL` | 200 enter/leave pairs after untimed screen prefill, 3,200 bytes |
-| `terminal-bench rows LABEL` | 2,000 insert/delete-line pairs in rows 2–23 after untimed prefill, 12,016 bytes |
+| `terminal-bench scroll LABEL` | 5,000 coloured lines; 550,000 bytes |
+| `terminal-bench redraw LABEL` | 200 frames of 24 positioned rows; 468,607 bytes |
+| `terminal-bench region LABEL` | 2,000 bottom-margin writes, rows 2–23; 192,017 bytes |
+| `terminal-bench alternate LABEL` | 200 enter/leave pairs; 3,200 bytes |
+| `terminal-bench rows LABEL` | 2,000 insert/delete-line pairs, rows 2–23; 12,016 bytes |
 
-Rounds alternate control and changed-image boots: b2 a2 b3 a3 b4 a4. Each boot
-runs one sample of every workload in the tab and then one in the pane, giving
-three samples per workload, layer and revision. Images reuse the same VM,
-firmware variables, devices and boot delay. Each command also has an 8-second
-whole-QEMU CPU window, in host ticks at 100 Hz. No debugger, extra guest client,
-build or second qualification VM runs inside those windows. Native timing
-records are pulled through the existing remote client between rounds; all
-commands complete and the connection drains before reset.
-
-Tab elapsed time includes kernel rendering. Pane elapsed time mostly measures
-producer acceptance into the bounded session queue; its CPU window includes
-later mux rendering and other guest/QEMU work. Screenshots after each window
-check that output drained. The unchanged binary reports the expected byte and
-short-write counts; its footer deliberately homes the cursor, so the next
-prompt can erase the samples. Visual checks use the captured colour bytes
-through `cat` without that footer instead.
+Three interleaved before/after boots give three samples per workload/layer.
+CPU windows are 8 seconds of whole-QEMU ticks at 100 Hz, including background
+work and queue drain. No debugger, build or extra client runs during timing.
+Tab elapsed includes rendering; pane elapsed mainly measures queue acceptance.
+Screenshots check drain; all 60 byte/write-count records match expectations.
+Raw records and captures remain local.
 
 ## Results
 
-Median and range in milliseconds; CPU is median and range of host ticks over
-the 8-second window. Each entry has three samples.
+Median (range), milliseconds; CPU columns are host ticks per window.
 
 | Workload | Before ms | After ms | CPU before | CPU after |
 | --- | ---: | ---: | ---: | ---: |
@@ -80,33 +55,21 @@ the 8-second window. Each entry has three samples.
 | Pane alternate | 0.036 (0.036–0.052) | 0.036 (0.034–0.113) | 147 (102–151) | 86 (82–89) |
 | Pane rows | 0.038 (0.037–0.120) | 0.038 (0.037–0.119) | 95 (93–96) | 85 (84–87) |
 
-All 60 timed records and their CPU windows are in [samples.csv](samples.csv).
+Tab scroll ranges overlap widely; the first pair's 21% slowdown did not repeat.
+Redraw consistently rises 2.3%; alternate-screen median rises 2.5% and row-copy
+0.9%, with overlapping ranges. Pane region acceptance rises 0.88 ms / 32%,
+while CPU windows fall. Queue acceptance and background CPU do not establish
+an isolated rendering regression or improvement. No measured cause is claimed.
 
-The first scroll pair was 2,459 → 2,971 ms, but the next was 3,062 → 2,452 ms
-and the third 2,409 → 2,451 ms. The initial 21% slowdown did not repeat; the
-three-sample ranges overlap widely and establish no consistent scroll change.
-They do not exclude a small regression. Redraw is consistently slightly slower
-in these three pairs: median **+2.3%**. Alternate-screen median is **+2.5%**
-within overlapping ranges; row-copy median is **+0.9%**. These small costs are
-recorded without claiming a measured cause.
-
-Pane region acceptance is about **0.88 ms / 32% slower** at the median, while
-its CPU windows are lower. Those clocks measure bounded-queue progress rather
-than isolated rendering, so the figures do not establish a rendering slowdown
-or a CPU improvement. Other pane ranges overlap; redraw controls include a
-36 ms sample. Whole-QEMU background variation is visible in the CPU windows.
-
-Source inspection: one-row whole-screen scroll moves 3,850,240 raster bytes
-plus cell data increasing from 22,560 to 90,240 bytes. Total copy volume rises
-**1.75%**; the 22-row region has the same ratio. Plain glyphs skip synthetic
-style processing. Larger cell writes and shared colour-resolution calls add
-work, but this inspection does not attribute the timing differences.
+Source inspection: whole-screen scroll moves 3,850,240 raster bytes unchanged;
+cell copy rises 22,560 → 90,240 bytes, raising total copy volume 1.75%.
+The 22-row region has the same ratio. Plain glyphs skip synthetic styling;
+larger cells and colour resolution add work without attributing timings.
 
 ## Backing
 
-Read-only GDB snapshots outside timing validate actual dimensions, allocation
-pointers, cell sizes and the full 1,024-row history at stride 160. These are
-requested buffer extents, excluding allocator overhead:
+Read-only GDB snapshots verify dimensions and full 1,024-row history at stride
+160. Requested extents exclude allocator overhead.
 
 | Backing | Before, bytes | After, bytes |
 | --- | ---: | ---: |
@@ -117,58 +80,29 @@ requested buffer extents, excluding allocator overhead:
 | Mux frame and previous frame | 61,440 | 184,320 |
 | Mux total in this one-pane fixture | 783,872 | 2,335,232 |
 
-The matched quiet post-workload snapshots at b2/a2 have all five framebuffer
-spaces and the one pane running, with the result-pull connection closed.
-Allocated physical frames increase from 13,561 to 14,071: **510 pages,
-2,088,960 bytes**. Allocatable capacity differs by three pages between boots;
-the 513-page free-frame decrease therefore includes that reservation difference.
-Kernel heap live block bytes increase from 2,238,512 to 2,932,264. Heap pool
-high-water bytes are separate from live backing. Requested buffer growth and
-allocated-page growth differ because of allocator slack, pooling and rounding;
-these snapshots do not isolate every allocation or measure peak resize memory.
+Matched quiet snapshots with five TTYs and one pane show allocated frames
+13,561 → 14,071: **510 pages / 2,088,960 bytes**. Capacity differs by three
+pages, so the free-frame decrease alone overstates allocation growth.
+Kernel heap live bytes rise 2,238,512 → 2,932,264. Pooling, slack and rounding
+separate requested bytes from page growth; this is not peak resize memory.
+Creation/resize retain eager allocation and rollback; failure unwinding was
+inspected, not injected.
 
-All buffers remain eagerly allocated at creation/resize. Mux history retains
-the maximum width seen; a wider resize stages new history and both screens
-before publication. Kernel resize stages every TTY and selection row before
-committing. Failure unwinding was inspected; no allocation failure was injected.
+## Qualification and limits
 
-## Interactive checks
+Tab and pane PNG pixels/GDB verify all indices, representative RGB, independent
+style clears, reverse, saved cursors and alternate roundtrips. Colon, truncated,
+out-of-range and 17-parameter groups leave the preceding style unchanged.
+Selection preserves styles; clipboard inspection verifies glyph-only copy.
+Paste after focus changes was unavailable and is not qualified.
 
-In a tab and pane, the colour sample shows all 256 indices, off-palette RGB,
-independent bold/italic/underline clears, reverse, and saved-cursor and alternate
-roundtrips. PNG pixels confirm the Aardvark first 16, cube endpoints and greys;
-GDB finds all 256 stored background indices and RGB foreground `(7,91,173)` /
-background `(43,17,67)` in both the pane and outer TTY. Indexed operand 7 and
-RGB component 7 leave reverse off. Colon, truncated indexed, index 256, RGB
-component 256 and 17-parameter sequences retain the preceding green combined
-style as a whole. Saved styles retain those same flags.
+A separate one-CPU, 256 MiB GTK/VirtIO-GPU run verifies tab/pane grow/shrink,
+cropping, blank exposure and alternate-screen restoration. Interactive remote
+PTY controls verify palette/RGB/style output and malformed rejection;
+`xfer` transfers 7,909 bytes unchanged (SHA-256
+`abd59f20f579ba8c2ff9c7e33a8caf5bfd7da601a66daad42ac78951f20a8bac`).
+This checks emitted controls, not the host font. Host saved-cursor/alternate
+support remains outside its presentation subset.
 
-Left-drag selection preserves styled glyph shapes in both terminals. Copy
-publishes the selected glyph bytes, independently verified in the bounded
-clipboard items; no colour tags enter the copied text. Paste after focus changes
-was unavailable in this fixture and is not qualified by this task.
-
-A separate GTK/X11 VirtIO-GPU run uses KVM, one CPU, 256 MiB and fresh firmware
-variables. Tab and pane colour samples survive grow/shrink, with cropping and
-blank newly exposed cells. With vi's alternate screen active, further growth
-and shrink preserve the hidden primary; quitting restores its styled cells.
-Observed guest sizes include 1000×753, 600×423, 1050×773 and 700×473. The
-separate VM and debugger are stopped before timed runs.
-
-The new interactive remote client runs with a real controlling PTY. Its emitted
-RGB matches every cube/grey background and sampled Aardvark entries, its emitted
-attributes match the styled words and independent clears, and all five invalid
-groups retain the prior style. This verifies emitted controls, not the host
-font's appearance. Host saved-cursor/alternate-screen support is unchanged;
-the host client does not implement the full native sequence table.
-`xfer send boot://colour-probe.bin` transfers 7,909 bytes through that client,
-with identical SHA-256
-`abd59f20f579ba8c2ff9c7e33a8caf5bfd7da601a66daad42ac78951f20a8bac`;
-transfer controls are intercepted rather than presented as terminal text.
-
-## Limits
-
-These are nested-VM results, not ThinkPad timings or native panel qualification.
-CPU windows include baseline presentation and guest background work. Quiet
-memory snapshots describe this fixture, not a per-pane resident-memory guarantee
-or a peak. Resize allocation rejection was reviewed, not forced at runtime.
+These are nested-VM results, not native ThinkPad timings or panel qualification.
+Quiet backing is fixture-specific; allocation rejection was not forced.
