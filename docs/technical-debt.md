@@ -316,6 +316,16 @@ Owner decision, 2026-10-10: flips stay opt-in for now. The prerequisite set for
 a default, one deliberate native panic with flips on showing its message, passed
 the same day; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
 
+## Presenter dirty regions
+
+Whole-frame skipping avoids unchanged frames across boot, Bochs, VirtIO and
+Renoir, but each visible change still composes and copies/submits a whole frame.
+Software pointer motion, selection and small UI changes therefore retain the
+full-frame pixel budget. Dirty-region tracking is deferred until matched
+whole-frame-skipping measurements show the remaining costs. Revisit after its
+native qualification or a measured consumer bottleneck; any partial-frame design
+must preserve capture, overlays, frame handoff and backend ownership proofs.
+
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)
@@ -1641,13 +1651,3 @@ APIs are omitted. Luv/Neovim must consume native stat validity and exit reasons,
 handle unsupported PIDs/signals, and close remaining libc/API gaps. Revisit in
 [Neovim tasks 5 and 6](wip/neovim-libuv.md#tasks); serving providers in a libuv
 loop needs a receiver adapter. Shared-process threads require a separate milestone.
-
-## Presenter dirty regions
-
-Whole-frame skipping avoids unchanged frames across boot, Bochs, VirtIO and
-Renoir, but each visible change still composes and copies/submits a whole frame.
-Software pointer motion, selection and small UI changes therefore retain the
-full-frame pixel budget. Dirty-region tracking is deferred until matched
-whole-frame-skipping measurements show the remaining costs. Revisit after its
-native qualification or a measured consumer bottleneck; any partial-frame design
-must preserve capture, overlays, frame handoff and backend ownership proofs.
