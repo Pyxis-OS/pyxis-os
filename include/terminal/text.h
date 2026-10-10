@@ -11,6 +11,8 @@ struct terminal_utf8 {
   uint32_t value;
   uint8_t count;
   uint8_t remaining;
+  uint8_t lower;
+  uint8_t upper;
 };
 
 /* Text bytes only: callers handle raw controls and CSI separately. A completed

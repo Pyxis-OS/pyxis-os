@@ -59,26 +59,19 @@ size_t terminal_utf8_decode(struct terminal_utf8 *state, uint8_t byte,
 {
   size_t count = 0;
   if (state->remaining) {
-    if ((byte & 0xc0) == 0x80) {
+    if (byte >= state->lower && byte <= state->upper) {
       state->value = state->value << 6 | (byte & 0x3f);
       ++state->count;
+      state->lower = 0x80;
+      state->upper = 0xbf;
       if (--state->remaining) {
         return 0;
       }
       uint32_t value = state->value;
-      unsigned bytes = state->count;
       terminal_utf8_flush(state);
-      uint32_t minimum = bytes == 2 ? 0x80 : bytes == 3 ? 0x800 : 0x10000;
-      if (value < minimum || value > 0x10ffff ||
-          (value >= 0xd800 && value <= 0xdfff)) {
-        for (unsigned i = 0; i < bytes; ++i) {
-          output[count++] = TERMINAL_REPLACEMENT;
-        }
-      } else {
-        output[count++] = value <= UINT16_MAX &&
-            terminal_character_glyph((uint16_t)value) != REPLACEMENT_GLYPH ?
-            (uint16_t)value : TERMINAL_REPLACEMENT;
-      }
+      output[count++] = value <= UINT16_MAX &&
+          terminal_character_glyph((uint16_t)value) != REPLACEMENT_GLYPH ?
+          (uint16_t)value : TERMINAL_REPLACEMENT;
       return count;
     }
     count = terminal_utf8_flush(state);
@@ -93,6 +86,10 @@ size_t terminal_utf8_decode(struct terminal_utf8 *state, uint8_t byte,
     state->remaining = byte < 0xe0 ? 1 : byte < 0xf0 ? 2 : 3;
     state->value = byte & (0x3f >> state->remaining);
     state->count = 1;
+    /* Exclude overlong forms, surrogates and values beyond U+10FFFF as soon
+     * as the second byte makes the prefix impossible. */
+    state->lower = byte == 0xe0 ? 0xa0 : byte == 0xf0 ? 0x90 : 0x80;
+    state->upper = byte == 0xed ? 0x9f : byte == 0xf4 ? 0x8f : 0xbf;
   } else {
     output[count++] = TERMINAL_REPLACEMENT;
   }
