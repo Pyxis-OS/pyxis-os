@@ -228,7 +228,7 @@ static struct terminal_session *session_create(uint64_t columns, uint64_t rows)
 
 void terminal_create_execute(struct terminal_create_service_request *request)
 {
-  KASSERT(arch_cpu_index() == 0 && request->table);
+  KASSERT(arch_cpu_index() == 0 && request->reservation.table);
   struct terminal_session *session = session_create(request->columns, request->rows);
   if (session) {
     session->space = request->space;
@@ -245,15 +245,17 @@ void terminal_create_execute(struct terminal_create_service_request *request)
     };
     const uint64_t transport[] = {0, 0, 0, 0};
     handle_t handles[4];
-    enum capability_result result;
-    while ((result = capability_insert_batch(request->table, objects, rights,
-        transport, 4, handles)) == CAP_FULL) {
-      result = capability_grow(request->table);
+    struct capability_grant grants[4] = {0};
+    enum capability_result result = CAP_OK;
+    for (size_t i = 0; i < 4; ++i) {
+      result = capability_grant_retain(objects[i], rights[i], transport[i], &grants[i]);
       if (result != CAP_OK) {
         break;
       }
     }
     if (result == CAP_OK) {
+      KASSERT(capability_validate_grants(request->reservation.table, grants, 4) == CAP_OK);
+      capability_install_reserved(&request->reservation, request->slots, grants, 4, handles);
       request->reply = (struct terminal_create_reply){
         .input = handles[0], .output = handles[1], .attachment = handles[2], .events = handles[3],
       };
@@ -263,10 +265,11 @@ void terminal_create_execute(struct terminal_create_service_request *request)
       request->result = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
     }
     for (size_t i = 0; i < 4; ++i) {
+      capability_grant_release(&grants[i]);
       object_release(objects[i]);
     }
   }
-  request->table = NULL;
+  capability_reservation_release(&request->reservation, request->slots);
 }
 
 static void destroy_terminal_service(struct kernel_object *object)
@@ -307,11 +310,24 @@ struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
       !input.rows || input.rows > TERMINAL_ROWS_MAX) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[4];
+  enum capability_result reserved = capability_request_reservation(4, &reservation, slots);
+  if (reserved != CAP_OK) {
+    KASSERT(reserved == CAP_NO_MEMORY || reserved == CAP_LIMIT);
+    return (struct syscall_result){reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, slots);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   struct terminal_create_service_request *request = (void *)
       bsp_request_prepare(BSP_SERVICE_TERMINAL_CREATE);
   struct process *process = process_current();
   KASSERT(process);
-  request->table = &process->capabilities;
+  request->reservation = reservation;
+  memcpy(request->slots, slots, sizeof(slots));
+  reservation = (struct capability_reservation){0};
   request->space = process_current()->space;
   request->columns = input.columns;
   request->rows = input.rows;

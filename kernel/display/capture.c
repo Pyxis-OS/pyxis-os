@@ -21,8 +21,8 @@ static void *frame_pixels;
 static void complete_capture(struct screen_capture_request *request,
     enum call_status status)
 {
-  KASSERT(arch_cpu_index() == 0 && request && request->table);
-  request->table = NULL;
+  KASSERT(arch_cpu_index() == 0 && request);
+  capability_reservation_release(&request->reservation, &request->slot);
   request->status = status;
   if (status != CALL_OK) {
     request->reply = (struct screen_capture_reply){0};
@@ -198,9 +198,13 @@ void screen_capture_finish(bool presented)
     file = file_create_snapshot(pixels, request->reply.size);
     status = CALL_NO_MEMORY;
     if (file) {
-      enum capability_result result = capability_install(request->table,
-          &file->object, FILE_RIGHT_READ, 0, &request->reply.file);
+      struct capability_grant grant;
+      enum capability_result result = capability_grant_retain(&file->object,
+          FILE_RIGHT_READ, 0, &grant);
       if (result == CAP_OK) {
+        KASSERT(capability_validate_grants(request->reservation.table, &grant, 1) == CAP_OK);
+        capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
+            &request->reply.file);
         status = CALL_OK;
       } else {
         KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);

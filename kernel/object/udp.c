@@ -64,7 +64,7 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* The sole task's checked mappings remain valid across the table loan. */
+  /* The sole task's checked mappings remain valid across the network wait. */
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }

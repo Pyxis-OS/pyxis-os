@@ -84,13 +84,14 @@ accessing the saved task stack. The same ordering applies to BSP userspace. See
 [SMP handoffs](smp.md). Private memory used the same deferred path until SMP task
 7a; it now runs in the caller's syscall ([memory](memory.md#execution)).
 
-Screen capture also uses DEFERRED publication, lending the parked caller's
-capability table exclusively until FILE installation and completion. After
+Screen capture retains DEFERRED publication. Its caller claims a destination
+slot before submission; the shared request owns that capacity through FILE
+installation or cleanup, without an exclusive table loan. After
 SERVICING, the executor transfers the request in FORWARDED state to the sole
 presenter without waiting for a frame. Admission and pending/active transitions,
 allocation, capability installation and completion use BSP/IF=0; composition and
 device waits use the presenter's existing IF=1 frame lease. Refusal or a finished
-frame clears all presenter references and the table loan before common completion.
+frame clears all presenter references and unconsumed claims before common completion.
 See [screen capture](../interfaces/screen-capture.md#frame-boundary-and-lifetime).
 
 HOST adds FORWARDED after SERVICING. The executor transfers it to the existing
@@ -125,15 +126,15 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Service | Submission and retained contract |
 | --- | --- |
 | System information | Ordinary; coherent allocator-counter snapshot, or a copy of the ACPI worker's latest battery and AC poll; no caller state loan or mutation |
-| Pipe creation | Ordinary; exclusive table loan and atomic endpoint installation/rollback |
-| Terminal creation | Ordinary; exclusive table loan, fixed queue allocation and atomic three-handle installation/rollback |
-| Capability growth | Ordinary; exclusive caller table loan |
-| Namespace creation | Ordinary; initial grant installation and cleanup on failure |
-| Endpoint creation/export | Ordinary; table/process loans and retained capability references |
+| Pipe creation | Ordinary; two preclaimed slots and atomic owned endpoint publication |
+| Terminal creation | Ordinary; four preclaimed slots, fixed queue allocation and atomic owned handle publication |
+| Capability growth | Ordinary; live table, BSP backing allocation and guarded copy/publication |
+| Namespace creation | Ordinary; preclaimed initial grant slot and cleanup on failure |
+| Endpoint creation/export | Ordinary; preclaimed result slots, owned receiver snapshot and BSP owner-list mutation |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
-| Group creation / launch preparation and publication | Ordinary; atomic supervision/launcher installation, independent capture/batch ownership, sealed admission and unpublished-child rollback |
+| Group creation / launch preparation and publication | Ordinary; claimed result capacity, owned grant captures, private observers, atomic publication and unpublished-child rollback |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
-| Screen capture | Deferred admission, then forwarded; exclusive caller table loan, one pending/in-flight presenter request, owned READ-only FILE installation or unpublished-backing rollback |
+| Screen capture | Deferred admission, then forwarded; preclaimed result slot, one pending/in-flight presenter request, owned READ-only FILE publication or unpublished-backing rollback |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
 | Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
 | Readiness wait | Ordinary admission; selected worker owns observations, transient object references and final completion |
@@ -285,7 +286,8 @@ draining remain undecided. Continued caller execution cannot access exclusively
 lent tables or VM state; borrowed buffers need stable contents and lifetime or
 independent captures.
 
-Concurrent sibling execution would invalidate today's exclusive process/table
-loans and must first replace that ownership contract. Kernel clients likewise
+Shared-table delivery replaces exclusive table loans with owned inputs and
+claims. Concurrent siblings still need process activity drain, VM quiescence and
+the remaining device-operation audit before thread creation. Kernel clients likewise
 need an explicit nesting/dependency contract before synchronous submission can be
 allowed. See the [thread follow-ups](../wip/scheduling-and-threads.md#multiple-user-threads).

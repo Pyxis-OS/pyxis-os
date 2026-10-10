@@ -9,6 +9,7 @@
 #include <kernel/object/directory.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 /* REMOVE may lock parent then child, while RENAME locks two arbitrary parents.
@@ -233,28 +234,53 @@ static enum call_status check_child_request(struct directory_object *directory, 
   return check_name(request->name, request->name_length);
 }
 
-/* Caller retains object while a table-growth loan may block. No directory
- * lock or capability-entry pointer survives the wait. */
-static enum call_status install_child(struct kernel_object *object, uint64_t rights,
-                                       handle_t *handle)
+static enum call_status child_capability_status(enum capability_result result)
 {
-  struct capability_table *table = &process_current()->capabilities;
-  enum capability_result result;
-  for (;;) {
-    result = capability_insert(table, object, rights, 0, handle);
-    if (result != CAP_FULL) {
-      break;
-    }
-    result = capability_request_growth();
-    if (result != CAP_OK) {
-      break;
-    }
+  switch (result) {
+  case CAP_OK: return CALL_OK;
+  case CAP_DENIED: return CALL_DENIED;
+  case CAP_NO_MEMORY: return CALL_NO_MEMORY;
+  case CAP_LIMIT: return CALL_LIMIT;
+  default: panic("unexpected directory capability result %u", (unsigned)result);
   }
+}
+
+/* No directory lock or table-entry pointer survives the growth wait. */
+static enum call_status reserve_child(struct capability_reservation *reservation,
+    struct capability_reserved_slot *slot)
+{
+  enum call_status status = child_capability_status(
+      capability_request_reservation(1, reservation, slot));
+  if (status == CALL_OK && task_stop_requested()) {
+    capability_reservation_release(reservation, slot);
+    status = CALL_UNAVAILABLE;
+  }
+  return status;
+}
+
+static enum call_status prepare_child_grant(struct capability_reservation *reservation,
+    struct kernel_object *object, uint64_t rights, struct capability_grant *grant)
+{
+  enum capability_result result = capability_grant_retain(object, rights, 0, grant);
   if (result == CAP_OK) {
-    return CALL_OK;
+    result = capability_validate_grants(reservation->table, grant, 1);
   }
-  KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-  return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+  if (result != CAP_OK) {
+    capability_grant_release(grant);
+  }
+  return child_capability_status(result);
+}
+
+static enum call_status install_child(struct capability_reservation *reservation,
+    const struct capability_reserved_slot *slot, struct kernel_object *object,
+    uint64_t rights, handle_t *handle)
+{
+  struct capability_grant grant = {0};
+  enum call_status status = prepare_child_grant(reservation, object, rights, &grant);
+  if (status == CALL_OK) {
+    capability_install_reserved(reservation, slot, &grant, 1, handle);
+  }
+  return status;
 }
 
 static struct syscall_result lookup(struct directory_object *directory, uint64_t rights,
@@ -267,6 +293,15 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     return (struct syscall_result){status, 0};
   }
 
+  if (directory->backing == DIRECTORY_HOST && request->name_length > VIRTIO_FS_NAME_MAX) {
+    return (struct syscall_result){CALL_LIMIT, 0};
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  status = reserve_child(&reservation, &slot);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
   struct kernel_object *object = NULL;
   if (directory->backing == DIRECTORY_NPFS) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_LOOKUP);
@@ -283,9 +318,6 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     pending->job.object = NULL;
     npfs_request_release(pending);
   } else if (directory->backing == DIRECTORY_HOST) {
-    if (request->name_length > VIRTIO_FS_NAME_MAX) {
-      return (struct syscall_result){CALL_LIMIT, 0};
-    }
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_LOOKUP);
     pending->node = directory->host;
     pending->kind = request->kind;
@@ -310,16 +342,21 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     }
     unlock_directory(directory);
   }
+  if (status == CALL_OK && task_stop_requested()) {
+    status = CALL_UNAVAILABLE;
+  }
   if (status != CALL_OK) {
     if (object) {
       object_release(object);
     }
+    capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){status, 0};
   }
 
   struct directory_child_reply reply;
-  status = install_child(object, request->rights, &reply.handle);
+  status = install_child(&reservation, &slot, object, request->rights, &reply.handle);
   object_release(object);
+  capability_reservation_release(&reservation, &slot);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -348,6 +385,23 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
+  if (directory->backing == DIRECTORY_HOST && request->name_length > VIRTIO_FS_NAME_MAX) {
+    return (struct syscall_result){CALL_LIMIT, 0};
+  }
+  if (directory->backing != DIRECTORY_NPFS && directory->backing != DIRECTORY_HOST &&
+      directory->backing != DIRECTORY_RAM) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
+  if (directory->backing == DIRECTORY_RAM &&
+      request->name_length > SIZE_MAX - sizeof(struct directory_entry) - 1) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  status = reserve_child(&reservation, &slot);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
   if (directory->backing == DIRECTORY_NPFS) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_CREATE);
     pending->job.node = directory->npfs;
@@ -355,11 +409,11 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     pending->job.child_rights = request->rights;
     pending->job.kind = request->kind;
     pending->job.count = request->name_length;
-    pending->job.table = &process_current()->capabilities;
+    pending->job.reservation = reservation;
+    pending->job.slot = slot;
+    reservation = (struct capability_reservation){0};
     KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
     pending->job.name[request->name_length] = 0;
-    /* The blocked caller lends its table until the worker has installed the
-     * returned handle and either published or unwound the namespace edit. */
     npfs_request_submit_and_wait(pending);
     status = pending->job.status;
     if (status != CALL_OK) {
@@ -372,14 +426,13 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (directory->backing == DIRECTORY_HOST) {
-    if (request->name_length > VIRTIO_FS_NAME_MAX) {
-      return (struct syscall_result){CALL_LIMIT, 0};
-    }
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CREATE);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
-    pending->table = &process_current()->capabilities;
+    pending->reservation = reservation;
+    pending->slot = slot;
+    reservation = (struct capability_reservation){0};
     pending->rights = request->rights;
     KASSERT(copy_from_user(pending->name, request->name, request->name_length));
     hostfs_request_submit_and_wait(pending);
@@ -393,42 +446,38 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     hostfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
-  if (directory->backing != DIRECTORY_RAM) {
-    return (struct syscall_result){CALL_READ_ONLY, 0};
-  }
-  if (request->name_length > SIZE_MAX - sizeof(struct directory_entry) - 1) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
-  }
 
   lock_directory(directory);
   bool detached = directory->detached;
   bool exists = find_user_entry(directory, request->name, request->name_length) != NULL;
   unlock_directory(directory);
-  if (detached) {
-    return (struct syscall_result){CALL_NOT_FOUND, 0};
-  }
-  if (exists) {
-    return (struct syscall_result){CALL_ALREADY_EXISTS, 0};
+  if (detached || exists) {
+    capability_reservation_release(&reservation, &slot);
+    return (struct syscall_result){detached ? CALL_NOT_FOUND : CALL_ALREADY_EXISTS, 0};
   }
 
   struct directory_entry *entry = ramfs_request_entry(request->kind, request->name_length);
   if (!entry) {
+    capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
   /* The BSP never reads an AP's user address or private syscall stack. Its
    * allocation is unpublished; this task fills the already-validated name. */
   KASSERT(copy_from_user(entry->name, request->name, request->name_length));
   entry->name[entry->name_length] = 0;
-  struct directory_child_reply reply;
-  status = install_child(entry->object, request->rights, &reply.handle);
-  if (status != CALL_OK) {
+  struct capability_grant grant = {0};
+  status = prepare_child_grant(&reservation, entry->object, request->rights, &grant);
+  if (status != CALL_OK || task_stop_requested()) {
+    capability_grant_release(&grant);
+    capability_reservation_release(&reservation, &slot);
     ramfs_request_discard(entry);
-    return (struct syscall_result){status, 0};
+    return (struct syscall_result){status != CALL_OK ? status : CALL_UNAVAILABLE, 0};
   }
 
+  struct directory_child_reply reply;
   lock_directory(directory);
-  /* Another CPU may have created this name while allocation/table growth
-   * slept. Publish only after both the entry and returned handle are ready. */
+  /* Recheck after the allocation wait. Namespace publication and the owned
+   * grant move cannot fail once these checks pass. */
   if (directory->detached) {
     status = CALL_NOT_FOUND;
   } else if (name_exists(directory, entry)) {
@@ -439,11 +488,13 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     append_entry(directory, entry);
     ++directory->generation;
     fs_metadata_touch(&directory->metadata);
+    capability_install_reserved(&reservation, &slot, &grant, 1, &reply.handle);
   }
   unlock_directory(directory);
 
+  capability_grant_release(&grant);
+  capability_reservation_release(&reservation, &slot);
   if (status != CALL_OK) {
-    KASSERT(capability_close(&process_current()->capabilities, reply.handle) == CAP_OK);
     ramfs_request_discard(entry);
     return (struct syscall_result){status, 0};
   }

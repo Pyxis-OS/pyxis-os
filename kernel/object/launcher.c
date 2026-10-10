@@ -71,25 +71,25 @@ static void create_execution_group(struct launcher_request *request)
   }
   struct kernel_object *launcher = create_launcher(group);
   if (launcher) {
-    struct kernel_object *objects[] = {&group->object, launcher};
-    const uint64_t rights[] = {EXECUTION_GROUP_RIGHT_CONTROL | EXECUTION_GROUP_RIGHT_WAIT,
-        LAUNCHER_RIGHT_LAUNCH};
-    const uint64_t transport[] = {0, 0};
-    handle_t handles[2];
-    enum capability_result result;
-    while ((result = capability_insert_batch(&parent->capabilities, objects,
-        rights, transport, 2, handles)) == CAP_FULL) {
-      result = capability_grow(&parent->capabilities);
-      if (result != CAP_OK) {
-        break;
-      }
+    struct capability_grant grants[2] = {0};
+    enum capability_result result = capability_grant_retain(&group->object,
+        EXECUTION_GROUP_RIGHT_CONTROL | EXECUTION_GROUP_RIGHT_WAIT, 0, &grants[0]);
+    if (result == CAP_OK) {
+      result = capability_grant_retain(launcher, LAUNCHER_RIGHT_LAUNCH, 0, &grants[1]);
     }
     if (result == CAP_OK) {
+      result = capability_validate_grants(&parent->capabilities, grants, 2);
+    }
+    if (result == CAP_OK) {
+      handle_t handles[2];
+      capability_install_reserved(&request->reservation, request->slots, grants, 2, handles);
       request->execution_reply = (struct execution_group_create_reply){handles[0], handles[1]};
       request->result = CALL_OK;
     } else {
-      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-      request->result = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+      request->result = result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+    }
+    for (size_t i = 0; i < 2; ++i) {
+      capability_grant_release(&grants[i]);
     }
     object_release(launcher);
   }
@@ -98,6 +98,10 @@ static void create_execution_group(struct launcher_request *request)
 
 static void discard_capture(struct launch_capture *capture)
 {
+  for (size_t i = 0; i < capture->grant_count; ++i) {
+    capability_grant_release(&capture->owned_grants[i]);
+  }
+  kfree(capture->owned_grants);
   image_capture_release(&capture->captured_image);
   if (capture->image) {
     object_release(&capture->image->object);
@@ -119,7 +123,24 @@ void launcher_request_execute(struct launcher_request *request)
   case LAUNCH_ALLOCATE:
     request->capture_result = kmalloc(sizeof(*request->capture_result));
     if (request->capture_result) {
-      memset(request->capture_result, 0, sizeof(*request->capture_result));
+      struct launch_capture *capture = request->capture_result;
+      memset(capture, 0, sizeof(*capture));
+      if (request->grant_count) {
+        size_t grant_bytes = request->grant_count * sizeof(*capture->owned_grants);
+        size_t slot_bytes = request->grant_count * sizeof(*capture->child_slots);
+        size_t handle_bytes = request->grant_count * sizeof(*capture->child_handles);
+        capture->owned_grants = kmalloc(grant_bytes + slot_bytes + handle_bytes);
+        if (!capture->owned_grants) {
+          kfree(capture);
+          request->capture_result = NULL;
+          request->result = CALL_NO_MEMORY;
+          break;
+        }
+        memset(capture->owned_grants, 0, grant_bytes);
+        capture->child_slots = (void *)((unsigned char *)capture->owned_grants + grant_bytes);
+        capture->child_handles = (void *)((unsigned char *)capture->child_slots + slot_bytes);
+      }
+      capture->grant_count = request->grant_count;
     } else {
       request->result = CALL_NO_MEMORY;
     }
@@ -139,13 +160,14 @@ void launcher_request_execute(struct launcher_request *request)
   case LAUNCH_START:
     KASSERT(request->capture && request->parent && !request->group);
     request->result = launcher_start(request->capture, request->parent,
-        request->parent_cpu, request->execution_group, &request->child);
+        request->parent_cpu, request->execution_group,
+        &request->reservation, request->slots, &request->child);
     discard_capture(request->capture);
     break;
   case LAUNCH_CREATE_SPACE:
     KASSERT(request->capture && request->parent && !request->group);
     request->result = launcher_create_space(request->capture, request->parent,
-        &request->child);
+        &request->reservation, request->slots, &request->child);
     discard_capture(request->capture);
     break;
   case LAUNCH_BATCH_PREPARE:
@@ -170,6 +192,7 @@ void launcher_request_execute(struct launcher_request *request)
   default:
     KASSERT(false);
   }
+  capability_reservation_release(&request->reservation, request->slots);
   object_cleanup_leave(previous);
   request->capture = NULL;
   request->group = NULL;
@@ -177,9 +200,10 @@ void launcher_request_execute(struct launcher_request *request)
   request->execution_group = NULL;
 }
 
-static struct launcher_request *request_launch_service(enum launcher_action action,
+static struct launcher_request *request_launch_service_reserved(enum launcher_action action,
     struct launch_capture *capture, struct launch_preparation *group,
-    struct execution_group *execution_group)
+    struct execution_group *execution_group, size_t grant_count,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots)
 {
   struct launcher_request *request =
       (struct launcher_request *)bsp_request_prepare(BSP_SERVICE_LAUNCHER);
@@ -191,7 +215,14 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
     .execution_group = execution_group,
     .result = CALL_OK,
     .child = HANDLE_INVALID,
+    .grant_count = grant_count,
   };
+  if (reservation) {
+    KASSERT(reservation->count <= 2);
+    request->reservation = *reservation;
+    memcpy(request->slots, slots, reservation->count * sizeof(*slots));
+    *reservation = (struct capability_reservation){0};
+  }
   if (action == LAUNCH_START || action == LAUNCH_BATCH_PREPARE ||
       action == LAUNCH_CREATE_SPACE || action == LAUNCH_CREATE_EXECUTION_GROUP) {
     request->parent = process_current();
@@ -202,9 +233,17 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
   return request;
 }
 
-static struct launch_capture *allocate_launch_capture(void)
+static struct launcher_request *request_launch_service(enum launcher_action action,
+    struct launch_capture *capture, struct launch_preparation *group,
+    struct execution_group *execution_group)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_ALLOCATE, NULL, NULL, NULL);
+  return request_launch_service_reserved(action, capture, group, execution_group, 0, NULL, NULL);
+}
+
+static struct launch_capture *allocate_launch_capture(size_t grant_count)
+{
+  struct launcher_request *request = request_launch_service_reserved(LAUNCH_ALLOCATE, NULL, NULL, NULL,
+      grant_count, NULL, NULL);
   struct launch_capture *capture = request->capture_result;
   request->capture_result = NULL;
   bsp_request_release(&request->request);
@@ -218,9 +257,11 @@ static void discard_launch_capture(struct launch_capture *capture)
 }
 
 static enum call_status launch_process(struct launch_capture *capture,
-    struct execution_group *execution_group, handle_t *child)
+    struct execution_group *execution_group, struct capability_reservation *reservation,
+    struct capability_reserved_slot *slots, handle_t *child)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_START, capture, NULL, execution_group);
+  struct launcher_request *request = request_launch_service_reserved(LAUNCH_START, capture,
+      NULL, execution_group, 0, reservation, slots);
   *child = request->child;
   enum call_status result = request->result;
   bsp_request_release(&request->request);
@@ -395,18 +436,8 @@ static void capture_streams(struct launch_capture *capture,
       return;
     }
 
-    struct capability_reference reference;
-    enum capability_result found = capability_acquire(&process_current()->capabilities,
-        capture->grants[stream->grant].source, rights,
-        capture->grants[stream->grant].transport, &reference);
-    if (found != CAP_OK) {
-      capture->error = found == CAP_LIMIT ? CALL_LIMIT :
-          found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
-      return;
-    }
-    bool valid = object_stream_valid(reference.object, stream->protocol,
-        capture->grants[stream->grant].transport);
-    capability_release(&reference);
+    bool valid = object_stream_valid(capture->owned_grants[stream->grant].object,
+        stream->protocol, capture->grants[stream->grant].transport);
     if (!valid) {
       capture->error = CALL_WRONG_TYPE;
       return;
@@ -431,16 +462,7 @@ static void capture_namespace(struct launch_capture *capture, uint64_t namespace
     capture->error = CALL_BAD_REQUEST;
     return;
   }
-  struct capability_reference reference;
-  enum capability_result found = capability_acquire(&process_current()->capabilities,
-      grant->source, grant->rights, 0, &reference);
-  if (found != CAP_OK) {
-    capture->error = found == CAP_LIMIT ? CALL_LIMIT :
-        found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
-    return;
-  }
-  bool valid = reference.object->type == OBJECT_NAMESPACE;
-  capability_release(&reference);
+  bool valid = capture->owned_grants[index].object->type == OBJECT_NAMESPACE;
   if (!valid) {
     capture->error = CALL_WRONG_TYPE;
     return;
@@ -450,9 +472,18 @@ static void capture_namespace(struct launch_capture *capture, uint64_t namespace
 
 static void capture_startup(struct launch_capture *capture, const struct launch_request *source)
 {
-  capture->grant_count = source->grant_count;
   capture->grants = launcher_capture_array(capture, source->grants, source->grant_count,
       sizeof(*capture->grants));
+  for (size_t i = 0; i < capture->grant_count && capture->error == CALL_OK; ++i) {
+    const struct launch_grant *grant = &capture->grants[i];
+    enum capability_result status = capability_grant_acquire(&process_current()->capabilities,
+        grant->source, grant->rights, grant->transport, &capture->owned_grants[i]);
+    if (status != CAP_OK) {
+      capture->error = status == CAP_LIMIT ? CALL_LIMIT :
+          status == CAP_BAD_HANDLE ? CALL_BAD_HANDLE :
+          status == CAP_DENIED ? CALL_DENIED : CALL_BAD_REQUEST;
+    }
+  }
   struct process_startup *startup = &capture->startup;
   startup->resource_count = source->resource_count;
   startup->resources = capture_bindings(capture, source->resources, source->resource_count);
@@ -497,6 +528,9 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     struct launch_capture **result)
 {
   *result = NULL;
+  if (request->grant_count > LAUNCH_CAPTURE_MAX_SIZE / sizeof(struct launch_grant)) {
+    return CALL_BAD_REQUEST;
+  }
   size_t initial_stack_bytes;
   if (user_initial_stack_size(request->initial_stack_bytes, &initial_stack_bytes) != MM_OK) {
     return CALL_BAD_REQUEST;
@@ -513,7 +547,7 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     return CALL_WRONG_TYPE;
   }
 
-  struct launch_capture *capture = allocate_launch_capture();
+  struct launch_capture *capture = allocate_launch_capture(request->grant_count);
   if (!capture) {
     capability_release(&image);
     return CALL_NO_MEMORY;
@@ -586,7 +620,7 @@ enum call_status launcher_capture_request(const struct launch_request *request,
 
 struct launch_capture *launcher_capture_empty(void)
 {
-  return allocate_launch_capture();
+  return allocate_launch_capture(0);
 }
 
 void launcher_capture_discard(struct launch_capture *capture)
@@ -599,8 +633,23 @@ void launcher_capture_discard(struct launch_capture *capture)
 
 enum call_status launcher_submit_space(struct launch_capture *capture, handle_t *child)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_CREATE_SPACE, capture,
-      NULL, NULL);
+  *child = HANDLE_INVALID;
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  if (capture->image) {
+    enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+    if (reserved != CAP_OK) {
+      launcher_capture_discard(capture);
+      return reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY;
+    }
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    launcher_capture_discard(capture);
+    return CALL_ENDPOINT_CLOSED;
+  }
+  struct launcher_request *request = request_launch_service_reserved(LAUNCH_CREATE_SPACE,
+      capture, NULL, NULL, 0, &reservation, &slot);
   *child = request->child;
   enum call_status result = request->result;
   bsp_request_release(&request->request);
@@ -620,17 +669,27 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+  if (reserved != CAP_OK) {
+    return (struct syscall_result){reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   struct launch_capture *capture;
   enum call_status status = launcher_capture_request(&request, &capture);
   if (status != CALL_OK) {
+    capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){status, 0};
   }
 
-  /* No other task can close source handles or mutate caller mappings. The BSP
-   * borrows the table and stable image, releases any file operation before
-   * child submission, and frees staging before waking this caller. */
+  /* Captured grants and the observer reservation survive source CLOSE and waits.
+   * The stable image operation ends before child publication. */
   handle_t child;
-  status = launch_process(capture, execution_group, &child);
+  status = launch_process(capture, execution_group, &reservation, &slot, &child);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -677,6 +736,16 @@ static struct syscall_result launch_batch(struct execution_group *execution_grou
     return batch_reply(reply_address, &reply, CALL_NO_MEMORY);
   }
 
+  enum capability_result reserved = launcher_batch_reserve(group, batch.count);
+  if (reserved != CAP_OK) {
+    discard_launch_batch(group);
+    return batch_reply(reply_address, &reply,
+        reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY);
+  }
+  if (task_stop_requested()) {
+    discard_launch_batch(group);
+    return batch_reply(reply_address, &reply, CALL_ENDPOINT_CLOSED);
+  }
   for (size_t i = 0; i < batch.count; ++i) {
     struct launch_capture *capture;
     enum call_status status = launcher_capture_request(&requests[i], &capture);
@@ -705,8 +774,18 @@ static struct syscall_result create_group(size_t request_size,
   if (!user_buffer_check(reply_address, sizeof(struct execution_group_create_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  struct launcher_request *request = request_launch_service(
-      LAUNCH_CREATE_EXECUTION_GROUP, NULL, NULL, NULL);
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slots[2];
+  enum capability_result reserved = capability_request_reservation(2, &reservation, slots);
+  if (reserved != CAP_OK) {
+    return (struct syscall_result){reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, slots);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  struct launcher_request *request = request_launch_service_reserved(
+      LAUNCH_CREATE_EXECUTION_GROUP, NULL, NULL, NULL, 0, &reservation, slots);
   enum call_status status = request->result;
   struct execution_group_create_reply reply = request->execution_reply;
   bsp_request_release(&request->request);

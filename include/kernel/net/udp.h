@@ -7,10 +7,10 @@
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
 
-/* User task, IF=0. OPEN lends its kernel-owned table to the BSP worker until
- * return; the parked task keeps its process, grants and mappings alive. The
- * worker installs the handle before publishing the binding. Failure leaves
- * no endpoint/binding behind. No caller stack or user pointers are retained. */
+/* Current user task/table, IF=0, no prepared BSP request. OPEN reserves a private
+ * slot before parking. The worker owns the prepared grant and binding; successful
+ * collection moves that grant into the slot. Failure releases private ownership.
+ * No caller stack or user pointers are retained. */
 enum call_status net_udp_open(struct capability_table *table, uint32_t address,
     uint16_t port, struct udp_open_reply *reply);
 /* Select and bind on the worker, serialized with address/route changes. */

@@ -438,7 +438,7 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
     }
     return wrap_inode(inode, job->child_rights, &job->object);
   }
-  if (!job->table) {
+  if (!job->reservation.table) {
     return CALL_BAD_REQUEST;
   }
   struct npfs_node *node;
@@ -447,26 +447,28 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
     return status;
   }
   uint64_t flags = cpu_save_interrupts();
-  enum capability_result installed = capability_install(job->table, node_object(node),
-      job->child_rights, 0, &job->handle);
+  enum capability_result prepared = capability_grant_retain(node_object(node),
+      job->child_rights, 0, &job->grant);
+  if (prepared == CAP_OK) {
+    prepared = capability_validate_grants(job->reservation.table, &job->grant, 1);
+  }
   cpu_restore_interrupts(flags);
-  if (installed == CAP_OK) {
-    /* The caller lends its table and cannot observe this staged handle. */
+  if (prepared == CAP_OK) {
     status = npfs_store_create(context, job->node->inode, job->name, job->count,
         job->kind, &inode);
     if (status == CALL_OK) {
       node->inode = inode;
-    } else {
       flags = cpu_save_interrupts();
-      KASSERT(capability_close(job->table, job->handle) == CAP_OK);
+      capability_install_reserved(&job->reservation, &job->slot, &job->grant,
+          1, &job->handle);
       cpu_restore_interrupts(flags);
-      job->handle = HANDLE_INVALID;
     }
   } else {
-    KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);
-    status = installed == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT);
+    status = prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
   }
   flags = cpu_save_interrupts();
+  capability_grant_release(&job->grant);
   object_release(node_object(node));
   cpu_restore_interrupts(flags);
   return status;
@@ -699,7 +701,8 @@ static void complete_job(struct npfs_job *job)
   job->node = NULL;
   job->destination = NULL;
   job->raw = NULL;
-  job->table = NULL;
+  capability_grant_release(&job->grant);
+  capability_reservation_release(&job->reservation, &job->slot);
   job->next = NULL;
   if (job->admitted) {
     KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
@@ -925,9 +928,11 @@ void npfs_request_submit_and_wait(struct npfs_request *request)
 
 void npfs_request_release(struct npfs_request *request)
 {
-  KASSERT(!request->job.raw && !request->job.node && !request->job.destination && !request->job.table && !request->job.object && !request->job.captured.address &&
-      !request->job.captured.size && !request->job.captured.backing_bytes && !request->job.next &&
-      !request->job.user_request && !request->job.admitted);
+  KASSERT(!request->job.raw && !request->job.node && !request->job.destination &&
+      !request->job.reservation.table && !request->job.grant.object &&
+      !request->job.object && !request->job.captured.address &&
+      !request->job.captured.size && !request->job.captured.backing_bytes &&
+      !request->job.next && !request->job.user_request && !request->job.admitted);
   bsp_request_release(&request->request);
 }
 

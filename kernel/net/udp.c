@@ -20,7 +20,9 @@ enum udp_control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_RUNNING, CONTROL_
 struct udp_control {
   enum udp_control_state state;
   enum udp_control_operation operation;
-  struct capability_table *table;
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  struct capability_grant grant;
   struct udp_endpoint *endpoint;
   uint32_t address;
   uint16_t port;
@@ -199,16 +201,8 @@ static enum call_status open_endpoint(struct udp_control *call)
     .broadcast = broadcast,
   };
   object_init(&endpoint->object, OBJECT_UDP, retire_endpoint);
-  enum capability_result result = capability_install(call->table, &endpoint->object,
-      UDP_RIGHTS, 0, &call->reply.handle);
-  if (result != CAP_OK) {
-    /* Unpublished: only the initial reference exists, with no binding to retire. */
-    kfree(endpoint);
-    cpu_restore_interrupts(flags);
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
-  }
-  object_release(&endpoint->object);
+  call->grant = (struct capability_grant){&endpoint->object, UDP_RIGHTS, 0};
+  KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
   cpu_restore_interrupts(flags);
 
   endpoint->next = endpoints;
@@ -249,11 +243,25 @@ static enum call_status apply_control(struct udp_control *call)
   return CALL_BAD_OPERATION;
 }
 
-static enum call_status exchange_control(struct udp_control *request)
+static enum call_status exchange_control(struct udp_control *request,
+    struct capability_table *table)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!net_worker_available()) {
     return CALL_UNAVAILABLE;
+  }
+  if (table) {
+    enum capability_result result = capability_request_reservation(1,
+        &request->reservation, &request->slot);
+    if (result != CAP_OK) {
+      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+      return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    }
+    KASSERT(request->reservation.table == table);
+    if (task_stop_requested()) {
+      capability_reservation_release(&request->reservation, &request->slot);
+      return CALL_ENDPOINT_CLOSED;
+    }
   }
   lock_control();
   struct udp_control *call = NULL;
@@ -265,10 +273,12 @@ static enum call_status exchange_control(struct udp_control *request)
   }
   if (!call) {
     unlock_control();
+    capability_reservation_release(&request->reservation, &request->slot);
     return CALL_QUEUE_FULL;
   }
   struct task_wait *wait = task_wait_prepare();
   *call = *request;
+  request->reservation = (struct capability_reservation){0};
   call->state = CONTROL_QUEUED;
   call->wait = wait;
   unlock_control();
@@ -288,19 +298,19 @@ static enum call_status exchange_control(struct udp_control *request)
     lock_control();
   }
   KASSERT(!call->wait);
-  bool discard_created = task_stop_requested() && call->status == CALL_OK &&
-      (request->operation == CONTROL_OPEN || request->operation == CONTROL_OPEN_ROUTE ||
-       request->operation == CONTROL_OPEN_BROADCAST);
-  uint64_t created_handle = call->reply.handle;
   enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
-  if (status == CALL_OK) {
-    request->reply = call->reply;
-  }
+  request->reply = call->reply;
+  request->grant = call->grant;
+  request->reservation = call->reservation;
+  request->slot = call->slot;
   *call = (struct udp_control){0};
   unlock_control();
-  if (discard_created) {
-    KASSERT(capability_close(request->table, created_handle) == CAP_OK);
+  if (status == CALL_OK && request->grant.object) {
+    capability_install_reserved(&request->reservation, &request->slot,
+        &request->grant, 1, &request->reply.handle);
   }
+  capability_grant_release(&request->grant);
+  capability_reservation_release(&request->reservation, &request->slot);
   return status;
 }
 
@@ -308,9 +318,9 @@ enum call_status net_udp_open(struct capability_table *table, uint32_t address,
     uint16_t port, struct udp_open_reply *reply)
 {
   struct udp_control request = {
-    .operation = CONTROL_OPEN, .table = table, .address = address, .port = port,
+    .operation = CONTROL_OPEN, .address = address, .port = port,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
     *reply = request.reply;
   }
@@ -321,9 +331,9 @@ enum call_status net_udp_open_route(struct capability_table *table, uint32_t des
     uint16_t port, struct udp_open_reply *reply)
 {
   struct udp_control request = {
-    .operation = CONTROL_OPEN_ROUTE, .table = table, .address = destination, .port = port,
+    .operation = CONTROL_OPEN_ROUTE, .address = destination, .port = port,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
     *reply = request.reply;
   }
@@ -334,9 +344,9 @@ enum call_status net_udp_open_broadcast(struct capability_table *table, uint16_t
     struct udp_open_reply *reply)
 {
   struct udp_control request = {
-    .operation = CONTROL_OPEN_BROADCAST, .table = table, .port = port,
+    .operation = CONTROL_OPEN_BROADCAST, .port = port,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
     *reply = request.reply;
   }
@@ -348,7 +358,7 @@ enum call_status net_udp_inspect(struct kernel_object *object, struct udp_endpoi
   struct udp_control request = {
     .operation = CONTROL_INSPECT, .endpoint = (struct udp_endpoint *)object,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, NULL);
   if (status == CALL_OK) {
     *reply = request.reply.local;
   }
@@ -360,7 +370,7 @@ enum call_status net_udp_shutdown(struct kernel_object *object)
   struct udp_control request = {
     .operation = CONTROL_SHUTDOWN, .endpoint = (struct udp_endpoint *)object,
   };
-  return exchange_control(&request);
+  return exchange_control(&request, NULL);
 }
 
 bool net_udp_service(void)
@@ -381,8 +391,8 @@ bool net_udp_service(void)
     unlock_control();
     cpu_restore_interrupts(flags);
 
-    /* The parked caller lends its table (OPEN) or keeps its endpoint grant.
-     * RUNNING grants this worker exclusive access to the captured payload. */
+    /* RUNNING gives the worker ownership of captured input and private output.
+     * The caller's reserved slot stays unpublished until successful collection. */
     enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : apply_control(call);
 
     flags = cpu_save_interrupts();

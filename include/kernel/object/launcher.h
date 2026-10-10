@@ -4,6 +4,7 @@
 #include <abi/launcher.h>
 #include <abi/syscall.h>
 #include <kernel/service/request.h>
+#include <kernel/object/capability.h>
 
 struct kernel_object;
 struct process;
@@ -25,10 +26,10 @@ enum launcher_action {
 };
 
 /* Capture/batch storage survives successive requests independently. START and
- * BATCH_PREPARE lend the parent table and stable image operation; every loan
- * is cleared before completion. CREATE_EXECUTION_GROUP also lends the parent
- * table for atomic handle installation. Allocation results transfer to the caller
- * before release. CAPTURE_RAM borrows its capture and ends the lent RAM file
+ * BATCH_PREPARE carry captured grants and stable image operations. Returned
+ * grants consume reservations captured before request preparation. The table
+ * remains synchronized rather than exclusively lent. Allocation results transfer
+ * to the caller before release. CAPTURE_RAM borrows its capture and ends the lent RAM file
  * operation after copying; only BSP code accesses the resulting page backing.
  * START/CREATE_SPACE/DISCARD/PREPARE consume their capture and
  * PUBLISH/DISCARD consume their batch. No caller private mappings are mutated. */
@@ -48,6 +49,9 @@ struct launcher_request {
   handle_t child;
   handle_t children[LAUNCH_BATCH_MAX];
   struct execution_group_create_reply execution_reply;
+  size_t grant_count; /* Capture allocation only, bounded by the wire budget. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[2];
 };
 
 /* BSP executor, IF=0. Local launch helpers never submit nested requests. */

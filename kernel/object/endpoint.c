@@ -51,10 +51,10 @@ struct endpoint_delivery_record {
   uint64_t deadline_ns;
   uint64_t request_size, reply_size, result;
   size_t request_count, reply_count;
-  struct kernel_object *request_grants[ENDPOINT_GRANTS_MAX];
-  struct kernel_object *reply_grants[ENDPOINT_GRANTS_MAX];
-  uint64_t request_rights[ENDPOINT_GRANTS_MAX], reply_rights[ENDPOINT_GRANTS_MAX];
-  uint64_t request_transport[ENDPOINT_GRANTS_MAX], reply_transport[ENDPOINT_GRANTS_MAX];
+  struct capability_grant request_grants[ENDPOINT_GRANTS_MAX];
+  struct capability_grant reply_grants[ENDPOINT_GRANTS_MAX];
+  struct capability_reservation reply_reservation;
+  struct capability_reserved_slot reply_slots[ENDPOINT_GRANTS_MAX];
   uint8_t request[ENDPOINT_DATA_MAX], reply[ENDPOINT_DATA_MAX];
 };
 
@@ -167,11 +167,10 @@ static enum call_status grant_status(enum capability_result result)
   }
 }
 
-static void release_grants(struct kernel_object **grants, const uint64_t *rights, size_t count)
+static void release_grants(struct capability_grant *grants, size_t count)
 {
   for (size_t i = 0; i < count; ++i) {
-    object_grant_release(grants[i], rights[i]);
-    grants[i] = NULL;
+    capability_grant_release(&grants[i]);
   }
 }
 
@@ -260,6 +259,7 @@ static void free_delivery(struct endpoint_delivery_record *record)
   if (!record->caller_active && !record->receipt_live) {
     KASSERT(record->state == DELIVERY_COMPLETE);
     KASSERT(!record->cancel_pending);
+    KASSERT(!record->reply_reservation.table && !record->reply_count);
     record->state = DELIVERY_FREE;
     if (record->target) {
       struct endpoint_export *export = record->target;
@@ -298,7 +298,7 @@ static void cancel_delivery(struct endpoint_state *state,
       state->tail = previous;
     }
     record->next = NULL;
-    release_grants(record->request_grants, record->request_rights, record->request_count);
+    release_grants(record->request_grants, record->request_count);
     record->request_count = 0;
   } else {
     record->cancel_pending = true;
@@ -388,7 +388,7 @@ static void close_endpoint(struct endpoint_state *state)
     }
     bool queued = record->state == DELIVERY_QUEUED;
     if (queued) {
-      release_grants(record->request_grants, record->request_rights, record->request_count);
+      release_grants(record->request_grants, record->request_count);
       record->request_count = 0;
     }
     record->next = NULL;
@@ -472,18 +472,12 @@ void endpoint_process_exit(struct process *owner)
   }
 }
 
-/* BSP, IF=0, with exclusive ownership of the caller's capability table.
- * Reserves all delivery storage and installs both handles or neither. */
-static enum call_status endpoint_create(struct process *owner,
-    struct endpoint_create_reply *reply)
+/* BSP owns allocation and the receiver owner list. The caller reserved both
+ * table slots before submitting this request. */
+static enum call_status endpoint_create(struct endpoint_create_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
-  while (capability_free_slots(&owner->capabilities) < 2) {
-    enum capability_result result = capability_grow(&owner->capabilities);
-    if (result != CAP_OK) {
-      return grant_status(result);
-    }
-  }
+  struct process *owner = request->owner;
   struct endpoint_state *state = kmalloc(sizeof(*state));
   if (!state) {
     return CALL_NO_MEMORY;
@@ -503,19 +497,25 @@ static enum call_status endpoint_create(struct process *owner,
   owner->endpoints = &state->receiver;
   object_init(&state->caller.object, OBJECT_ENDPOINT, destroy_endpoint);
   object_init(&state->receiver.object, OBJECT_ENDPOINT_RECEIVER, destroy_endpoint);
-  struct kernel_object *objects[] = {&state->receiver.object, &state->caller.object};
-  uint64_t rights[] = {ENDPOINT_RECEIVER_RIGHT_CONTROL, 0};
-  uint64_t transport[] = {HANDLE_TRANSPORT_RECEIVE, HANDLE_TRANSPORT_CALL};
-  handle_t handles[2];
-  enum capability_result result = capability_insert_batch(&owner->capabilities,
-      objects, rights, transport, 2, handles);
+  struct capability_grant grants[2] = {0};
+  enum capability_result result = capability_grant_retain(&state->receiver.object,
+      ENDPOINT_RECEIVER_RIGHT_CONTROL, HANDLE_TRANSPORT_RECEIVE, &grants[0]);
+  if (result == CAP_OK) {
+    result = capability_grant_retain(&state->caller.object, 0,
+        HANDLE_TRANSPORT_CALL, &grants[1]);
+  }
+  if (result == CAP_OK) {
+    result = capability_validate_grants(request->reservation.table, grants, 2);
+  }
+  if (result == CAP_OK) {
+    handle_t handles[2];
+    capability_install_reserved(&request->reservation, request->slots, grants, 2, handles);
+    request->reply = (struct endpoint_create_reply){handles[0], handles[1]};
+  }
+  release_grants(grants, 2);
   object_release(&state->caller.object);
   object_release(&state->receiver.object);
-  if (result != CAP_OK) {
-    return grant_status(result);
-  }
-  *reply = (struct endpoint_create_reply){handles[0], handles[1]};
-  return CALL_OK;
+  return grant_status(result);
 }
 
 static struct endpoint_export *find_export(struct endpoint_state *state, uint64_t id)
@@ -528,57 +528,33 @@ static struct endpoint_export *find_export(struct endpoint_state *state, uint64_
   return NULL;
 }
 
-static enum call_status endpoint_export_create(struct process *owner,
-    const struct endpoint_export_message *request, struct endpoint_export_reply *reply)
+static enum call_status endpoint_export_create(struct endpoint_export_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
-  if (!request->object_id || !request->protocol ||
-      (request->transport & ~HANDLE_TRANSPORT_CALL)) {
-    return CALL_BAD_REQUEST;
-  }
-  struct capability_reference reference;
-  enum capability_result result = capability_acquire(&owner->capabilities,
-      request->receiver, ENDPOINT_RECEIVER_RIGHT_CONTROL, 0, &reference);
-  if (result != CAP_OK) {
-    return grant_status(result);
-  }
-  if (reference.object->type != OBJECT_ENDPOINT_RECEIVER) {
-    capability_release(&reference);
-    return CALL_WRONG_TYPE;
-  }
-  struct endpoint *receiver = (struct endpoint *)reference.object;
-  if (receiver->owner != owner) {
-    capability_release(&reference);
+  const struct endpoint_export_message *input = &request->input;
+  struct endpoint *receiver = (struct endpoint *)request->receiver.object;
+  if (receiver->owner != request->owner) {
     return CALL_DENIED;
   }
   struct endpoint_state *state = receiver->state;
   lock_endpoint(state);
   enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
-      find_export(state, request->object_id) ? CALL_ALREADY_EXISTS :
+      find_export(state, input->object_id) ? CALL_ALREADY_EXISTS :
       state->export_count == ENDPOINT_EXPORTS_MAX ? CALL_LIMIT : CALL_OK;
   unlock_endpoint(state);
   if (status != CALL_OK) {
-    capability_release(&reference);
     return status;
-  }
-  while (!capability_free_slots(&owner->capabilities)) {
-    result = capability_grow(&owner->capabilities);
-    if (result != CAP_OK) {
-      capability_release(&reference);
-      return grant_status(result);
-    }
   }
   struct endpoint_export *export = kmalloc(sizeof(*export));
   if (!export) {
-    capability_release(&reference);
     return CALL_NO_MEMORY;
   }
   memset(export, 0, sizeof(*export));
   export->endpoint = state;
-  export->object_id = request->object_id;
-  export->protocol = request->protocol;
-  export->rights = request->rights;
-  export->transport = request->transport;
+  export->object_id = input->object_id;
+  export->protocol = input->protocol;
+  export->rights = input->rights;
+  export->transport = input->transport;
   export->client_live = true;
   object_init(&export->client, OBJECT_ENDPOINT_EXPORT, destroy_export_client);
   object_init(&export->storage, OBJECT_ENDPOINT_EXPORT, destroy_export_storage);
@@ -586,84 +562,135 @@ static enum call_status endpoint_export_create(struct process *owner,
   lock_endpoint(state);
   ++state->storage_references;
   unlock_endpoint(state);
-  result = capability_insert(&owner->capabilities, &export->client,
-      request->rights, request->transport, &reply->client);
-  if (result != CAP_OK) {
-    object_release(&export->client);
-    object_release(&export->storage);
-    capability_release(&reference);
-    return grant_status(result);
+  struct capability_grant grant = {0};
+  enum capability_result result = capability_grant_retain(&export->client,
+      input->rights, input->transport, &grant);
+  if (result == CAP_OK) {
+    result = capability_validate_grants(request->reservation.table, &grant, 1);
   }
-  /* Creation is BSP-owned while this process lends its table; the owned
-   * receiver cannot close or change during the allocation/installation. */
-  lock_endpoint(state);
-  KASSERT(!state->closed && !find_export(state, request->object_id));
-  export->next = state->exports;
-  state->exports = export;
-  ++state->export_count;
-  export->linked = true;
-  unlock_endpoint(state);
+  status = grant_status(result);
+  if (status == CALL_OK) {
+    lock_endpoint(state);
+    status = state->closed ? CALL_ENDPOINT_CLOSED :
+        find_export(state, input->object_id) ? CALL_ALREADY_EXISTS :
+        state->export_count == ENDPOINT_EXPORTS_MAX ? CALL_LIMIT : CALL_OK;
+    if (status == CALL_OK) {
+      export->next = state->exports;
+      state->exports = export;
+      ++state->export_count;
+      export->linked = true;
+      capability_install_reserved(&request->reservation, request->slots, &grant,
+          1, &request->reply.client);
+    }
+    unlock_endpoint(state);
+  }
+  capability_grant_release(&grant);
   object_release(&export->client);
-  capability_release(&reference);
-  return CALL_OK;
+  if (status != CALL_OK) {
+    object_release(&export->storage);
+  }
+  return status;
 }
 
 void endpoint_create_execute(struct endpoint_create_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->loan);
-  request->result = endpoint_create(request->loan, &request->reply);
-  request->loan = NULL;
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->owner);
+  request->result = endpoint_create(request);
+  capability_reservation_release(&request->reservation, request->slots);
+  request->owner = NULL;
 }
 
 void endpoint_export_execute(struct endpoint_export_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->loan);
-  request->result = endpoint_export_create(request->loan, &request->input, &request->reply);
-  request->loan = NULL;
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->owner);
+  request->result = endpoint_export_create(request);
+  capability_reservation_release(&request->reservation, request->slots);
+  capability_release(&request->receiver);
+  request->owner = NULL;
 }
 
 static enum call_status create_endpoint(struct endpoint_create_reply *reply)
 {
-  struct process *process = process_current();
-  KASSERT(process);
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slots[2];
+  enum capability_result result = capability_request_reservation(2, &reservation, slots);
+  if (result != CAP_OK) {
+    return grant_status(result);
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, slots);
+    return CALL_ENDPOINT_CLOSED;
+  }
   struct endpoint_create_request *request =
       (struct endpoint_create_request *)bsp_request_prepare(BSP_SERVICE_ENDPOINT_CREATE);
-  request->loan = process;
+  request->owner = process_current();
+  request->reservation = reservation;
+  memcpy(request->slots, slots, sizeof(slots));
+  reservation = (struct capability_reservation){0};
   request->reply = (struct endpoint_create_reply){0};
   request->result = CALL_NO_MEMORY;
 
   bsp_request_submit_and_wait(&request->request);
-  enum call_status result = request->result;
-  if (result == CALL_OK) {
+  enum call_status status = request->result;
+  if (status == CALL_OK) {
     *reply = request->reply;
   }
   bsp_request_release(&request->request);
-  return result;
+  return status;
 }
 
 static enum call_status export_endpoint(const struct endpoint_export_message *input,
     struct endpoint_export_reply *reply)
 {
-  struct process *process = process_current();
-  KASSERT(process);
+  if (!input->object_id || !input->protocol ||
+      (input->transport & ~HANDLE_TRANSPORT_CALL)) {
+    return CALL_BAD_REQUEST;
+  }
+  struct capability_reference receiver;
+  enum capability_result result = capability_acquire(&process_current()->capabilities,
+      input->receiver, ENDPOINT_RECEIVER_RIGHT_CONTROL, 0, &receiver);
+  if (result != CAP_OK) {
+    return grant_status(result);
+  }
+  if (receiver.object->type != OBJECT_ENDPOINT_RECEIVER) {
+    capability_release(&receiver);
+    return CALL_WRONG_TYPE;
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slots[1];
+  result = capability_request_reservation(1, &reservation, slots);
+  if (result != CAP_OK) {
+    capability_release(&receiver);
+    return grant_status(result);
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, slots);
+    capability_release(&receiver);
+    return CALL_ENDPOINT_CLOSED;
+  }
   struct endpoint_export_request *request =
       (struct endpoint_export_request *)bsp_request_prepare(BSP_SERVICE_ENDPOINT_EXPORT);
-  request->loan = process;
+  request->owner = process_current();
+  request->receiver = receiver;
+  receiver = (struct capability_reference){0};
+  request->reservation = reservation;
+  memcpy(request->slots, slots, sizeof(slots));
+  reservation = (struct capability_reservation){0};
   request->input = *input;
   request->reply = (struct endpoint_export_reply){0};
   request->result = CALL_NO_MEMORY;
 
   bsp_request_submit_and_wait(&request->request);
-  enum call_status result = request->result;
-  if (result == CALL_OK) {
+  enum call_status status = request->result;
+  if (status == CALL_OK) {
     *reply = request->reply;
   }
   bsp_request_release(&request->request);
-  return result;
+  return status;
 }
 
 static struct syscall_result control_export(struct endpoint *receiver,
@@ -719,44 +746,17 @@ static struct syscall_result control_export(struct endpoint *receiver,
   return (struct syscall_result){CALL_OK, 0};
 }
 
-static enum call_status reserve_handles(size_t count)
-{
-  while (capability_free_slots(&process_current()->capabilities) < count) {
-    enum capability_result result = capability_request_growth();
-    if (result != CAP_OK) {
-      return grant_status(result);
-    }
-  }
-  return CALL_OK;
-}
-
 static enum call_status capture_grants(const struct endpoint_message *message,
-    struct kernel_object **objects, uint64_t *rights, uint64_t *transport)
+    struct capability_grant *grants)
 {
   for (size_t i = 0; i < message->grant_count; ++i) {
-    struct capability_reference reference;
-    enum capability_result result = capability_acquire(&process_current()->capabilities,
+    enum capability_result result = capability_grant_acquire(&process_current()->capabilities,
         message->grants[i].handle, message->grants[i].rights,
-        message->grants[i].transport, &reference);
+        message->grants[i].transport, &grants[i]);
     if (result != CAP_OK) {
-      release_grants(objects, rights, i);
+      release_grants(grants, i);
       return grant_status(result);
     }
-    struct kernel_object *object = reference.object;
-    if (object->type == OBJECT_ENDPOINT_RECEIPT || object->type == OBJECT_ENDPOINT_RECEIVER) {
-      capability_release(&reference);
-      release_grants(objects, rights, i);
-      return CALL_DENIED;
-    }
-    if (!object_grant_retain(object, message->grants[i].rights)) {
-      capability_release(&reference);
-      release_grants(objects, rights, i);
-      return CALL_LIMIT;
-    }
-    objects[i] = object;
-    rights[i] = message->grants[i].rights;
-    transport[i] = message->grants[i].transport;
-    capability_release(&reference);
   }
   return CALL_OK;
 }
@@ -801,12 +801,13 @@ static struct syscall_result write_packet(uintptr_t address,
 static enum call_status admit_message(struct endpoint *endpoint,
     struct endpoint_export *target, uint64_t resource_rights,
     const struct endpoint_message *message, struct task_wait *wait,
-    struct endpoint_delivery_record **result)
+    struct endpoint_delivery_record **result, struct capability_reservation *reservation,
+    const struct capability_reserved_slot *slots)
 {
   KASSERT((wait != NULL) == (result != NULL));
-  struct kernel_object *grants[ENDPOINT_GRANTS_MAX];
-  uint64_t rights[ENDPOINT_GRANTS_MAX], transport[ENDPOINT_GRANTS_MAX];
-  enum call_status status = capture_grants(message, grants, rights, transport);
+  KASSERT((wait != NULL) == (reservation != NULL));
+  struct capability_grant grants[ENDPOINT_GRANTS_MAX];
+  enum call_status status = capture_grants(message, grants);
   if (status != CALL_OK) {
     return status;
   }
@@ -821,8 +822,8 @@ static enum call_status admit_message(struct endpoint *endpoint,
     /* Reject before admission: an incompatible SEND at the FIFO head must not
      * leave the receiver permanently unable to collect later valid messages. */
     for (size_t i = 0; i < message->grant_count; ++i) {
-      if (state->execution_group && grants[i]->type == OBJECT_LAUNCHER &&
-          launcher_execution_group(grants[i]) != state->execution_group) {
+      if (state->execution_group && grants[i].object->type == OBJECT_LAUNCHER &&
+          launcher_execution_group(grants[i].object) != state->execution_group) {
         status = CALL_DENIED;
         break;
       }
@@ -842,7 +843,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   unlock_endpoint(state);
   if (status != CALL_OK) {
-    release_grants(grants, rights, message->grant_count);
+    release_grants(grants, message->grant_count);
     return status;
   }
   /* The reserved slot is private until publication. Owner exit leaves filling
@@ -856,13 +857,13 @@ static enum call_status admit_message(struct endpoint *endpoint,
     record->state = DELIVERY_FREE;
     status = expired ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     end_endpoint_update(state, ready_before);
-    release_grants(grants, rights, message->grant_count);
+    release_grants(grants, message->grant_count);
     return status;
   }
   if (target && !object_retain(&target->client)) {
     record->state = DELIVERY_FREE;
     end_endpoint_update(state, ready_before);
-    release_grants(grants, rights, message->grant_count);
+    release_grants(grants, message->grant_count);
     return CALL_LIMIT;
   }
   record->target = target;
@@ -887,8 +888,12 @@ static enum call_status admit_message(struct endpoint *endpoint,
   record->status = CALL_OK;
   for (size_t i = 0; i < message->grant_count; ++i) {
     record->request_grants[i] = grants[i];
-    record->request_rights[i] = rights[i];
-    record->request_transport[i] = transport[i];
+  }
+  record->reply_reservation = (struct capability_reservation){0};
+  if (reservation) {
+    record->reply_reservation = *reservation;
+    memcpy(record->reply_slots, slots, sizeof(record->reply_slots));
+    *reservation = (struct capability_reservation){0};
   }
   object_init(&record->receipt, OBJECT_ENDPOINT_RECEIPT, NULL);
   ++state->storage_references;
@@ -921,7 +926,7 @@ static struct syscall_result send_endpoint(struct endpoint *endpoint,
     status = CALL_BAD_REQUEST;
   }
   if (status == CALL_OK) {
-    status = admit_message(endpoint, target, resource_rights, &message, NULL, NULL);
+    status = admit_message(endpoint, target, resource_rights, &message, NULL, NULL, NULL, NULL);
   }
   return (struct syscall_result){status, 0};
 }
@@ -948,12 +953,16 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   if (status == CALL_OK && deadline_expired(message.deadline_ns)) {
     status = CALL_TIMED_OUT;
   }
-  /* Reserve collection slots before admission: growth failure cannot discard
-   * a completed operation's result. This process has only one executing task. */
+  /* These claims remain in the delivery record until collection, even when
+   * timeout or receipt retirement wins before the caller resumes. */
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slots[ENDPOINT_GRANTS_MAX];
   if (status == CALL_OK) {
-    status = reserve_handles(ENDPOINT_GRANTS_MAX);
+    status = grant_status(capability_request_reservation(ENDPOINT_GRANTS_MAX,
+        &reservation, slots));
   }
   if (task_stop_requested()) {
+    capability_reservation_release(&reservation, slots);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   if (status != CALL_OK) {
@@ -961,8 +970,10 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   }
   struct task_wait *wait = task_wait_prepare();
   struct endpoint_delivery_record *record;
-  status = admit_message(endpoint, target, resource_rights, &message, wait, &record);
+  status = admit_message(endpoint, target, resource_rights, &message, wait, &record,
+      &reservation, slots);
   if (status != CALL_OK) {
+    capability_reservation_release(&reservation, slots);
     return write_packet(reply_address, &output, NULL, status);
   }
   bool resumed = message.deadline_ns ?
@@ -976,8 +987,9 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
       cancel_delivery(state, record, CALL_ENDPOINT_CLOSED);
     }
     KASSERT(!record->wait);
-    release_grants(record->reply_grants, record->reply_rights, record->reply_count);
+    release_grants(record->reply_grants, record->reply_count);
     record->reply_count = 0;
+    capability_reservation_release(&record->reply_reservation, record->reply_slots);
     record->caller_active = false;
     free_delivery(record);
     end_endpoint_update(state, ready_before);
@@ -993,21 +1005,22 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   output.delivery = record->delivered ? ENDPOINT_DELIVERED : ENDPOINT_NOT_DELIVERED;
   if (status == CALL_OK) {
     handle_t handles[ENDPOINT_GRANTS_MAX];
-    enum capability_result result = capability_insert_batch(&process_current()->capabilities,
-        record->reply_grants, record->reply_rights, record->reply_transport, record->reply_count, handles);
-    KASSERT(result != CAP_FULL);
-    status = grant_status(result);
-    if (status == CALL_OK) {
-      output.result = record->result;
-      output.size = record->reply_size;
-      output.grant_count = record->reply_count;
-      for (size_t i = 0; i < record->reply_count; ++i) {
-        output.grants[i] = (struct endpoint_grant){handles[i], record->reply_rights[i], record->reply_transport[i]};
-      }
+    output.result = record->result;
+    output.size = record->reply_size;
+    output.grant_count = record->reply_count;
+    for (size_t i = 0; i < record->reply_count; ++i) {
+      output.grants[i].rights = record->reply_grants[i].rights;
+      output.grants[i].transport = record->reply_grants[i].transport;
+    }
+    capability_install_reserved(&record->reply_reservation, record->reply_slots,
+        record->reply_grants, record->reply_count, handles);
+    for (size_t i = 0; i < record->reply_count; ++i) {
+      output.grants[i].handle = handles[i];
     }
   }
-  release_grants(record->reply_grants, record->reply_rights, record->reply_count);
+  release_grants(record->reply_grants, record->reply_count);
   record->reply_count = 0;
+  capability_reservation_release(&record->reply_reservation, record->reply_slots);
   end_endpoint_update(state, ready_before);
   struct syscall_result result = write_packet(reply_address, &output, record->reply, status);
   ready_before = begin_endpoint_update(state);
@@ -1020,11 +1033,14 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
 static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr_t reply_address)
 {
   struct endpoint_state *state = endpoint->state;
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slots[ENDPOINT_GRANTS_MAX + 1];
   for (;;) {
     struct task_wait *wait = task_wait_prepare();
     uint64_t ready_before = begin_endpoint_update(state);
     if (task_stop_requested() || state->closed) {
       end_endpoint_update(state, ready_before);
+      capability_reservation_release(&reservation, slots);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
     for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
@@ -1049,6 +1065,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
         .operation = cancel->operation, .rights = cancel->rights, .reason = cancel->status};
       cancel->cancel_pending = false;
       end_endpoint_update(state, ready_before);
+      capability_reservation_release(&reservation, slots);
       return write_packet(reply_address, &output, NULL, CALL_OK);
     }
     for (struct endpoint_export *export = state->exports; export; export = export->next) {
@@ -1058,6 +1075,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
         export->retire_pending = false;
         export->retire_delivered = true;
         end_endpoint_update(state, ready_before);
+        capability_reservation_release(&reservation, slots);
         return write_packet(reply_address, &output, NULL, CALL_OK);
       }
     }
@@ -1066,6 +1084,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
       KASSERT(!state->waiting_receiver);
       state->waiting_receiver = wait;
       end_endpoint_update(state, ready_before);
+      capability_reservation_release(&reservation, slots);
       bool resumed = task_wait_sleep_interruptible(wait);
       ready_before = begin_endpoint_update(state);
       if (state->waiting_receiver == wait) {
@@ -1079,31 +1098,53 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
       continue;
     }
     size_t count = record->request_count;
-    if (capability_free_slots(&process_current()->capabilities) < count + 1) {
-      end_endpoint_update(state, ready_before);
-      enum call_status status = reserve_handles(count + 1);
-      if (status != CALL_OK) {
-        return (struct syscall_result){status, 0};
+    if (reservation.count < count + 1) {
+      capability_reservation_release(&reservation, slots);
+      enum capability_result result = capability_reserve(&process_current()->capabilities,
+          count + 1, &reservation, slots);
+      if (result != CAP_OK) {
+        end_endpoint_update(state, ready_before);
+        if (result == CAP_FULL) {
+          result = capability_request_reservation(count + 1, &reservation, slots);
+          if (result == CAP_OK) {
+            /* Growth can change the selected message or its deadline. */
+            continue;
+          }
+        }
+        return (struct syscall_result){grant_status(result), 0};
       }
-      continue;
     }
-    struct kernel_object *objects[ENDPOINT_GRANTS_MAX + 1];
-    uint64_t rights[ENDPOINT_GRANTS_MAX + 1], transport[ENDPOINT_GRANTS_MAX + 1];
-    handle_t handles[ENDPOINT_GRANTS_MAX + 1];
-    objects[0] = &record->receipt;
-    rights[0] = record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0;
-    transport[0] = 0;
+    struct capability_grant grants[ENDPOINT_GRANTS_MAX + 1];
+    grants[0] = (struct capability_grant){&record->receipt,
+        record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0, 0};
     for (size_t i = 0; i < count; ++i) {
-      objects[i + 1] = record->request_grants[i];
-      rights[i + 1] = record->request_rights[i];
-      transport[i + 1] = record->request_transport[i];
+      grants[i + 1] = record->request_grants[i];
     }
-    enum capability_result result = capability_insert_batch(&process_current()->capabilities,
-        objects, rights, transport, count + 1, handles);
+    enum capability_result result = capability_validate_grants(reservation.table, grants, count + 1);
     if (result != CAP_OK) {
       end_endpoint_update(state, ready_before);
+      capability_reservation_release(&reservation, slots);
       return (struct syscall_result){grant_status(result), 0};
     }
+    struct packet_header output = {.delivery = ENDPOINT_DELIVERED,
+      .kind = record->kind, .size = record->request_size, .grant_count = count,
+      .deadline_ns = record->deadline_ns,
+      .object_id = record->target ? record->target->object_id : 0,
+      .protocol = record->target ? record->target->protocol : 0,
+      .operation = record->operation, .rights = record->rights};
+    for (size_t i = 0; i < count; ++i) {
+      output.grants[i].rights = grants[i + 1].rights;
+      output.grants[i].transport = grants[i + 1].transport;
+    }
+    handle_t handles[ENDPOINT_GRANTS_MAX + 1];
+    /* Move the queue's initial receipt reference and captured attachment grants
+     * into the claimed slots. No logical retain runs under the endpoint lock. */
+    capability_install_reserved(&reservation, slots, grants, count + 1, handles);
+    for (size_t i = 0; i < count; ++i) {
+      record->request_grants[i] = (struct capability_grant){0};
+      output.grants[i].handle = handles[i + 1];
+    }
+    record->request_count = 0;
     state->head = record->next;
     if (!state->head) {
       state->tail = NULL;
@@ -1111,19 +1152,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     record->next = NULL;
     record->state = DELIVERY_RECEIVED;
     record->delivered = true;
-    record->receipt_handle = handles[0];
-    struct packet_header output = {.receipt = handles[0], .delivery = ENDPOINT_DELIVERED,
-      .kind = record->kind, .size = record->request_size, .grant_count = count,
-      .deadline_ns = record->deadline_ns,
-      .object_id = record->target ? record->target->object_id : 0,
-      .protocol = record->target ? record->target->protocol : 0,
-      .operation = record->operation, .rights = record->rights};
-    for (size_t i = 0; i < count; ++i) {
-      output.grants[i] = (struct endpoint_grant){handles[i + 1], rights[i + 1], transport[i + 1]};
-    }
-    release_grants(record->request_grants, record->request_rights, count);
-    record->request_count = 0;
-    object_release(&record->receipt);
+    record->receipt_handle = output.receipt = handles[0];
     end_endpoint_update(state, ready_before);
     return write_packet(reply_address, &output, record->request, CALL_OK);
   }
@@ -1140,9 +1169,8 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   if (message.deadline_ns || message.protocol || message.operation) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  struct kernel_object *grants[ENDPOINT_GRANTS_MAX];
-  uint64_t rights[ENDPOINT_GRANTS_MAX], transport[ENDPOINT_GRANTS_MAX];
-  status = capture_grants(&message, grants, rights, transport);
+  struct capability_grant grants[ENDPOINT_GRANTS_MAX];
+  status = capture_grants(&message, grants);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -1154,7 +1182,7 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   if (record->state != DELIVERY_RECEIVED || state->closed) {
     status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     end_endpoint_update(state, ready_before);
-    release_grants(grants, rights, message.grant_count);
+    release_grants(grants, message.grant_count);
     return (struct syscall_result){status, 0};
   }
   end_endpoint_update(state, ready_before);
@@ -1168,16 +1196,21 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   if (record->state != DELIVERY_RECEIVED || state->closed) {
     status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     end_endpoint_update(state, ready_before);
-    release_grants(grants, rights, message.grant_count);
+    release_grants(grants, message.grant_count);
     return (struct syscall_result){status, 0};
+  }
+  enum capability_result policy = capability_validate_grants(record->reply_reservation.table,
+      grants, message.grant_count);
+  if (policy != CAP_OK) {
+    end_endpoint_update(state, ready_before);
+    release_grants(grants, message.grant_count);
+    return (struct syscall_result){grant_status(policy), 0};
   }
   record->reply_size = message.size;
   record->result = message.result;
   record->reply_count = message.grant_count;
   for (size_t i = 0; i < message.grant_count; ++i) {
     record->reply_grants[i] = grants[i];
-    record->reply_rights[i] = rights[i];
-    record->reply_transport[i] = transport[i];
   }
   record->status = CALL_OK;
   record->state = DELIVERY_COMPLETE;

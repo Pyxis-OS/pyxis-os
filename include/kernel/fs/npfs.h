@@ -8,6 +8,7 @@
 #include <kernel/block.h>
 #include <kernel/gpt.h>
 #include <kernel/service/request.h>
+#include <kernel/object/capability.h>
 #include <kernel/user/image_capture.h>
 #include <pyxis_fs/npfs.h>
 
@@ -24,7 +25,6 @@ struct disk_object;
 struct npfs_node;
 struct kernel_object;
 struct npfs_request;
-struct capability_table;
 
 enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
@@ -63,7 +63,11 @@ struct npfs_job {
   char destination_name[NPFS_NAME_MAX + 1];
   size_t destination_length;
   bool replace;
-  struct capability_table *table; /* Exclusive CREATE loan until completion. */
+  /* CREATE claims capacity before submission and prepares logical ownership
+   * before native mutation. Completion drains both before returning ownership. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  struct capability_grant grant;
   handle_t handle;
   struct directory_cursor cursor;
   struct directory_enumerate_reply entry;
@@ -87,7 +91,7 @@ struct npfs_job {
 
 /* One provisioned request per user task. A live capability retains node through
  * the uninterruptible call; no capability entry or user buffer crosses to BSP.
- * CREATE alone lends the capability table exclusively until completion.
+ * CREATE moves its caller-owned slot claim into the request until completion.
  * Consume/detach outputs before release, including on stop. */
 struct npfs_request {
   struct bsp_request request;

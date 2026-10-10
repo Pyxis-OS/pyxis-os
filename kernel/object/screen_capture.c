@@ -3,6 +3,7 @@
 #include <kernel/object/screen_capture.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 static void destroy_screen_capture(struct kernel_object *object)
@@ -37,9 +38,22 @@ struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
   }
   struct process *process = process_current();
   KASSERT(process);
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+  if (reserved != CAP_OK) {
+    KASSERT(reserved == CAP_NO_MEMORY || reserved == CAP_LIMIT);
+    return (struct syscall_result){reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   struct screen_capture_request *request =
       (void *)bsp_request_prepare(BSP_SERVICE_SCREEN_CAPTURE);
-  request->table = &process->capabilities;
+  request->reservation = reservation;
+  request->slot = slot;
+  reservation = (struct capability_reservation){0};
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
   struct screen_capture_reply reply = request->reply;
