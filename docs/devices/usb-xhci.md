@@ -115,16 +115,17 @@ zero. Supported hubs receive Slot-only Configure Endpoint metadata for
 endpoints from a separate pre-AP device pool for an internal read-only probe.
 Every inspectable device receives an address/descriptor record; other classes
 remain unbound. Private class consumers can configure the
-[root full-speed interrupt-IN interface](usb-interrupt-in.md), with independent
+[class-specific interrupt-IN profiles](usb-interrupt-in.md), with independent
 pre-AP receive resources and post-event rearm during every controller wait.
 
-A connection change after the snapshot retires that startup candidate. Loss of
-an enabled reserved port runs Disable Slot after prior command completion, then
-keeps that port retired until reboot. It does not stop unrelated ports when that
-device has no active request; removal during active transfer work fails the
-controller and retains unresolved DMA. Later
-insertion cannot inherit a reservation. Writes acknowledge only observed PORTSC
-changes and preserve neutral power/wake fields; they never echo PED or reset bits.
+A connection change retires that startup candidate. Ordinary HID leaves have
+[device-local endpoint and slot fences](usb-interrupt-in.md#collection-loss-and-retirement),
+with fresh prepared records for bounded low/full-speed reattachment. An idle
+unbound startup device can be disabled without stopping unrelated ports; active
+non-HID removal and unsupported hub-subtree loss retain controller quarantine.
+Reconnection never inherits an old device's DMA or software state. Writes
+acknowledge only observed PORTSC changes and preserve neutral power/wake fields;
+they never echo PED or reset bits.
 
 Command timeout, invalid completion/event identity, controller error, failed
 port setup or failed slot retirement stops the controller for this boot. The

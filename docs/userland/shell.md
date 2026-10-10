@@ -5,7 +5,7 @@ default [init script](init.md) and [session launcher](session-configuration.md),
 which by default start separate shells in the Development and Read-only spaces,
 with shared `home://` as their working directory. Boot starts on Caelum's tab;
 use Super+Right to select Development before typing. The normal initrd contains init,
-shell, ls, cat, echo, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
+shell, ls, tree, cat, echo, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
 home is initially empty. On live boots it is RAM and its contents disappear on
 reboot; installed systems keep it in the pool's `home` volume.
 
@@ -105,6 +105,28 @@ that shell stops saving.
 
 Searching history with Ctrl+R is [deferred](../technical-debt.md#initial-terminal-editor).
 
+**Tab completion.** Tab completes the command name: the first word of the line
+or of a pipeline stage after `|`. The candidates are the shell builtins and the
+programs in `bin://` and `boot://` (each `NAME.pxe` offered as `NAME`), sorted
+and without duplicates. Names that need quoting to type are not offered, and
+`bin://` entries added by a development bundle catalog are not either.
+
+- **One match** replaces the word and adds a space.
+- **Several matches** extend the word to their common prefix when that is longer.
+  Otherwise Tab lists them in columns under the line and draws the prompt and
+  line again. Tab on an empty line lists every command.
+- **Nothing** happens in argument position, after a redirection operator, inside
+  quotes, or when the word contains `/`, `:` or another byte a bare name cannot
+  hold. Paths and arguments are not completed.
+- A completion that would exceed the line limit changes nothing and marks the
+  line as full. The shell lists `bin://` and `boot://` with its own grants; if
+  either cannot be listed, it offers fewer names.
+
+The local shell, a [multiplexer](multiplexer.md) pane and the
+[remote terminal](remote-terminal.md) shell complete the same way; the quiet
+(`--no-echo`) editor and script mode do not. The editor interface is
+[`term_read_line_completing`](terminal.md#tab-completion).
+
 There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
 argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
 below; `|` connects foreground external commands as described under pipelines.
@@ -187,11 +209,12 @@ parent pruning or wildcard expansion. Existing handles survive removal, and
 removing an empty directory makes it unavailable for new children even through
 an older handle. See [the directory contract](../interfaces/directories.md#removal).
 
-`mv source-file destination-file` renames a file and replaces an existing file
-at the exact destination path. It accepts exactly two operands, has no options,
-and does not append a basename when the destination is a directory. Directory
-moves and cross-filesystem copying are unsupported. It uses libc rename and
-reports failure without deleting the source or destination itself.
+`mv [--] source... destination` renames files with libc `rename`: to the
+destination path, replacing an existing file, or, when the destination is a
+directory, into it under each source's last name. Several sources need a
+destination directory. Directory moves and cross-filesystem copying are
+unsupported. It continues after a failed source and reports failure without
+deleting the source or destination itself. See [mv](mv.md).
 
 [`cp [--] source-file... destination`](cp.md) copies files within or across roots.
 A directory destination receives each source's basename; several sources require
@@ -269,8 +292,13 @@ Interactive commands and scripts use the same redirection rules.
 
 Paths use the shell's current directory and root grants. The shell first opens the
 executable, then opens all redirect targets in written order. Input must exist;
-output is opened or created without truncation. Only after every target is open
-are output files truncated, in written order, and the child launched. The child
+output is opened or created without truncation. After wiring pipes, the shell
+compares every explicit output with every stage's final FILE stdin, including
+inherited input. Different known domains prove distinctness even without object
+IDs; within one domain both IDs must be available and different. An alias,
+unknown domain, missing required identity or failed query aborts before any
+truncation. See [file metadata](../interfaces/file-metadata.md).
+Only after this check are outputs truncated, in written order, and children launched. The child
 receives independent native file grants, not filenames to reopen. Temporary shell
 handles close after launch or failure. `<` withholds keyboard and pointer grants.
 If stdout remains a console, the final foreground stage receives named terminal
@@ -285,8 +313,8 @@ shebang interpreter, allocation or launch failure may leave outputs truncated.
 There is no rollback or atomic multi-file update. Shell preparation errors use the
 shell's own stderr; `2>` redirects the child's stderr only.
 
-There is no same-file protection: `cat file > file` and `cat < file > file` truncate
-the input before it is consumed. Different path spellings may alias the same file.
+`cat < file > alias` is protected even through different root/path spellings.
+Argument files are outside the check: `cat file > file` can still destroy its input.
 stdout and stderr each start at offset zero, even for `> out 2> out`; their
 independent writes can overwrite one another. This is not a merged output stream.
 

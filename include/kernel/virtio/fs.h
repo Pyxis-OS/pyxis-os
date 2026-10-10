@@ -58,6 +58,8 @@ struct virtio_fs_session {
 struct virtio_fs_attributes {
   enum virtio_fs_kind kind;
   uint64_t size;
+  int64_t modified_seconds;
+  uint32_t modified_nanoseconds;
 };
 
 /* Caller-owned stable records, initially zeroed. Each successful lookup owns

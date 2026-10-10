@@ -59,6 +59,11 @@ struct directory_object *directory_create(enum directory_backing backing)
     return NULL;
   }
   *directory = (struct directory_object){.backing = backing, .generation = 1};
+  if ((backing == DIRECTORY_RAM || backing == DIRECTORY_INITRD) &&
+      !fs_metadata_create(&directory->metadata, backing == DIRECTORY_INITRD)) {
+    kfree(directory);
+    return NULL;
+  }
   atomic_init(&directory->locked, false);
   object_init(&directory->object, OBJECT_DIRECTORY, destroy_directory);
   return directory;
@@ -433,6 +438,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   } else {
     append_entry(directory, entry);
     ++directory->generation;
+    fs_metadata_touch(&directory->metadata);
   }
   unlock_directory(directory);
 
@@ -515,6 +521,7 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
   if (status == CALL_OK) {
     unlink_entry(directory, entry);
     ++directory->generation;
+    fs_metadata_touch(&directory->metadata);
   }
   unlock_directory(directory);
   unlock_mutation();
@@ -691,8 +698,10 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
     }
     append_entry(destination, entry);
     ++source->generation;
+    fs_metadata_touch(&source->metadata);
     if (destination != source) {
       ++destination->generation;
+      fs_metadata_touch(&destination->metadata);
     }
   }
   unlock_parents(source, destination);
@@ -826,6 +835,46 @@ static struct syscall_result filesystem_info(struct directory_object *directory,
   return (struct syscall_result){status, status == CALL_OK ? sizeof(struct directory_filesystem_info) : 0};
 }
 
+static struct syscall_result query_info(struct directory_object *directory, uint64_t rights,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct file_info_reply reply = {0};
+  if (reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (directory->backing == DIRECTORY_NPFS) {
+    struct npfs_request *pending = npfs_request_prepare(NPFS_INFO);
+    pending->job.node = directory->npfs;
+    pending->job.rights = rights;
+    npfs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    if (status == CALL_OK) {
+      KASSERT(copy_to_user(reply_address, &pending->job.file_info, sizeof(reply)));
+    }
+    npfs_request_release(pending);
+    return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
+  }
+  if (directory->backing == DIRECTORY_HOST) {
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_INFO);
+    pending->node = directory->host;
+    hostfs_request_submit_and_wait(pending);
+    enum call_status status = pending->status;
+    if (status == CALL_OK) {
+      KASSERT(copy_to_user(reply_address, &pending->info, sizeof(reply)));
+    }
+    hostfs_request_release(pending);
+    return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
+  }
+  lock_directory(directory);
+  fs_metadata_info(&directory->metadata, &reply);
+  unlock_directory(directory);
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -835,6 +884,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   uint64_t required;
   switch (operation) {
+  case DIRECTORY_INFO:
+    required = 0;
+    break;
   case DIRECTORY_LOOKUP:
     required = DIRECTORY_RIGHT_LOOKUP;
     break;
@@ -860,7 +912,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & required)) {
+  if (required && !(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   union directory_payload request;
@@ -869,6 +921,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == DIRECTORY_INFO) {
+    return query_info(directory, rights, reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_FILESYSTEM_INFO) {
     return filesystem_info(directory, rights, reply_address, reply_capacity);

@@ -43,6 +43,11 @@ struct wait_interest {
  * EOF. FIN alone never closes writes. A listener accepts ACCEPTABLE/CLOSED,
  * both requiring ACCEPT; ACCEPTABLE automatically reports CLOSED. Relevant
  * terminal errors report ERROR without an additional INSPECT right.
+ * Pipe readers accept READABLE/PEER_FIN with READ; writers accept
+ * WRITABLE/WRITE_CLOSED with WRITE. Ordinary interests automatically include
+ * their closure flag. Final-writer closure preserves buffered readable bytes;
+ * drain them before interpreting a zero-length read as EOF. Final-reader closure
+ * reports WRITE_CLOSED, never WRITABLE. Ordinary pipe closure does not report ERROR.
  * Unknown types/interests or zero masks are BAD_REQUEST; stale handles are
  * BAD_HANDLE and insufficient rights are DENIED. Validate the entire list
  * before registration. Repeated handles/copies are separate observations.
@@ -71,7 +76,7 @@ struct wait_interest {
  * WAIT right. Completion is immutable and reports finished cleanup, not program
  * success. PROCESS_WAIT retrieves the observer's immutable result; group
  * completion additionally observes attributed deferred cleanup.
- * Process/group/terminal/console/display/keyboard/spatial/TCP interests may be
+ * Process/group/terminal/console/display/keyboard/spatial/TCP/pipe interests may be
  * mixed; waits without TCP need no network device.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
  * readiness. */

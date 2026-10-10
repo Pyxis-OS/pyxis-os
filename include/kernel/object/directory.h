@@ -2,6 +2,7 @@
 #define KERNEL_DIRECTORY_H
 
 #include <abi/syscall.h>
+#include <kernel/fs/metadata.h>
 #include <kernel/object/object.h>
 
 struct hostfs_node;
@@ -30,6 +31,7 @@ struct directory_entry {
 struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;
+  struct fs_metadata metadata; /* RAM/archive, under the directory lock. */
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
   struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
   atomic_bool locked;

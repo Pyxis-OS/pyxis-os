@@ -174,6 +174,11 @@ static struct file_object *create_file(enum file_backing backing)
     return NULL;
   }
   *file = (struct file_object){.backing = backing};
+  if ((backing == FILE_RAM || backing == FILE_INITRD) &&
+      !fs_metadata_create(&file->metadata, backing == FILE_INITRD)) {
+    kfree(file);
+    return NULL;
+  }
   atomic_init(&file->locked, false);
   object_init(&file->object, OBJECT_FILE, destroy_file);
   return file;
@@ -490,6 +495,7 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
   if (end > file->size) {
     file->size = end;
   }
+  fs_metadata_touch(&file->metadata);
   file_end_operation(file);
 
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
@@ -501,6 +507,7 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
   if (!file_begin_operation(file)) {
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
+  bool changed = size != file->size;
   /* Growth leaves holes. Shrinking frees whole pages past the new size and
    * zeroes the rest of its last page, so truncated bytes never reappear. */
   if (!size) {
@@ -515,8 +522,55 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
     }
   }
   file->size = size;
+  if (changed) {
+    fs_metadata_touch(&file->metadata);
+  }
   file_end_operation(file);
   return (struct syscall_result){CALL_OK, 0};
+}
+
+static struct syscall_result query_info(struct file_object *file, uint64_t rights,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  struct file_info_reply reply = {0};
+  if (request_size || reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (file->backing == FILE_NPFS) {
+    struct npfs_request *pending = npfs_request_prepare(NPFS_INFO);
+    pending->job.node = file->npfs;
+    pending->job.rights = rights;
+    npfs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    if (status == CALL_OK) {
+      KASSERT(copy_to_user(reply_address, &pending->job.file_info, sizeof(reply)));
+    }
+    npfs_request_release(pending);
+    return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
+  }
+  if (file->backing == FILE_HOST) {
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_INFO);
+    pending->node = file->host;
+    hostfs_request_submit_and_wait(pending);
+    enum call_status status = pending->status;
+    if (status == CALL_OK) {
+      KASSERT(copy_to_user(reply_address, &pending->info, sizeof(reply)));
+    }
+    hostfs_request_release(pending);
+    return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
+  }
+  if (!file_begin_operation(file)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  reply.valid = FILE_INFO_SIZE_VALID;
+  reply.size = file->size;
+  fs_metadata_info(&file->metadata, &reply);
+  file_end_operation(file);
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
 struct syscall_result file_call(struct file_object *file, uint64_t rights,
@@ -532,6 +586,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     required = FILE_RIGHT_READ;
     break;
   case FILE_SIZE:
+  case FILE_INFO:
     required = FILE_RIGHTS;
     break;
   case FILE_WRITE:
@@ -544,6 +599,9 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == FILE_INFO) {
+    return query_info(file, rights, request_size, reply_address, reply_capacity);
   }
 
   if (operation == FILE_READ) {

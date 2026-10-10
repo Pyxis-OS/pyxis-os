@@ -104,11 +104,15 @@ signed long on the LP64 target; `limits.h` defines SSIZE_MAX as LONG_MAX.
 
 Read/write check descriptor and access validity first (-1/EBADF), then reject
 counts above SSIZE_MAX (-1/EINVAL). A valid zero-count request returns zero
-without touching the buffer or backend. Nonempty calls perform one backend
-transfer and return the confirmed byte count, including short progress, or -1
-with the translated errno. They do not fill a buffer or retry the remainder. A
-read first returns bytes the associated FILE read ahead, without a backend call;
-read itself never reads ahead.
+without touching the buffer or backend. A nonempty write performs one backend
+transfer and returns the confirmed byte count, including short progress, or -1
+with the translated errno; it does not retry the remainder. A nonempty read of a
+regular file repeats native transfers (each under 4 KiB) until the count is
+filled or the file ends, so callers get the whole count as on other systems. If
+an error follows some progress, read returns the bytes already read and the error
+recurs on the next call. A pipe or console read returns one transfer, including
+short progress. A read first returns bytes the associated FILE read ahead,
+without a backend call; read itself never reads ahead.
 
 `pread` and `pwrite` take an explicit off_t file offset and leave the descriptor's
 private position unchanged. They call native FILE operations directly, never
@@ -216,8 +220,9 @@ shares backend dispatch and indicator handling with `fread`, whose complete
 element counts and fill-request behavior are unchanged. It returns bytes already
 read ahead first and never reads ahead itself; there is no extra handle.
 
-Private descriptor transfers return one backend result: progress or an error.
-FILE alone updates EOF/error indicators and implements the fread/fwrite loops.
+Descriptor writes, and reads of pipes and consoles, return one backend result:
+progress or an error. A regular-file `read` repeats its transfers as described
+above, and `fread_some` stays a single transfer. FILE alone updates EOF/error indicators and implements the fread/fwrite loops.
 A FILE's sticky EOF does not suppress a descriptor transfer. Selected access
 mode and native rights remain separate: invalid entries and wrong modes report
 EBADF, while native authority denial remains EACCES and unsupported operations
@@ -466,7 +471,7 @@ if reporting itself fails.
 | BAD_HANDLE | EBADF |
 | DENIED | EACCES |
 | BAD_OPERATION | ENOTSUP |
-| BAD_REQUEST, WRONG_TYPE | EINVAL |
+| BAD_REQUEST, WRONG_TYPE | EINVAL, except EILSEQ when BAD_REQUEST answers a path that is not valid UTF-8 |
 | BAD_BUFFER | EFAULT |
 | UNAVAILABLE | ENODEV |
 | QUEUE_FULL | EAGAIN |

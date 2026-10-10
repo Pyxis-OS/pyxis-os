@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+struct key_event;
+bool ps2_keyboard_available(void);
+bool ps2_keyboard_read_event(struct key_event *event);
+bool ps2_keyboard_sync_device(void);
+bool ps2_keyboard_input_complete(void);
+
 /* BSP, IF=0; the PS/2 I/O APIC routes must already be initialized/masked.
  * Configures the keyboard, then the optional mouse. A mouse failure disables
  * only the auxiliary port and never fails keyboard setup. */

@@ -52,12 +52,52 @@ Zero-length operations succeed without waiting or observing peer closure after
 handle and authority validation. A failed native call transfers no bytes and
 leaves output storage untouched. A successful partial transfer is not an error;
 the caller may submit its remaining suffix. There are no message boundaries,
-nonblocking mode, deadlines, wait sets, signals or shared seek positions.
+per-endpoint mode flags, transfer deadlines, signals or shared seek positions.
+
+`PIPE_TRY_READ` and `PIPE_TRY_WRITE` use the same layouts, rights and limits as
+the blocking operations. They report available short progress, drained EOF or
+peer closure immediately. An empty live reader or full live writer returns
+`CALL_WOULD_BLOCK`, transfers nothing and publishes no pending operation.
+Zero-length and error-output rules are unchanged. The native libpyxis helpers
+are `pipe_try_read()` and `pipe_try_write()`; libc and its blocking streams do
+not gain an `O_NONBLOCK` mode.
 
 Multiple copied readers compete for bytes from the same stream. Multiple writers
 contribute to that stream; large transfers may interleave between calls. No atomic
 write size or strict fairness is guaranteed. Backend locking prevents corruption
 and duplicate consumption, but wakeup does not reserve bytes or space for a task.
+
+## Readiness
+
+[`wait_many`](../../include/abi/wait.h) accepts a pipe read endpoint with
+`WAIT_READABLE` and/or `WAIT_PEER_FIN`, requiring `PIPE_RIGHT_READ`. A write
+endpoint accepts `WAIT_WRITABLE` and/or `WAIT_WRITE_CLOSED`, requiring
+`PIPE_RIGHT_WRITE`. Other interests are rejected before publishing the wait.
+The existing 32-interest bound, absolute deadline and zero-deadline poll apply.
+Pipe interests can share a wait with console, terminal, TCP and process interests.
+
+Readiness is level-triggered and reserves nothing. READABLE means queued bytes;
+WRITABLE means an open reader and room for at least one byte. Last-writer closure
+returns PEER_FIN even when only READABLE was requested, including while bytes
+remain buffered. With READABLE requested, READABLE plus PEER_FIN means buffered
+bytes can still drain; PEER_FIN without READABLE then means the next nonempty
+try-read returns zero. A PEER_FIN-only interest does not report whether bytes
+remain. Last-reader closure returns WRITE_CLOSED even when only WRITABLE was
+requested, suppresses WRITABLE, and makes a nonempty try-write fail with
+`CALL_ENDPOINT_CLOSED`. Ordinary closure adds no `WAIT_ERROR`.
+
+A copied endpoint can consume readiness before another caller transfers. Use a
+try operation after a wait and handle WOULD_BLOCK, short progress and closure.
+A wait retains only its watched endpoint, never its peer, until its worker
+unlinks and completes the request. Thus watching a reader does not postpone EOF.
+
+State observation uses the pair lock. Empty-to-nonempty writes, full-to-nonfull
+reads and final endpoint closure notify the existing readiness workers after
+releasing that lock. Admission registers a pipe interest before the initial
+scan; a preceding transition is seen by the scan, and a following transition
+notifies it. The existing remembered worker notification covers wake before
+park. With no admitted pipe interests, transitions skip worker notification;
+blocking pipeline traffic does not wake otherwise idle readiness workers.
 
 ## Closure, waiting and storage lifetime
 

@@ -8,7 +8,8 @@ QEMU's default mouse. On the ThinkPad, the Synaptics touchpad in its firmware
 relative mode reports as a standard PS/2 mouse without a wheel (device ID 0).
 TrackPoint motion and buttons arrive through the same stream, and firmware
 tap-to-click and tap-and-drag work; there is no scrolling in this mode.
-Synaptics absolute mode and USB HID mice are not supported.
+Synaptics absolute mode is unsupported. [USB boot mice](usb-hid.md) are separate
+sources feeding the same system pointer.
 
 Events carry raw device counts without acceleration. Signs follow the display:
 +dx is right, +dy is down and +wheel scrolls toward the user. The device's own
@@ -16,8 +17,8 @@ Events carry raw device counts without acceleration. Signs follow the display:
 buttons after the packet. QEMU and some devices also send a packet with all
 deltas zero, for example when a wheel step ends.
 
-The presentation task drains these events into the kernel-owned physical
-pointer and routes ordinary input to the shown surface. The
+The presentation task drains these events through the shared input coordinator
+into the kernel-owned physical pointer and routes ordinary input to the shown surface. The
 [system pointer interface](../interfaces/pointer.md) documents graphics sessions,
 terminal control, geometry, cursor images, lock and source-loss handling.
 [Mousetest](../userland/mousetest.md) provides an interactive consumer; the

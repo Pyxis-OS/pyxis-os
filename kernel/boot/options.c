@@ -128,6 +128,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *remote_beacon = NULL, *log_udp = NULL, *display_size = NULL;
   const char *display_timing = NULL, *display_timing_metrics = NULL, *display_inventory = NULL;
   const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
+  const char *display_flip = NULL, *display_flip_metrics = NULL;
 
   char *cursor = command_line_storage;
   while (*cursor) {
@@ -176,6 +177,10 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&display_timing, key, value);
     } else if (same_text(key, "display.timing.metrics")) {
       take_option(&display_timing_metrics, key, value);
+    } else if (same_text(key, "display.flip")) {
+      take_option(&display_flip, key, value);
+    } else if (same_text(key, "display.flip.metrics")) {
+      take_option(&display_flip_metrics, key, value);
     } else if (same_text(key, "display.inventory")) {
       take_option(&display_inventory, key, value);
     } else {
@@ -224,6 +229,9 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.display_timing_metrics = display_timing_metrics &&
     flag_option("display.timing.metrics", display_timing_metrics);
   options.display_inventory = display_inventory && flag_option("display.inventory", display_inventory);
+  options.display_flip = display_flip && flag_option("display.flip", display_flip);
+  options.display_flip_metrics = display_flip_metrics &&
+    flag_option("display.flip.metrics", display_flip_metrics);
   return &options;
 }
 

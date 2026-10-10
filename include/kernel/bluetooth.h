@@ -6,6 +6,7 @@
 
 struct usb_host_controller;
 struct usb_host_device;
+struct usb_host_interrupt;
 
 /* Owning USB worker, BSP/IF=1. Count each identified AX200 before transport
  * admission and select its host. A second candidate makes the singleton
@@ -13,7 +14,7 @@ struct usb_host_device;
 void bluetooth_hci_candidate(struct usb_host_controller *host);
 /* Bind after both retained receives start. Seal inventory before initialization. */
 void bluetooth_hci_attach(struct usb_host_controller *host,
-    struct usb_host_device *device, uint8_t interface_number);
+    struct usb_host_device *device, uint8_t interface_number, struct usb_host_interrupt *event);
 /* BSP/IF=0, after final USB publication. Require complete discovery on the
  * selected host; the global inventory can retain unsupported controllers. */
 void bluetooth_hci_inventory_sealed(void);

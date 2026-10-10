@@ -26,6 +26,7 @@
 #include <kernel/task.h>
 #include <kernel/user/wait.h>
 #include <kernel/keyboard.h>
+#include <kernel/input.h>
 #include <kernel/mouse.h>
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
@@ -36,8 +37,10 @@
 #include <kernel/pointer_present.h>
 #include <kernel/display_capture.h>
 #include <kernel/volume_ui.h>
+#include "display/presentation.h"
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
+#define FLIP_POLL_INTERVAL_NS UINT64_C(1000000)
 
 #define SPACES_NAV_HEIGHT 32
 /* Character cells: a chevron slot at each end, and blank margin each side of a title. */
@@ -55,7 +58,7 @@ static const struct framebuffer *screen;
 #define CAELUM_SPACE_NAME "caelum"
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
-static uint32_t ps2_suppressed_buttons;
+static void handle_space_input(void);
 /* Registry index of the leftmost visible tab. Presenter-owned. */
 static size_t viewport_first;
 /* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
@@ -1021,7 +1024,16 @@ void space_present()
   }
 
 frame_done:
-  bool presented = display_end_frame(pointer) && composed;
+  bool presented = display_end_frame(composed ? pointer : NULL);
+  while (display_frame_pending()) {
+    presented = display_frame_poll();
+    if (display_frame_pending()) {
+      handle_space_input();
+      space_pointer_sync_input();
+      kernel_task_sleep_until(arch_monotonic_ns() + FLIP_POLL_INTERVAL_NS);
+    }
+  }
+  presented = presented && composed;
   flags = cpu_save_interrupts();
   if (presented) {
     drawn_nav_layout = nav;
@@ -1100,6 +1112,7 @@ static void handle_space_input_locked(void)
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
       memset(volume_held, 0, sizeof(volume_held));
+      escape_held = false;
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
       clipboard_key_event(active_space, &event);
@@ -1213,12 +1226,12 @@ struct space *space_pointer_active(void)
 
 bool space_pointer_input_available(void)
 {
-  return mouse_available();
+  return input_pointer_available();
 }
 
 uint32_t space_pointer_suppressed_buttons(void)
 {
-  return ps2_suppressed_buttons;
+  return input_pointer_suppressed_buttons();
 }
 
 size_t space_pointer_content_y(void)
@@ -1254,26 +1267,7 @@ void space_pointer_select(struct space *space)
 
 void space_pointer_sync_input(void)
 {
-  _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
-      MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
-      MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "PS/2 pointer button bits");
-  struct mouse_event event;
-  while (mouse_read_event(&event)) {
-    uint64_t flags = cpu_save_interrupts();
-    if (event.reset) {
-      /* Lost PS/2 bytes cannot establish whether a held button is a new press. */
-      ps2_suppressed_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
-      pointer_source_lost(0);
-    } else {
-      ps2_suppressed_buttons &= event.buttons;
-      struct pointer_input_report report = {
-        .dx = event.dx, .dy = event.dy, .wheel = event.wheel,
-        .buttons = event.buttons, .suppressed_buttons = ps2_suppressed_buttons,
-      };
-      pointer_handle_input(&report);
-    }
-    cpu_restore_interrupts(flags);
-  }
+  input_pointer_drain();
 }
 
 void space_present_task(void *argument)
@@ -1300,8 +1294,9 @@ void space_present_task(void *argument)
     deadline += PRESENT_INTERVAL_NS;
     uint64_t now = arch_monotonic_ns();
     if (deadline <= now) {
-      /* Drop missed frames rather than catching up in a busy loop. */
-      deadline = now + PRESENT_INTERVAL_NS;
+      /* A synchronized flip already paced this frame. If the software
+       * deadline is due, continue without adding another full interval. */
+      deadline = display_frame_flip_completed() ? now : now + PRESENT_INTERVAL_NS;
     }
     kernel_task_sleep_until(deadline);
   }

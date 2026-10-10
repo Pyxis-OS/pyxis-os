@@ -65,8 +65,9 @@ append use this same ownership/cursor machinery.
 
 Backend operations report one transfer or an error. FILE alone owns sticky
 EOF/error indicators and the fread/fwrite loops. Descriptor reads remain usable
-after a FILE observes EOF and never fill a short request through repeated reads;
-they return bytes a FILE read ahead before any backend transfer.
+after a FILE observes EOF. `read` of a regular file repeats native transfers to
+fill the request or reach the end, while pipe and console reads stay one
+transfer; both return bytes a FILE read ahead before any backend transfer.
 Supported operations, selected mode and granted native rights remain separate;
 an adapter preserves authority and reports denied or unsupported operations.
 
@@ -156,9 +157,9 @@ x86-64 LP64 interface is:
 | --- | --- |
 | `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x100, O_TRUNC = 0x200, O_EXCL = 0x400, O_APPEND = 0x800 |
 | `unistd.h` | read, write, pread, pwrite, close, lseek, ftruncate, fsync, unlink, rmdir, access, isatty; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
-| `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size |
+| `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size; independently valid st_dev/st_ino/st_mtim under st_valid |
 | `arpa/inet.h` | htonl, htons, ntohl, ntohs only; no socket or address parsing/formatting declarations |
-| `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int |
+| `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int; dev_t and ino_t as uint64_t |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
 | `inttypes.h` | PRId/PRIi/PRIo/PRIu/PRIx/PRIX output macros for fixed-width 8/16/32/64-bit, pointer and greatest-width types |
@@ -180,9 +181,10 @@ This creates no permission system or additional rights; virtio-fs retains its
 
 Read/write first check descriptor and access validity (EBADF), then reject
 counts above SSIZE_MAX (EINVAL). A valid zero-count call returns zero without
-touching the buffer or backend. Nonempty calls return one confirmed transfer,
-including positive short progress, or -1 with errno. File/pipe zero reads mean
-EOF; unexpected console zero progress and nonempty zero writes mean EIO.
+touching the buffer or backend. A nonempty `read` of a regular file returns the
+full count unless the file ends first (an error after progress returns the bytes
+read). Other nonempty calls return one confirmed transfer, including positive
+short progress, or -1 with errno. File/pipe zero reads mean EOF; unexpected console zero progress and nonempty zero writes mean EIO.
 Descriptor calls neither inspect nor update FILE indicators.
 
 The [descriptor I/O reference](stdio.md#descriptor-io) and

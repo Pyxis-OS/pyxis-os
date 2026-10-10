@@ -101,14 +101,15 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-09): [machine settings, task 1](machine-settings.md#task-1-contract),
-  hostname store/validation, boot selection, native query and print-only command.
+- **Codex** (2026-10-10): [USB HID boot keyboards and mice](usb-hid.md),
+  shared physical input, USB 2 hub chains and bounded leaf hotplug. QEMU and
+  ThinkPad keyboard/composite mouse input are qualified; #654 ready to merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
-  task 1 read-only inventory complete; exclusion standard and PSP/SMU risk accepted.
-  Inherited pitch remains a backend prerequisite; task 2 awaits separate owner go.
+  tasks 1–2 complete; normal flips/game play natively qualified, default off.
+  Task 3 and cheaper steady-state polling require separate assignments.
 - **Claude** (2026-10-09): no milestone after closing SDL game ports.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
@@ -154,8 +155,6 @@ Other candidates; current assignments are listed above.
 - [Network kernel debugger](network-debugger.md): checkpoint and guarded
   inspection implemented; task 3 assigned for both NICs, bridge and native
   read-only LAN attach during PXE bring-up.
-- USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
-  boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after
   the completed analog playback milestone.
 - [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
@@ -183,7 +182,8 @@ prerequisites and result are clear.
   Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 - [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
   [Go runtime investigation](go-runtime.md) and the
-  [Neovim/libuv investigation](neovim-libuv.md).
+  [Neovim milestone proposal](neovim-libuv.md), with its re-check of the libuv
+  investigation.
 - [Building software on Pyxis](source-builds.md): after hosted Clang, ports and
   non-rescue userland build from source on the installed system, Gentoo style,
   until a package manager exists.

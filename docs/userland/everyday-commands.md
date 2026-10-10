@@ -1,8 +1,9 @@
 # Everyday commands
 
-The boot image packages native `echo`, `cp` and `ls`. The installed rescue
-archive retains all three, so configuration text can be written, files copied
-and directories inspected while repairing the system. See
+The boot image packages native `echo`, `cp`, `ls`, `tree` and `mv`. The installed
+rescue archive retains `echo`, `cp`, `ls` and `mv`, so configuration text can be
+written, files copied or moved and directories inspected while repairing the
+system. See
 [system layout](system-layout.md#programs) for `bin://` and rescue fallback.
 
 | Command | Behavior | Reference |
@@ -10,6 +11,8 @@ and directories inspected while repairing the system. See
 | `echo [-n] [ARG...]` | Space-separated arguments and a newline; an exact first `-n` suppresses the newline. No escape processing. | [Shell quoting and streams](shell.md#commands-and-quoting) |
 | `cp [--] SOURCE... DESTINATION` | Files within or across roots; several sources require an existing destination directory. Exclusive sibling staging followed by replacement rename. | [cp authority and recovery limits](cp.md) |
 | `ls [-1l] [--] [DIRECTORY...]` | Byte-sorted names, terminal columns and kind colors; plain names in pipes/files. `-l` adds kinds and sizes, with no timestamps. | [ls options and limits](ls.md) |
+| `tree [-L N] [--] [DIRECTORY...]` | Recursive listing with ASCII branches, sorted and colored like `ls`; `-L` limits the depth. | [tree](tree.md) |
+| `mv [--] SOURCE... DESTINATION` | Renames files, or moves them into a destination directory. Files only. | [mv](mv.md) |
 
 ```text
 echo hi > home://note.txt

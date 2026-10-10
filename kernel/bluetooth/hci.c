@@ -125,6 +125,7 @@ enum hci_initialization {
 static struct {
   struct usb_host_controller *host;
   struct usb_host_device *device;
+  struct usb_host_interrupt *event;
   unsigned attachments;
   bool sealed, complete, terminal, dirty, cleanup, progress_active;
   enum call_status failure;
@@ -1286,7 +1287,7 @@ static void collect_receives(void)
       struct usb_interrupt_completion completion;
       enum usb_result result = stream_index ?
           usb_host_async_bulk_take(adapter.device, adapter.chunk, sizeof(adapter.chunk), &completion) :
-          usb_host_interrupt_take(adapter.device, adapter.chunk, sizeof(adapter.chunk), &completion);
+          usb_host_interrupt_take(adapter.event, adapter.chunk, sizeof(adapter.chunk), &completion);
       if (result == USB_BUSY) {
         idle[stream_index] = true;
         break;
@@ -1635,7 +1636,7 @@ void bluetooth_hci_candidate(struct usb_host_controller *host)
 }
 
 void bluetooth_hci_attach(struct usb_host_controller *host,
-    struct usb_host_device *device, uint8_t interface_number)
+    struct usb_host_device *device, uint8_t interface_number, struct usb_host_interrupt *event)
 {
   KASSERT(arch_cpu_index() == 0 && host && device);
   uint64_t flags = cpu_save_interrupts();
@@ -1645,6 +1646,7 @@ void bluetooth_hci_attach(struct usb_host_controller *host,
     fail_adapter_reason(CALL_UNAVAILABLE, "invalid AX200 attachment");
   } else {
     adapter.device = device;
+    adapter.event = event;
     adapter.command_credits = 1; /* Initial HCI command allowance before replies. */
   }
   cpu_restore_interrupts(flags);

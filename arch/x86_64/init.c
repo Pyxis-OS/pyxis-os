@@ -66,7 +66,7 @@ void arch_init(struct boot_info *boot)
   klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   io_apic_prepare(boot);
   arch_clock_prepare(boot);
-  if (options->display_inventory) {
+  if (options->display_inventory || options->display_flip) {
     renoir_inventory_boot(boot);
   }
   paging_init(boot);

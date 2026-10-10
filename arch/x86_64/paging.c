@@ -1310,6 +1310,18 @@ enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical)
                   PTE_CACHE_DISABLE | PTE_WRITE_THROUGH);
 }
 
+enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(active && !arch_cpu_count());
+  uint64_t pat = read_msr(IA32_PAT);
+  if (((pat >> (PAT_FRAMEBUFFER_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) != PAT_WRITE_COMBINING ||
+      paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
+    return MM_INVALID;
+  }
+  return map_page(&kernel_space, virtual, physical, PAGE_WRITE, PTE_PAT_4K | PTE_WRITE_THROUGH);
+}
+
 bool paging_display_aperture_overlaps(phys_addr_t physical, size_t bytes)
 {
   return display_aperture_bytes && physical < display_aperture_physical + display_aperture_bytes &&

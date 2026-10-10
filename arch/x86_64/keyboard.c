@@ -74,8 +74,6 @@ static bool input_lost;
 static size_t key_errors; /* IRQ producer; the consumer reads it with IF=0. */
 static size_t key_errors_logged;
 static uint64_t key_errors_logged_at;
-static bool held[KEY_COUNT];
-static unsigned locks;
 static bool extended, released, pause_release;
 static size_t pause_index;
 
@@ -105,7 +103,7 @@ void keyboard_receive(uint8_t status, uint8_t data)
   ++raw_count;
 }
 
-bool keyboard_available(void)
+bool ps2_keyboard_available(void)
 {
   return available;
 }
@@ -134,43 +132,13 @@ static enum raw_result read_raw(uint8_t *data)
   return result;
 }
 
-static unsigned modifiers(void)
-{
-  unsigned state = locks;
-  if (held[KEY_LEFT_SHIFT] || held[KEY_RIGHT_SHIFT]) {
-    state |= KEY_MOD_SHIFT;
-  }
-  if (held[KEY_LEFT_CONTROL] || held[KEY_RIGHT_CONTROL]) {
-    state |= KEY_MOD_CONTROL;
-  }
-  if (held[KEY_LEFT_ALT] || held[KEY_RIGHT_ALT]) {
-    state |= KEY_MOD_ALT;
-  }
-  if (held[KEY_LEFT_SUPER] || held[KEY_RIGHT_SUPER]) {
-    state |= KEY_MOD_SUPER;
-  }
-  return state;
-}
-
 static void key_event(enum key_code key, bool release, struct key_event *event)
 {
-  enum key_action action = release ? KEY_RELEASE : held[key] ? KEY_REPEAT : KEY_PRESS;
-  held[key] = !release;
-  if (action == KEY_PRESS) {
-    switch (key) {
-    case KEY_CAPS_LOCK: locks ^= KEY_MOD_CAPS_LOCK; break;
-    case KEY_NUM_LOCK: locks ^= KEY_MOD_NUM_LOCK; break;
-    case KEY_SCROLL_LOCK: locks ^= KEY_MOD_SCROLL_LOCK; break;
-    default: break;
-    }
-  }
-  *event = (struct key_event){.key = key, .action = action, .modifiers = modifiers()};
+  *event = (struct key_event){.key = key, .action = release ? KEY_RELEASE : KEY_PRESS};
 }
 
 static void reset_state(struct key_event *event)
 {
-  memset(held, 0, sizeof(held));
-  locks = 0;
   extended = released = pause_release = false;
   pause_index = 0;
   *event = (struct key_event){.action = KEY_STATE_RESET};
@@ -236,7 +204,7 @@ static void report_key_errors(void)
   key_errors_logged_at = now;
 }
 
-bool keyboard_read_event(struct key_event *event)
+bool ps2_keyboard_read_event(struct key_event *event)
 {
   KASSERT(cpu_current() == cpu_bsp() && event);
   if (!available) {
@@ -266,14 +234,14 @@ bool keyboard_read_event(struct key_event *event)
   }
 }
 
-bool keyboard_sync_device(void)
+bool ps2_keyboard_sync_device(void)
 {
   KASSERT(cpu_current() == cpu_bsp());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   return available && ps2_sync_input();
 }
 
-bool keyboard_input_complete(void)
+bool ps2_keyboard_input_complete(void)
 {
   KASSERT(cpu_current() == cpu_bsp());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
