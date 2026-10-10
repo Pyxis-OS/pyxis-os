@@ -26,6 +26,7 @@
 #include <kernel/task.h>
 #include <kernel/user/wait.h>
 #include <kernel/keyboard.h>
+#include <kernel/input.h>
 #include <kernel/mouse.h>
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
@@ -57,7 +58,6 @@ static const struct framebuffer *screen;
 #define CAELUM_SPACE_NAME "caelum"
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
-static uint32_t ps2_suppressed_buttons;
 static void handle_space_input(void);
 /* Registry index of the leftmost visible tab. Presenter-owned. */
 static size_t viewport_first;
@@ -115,11 +115,11 @@ static void fb_free(struct framebuffer *fb)
   }
 }
 
-static uint8_t *tty_cells_try_alloc(const struct framebuffer *fb)
+static uint8_t *tty_storage_try_alloc(const struct framebuffer *fb)
 {
-  size_t bytes;
-  if (__builtin_mul_overflow(fb->width / bizcat.width, fb->height / bizcat.height, &bytes) ||
-      !bytes) {
+  size_t cells, bytes;
+  if (__builtin_mul_overflow(fb->width / bizcat.width, fb->height / bizcat.height, &cells) ||
+      !cells || __builtin_mul_overflow(cells, TTY_STORAGE_BYTES_PER_CELL, &bytes)) {
     return NULL;
   }
   return kmalloc(bytes);
@@ -144,16 +144,18 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
 
   tty->fg = aardvark_scheme.foreground;
   tty->bg = aardvark_scheme.background;
+  tty->foreground = TTY_DEFAULT_COLOR;
+  tty->background = TTY_DEFAULT_COLOR;
 
   tty->font = &bizcat;
   tty->scheme = &aardvark_scheme;
   tty->fb = fb;
 
-  tty->cells = tty_cells_try_alloc(fb);
-  if (!tty->cells) {
+  uint8_t *storage = tty_storage_try_alloc(fb);
+  if (!storage) {
     panic("cannot allocate space TTY cells");
   }
-  memset(tty->cells, ' ', (size_t)tty->width * tty->height);
+  tty_attach_storage(tty, storage);
   tty_clear(tty);
 
   tty->initialized = true;
@@ -714,7 +716,7 @@ static bool begin_presenting(void)
 struct resize_space {
   struct space *space;
   struct framebuffer *fb;
-  uint8_t *cells;
+  uint8_t *storage;
   struct resize_space *next;
 };
 
@@ -735,7 +737,7 @@ static void resize_buffers_free(struct resize_buffers *buffers)
     struct resize_space *entry = buffers->spaces;
     buffers->spaces = entry->next;
     fb_free(entry->fb);
-    kfree(entry->cells);
+    kfree(entry->storage);
     kfree(entry);
   }
   fb_free(buffers->navigation);
@@ -765,8 +767,8 @@ static bool resize_buffers_prepare(struct resize_buffers *buffers,
     if (!entry->fb) {
       return false;
     }
-    entry->cells = tty_cells_try_alloc(entry->fb);
-    if (!entry->cells) {
+    entry->storage = tty_storage_try_alloc(entry->fb);
+    if (!entry->storage) {
       return false;
     }
   }
@@ -846,9 +848,9 @@ static void resize_display(void)
   size_t count = 0;
   for (struct resize_space *entry = buffers.spaces; entry; entry = entry->next) {
     struct framebuffer *old = entry->space->fb;
-    uint8_t *old_cells = entry->space->tty->cells;
-    tty_resize(entry->space->tty, entry->fb, entry->cells);
-    entry->cells = old_cells;
+    uint8_t *old_storage = entry->space->tty->storage;
+    tty_resize(entry->space->tty, entry->fb, entry->storage);
+    entry->storage = old_storage;
     entry->space->fb = entry->fb;
     entry->fb = old;
     ++count;
@@ -1112,6 +1114,7 @@ static void handle_space_input_locked(void)
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
       memset(volume_held, 0, sizeof(volume_held));
+      escape_held = false;
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
       clipboard_key_event(active_space, &event);
@@ -1225,12 +1228,12 @@ struct space *space_pointer_active(void)
 
 bool space_pointer_input_available(void)
 {
-  return mouse_available();
+  return input_pointer_available();
 }
 
 uint32_t space_pointer_suppressed_buttons(void)
 {
-  return ps2_suppressed_buttons;
+  return input_pointer_suppressed_buttons();
 }
 
 size_t space_pointer_content_y(void)
@@ -1266,26 +1269,7 @@ void space_pointer_select(struct space *space)
 
 void space_pointer_sync_input(void)
 {
-  _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
-      MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
-      MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "PS/2 pointer button bits");
-  struct mouse_event event;
-  while (mouse_read_event(&event)) {
-    uint64_t flags = cpu_save_interrupts();
-    if (event.reset) {
-      /* Lost PS/2 bytes cannot establish whether a held button is a new press. */
-      ps2_suppressed_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
-      pointer_source_lost(0);
-    } else {
-      ps2_suppressed_buttons &= event.buttons;
-      struct pointer_input_report report = {
-        .dx = event.dx, .dy = event.dy, .wheel = event.wheel,
-        .buttons = event.buttons, .suppressed_buttons = ps2_suppressed_buttons,
-      };
-      pointer_handle_input(&report);
-    }
-    cpu_restore_interrupts(flags);
-  }
+  input_pointer_drain();
 }
 
 void space_present_task(void *argument)

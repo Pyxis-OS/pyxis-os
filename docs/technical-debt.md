@@ -5,6 +5,29 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## USB HID native coverage
+
+The [USB boot input](devices/usb-hid.md) is natively qualified for a full-speed root
+keyboard and a composite dongle ([record](development/experiments/usb-hid/README.md#native-owner-thinkpad)).
+Not exercised natively: the real dock or switch hub chain with low and full-speed leaves
+(letters, locks, repeat and fresh chords; unplugging and replugging a leaf without its hub,
+with held-key removal, held-button lock revocation and buttonless-survivor lock
+preservation); input during USB storage or Bluetooth work with ktrace for admission or
+loss; keyboard LED output; and the ASUS wheel. Low-speed scheduling and high-speed hub
+and transaction-translator routing are source-reviewed only, and QEMU has no composite or
+low-speed fixture. Steam Deck lizard mode would need its actual boot interfaces, and
+Bluetooth HID is separate. Revisit when a native batch includes the dock or when a device
+fails to bind; luna stages these runs through the owner and records image revision,
+controller, descriptors, link speeds and hub path (`lsusb -n` shows only the boot snapshot).
+
+## USB switch subtree removal
+
+The accepted [USB HID contract](devices/usb-hid.md#binding-and-ownership) permits controller
+quarantine after hub-subtree removal. A USB switch flip can therefore disable
+devices on that controller until reboot. Surviving the flip without quarantine
+needs proven subtree retirement with mixed storage/Bluetooth DMA ownership;
+the owner deferred it for much later (2026-10-10).
+
 ## Remote transfer memory and staging limits
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
@@ -259,18 +282,29 @@ raw pitch `0x780` on 2026-10-09. Preserve that register; the Linux convention
 would normally write `0x77f`. Other inherited modes remain unqualified. The owner accepted
 Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
 reservations if new firmware/client ranges appear; retain the low prefix and
-last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers. The [task-2 backend](development/experiments/renoir-flip-backend/README.md)
-is opt-in: normal completion and game play were natively qualified at `9254f5c8`
-on 2026-10-10. Timeout recovery, panic visibility and unreported capture/input
-checks remain unqualified; revisit in task 3. Interrupts, three surfaces and
-blanking stay deferred.
+last-16-MiB guard. The [flip backend](kernel/renoir-flip.md) is opt-in; its
+[remaining native qualification](#renoir-flip-backend-qualification) is below.
+Interrupts, three surfaces and blanking stay deferred.
+
+## Renoir flip backend qualification
+
+The [flip backend](kernel/renoir-flip.md) is opt-in and natively qualified for
+normal flips and Quake/Chocolate Quake play (`9254f5c8`, owner, 2026-10-10).
+Unqualified on the ThinkPad: timeout recovery, native panic visibility, remote
+screenshots with a visible cursor and selection, and the owner's ordinary input
+checks (tabs, selection, layers, lock and relock) not reported in that run. The
+paired disabled/enabled boots with camera clips, compose/copy costs and poll
+counts were not taken as a set. No native timeout injection or panic trigger is
+authorized. Revisit when the backend is proposed as a default, or after a change
+to its failure, panic or capture paths; the paired steps are in the
+[backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
 ## Renoir steady-state validation cost
 
 The [native flip run](development/experiments/renoir-flip-backend/README.md#native-success--2026-10-10)
 spends roughly 3 ms cumulative validation elapsed per frame (about 8 polls at 369 µs
 mean). Full double-snapshot PCI/route/layout checks on every poll occupy the BSP.
-Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-presentation.md#proposed-cheaper-steady-state-polling):
+Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-polling.md):
 light reads are hints; full validation must guard writes, retirement, capture and
 fallback. Detection cadence needs owner acceptance; no optimization is implemented.
 
@@ -325,12 +359,10 @@ natively in the boot log, raw terminals and mux on 2026-10-09; that correction n
 
 [Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as printable ASCII; non-ASCII glyphs,
 original tabs, soft wraps and intentional trailing spaces have the [initial delivery limits](#initial-clipboard-delivery-limits).
-Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
-pointer source, with raw counts and relative-mode Synaptics behavior; Bluetooth aggregation, USB HID, acceleration, absolute-mode
-scrolling, remote pointer transport and multiple-display composition are separate tracks. The current PS/2 reset hook alone does not
-implement the accepted conditional multi-source rules: revisit input routing through the
-[pointer source boundary](interfaces/pointer.md#input-source-coordination) when another trusted source is integrated, so independent
-masks never release a surviving source's held buttons.
+Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. [USB boot mice](devices/usb-hid.md) and PS/2 now share the accepted multi-source
+button and loss rules. Bluetooth input, acceleration, absolute-mode scrolling,
+remote pointer transport and multiple-display composition remain separate work.
+Revisit each when a concrete consumer or native device needs it.
 
 ## VirtIO cursor frontend limits
 
@@ -475,10 +507,18 @@ connection sets make these costs material. A persistent wait-set object (registe
 without a per-call input array, epoll/kqueue style) is a proposed later direction, for example for a many-connection web server;
 authority, lifetime, capacity and failure rules are open and nothing is agreed, scheduled or added.
 
+## Terminal profile limits
+
+The [`pyxis` terminal profile](userland/terminal.md#tty-output-controls) is ASCII only and has no origin mode, character insert, delete or
+erase (`CSI @`, `P`, `X`), `CSI ? 47/1047/1048`, horizontal margins or colors beyond the 16-entry palette; those sequences are ignored. The kernel TTY and the
+multiplexer's pane terminal implement the table separately and must change together; there is no shared parser across the kernel and
+userland boundary. Neovim is to be built without terminfo, and its built-in table has no `pyxis` entry, so the Neovim recipe must add one
+matching the profile ([Neovim task 6](wip/neovim-libuv.md)). Revisit with UTF-8 rendering or when a program needs a missing sequence.
+
 ## Initial terminal multiplexer limits
 
-The [multiplexer](userland/multiplexer.md) has one window and up to eight panes. Its native terminal subset has no alternate screen,
-Unicode widths or detach, and full-screen applications reuse the shell's screen. History keeps 1,024 scrolled-off rows with no reflow or
+The [multiplexer](userland/multiplexer.md) has one window and up to eight panes. Its native terminal subset has no Unicode widths or
+detach. History keeps 1,024 scrolled-off rows with no reflow or
 erased-screen archive; rows cropped by resize are not inserted into history (retaining them is a proposed follow-up), presentation crops
 at the session maximum and history storage keeps the largest width seen. Steady text storage is about 2.5 MiB per pane (resize can
 briefly double one pane's), with no per-group CPU or memory quota.
@@ -665,7 +705,7 @@ and held the clock through a native session of more than 15 minutes on 2026-10-0
 take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
 qualifies with an error bound up to 100 ppm on top of the HPET's crystal error, and CPUID `0x15` is only logged. Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
-calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. Revisit with a target that shows a warp or needs better accuracy.
+calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp, needs better accuracy or is an Intel CPU.
 
 ## Doom configuration and save-format limits
 
@@ -845,7 +885,7 @@ The owner checked the [SDL game ports](development/sdl-game-ports.md) on the Thi
 with `DUKE3D_DATA`, info logging, wired, AC, 1920x1080). The SDL path cost about 2.0 ms per frame in Chocolate Quake's timedemo (about 1.2 ms in
 QEMU) and about 1.6 ms in Chocolate Doom's, from an earlier batch ([Quake](development/experiments/chocolate-quake/README.md#native-results),
 [Doom](development/experiments/chocolate-doom/README.md#native-results)). Chocolate Quake played, with clearly more tearing than native Quake:
-about three drifting tear lines at once, an input to the [Renoir flip qualification](wip/renoir-flip-presentation.md#tasks-and-native-qualification).
+about three drifting tear lines at once, an input to the [Renoir flip qualification](#renoir-flip-backend-qualification).
 EDuke32 played smoothly at the native resolution with smooth pointer motion; its SDL cursor showed through the system pointer, some tearing
 appeared, and a mouse suits it better than the trackpad. Still pending natively: Chocolate Doom's matched configuration and a play
 check, and EDuke32's level load time, frame rates capped and uncapped, and save, load and quit. Revisit when the owner
@@ -1394,13 +1434,13 @@ full transport, encrypted bond/reconnect and HID/pointer compatibility rule.
 
 ### USB interrupt-IN initial profile and failure retention
 
-The private [interrupt-IN path](devices/usb-interrupt-in.md) follows the owner's initial profile for
-[Bluetooth task 3a](devices/ax200-bluetooth.md#accepted-interrupt-in-decisions): boot-present, root-connected full-speed endpoints only, so behind-hub periodic endpoints and
-other speeds (including HID consumers on them) are unavailable; revisit admission and periodic/TT handling when a device needs another profile, with its descriptors and
-hardware evidence. Qualification covers AX200 passthrough behind emulated xHCI, not native periodic transfers. For the internal AX200, active removal may quarantine the whole
-controller and stop unrelated storage, retaining backing until reboot, and a STALL is a terminal stream failure with DMA backing and ring identity retained until reboot and
-no automatic recovery, so a stalled stream cannot resume that boot and controller-wide removal handling is the usual case for a persistent receive. Revisit with separately
-scoped endpoint and device retirement and periodic recovery before widening hotplug or recovery guarantees; confirmed halt alone does not change the retention contract.
+The private [interrupt-IN path](devices/usb-interrupt-in.md) supports boot HID on USB 2 paths and bounded low/full-speed leaf hotplug; HCI remains root/full-speed.
+Runtime high-speed/HCI attachment, new hubs, USB 3 periodic input and general HID reports remain unavailable. The 32 retained HID admissions can exhaust until reboot.
+Revisit broader profiles or reusable resources for a concrete device, with a bounded lifetime design.
+
+Ordinary HID leaves have fenced slot retirement. Failed fences, unowned events, active non-HID removal and hub-subtree loss can still disable the whole controller,
+including storage/Bluetooth, until reboot; automatic interrupt STALL recovery is absent. Revisit recovery and subtree retirement separately, preserving DMA ownership.
+The [HID qualification record](development/experiments/usb-hid/README.md) does not establish native periodic-transfer coverage.
 
 ## USB descriptor bounds and per-port preparation
 
@@ -1424,14 +1464,16 @@ high-speed hubs and the dock's SuperSpeedPlus USB 3 hub with reads from its Supe
 ([native run](targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)); recovery, other link or firmware profiles and broader TT
 qualification are pending. Only standard symmetric Gen1/Gen2 one- and two-lane downstream links attach (absent or ambiguous controller profiles stay partial; do not
 pick a speed ID), and categorical inventory omits directional rates and lane counts, with SSP isochronous byte budgets uninterpreted until non-control scheduling
-needs them. Hub descendants are not monitored after publication, so idle downstream removal retains slots and backing until reboot (root removal retires the subtree
-and active request errors quarantine the controller); revisit with hotplug and lifetime work. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
+needs them. Supported boot-present USB 2 hubs have bounded notification streams for low/full-speed HID leaf hotplug; USB 3 descendants remain unmonitored after
+publication. New hub topology and runtime storage/Bluetooth admission remain unsupported, ordinary HID leaves have fenced slot retirement, and unsupported subtree
+removal can quarantine the controller. Revisit broader monitoring and subtree lifetime with concrete requirements. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
 inventory is not full USB 3 conformance (revisit with path-latency accounting before power management or non-control scheduling, never sending zero placeholders), and
 USB 3 traversal keeps the conservative USB 2 stability and recovery delays with no explicit warm-reset retry.
 
-Each device admits one active control request and each admitted BOT device serializes private bulk exchanges. Owned stalls have bounded endpoint recovery (including TT
-cleanup and safe dequeue retirement), while other early errors, deadlines or removal during active work stop the whole controller and retain unresolved DMA until
-reboot. BOT probes and kernel block reads ran 512/4096-byte reads and large-LBA SCSI commands in QEMU, including hub descendants and several controllers; GPT waits for
+Each device admits one active control request and each admitted BOT device serializes private bulk exchanges. Owned control/bulk stalls have bounded endpoint recovery
+(including TT cleanup and safe dequeue retirement). Admitted HID leaf loss can use per-device endpoint/slot retirement; deadlines, unowned/corrupt events, failed fences
+and active non-HID removal can stop the whole controller, retaining unresolved DMA until reboot. BOT probes and kernel block reads ran 512/4096-byte reads and
+large-LBA SCSI commands in QEMU, including hub descendants and several controllers; GPT waits for
 terminal USB discovery and scans retained candidates without treating partial discovery as a global failure. Stall, TT and reset recovery, active abandonment, ring
 wrap and nonzero alternate selection are source-reviewed without forced-error validation (revisit with natural device evidence).
 
@@ -1469,8 +1511,9 @@ failure and abandonment, MODE SENSE fallback, unsupported flush and malformed qu
 
 xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers (such as the ThinkPad's Realtek DASH EHCI) remain unsupported inventory records, `lsusb`
 reports partial coverage, and disks behind them are invisible to configured mounts and the installer. [USB storage](devices/usb-storage.md) uses Bulk-Only Transport only: a
-device offering UAS as an alternate is used through BOT (throughput cost unmeasured), a UAS-only device is unsupported, and classes other than hubs and storage, including
-HID, stay unbound. Revisit when a target device or workflow needs another controller type, UAS or a USB input class, adding each through the existing
+device offering UAS as an alternate is used through BOT (throughput cost unmeasured), and a UAS-only device is unsupported. Checked boot keyboard/mouse HID and the
+bounded AX200 HCI binder now join hubs and storage; other class profiles remain unbound. Revisit when a target device or workflow needs another controller type, UAS
+or broader HID support, adding each through the existing
 [layer boundaries](devices/usb-installation.md#layers-and-ownership).
 
 ## Random generator trust and availability
@@ -1490,10 +1533,9 @@ hardware is available, keeping trust claims separate from the health and RFC che
 
 The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
 packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
-would catch, or a target routes IRQ 12 elsewhere. Only that stream is supported: the ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger
-input and TrackPoint motion arrives mixed into the same stream; Synaptics absolute mode is a revisit for gestures or scrolling. USB HID mice need a HID boot-protocol driver
-on the private interrupt-IN path (root-connected full-speed only, see [USB interrupt-IN](#usb-interrupt-in-initial-profile-and-failure-retention)), and Doom has no mouse
-support.
+would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
+revisit Synaptics absolute mode for gestures or scrolling. [USB boot mice](devices/usb-hid.md) are independent sources; unknown native wheel extensions remain undecoded
+until their report layout is established. Doom has no mouse support.
 
 ## Lua build runtime limits
 

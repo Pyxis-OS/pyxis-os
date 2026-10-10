@@ -13,19 +13,26 @@ cover specific native profiles; broader hardware and recovery qualification rema
 `kernel/usb/xhci.c` owns controller commands, contexts, endpoint rings, DMA and
 transfer-event interpretation. `core.c` owns USB requests, descriptor traversal,
 inventory completeness and immutable observation publication. `bot.c` owns
-storage matching, SCSI commands and BOT recovery. No class is selected from a
-vendor ID. Classes other than supported hubs and storage remain unbound. Their standard
-descriptor structure is checked without configuring endpoints or interpreting
-class reports. [USB hubs](usb-hubs.md) are configured for boot traversal;
+storage matching, SCSI commands and BOT recovery. `hid.c` selects checked boot
+keyboard/mouse interfaces and interprets their fixed reports; the AX200 binder
+supplies its private HCI profile. Supported HID can bind one keyboard and one
+mouse per device, including distinct endpoints in a composite device. Other
+classes remain unbound observations. [USB hubs](usb-hubs.md) are configured for
+boot traversal, with USB 2 notification streams for bounded HID leaf hotplug;
 unsupported hubs or uninspected descendants make inventory partial.
 
 `usb_prepare()` allocates retained root/descendant discovery records, one reusable
 scratch descriptor buffer and a bounded interface-record arena per controller
 before AP startup. xHCI prepares input/output contexts,
 an EP0 ring and control-data storage for every advertised root port at the same
-stage, plus a bounded descendant pool in one retained DMA arena. The runtime worker allocates or maps nothing.
-Resource exhaustion fails preparation or discovery explicitly; it cannot silently
-skip a configuration or connected port while claiming complete observation.
+stage, plus a bounded descendant pool in one retained DMA arena. Independent
+HID preparation adds fresh device/context/control slices and endpoint streams,
+and the core retains separate runtime discovery records and scratch/interface
+storage. One 32-record HID budget per controller covers boot claims and runtime
+attempts, including failed and retired generations. Storage and HCI pools remain
+separate. The runtime worker allocates or maps nothing. Resource exhaustion fails
+preparation or refuses admission explicitly; it cannot silently skip a boot
+configuration or connected port while claiming complete observation.
 
 The private interfaces in `host.h` run on the current BSP controller worker.
 This placement follows the scheduler/VM ownership contract; it is not a permanent
@@ -76,8 +83,31 @@ Supported hubs receive SET_CONFIGURATION and xHCI Slot hub metadata.
 Completely inspected supported storage can select its first BOT configuration
 and alternate, configure bulk endpoints and run the private media probe after
 hub traversal. [Storage preparation](usb-storage.md#binding-and-preparation)
-reserves its own bounded pool before AP startup. Observation does not grant disk
-or filesystem authority; storage outcomes remain private and per device.
+reserves its own bounded pool before AP startup. Checked boot keyboard/mouse
+profiles bind on low/full/high-speed roots or paths through at most five supported
+external USB 2 hubs, using the private [interrupt-IN transport](usb-interrupt-in.md).
+Class setup and fixed report interpretation stay outside xHCI. Observation does
+not grant disk, filesystem, input or raw transfer authority; binding outcomes
+remain private and per device.
+
+## Bounded runtime HID attachment
+
+After boot publication, the owning worker monitors root connection generations
+and retained USB 2 hub notification streams. New low/full-speed HID leaves can
+attach on roots or ports of boot-present supported USB 2 hub chains. Connection
+stability, reset and recovery precede addressing; root speed is classified after
+reset, because USB 2 Port Speed is invalid before it. Runtime high-speed leaves,
+new hubs, storage/Bluetooth attachment and USB 3 descendants are not admitted.
+
+Each runtime attempt consumes a fresh prepared HID generation. Descriptor
+inspection and interface accounting use private runtime records and scratch
+storage rather than writing the published inventory. Enumeration/control and
+class setup share a bounded deadline, with report collection progressing during
+command waits. Failed or retired generations consume the attachment budget until
+reboot. Ordinary HID leaf removal releases that input source and fences its host
+slot independently; unsupported subtree removal or an unproven fence can
+quarantine the controller. No runtime reconfiguration or DMA recycling is
+provided.
 
 ## Snapshot publication
 
@@ -115,11 +145,19 @@ Wait timeout does not consume or cancel the request. Abandonment removes client
 ownership while active hardware work retains its ring span/data buffer; successful
 terminal completion can later retire it. An owned STALL can safely retire the
 old sequence through Reset Endpoint, TT cleanup and Set TR Dequeue before reuse.
-A request deadline, other early transfer error or unexpected removal during
-active work stops the controller and retains the
-unresolved span. Halt, interrupt masking or disabling bus mastering alone cannot
-justify recycling it. All runtime backing remains until reboot, including after
-successful completion. Idle port removal still retires that device independently.
+Request deadlines and unowned/corrupt completions stop the controller and retain
+unresolved spans. Active non-HID removal retains that policy. An admitted HID
+leaf can instead enter per-device retirement: rearm stops, EP0 and interrupt
+endpoints are fenced, and Disable Slot retires numeric slot ownership. A failed
+fence quarantines the controller. Halt, interrupt masking or disabling bus
+mastering alone cannot justify recycling backing; all old DMA and TD records
+remain until reboot. Ordinary idle unbound leaf removal can also disable its
+slot independently.
+
+The runtime outer worker uses `usb_host_control_poll` before collecting an EP0
+ticket. An active request stays posted; an owned STALL uses the existing bounded
+Reset Endpoint/TT/dequeue retirement before collection. This does not authorize
+class progress to wait or issue recovery commands during event-ring traversal.
 
 `inventory` and each controller's private discovery/per-port/request records are
 available for GDB inspection. Only the copied observation records cross the ABI.

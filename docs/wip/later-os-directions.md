@@ -272,8 +272,8 @@ TSC with extended-HPET fallback is
 pvclock, runtime source switching, suspend and resume and VM migration remain
 separate scopes. The
 [investigation](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#what-caelum-must-establish-for-tsc)
-records the original requirements and references, and
-[cheaper timekeeping](cheaper-timekeeping.md) the plan that delivered it.
+records the original requirements and references; the
+[TSC measurements](../development/experiments/tsc-clock/README.md) cover the delivery.
 
 ## Power and ACPI
 

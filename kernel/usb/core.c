@@ -11,6 +11,7 @@
 #include "bot.h"
 #include "block.h"
 #include "bluetooth.h"
+#include "hid.h"
 #include "../storage/block_registry.h"
 #include "host.h"
 #include "settings.h"
@@ -145,27 +146,57 @@
 
 struct usb_device_record {
   struct usb_discovery *owner;
+  struct usb_device_record *parent;
   struct usb_host_device *host;
   struct usb_bot storage;
   struct usb_bluetooth_binding bluetooth;
+  struct usb_hid_binding hid;
   struct system_info_usb_device info;
   enum usb_speed speed;
   const char *detail;
   uint8_t hub_configuration;
+  struct usb_interrupt_endpoint hub_endpoint;
+  struct usb_host_interrupt *hub_stream;
+  uint8_t hub_pending[USB_BITSET_BYTES], hub_rebind[USB_BITSET_BYTES], hub_ports;
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
-  bool present, incomplete;
+  bool present, incomplete, runtime, monitor_failed, retired;
+};
+
+enum usb_runtime_stage {
+  USB_RUNTIME_IDLE, USB_RUNTIME_HUB_STATUS, USB_RUNTIME_HUB_ACK,
+  USB_RUNTIME_HUB_DEBOUNCE, USB_RUNTIME_HUB_RESET, USB_RUNTIME_HUB_RESET_POLL,
+  USB_RUNTIME_HUB_RECOVERY, USB_RUNTIME_ATTACH, USB_RUNTIME_ADDRESS,
+  USB_RUNTIME_DEVICE_PREFIX, USB_RUNTIME_DEVICE, USB_RUNTIME_CONFIGURATION_PREFIX,
+  USB_RUNTIME_CONFIGURATION, USB_RUNTIME_BIND,
+};
+
+struct usb_runtime {
+  struct usb_device_record *device, *hub;
+  struct usb_ticket ticket;
+  uint64_t deadline, wake, stable;
+  enum usb_runtime_stage stage, after_ack;
+  unsigned root, port, configuration_index;
+  uint16_t status, change, acknowledge, bytes;
+  uint8_t prefix[USB_DEVICE_PREFIX_BYTES], header[USB_CONFIGURATION_BYTES];
+  uint8_t configurations[USB_BITSET_BYTES];
+  struct usb_link link;
+  bool ticket_active;
 };
 
 struct usb_discovery {
   struct usb_host_controller *host;
   struct usb_device_record *devices;
+  struct usb_device_record *runtime_devices;
+  uint64_t *root_generation;
+  struct usb_runtime runtime;
   struct system_info_usb_interface *interfaces;
   uint8_t *descriptors, *storage_scratch;
   struct usb_block_pool *storage_pool;
   size_t capacity, interface_count, device_count, registry_index;
   unsigned port_count, device_capacity;
-  bool started, hardware_failed;
+  unsigned runtime_count, next_root, next_hub;
+  bool started, hardware_failed, runtime_ready;
 };
 
 struct usb_controller_record {
@@ -310,6 +341,11 @@ static void select_hub_configuration(struct usb_device_record *device, size_t to
       if ((part[2] & USB_ENDPOINT_IN) &&
           (part[3] & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_INTERRUPT) {
         device->hub_configuration = device->owner->descriptors[5];
+        uint16_t packet = read16(part + 4);
+        device->hub_endpoint = (struct usb_interrupt_endpoint){
+          .address = part[2], .packet = packet & USB_PACKET_SIZE_MASK,
+          .interval = part[6], .transactions = (packet & USB_PACKET_TRANSACTIONS) >> 11,
+        };
       }
       return;
     }
@@ -354,6 +390,10 @@ static bool finish_interface(struct usb_device_record *device,
                              const struct system_info_usb_interface *interface)
 {
   struct usb_discovery *discovery = device->owner;
+  if (device->runtime) {
+    classify_class(device, interface->class);
+    return true;
+  }
   if (discovery->interface_count == USB_INTERFACE_BUDGET) {
     device->detail = "interface inventory exceeds reserved budget";
     return false;
@@ -662,6 +702,8 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       select_hub_configuration(device, total);
       device->storage.host = device->host;
       usb_bot_select(&device->storage, device->owner->descriptors, total, device->speed);
+      usb_hid_select(&device->hid, device->owner->descriptors, total, device->speed,
+                      device->info.vendor_id, device->info.product_id);
       if (usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id) &&
           device->info.configuration_count == 1) {
         usb_bluetooth_select(&device->bluetooth, device->owner->descriptors, total);
@@ -833,15 +875,20 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->device_capacity = ports + descendants;
   discovery->capacity = capacity;
   discovery->devices = kmalloc(discovery->device_capacity * sizeof(*discovery->devices));
+  discovery->runtime_devices = kmalloc(USB_HID_DEVICE_BUDGET * sizeof(*discovery->runtime_devices));
+  discovery->root_generation = kmalloc(ports * sizeof(*discovery->root_generation));
   discovery->descriptors = kmalloc(capacity);
   discovery->storage_scratch = kmalloc(USB_BULK_BYTES);
   discovery->storage_pool = usb_block_prepare(host, discovery->device_capacity);
   discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
-  if (!discovery->devices || !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces) {
+  if (!discovery->devices || !discovery->runtime_devices || !discovery->root_generation ||
+      !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces) {
     usb_release_prepared(discovery);
     return NULL;
   }
   memset(discovery->devices, 0, discovery->device_capacity * sizeof(*discovery->devices));
+  memset(discovery->runtime_devices, 0, USB_HID_DEVICE_BUDGET * sizeof(*discovery->runtime_devices));
+  memset(discovery->root_generation, 0, ports * sizeof(*discovery->root_generation));
   controller->discovery = discovery;
   return discovery;
 }
@@ -862,6 +909,8 @@ void usb_release_prepared(struct usb_discovery *discovery)
   usb_block_release_prepared(discovery->storage_pool);
   kfree(discovery->storage_scratch);
   kfree(discovery->descriptors);
+  kfree(discovery->root_generation);
+  kfree(discovery->runtime_devices);
   kfree(discovery->devices);
   kfree(discovery);
 }
@@ -1303,6 +1352,24 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
   if (!request_ok(hub, usb_host_configure_hub(hub->host, *ports, tt, false, deadline))) {
     return false;
   }
+  hub->hub_ports = *ports;
+  if (!enhanced && usb_host_device_depth(hub->host) < 5) {
+    size_t bitmap_bytes = (*ports + 8) / 8;
+    size_t receive_bytes = hub->hub_endpoint.packet > bitmap_bytes ?
+      hub->hub_endpoint.packet : bitmap_bytes;
+    enum usb_result result = receive_bytes > usb_host_interrupt_capacity() ? USB_UNSUPPORTED :
+      usb_host_configure_interrupt_in(hub->host, &hub->hub_endpoint, receive_bytes,
+          USB_INTERRUPT_HUB, deadline, &hub->hub_stream);
+    if (result == USB_OK) {
+      result = usb_host_interrupt_start(hub->hub_stream);
+    }
+    if (result != USB_OK) {
+      /* Refused monitor admission leaves boot traversal and class owners live.
+       * Only an admitted stream has runtime notification ownership to lose. */
+      hub->monitor_failed = hub->hub_stream != NULL;
+      ktrace("usb HID: boot hub notification unavailable (result %u)\n", (unsigned)result);
+    }
+  }
   for (unsigned port = 1; port <= *ports; ++port) {
     if (!hub_feature(hub, port, USB_HUB_FEATURE_POWER, true, deadline)) {
       return false;
@@ -1364,6 +1431,7 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       } else {
         struct usb_device_record *child = &discovery->devices[discovery->device_count++];
         child->owner = discovery;
+        child->parent = hub;
         child->present = true;
         child->info.root_port = hub->info.root_port;
         child->info.parent_index = hub - discovery->devices;
@@ -1456,6 +1524,7 @@ void usb_inventory_controller_failed(size_t index)
   uint64_t flags = cpu_save_interrupts();
   if (index < inventory.controller_count && inventory.controllers[index].discovery) {
     usb_block_fail(inventory.controllers[index].discovery->storage_pool);
+    usb_hid_controller_failed(inventory.controllers[index].discovery->host);
   }
   if (index >= inventory.controller_count || !inventory.controllers[index].pending) {
     cpu_restore_interrupts(flags);
@@ -1588,6 +1657,14 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       }
     }
     struct usb_bot *storage = &device->storage;
+    if (device->hid.configuration && (ax200 || storage->configuration)) {
+      ktrace("usb HID: interface left unbound on existing class-owned device\n");
+    } else if (device->hid.configuration && !device->incomplete && !discovery->hardware_failed) {
+      enum usb_result result = usb_hid_bind_boot(&device->hid, device->host, deadline);
+      if (result != USB_OK) {
+        ktrace("usb HID: boot binding refused (result %u)\n", (unsigned)result);
+      }
+    }
     if (storage->configuration) {
       if (device->incomplete || discovery->hardware_failed || task_deadline_expired(deadline)) {
         storage->state = USB_BOT_FAILED;
@@ -1604,6 +1681,10 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
     }
   }
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
+  for (unsigned port = 0; port < discovery->port_count; ++port) {
+    discovery->root_generation[port] = usb_host_port_generation(discovery->host, port);
+  }
+  discovery->runtime_ready = !discovery->hardware_failed;
   uint64_t flags = cpu_save_interrupts();
   struct usb_controller_record *controller = &inventory.controllers[discovery->registry_index];
   controller->info.state = discovery->hardware_failed ? SYSTEM_INFO_USB_CONTROLLER_FAILED :
@@ -1635,6 +1716,630 @@ void usb_storage_process(struct usb_discovery *discovery)
   if (discovery) {
     usb_block_process(discovery->storage_pool);
   }
+}
+
+static struct usb_discovery *hid_discovery(const struct usb_host_controller *host)
+{
+  for (size_t index = 0; index < inventory.controller_count; ++index) {
+    struct usb_discovery *discovery = inventory.controllers[index].discovery;
+    if (discovery && discovery->host == host) {
+      return discovery;
+    }
+  }
+  return NULL;
+}
+
+static struct usb_device_record *live_record(struct usb_discovery *discovery, size_t index)
+{
+  return index < discovery->device_count ? &discovery->devices[index] :
+    &discovery->runtime_devices[index - discovery->device_count];
+}
+
+static bool descendant_of(const struct usb_device_record *device,
+                           const struct usb_device_record *ancestor)
+{
+  for (const struct usb_device_record *parent = device; parent; parent = parent->parent) {
+    if (parent == ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void lose_subtree(struct usb_device_record *ancestor)
+{
+  struct usb_discovery *discovery = ancestor->owner;
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    if (descendant_of(device, ancestor)) {
+      usb_hid_lost(&device->hid);
+    }
+  }
+}
+
+void usb_hid_controller_failed(struct usb_host_controller *host)
+{
+  struct usb_discovery *discovery = hid_discovery(host);
+  if (!discovery) {
+    return;
+  }
+  discovery->hardware_failed = true;
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    usb_hid_lost(&device->hid);
+    if (device->hub_stream) {
+      usb_host_interrupt_ack_loss(device->hub_stream);
+    }
+  }
+}
+
+void usb_hid_drain_progress(struct usb_host_controller *host)
+{
+  struct usb_discovery *discovery = hid_discovery(host);
+  if (!discovery || discovery->hardware_failed) {
+    return;
+  }
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    usb_hid_collect(&device->hid);
+    if (!device->hub_stream || device->monitor_failed) {
+      continue;
+    }
+    if (!usb_host_device_present(device->host)) {
+      device->monitor_failed = true;
+      lose_subtree(device);
+      usb_host_interrupt_ack_loss(device->hub_stream);
+      continue;
+    }
+    for (unsigned packet = 0; packet < USB_INTERRUPT_COMPLETIONS; ++packet) {
+      uint8_t bitmap[USB_INTERRUPT_BYTES];
+      struct usb_interrupt_completion completion;
+      enum usb_result result = usb_host_interrupt_take(device->hub_stream, bitmap,
+                                                      sizeof(bitmap), &completion);
+      if (result == USB_BUSY) {
+        break;
+      }
+      if (result != USB_OK || !completion.bytes) {
+        device->monitor_failed = true;
+        lose_subtree(device);
+        usb_host_interrupt_ack_loss(device->hub_stream);
+        break;
+      }
+      size_t bytes = (device->hub_ports + 8u) / 8u;
+      if (completion.bytes < bytes) {
+        bytes = completion.bytes;
+      }
+      for (size_t byte = 0; byte < bytes; ++byte) {
+        device->hub_pending[byte] |= bitmap[byte];
+      }
+      if (discovery->runtime_ready) {
+        for (size_t child_index = 0;
+             child_index < discovery->device_count + discovery->runtime_count; ++child_index) {
+          struct usb_device_record *child = live_record(discovery, child_index);
+          unsigned port = child->info.parent_port;
+          if (child->parent != device || child->retired || !port || port / 8 >= bytes ||
+              !(bitmap[port / 8] & (1u << (port % 8)))) {
+            continue;
+          }
+          if (child->hid.active) {
+            /* A queued port change cannot leave old holds authoritative while
+             * another leaf's EP0 request completes. Verify/rebind later. */
+            usb_hid_lost(&child->hid);
+            device->hub_rebind[port / 8] |= 1u << (port % 8);
+          } else if (child->hub_stream) {
+            lose_subtree(child);
+          }
+        }
+      }
+    }
+  }
+}
+
+bool usb_hid_input_complete(void)
+{
+  for (size_t index = 0; index < inventory.controller_count; ++index) {
+    const struct usb_discovery *discovery = inventory.controllers[index].discovery;
+    if (!discovery || discovery->hardware_failed) {
+      continue;
+    }
+    bool active = false;
+    for (size_t device = 0; device < discovery->device_count + discovery->runtime_count; ++device) {
+      const struct usb_device_record *record = device < discovery->device_count ?
+        &discovery->devices[device] : &discovery->runtime_devices[device - discovery->device_count];
+      active |= record->hid.active;
+      if (record->hub_stream) {
+        for (unsigned port = 0; port <= record->hub_ports; ++port) {
+          if (record->hub_pending[port / 8] & (1u << (port % 8))) {
+            return false;
+          }
+        }
+      }
+    }
+    if (!active) {
+      continue;
+    }
+    if (!discovery->runtime_ready || !usb_host_hid_input_complete(discovery->host)) {
+      return false;
+    }
+    for (unsigned port = 0; port < discovery->port_count; ++port) {
+      if (discovery->root_generation[port] != usb_host_port_generation(discovery->host, port)) {
+        return false;
+      }
+    }
+    if (discovery->runtime.hub && discovery->runtime.stage <= USB_RUNTIME_HUB_RECOVERY &&
+        discovery->runtime.stage != USB_RUNTIME_IDLE) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool retire_record(struct usb_device_record *device)
+{
+  if (!device || device->retired || !device->host) {
+    if (device) {
+      device->hid.retirement_pending = false;
+    }
+    return true;
+  }
+  lose_subtree(device);
+  enum usb_result result = usb_host_hid_retire(device->host,
+                                               task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS));
+  if (result != USB_OK) {
+    return false;
+  }
+  device->retired = true;
+  device->hid.retirement_pending = false;
+  return true;
+}
+
+static void runtime_end(struct usb_discovery *discovery, bool refused)
+{
+  struct usb_runtime *runtime = &discovery->runtime;
+  if (runtime->ticket_active && runtime->device) {
+    usb_host_control_abandon(runtime->device->host, runtime->ticket);
+  } else if (runtime->ticket_active && runtime->hub) {
+    usb_host_control_abandon(runtime->hub->host, runtime->ticket);
+  }
+  if (refused && runtime->device) {
+    ktrace("usb HID: runtime attachment refused\n");
+    retire_record(runtime->device);
+  }
+  *runtime = (struct usb_runtime){0};
+}
+
+static enum usb_result runtime_request(struct usb_discovery *discovery,
+                                        struct usb_device_record *device,
+                                        const struct usb_setup *setup)
+{
+  struct usb_runtime *runtime = &discovery->runtime;
+  if (!runtime->ticket_active) {
+    uint64_t deadline = control_deadline(runtime->deadline);
+    enum usb_result result = usb_host_control_submit(device->host, setup, NULL,
+                                                    deadline, &runtime->ticket);
+    if (result != USB_OK) {
+      return result;
+    }
+    runtime->ticket_active = true;
+    return USB_BUSY;
+  }
+  enum usb_result result = usb_host_control_poll(device->host, runtime->ticket, runtime->deadline);
+  if (result != USB_OK) {
+    return result;
+  }
+  struct usb_completion completion;
+  result = usb_host_control_take(device->host, runtime->ticket, discovery->descriptors,
+                                 discovery->capacity, &completion);
+  if (result != USB_OK) {
+    return result;
+  }
+  runtime->ticket_active = false;
+  runtime->bytes = completion.bytes;
+  return completion.result;
+}
+
+static struct usb_device_record *find_child(struct usb_discovery *discovery,
+                                             struct usb_device_record *hub, unsigned port)
+{
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    if (!device->retired && device->present && device->host && device->parent == hub &&
+        device->info.parent_port == port) {
+      return device;
+    }
+  }
+  return NULL;
+}
+
+static void runtime_ack(struct usb_runtime *runtime, enum usb_runtime_stage next)
+{
+  runtime->acknowledge = runtime->change;
+  runtime->after_ack = next;
+  runtime->stage = USB_RUNTIME_HUB_ACK;
+}
+
+static bool runtime_hub_connected(const struct usb_runtime *runtime)
+{
+  return (runtime->status & (USB_HUB_PORT_CONNECTION | USB_HUB_PORT_POWER)) ==
+      (USB_HUB_PORT_CONNECTION | USB_HUB_PORT_POWER) &&
+    !(runtime->status & (USB_HUB_PORT_OVERCURRENT | USB_HUB_PORT_SUSPEND));
+}
+
+static void runtime_hub_status(struct usb_discovery *discovery)
+{
+  struct usb_runtime *runtime = &discovery->runtime;
+  if (runtime->wake && !task_deadline_expired(runtime->wake)) {
+    return;
+  }
+  struct usb_setup setup = {
+    .request_type = runtime->port ? USB_REQUEST_PORT_IN : USB_REQUEST_HUB_IN,
+    .request = USB_REQUEST_GET_STATUS,
+    .index = runtime->port,
+    .length = USB_HUB_STATUS_BYTES,
+  };
+  enum usb_result result = runtime_request(discovery, runtime->hub, &setup);
+  if (result == USB_BUSY) {
+    return;
+  }
+  if (result != USB_OK || runtime->bytes != USB_HUB_STATUS_BYTES) {
+    runtime->hub->monitor_failed = true;
+    lose_subtree(runtime->hub);
+    runtime_end(discovery, false);
+    return;
+  }
+  runtime->status = read16(discovery->descriptors);
+  runtime->change = read16(discovery->descriptors + 2);
+  if (!runtime->port) {
+    if ((runtime->status & USB_HUB_OVERCURRENT) || (runtime->status & ~3u) ||
+        (runtime->change & ~3u)) {
+      runtime->hub->monitor_failed = true;
+      lose_subtree(runtime->hub);
+      runtime_end(discovery, false);
+    } else {
+      runtime_ack(runtime, USB_RUNTIME_IDLE);
+    }
+    return;
+  }
+  if ((runtime->status & USB_HUB_PORT_RESERVED) || (runtime->change & USB_HUB_CHANGE_RESERVED)) {
+    runtime->hub->monitor_failed = true;
+    lose_subtree(runtime->hub);
+    runtime_end(discovery, false);
+    return;
+  }
+  struct usb_device_record *old = find_child(discovery, runtime->hub, runtime->port);
+  bool changed = runtime->change & USB_HUB_CHANGE_CONNECTION;
+  bool rebind = runtime->hub->hub_rebind[runtime->port / 8] & (1u << (runtime->port % 8));
+  if (old && (changed || !runtime_hub_connected(runtime))) {
+    if (!retire_record(old)) {
+      runtime_end(discovery, false);
+      return;
+    }
+    old = NULL;
+  }
+  if (!runtime_hub_connected(runtime)) {
+    runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
+    runtime_ack(runtime, USB_RUNTIME_IDLE);
+    return;
+  }
+  switch (runtime->stage) {
+  case USB_RUNTIME_HUB_STATUS:
+    if (old || (!changed && !rebind)) {
+      runtime_ack(runtime, USB_RUNTIME_IDLE);
+    } else {
+      runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
+      runtime->stable = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
+      runtime->wake = task_deadline_after_ms(USB_HUB_POLL_MS);
+      runtime_ack(runtime, USB_RUNTIME_HUB_DEBOUNCE);
+    }
+    break;
+  case USB_RUNTIME_HUB_DEBOUNCE:
+    if (changed) {
+      runtime->stable = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
+      runtime_ack(runtime, USB_RUNTIME_HUB_DEBOUNCE);
+    } else if (task_deadline_expired(runtime->stable)) {
+      runtime_ack(runtime, USB_RUNTIME_HUB_RESET);
+    }
+    runtime->wake = task_deadline_after_ms(USB_HUB_POLL_MS);
+    break;
+  case USB_RUNTIME_HUB_RESET_POLL:
+    if (changed || task_deadline_expired(runtime->stable)) {
+      runtime_ack(runtime, USB_RUNTIME_IDLE);
+    } else if (!(runtime->status & USB_HUB_PORT_RESET) &&
+               (runtime->status & USB_HUB_PORT_ENABLE) &&
+               (runtime->change & USB_HUB_CHANGE_RESET)) {
+      runtime->wake = task_deadline_after_ms(USB_HUB_RESET_RECOVERY_MS);
+      runtime_ack(runtime, USB_RUNTIME_HUB_RECOVERY);
+    } else {
+      runtime->wake = task_deadline_after_ms(USB_HUB_POLL_MS);
+    }
+    break;
+  case USB_RUNTIME_HUB_RECOVERY:
+    if (changed || !(runtime->status & USB_HUB_PORT_ENABLE) ||
+        (runtime->status & (USB_HUB_PORT_RESET | USB_HUB_PORT_HIGH_SPEED))) {
+      runtime_ack(runtime, USB_RUNTIME_IDLE);
+    } else {
+      runtime->link.speed = runtime->status & USB_HUB_PORT_LOW_SPEED ? USB_SPEED_LOW : USB_SPEED_FULL;
+      runtime_ack(runtime, USB_RUNTIME_ATTACH);
+    }
+    break;
+  default:
+    runtime_end(discovery, false);
+    break;
+  }
+}
+
+static void runtime_hub_step(struct usb_discovery *discovery)
+{
+  struct usb_runtime *runtime = &discovery->runtime;
+  if (runtime->stage != USB_RUNTIME_HUB_ACK && runtime->stage != USB_RUNTIME_HUB_RESET) {
+    runtime_hub_status(discovery);
+    return;
+  }
+  if (runtime->stage == USB_RUNTIME_HUB_ACK && !runtime->acknowledge) {
+    if (runtime->after_ack == USB_RUNTIME_IDLE) {
+      runtime_end(discovery, false);
+    } else {
+      runtime->stage = runtime->after_ack;
+    }
+    return;
+  }
+  unsigned bit = 0;
+  if (runtime->stage == USB_RUNTIME_HUB_ACK) {
+    while (!(runtime->acknowledge & (1u << bit))) {
+      ++bit;
+    }
+  }
+  struct usb_setup setup = {
+    .request_type = runtime->port ? USB_REQUEST_PORT_OUT : USB_REQUEST_HUB_OUT,
+    .request = runtime->stage == USB_RUNTIME_HUB_RESET ? USB_REQUEST_SET_FEATURE : USB_REQUEST_CLEAR_FEATURE,
+    .value = runtime->stage == USB_RUNTIME_HUB_RESET ? USB_HUB_FEATURE_RESET :
+      runtime->port ? USB_HUB_FEATURE_CHANGE_FIRST + bit : bit,
+    .index = runtime->port,
+  };
+  enum usb_result result = runtime_request(discovery, runtime->hub, &setup);
+  if (result == USB_BUSY) {
+    return;
+  }
+  if (result != USB_OK || runtime->bytes) {
+    runtime->hub->monitor_failed = true;
+    lose_subtree(runtime->hub);
+    runtime_end(discovery, false);
+    return;
+  }
+  if (runtime->stage == USB_RUNTIME_HUB_RESET) {
+    runtime->stage = USB_RUNTIME_HUB_RESET_POLL;
+    runtime->wake = task_deadline_after_ms(USB_HUB_POLL_MS);
+    runtime->stable = task_deadline_after_ms(USB_HUB_RESET_TIMEOUT_MS);
+  } else {
+    runtime->acknowledge &= ~(1u << bit);
+  }
+}
+
+static bool runtime_descriptor_step(struct usb_discovery *discovery)
+{
+  struct usb_runtime *runtime = &discovery->runtime;
+  struct usb_device_record *device = runtime->device;
+  struct usb_setup setup = {
+    .request_type = USB_REQUEST_DEVICE_IN,
+    .request = USB_REQUEST_GET_DESCRIPTOR,
+  };
+  switch (runtime->stage) {
+  case USB_RUNTIME_DEVICE_PREFIX:
+    setup.value = USB_DESCRIPTOR_DEVICE << 8;
+    setup.length = USB_DEVICE_PREFIX_BYTES;
+    break;
+  case USB_RUNTIME_DEVICE:
+    setup.value = USB_DESCRIPTOR_DEVICE << 8;
+    setup.length = USB_DEVICE_BYTES;
+    break;
+  case USB_RUNTIME_CONFIGURATION_PREFIX:
+    setup.value = (USB_DESCRIPTOR_CONFIGURATION << 8) | runtime->configuration_index;
+    setup.length = USB_CONFIGURATION_BYTES;
+    break;
+  case USB_RUNTIME_CONFIGURATION:
+    setup.value = (USB_DESCRIPTOR_CONFIGURATION << 8) | runtime->configuration_index;
+    setup.length = read16(runtime->header + 2);
+    break;
+  default:
+    return false;
+  }
+  enum usb_result result = runtime_request(discovery, device, &setup);
+  if (result == USB_BUSY) {
+    return true;
+  }
+  if (result != USB_OK || runtime->bytes != setup.length) {
+    runtime_end(discovery, true);
+    return true;
+  }
+  const uint8_t *description = discovery->descriptors;
+  switch (runtime->stage) {
+  case USB_RUNTIME_DEVICE_PREFIX: {
+    uint16_t packet;
+    if (description[0] != USB_DEVICE_BYTES || description[1] != USB_DESCRIPTOR_DEVICE ||
+        !valid_packet(device->speed, description[7], &packet)) {
+      runtime_end(discovery, true);
+      break;
+    }
+    memcpy(runtime->prefix, description, sizeof(runtime->prefix));
+    if (device->speed == USB_SPEED_FULL && packet != 8 &&
+        usb_host_update_packet(device->host, packet, runtime->deadline) != USB_OK) {
+      runtime_end(discovery, true);
+      break;
+    }
+    runtime->stage = USB_RUNTIME_DEVICE;
+    break;
+  }
+  case USB_RUNTIME_DEVICE:
+    if (memcmp(runtime->prefix, description, sizeof(runtime->prefix)) || !description[17] ||
+        description[4] == USB_CLASS_HUB) {
+      runtime_end(discovery, true);
+      break;
+    }
+    device->info.vendor_id = read16(description + 8);
+    device->info.product_id = read16(description + 10);
+    device->info.device_class = description[4];
+    device->info.device_subclass = description[5];
+    device->info.device_protocol = description[6];
+    device->info.configuration_count = description[17];
+    runtime->stage = USB_RUNTIME_CONFIGURATION_PREFIX;
+    break;
+  case USB_RUNTIME_CONFIGURATION_PREFIX: {
+    size_t total = read16(description + 2);
+    if (description[0] != USB_CONFIGURATION_BYTES || description[1] != USB_DESCRIPTOR_CONFIGURATION ||
+        total < USB_CONFIGURATION_BYTES || total > discovery->capacity || !description[4] ||
+        !description[5] || !(description[7] & USB_CONFIGURATION_REQUIRED) ||
+        (description[7] & USB_CONFIGURATION_RESERVED) ||
+        bit_set(runtime->configurations, description[5])) {
+      runtime_end(discovery, true);
+      break;
+    }
+    memcpy(runtime->header, description, sizeof(runtime->header));
+    runtime->stage = USB_RUNTIME_CONFIGURATION;
+    break;
+  }
+  case USB_RUNTIME_CONFIGURATION:
+    if (memcmp(runtime->header, description, sizeof(runtime->header)) ||
+        !parse_configuration(device, setup.length)) {
+      runtime_end(discovery, true);
+      break;
+    }
+    usb_bot_select(&device->storage, description, setup.length, device->speed);
+    usb_hid_select(&device->hid, description, setup.length, device->speed,
+                    device->info.vendor_id, device->info.product_id);
+    if (++runtime->configuration_index < device->info.configuration_count) {
+      runtime->stage = USB_RUNTIME_CONFIGURATION_PREFIX;
+    } else if (!device->hid.configuration || device->storage.configuration ||
+               (device->info.flags & SYSTEM_INFO_USB_DEVICE_HUB) ||
+               usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id) ||
+               usb_hid_begin(&device->hid, device->host, runtime->deadline) != USB_OK) {
+      runtime_end(discovery, true);
+    } else {
+      runtime->stage = USB_RUNTIME_BIND;
+    }
+    break;
+  default:
+    break;
+  }
+  return true;
+}
+
+static void runtime_start(struct usb_discovery *discovery, struct usb_device_record *hub,
+                            unsigned root, unsigned port)
+{
+  discovery->runtime = (struct usb_runtime){
+    .hub = hub, .root = root, .port = port,
+    .stage = hub ? USB_RUNTIME_HUB_STATUS : USB_RUNTIME_ATTACH,
+    .deadline = task_deadline_after_ms(USB_ENUMERATION_TIMEOUT_MS),
+    .wake = hub ? 0 : task_deadline_after_ms(USB_HUB_DEBOUNCE_MS),
+  };
+}
+
+void usb_hid_process(struct usb_discovery *discovery)
+{
+  if (!discovery || !discovery->runtime_ready || discovery->hardware_failed) {
+    return;
+  }
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    if (device->hid.retirement_pending || (device->monitor_failed && !device->retired)) {
+      retire_record(device);
+      return;
+    }
+  }
+  struct usb_runtime *runtime = &discovery->runtime;
+  if (runtime->stage == USB_RUNTIME_IDLE) {
+    unsigned root = discovery->next_root++ % discovery->port_count;
+    uint64_t generation = usb_host_port_generation(discovery->host, root);
+    if (generation != discovery->root_generation[root]) {
+      discovery->root_generation[root] = generation;
+      for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+        struct usb_device_record *old = live_record(discovery, index);
+        if (old->present && !old->parent && old->info.root_port == root + 1 && !old->retired &&
+            !retire_record(old)) {
+          return;
+        }
+      }
+      if (usb_host_hid_root_present(discovery->host, root)) {
+        runtime_start(discovery, NULL, root, 0);
+      }
+      return;
+    }
+    size_t records = discovery->device_count;
+    for (size_t count = 0; count < records; ++count) {
+      struct usb_device_record *hub = &discovery->devices[discovery->next_hub++ % records];
+      if (!hub->hub_stream || hub->monitor_failed || hub->retired) {
+        continue;
+      }
+      for (unsigned port = 0; port <= hub->hub_ports; ++port) {
+        uint8_t bit = 1u << (port % 8);
+        if (hub->hub_pending[port / 8] & bit) {
+          hub->hub_pending[port / 8] &= ~bit;
+          runtime_start(discovery, hub, hub->info.root_port - 1, port);
+          return;
+        }
+      }
+    }
+    return;
+  }
+  if (task_deadline_expired(runtime->deadline)) {
+    runtime_end(discovery, true);
+    return;
+  }
+  if (runtime->stage <= USB_RUNTIME_HUB_RECOVERY) {
+    runtime_hub_step(discovery);
+    return;
+  }
+  if (runtime->stage == USB_RUNTIME_ATTACH) {
+    if (!runtime->hub) {
+      if (discovery->root_generation[runtime->root] !=
+          usb_host_port_generation(discovery->host, runtime->root) ||
+          !usb_host_hid_root_present(discovery->host, runtime->root)) {
+        runtime_end(discovery, false);
+        return;
+      }
+      if (!task_deadline_expired(runtime->wake)) {
+        return;
+      }
+    }
+    if (discovery->runtime_count == USB_HID_DEVICE_BUDGET) {
+      ktrace("usb HID: runtime retained record budget exhausted\n");
+      runtime_end(discovery, false);
+      return;
+    }
+    struct usb_device_record *device = &discovery->runtime_devices[discovery->runtime_count++];
+    *device = (struct usb_device_record){
+      .owner = discovery, .parent = runtime->hub, .runtime = true, .present = true,
+      .info = {.root_port = runtime->root + 1, .parent_port = runtime->port},
+    };
+    runtime->device = device;
+    enum usb_result result = runtime->hub ?
+      usb_host_hid_attach_child(runtime->hub->host, runtime->port, &runtime->link,
+                                 runtime->deadline, &device->host) :
+      usb_host_hid_attach_root(discovery->host, runtime->root, runtime->deadline, &device->host);
+    if (result != USB_OK) {
+      runtime_end(discovery, true);
+    } else {
+      device->speed = usb_host_device_speed(device->host);
+      runtime->stage = USB_RUNTIME_ADDRESS;
+    }
+    return;
+  }
+  if (runtime->stage == USB_RUNTIME_ADDRESS) {
+    if (usb_host_address(runtime->device->host, runtime->deadline) != USB_OK) {
+      runtime_end(discovery, true);
+    } else {
+      runtime->stage = USB_RUNTIME_DEVICE_PREFIX;
+    }
+    return;
+  }
+  if (runtime->stage == USB_RUNTIME_BIND) {
+    enum usb_result result = usb_hid_bind_step(&runtime->device->hid);
+    if (result != USB_BUSY) {
+      runtime_end(discovery, result != USB_OK);
+    }
+    return;
+  }
+  runtime_descriptor_step(discovery);
 }
 
 static bool inventory_published(void)

@@ -2,10 +2,13 @@
 #include <kernel/format.h>
 #include <arch/cpu.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
 #define UINT64_DECIMAL_DIGITS 20
+/* Widest field %d, %u and %x pad to; a larger width is unsupported. */
+#define FORMAT_WIDTH_MAX 32
 
 enum integer_length {
   LENGTH_INT,
@@ -36,7 +39,19 @@ static void put_string(struct format_output *output, const char *text)
   }
 }
 
-static void put_unsigned(struct format_output *output, uint64_t value, unsigned radix)
+static void put_padding(struct format_output *output, char c, size_t count)
+{
+  while (count) {
+    put_char(output, c);
+    --count;
+  }
+}
+
+/* Digits of value, preceded by a minus sign if negative, right-aligned in at
+ * least width cells: filled with spaces before the sign, or with zeros after
+ * it. */
+static void put_number(struct format_output *output, uint64_t value, unsigned radix,
+                       bool negative, size_t width, bool zero_fill)
 {
   char digits[UINT64_DECIMAL_DIGITS];
   size_t count = 0;
@@ -46,6 +61,18 @@ static void put_unsigned(struct format_output *output, uint64_t value, unsigned 
     ++count;
     value /= radix;
   } while (value);
+
+  size_t used = count + negative;
+  size_t padding = width > used ? width - used : 0;
+  if (!zero_fill) {
+    put_padding(output, ' ', padding);
+  }
+  if (negative) {
+    put_char(output, '-');
+  }
+  if (zero_fill) {
+    put_padding(output, '0', padding);
+  }
 
   while (count) {
     --count;
@@ -92,6 +119,22 @@ static void format_output(struct format_output *output, const char *format,
     }
 
     ++format;
+    bool zero_fill = false;
+    if (*format == '0') {
+      zero_fill = true;
+      ++format;
+    }
+    size_t width = 0;
+    bool has_width = false, width_valid = true;
+    while (*format >= '0' && *format <= '9') {
+      has_width = true;
+      width = width * 10 + (size_t)(*format - '0');
+      if (width > FORMAT_WIDTH_MAX) {
+        width_valid = false;
+        width = FORMAT_WIDTH_MAX + 1; /* Keep consuming digits without overflow. */
+      }
+      ++format;
+    }
     enum integer_length length = LENGTH_INT;
     if (*format == 'l') {
       length = LENGTH_LONG;
@@ -111,6 +154,14 @@ static void format_output(struct format_output *output, const char *format,
     }
     ++format;
 
+    /* Only integers take a width or zero fill; anything else with one is not
+     * supported, as is a width past the limit. */
+    bool integer = conversion == 'd' || conversion == 'u' || conversion == 'x';
+    if (!width_valid || ((zero_fill || has_width) && !integer)) {
+      put_string(output, "<format?>");
+      continue;
+    }
+
     switch (conversion) {
     case '%':
       put_char(output, '%');
@@ -125,24 +176,23 @@ static void format_output(struct format_output *output, const char *format,
       break;
     case 'p':
       put_string(output, "0x");
-      put_unsigned(output, (uintptr_t)va_arg(args, void *), 16);
+      put_number(output, (uintptr_t)va_arg(args, void *), 16, false, 0, false);
       break;
     case 'd': {
       int64_t signed_value = next_signed_integer(args, length);
       uint64_t magnitude = (uint64_t)signed_value;
       if (signed_value < 0) {
-        put_char(output, '-');
         /* Unsigned negation also handles INT64_MIN without signed overflow. */
         magnitude = 0 - magnitude;
       }
 
-      put_unsigned(output, magnitude, 10);
+      put_number(output, magnitude, 10, signed_value < 0, width, zero_fill);
       break;
     }
     case 'u':
     case 'x': {
       uint64_t value = next_unsigned_integer(args, length);
-      put_unsigned(output, value, conversion == 'x' ? 16 : 10);
+      put_number(output, value, conversion == 'x' ? 16 : 10, false, width, zero_fill);
       break;
     }
     default:

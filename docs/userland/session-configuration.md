@@ -34,6 +34,8 @@ return {
   timezone = "Europe/Bucharest",
   terminal = { tab_width = 8 },
   environment = {
+    -- The terminal profile: exactly the sequences in docs/userland/terminal.md.
+    TERM = "pyxis",
     -- vi: three-column tab stops, spaces for Tab and autoindent.
     EXINIT = "set ts=3 et ai",
   },
@@ -50,7 +52,10 @@ There is no fallback after a configuration error.
 `environment` adds variables to the shell's startup environment, for the local
 shell and for [remote terminal](remote-terminal.md) sessions alike. The shell
 forwards its whole environment to the programs it starts, so the packaged
-`EXINIT` gives [vi](vi.md) its default options. Each key is a variable name:
+`TERM` names the [terminal profile](terminal.md#tty-output-controls) to every
+program, in tabs, multiplexer panes and remote sessions, and `EXINIT` gives
+[vi](vi.md) its default options. No packaged program reads `TERM` yet; remote
+clients' typical host terminals support a superset of the profile. Each key is a variable name:
 an ASCII letter or underscore, then letters, digits or underscores. Each value
 is a string without NUL bytes. Other keys or values are configuration errors.
 `TZ` and `DNS_SERVER` are refused, because `timezone` and the network

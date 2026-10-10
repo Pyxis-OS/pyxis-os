@@ -20,26 +20,36 @@ size_t keyboard_text(const struct key_event *event, char bytes[KEY_TEXT_MAX])
     bytes[0] = plain - 'a' + 1;
     return 1;
   }
-  if (plain) {
-    bytes[0] = key_layout_character(event->key, event->modifiers);
+  char character = key_layout_character(event->key, event->modifiers);
+  if (character) {
+    bytes[0] = character;
     return 1;
   }
 
-  /* Modified navigation and function/keypad keys have no text binding yet. */
+  /* Modified navigation and function keys have no text binding yet. */
   if (event->modifiers & KEY_MOD_SHIFT) {
     return 0;
   }
   const char *sequence;
   switch (event->key) {
-  case KEY_UP: sequence = "\x1b[A"; break;
-  case KEY_DOWN: sequence = "\x1b[B"; break;
-  case KEY_RIGHT: sequence = "\x1b[C"; break;
-  case KEY_LEFT: sequence = "\x1b[D"; break;
-  case KEY_HOME: sequence = "\x1b[H"; break;
-  case KEY_END: sequence = "\x1b[F"; break;
-  case KEY_DELETE: sequence = "\x1b[3~"; break;
-  case KEY_PAGE_UP: sequence = "\x1b[5~"; break;
-  case KEY_PAGE_DOWN: sequence = "\x1b[6~"; break;
+  case KEY_UP:
+  case KEY_KP_8: sequence = "\x1b[A"; break;
+  case KEY_DOWN:
+  case KEY_KP_2: sequence = "\x1b[B"; break;
+  case KEY_RIGHT:
+  case KEY_KP_6: sequence = "\x1b[C"; break;
+  case KEY_LEFT:
+  case KEY_KP_4: sequence = "\x1b[D"; break;
+  case KEY_HOME:
+  case KEY_KP_7: sequence = "\x1b[H"; break;
+  case KEY_END:
+  case KEY_KP_1: sequence = "\x1b[F"; break;
+  case KEY_DELETE:
+  case KEY_KP_PERIOD: sequence = "\x1b[3~"; break;
+  case KEY_PAGE_UP:
+  case KEY_KP_9: sequence = "\x1b[5~"; break;
+  case KEY_PAGE_DOWN:
+  case KEY_KP_3: sequence = "\x1b[6~"; break;
   default: return 0;
   }
   size_t size = strlen(sequence);

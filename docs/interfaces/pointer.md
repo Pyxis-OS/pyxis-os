@@ -204,28 +204,24 @@ remain separate from pointer INPUT and terminal CONTROL authority.
 
 ## Input-source coordination
 
-PS/2 is the only implemented source. Its adapter submits a complete physical
-button snapshot and continuity suppression with each normalized motion report
-through [`pointer_input_report`](../../include/kernel/pointer.h). Suppression
-is separate from physical state: after stream loss, held bits remain quarantined
-until observed released. Pending discontinuity also refuses lock/warp before
-routing the first confirmed report.
+PS/2 and [USB boot mice](../devices/usb-hid.md) submit relative motion and
+complete physical button snapshots to the BSP input coordinator. Source records
+and queued reports remain source-owned; delivery performs no USB operation or
+allocation. The coordinator ORs physical buttons and continuity suppression
+before routing through [`pointer_input_report`](../../include/kernel/pointer.h).
+Independent masks never release another source's hold. Suppression is separate
+from physical state: after loss or attachment with buttons held, those holds
+remain quarantined until release. Pending discontinuity refuses lock/warp.
 
 `pointer_source_lost()` accepts the remaining physical button mask, preserves
-position, clears accepted input/drag/activation and revokes lock. The PS/2
-adapter supplies zero on loss and resets every space's accepted input. Source
-availability and quarantine remain adapter-owned.
+position, clears accepted input/drag/activation and revokes lock. The coordinator
+calls it when the lost source held buttons or no live source remains. A buttonless
+loss with a surviving source preserves input and lock. Motion reports from live
+sources are serialized, with raw counts and no per-source acceleration.
 
-The accepted future source integration aggregates physical snapshots by OR
-and aggregates continuity suppression before routing. Loss of a source holding
-buttons resets accepted input and cancels drag; lock is revoked when that source
-held buttons or no live source remains. A buttonless loss with a live surviving
-source leaves input and lock state unchanged. The current combined PS/2 loss
-hook does not implement those conditional branches or a multi-source availability
-view. Submitting independent masks would incorrectly release another source's
-hold. Bluetooth producer authority, epochs, sequencing and reconnect belong to
-its [separate milestone](../wip/bluetooth-mouse.md); USB HID is also deferred.
-Neither adds a public pointer API here.
+Bluetooth producer authority, epochs, sequencing and reconnect remain in its
+[separate milestone](../wip/bluetooth-mouse.md). These source adapters do not add
+a public pointer API.
 
 ## Current boundaries
 

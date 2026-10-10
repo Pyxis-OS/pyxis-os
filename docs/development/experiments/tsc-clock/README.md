@@ -14,7 +14,7 @@ for the behaviour. Main here is `e34b9ce`, which already includes
 | Development VM, task B | HPET, `clock: HPET kept: CPU 0 has no invariant TSC` | measured: the fallback path |
 | Development VM, task B with a local forced patch | TSC, 3187.062 MHz (+/-250 ppm), RDTSCP+LFENCE | measured, not a supported configuration |
 | Desktop host QEMU, `-cpu host,+invtsc` | TSC, 3187.061 MHz (+/-66 ppm), RDTSCP+LFENCE | [measured](#desktop-host-runs) by luna |
-| ThinkPad, native | expected TSC | [owner's batch](#native-steps-for-the-owner) |
+| ThinkPad, native | TSC | [owner-reported](#native-result): 2096.063 and 2096.064 MHz |
 
 **Development VM.** QEMU 10.2.2 with the local AHCI fix, nested KVM on the
 development VM, q35, `-cpu max`, 4 CPUs, 8 GiB, VirtIO net with user
@@ -112,6 +112,15 @@ Single-level KVM HPET exits fit the 100 ppm calibration bound. The
 frequency agrees with the forced nested runs and with #557's measurement.
 These are host-KVM results, not native ones.
 
+## Native result
+
+Owner-reported on the ThinkPad: two cold boots selected the TSC and calibrated
+2096.063 and 2096.064 MHz, within 12 ppm of Linux's refined 2,096.061 MHz; a clock
+read costs about 130 ns; and the 15-minute `date -u` check against a stopwatch held
+with no drift or step. The same batch's network results are in
+[technical debt](../../../technical-debt.md#tcp-throughput-limits). These are owner
+numbers, not agent measurements, and the individual lines are not recorded here.
+
 ## Native steps for the owner
 
 On the ThinkPad, wired, on AC, from the local Development shell. Use PXE
@@ -153,7 +162,8 @@ builds of main `e34b9ce` and of this branch, in the same order for both.
 
 ## Limits
 
-The development-VM TSC numbers come from an unsupported local patch. The
-committed code selected the TSC on the desktop host; native behaviour awaits
-the ThinkPad run. The warp check and the switch ran on four vCPUs of one
-VM; twelve CPUs on real hardware are the owner's run.
+The development-VM TSC numbers come from an unsupported local patch. The committed
+code selected the TSC on the desktop host and natively on the ThinkPad (above). The
+warp check and the switch ran on four vCPUs of one VM in the agent's runs; the owner's
+native run covered the ThinkPad's twelve CPUs. Cross-CPU agreement is checked only at
+startup, so a later warp would go unnoticed.

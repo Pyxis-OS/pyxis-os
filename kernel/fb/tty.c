@@ -53,14 +53,42 @@ void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
   cpu_store_fence();
 }
 
-void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
-               uint32_t fg, uint32_t bg)
+static uint32_t style_color(const struct tty *tty, unsigned index, bool foreground)
 {
-  const struct font *font = tty->font;
-  uint8_t glyph = glyph_index(font, c);
+  if (index < 16) {
+    return tty->scheme->palette[index];
+  }
+  return foreground ? tty->scheme->foreground : tty->scheme->background;
+}
+
+static uint16_t current_style(const struct tty *tty, bool reverse)
+{
+  return (uint16_t)(tty->foreground |
+      (unsigned)tty->background << TTY_STYLE_BACKGROUND_SHIFT |
+      (reverse ? TTY_STYLE_REVERSE : 0));
+}
+
+static void draw_cell(struct tty *tty, uint8_t glyph, uint16_t style, size_t x, size_t y)
+{
+  uint32_t fg = style_color(tty, style & TTY_STYLE_FOREGROUND_MASK, true);
+  uint32_t bg = style_color(tty,
+      (style & TTY_STYLE_BACKGROUND_MASK) >> TTY_STYLE_BACKGROUND_SHIFT, false);
+  if (style & TTY_STYLE_REVERSE) {
+    uint32_t swap = fg;
+    fg = bg;
+    bg = swap;
+  }
+  tty_plot_char_raw(tty->fb, tty->font, (char)glyph, x * tty->font->width,
+      y * tty->font->height, fg, bg);
+}
+
+/* Record and draw one cell of the active screen. */
+static void put_cell(struct tty *tty, char c, size_t x, size_t y, uint16_t style)
+{
+  uint8_t glyph = glyph_index(tty->font, c);
   if (tty->cells) {
     KASSERT(x < tty->width && y < tty->height);
-    size_t index = (size_t)y * tty->width + x;
+    size_t index = y * tty->width + x;
     if ((tty->selection_valid || tty->selection_dragging) && tty->cells[index] != glyph) {
       size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
       size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
@@ -69,44 +97,82 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
       }
     }
     tty->cells[index] = glyph;
+    tty->styles[index] = style;
   }
-
-  size_t x_dst = (size_t)x * font->width;
-  size_t y_dst = (size_t)y * font->height;
-
-  tty_plot_char_raw(tty->fb, font, (char)glyph, x_dst, y_dst, fg, bg);
+  draw_cell(tty, glyph, style, x, y);
 }
 
+static void blank_rows(struct tty *tty, size_t first, size_t end)
+{
+  uint16_t style = current_style(tty, false);
+  for (size_t y = first; y < end; ++y) {
+    for (size_t x = 0; x < tty->width; ++x) {
+      put_cell(tty, ' ', x, y, style);
+    }
+  }
+}
+
+/* Move rows [source, source + count) to destination, cells and raster. */
+static void move_rows(struct tty *tty, size_t destination, size_t source, size_t count)
+{
+  size_t row_bytes = tty->fb->pitch * tty->font->height;
+  uint8_t *pixels = (uint8_t *)tty->fb->address;
+
+  memmove(pixels + destination * row_bytes, pixels + source * row_bytes, count * row_bytes);
+  if (tty->cells) {
+    memmove(tty->cells + destination * tty->width, tty->cells + source * tty->width,
+        count * tty->width);
+    memmove(tty->styles + destination * tty->width, tty->styles + source * tty->width,
+        count * tty->width * sizeof(*tty->styles));
+  }
+}
+
+/* Scroll rows top..bottom (inclusive) up by count, blanking the bottom. */
+static void scroll_up(struct tty *tty, size_t top, size_t bottom, size_t count)
+{
+  size_t rows = bottom - top + 1;
+  count = MIN(count, rows);
+  tty_selection_clear(tty);
+  move_rows(tty, top, top + count, rows - count);
+  blank_rows(tty, bottom + 1 - count, bottom + 1);
+}
+
+/* Scroll rows top..bottom (inclusive) down by count, blanking the top. */
+static void scroll_down(struct tty *tty, size_t top, size_t bottom, size_t count)
+{
+  size_t rows = bottom - top + 1;
+  count = MIN(count, rows);
+  tty_selection_clear(tty);
+  move_rows(tty, top + count, top, rows - count);
+  blank_rows(tty, top, top + count);
+}
+
+/* LF: the bottom margin scrolls the region; below it the screen edge stops. */
 static void tty_newline(struct tty *tty)
 {
   tty->wrap_pending = false;
   tty->x = 0;
-  tty->y++;
+  if (tty->y == tty->region_bottom) {
+    scroll_up(tty, tty->region_top, tty->region_bottom, 1);
+  } else if (tty->y + 1u < tty->height) {
+    tty->y++;
+  }
+}
 
-  if (tty->y >= tty->height) {
-    size_t row_bytes = tty->fb->pitch * tty->font->height;
-    void *pixels = (void *)tty->fb->address;
-
-    tty_selection_clear(tty);
-    if (tty->cells) {
-      memmove(tty->cells, tty->cells + tty->width,
-          (size_t)tty->width * (tty->height - 1));
-    }
-    memmove(pixels, (uint8_t *)pixels + row_bytes,
-            row_bytes * (tty->height - 1));
-    tty->y = tty->height - 1;
-
-    for (size_t x = 0; x < tty->width; ++x) {
-      tty_plot_char(tty, ' ', x, tty->y, tty->fg, tty->bg);
-    }
+/* ESC M: the top margin scrolls the region down; above it the screen edge stops. */
+static void reverse_index(struct tty *tty)
+{
+  tty->wrap_pending = false;
+  if (tty->y == tty->region_top) {
+    scroll_down(tty, tty->region_top, tty->region_bottom, 1);
+  } else if (tty->y) {
+    tty->y--;
   }
 }
 
 static void tty_draw_cell(struct tty *tty, char c, size_t x, size_t y)
 {
-  uint32_t fg = tty->reverse ? tty->bg : tty->fg;
-  uint32_t bg = tty->reverse ? tty->fg : tty->bg;
-  tty_plot_char(tty, c, x, y, fg, bg);
+  put_cell(tty, c, x, y, current_style(tty, tty->reverse));
 }
 
 static void erase_cells(struct tty *tty, size_t first, size_t end)
@@ -116,26 +182,128 @@ static void erase_cells(struct tty *tty, size_t first, size_t end)
   }
 }
 
+static void set_colors(struct tty *tty, unsigned foreground, unsigned background)
+{
+  tty->foreground = (uint8_t)foreground;
+  tty->background = (uint8_t)background;
+  tty->fg = style_color(tty, foreground, true);
+  tty->bg = style_color(tty, background, false);
+}
+
 static void select_style(struct tty *tty, unsigned parameter)
 {
   if (parameter == 0) {
-    tty->fg = tty->scheme->foreground;
-    tty->bg = tty->scheme->background;
+    set_colors(tty, TTY_DEFAULT_COLOR, TTY_DEFAULT_COLOR);
     tty->reverse = false;
   } else if (parameter == 7 || parameter == 27) {
     tty->reverse = parameter == 7;
   } else if (parameter == 39) {
-    tty->fg = tty->scheme->foreground;
+    set_colors(tty, TTY_DEFAULT_COLOR, tty->background);
   } else if (parameter == 49) {
-    tty->bg = tty->scheme->background;
+    set_colors(tty, tty->foreground, TTY_DEFAULT_COLOR);
   } else if (parameter >= 30 && parameter <= 37) {
-    tty->fg = tty->scheme->palette[parameter - 30];
+    set_colors(tty, parameter - 30, tty->background);
   } else if (parameter >= 40 && parameter <= 47) {
-    tty->bg = tty->scheme->palette[parameter - 40];
+    set_colors(tty, tty->foreground, parameter - 40);
   } else if (parameter >= 90 && parameter <= 97) {
-    tty->fg = tty->scheme->palette[parameter - 90 + 8];
+    set_colors(tty, parameter - 90 + 8, tty->background);
   } else if (parameter >= 100 && parameter <= 107) {
-    tty->bg = tty->scheme->palette[parameter - 100 + 8];
+    set_colors(tty, tty->foreground, parameter - 100 + 8);
+  }
+}
+
+static void save_cursor(struct tty *tty)
+{
+  tty->saved[tty->alternate] = (struct tty_saved_cursor){
+    .x = tty->x,
+    .y = tty->y,
+    .foreground = tty->foreground,
+    .background = tty->background,
+    .reverse = tty->reverse,
+    .wrap_pending = tty->wrap_pending,
+  };
+}
+
+static void restore_cursor(struct tty *tty)
+{
+  const struct tty_saved_cursor *saved = &tty->saved[tty->alternate];
+  tty->x = MIN(saved->x, tty->width - 1u);
+  tty->y = MIN(saved->y, tty->height - 1u);
+  set_colors(tty, saved->foreground, saved->background);
+  tty->reverse = saved->reverse;
+  tty->wrap_pending = saved->wrap_pending && tty->x == tty->width - 1u;
+}
+
+static void reset_saved_cursor(struct tty_saved_cursor *saved)
+{
+  *saved = (struct tty_saved_cursor){
+    .foreground = TTY_DEFAULT_COLOR,
+    .background = TTY_DEFAULT_COLOR,
+  };
+}
+
+static void reset_region(struct tty *tty)
+{
+  tty->region_top = 0;
+  tty->region_bottom = tty->height - 1u;
+}
+
+static void redraw_screen(struct tty *tty)
+{
+  for (size_t y = 0; y < tty->height; ++y) {
+    for (size_t x = 0; x < tty->width; ++x) {
+      size_t index = y * tty->width + x;
+      draw_cell(tty, tty->cells[index], tty->styles[index], x, y);
+    }
+  }
+}
+
+/* CSI ? 1049 h/l. Entering saves the primary cursor and shows a cleared
+ * alternate screen; leaving redraws the primary from its cells and restores
+ * the cursor. The scroll region resets either way. */
+static void select_screen(struct tty *tty, bool alternate)
+{
+  if (!tty->storage || tty->alternate == alternate) {
+    return;
+  }
+  if (alternate) {
+    save_cursor(tty);
+  }
+  uint8_t *cells = tty->cells;
+  uint16_t *styles = tty->styles;
+  tty->cells = tty->other_cells;
+  tty->styles = tty->other_styles;
+  tty->other_cells = cells;
+  tty->other_styles = styles;
+  tty->alternate = alternate;
+  tty_selection_clear(tty);
+  reset_region(tty);
+  tty->wrap_pending = false;
+  if (alternate) {
+    blank_rows(tty, 0, tty->height);
+    tty->x = 0;
+    tty->y = 0;
+  } else {
+    redraw_screen(tty);
+    restore_cursor(tty);
+  }
+}
+
+static bool cursor_in_region(const struct tty *tty)
+{
+  return tty->y >= tty->region_top && tty->y <= tty->region_bottom;
+}
+
+static void execute_private_csi(struct tty *tty, unsigned char command)
+{
+  unsigned parameter = tty->parameters[0];
+  if (tty->parameter_index != 0 || (command != 'h' && command != 'l')) {
+    return;
+  }
+  if (parameter == 25) {
+    tty->cursor_visible = command == 'h';
+  } else if (parameter == 1049) {
+    select_screen(tty, command == 'h');
   }
 }
 
@@ -147,10 +315,7 @@ static void execute_csi(struct tty *tty, unsigned char command)
   size_t cells = (size_t)tty->width * tty->height;
 
   if (tty->private_csi) {
-    if (tty->parameter_index == 0 && parameter == 25 &&
-        (command == 'h' || command == 'l')) {
-      tty->cursor_visible = command == 'h';
-    }
+    execute_private_csi(tty, command);
     return;
   }
   if (command == 'm') {
@@ -159,22 +324,47 @@ static void execute_csi(struct tty *tty, unsigned char command)
     }
     return;
   }
+  if (command == 'r') {
+    /* DECSTBM: one-based rows; zero or missing selects the screen edge. */
+    if (tty->parameter_index > 1) {
+      return;
+    }
+    unsigned top = parameter ? parameter : 1;
+    unsigned bottom = tty->parameters[1] ? tty->parameters[1] : tty->height;
+    if (top < bottom && bottom <= tty->height) {
+      tty->region_top = top - 1;
+      tty->region_bottom = bottom - 1;
+      tty->x = 0;
+      tty->y = 0;
+      tty->wrap_pending = false;
+    }
+    return;
+  }
   if (tty->parameter_index > (command == 'H' ? 1u : 0u)) {
+    return;
+  }
+  if ((command == 's' || command == 'u') && parameter) {
     return;
   }
 
   if (command == 'A' || command == 'B' || command == 'C' || command == 'D' ||
-      command == 'G' || command == 'H' || command == 'J' || command == 'K') {
+      command == 'G' || command == 'H' || command == 'J' || command == 'K' ||
+      command == 'L' || command == 'M') {
     tty->wrap_pending = false;
   }
 
   switch (command) {
-  case 'A':
-    tty->y = count > tty->y ? 0 : tty->y - count;
+  case 'A': {
+    /* Inside the region the top margin stops the cursor, as in xterm. */
+    unsigned limit = cursor_in_region(tty) ? tty->region_top : 0;
+    tty->y = count > (unsigned)(tty->y - limit) ? limit : tty->y - count;
     break;
-  case 'B':
-    tty->y = count >= (unsigned)(tty->height - tty->y) ? tty->height - 1u : tty->y + count;
+  }
+  case 'B': {
+    unsigned limit = cursor_in_region(tty) ? tty->region_bottom : tty->height - 1u;
+    tty->y = count > (unsigned)(limit - tty->y) ? limit : tty->y + count;
     break;
+  }
   case 'C':
     tty->x = count >= (unsigned)(tty->width - tty->x) ? tty->width - 1u : tty->x + count;
     break;
@@ -208,6 +398,25 @@ static void execute_csi(struct tty *tty, unsigned char command)
       erase_cells(tty, 0, cells);
     }
     break;
+  case 'L':
+    /* Insert and delete lines act inside the region and return to column one. */
+    if (cursor_in_region(tty)) {
+      scroll_down(tty, tty->y, tty->region_bottom, count);
+      tty->x = 0;
+    }
+    break;
+  case 'M':
+    if (cursor_in_region(tty)) {
+      scroll_up(tty, tty->y, tty->region_bottom, count);
+      tty->x = 0;
+    }
+    break;
+  case 's':
+    save_cursor(tty);
+    break;
+  case 'u':
+    restore_cursor(tty);
+    break;
   }
 }
 
@@ -217,6 +426,22 @@ static void begin_escape(struct tty *tty)
   tty->parameter_index = 0;
   tty->private_csi = false;
   memset(tty->parameters, 0, sizeof(tty->parameters));
+}
+
+static void execute_escape(struct tty *tty, unsigned char byte)
+{
+  tty->escape_state = TTY_TEXT;
+  if (byte == '[') {
+    tty->escape_state = TTY_CSI_ENTRY;
+  } else if (byte == '(' || byte == ')' || byte == '*' || byte == '+') {
+    tty->escape_state = TTY_CHARSET;
+  } else if (byte == '7') {
+    save_cursor(tty);
+  } else if (byte == '8') {
+    restore_cursor(tty);
+  } else if (byte == 'M') {
+    reverse_index(tty);
+  }
 }
 
 void tty_put_char(struct tty *tty, char c)
@@ -243,7 +468,12 @@ void tty_put_char(struct tty *tty, char c)
   }
 
   if (tty->escape_state == TTY_ESCAPE) {
-    tty->escape_state = byte == '[' ? TTY_CSI_ENTRY : TTY_TEXT;
+    execute_escape(tty, byte);
+    return;
+  }
+  if (tty->escape_state == TTY_CHARSET) {
+    /* Only the default set exists; the designation is consumed. */
+    tty->escape_state = TTY_TEXT;
     return;
   }
   if (tty->escape_state == TTY_CSI_ENTRY || tty->escape_state == TTY_CSI ||
@@ -291,13 +521,31 @@ void tty_put_char(struct tty *tty, char c)
   }
 }
 
+void tty_attach_storage(struct tty *tty, uint8_t *storage)
+{
+  size_t cells = (size_t)tty->width * tty->height;
+  tty->storage = storage;
+  tty->cells = storage;
+  tty->other_cells = storage + cells;
+  tty->styles = (uint16_t *)(storage + 2 * cells);
+  tty->other_styles = tty->styles + cells;
+  tty->alternate = false;
+  reset_region(tty);
+  reset_saved_cursor(&tty->saved[0]);
+  reset_saved_cursor(&tty->saved[1]);
+
+  uint16_t style = current_style(tty, false);
+  memset(tty->cells, ' ', cells);
+  memset(tty->other_cells, ' ', cells);
+  for (size_t i = 0; i < cells; ++i) {
+    tty->styles[i] = style;
+    tty->other_styles[i] = style;
+  }
+}
+
 void tty_clear(struct tty *tty)
 {
-  for (size_t y = 0; y < tty->height; ++y) {
-    for (size_t x = 0; x < tty->width; ++x) {
-      tty_plot_char(tty, ' ', x, y, tty->fg, tty->bg);
-    }
-  }
+  blank_rows(tty, 0, tty->height);
   tty->x = 0;
   tty->y = 0;
   tty->escape_state = TTY_TEXT;
@@ -312,17 +560,38 @@ void tty_fresh_line(struct tty *tty)
   }
 }
 
-void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *cells)
+/* Copy a screen's cells into new storage, keeping the rows from first_row. */
+static void copy_screen(uint8_t *cells, uint16_t *styles, size_t width, size_t height,
+    const uint8_t *old_cells, const uint16_t *old_styles, size_t old_width,
+    size_t first_row, size_t rows, size_t columns, uint16_t blank)
+{
+  memset(cells, ' ', width * height);
+  for (size_t i = 0; i < width * height; ++i) {
+    styles[i] = blank;
+  }
+  for (size_t y = 0; y < rows; ++y) {
+    memcpy(cells + y * width, old_cells + (first_row + y) * old_width, columns);
+    memcpy(styles + y * width, old_styles + (first_row + y) * old_width,
+        columns * sizeof(*styles));
+  }
+}
+
+static size_t kept_first_row(size_t cursor_row, size_t height)
+{
+  return cursor_row >= height ? cursor_row - height + 1 : 0;
+}
+
+void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   size_t width = fb->width / tty->font->width;
   size_t height = fb->height / tty->font->height;
   KASSERT(width && width <= UINT16_MAX && height && height <= UINT16_MAX);
   KASSERT(width <= SIZE_MAX / height);
-  KASSERT(cells && tty->cells && cells != tty->cells);
+  KASSERT(storage && tty->storage && storage != tty->storage);
   KASSERT(tty->geometry_generation && tty->geometry_generation < UINT64_MAX);
 
-  size_t first_row = tty->y >= height ? tty->y - height + 1 : 0;
+  size_t first_row = kept_first_row(tty->y, height);
   size_t rows = MIN((size_t)tty->height - first_row, height);
   size_t columns = MIN((size_t)tty->width, width);
   uint32_t background = framebuffer_color(fb, tty->bg);
@@ -339,18 +608,40 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *cells)
     memcpy((void *)(fb->address + y * fb->pitch),
         (const void *)(tty->fb->address + (source_y + y) * tty->fb->pitch), row_bytes);
   }
-  memset(cells, ' ', width * height);
-  for (size_t y = 0; y < rows; ++y) {
-    memcpy(cells + y * width, tty->cells + (first_row + y) * tty->width, columns);
-  }
+
+  /* The hidden screen keeps the rows around its saved cursor. */
+  size_t cells = width * height;
+  uint8_t *new_cells = storage;
+  uint8_t *new_other_cells = storage + cells;
+  uint16_t *new_styles = (uint16_t *)(storage + 2 * cells);
+  uint16_t *new_other_styles = new_styles + cells;
+  uint16_t blank = current_style(tty, false);
+  const struct tty_saved_cursor *hidden = &tty->saved[!tty->alternate];
+  size_t other_first_row = kept_first_row(hidden->y, height);
+  copy_screen(new_cells, new_styles, width, height, tty->cells, tty->styles, tty->width,
+      first_row, rows, columns, blank);
+  copy_screen(new_other_cells, new_other_styles, width, height, tty->other_cells,
+      tty->other_styles, tty->width, other_first_row,
+      MIN((size_t)tty->height - other_first_row, height), columns, blank);
 
   tty_selection_clear(tty);
   tty->fb = fb;
-  tty->cells = cells;
+  tty->storage = storage;
+  tty->cells = new_cells;
+  tty->styles = new_styles;
+  tty->other_cells = new_other_cells;
+  tty->other_styles = new_other_styles;
   tty->width = width;
   tty->height = height;
   tty->x = MIN((size_t)tty->x, width - 1);
   tty->y = MIN((size_t)tty->y - first_row, height - 1);
+  for (size_t screen = 0; screen < 2; ++screen) {
+    struct tty_saved_cursor *saved = &tty->saved[screen];
+    size_t kept = screen == tty->alternate ? first_row : other_first_row;
+    saved->x = MIN((size_t)saved->x, width - 1);
+    saved->y = MIN((size_t)saved->y - MIN((size_t)saved->y, kept), height - 1);
+  }
+  reset_region(tty);
   tty->wrap_pending = false;
   ++tty->geometry_generation;
 }
