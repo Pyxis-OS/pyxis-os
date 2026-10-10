@@ -12,6 +12,7 @@
 #include <kernel/process.h>
 #include <kernel/process_vm.h>
 #include <kernel/space.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 static void destroy_display(struct kernel_object *object)

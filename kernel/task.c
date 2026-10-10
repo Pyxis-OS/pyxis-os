@@ -1164,6 +1164,7 @@ void kernel_task_yield_if_runnable(void)
 
     /* We are back on this CPU's permanent stack. Drop the private root and
      * flush translations before publishing completion to the BSP reaper. */
+    KASSERT(!task->vm_borrowers);
     KASSERT(vm_space_activate(vm_kernel_space()) == MM_OK);
     arch_user_set_kernel_stack(0);
     scheduler->current_task = NULL;

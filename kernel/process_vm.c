@@ -114,11 +114,9 @@ void process_vm_borrow_release(struct process *process)
   KASSERT(process->vm.borrowers);
   task_vm_borrow_leave(task);
   --process->vm.borrowers;
-  bool pending = process->vm.pending != NULL;
   spin_unlock(&process->vm.lock);
-  if (pending) {
-    wake_worker();
-  }
+  /* Every borrower retains an active root; only root departure can finish
+   * drainage. Keep this guard a leaf for copies under object ownership. */
 }
 
 static void resume_held(struct process_vm_held *held)

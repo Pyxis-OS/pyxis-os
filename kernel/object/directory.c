@@ -763,9 +763,47 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
     return (struct syscall_result){status, 0};
   }
   struct syscall_result reply = {CALL_WRONG_TYPE, 0};
+  char *source_name = NULL, *destination_name = NULL;
   if (destination.object->type == OBJECT_DIRECTORY) {
-    reply = rename_to_directory(source, rights,
-        (struct directory_object *)destination.object, destination.rights, request);
+    struct directory_object *target = (void *)destination.object;
+    bool native = source->backing == DIRECTORY_NPFS || target->backing == DIRECTORY_NPFS;
+    bool host = source->backing == DIRECTORY_HOST || target->backing == DIRECTORY_HOST;
+    enum call_status status = CALL_OK;
+    if ((native && (source->backing != DIRECTORY_NPFS || target->backing != DIRECTORY_NPFS)) ||
+        (host && (source->backing != DIRECTORY_HOST || target->backing != DIRECTORY_HOST))) {
+      status = CALL_BAD_OPERATION;
+    } else if ((native && (request->source_length > NPFS_NAME_MAX ||
+        request->destination_length > NPFS_NAME_MAX)) ||
+        (host && (request->source_length > VIRTIO_FS_NAME_MAX ||
+        request->destination_length > VIRTIO_FS_NAME_MAX))) {
+      status = CALL_NAME_TOO_LONG;
+    } else if (!native && !host &&
+        (source->backing != DIRECTORY_RAM || target->backing != DIRECTORY_RAM)) {
+      status = CALL_READ_ONLY;
+    } else if (request->policy == DIRECTORY_RENAME_REPLACE &&
+        !(destination.rights & DIRECTORY_RIGHT_REMOVE)) {
+      status = CALL_DENIED;
+    }
+    struct directory_rename_request captured = *request;
+    if (status == CALL_OK) {
+      status = capture_name(request->source_name, request->source_length, &source_name);
+    }
+    if (status == CALL_OK) {
+      status = capture_name(request->destination_name, request->destination_length, &destination_name);
+    }
+    if (status == CALL_OK) {
+      captured.source_name = (uintptr_t)source_name;
+      captured.destination_name = (uintptr_t)destination_name;
+      reply = rename_to_directory(source, rights, target, destination.rights, &captured);
+    } else {
+      reply = (struct syscall_result){status, 0};
+    }
+  }
+  if (source_name) {
+    kfree(source_name);
+  }
+  if (destination_name) {
+    kfree(destination_name);
   }
   capability_release(&destination);
   return reply;
@@ -1024,7 +1062,16 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  char *source = NULL, *destination = NULL;
+  if (operation == DIRECTORY_RENAME) {
+    return rename_child(directory, rights, &request.rename);
+  }
+  size_t name_length = operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE ?
+      request.lookup.name_length : operation == DIRECTORY_REMOVE ? request.remove.name_length : 0;
+  if ((directory->backing == DIRECTORY_NPFS && name_length > NPFS_NAME_MAX) ||
+      (directory->backing == DIRECTORY_HOST && name_length > VIRTIO_FS_NAME_MAX)) {
+    return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
+  }
+  char *source = NULL;
   enum call_status status = CALL_OK;
   /* Only private name fields are rewritten. Enumeration's destination remains
    * a user address; all named operations consume one immutable kernel capture. */
@@ -1034,15 +1081,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   } else if (operation == DIRECTORY_REMOVE) {
     status = capture_name(request.remove.name, request.remove.name_length, &source);
     request.remove.name = (uintptr_t)source;
-  } else if (operation == DIRECTORY_RENAME) {
-    status = capture_name(request.rename.source_name, request.rename.source_length, &source);
-    if (status == CALL_OK) {
-      status = capture_name(request.rename.destination_name,
-          request.rename.destination_length, &destination);
-    }
-    request.rename.source_name = (uintptr_t)source;
-    request.rename.destination_name = (uintptr_t)destination;
   }
+
   struct syscall_result result = {status, 0};
   if (status == CALL_OK) {
     result = directory_operation(directory, rights, operation, &request,
@@ -1050,9 +1090,6 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (source) {
     kfree(source);
-  }
-  if (destination) {
-    kfree(destination);
   }
   return result;
 }
