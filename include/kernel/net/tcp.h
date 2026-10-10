@@ -26,8 +26,10 @@ enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t de
  * This call consumes the pointer; actual metadata disposal is worker-deferred. */
 void net_tcp_release(struct tcp_connection *connection);
 
-/* Caller, IF=0: CONNECT lends the exclusively owned table while parked.
- * Others retain their grant. No stack/reply/user pointers cross to the worker. */
+/* Current user task/table, IF=0, no prepared BSP request. CONNECT/LISTEN/ACCEPT
+ * reserve a private slot before parking. Worker preparation owns its grant until
+ * successful caller collection moves it into the slot. Failure releases private
+ * ownership. Other operations retain admitted storage. No caller pointers cross. */
 enum call_status net_tcp_connect(struct capability_table *table, uint32_t address,
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply);
 enum call_status net_tcp_listen(struct capability_table *table, uint32_t address,

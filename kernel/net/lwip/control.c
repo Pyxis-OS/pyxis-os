@@ -18,7 +18,9 @@ enum control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE 
 struct tcp_control {
   enum control_state state;
   enum control_operation operation;
-  struct capability_table *table;
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  struct capability_grant grant;
   struct tcp_stream *stream;
   struct tcp_stream *listener;
   uint32_t address;
@@ -106,7 +108,7 @@ static enum call_status prepare_status(enum net_result result)
   return CALL_IO;
 }
 
-static enum call_status reserve_handle(struct tcp_control *call, bool listening)
+static enum call_status prepare_stream(struct tcp_control *call, bool listening)
 {
   struct tcp_stream *stream = caelum_lwip_calloc(1, sizeof(*stream));
   if (!stream) {
@@ -114,18 +116,13 @@ static enum call_status reserve_handle(struct tcp_control *call, bool listening)
   }
   object_init(&stream->object, listening ? OBJECT_TCP_LISTENER : OBJECT_TCP, retire_stream);
 
-  /* The sole task is parked and lends its table exclusively. Reserve the real
-   * entry before sending anything; its handle is private until CALL completes.
-   * Failed preparation removes it, so there can be no half-open user handle. */
+  /* Initial ownership becomes the prepared grant; the reserved destination slot
+   * stays empty through connection/listener preparation and network waits. */
   uint64_t flags = cpu_save_interrupts();
-  enum capability_result installed = capability_install(call->table, &stream->object,
-      listening ? TCP_LISTENER_RIGHTS : TCP_RIGHTS, 0, &call->reply.handle);
+  call->grant = (struct capability_grant){&stream->object,
+      listening ? TCP_LISTENER_RIGHTS : TCP_RIGHTS, 0};
+  KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
   cpu_restore_interrupts(flags);
-  if (installed != CAP_OK) {
-    KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);
-    caelum_lwip_free(stream); /* Unpublished initial reference only. */
-    return installed == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
-  }
   call->stream = stream;
   return CALL_OK;
 }
@@ -135,7 +132,7 @@ static enum call_status prepare_connect(struct tcp_control *call)
   if (task_deadline_expired(call->deadline)) {
     return CALL_TIMED_OUT;
   }
-  enum call_status status = reserve_handle(call, false);
+  enum call_status status = prepare_stream(call, false);
   if (status != CALL_OK) {
     return status;
   }
@@ -157,7 +154,6 @@ static void finish_created(struct tcp_control *call, enum call_status status)
   }
   if (status == CALL_OK) {
     if (call->operation == CONTROL_LISTEN) {
-      call->listen_reply.handle = call->reply.handle;
       tcp_listener_inspect(stream->connection, &call->listen_reply.listener);
     } else {
       tcp_connection_inspect(stream->connection, &call->reply.connection);
@@ -171,12 +167,10 @@ static void finish_created(struct tcp_control *call, enum call_status status)
 
   uint64_t flags = cpu_save_interrupts();
   if (status != CALL_OK) {
-    KASSERT(capability_close(call->table, call->reply.handle) == CAP_OK);
+    capability_grant_release(&call->grant);
   }
-  object_release(&stream->object); /* Table owns successful streams from here. */
   cpu_restore_interrupts(flags);
   call->stream = NULL;
-  call->table = NULL;
 }
 
 /* ACTIVE grants the worker exclusive access until completion publication. */
@@ -208,11 +202,25 @@ static void complete_control(struct tcp_control *call, enum call_status status)
   /* The caller may already have consumed and reused the slot. */
 }
 
-static enum call_status exchange_control(struct tcp_control *request)
+static enum call_status exchange_control(struct tcp_control *request,
+    struct capability_table *table)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!net_worker_available()) {
     return CALL_UNAVAILABLE;
+  }
+  if (table) {
+    enum capability_result result = capability_request_reservation(1,
+        &request->reservation, &request->slot);
+    if (result != CAP_OK) {
+      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+      return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    }
+    KASSERT(request->reservation.table == table);
+    if (task_stop_requested()) {
+      capability_reservation_release(&request->reservation, &request->slot);
+      return CALL_ENDPOINT_CLOSED;
+    }
   }
   lock_control();
   struct tcp_control *call = NULL;
@@ -222,15 +230,18 @@ static enum call_status exchange_control(struct tcp_control *request)
     } else if (request->operation == CONTROL_ACCEPT &&
         pending[i].operation == CONTROL_ACCEPT && pending[i].listener == request->listener) {
       unlock_control();
+      capability_reservation_release(&request->reservation, &request->slot);
       return CALL_BUSY;
     }
   }
   if (!call) {
     unlock_control();
+    capability_reservation_release(&request->reservation, &request->slot);
     return CALL_QUEUE_FULL;
   }
   struct task_wait *wait = task_wait_prepare();
   *call = *request;
+  request->reservation = (struct capability_reservation){0};
   call->state = CONTROL_QUEUED;
   call->wait = wait;
   if (call->operation == CONTROL_CONNECT || call->operation == CONTROL_LISTEN ||
@@ -242,8 +253,8 @@ static enum call_status exchange_control(struct tcp_control *request)
   task_wait_sleep_interruptible(wait);
 
   lock_control();
-  /* A stop wake does not return the loan. Detach before renewing the wait and
-   * let the worker cancel or finish before collecting the slot. */
+  /* A stop wake does not reclaim worker-owned preparation. Detach before renewing
+   * the wait and let the worker cancel or finish before collecting the slot. */
   while (call->state != CONTROL_DONE) {
     KASSERT(call->wait == wait);
     call->wait = NULL;
@@ -256,20 +267,23 @@ static enum call_status exchange_control(struct tcp_control *request)
     lock_control();
   }
   KASSERT(!call->wait);
-  bool discard_created = task_stop_requested() && call->status == CALL_OK &&
-      (request->operation == CONTROL_CONNECT || request->operation == CONTROL_LISTEN ||
-       request->operation == CONTROL_ACCEPT);
-  uint64_t created_handle = call->reply.handle;
   enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
-  if (status == CALL_OK) {
-    request->reply = call->reply;
-    request->listen_reply = call->listen_reply;
-  }
+  request->reply = call->reply;
+  request->listen_reply = call->listen_reply;
+  request->grant = call->grant;
+  request->reservation = call->reservation;
+  request->slot = call->slot;
   *call = (struct tcp_control){0};
   unlock_control();
-  if (discard_created) {
-    KASSERT(capability_close(request->table, created_handle) == CAP_OK);
+  if (status == CALL_OK && request->grant.object) {
+    capability_install_reserved(&request->reservation, &request->slot,
+        &request->grant, 1, &request->reply.handle);
+    if (request->operation == CONTROL_LISTEN) {
+      request->listen_reply.handle = request->reply.handle;
+    }
   }
+  capability_grant_release(&request->grant);
+  capability_reservation_release(&request->reservation, &request->slot);
   net_worker_notify(); /* Direction ownership became available to readiness waits. */
   return status;
 }
@@ -285,10 +299,10 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
     return CALL_BAD_REQUEST;
   }
   struct tcp_control request = {
-    .operation = CONTROL_CONNECT, .table = table, .address = address,
+    .operation = CONTROL_CONNECT, .address = address,
     .port = port, .deadline = deadline,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
     *reply = request.reply;
   }
@@ -299,9 +313,9 @@ enum call_status net_tcp_listen(struct capability_table *table, uint32_t address
     uint16_t port, struct tcp_listen_reply *reply)
 {
   struct tcp_control request = {
-    .operation = CONTROL_LISTEN, .table = table, .address = address, .port = port,
+    .operation = CONTROL_LISTEN, .address = address, .port = port,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
     *reply = request.listen_reply;
   }
@@ -319,10 +333,10 @@ enum call_status net_tcp_accept(struct kernel_object *object, struct capability_
     return CALL_BAD_REQUEST;
   }
   struct tcp_control request = {
-    .operation = CONTROL_ACCEPT, .table = table,
+    .operation = CONTROL_ACCEPT,
     .listener = (struct tcp_stream *)object, .deadline = deadline, .nonblocking = nonblocking,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
     *reply = (struct tcp_accept_reply){request.reply.handle, request.reply.connection};
   }
@@ -335,7 +349,7 @@ enum call_status net_tcp_listener_inspect(struct kernel_object *object,
   struct tcp_control request = {
     .operation = CONTROL_LISTENER_INSPECT, .listener = (struct tcp_stream *)object,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, NULL);
   if (status == CALL_OK) {
     *reply = request.listen_reply.listener;
   }
@@ -347,7 +361,7 @@ enum call_status net_tcp_inspect(struct kernel_object *object, struct tcp_connec
   struct tcp_control request = {
     .operation = CONTROL_INSPECT, .stream = (struct tcp_stream *)object,
   };
-  enum call_status status = exchange_control(&request);
+  enum call_status status = exchange_control(&request, NULL);
   if (status == CALL_OK) {
     *reply = request.reply.connection;
   }
@@ -359,7 +373,7 @@ enum call_status net_tcp_abort(struct kernel_object *object)
   struct tcp_control request = {
     .operation = CONTROL_ABORT, .stream = (struct tcp_stream *)object,
   };
-  return exchange_control(&request);
+  return exchange_control(&request, NULL);
 }
 
 enum call_status net_tcp_shutdown_write(struct kernel_object *object)
@@ -367,7 +381,7 @@ enum call_status net_tcp_shutdown_write(struct kernel_object *object)
   struct tcp_control request = {
     .operation = CONTROL_SHUTDOWN_WRITE, .stream = (struct tcp_stream *)object,
   };
-  return exchange_control(&request);
+  return exchange_control(&request, NULL);
 }
 
 bool net_tcp_service(void)
@@ -395,7 +409,7 @@ bool net_tcp_service(void)
       continue;
     }
     if (call->operation == CONTROL_LISTEN) {
-      enum call_status status = reserve_handle(call, true);
+      enum call_status status = prepare_stream(call, true);
       if (status == CALL_OK) {
         status = prepare_status(tcp_listener_prepare(call->address, call->port,
             &call->stream->connection));
@@ -415,7 +429,7 @@ bool net_tcp_service(void)
         status = CALL_WOULD_BLOCK;
       }
       if (status == CALL_OK && start) {
-        status = reserve_handle(call, false);
+        status = prepare_stream(call, false);
         worked = true;
       }
       if (status == CALL_OK && !call->nonblocking && task_deadline_expired(call->deadline)) {
