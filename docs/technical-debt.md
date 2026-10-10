@@ -313,6 +313,13 @@ authorized. Revisit when the backend is proposed as a default, or after a change
 to its failure, panic or capture paths; the paired steps are in the
 [backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
+Owner decision, 2026-10-10: flips stay opt-in for now. Before they become the
+default, one deliberate native panic with flips on must show the panic message
+on the display, using an unmerged probe build like the network debugger's
+[panic probe](development/experiments/network-debugger/README.md); the owner
+authorized that deliberate panic the same day. The owner has seen no unintended
+native panic since bring-up, so this path has never run on hardware.
+
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)
