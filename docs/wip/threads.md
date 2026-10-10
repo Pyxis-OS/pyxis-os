@@ -184,12 +184,19 @@ completion/reclamation boundary. Exhaustion returns a real limit/allocation
 error. These tunable bounds allow roughly 64 MiB of default user stacks and
 1 MiB of 16 KiB kernel stacks, plus TLS/metadata; they guarantee no physical
 capacity. Large native contexts remain subject to VM/allocation admission.
+The 1 MiB default and 64/64 bounds are tunable implementation policy, not ABI
+or SDK contracts. Consumers must handle real limit/allocation errors rather
+than assume these values; Go or libuv may need different tuning later.
 
 ## Small next task and delivery gates
 
 Each gate needs its own owner assignment, baseline where costs change, ordinary
 build and interactive QEMU/debugger qualification. No new test infrastructure.
 The following split refines the former broad task 2; it authorizes no code.
+Tasks 2–4 are ownership plumbing with no new runnable thread feature. The first
+owner-runnable siblings arrive at task 5; ordinary threaded C arrives at task 8.
+SDL audio callbacks and libuv workers require their later consumer tasks, not
+merely completion of task 2.
 
 1. [x] **Process lifetime (#612).** Independent process/group ownership and task retirement, still one user task.
 
@@ -240,6 +247,7 @@ PRs before gitlinks. This docs PR changes no pin or compiler container.
 ## Owner decisions requested
 
 The earlier accepted execution, lifetime and parking directions remain unchanged.
+The three defaults below remain proposals pending the owner's separate decisions.
 
 1. **Stack/admission policy — default:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both 64-entry bounds above. Lazy growth needs a separate
