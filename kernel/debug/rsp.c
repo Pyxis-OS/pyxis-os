@@ -566,7 +566,8 @@ static DEBUG_CODE bool dispatch(struct rsp_buffer *out, const uint8_t *data, siz
   }
   if (bytes && (data[0] == 'G' || data[0] == 'P' || data[0] == 'M' || data[0] == 'X' ||
       data[0] == 'Z' || data[0] == 'z' || data[0] == 's' || data[0] == 'S' ||
-      data[0] == 'D' || data[0] == 'k' || prefix(data, bytes, "vCont;"))) {
+      data[0] == 'D' || data[0] == 'k' || data[0] == 'c' || data[0] == 'C' ||
+      prefix(data, bytes, "vCont;") || prefix(data, bytes, "vKill"))) {
     return literal(out, "E01");
   }
   return true;
