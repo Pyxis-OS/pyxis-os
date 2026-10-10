@@ -97,8 +97,8 @@ target state injection, faults, saturation or new test infrastructure:
   removal from the boot archive returned status 1; following shell exit drained
   successfully. Reverse sessions exercised UDP discovery and TCP delivery.
 
-No native post-change run, competing sibling operation, reference saturation or
-forced policy rejection is claimed. HOST/NPFS CREATE and raw-disk/mount error
+At this frozen-B qualification stage, no native post-change run, competing
+sibling operation, reference saturation or forced policy rejection was claimed. HOST/NPFS CREATE and raw-disk/mount error
 unwind were source-reviewed, without an attached backend in these boots.
 Independent reviews found and corrected remaining preflight gaps in mount,
 disk, namespace and console wrappers; no blocking finding remained.
@@ -169,9 +169,9 @@ retained all 400 verified samples and four successful FINAL records:
 
 The large B2 admission increase did not repeat: follow-up pair admission changes
 are +0.4%/+0.5%, while completion changes direction. No sample is discarded and
-no stable causal overhead is established. Native A/B remains owner qualification:
-stage the same initrd into both kernels and use the four-command remote loop at
-256 messages/100 rounds. No optimization is included merely to improve these
+no stable causal overhead is established from these nested runs. Native A/B was
+then pending owner qualification; the native results below use the same initrd
+and four-command remote loop at 256 messages/100 rounds. No optimization is included merely to improve these
 nested results.
 
 
