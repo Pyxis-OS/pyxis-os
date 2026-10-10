@@ -77,6 +77,28 @@ refuse. A selected committed journal must first be recovered by booting the
 installed system. No wipe marker is needed. See
 [system updates](system-updates.md) for admission, recovery and qualification.
 
+## Progress
+
+Install and Update report program-copy progress, including files inside bundles:
+
+```text
+bin://: 812/2347 files, 41 MiB
+```
+
+The numerator counts fully copied regular files; MiB counts successfully written
+file data, including the current file. Directories are excluded. The denominator
+comes from the existing source-archive filtering pass, without another tree scan.
+On a console, carriage return redraws a single row at most four times per second.
+Other output gets plain newline records at most once per second. Both include a
+final record; errors end an active row before their diagnostic.
+
+Phase lines announce revision-directory preparation, pool flush, copy
+verification, EFI geometry invalidation, replacement-tree writes and flush,
+boot-sector publication, final flush and old-revision cleanup. These messages
+show which operation is in progress; they do not establish durability or success.
+Clock or progress-output failure disables counters and leaves installation's
+existing checks, failure handling and publication order unchanged.
+
 ## Restart
 
 After the final `installed` or `updated` message the installer asks to restart,
