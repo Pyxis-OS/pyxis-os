@@ -5,9 +5,9 @@
 #include <kernel/mouse.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
-#include <kernel/string.h>
+#include <kernel/memory.h>
 #include <stdatomic.h>
-#include "usb/hid.h"
+#include "usb/core.h"
 
 #define INPUT_KEY_EVENTS 256
 #define INPUT_POINTER_EVENTS 1024
