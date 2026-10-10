@@ -50,6 +50,8 @@ LIBUV_INPUTS := $(wildcard ports/libuv/*.lua ports/libuv/Makefile ports/libuv/PO
                          ports/libuv/include/uv/*.h ports/libuv/pyxis/*.c \
                          ports/libuv/pyxis/*.h ports/libuv/examples/* \
                          ports/libuv/patches/*.patch) ports/ports.lua ports/build.lua
+LUA51_INPUTS := $(wildcard ports/lua51/*.lua ports/lua51/Makefile ports/lua51/manifest.json \
+                         ports/lua51/patches/*.patch) ports/ports.lua ports/build.lua
 
 LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile \
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
@@ -103,6 +105,7 @@ SBASE_OUTPUTS := $(call port_outputs,sbase)
 PICOHTTPPARSER_OUTPUTS := $(call port_outputs,picohttpparser)
 ZLIB_OUTPUTS := $(call port_outputs,zlib)
 LIBUV_OUTPUTS := $(call port_outputs,libuv)
+LUA51_OUTPUTS := $(call port_outputs,lua51)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -117,7 +120,7 @@ all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPU
      $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
-all: $(LIBUV_OUTPUTS)
+all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS)
 ifneq ($(DIABLO_DATA),)
 all: $(DEVILUTIONX_OUTPUTS)
 endif
@@ -205,6 +208,10 @@ $(ZLIB_OUTPUTS) &: $(ZLIB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(LIBUV_OUTPUTS) &: $(LIBUV_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/libuv
 	$(LUA) ports/build.lua libuv --sdk $(abspath build/sdk) --work $(abspath build/ports/libuv)
+
+$(LUA51_OUTPUTS) &: $(LUA51_INPUTS) $(SDK_INPUTS) $(LIBUV_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/lua51
+	$(LUA) ports/build.lua lua51 --sdk $(abspath build/sdk) --work $(abspath build/ports/lua51) --libuv $(abspath build/ports/libuv/stage/dev)
 
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng
