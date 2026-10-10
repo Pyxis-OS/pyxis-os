@@ -10,7 +10,7 @@ the pool, without rebuilding boot media.
 | Root | Installed systems | Live boots |
 | --- | --- | --- |
 | `boot://` | The boot archive on the ESP: boot init, the default configuration, the rescue set and shared data (`share/`, `sdk/`). Read-only. | The whole archive. |
-| `bin://` | `bin/REVISION` on the pool's `bin` volume: the running kernel's programs. Read-only. | The archive itself. |
+| `bin://` | `bin/REVISION` on the pool's `bin` volume: the running kernel's plain programs and complete bundles. Read-only. | The archive itself. |
 | `system://` | The pool's `system` volume, read-write for the default space. | Not bound. |
 | `home://` | The pool's `home` volume, shared by the spaces that name it. | A RAM volume, lost at reboot. |
 | `tmp://` | A RAM directory shared by every space, lost at reboot. | The same. |
@@ -42,20 +42,26 @@ be mounted.
 The installed archive keeps only the rescue set listed in `boot/rescue.list`,
 packaged as `boot://share/installer/rescue.list`: boot init, the installer, the
 shell and session, the init providers and a few file commands, including
-`echo` and `cp` for writing configuration and copying recovery files. Every other
-executable lives in `bin/REVISION`, one directory per kernel revision. Boot
+`echo` and `cp` for writing configuration and copying recovery files. Other
+root-level `.pxe` files and complete root-level `.pxb` directories live in
+`bin/REVISION`, one directory per kernel revision. Boot
 init binds the running kernel's directory. When that directory is missing it
 binds the archive instead, which on an installed system holds only the rescue
-set, and says so. The shell resolves bare command names through `bin://`, then
-`boot://`. An explicitly configured development catalog adds bundle command
-resolution after an absent ordinary `bin://NAME.pxe`; `bin://NAME` selects a
-registered logical alias. This is launcher resolution, not a new filesystem
-directory backend. See [development bundle lookup](../wip/program-bundles.md#unpacked-development-lookup).
+set, and says so. Shell and Lua share bare lookup: `bin://NAME.pxe`, then the
+default entry of `bin://NAME.pxb`, then an explicitly configured development
+catalog, then `boot://NAME.pxe`. Only an absent candidate permits fallback;
+a denied, malformed or incomplete candidate reports its error. Direct hits
+read no catalog and enumerate no installation directory. `bin://NAME` first
+tries a literal file, then the same bin candidates and catalog without rescue
+fallback. Explicit `.pxb` paths select the default entry. See
+[development bundle lookup](../wip/program-bundles.md#unpacked-development-lookup).
 
-The owner accepted flat bundle placement and same-name bare lookup on
-2026-10-10; these are not implemented yet. The
-[bin bundle proposal](../wip/bundles-in-bin.md) covers archive/install placement,
-lookup precedence, the development catalog and future ZIP/index integration.
+`nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and
+`bin://lua5.1.pxb` on live and installed systems. Each contains its application
+files, port notes, provenance and application/dependency notices under `app/`;
+metadata lives in `app/metadata/`. Other declared commands still need explicit
+paths or the development catalog. ZIP launch and a generated command index
+remain [future work](../wip/bundles-in-bin.md).
 
 One directory per revision is interim, until a final program update scheme
 replaces it.
@@ -65,11 +71,13 @@ replaces it.
 Install formats the pool and creates the `system`, `bin` and `home` volumes.
 [Update](system-updates.md) keeps the GPT and the contents of `system` and
 `home`. It creates `home` when it is missing, writes the new revision's programs
-into `bin`, verifies them, and only then rewrites the ESP, which is the switch
-to the new revision. An Update interrupted before the ESP changes leaves the
-disk booting its previous revision, and a rerun completes it. Afterwards it
-removes every revision directory except the new and previous ones, or none when
-the previous revision is unknown.
+into `bin`, syncs and verifies complete trees, and only then rewrites the ESP,
+which is the switch to the new revision. An Update interrupted before the ESP
+changes leaves a different previous revision bootable. A same-revision rewrite
+or an unknown previous revision can leave the booted program tree incomplete;
+a rerun clears and rewrites it. Afterwards it recursively removes every revision
+directory except the new and previous ones, or none when the previous revision
+is unknown. Cleanup is best effort after a successful update.
 
 ## Limits
 
@@ -78,7 +86,8 @@ the previous revision is unknown.
   [users work](../wip/users-and-authority.md).
 - RAM volumes are carved from one private directory boot init receives; no ABI
   creates them ([technical debt](../technical-debt.md#ram-volumes)).
-- `textfs` and `httpfs` stay in the rescue set, and only executables move
+- `textfs` and `httpfs` stay in the rescue set; plain programs and complete
+  `.pxb` trees move, while other shared data remains in the archive
   ([technical debt](../technical-debt.md#rescue-set-programs)).
 - Program revision directories are interim
   ([technical debt](../technical-debt.md#interim-program-revision-directories)).

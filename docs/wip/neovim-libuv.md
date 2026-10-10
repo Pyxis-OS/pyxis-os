@@ -89,7 +89,7 @@ without Neovim.
 5. [x] **Lua 5.1.5 with luv.** Lua 5.1.5 with its standard libraries, LPeg, luv and
    lua-compat-5.3 as one recipe set. The owner can run Lua scripts with timers
    and child processes through luv. Implemented as the [`lua51` recipe](../../ports/lua51/README.md)
-   and the `boot://share/lua51/lua5.1.pxb` bundle;
+   and the `bin://lua5.1.pxb` bundle;
    [qualification](../development/experiments/lua51-luv/README.md).
 6. [x] **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
    tree-sitter library, iconv) with host generators kept native, plus the libc
@@ -311,10 +311,10 @@ this task) and `raw-github` for the others; each matched the SHA-256 above
 before patching.
 
 1. **Delivery and authority.** The interpreter is the development bundle
-   `boot://share/lua51/lua5.1.pxb`, requesting memory, clock (read and sleep),
+   `bin://lua5.1.pxb`, requesting memory, clock (read and sleep),
    launcher and pipe creation, with random optional. libuv's loop needs pipe
-   creation, which plain programs do not receive. It is not in the default
-   command catalog; the Lua 5.5 `lua` is unchanged.
+   creation, which plain programs do not receive. Bare `lua5.1` selects its default without a catalog; the Lua 5.5 `lua`
+   is unchanged. Earlier qualification used its former archive share path.
 2. **Standard library profile.** What libc cannot do is left out or reported:
    no `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` or
    C modules; `os.time(table)` is rejected; strings compare bytewise;
