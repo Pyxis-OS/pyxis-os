@@ -115,6 +115,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex alpha** (2026-10-10): [Renoir hardware cursor](renoir-hardware-cursor.md),
+  proposal first; scaled game planes need a separate decision.
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
   the small first step is implemented and qualified; review before merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
