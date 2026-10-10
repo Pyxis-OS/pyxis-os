@@ -128,9 +128,10 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Claude** (2026-10-10): [system power overlay](system-power-overlay.md),
-  a kernel-drawn Ctrl+Alt+Delete emergency screen with Shut down, Reboot and
-  Cancel; task 1 in #659, natively checked except the installed-system flush.
+- **Claude** (2026-10-10): [Neovim task 5](neovim-libuv.md#task-5-decisions),
+  Lua 5.1.5 with LPeg, luv and lua-compat-5.3. The
+  [system power overlay](system-power-overlay.md) is merged (#659); its
+  installed-system flush check is pending.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its

@@ -239,9 +239,9 @@ address; it adds no signal-mask handling or kernel context-switch interface.
 
 The `<math.h>` subset provides `floor`, `floorf`, `ceil`, `ceilf`, `round`, `roundf`,
 `rintf`, `lrint`, `lrintf`, `llrintf`, `modf`, `fmod`, `fmodf`, `pow`, `powf`,
-`expf`, `log`, `logf`, `log10`, `log10f`, `sqrt`, `sqrtf`, `sin`,
-`sinf`, `cos`, `cosf`, `tan`, `tanf`, `acosf`, `atan`, `atanf`, `atan2`,
-`atan2f`, `frexp`, `ldexp`, `scalbn`, `fabs`, `fabsf`, `scalbnl`, `ldexpl`,
+`exp`, `expf`, `expm1`, `log`, `logf`, `log10`, `log10f`, `sqrt`, `sqrtf`, `sin`,
+`sinf`, `cos`, `cosf`, `tan`, `tanf`, `asin`, `acos`, `acosf`, `atan`, `atanf`,
+`atan2`, `atan2f`, `sinh`, `cosh`, `tanh`, `frexp`, `ldexp`, `scalbn`, `fabs`, `fabsf`, `scalbnl`, `ldexpl`,
 `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources,
 and POSIX's `M_*` constants with musl's values. The `rint` family rounds in the
 current rounding mode. `round` and `roundf`

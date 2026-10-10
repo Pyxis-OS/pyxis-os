@@ -1635,9 +1635,19 @@ editing or deleting a live revision is unsupported.
 ## Native libuv first-slice limits
 
 The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
-stream/process interests per loop and synchronous filesystem calls. Child cwd,
+stream/process interests per loop and synchronous filesystem calls. Child
 bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
-APIs are omitted. Luv/Neovim must consume native stat validity and exit reasons,
-handle unsupported PIDs/signals, and close remaining libc/API gaps. Revisit in
-[Neovim tasks 5 and 6](wip/neovim-libuv.md#tasks); serving providers in a libuv
-loop needs a receiver adapter. Shared-process threads require a separate milestone.
+APIs are omitted. Luv consumes the native exit reasons and reports unsupported
+PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
+Neovim must still consume native stat validity and close remaining libc/API gaps
+in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
+receiver adapter. Shared-process threads require a separate milestone.
+
+## Lua 5.1 and luv limits
+
+The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
+`io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules, and reject `os.time(table)`, until libc has
+`popen`/`system`, `clock`, locales, `setvbuf`, `mktime` and dynamic loading. luv reports TCP, UDP, DNS, watches, signals, work queues,
+callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
+descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
+[task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.
