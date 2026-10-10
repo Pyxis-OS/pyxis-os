@@ -541,25 +541,29 @@ static void receive_udp(struct bridge *bridge, uint64_t now)
     return;
   }
   bool valid = false;
+  size_t reply_offset = packet.length > 1 &&
+      (packet.payload[0] == '+' || packet.payload[0] == '-') ? 1 : 0;
+  const uint8_t *reply_bytes = packet.payload + reply_offset;
+  size_t reply_length = packet.length - reply_offset;
   /* The reply can race its RSP acknowledgement on the independent UDP path.
    * Accept a retained result after local retirement without replaying it to GDB. */
   bool completed_reply = bridge->completed.command &&
       packet.command == bridge->completed.command &&
       ((packet.length == 1 && (packet.payload[0] == '+' || packet.payload[0] == '-')) ||
-       (packet.length == bridge->completed.length &&
-        !memcmp(packet.payload, bridge->completed.bytes, packet.length)));
+       (reply_length == bridge->completed.length &&
+        !memcmp(reply_bytes, bridge->completed.bytes, reply_length)));
   if (bridge->phase == BRIDGE_STOPPED && packet.kind == DEBUG_DATA &&
       packet.sequence && rsp_valid(packet.payload, packet.length) &&
       ((bridge->pending_command && packet.command == bridge->pending_command) || completed_reply)) {
     if (packet.sequence == bridge->rx_sequence + 1 && bridge->rx_sequence != UINT64_MAX) {
-      bool new_reply = packet.payload[0] == '$';
+      bool new_reply = reply_length && reply_bytes[0] == '$';
       bool forward = !completed_reply;
       size_t retry_index = RECORD_COUNT;
       for (size_t i = 0; new_reply && i < bridge->reply_count; ++i) {
         size_t index = (bridge->reply_head + i) % RECORD_COUNT;
         struct record *reply = &bridge->replies[index];
-        if (reply->command == packet.command && reply->length == packet.length &&
-            !memcmp(reply->bytes, packet.payload, packet.length)) {
+        if (reply->command == packet.command && reply->length == reply_length &&
+            !memcmp(reply->bytes, reply_bytes, reply_length)) {
           new_reply = false;
           forward = bridge->reply_retry[index];
           retry_index = index;
@@ -579,8 +583,8 @@ static void receive_udp(struct bridge *bridge, uint64_t now)
       if (new_reply) {
         size_t index = (bridge->reply_head + bridge->reply_count) % RECORD_COUNT;
         struct record *reply = &bridge->replies[index];
-        memcpy(reply->bytes, packet.payload, packet.length);
-        reply->length = packet.length;
+        memcpy(reply->bytes, reply_bytes, reply_length);
+        reply->length = reply_length;
         reply->command = packet.command;
         bridge->reply_retry[index] = false;
         ++bridge->reply_count;

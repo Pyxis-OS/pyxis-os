@@ -16,8 +16,17 @@ static int hex_digit(uint8_t byte)
 
 bool rsp_valid(const uint8_t *bytes, size_t length)
 {
+  if (!length || length > DEBUG_PAYLOAD_BYTES) {
+    return false;
+  }
   if (length == 1) {
     return bytes[0] == '+' || bytes[0] == '-' || bytes[0] == 3;
+  }
+  /* The target may coalesce the request acknowledgement and its reply into
+   * one transport record. TCP parsing still emits each record separately. */
+  if (length > 1 && (bytes[0] == '+' || bytes[0] == '-')) {
+    ++bytes;
+    --length;
   }
   if (length < 4 || length > DEBUG_PAYLOAD_BYTES || bytes[0] != '$' ||
       bytes[length - 3] != '#') {
