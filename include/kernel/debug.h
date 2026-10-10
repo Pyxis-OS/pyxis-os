@@ -6,6 +6,10 @@
 
 struct boot_options;
 
+#define DEBUG_CODE __attribute__((section(".text.debug")))
+#define DEBUG_DATA __attribute__((section(".bss.debug")))
+#define DEBUG_RODATA __attribute__((section(".rodata.debug")))
+
 /* Boot BSP, IF=0, after driver/display preparation and before AP startup. */
 void debug_prepare(const struct boot_info *boot,
                     const struct boot_options *options);
