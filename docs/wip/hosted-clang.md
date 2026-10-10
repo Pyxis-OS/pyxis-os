@@ -64,7 +64,9 @@ with a documented adapter; do not weaken libc's policy to satisfy those modes.
 Shared [working path and environment](../userland/process-state.md) now supply
 `chdir`, `getcwd`, `getenv`, `setenv` and `unsetenv`, with explicit child snapshots.
 The table preserves the earlier probe results; those functions are delivered.
-There is no writable `environ`; proved `realpath` is the next slice.
+There is no writable `environ`. Task 6 slice 2 adds bounded
+[proved realpath](../userland/paths.md#proved-realpath) and
+[fdopen/dup association](../userland/stdio.md#opening-and-ownership).
 
 ## Process boundary
 

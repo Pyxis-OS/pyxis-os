@@ -355,4 +355,6 @@ qualification processes are stopped. Stop for owner review of task 3.
 Shared [working path and environment](../userland/process-state.md) now provide
 `chdir`/`getcwd` and `setenv`/`unsetenv`, superseding those gaps in the earlier
 probe tables. Children receive explicit snapshots; no writable `environ` or
-`putenv` is supplied. The bounded proved `realpath` remains the next slice.
+`putenv` is supplied. The bounded [proved `realpath`](../userland/paths.md#proved-realpath) and
+[fdopen/dup association](../userland/stdio.md#opening-and-ownership) are delivered
+by Neovim task 6 slice 2; remaining process/stream assumptions still need adaptation.

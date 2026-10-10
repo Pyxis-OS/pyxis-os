@@ -19,8 +19,8 @@ stale while retained directories remain valid. Unknown launch spelling returns
 ENOTSUP; relative operations still use the real chain, and an explicit scheme
 change establishes a description. A short buffer returns ERANGE unchanged.
 `getcwd(NULL, 0)` allocates an exact-sized result released with `free`.
-`realpath` remains unimplemented: its next slice must prove the returned spelling
-through a second lookup and valid live identity comparison.
+`realpath` supplies a separately [proved bounded spelling](paths.md#proved-realpath);
+`getcwd` remains descriptive even when such proof fails.
 
 `getenv`, `setenv` and `unsetenv` use copied strings. Names are case-sensitive,
 nonempty and exclude `=`; empty values differ from absence. `overwrite == 0`
