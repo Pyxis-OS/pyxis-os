@@ -104,7 +104,9 @@ void usb_host_notify(struct usb_host_controller *controller);
  * Wait expiry leaves receives posted. Take borrows no destination beyond return.
  * Terminal failure precedes queued data; ack_loss follows class source release.
  * Prepared and retired backing is retained until reboot. */
+/* HCI and hub receive capacity remains independent from the HID profile. */
 size_t usb_host_interrupt_capacity(void);
+size_t usb_host_hid_interrupt_capacity(void);
 enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
                                                 const struct usb_interrupt_endpoint *endpoint,
                                                 size_t receive_bytes, enum usb_interrupt_kind kind,

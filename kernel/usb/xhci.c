@@ -91,7 +91,7 @@ struct xhci_interrupt_receive {
 };
 struct xhci_interrupt_record {
   struct usb_interrupt_completion completion;
-  uint8_t bytes[USB_INTERRUPT_BYTES];
+  uint8_t bytes[USB_HID_INTERRUPT_BYTES];
 };
 struct usb_host_interrupt {
   struct usb_host_device *device;
@@ -809,8 +809,9 @@ static bool allocate_async_bulk(struct usb_host_controller *controller)
 
 static bool allocate_interrupts(struct usb_host_controller *controller)
 {
-  _Static_assert(USB_INTERRUPT_BYTES && USB_INTERRUPT_BYTES <= PAGE_SIZE,
-                 "a prepared interrupt buffer fits one page and one Normal TRB boundary");
+  _Static_assert(USB_INTERRUPT_BYTES && USB_INTERRUPT_BYTES <= USB_HID_INTERRUPT_BYTES &&
+                 USB_HID_INTERRUPT_BYTES <= PAGE_SIZE,
+                 "prepared interrupt capacities fit one page and one Normal TRB boundary");
   _Static_assert(USB_INTERRUPT_RECEIVES && USB_INTERRUPT_RECEIVES < XHCI_RING_TRBS,
                  "posted interrupt receives fit the usable transfer ring");
   _Static_assert(USB_INTERRUPT_COMPLETIONS, "interrupt completion queue is nonempty");
@@ -2977,6 +2978,11 @@ size_t usb_host_interrupt_capacity(void)
   return USB_INTERRUPT_BYTES;
 }
 
+size_t usb_host_hid_interrupt_capacity(void)
+{
+  return USB_HID_INTERRUPT_BYTES;
+}
+
 static struct usb_host_interrupt *device_interrupt(const struct usb_host_device *device, unsigned dci)
 {
   for (unsigned i = 0; i < USB_HID_ENDPOINTS_PER_DEVICE; ++i) {
@@ -3009,12 +3015,13 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
     return USB_UNSUPPORTED;
   }
   unsigned packet_max = speed == USB_SPEED_LOW ? 8 : speed == USB_SPEED_FULL ? 64 : 1024;
+  size_t receive_capacity = kind == USB_INTERRUPT_HID ? USB_HID_INTERRUPT_BYTES : USB_INTERRUPT_BYTES;
   if (!endpoint || !(endpoint->address & USB_ENDPOINT_DIRECTION_IN) ||
       !(endpoint->address & USB_ENDPOINT_NUMBER) || (endpoint->address & USB_ENDPOINT_RESERVED) ||
       !endpoint->interval || !endpoint->packet || endpoint->packet > packet_max ||
       (speed == USB_SPEED_HIGH ? endpoint->interval > 16 || endpoint->transactions > 2 :
                                 endpoint->transactions != 0) ||
-      !receive_bytes || receive_bytes > USB_INTERRUPT_BYTES || kind > USB_INTERRUPT_HUB) {
+      !receive_bytes || receive_bytes > receive_capacity || kind > USB_INTERRUPT_HUB) {
     return USB_INVALID;
   }
   if ((!controller->enumerating && kind != USB_INTERRUPT_HID) ||

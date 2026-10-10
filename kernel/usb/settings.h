@@ -17,6 +17,8 @@
 #define USB_ASYNC_BULK_COMPLETIONS 8
 /* Maximum HCI event: two header bytes plus 255 parameter bytes. */
 #define USB_INTERRUPT_BYTES 257
+/* USB 2 high-speed interrupt endpoints permit 1024-byte packets. */
+#define USB_HID_INTERRUPT_BYTES 1024
 #define USB_HID_DEVICE_BUDGET 32
 #define USB_HID_ENDPOINTS_PER_DEVICE 2
 #define USB_HUB_INTERRUPT_DEVICE_BUDGET 32
