@@ -253,12 +253,26 @@ when a failure appears.
 ## Renoir inherited pitch and firmware reservations
 
 [Native flip inventory](development/experiments/renoir-flip-inventory/README.md)
-confirms BAR0/GOP correlation and the 512 MiB UMA range. Raw pitch `0x780` remains
-unexplained against GOP 7680 bytes and Linux's pixels-minus-one convention;
-qualify effective row stride before any write-backend layout. The owner accepted
+confirms BAR0/GOP correlation and the 512 MiB UMA range. The owner accepted
+the unsheared native GOP image as evidence of a 7680-byte effective stride for
+raw pitch `0x780` on 2026-10-09. Preserve that register; the Linux convention
+would normally write `0x77f`. Other inherited modes remain unqualified. The owner accepted
 Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
 reservations if new firmware/client ranges appear; retain the low prefix and
-last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers.
+last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers. The [task-2 backend](development/experiments/renoir-flip-backend/README.md)
+is opt-in: normal completion and game play were natively qualified at `9254f5c8`
+on 2026-10-10. Timeout recovery, panic visibility and unreported capture/input
+checks remain unqualified; revisit in task 3. Interrupts, three surfaces and
+blanking stay deferred.
+
+## Renoir steady-state validation cost
+
+The [native flip run](development/experiments/renoir-flip-backend/README.md#native-success--2026-10-10)
+spends roughly 3 ms cumulative validation elapsed per frame (about 8 polls at 369 µs
+mean). Full double-snapshot PCI/route/layout checks on every poll occupy the BSP.
+Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-presentation.md#proposed-cheaper-steady-state-polling):
+light reads are hints; full validation must guard writes, retirement, capture and
+fallback. Detection cadence needs owner acceptance; no optimization is implemented.
 
 ## Native Renoir presentation qualification
 
@@ -276,9 +290,10 @@ phasing, sleeping or polling. The existing period estimator remains inaccurate;
 EDID anchoring and its overhaul were dropped by the owner. Default remains
 unsynchronized `observe`. Run the
 [two-boot safety recheck](development/experiments/renoir-presentation/README.md#native-safety-recheck)
-before claiming the scheduling/logging regression resolved. Reduced tearing,
-accurate native timing and GPU flip presentation remain unqualified; revisit
-through the owner's separate flip proposal, not default timed-copy enablement.
+before claiming the scheduling/logging regression resolved. The observer’s
+tearing effect and counter-derived timing remain unqualified. The separately qualified
+opt-in flip backend does not qualify the observer; revisit its safety recheck
+without default timed-copy enablement.
 
 Register-window identity bounds access without PCI sizing writes; native BAR
 allocation length and GOP/HUBP routing are not independently decoded. Only the

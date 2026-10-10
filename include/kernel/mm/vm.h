@@ -71,6 +71,10 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
  * Caller must exclude RAM/cache aliases. Never free MMIO frames through PMM;
  * undo with vm_unmap and release the virtual reservation. Before AP startup. */
 enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
+/* Boot-only driver-owned scanout page, RW/NX/WC; caller excludes aliases. */
+enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical);
+/* BSP IF=0, before publication: scan all kernel VM ranges for physical aliases. */
+bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes);
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical);
 /* Protect one mapped page in a reservation or VM-owned allocation. */

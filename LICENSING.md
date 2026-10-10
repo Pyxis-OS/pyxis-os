@@ -45,8 +45,8 @@ source and conversion are recorded in [the asset note](assets/ui/volume/README.m
 - `tools/remote/vendor/sha256.c` and `tools/remote/sha256.h`: the imported
   SHA-256 implementation/interface is public domain; see its retained notice
   and [source provenance](tools/remote/vendor/UPSTREAM.md).
-- `arch/x86_64/amd/renoir_registers.h` and the firmware inventory adapt AMD
-  MIT register/table definitions. Pinned provenance, local changes and complete
+- `arch/x86_64/amd/renoir_registers.h` the firmware inventory and bounded flip backend adapt AMD DC
+  MIT register/table definitions, mono flip ordering and completion/state decoding. Pinned provenance, local changes and complete
   retained notices are in [arch/x86_64/amd/NOTICE](arch/x86_64/amd/NOTICE); kernel
   bundles and images retain it at `boot://share/licenses/kernel-amd/NOTICE`.
 - `kernel/fb/font.c`: Bizcat font data by Robey Pointer retains the CC BY 4.0
