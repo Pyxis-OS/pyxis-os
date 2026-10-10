@@ -4,6 +4,7 @@
 #include <abi/endpoint.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/object/capability.h>
 #include <kernel/service/request.h>
 
 struct process;
@@ -17,14 +18,19 @@ struct endpoint {
 
 struct endpoint_create_request {
   struct bsp_request request;
-  struct process *loan; /* Exclusive capability table and endpoint owner list. */
+  struct process *owner; /* Kept alive by the admitted caller. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[2];
   struct endpoint_create_reply reply;
   enum call_status result;
 };
 
 struct endpoint_export_request {
   struct bsp_request request;
-  struct process *loan; /* Exclusive table; its receiver authority stays live. */
+  struct process *owner; /* Kept alive by the admitted caller. */
+  struct capability_reference receiver;
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[1];
   struct endpoint_export_message input;
   struct endpoint_export_reply reply;
   enum call_status result;
