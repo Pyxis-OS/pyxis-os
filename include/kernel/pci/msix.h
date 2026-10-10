@@ -36,4 +36,12 @@ bool pci_msix_prepare(struct pci_msix *msix, uint8_t vector);
 bool pci_msix_enable(struct pci_msix *msix);
 bool pci_msix_disable(struct pci_msix *msix);
 
+/* Exclusive prepared-device owner, IF=0. Direct mapped entry only: no PCI
+ * configuration, owner/GS lookup, allocation or DMA mutation. Save and restore
+ * exact control with readback; false retains the caller's device ownership. */
+bool pci_msix_mask_prepared_entry(const struct pci_msix *msix,
+    unsigned entry, uint32_t *saved_control);
+bool pci_msix_restore_prepared_entry(const struct pci_msix *msix,
+    unsigned entry, uint32_t saved_control);
+
 #endif

@@ -1,5 +1,7 @@
 #include <kernel/memory.h>
 #include <kernel/net/driver.h>
+#include <kernel/net/debug.h>
+#include <kernel/net/panic_tx.h>
 #include <kernel/net/ethernet.h>
 #include <kernel/virtio/net.h>
 #include <kernel/net/rtl8111.h>
@@ -19,6 +21,31 @@ static struct controller bound;
 /* Publish the immutable selection before activation. Fatal entry can close
  * its driver gate even when activation is interrupted. */
 static atomic_int panic_kind;
+static atomic_bool handoff_enabled;
+static uint32_t handoff_cpu;
+static bool debug_enabled;
+
+void net_panic_context_enable(void)
+{
+  handoff_cpu = cpu_initial_apic_id();
+  atomic_store_explicit(&handoff_enabled, true, memory_order_release);
+}
+
+bool net_panic_context_enabled(void)
+{
+  return atomic_load_explicit(&handoff_enabled, memory_order_acquire);
+}
+
+uint32_t net_panic_context_cpu(void)
+{
+  return handoff_cpu;
+}
+
+void net_driver_debug_enable(void)
+{
+  net_panic_context_enable();
+  debug_enabled = true;
+}
 
 static bool same_controller(struct controller a, struct controller b)
 {
@@ -291,4 +318,68 @@ enum net_result net_driver_transmit(const void *frame, size_t length)
 {
   return bound.kind == DRIVER_VIRTIO ? virtio_net_transmit(bound.virtio, frame, length) :
     bound.kind == DRIVER_RTL8111 ? rtl8111_transmit(bound.rtl, frame, length) : NET_UNAVAILABLE;
+}
+
+bool net_driver_debug_ready(struct net_debug_device *device)
+{
+  net_worker_assert_context();
+  if (!debug_enabled || !device) {
+    return false;
+  }
+  *device = (struct net_debug_device){0};
+  return bound.kind == DRIVER_VIRTIO ? virtio_net_debug_ready(bound.virtio, device) :
+    bound.kind == DRIVER_RTL8111 && rtl8111_debug_ready(bound.rtl, device);
+}
+
+bool net_driver_debug_service(void)
+{
+  net_worker_assert_context();
+  return bound.kind == DRIVER_VIRTIO ? virtio_net_debug_service(bound.virtio) :
+    bound.kind == DRIVER_RTL8111 && rtl8111_debug_service(bound.rtl);
+}
+
+enum net_debug_status net_driver_debug_begin(uint64_t generation)
+{
+  if (!debug_enabled || !generation) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  enum driver_kind kind = atomic_load_explicit(&panic_kind, memory_order_acquire);
+  return kind == DRIVER_VIRTIO ? virtio_net_debug_begin(bound.virtio, generation) :
+    kind == DRIVER_RTL8111 ? rtl8111_debug_begin(bound.rtl, generation) :
+    NET_DEBUG_UNAVAILABLE;
+}
+
+enum net_debug_status net_driver_debug_poll(uint64_t generation,
+    void *frame, size_t capacity, size_t *length)
+{
+  *length = 0;
+  return bound.kind == DRIVER_VIRTIO ?
+    virtio_net_debug_poll(bound.virtio, generation, frame, capacity, length) :
+    bound.kind == DRIVER_RTL8111 ?
+    rtl8111_debug_poll(bound.rtl, generation, frame, capacity, length) :
+    NET_DEBUG_UNAVAILABLE;
+}
+
+enum net_debug_status net_driver_debug_transmit(uint64_t generation,
+    const void *frame, size_t length)
+{
+  return bound.kind == DRIVER_VIRTIO ?
+    virtio_net_debug_transmit(bound.virtio, generation, frame, length) :
+    bound.kind == DRIVER_RTL8111 ?
+    rtl8111_debug_transmit(bound.rtl, generation, frame, length) :
+    NET_DEBUG_UNAVAILABLE;
+}
+
+enum net_debug_status net_driver_debug_restore(uint64_t generation)
+{
+  return bound.kind == DRIVER_VIRTIO ? virtio_net_debug_restore(bound.virtio, generation) :
+    bound.kind == DRIVER_RTL8111 ? rtl8111_debug_restore(bound.rtl, generation) :
+    NET_DEBUG_UNAVAILABLE;
+}
+
+bool net_driver_debug_retained(void)
+{
+  enum driver_kind kind = atomic_load_explicit(&panic_kind, memory_order_acquire);
+  return kind == DRIVER_VIRTIO ? virtio_net_debug_retained(bound.virtio) :
+    kind == DRIVER_RTL8111 && rtl8111_debug_retained(bound.rtl);
 }

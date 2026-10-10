@@ -51,6 +51,12 @@ void virtio_net_queue_notify(const struct virtio_net_queue *queue);
 bool virtio_net_queue_complete(struct virtio_net_queue *queue,
     struct virtio_net_completion completed[VIRTIO_NET_QUEUE_SIZE], unsigned *count);
 
+/* Stopped exclusive owner. Check software/DMA publication agreement without
+ * changing it. Post returns false rather than invoking fatal assertions. */
+bool virtio_net_queue_debug_coherent(const struct virtio_net_queue *queue);
+bool virtio_net_queue_debug_post(struct virtio_net_queue *queue,
+    unsigned id, size_t bytes);
+
 /* Fatal owner only, IF=0, after the controller gate has closed permanently.
  * These use DMA indices, never partially updated normal ownership metadata. */
 bool virtio_net_queue_panic_begin(struct virtio_net_queue *queue);

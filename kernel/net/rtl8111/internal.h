@@ -29,6 +29,11 @@ struct rtl8111_controller {
   bool identity_known, started, active, link_up, stopping;
   struct rtl_ring rx, tx;
   struct net_panic_gate panic_gate;
+  struct {
+    uint32_t msix_control, tx_owned;
+    uint16_t interrupt_mask;
+    bool failed;
+  } debug;
   bool panic_ready, panic_duplicate;
   unsigned panic_slot, panic_interrupted_slot;
   struct dma_buffer counters;
