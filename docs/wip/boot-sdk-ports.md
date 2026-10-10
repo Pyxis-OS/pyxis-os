@@ -103,6 +103,9 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-09): [machine settings, task 1](machine-settings.md#task-1-contract),
   hostname store/validation, boot selection, native query and print-only command.
+- **Codex epsilon** (2026-10-10): [Neovim task 4](neovim-libuv.md#task-4-preflight),
+  native libuv backend. Preflight source audit complete; material choices and
+  the libuv mirror precede code. Tasks 1 and 2 are merged.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.

@@ -1,7 +1,8 @@
 # Neovim on Pyxis
 
-Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651.**
-Task 2 is implemented in the current review, with its accepted contract and qualification linked below.
+Status: **milestone decisions accepted 2026-10-10; tasks 1 and 2 merged in #651 and #656.**
+Task 4 is assigned; its [preflight](#task-4-preflight) awaits the source mirror and
+the material decisions below before code. Task 3 remains unassigned.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -112,6 +113,108 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
    TCC retains one stream per once object until normal/error translation-unit
    cleanup; borrowed stdin remains caller-owned. Argument files are outside
    shell protection; identity supplies no mutation lease.
+
+### Task 4 preflight
+
+**Inspected 2026-10-10 at main `6f318e0c`; no implementation or runtime qualification.**
+The first task remains the native loop/child-output relay with a timer. Pool,
+worker creation/join, asynchronous filesystem submissions, sockets, watches,
+loading modules and signals return unsupported errors.
+
+The requested mirror is the existing manifest pin: libuv **v1.52.1**, commit
+`1cfa32ff59c076ffb6ed735bbc8c18361558661f`, archive
+`https://github.com/libuv/libuv/archive/v1.52.1.tar.gz`, SHA-256
+`478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c`.
+The checksum is recorded in Neovim's pinned `cmake.deps/deps.txt`; it has not
+been recomputed against an owner mirror. Preserve upstream `LICENSE` (MIT) and
+`LICENSE-extra` (including BSD-2-Clause tree.h and ISC inet routines where used).
+Inspection copies are not build sources; builds wait for the owner mirror.
+
+**Proposed material defaults; not accepted:**
+
+1. **Complete native console output readiness/try operations here.** Application
+   console/output currently has no WRITABLE interest, and terminal output WRITE
+   waits when its record queue is full ([wait implementation](../../kernel/user/wait.c),
+   [terminal queue](../../kernel/object/terminal.c)). Add bounded
+   `CONSOLE_TRY_WRITE` and matching WRITABLE/WRITE_CLOSED observation, returning
+   short progress or WOULD_BLOCK with wake-before-park ordering. Record overhead
+   counts toward capacity; blocking WRITE retains its existing behavior. This
+   adds a native prerequisite and qualification for tabs, mux and remote output.
+   Accepting blocking output instead would let backpressure stall timers and
+   child reads, contradicting the requested responsive stream behavior.
+2. **Pipe creation is explicit bundle authority.** Ordinary foreground commands
+   currently receive a child launcher where available, but pipe CREATE is
+   session-only ([shell delegation](../../userspace/shell/launch.c)). Add a
+   recognized `pipe/create` bundle request and make it available to requested
+   foreground bundles when the supplying shell holds it. Plain-program
+   delegation stays as today; missing required authority rejects admission.
+   Package the relay sample as an unpacked bundle requesting memory, clock,
+   launcher and pipe grants. Child launch forwards explicit stdio and a selected
+   ordinary application profile within the caller's actual authority; it does
+   not copy session/system authority indiscriminately. The smaller alternative
+   is session-handoff-only qualification, postponing ordinary bundle launch.
+3. **Expose native result validity rather than invent Unix metadata/results.**
+   Add Pyxis validity to libuv stat results, preserving known type/size and each
+   available domain/object/mtime; other Unix fields remain explicitly unknown.
+   Expose the native EXITED/FAULTED/TERMINATED reason on the process handle.
+   Ordinary exits retain their status; fault/termination callbacks report -1
+   with term_signal zero and the distinct native reason, never a fabricated
+   Unix signal or successful status zero. Keep the real observer internally;
+   numeric PID fields/accessors have a documented unavailable/unsupported value
+   (negative UV_ENOSYS), not an invented PID. Later luv/Neovim adapters must
+   consume these native fields/errors. Closing a libuv process handle stops
+   observation, not the child; signal/kill APIs remain unsupported.
+
+Implementation follows existing ownership and bounds: libc owns `uv_file`
+integer descriptors. A small native libc bridge must adopt handles atomically
+and provide descriptor-aware try I/O; no competing fd table or raw-handle bypass
+of read-ahead. Stream-open transfers descriptor responsibility. Unsupported
+extra stdio slots, duplex pipes, shared FILE cursor inheritance and unsupported
+spawn options reject before launch. Submitted writes borrow buffers until one
+terminal callback; close cancels remaining writes before its close callback.
+
+The loop admits at most the native 32 interests, reserving one for its coalesced
+async wake reader: reject excess admission with UV_ENOSPC before activating I/O
+or publishing a child, rather than splitting an atomic wait into polling batches.
+Timers use no interest; waits longer than 30 seconds are capped and recomputed.
+`uv_async_send` supports this one-thread process only, without claiming thread
+or signal safety. Mutexes include real recursive depth; once/key state and
+`uv_thread_self`/equality work for the sole thread. Creation/join/pool work fail.
+
+#### Early Neovim pool audit
+
+Inspected exact Neovim/luv/libuv pins from the table below. Core startup, ordinary
+native file opening and `:w`, with swap/backup off and excluded APIs absent from
+configuration, reached **no pool submission, worker creation/join or callback-style
+filesystem request**. This is a source audit, not an instrumented host run or a
+claim that unmodified Neovim already starts on this backend.
+
+- [loop_init][N-loop] initializes mutex, async wake and timers; runtime search
+  uses a mutex and logging needs a recursive mutex. [Lua initialization][N-lua]
+  calls luaopen_luv and uv_thread_self. Luv [work initialization][L-work]
+  creates mutex/once/key state and allocates Lua-state slots, without submitting
+  work; refusing those initializers aborts startup.
+- [C filesystem wrappers][N-fs], including open/close/stat/fstat/fsync and
+  [regular-file streams][N-read]/[N-write], pass NULL callbacks. File read/save
+  also use libc read/write. Luv src/fs.c selects a NULL callback when no Lua
+  callback is supplied; libuv's [fs dispatch][U-fs-code] runs those synchronously.
+- Lua package initialization requires vim._init_packages and core modules;
+  default callbacks use timers without work submissions. The optional Lua
+  loader's file calls are synchronous. vim._watch.watchdirs uses callback-style
+  fs_stat when watching; explicit luv work/thread APIs submit work/create threads.
+  Watches, those APIs and arbitrary configuration invoking them are excluded.
+- Signal initialization is unconditional in upstream loop_init; unsupported
+  signals still need a Neovim platform adaptation in task 6. The audit establishes
+  the pool conclusion, not closure of every native startup dependency.
+
+**Endpoint receivers need no new readiness in this slice.** Child/editor RPC
+uses byte pipes. Synchronous FILE client calls may invoke a provider and block
+(as their API permits); callback-style fs is rejected. Serving provider requests
+inside a libuv loop would require receiver readiness and remains a separate task.
+
+Resume after decisions/mirror: baseline on the selected main, userland bridge
+and native console prerequisite, then ports backend/sample, matched QEMU/GDB
+qualification and dependency-first PRs. No later milestone task starts here.
 
 ### Mirrors the owner must provide
 
