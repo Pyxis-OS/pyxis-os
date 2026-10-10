@@ -12,8 +12,9 @@ merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
 matched comparison and 1/4-CPU inspection. Task 4, VM activity and buffer leases,
 is owner-assigned and implemented on this branch; its
 [qualification](../development/experiments/threads-task4/README.md) separates
-nested-QEMU evidence from the owner-run native A/B; native pages/launch costs
-and the proposed string-capture fix await owner review. The remaining proposal
+nested-QEMU evidence from the owner-run native A/B. The owner accepts the BSP
+MEMORY latency follow-up; bounded string capture is implemented and its native
+rerun is pending. The remaining proposal
 originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)

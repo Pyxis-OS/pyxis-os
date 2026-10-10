@@ -213,20 +213,44 @@ and releases a guarded borrower for every byte. This is avoidable. No native
 trace apportions the observed roughly 229–265 microseconds extra per launch
 among string capture, other accounting, occasional heap growth and client time.
 
-**Recommendation, awaiting owner decision:** fix bounded string capture before
-merge: one short lease, page-aware validation, stop at NUL, retain the capture
-budget/overflow/error rules and release before allocation or any wait. Consider
-collapsing nested FILE/endpoint leases as a separate small follow-up, retaining
-one global outer borrower and balanced task-local nesting. Batch child mappings
-is already the preparation ownership model and saves no new task-4 transaction.
-Skipping drain by task count or restoring AP/current-root MEMORY mutation would
-weaken the accepted BSP/departure contract; the generic zero-activity fast path
-already works when siblings later appear. Accept remaining MEMORY handoff cost
-with the recorded latency follow-up after owner review; do not add a single-task
-bypass. Rerun matched native pages/launch after the string fix before claiming its
-benefit. Existing `allocbench ... --profile` can separate service from total,
-which now also includes handoff/drain/resumption, but cannot isolate every phase.
-No code changed for this analysis.
+**Owner accepted:** retain the generic zero-activity fast path and accept the
+remaining BSP MEMORY round trip (about 1.6–4.2 microseconds per mutation) as a
+[latency follow-up](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation),
+without a task-count bypass. Fix bounded string capture before merge and rerun
+native pages, launch and IPC; that rerun remains pending.
+
+### Bounded capture qualification
+
+Implementation `48b8b98d`: one short lease per string, page-aware validation and
+byte copying through NUL; unchanged capture budget, overflow checks and
+BAD_BUFFER/BAD_REQUEST mapping. Each page is validated only when reached, and
+failure unwinds the lease before returning. RAM/INITRD prefix reads reuse their
+existing outer lease for full-output validation and header copy, removing
+redundant nested borrows on the launch path. Global borrower accounting, other
+nested paths, BSP mutation and the public ABI are unchanged. Source review found
+no blockers; invalid addresses and final-byte/page-edge rules are source-inspected.
+
+Ordinary source image build passed with the same SDK/userland/ports, compiler,
+config and byte-identical integration initrd. ELF SHA-256
+`a698895584743f13546a506b2c1299fef097c05e0229866f0e559c07a54f650b`, ISO
+`0a320c42639c929706df6b38b3e43be52ecb9f9971039a5ca5778b635fceccd9`.
+Same QEMU configuration, fresh 1/4-CPU boots, matching-ELF GDB with injected calls
+disabled. Ordinary Lua launches passed with empty and 8,192-byte arguments. GDB
+observed the long copy crossing a page boundary with one process/task borrower,
+returning OK with 8,193 copied bytes and zero borrowers; empty copy returned one.
+A 65,500-byte argument exhausted the remaining capture budget: GDB saw TOO_LONG,
+zero copied result/borrowers, then CALL_BAD_REQUEST (4) reached Lua and FINAL
+1/complete. No child/output was published for that refused launch.
+
+On four CPUs GDB observed INITRD prefix data/header copy on CPU1 with one borrower,
+then OK/1,033 bytes and zero borrowers. Sixty-four ordinary child launches and all
+four IPC workloads (256 messages, five rounds each) completed with all 20 passes
+verified, zero failures/rejects and FINAL 0/complete. Normal provider/pipe and RAM
+create/read/rename/remove passed. Pages had 800 allocations/releases and zero
+failures on each CPU count. These are functional checks; debugger runs and single
+page samples establish no timing improvement. Invalid-pointer injection and new
+test infrastructure were not added. Captures are in ignored `build/task4-string`;
+owned VMs/debuggers/clients stopped. Native benefit awaits the owner's rerun.
 
 ### Hands-free commands
 
