@@ -54,7 +54,7 @@ struct bridge {
   struct record completed;
   struct record records[RECORD_COUNT];
   size_t record_head, record_count;
-  uint8_t transmit[DEBUG_DATAGRAM_BYTES];
+  uint8_t transmit[DEBUG_PACKET_DATAGRAM_BYTES];
   size_t transmit_length;
   uint8_t tcp_queue[TCP_QUEUE_BYTES];
   size_t tcp_length;
@@ -272,7 +272,7 @@ static void send_bytes(struct bridge *bridge, const uint8_t *bytes, size_t lengt
 static void send_packet(struct bridge *bridge, const struct debug_packet *packet,
                         const struct sockaddr_in *destination)
 {
-  uint8_t bytes[DEBUG_DATAGRAM_BYTES];
+  uint8_t bytes[DEBUG_PACKET_DATAGRAM_BYTES];
   size_t length = debug_encode(bytes, packet);
   if (length) {
     send_bytes(bridge, bytes, length, destination);
@@ -345,7 +345,7 @@ static void start_record(struct bridge *bridge, uint64_t now)
     return;
   }
   struct record *record = &bridge->records[bridge->record_head];
-  struct debug_packet packet = packet_header(bridge, DEBUG_DATA);
+  struct debug_packet packet = packet_header(bridge, DEBUG_PACKET_DATA);
   packet.sequence = ++bridge->tx_sequence;
   packet.command = record->command;
   packet.payload = record->bytes;
@@ -503,7 +503,7 @@ static void receive_offer(struct bridge *bridge, const struct debug_packet *pack
 
 static void receive_udp(struct bridge *bridge, uint64_t now)
 {
-  uint8_t bytes[DEBUG_DATAGRAM_BYTES + 1];
+  uint8_t bytes[DEBUG_PACKET_DATAGRAM_BYTES + 1];
   struct sockaddr_in source;
   socklen_t source_length = sizeof(source);
   ssize_t size = recvfrom(bridge->udp, bytes, sizeof(bytes), 0,
@@ -552,7 +552,7 @@ static void receive_udp(struct bridge *bridge, uint64_t now)
       ((packet.length == 1 && (packet.payload[0] == '+' || packet.payload[0] == '-')) ||
        (reply_length == bridge->completed.length &&
         !memcmp(reply_bytes, bridge->completed.bytes, reply_length)));
-  if (bridge->phase == BRIDGE_STOPPED && packet.kind == DEBUG_DATA &&
+  if (bridge->phase == BRIDGE_STOPPED && packet.kind == DEBUG_PACKET_DATA &&
       packet.sequence && rsp_valid(packet.payload, packet.length) &&
       ((bridge->pending_command && packet.command == bridge->pending_command) || completed_reply)) {
     if (packet.sequence == bridge->rx_sequence + 1 && bridge->rx_sequence != UINT64_MAX) {

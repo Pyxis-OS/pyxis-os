@@ -617,7 +617,7 @@ DEBUG_CODE bool debug_rsp_handle(uint64_t command, const uint8_t *request, size_
     return true;
   }
   if (length == 1 && request[0] == '-') {
-    if (cached_valid && cached_reply_length <= capacity) {
+    if (cached_valid && command == cached_command && cached_reply_length <= capacity) {
       memcpy(output, cached_reply, cached_reply_length);
       *output_length = cached_reply_length;
       return true;
@@ -634,6 +634,9 @@ DEBUG_CODE bool debug_rsp_handle(uint64_t command, const uint8_t *request, size_
     memcpy(output, cached_reply, cached_reply_length);
     *output_length = cached_reply_length;
     return true;
+  }
+  if (!command || (cached_valid && command < cached_command)) {
+    return false;
   }
   size_t bytes = 0;
   for (size_t i = 1; i < length - 3; ++i) {
