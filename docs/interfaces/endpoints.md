@@ -10,22 +10,18 @@ handle can be copied with equal or reduced resource and transport authority. The
 name or implicit discovery.
 
 Creation and export use typed requests on the common
-[BSP executor](../kernel/smp.md#scheduling-and-ownership) FIFO. Publication lends the caller's
-capability table exclusively until completion; creation also lends its receiver
-owner list. Export copies its descriptor into the request, and the table keeps
-the owned receiver and CONTROL authority live during the loan. The caller uses
-only its saved wait pointer after publication. An early completion records a
-notification without enqueueing a still-running caller. Neither operation changes
-private mappings or needs a VM handoff, including for BSP userspace.
+[BSP executor](../kernel/smp.md#scheduling-and-ownership) FIFO. Creation claims
+both result slots before publication; export claims one and carries an owned
+receiver snapshot plus copied descriptor. The sole caller keeps process/owner-list
+storage alive until completion, without exclusive table ownership. An early
+completion records notification without enqueueing a still-running caller.
+Neither operation changes private mappings or needs a VM handoff.
 
-The BSP runs each operation with interrupts disabled and no queue lock held.
-Its local helpers grow the loaned table directly, never by submitting another
-request and waiting on the executor. Creation installs both handles atomically
-or neither. Export checks descriptor validity, receiver authority/ownership,
-closure, duplicate ID and export limit before growing the table or allocating
-backing; failed installation releases that backing without publishing an export.
-Completion returns the loan before the caller consumes the result, and the worker
-makes no further request or caller-state access after notification.
+The BSP allocates backing with IF=0 and no queue lock held. Validated owned
+grants move atomically into the claims. Export rechecks closure, duplicate ID and
+export limit before publication; failure releases backing and the claim. No
+nested executor wait occurs. Completion clears inputs/claims before waking the
+caller and makes no further request access afterward.
 
 The [ABI](../../include/abi/endpoint.h) defines three distinct protocols for
 client delivery, receiving and replying, plus the service creation/export protocol. The
@@ -162,15 +158,21 @@ notice clears that pending notification but does not finish the receipt;
 `endpoint_finish()` clears any pending notice and closes the receipt. No
 notification is needed for expiry before delivery.
 
-The caller reserves four capability slots before admission so a completed reply
-can transfer its attachments without later table growth. RECEIVE needs one
-slot for the receipt and one per request attachment. If its table is short, the
-task lends that table through an ordinary capability-growth request on the common
-FIFO, outside the endpoint lock, then rechecks the queued delivery after completion.
-The invoking handle keeps the endpoint or export alive across the loan; no pointer
+The caller claims four exact capability slots before admission so a completed
+reply can move its owned attachments without later allocation or retain. Claims
+live with caller activity in the delivery record and drain on collection/stop.
+REPLY validates destination group policy before committing completion; rejection
+leaves the receipt for correction. Successful REPLY has no subsequent capacity
+failure. Provider side effects are never implicitly rolled back.
+
+RECEIVE claims one slot for the receipt and one per request attachment before
+dequeueing. If its table is short, ordinary BSP growth runs on the common FIFO
+outside the endpoint lock, then the receiver reselects/rechecks the live queue.
+The invoking handle keeps endpoint storage alive across the wait; no pointer
 into replaceable table storage is retained. Growth failure leaves the delivery
 queued for a later receive attempt. Endpoint state and wait records live in stable
-kernel storage; the endpoint lock may nest the scheduler lock, but no lock spans user copying,
+kernel storage; the endpoint lock may nest the scheduler or short table guard,
+but no lock spans user copying,
 allocation or parking. See [scheduling ownership](../kernel/smp.md#scheduling-and-ownership).
 
 ## Exports and retirement

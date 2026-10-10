@@ -16,10 +16,10 @@ endpoint. Each pipe allocates a fixed 64 KiB buffer at creation; there is no
 resize, configurable capacity or independent pipe-memory quota.
 
 Creation uses an internal [BSP request](../../include/kernel/service/request.h).
-The pipe subsystem captures an exclusive capability-table loan in a typed
-shared record, submits and waits, then consumes its result before releasing the
-record for reuse. Allocation, installation and rollback run on the BSP with
-interrupts disabled. Completion detaches the request and table references before
+The pipe subsystem claims both result slots before submission, transfers those
+claims in a typed shared record, waits, then consumes its result before releasing
+the record for reuse. Owned endpoint grants publish together under the table guard. Allocation, installation and rollback run on the BSP with
+interrupts disabled. Completion drains unconsumed claims and detaches request inputs before
 notifying the caller; an early notification does not enqueue a still-running task.
 The record occupies the caller's reusable request allocation. A dedicated BSP worker
 services requests in FIFO order, parks when idle, and receives a notification

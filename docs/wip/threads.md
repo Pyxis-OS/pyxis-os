@@ -7,7 +7,7 @@ process remains. Task 2, admitted call references and CLOSE, is merged in
 [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
 [qualification](../development/experiments/threads-task2/README.md) records its
 build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
-owner-assigned; its accepted contracts below are not yet implemented. The
+owner-assigned and implemented on this branch; qualification is in progress. The
 remaining proposal originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
@@ -25,10 +25,10 @@ is independent.
 | Inspected source | Remaining gate |
 | --- | --- |
 | [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns group membership and lifetime, but its task/retiring-storage fields and terminal-result writer are still singular. |
-| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Calls own storage/rights snapshots and CLOSE detaches exact generations before logical release. Growth, installation/reservation and BSP loans still require exclusive table ownership; task 3 replaces that contract. |
-| [Endpoint replies](../../kernel/object/endpoint.c) | Preflight counts free slots before sleeping; collection assumes they remain free. Sibling installation would invalidate that guarantee. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown still requires drained activity; sibling process/VM admission remains task 4. |
+| [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Competing endpoint operations remain part of the pre-sibling audit. |
 | [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Check then memcpy and local mapping mutation assume the sole task. Stable mappings must cover copies and retained borrowers. |
-| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Parking one caller currently lends its table or inactive VM exclusively. A sibling invalidates that loan, even on one CPU. |
+| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Table loans are replaced by owned inputs/claims. Inactive-VM loans still require process-wide quiescence before siblings. |
 | [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | FS is saved per task, but starts at zero; no public FS setup or sibling entry exists. |
 | [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
 
@@ -79,19 +79,20 @@ outside it. It needs no additional retain that could fail at saturation.
 Table teardown uses the same close effects after detachment. No table guard spans
 an object callback, allocation, user copy, wait or scheduling.
 
-Growth prepares storage outside the guard and copies/publishes under it, but
-still requires the sole-task/BSP-exclusive loan. Installation and teardown also
-remain exclusive; this guard alone does not admit siblings. Storage references
-drain before `task_syscall_leave`; existing stop/unwind and task retirement retain
-the process/table lifetime. A future shared process must additionally drain
-admitted activity before teardown.
+**Shared-table delivery — task 3 implemented.** BSP growth prepares backing
+outside the guard, rechecks capacity and copies current entries/reservations
+under it, then frees old backing after unlocking. Installation claims exact
+slots/generations, hidden from lookup and competing installers. Operations own
+capacity before commit or sleep, consume it once through atomic publication of
+already-owned grants, and release unused/failure claims. BSP requests carry owned
+inputs and destination claims instead of exclusive table loans; caller activity
+keeps the table alive through completion. No entry or remote-stack pointer is
+retained. Allocation and process owner-list mutation remain BSP-owned.
 
-Replace BSP table loans with owned inputs and synchronized installation.
-Grant-returning operations reserve their required slots before committing or
-sleeping, consuming or releasing that reservation exactly once. A free-slot
-count is not a reservation. Preserve atomic bulk installation/rollback and
-existing uncertain-outcome rules; do not turn a committed endpoint reply into
-an impossible CAP_FULL assertion or silently discard grants.
+Storage and grant references drain before `task_syscall_leave`; existing
+uninterruptible request and stop/unwind rules retain process/table lifetime.
+Teardown requires no live claims. Shared siblings are still disabled; their
+activity drain and VM/device-operation gates remain later work.
 
 **Task 3 accepted details, 2026-10-10.** COPY, launch sources and endpoint
 attachments retain prospective grant authority outside the table guard, then
@@ -283,8 +284,8 @@ The owner accepted all three defaults with this condition, recorded verbatim:
 The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
-does not assign later implementation; task 2 was separately assigned and task 3
-still requires an owner go.
+does not assign later implementation; tasks 2 and 3 were separately assigned.
+Task 4 still requires an owner go.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK

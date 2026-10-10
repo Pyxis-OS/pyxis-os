@@ -80,9 +80,14 @@ then applies protocol close and grant release outside the guard; an admitted
 operation cannot make that handle usable again. Process teardown applies the
 same logical close effects to its detached entries.
 
-There is still exactly one user task per process. Growth, installations and
-teardown retain exclusive ownership, including explicit BSP table loans; the
-short guard does not yet make those operations safe for concurrent siblings.
+Grant-producing capture (COPY, launch sources and endpoint attachments) retains
+prospective logical authority outside that guard, then rechecks the exact source
+generation, object and masks. A stale source fails and unwinds; admitted grants
+survive later CLOSE. Ordinary CALL/readiness references remain storage-only.
+
+There is still exactly one user task per process. Growth and installation use
+the shared-table protocols below; teardown requires drained activity and claims.
+This does not enable concurrent siblings or stable shared user mappings.
 See the [thread gates](../wip/threads.md#shared-capability-and-vm-ownership).
 
 Each space would have a capability table describing resources available to its
@@ -317,27 +322,27 @@ installs reuse vacant slots or double capacity, bounded by allocation success
 and the handle's index range. Growth preserves slot indices and generations.
 Allocation failure leaves existing handles and reference ownership intact.
 
-`capability_grant()` copies a source grant into another exclusively owned table
-with equal or reduced rights. BSP must exclusively own both tables, either
-during preparation or through a blocked caller's launch loan.
-The destination gains a reference; the source remains unchanged. Failure clears
-the output handle and leaves existing entries and references intact. This is a
-kernel setup operation, not a userspace transfer syscall.
+After submission, admitted user operations and BSP services share the table
+through a short IF=0 guard. Source-handle grant capture owns logical authority
+and rechecks generation/masks after prospective retain; it never keeps an entry
+pointer. Growth allocates on BSP outside exclusion and copies/publishes current
+entries, including slot claims, under it. Old backing frees after unlock.
 
-After submission, the process's single executing task owns the table. Resolve
-and close require interrupts disabled, do not allocate, and need no table lock.
-Resolve checks generation and every requested right, then returns a borrowed
-object valid until the entry closes. Close invalidates the handle immediately.
-`capability_insert()` adds a received reference into an available slot on the
-owning CPU without allocating. A full table returns CAP_FULL. The executing
-task then lends its table to a BSP growth request and blocks; no other code
-may access it during that loan. The BSP grows it outside all queue/endpoint
-locks and returns ownership on wake. Existing handles, generations and object
-references survive growth. Allocation and handle-space exhaustion return
-errors without consuming the endpoint request. Launch similarly lends only its
-caller's table for grant copying and installing the completion observer; no
-arbitrary access to another submitted process's table is permitted. The kernel
-result enum is separate from syscall status values.
+Grant-returning operations reserve exact destination indices/generations before
+commit or sleeping. Claims are invisible to lookup and unavailable to another
+installer; they own capacity, not object authority. Native creators preflight
+owned grants, and endpoint/launch captures own transferred grants. Validated
+ownership moves into every claimed destination entry together, without another
+retain or failing allocation. Abort releases all unpublished claims; successful
+publication releases unused claims. Launch observers remain private through
+preparation and publish together after successful task submission.
+
+Requests carry owned inputs/claims instead of an exclusive table loan. Their
+admitted caller and uninterruptible completion keep destination storage alive;
+stop unwinds references and claims before retirement. Final table teardown still
+requires all activity drained. VM leases, competing device operations and actual
+siblings remain separate [thread gates](../wip/threads.md). The kernel result
+enum remains separate from public syscall statuses.
 
 Objects have an atomic reference count and a destruction callback, with no
 global object registry or operation dispatch. The last release links the object
@@ -658,8 +663,10 @@ working_path is optional and requires a nonempty directory chain. argv contains
 argc string addresses; the kernel adds the child's final NULL.
 
 The caller obtains launch metadata storage from BSP, then captures metadata on
-its own CPU/root. Source handles remain alive in its exclusively owned table
-while blocked. For RAM images it acquires the file's operation ownership, then
+its own CPU/root. Source grants gain prospective logical ownership and an exact
+generation/authority recheck before image waits; captured authority survives
+source CLOSE. No BSP source-table loan or later handle re-resolution remains.
+For RAM images it acquires the file's operation ownership, then
 lends the file to BSP for a selected-image copy; other reads/writes/resizes queue
 until the copy finishes and BSP ends that operation exactly once. Boot-archive
 images retain their immutable bytes without a new copy. No spinlock is held

@@ -220,9 +220,9 @@ Capability growth, namespace creation, endpoint creation/export and RAMFS
 entry/name allocation and discard publish to that same FIFO before the caller
 sleeps. Their typed records use the caller's reusable
 shared request allocation.
-Capability/endpoint operations lend the capability table exclusively until
-completion; endpoint creation also lends the process's receiver owner list. FILE
-replacement lends exclusive operation ownership while `busy` remains set; RAMFS
+Capability operations use synchronized table access and exact destination claims
+until completion; endpoint owner-list mutation remains BSP-owned while the sole
+caller waits. FILE replacement lends operation ownership while `busy` remains set; RAMFS
 discard transfers the detached entry. The caller stops accessing the loan and
 request at publication and waits through its saved wait pointer. Completion may
 arrive before parking, but only records notification and cannot enqueue a
@@ -272,16 +272,18 @@ syscall resumes on the same CPU, restoring its process root and private entry
 stack, with interrupts still disabled. The process remains alive while blocked. User mappings stay
 stable except during an explicit private-memory loan after the task has left
 its address space.
-Only an explicit capability-table loan allows the BSP to modify its table.
+BSP allocation/growth and admitted user installation share the short table guard;
+no exclusive capability-table loan remains.
 
 Admitted calls own object storage and copied rights/transport through their
 continuations; they borrow no table entry across growth or blocking. The short
-table guard covers acquisition and CLOSE detachment, but does not replace the
-sole-task/exclusive installation and growth loan. CLOSE invokes logical effects
+table guard covers acquisition, CLOSE detachment, slot claims and structural
+publication; growth prepares backing on BSP outside it. CLOSE invokes logical effects
 and releases its detached grant outside that guard. These storage references
 drain during syscall cleanup before `task_syscall_leave` and retirement; they do
-not prolong controller authority or pipe open directions. Shared-table delivery
-and sibling activity admission remain [later thread gates](../wip/threads.md).
+not prolong controller authority or pipe open directions. Grant-producing capture additionally retains logical authority and rechecks the
+source generation/masks. Shared-table delivery is implemented; sibling activity
+and VM admission remain [later thread gates](../wip/threads.md).
 
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
@@ -317,9 +319,9 @@ and direct DMA publication share a bounded IF=0 phase, so exit cannot interleave
 with the mix commit. Already mixed DMA belongs to the engine and may outlive the
 producer.
 
-Capability tables follow that same exclusive process ownership. The BSP installs
-entries before submission; the executing CPU can resolve or close them with
-IF=0. A last object release normally queues its embedded retirement link without
+Capability tables use admitted process lifetime and short IF=0 exclusion. The
+BSP installs entries before submission; admitted user/service activity captures,
+claims, installs or detaches entries under the same guard. A last object release normally queues its embedded retirement link without
 touching the heap. Endpoint receipts instead release logical delivery ownership
 synchronously under the endpoint lock; their reusable embedded objects never
 enter the retirement list. The BSP scheduler drains this separate list after
@@ -328,18 +330,18 @@ also cause a busy BSP task to return to the scheduler on its next timer
 interrupt. No table grows on an AP; final releases never require an AP allocator
 call.
 
-Namespace creation uses the caller's exclusive table loan for its fixed
-binding storage and initial grant. Namespace lookup captures a reference and both
-authority masks under its own lock, releases the lock, then installs the grant or
-lends the table for growth. Replacement cannot alter a captured lookup. Namespace
-locks never span allocation, endpoint locking or parking.
+Namespace creation preclaims the initial handle before waiting for BSP fixed
+binding storage. Lookup claims capacity before capturing a client and authority
+masks under its own lock, then moves a validated grant; replacement cannot alter
+that capture. Namespace locks never span allocation, endpoint locking or parking.
 
-Endpoint creation lends the calling task's table to the BSP, which allocates
-its bounded delivery storage and installs both initial handles. Export creation
-uses the same table loan for backing allocation and client installation. Its owned
-receiver and authority remain live throughout the loan. The BSP helpers grow the
-loaned table directly when needed; they never submit a nested request or wait on
-the executor. Export control holds storage separately from client references,
+Endpoint creation preclaims both handles before BSP backing allocation and
+atomic publication. Export creation carries an owned receiver snapshot and one
+claim; it rechecks endpoint state before publishing. Reply claims live in the
+shared delivery record, and successful REPLY moves its already-owned grants
+without later allocation or retain. Growth requests never require a borrowed
+exclusive table or nested executor wait.
+Export control holds storage separately from client references,
 so it cannot prevent natural retirement. Accepted deliveries retain their target until caller and
 receipt ownership both end. A delivery slot becomes reusable as soon as the
 caller has collected its outcome, if any, and the final receipt reference is
@@ -470,11 +472,11 @@ latency. The scheduler does not know about display timing. See
 [timekeeping](timekeeping.md) for the clock and deadline contracts.
 
 [Screen capture](../interfaces/screen-capture.md) uses deferred publication after
-the caller leaves its stack and private root, lending its capability table until
-completion. The executor forwards admission to the presenter without waiting for
+the caller leaves its stack and private root. It reserves the returned FILE
+slot before submission; the shared request owns this claim until completion. The executor forwards admission to the presenter without waiting for
 a frame. The presenter copies with IF=1, while pending/active ownership changes,
 allocation and READ-only FILE installation remain BSP/IF=0 work outside the output
-lock. It clears all presenter references and the loan before waking the caller.
+lock. It clears all presenter references and unconsumed claims before waking the caller.
 
 ## Memory and output boundaries
 

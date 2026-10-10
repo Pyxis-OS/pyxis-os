@@ -122,9 +122,9 @@ Chosen by the owner, each starting with a proposal:
   Scaled game planes need a separate decision.
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
   the small first step is implemented and qualified; review before merge.
-- **Codex delta** (2026-10-10): [threads task 2](threads.md#shared-capability-and-vm-ownership),
-  owned call references and detached-generation CLOSE, still one user task and
-  exclusive BSP table loans. Review before merge; task 3 remains unassigned.
+- **Codex delta** (2026-10-10): [threads task 3](threads.md#shared-capability-and-vm-ownership),
+  owner-assigned shared-table delivery, growth, reservations and owned inputs;
+  still one user task. Tasks 1–2 are merged; later gates need separate assignment.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.

@@ -98,8 +98,8 @@ unwritten or stale bytes from the snapshot allocation.
 
 The typed BSP request uses DEFERRED publication after the scheduler parks the
 caller, leaves its stack, activates the kernel root and clears entry/current-task
-state. This lends the caller's capability table exclusively through completion,
-including for BSP userspace. The FIFO executor forwards the request to the sole
+state. The caller reserves its result slot before submission; the shared request
+owns that claim through completion, including for BSP userspace. The FIFO executor forwards the request to the sole
 presenter and continues servicing other work. The presenter owns pending/active
 state; admission, allocation, FILE installation, cleanup and completion run on
 BSP with IF=0, outside the output lock. Pixel copying and device waits retain the
@@ -107,7 +107,7 @@ existing IF=1 frame lease.
 
 Stop is checked before admission, before backing allocation and before FILE
 publication. Refusal, stop and backend failure release unpublished resources.
-Completion clears presenter references and the table loan before waking the
+Completion clears presenter references and any unconsumed slot claim before waking the
 caller, and never accesses request storage afterward. The caller consumes the
 result and releases its request reservation before another operation can reuse
 it. See [BSP requests](../kernel/bsp-service-requests.md#publication-and-completion).
