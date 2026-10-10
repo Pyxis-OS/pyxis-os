@@ -66,6 +66,41 @@ dependency graphs or interface discovery machinery. Revisit concrete filesystem
 backend duplication or additional network drivers when that work is selected;
 the present note does not schedule a refactor or introduce APIs.
 
+## Completion-based asynchronous operations
+
+Owner direction, 2026-10-10: a planned complement to readiness, not current
+work. [Pipes](../interfaces/pipes.md#readiness), terminals and TCP use the
+readiness model: wait until an object is ready, then make a nonblocking try
+transfer. The Neovim milestone accepted that model for its event loop.
+
+The complement is completion: submit an operation, keep running, and collect
+its single result later. The owner's original design discussion put this on
+[endpoint](../interfaces/endpoints.md) SEND and RECEIVE, and that shape fits.
+An operation would be a message to a kernel object or provider, and a receiver
+would collect completions, one per submitted operation. Submission returns at
+once; the receiver delivers the outcome, including short progress, failure or
+cancellation. It is the io_uring and IOCP family, expressed through capabilities
+rather than file descriptors.
+
+Expected consumers are graphical programs and their event loops: input, frame
+presentation, compositor messages and provider replies arriving together.
+Bulk file I/O and several outstanding provider requests are also candidates.
+
+Settle these before any implementation:
+
+- whether request and reply buffers are copied at submission or borrowed until
+  completion, and what happens to borrowed memory on cancel or exit;
+- that every submission has exactly one terminal outcome, including cancel,
+  close and process exit, with no completion dropped;
+- limits on outstanding operations per process and per receiver;
+- ordering between completions and readiness on the same object.
+
+A smaller step comes first and is useful to both models: endpoint receivers
+cannot yet be waited on with `wait_many`, so a program cannot wait for "a
+provider message or a key press" in one call. This adds no prerequisites to
+the current milestones, and [BSP service requests](../kernel/bsp-service-requests.md)
+remain synchronous until a contract replaces them.
+
 ## Additional ports
 
 Kilo and TCC provide the [edit/build/run workflow](../development/edit-build-run.md).
