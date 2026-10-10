@@ -58,6 +58,6 @@ elapsed milliseconds for `-bench`. Benchmark reports retain upstream floating-
 point formatting through libc's [printf support](../userland/stdio.md#standard-streams-formatting-and-exit).
 Host-running TCC continues to use the host's clock and local time.
 
-[Local-time conversion](../userland/timezones.md) is provided by userspace. Reverse
-conversion (`mktime`), `strftime`, locale and clock adjustment remain deferred.
+[Local-time conversion](../userland/timezones.md), including `mktime` and `strftime`,
+is provided by userspace. Locale and clock adjustment remain deferred.
 Reads and calendar conversion work independently of [session configuration](../userland/session-configuration.md).
