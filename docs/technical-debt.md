@@ -219,7 +219,7 @@ The [Ctrl+Alt+Delete power overlay](wip/system-power-overlay.md#emergency-covera
   Revisit with bounded output-lock waits in the presenter, which need a decision because they change ordinary presentation.
 - A stuck ACPI worker or pool flush leaves it at "flushing pools" with no time limit and no forced reset.
 - A display resize waits while it is open. Its text is ASCII in the kernel font, and the failure shows a numeric status.
-- Checked in QEMU only until the owner's native run.
+- Natively, the installed-system flush is unchecked until the next stick update ([native results](development/experiments/power-overlay/README.md#native-results)).
 
 ## Embedded controller and battery limits
 

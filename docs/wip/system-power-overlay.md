@@ -1,9 +1,10 @@
 # System power overlay
 
-Status: **decisions accepted 2026-10-10; task 1 implemented in this PR, native
-check pending.** Code inspected at `3c3f9cfe`. The sections below describe the
-implemented behaviour; [qualification](../development/experiments/power-overlay/README.md)
-records the QEMU checks.
+Status: **decisions accepted 2026-10-10; task 1 implemented in this PR and
+checked natively on the ThinkPad, except the installed-system flush.** Code
+inspected at `3c3f9cfe`. The sections below describe the implemented
+behaviour; [qualification](../development/experiments/power-overlay/README.md)
+records the QEMU and native checks.
 
 Ctrl+Alt+Delete opens a full-screen system overlay offering **Shut down**,
 **Reboot** and **Cancel**, chosen by mouse click or keyboard. It works in any
@@ -197,9 +198,10 @@ Accepted by the owner on 2026-10-10:
 1. [x] **The overlay.** The chord in `kernel/space.c`, the overlay in
    `kernel/ui/power_overlay.c` composed by the presenter, pointer routing in
    `kernel/pointer.c`, and `acpi_power_local()` in the ACPI worker. Checked in
-   QEMU on both display drivers, one and four CPUs, live and installed; the
-   [qualification](../development/experiments/power-overlay/README.md) lists the
-   checks and the owner's native steps. **After this task the owner can**
+   QEMU on both display drivers, one and four CPUs, live and installed, and
+   natively on the ThinkPad from the built-in and a USB keyboard; the
+   [qualification](../development/experiments/power-overlay/README.md) records
+   both. The installed-system flush waits for the next stick update. **After this task the owner can**
    press Ctrl+Alt+Delete in any tab, even in a game with mouse lock, and shut
    down, reboot or return with a click or the keyboard.
 

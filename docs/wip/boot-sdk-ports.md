@@ -121,7 +121,7 @@ Chosen by the owner, each starting with a proposal:
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Claude** (2026-10-10): [system power overlay](system-power-overlay.md),
   a kernel-drawn Ctrl+Alt+Delete emergency screen with Shut down, Reboot and
-  Cancel; decisions accepted, task 1 implemented in #659, native check pending.
+  Cancel; task 1 in #659, natively checked except the installed-system flush.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its

@@ -74,6 +74,23 @@ adds one flag test per presented frame, key event and pointer report, and none
 on output paths. While open, each frame copies the whole screen like a
 full-screen graphics frame.
 
+## Native results
+
+The owner ran the steps below on the ThinkPad on 2026-10-10, with a PXE build
+of `a2d49db0` from the default entry:
+- **Built-in keyboard:** the overlay opened, and Escape or Cancel returned the
+  shell intact. Over Quake, the overlay and Cancel behaved as described above.
+  Reboot by keyboard restarted the machine, and Shut down by click powered it
+  off.
+- **USB keyboard (Keychron):** the overlay opened, and Escape and Cancel
+  worked. Reboot and Shut down were not repeated from it, because the power
+  path does not depend on the keyboard.
+- **Keypad:** Ctrl+Alt with keypad "." opened the overlay. Pyxis takes that key
+  as keypad Delete whatever the Num Lock state; KDE Plasma on the same machine
+  does not treat it as Delete.
+- **Pending:** step 6, the installed system's flush, waits for the next stick
+  update.
+
 ## Native steps for the owner
 
 On the ThinkPad with a PXE build of this branch, default entry:
@@ -92,7 +109,7 @@ On the ThinkPad with a PXE build of this branch, default entry:
 
 ## Limits
 
-- QEMU only, nested; no native results yet.
+- Natively, the installed-system flush is still unchecked.
 - The VirtIO checks could not see the hardware cursor in screenshots; mouse
   behaviour there was judged by its effect.
 - Coverage of a stuck presenter, display or ACPI worker is by code inspection
