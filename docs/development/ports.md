@@ -300,6 +300,22 @@ collation and uses libc's unstable `qsort`. Libc gained `bsearch` for them. See
 the [reference](../userland/wc-tail-sort.md) for behavior, limits and validation,
 and the [recipe notes](../../ports/sbase/README.md) for the adaptation.
 
+## Searching text with sbase grep
+
+The shell resolves `grep` to `bin://grep.pxe`:
+
+```text
+grep -n main host://notes.c
+grep -rl TODO home://src
+cat host://words | grep -vc '^#'
+```
+
+It is upstream sbase grep with `-r` added over libc `opendir`/`readdir`, `fmemopen`
+replaced by line splitting, name prefixes on `-c`, and block output. Patterns
+use libc's regex engine, so classes and case folding are ASCII-only. See the
+[reference](../userland/grep.md) for behavior, limits and validation, and the
+[recipe notes](../../ports/sbase/README.md#grep) for the adaptation.
+
 ## SHA-256 digests with sbase sha256sum
 
 The shell resolves `sha256sum` to `bin://sha256sum.pxe`:
