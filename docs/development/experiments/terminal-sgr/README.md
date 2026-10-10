@@ -10,6 +10,9 @@ Matched runs use rebuilt control `441fcd4a` / userland `3bd6c21` and changed
 `85a4e8a4` / userland `e742ccb`; both pin ports `be901cf`, filesystem
 `b427df29` and lwIP `a1aadb91`. Later integration includes upstream runtime
 changes; the figures below describe these frozen revisions.
+The final image is built at `562533ad`, incorporating main `775502e4`,
+userland `1162d729` and main's ports `f510e212`; tab/pane colour and plain
+launch checks pass again. The SGR patch is unchanged after rebasing.
 
 Ordinary `make -j16 image` uses builder `pyxis-llvm23.1.3-49e2c1a`.
 QEMU 10.2.2 with the documented AHCI fix: q35, nested KVM, four CPUs, 8 GiB,
