@@ -123,8 +123,9 @@ Each pane terminal implements the kernel TTY's
 [sequence table](terminal.md#tty-output-controls), including the alternate
 screen, scroll regions and saved cursor.
 
-Each live, alternate and history cell is 12 bytes, retaining tagged colours and
-attributes. History still reserves 1,024 rows at the largest width seen; steady
+Each live, alternate and history cell is 12 bytes, retaining supported Unicode
+scalars, tagged colours and attributes. UTF-8 follows the shared terminal
+repertoire; Copy exports scalars, while safe Paste remains ASCII-only. History still reserves 1,024 rows at the largest width seen; steady
 output allocates nothing. Creation and resize allocate new backing before
 publication and leave the old state intact on failure. The frame and previous
 frame use the same cells and compare fields rather than padding. At 160 columns,
@@ -180,8 +181,8 @@ Exact Ctrl+Shift+C/V copies/pastes the local layer; Super+Shift+C/V selects the
 shared layer. Trusted startup explicitly delegates separate clipboard grants to
 mux; pane children inherit neither. Actions arrive on the terminal spatial queue
 with native operation/view identity, keeping them outside the Ctrl+B byte parser.
-Copy exports the completed selection's pane as owned printable-ASCII text;
-physical rows are LF-joined and trailing spaces trimmed. Non-ASCII, missing,
+Copy exports the completed selection's pane as owned UTF-8 text;
+physical rows are LF-joined and trailing spaces trimmed. The encoded byte limit, missing,
 pending or dragging selections refuse without replacing the previous item.
 A plain click clears selection, including when it focuses another pane.
 

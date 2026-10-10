@@ -31,6 +31,7 @@ case "${1:-}" in
     install -C -m 644 lib/shebang.c "$sdk/share/pyxis/shebang.c"
     install -C -m 644 lib/key_layout.c "$sdk/share/pyxis/key_layout.c"
     install -C -m 644 lib/terminal_style.c "$sdk/share/pyxis/terminal_style.c"
+    install -C -m 644 lib/terminal_text.c "$sdk/share/pyxis/terminal_text.c"
     mkdir -p "$sdk/share/pyxis/machine_settings"
     install -C -m 644 userspace/include/machine_settings.h userspace/lib/machine_settings.c "$sdk/share/pyxis/machine_settings/"
     install -C -m 644 cmake/pyxis.cmake "$sdk/share/pyxis.cmake"

@@ -259,8 +259,11 @@ a pending send backlog cannot hold FIN ahead of termination. Resize and reattach
 
 The presentation tracks the native TTY subset across output records: LF resets
 the column, tabs move without erasing and clamp to the edge, wrapping is delayed,
-and FRESH_LINE cancels an incomplete escape. Non-ASCII output is displayed as
-one `?` cell; machine mode preserves every byte.
+and FRESH_LINE cancels an incomplete escape and flushes partial UTF-8. The
+shared [single-cell UTF-8 repertoire](terminal.md#tty-output-controls) is emitted
+as UTF-8 for the host font; unsupported scalars and invalid bytes use U+FFFD.
+Partial sequences survive output records; intercepted transfer/prompt controls
+also interrupt pending text. Machine mode and transfers preserve every byte.
 Interactive SGR uses the shared [colour and attribute rules](terminal.md#tty-output-controls):
 bold, italic, underline, reverse, 256 indices and semicolon RGB, with atomic
 rejection of malformed or oversized sequences. It resolves indices using

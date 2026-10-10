@@ -83,12 +83,12 @@ void tty_plot_char_styled(const struct framebuffer *fb, const struct font *font,
   cpu_store_fence();
 }
 
-static struct terminal_cell styled_cell(const struct tty *tty, char c, uint8_t attributes)
+static struct terminal_cell styled_cell(const struct tty *tty, uint16_t character, uint8_t attributes)
 {
   return (struct terminal_cell){
     .foreground = tty->style.foreground,
     .background = tty->style.background,
-    .glyph = glyph_index(tty->font, c),
+    .character = character,
     .attributes = attributes,
   };
 }
@@ -104,7 +104,7 @@ static void draw_cell(struct tty *tty, struct terminal_cell cell, size_t x, size
     fg = bg;
     bg = swap;
   }
-  tty_plot_char_styled(tty->fb, tty->font, (char)cell.glyph, x * tty->font->width,
+  tty_plot_char_styled(tty->fb, tty->font, (char)terminal_character_glyph(cell.character), x * tty->font->width,
       y * tty->font->height, fg, bg, cell.attributes);
 }
 
@@ -116,12 +116,12 @@ static void put_cell(struct tty *tty, struct terminal_cell cell, size_t x, size_
     KASSERT(x < tty->width && y < tty->height);
     size_t index = y * tty->width + x;
     struct terminal_cell previous = tty->cells[index];
-    changed = previous.glyph != cell.glyph ||
+    changed = previous.character != cell.character ||
         previous.foreground != cell.foreground ||
         previous.background != cell.background ||
         previous.attributes != cell.attributes;
     if ((tty->selection_valid || tty->selection_dragging) &&
-        previous.glyph != cell.glyph) {
+        previous.character != cell.character) {
       size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
       size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
       if (index >= first && index <= last) {
@@ -205,9 +205,9 @@ static void reverse_index(struct tty *tty)
   }
 }
 
-static void tty_draw_cell(struct tty *tty, char c, size_t x, size_t y)
+static void tty_draw_cell(struct tty *tty, uint16_t character, size_t x, size_t y)
 {
-  put_cell(tty, styled_cell(tty, c, tty->style.attributes), x, y);
+  put_cell(tty, styled_cell(tty, character, tty->style.attributes), x, y);
 }
 
 static void erase_cells(struct tty *tty, size_t first, size_t end)
@@ -444,9 +444,35 @@ static void execute_escape(struct tty *tty, unsigned char byte)
   }
 }
 
+static void put_character(struct tty *tty, uint16_t character)
+{
+  /* Writing the margin must not scroll a full-screen application's last row.
+   * Styles and cursor visibility preserve this pending wrap across writes. */
+  if (tty->wrap_pending) {
+    tty_newline(tty);
+  }
+  tty_draw_cell(tty, character, tty->x, tty->y);
+  if (tty->x == tty->width - 1) {
+    tty->wrap_pending = true;
+  } else {
+    ++tty->x;
+  }
+}
+
+static void flush_utf8(struct tty *tty)
+{
+  size_t count = terminal_utf8_flush(&tty->utf8);
+  for (size_t i = 0; i < count; ++i) {
+    put_character(tty, TERMINAL_REPLACEMENT);
+  }
+}
+
 static void put_char(struct tty *tty, char c)
 {
   unsigned char byte = (unsigned char)c;
+  if (byte < 0x20 || byte == 0x7f) {
+    flush_utf8(tty);
+  }
   if (byte == 0x1b) {
     begin_escape(tty);
     return;
@@ -509,16 +535,10 @@ static void put_char(struct tty *tty, char c)
     return;
   }
 
-  /* Writing the margin must not scroll a full-screen application's last row.
-   * Styles and cursor visibility preserve this pending wrap across writes. */
-  if (tty->wrap_pending) {
-    tty_newline(tty);
-  }
-  tty_draw_cell(tty, c, tty->x, tty->y);
-  if (tty->x == tty->width - 1) {
-    tty->wrap_pending = true;
-  } else {
-    ++tty->x;
+  uint16_t characters[4];
+  size_t count = terminal_utf8_decode(&tty->utf8, byte, characters);
+  for (size_t i = 0; i < count; ++i) {
+    put_character(tty, characters[i]);
   }
 }
 
@@ -567,6 +587,7 @@ void tty_clear(struct tty *tty)
   tty->x = 0;
   tty->y = 0;
   tty->escape_state = TTY_TEXT;
+  tty->utf8 = (struct terminal_utf8){0};
   tty->wrap_pending = false;
 }
 
@@ -574,6 +595,7 @@ void tty_fresh_line(struct tty *tty)
 {
   uint16_t x = tty->x;
   uint16_t y = tty->y;
+  flush_utf8(tty);
   tty->escape_state = TTY_TEXT;
   if (tty->x || tty->wrap_pending) {
     tty_newline(tty);

@@ -39,6 +39,7 @@ static void style(struct presentation *screen, uint8_t attributes)
 void presentation_begin(struct presentation *screen)
 {
   screen->tab_width = 8;
+  screen->utf8 = (struct terminal_utf8){0};
   screen->style = (struct terminal_style){
     .foreground = TERMINAL_COLOR_DEFAULT, .background = TERMINAL_COLOR_DEFAULT
   };
@@ -71,8 +72,34 @@ static void newline(struct presentation *screen)
   position(screen);
 }
 
+static void character(struct presentation *screen, uint16_t value)
+{
+  if (screen->wrap_pending) {
+    newline(screen);
+  }
+  position(screen);
+  char text[3];
+  size_t length = terminal_character_encode(value, text);
+  buffer_append(screen->output, text, length);
+  if (screen->x == screen->columns - 1) {
+    screen->wrap_pending = true;
+  } else {
+    ++screen->x;
+  }
+  position(screen);
+}
+
+void presentation_text_boundary(struct presentation *screen)
+{
+  size_t count = terminal_utf8_flush(&screen->utf8);
+  for (size_t i = 0; i < count; ++i) {
+    character(screen, TERMINAL_REPLACEMENT);
+  }
+}
+
 void presentation_fresh_line(struct presentation *screen)
 {
+  presentation_text_boundary(screen);
   screen->state = PRESENT_TEXT;
   if (screen->x || screen->wrap_pending) {
     newline(screen);
@@ -176,6 +203,9 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
 {
   for (size_t i = 0; i < length; ++i) {
     unsigned char byte = data[i];
+    if (byte < 0x20 || byte == 0x7f) {
+      presentation_text_boundary(screen);
+    }
     if (byte == 0x1b) {
       screen->state = PRESENT_ESCAPE;
       screen->parameter_index = 0;
@@ -234,18 +264,10 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
     if (byte < 0x20 || byte == 0x7f) {
       continue;
     }
-    if (screen->wrap_pending) {
-      newline(screen);
+    uint16_t values[4];
+    size_t count = terminal_utf8_decode(&screen->utf8, byte, values);
+    for (size_t j = 0; j < count; ++j) {
+      character(screen, values[j]);
     }
-    position(screen);
-    /* Native output addresses byte glyphs; keep one host cell per byte. */
-    unsigned char glyph = byte < 0x80 ? byte : '?';
-    buffer_append(screen->output, &glyph, 1);
-    if (screen->x == screen->columns - 1) {
-      screen->wrap_pending = true;
-    } else {
-      ++screen->x;
-    }
-    position(screen);
   }
 }
