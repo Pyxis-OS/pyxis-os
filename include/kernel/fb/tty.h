@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <kernel/fb/fb.h>
 #include <terminal/style.h>
+#include <terminal/text.h>
 
 #include "font.h"
 
@@ -56,6 +57,7 @@ struct tty
 
   /* Output calls can split a sequence; parser state belongs to the TTY. */
   enum tty_escape_state escape_state;
+  struct terminal_utf8 utf8;
   uint16_t parameters[TTY_CSI_PARAMETERS];
   uint16_t parameters_present;
   size_t parameter_index;

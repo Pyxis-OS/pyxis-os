@@ -320,6 +320,9 @@ static void flush_prompt_escape(struct client *client)
 static void interactive_output(struct client *client, unsigned char byte)
 {
   static const unsigned char marker[] = "\x1b]133;B\a";
+  if (!client->prompt_escape_length && byte == 27) {
+    presentation_text_boundary(&client->screen);
+  }
   if (byte != marker[client->prompt_escape_length]) {
     flush_prompt_escape(client);
     if (byte != marker[0]) {
