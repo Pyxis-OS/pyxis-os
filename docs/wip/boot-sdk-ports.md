@@ -117,8 +117,9 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex epsilon** (2026-10-10): [Neovim task 4](neovim-libuv.md#task-4-preflight),
   native libuv backend. Tasks 1–3 are merged.
-- **Codex alpha** (2026-10-10): [presenter whole-frame skipping](presenter-frame-skipping.md),
-  baseline and implementation authorized after #670. [Renoir cursor](renoir-hardware-cursor.md)
+- **Codex alpha** (2026-10-10): [presenter whole-frame skipping](../kernel/presenter-frame-skipping.md),
+  implemented with matched QEMU/native counters and the owner's functional pass;
+  ready for review before merge. [Renoir cursor](renoir-hardware-cursor.md)
   task 1 is merged; task 2 and scaled game planes remain separate assignments.
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
   the small first step is implemented and qualified; review before merge.

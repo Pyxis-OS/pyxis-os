@@ -63,7 +63,7 @@ backing remain cursor-free.
 Boot and Bochs use this software path on changed frames. The presenter services
 input/devices at approximately 60 Hz; unchanged frames skip all pixel work and
 submission. Visible pointer changes force a full repaint that restores the old
-location. See [whole-frame skipping](../wip/presenter-frame-skipping.md). There
+location. See [whole-frame skipping](presenter-frame-skipping.md). There
 is no additional full-screen buffer. A 64x64 image bounds blending to 4,096 pixels per frame; measured cost
 and runtime coverage are recorded separately in
 [system pointer qualification](../development/system-pointer-qualification.md).

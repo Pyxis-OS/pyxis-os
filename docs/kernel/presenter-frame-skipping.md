@@ -1,21 +1,12 @@
 # Presenter whole-frame skipping
 
-Owner-authorized 2026-10-10 after #670. Implemented on the task branch;
-QEMU and owner-run native interleaved counter qualification are complete; the
-short native functional pass is pending. Renoir hardware cursor task 2 remains
-separately unassigned.
+Boot framebuffer, Bochs, VirtIO and qualified Renoir share one whole-frame skip
+rule. Every visible change forces a complete frame; unchanged inputs skip
+composition, scanout copy and submission. Input/device service remains at
+approximately 60 Hz. Capture always forces a frame. This preserves existing
+visuals: no new bar clock or caret blink timer is added.
 
-## Accepted defaults — 2026-10-10
-
-- Boot framebuffer, Bochs, VirtIO and qualified Renoir share one skip rule.
-  Every visible change forces a complete frame; no dirty rectangles.
-- Preserve existing visuals: steady TTY caret, no new bar clock or blink timer.
-  Existing caret, title, layer marker, battery and volume changes invalidate.
-- Retain approximately 16.7 ms input/device service and pacing while skipping
-  composition, copy and submission. Capture forces a full frame. Preserve the
-  independent power overlay, panic ownership and three-slot application handoff.
-
-## Implemented contract
+## Change tracking
 
 TTY raster/caret/selection and application submissions have visual generations
 under their existing output-lock/BSP owners. Graphics margin background has a
@@ -52,24 +43,18 @@ idle skips. Frame/composition/copy totals retain their meanings; service/skip
 counts distinguish presenter activity from actual pixel work. Default logging
 adds no lines. There is no new ABI, write allowlist or input authority.
 
-## Qualification and owner outcomes
+## Qualification and limits
 
-- [x] Capture current-main baseline before code (`4b6550a6`), source image and
-  QEMU idle/motion/idle/motion counters, preserving the artifacts.
-- [x] Implement generations, whole-frame skip and independent device service.
-- [x] Matched QEMU A–B–A–B plus boot/Bochs/VirtIO transition/capture checks
-  and ordinary default build; [record](../development/experiments/presenter-frame-skipping/README.md).
-- [ ] Exact-head CI and implementation review.
-- [x] Owner-run native interleaved control/change counter boots via Luna,
-  A1–B1–A2–B2 with identical initrd and synthetic motion; about 99% less idle
-  compose/copy work, continuous motion still presents full frames.
-- [ ] Owner's short native B functional pass: responsiveness, visual behaviour,
-  capture and transitions. Integration with current main and final review remain.
+[The qualification record](../development/experiments/presenter-frame-skipping/README.md)
+contains baseline revisions, matched QEMU runs and the owner-run ThinkPad native
+A1–B1–A2–B2. Native idle pixel work falls about 99%; continuous software-pointer
+motion still requires full frames. The short native functional pass covers
+idle capture, typing, pointer, selection, tabs, power-overlay cancel, volume,
+Quake and Chocolate Quake. The latter's mouse capture/unlock issue is routed
+separately and is not fixed here.
 
-The native counter record demonstrates avoided idle pixel work, independently
-of the QEMU measurements. The measured candidate is `87e03014` plus the
-opt-in synthetic tool; the native functional result is still pending. Current
-main conflicts in `kernel/fb/tty.c`; that integration is not part of the measured
-revision or this documentation update.
-[Dirty regions](../technical-debt.md#presenter-dirty-regions) remain later work,
-after measuring the work left by whole-frame skipping.
+These compose/copy elapsed measurements are not total BSP CPU profiling.
+Runtime host resize and forced timeout/panic/wedged-writer paths are not newly
+qualified. [Dirty regions](../technical-debt.md#presenter-dirty-regions) and
+Renoir hardware cursor writes remain separate work; no new ABI or GPU writer
+allowlist is introduced.

@@ -1,6 +1,6 @@
 # Presenter frame-skipping qualification
 
-2026-10-10, [accepted task](../../../wip/presenter-frame-skipping.md).
+2026-10-10, [implemented contract](../../../kernel/presenter-frame-skipping.md).
 
 ## Inputs
 
@@ -176,10 +176,47 @@ Compose/copy spans are elapsed measurements, including preemption/log overhead;
 this result is not a total BSP CPU measurement. It does not qualify forced
 failure/panic/wedged-writer paths.
 
-**Native counter qualification is complete.** The owner is doing the short
-functional pass on the running B2 boot after the source stopped. Responsiveness,
-visual behaviour, capture and transition results remain pending and must be
-recorded before claiming that pass succeeded or removing the PR's draft state.
-The branch now has a `kernel/fb/tty.c` conflict against current main after the
-terminal style work; this result records the measured `87e03014` implementation,
-not an unqualified integration revision. This update changes documentation only.
+### Owner functional pass on B2
+
+After the synthetic source stopped, the owner checked the same B2 kernel
+(`#676` head `87e03014` plus the tool), with qualified flips on:
+
+- `screenshot tmp://idle.png` completed.
+- Typing after idle, pointer motion, selection and tabs work and look right.
+- Ctrl+Alt+Delete power-overlay cancellation and the volume popup work.
+- Native Quake and Chocolate Quake presentation work and look right. Native
+  Quake timedemo was approximately 620 fps, reported as "just as solid"; this
+  is an owner observation, not a matched timedemo performance comparison.
+
+**Native counter and short functional qualification are complete.** Chocolate
+Quake has a separate observed input problem: motion stops at the left/right
+screen edges and unlocking does not work, appearing to hide rather than capture
+the cursor. Normal Quake works. The owner considers this independent of frame
+skipping and the orchestrator is routing it separately; this PR makes no consumer
+mouse changes and does not claim that diagnosis is established.
+
+### Integration after qualification
+
+Current main `4cb736f8` was merged after the native run. Its terminal styles/RGB
+change conflicts with generation tracking in `kernel/fb/tty.c`: retained cells
+now store glyph, foreground, background and attributes together. The resolution
+compares all four fields for visual invalidation, preserves glyph-only selection
+invalidation, and compares resolved background colours for graphics-margin
+invalidation. No skip, pacing, frame-handoff or GPU-write contract changed.
+Native results above belong to `87e03014` plus the tool; they are not a native
+run of this integration revision. Integration code is `1b0f5bd8` (main `4cb736f8`). Its full source image builds
+with the existing LLVM23.1.3 builder and inherited published main pins (userland
+`1162d729`, ports `4047297d`, unchanged fs/lwIP); no dependency PR or unpublished
+pin. Probe enabled, synthetic source disabled. QEMU10.2.2 Q35/nestedKVM/maxCPU,
+four CPUs, 2 GiB, fresh OVMF, standard/Bochs/VirtIO each 1280×800, relative PS/2,
+VirtIO-SCSI CD/RNG, no NIC/disk/USB/audio:
+
+- Firmware: echo, idle skip, same-glyph red→blue/bold repaint, styled selection
+  (read-only GDB verifies glyph/colour/attributes retained), screenshot command.
+- Bochs and VirtIO: echo after startup and unchanged frames held while service
+  and skip counts continue. VirtIO's QMP scanout does not qualify its separate
+  host cursor pixels.
+
+Source/integration review, whitespace and document links pass; task-owned VMs
+and debugger sessions are stopped. No native run of `1b0f5bd8` is claimed.
+Exact-head CI is reported on the PR; the owner reviews and merges.

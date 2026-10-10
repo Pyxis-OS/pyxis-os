@@ -17,7 +17,7 @@ input focus, lock, Super+Esc, custom cursor ownership and geometry stay unchange
 
 Today Renoir frames include the software pointer through cursor row composition
 and `pointer_present_copy`. Task 1 measured periodic full-frame recomposition.
-The owner then assigned [whole-frame skipping](presenter-frame-skipping.md):
+The owner then assigned [whole-frame skipping](../kernel/presenter-frame-skipping.md):
 unchanged frames avoid pixel work, while visible software pointer changes still
 require a complete frame. Hardware support should
 remove pointer pixels from ordinary base-frame composition and service changed
