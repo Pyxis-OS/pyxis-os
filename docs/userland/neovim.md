@@ -43,14 +43,27 @@ survives independently. Redirected stdin requiring fd 3 is refused before launch
 
 ## Saving and limits
 
+File selection proves the existing parent directory with native `realpath`, then
+joins the final component to that absolute scheme path. A new file needs no
+identity of its own yet; an absent, stale or unprovable parent refuses selection.
+The selected name stays fixed across `:cd`, including `:e!`. Force does not
+bypass parent proof or grant write authority.
+
+A buffer without an original creates exclusively: a file that appeared meanwhile
+is refused by ordinary `:w`; `:w!` selects the current writable target before
+truncation. `:w newname` and `:saveas` to a new name also create exclusively;
+an existing destination needs force. Changing names drops the old origin;
+a successful save establishes the new one. Plain `:w >> missing` refuses,
+following upstream; `:w! >> missing` creates and appends, without truncation.
+
 Each loaded file buffer retains a reference until unload. Before ordinary `:w`
 truncates, it compares fresh, valid identity and modification time on that
 reference and the actual writable target. Replacement, changed time or missing
 comparison metadata requires `:w!`; force selects the current native target and
 still needs write authority. Failed force invalidates the comparison baseline.
 A successful save establishes the selected target for later ordinary saves.
-`:saveas` of an existing loaded buffer conservatively needs force; writing a new
-name creates exclusively. The [backing validity table](../wip/neovim-groundwork.md#slice-4-contract-accepted-2026-10-10)
+`:saveas` keeps the selected new name even if writing fails, as upstream does.
+The [backing validity table](../wip/neovim-groundwork.md#slice-4-contract-accepted-2026-10-10)
 explains RAM, npfs, host and archive cases. This comparison is not a mutation
 lease: concurrent changes remain possible, and equal times do not prove equal
 bytes. Saving retains the existing checked write/sync path.
