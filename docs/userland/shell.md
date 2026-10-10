@@ -105,22 +105,46 @@ that shell stops saving.
 
 Searching history with Ctrl+R is [deferred](../technical-debt.md#initial-terminal-editor).
 
-**Tab completion.** Tab completes the command name: the first word of the line
-or of a pipeline stage after `|`. The candidates are the shell builtins and the
-programs in `bin://` and `boot://` (each `NAME.pxe` offered as `NAME`), sorted
-and without duplicates. Names that need quoting to type are not offered, and
-`bin://` entries added by a development bundle catalog are not either.
+**Tab completion.** Tab completes the word before the cursor, read with the
+parser's quoting rules.
 
-- **One match** replaces the word and adds a space.
+- **Command names:** the first word of the line or of a pipeline stage after `|`,
+  typed bare. The candidates are the shell builtins and the programs in `bin://`
+  and `boot://` (each `NAME.pxe` offered as `NAME`), sorted and without duplicates.
+  Names that need quoting to type are not offered, and `bin://` entries added by
+  a development bundle catalog are not either.
+- **Paths:** any other word, including a redirection target. Everything up to the
+  last `/` is the directory, opened as `cd` and `ls` open one: relative to the
+  working directory, or by a `scheme://` root, with the shell's own grants. A
+  directory it cannot open offers nothing. Files and directories are offered,
+  whatever the command. A directory ends in `/` and a lone one gets no space, so
+  the next Tab goes deeper. Names that start with `.` are offered only after a
+  typed `.`. A word that begins with a partial root name, such as `ho` or `home:`,
+  also offers the caller's roots as `name://`, taken from the shell's own root
+  bindings.
+- **Quoting follows how the word began.** Unquoted, the inserted text escapes a
+  space, `'`, `"`, `\`, `|`, `<`, `>` and `&` with a backslash (`two\ words`). Inside
+  quotes the name is inserted raw, with `"` and `\` escaped in double quotes, and a
+  lone file match closes the quote. A name holding `'` is not offered inside single
+  quotes. A word that mixes quoted and unquoted pieces is written again in the
+  quote state at the cursor.
+- **Not offered:** names with non-ASCII or control bytes, `http://` and
+  `https://` words (Tab never starts a network request), and the contents of a
+  directory with more than 4096 entries.
+
+Matches behave the same for both kinds:
+
+- **One match** replaces the word and adds a space, or nothing after a directory.
 - **Several matches** extend the word to their common prefix when that is longer.
   Otherwise Tab lists them in columns under the line and draws the prompt and
-  line again. Tab on an empty line lists every command.
-- **Nothing** happens in argument position, after a redirection operator, inside
-  quotes, or when the word contains `/`, `:` or another byte a bare name cannot
-  hold. Paths and arguments are not completed.
+  line again. Tab on an empty command position lists every command, and on an
+  empty argument position the working directory and the roots.
+- **Nothing** happens after a background `&`, for a command word that is quoted
+  or holds `/`, `:` or another byte a bare name cannot hold, and when nothing
+  matches.
 - A completion that would exceed the line limit changes nothing and marks the
-  line as full. The shell lists `bin://` and `boot://` with its own grants; if
-  either cannot be listed, it offers fewer names.
+  line as full. The shell lists `bin://` and `boot://` and path directories with
+  its own grants; what it cannot list it leaves out.
 
 The local shell, a [multiplexer](multiplexer.md) pane and the
 [remote terminal](remote-terminal.md) shell complete the same way; the quiet
