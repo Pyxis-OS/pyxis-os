@@ -1,6 +1,6 @@
 # Neovim task 6 groundwork
 
-**Owner accepted the three defaults on 2026-10-10. Working path and environment
+**Owner accepted the three groundwork defaults on 2026-10-10. Working path and environment
 are implemented in slice 1; proved realpath and fdopen/dup are implemented in
 slice 2; calendar, encoding and the numeric/string closure are implemented for
 review in slice 3. Stream rebinding/buffering and the editor recipe remain
@@ -29,6 +29,50 @@ row's `EINTR`, `NAME_MAX`, `O_NOFOLLOW` and permission constants are not part
 of this slice.
 The probe inventory below describes its original baseline, not current
 availability of the delivered slice 1–3 APIs.
+
+## Slice 4 preflight (pending owner decisions)
+
+Assigned 2026-10-10: Neovim 0.12.5 recipe, native platform/TUI and bundle.
+Fresh main `3d4bb733`, userland `8e85604a`, ports `f510e212`. The ordinary
+SDK/image builds; verified utf8proc/tree-sitter archives build and whole-archive
+link with no unresolved functions. Native PUC Lua 5.1, LPeg, mpack and the pinned
+in-tree bit module supply host generators. Target Lua/luv/LPeg/libuv are real;
+iconv is the merged libc implementation. No target placeholders or editor run. All host generators ran; the strict
+unadapted target build stopped at Unix-only `netdb.h`, before final link.
+
+1. **Internal child authority — default: explicit native spawn delegation.**
+   Neovim's `ui_client_start_server` starts the same image with `--embed`.
+   Its loop requires pipe/create, but ordinary libuv children deliberately
+   receive only memory/clock/launcher. Add a native spawn extension with explicit
+   caller-selected child resource grants; Neovim selects pipe/create for this
+   internal server, leaving ordinary `uv_spawn` attenuation unchanged. Directional
+   pipes use slots 0–2 and flags zero; redirected stdin needing fd 3 is refused
+   before launch. Alternative: a Neovim-owned native launcher/observer adapter,
+   duplicating the existing libuv capture/lifetime work. Qualify both loops and
+   child cleanup; never silently delegate the grant to ordinary jobs.
+
+2. **Cached metadata and overwrite — default: held reference and explicit force.**
+   Keep one reference per loaded file buffer until unload; comparison metadata
+   includes validity. Compare the actual held writable target before truncation,
+   retaining the original throughout. Ordinary `:w` refuses replacement or
+   unavailable comparison metadata; `:w!` explicitly selects the current native
+   target when freshness cannot be established. Never treat unknown zero IDs or
+   times as equality, or retain freshness caches with unknown mtime. Alternative:
+   refuse uncertain overwrites even with `:w!`. Qualify replacement, unavailable
+   metadata and reference cleanup. This supplies no mutation lease: names and
+   contents can change after sampling, and equal mtime never proves equal bytes.
+
+Source evidence: libuv `pyxis/process.c` resource selection and `core.c` loop
+admission; Neovim `ui_client.c`, `event/libuv_proc.c`, `os/fs.c`, `fileio.c` and
+`bufwrite.c`; [live metadata lifetime](../interfaces/file-metadata.md).
+
+Existing contracts cover native observer termination/exit reasons, raw console
+input with a held passthrough grant, and generation-based resize without Unix
+signals. Numeric PID operations remain unsupported; PID metadata is omitted.
+Keep the current 16-colour profile, suppress probes and shutdown query waits,
+set NVIM_NOTTYFAST before startup, and leave COLORTERM unset. A delegated runtime
+root survives internal-child launch without forwarding the parent's app root.
+No native adapter implementation begins until the two decisions above settle.
 
 ## Editor integration still required
 
