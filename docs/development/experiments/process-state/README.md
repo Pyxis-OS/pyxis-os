@@ -82,3 +82,16 @@ cleanup, bootstrap cwd clear before original-grant retirement, snapshot lifetime
 through network overlays/launch capture. No allocation fault injection, HOST/
 installed-image/native run, game execution or threads qualification. Proved
 realpath and the remaining Neovim closure are later slices.
+
+## Integration refresh after tab completion
+
+Userland `3bd6c21f` rebases the slice onto main `1b6d26a` (#200), adapting
+the new root-completion access to the shared context. Parent code integration
+`9fb37ef0` merges Pyxis main `5531dfd1`; ports stays `be901cf5`. The ordinary
+`make -j16 image` build passed with the same compiler. Rebuilt scratch consumers
+repeated the cwd/environment/child checks above in the same four-CPU Q35/KVM
+configuration, with GDB inspection confirming the expected results. A separate
+ordinary boot completed `cd tm<Tab>` to `tmp://`, then `cat al<Tab>` to the
+relative file `alpha` and read its contents. Ordinary image inputs were restored;
+all task-owned VMs/debuggers stopped. Earlier launch samples retain their original
+inputs; this refresh did not change the launch implementation.
