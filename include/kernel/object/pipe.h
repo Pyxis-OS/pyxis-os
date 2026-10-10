@@ -23,6 +23,7 @@ struct pipe_end {
   struct kernel_object object;
   struct pipe_pair *pair;
   bool reader;
+  size_t grants; /* Open-end ownership; protected by pair lock. */
 };
 
 /* BSP, IF=0. Returned service has one owned reference. */
@@ -36,5 +37,10 @@ struct syscall_result pipe_call(struct pipe_end *end, uint64_t rights,
 
 /* Observe a retained endpoint under the pair lock; no readiness reservation. */
 uint64_t pipe_ready(struct pipe_end *end, uint64_t events);
+
+/* IF=0, caller retains storage. Every capability/transfer grant counts,
+ * including attenuated zero-right grants; operation references do not. */
+bool pipe_grant_retain(struct pipe_end *end);
+void pipe_grant_release(struct pipe_end *end);
 
 #endif

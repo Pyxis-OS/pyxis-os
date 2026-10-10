@@ -273,6 +273,16 @@ stack, with interrupts still disabled. The process remains alive while blocked. 
 stable except during an explicit private-memory loan after the task has left
 its address space.
 Only an explicit capability-table loan allows the BSP to modify its table.
+
+Admitted calls own object storage and copied rights/transport through their
+continuations; they borrow no table entry across growth or blocking. The short
+table guard covers acquisition and CLOSE detachment, but does not replace the
+sole-task/exclusive installation and growth loan. CLOSE invokes logical effects
+and releases its detached grant outside that guard. These storage references
+drain during syscall cleanup before `task_syscall_leave` and retirement; they do
+not prolong controller authority or pipe open directions. Shared-table delivery
+and sibling activity admission remain [later thread gates](../wip/threads.md).
+
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
 
