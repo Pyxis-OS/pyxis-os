@@ -51,7 +51,7 @@ static enum virtio_fs_result host_error(int32_t error)
   case FUSE_EXDEV:
   case FUSE_ELOOP: return VIRTIO_FS_UNSUPPORTED;
   case FUSE_EINVAL: return VIRTIO_FS_INVALID;
-  case FUSE_ENAMETOOLONG:
+  case FUSE_ENAMETOOLONG: return VIRTIO_FS_NAME_TOO_LONG;
   case FUSE_EMFILE:
   case FUSE_EOVERFLOW: return VIRTIO_FS_LIMIT;
   case FUSE_ENOMEM: return VIRTIO_FS_NO_MEMORY;
@@ -288,7 +288,7 @@ enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
 {
   KASSERT(parent->references && !node->references);
   if (length > VIRTIO_FS_NAME_MAX) {
-    return VIRTIO_FS_LIMIT;
+    return VIRTIO_FS_NAME_TOO_LONG;
   }
   if (!ordinary_name(name, length) || dot_name(name, length)) {
     return VIRTIO_FS_INVALID;
@@ -315,8 +315,10 @@ enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
     .kind = mode_kind(entry.attr.mode), .references = 1, .lookup_owned = true,
   };
   if (node->kind != VIRTIO_FS_FILE && node->kind != VIRTIO_FS_DIRECTORY) {
+    enum virtio_fs_result refused = node->kind == VIRTIO_FS_SYMLINK ?
+      VIRTIO_FS_LINK_NOT_FOLLOWED : VIRTIO_FS_UNSUPPORTED;
     result = virtio_fs_node_put(node);
-    return result == VIRTIO_FS_OK ? VIRTIO_FS_UNSUPPORTED : result;
+    return result == VIRTIO_FS_OK ? refused : result;
   }
   return VIRTIO_FS_OK;
 }
@@ -397,7 +399,7 @@ enum virtio_fs_result virtio_fs_create(struct virtio_fs_node *parent,
 {
   KASSERT(parent->references && !node->references && !opened->node);
   if (length > VIRTIO_FS_NAME_MAX) {
-    return VIRTIO_FS_LIMIT;
+    return VIRTIO_FS_NAME_TOO_LONG;
   }
   if (!ordinary_name(name, length) || dot_name(name, length)) {
     return VIRTIO_FS_INVALID;
@@ -450,7 +452,7 @@ enum virtio_fs_result virtio_fs_mkdir(struct virtio_fs_node *parent,
 {
   KASSERT(parent->references && !node->references);
   if (length > VIRTIO_FS_NAME_MAX) {
-    return VIRTIO_FS_LIMIT;
+    return VIRTIO_FS_NAME_TOO_LONG;
   }
   if (!ordinary_name(name, length) || dot_name(name, length)) {
     return VIRTIO_FS_INVALID;
@@ -497,7 +499,7 @@ enum virtio_fs_result virtio_fs_remove(struct virtio_fs_node *parent,
 {
   KASSERT(parent->references);
   if (length > VIRTIO_FS_NAME_MAX) {
-    return VIRTIO_FS_LIMIT;
+    return VIRTIO_FS_NAME_TOO_LONG;
   }
   if (!ordinary_name(name, length) || dot_name(name, length)) {
     return VIRTIO_FS_INVALID;
@@ -518,7 +520,7 @@ enum virtio_fs_result virtio_fs_rename(struct virtio_fs_node *source,
 {
   KASSERT(source->references && destination->references);
   if (source_length > VIRTIO_FS_NAME_MAX || destination_length > VIRTIO_FS_NAME_MAX) {
-    return VIRTIO_FS_LIMIT;
+    return VIRTIO_FS_NAME_TOO_LONG;
   }
   if (!ordinary_name(source_name, source_length) || dot_name(source_name, source_length) ||
       !ordinary_name(destination_name, destination_length) ||

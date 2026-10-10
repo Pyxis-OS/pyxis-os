@@ -68,6 +68,8 @@ static enum call_status call_result(enum virtio_fs_result result)
   case VIRTIO_FS_TIMED_OUT: return CALL_TIMED_OUT;
   case VIRTIO_FS_OUTCOME_UNKNOWN: return CALL_OUTCOME_UNKNOWN;
   case VIRTIO_FS_UNAVAILABLE: return CALL_UNAVAILABLE;
+  case VIRTIO_FS_LINK_NOT_FOLLOWED: return CALL_LINK_NOT_FOLLOWED;
+  case VIRTIO_FS_NAME_TOO_LONG: return CALL_NAME_TOO_LONG;
   default: return CALL_IO;
   }
 }

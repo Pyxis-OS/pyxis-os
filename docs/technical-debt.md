@@ -600,7 +600,8 @@ O_CREAT accepts only mode 0666 as a request for native creation policy; it insta
 other modes (including restrictive ones such as 0600, and opens of existing files) fail with ENOTSUP before lookup. Virtio-fs keeps its
 0644 creation request under the host-service identity. This is the accepted policy for the first writable public opens (used by tee).
 Revisit with a file permission system, users and ownership, defining mode enforcement and umask together rather than silently discarding
-requests callers expect to restrict access.
+requests callers expect to restrict access. Neovim's persistent undo passes the edited file's permission bits (none, since `stat`
+reports only the type) or 0600 for a new file, so it fails with E828 ([Neovim limits](userland/neovim.md#saving-and-limits)).
 
 ## Non-atomic stdio append
 
@@ -657,7 +658,7 @@ ownership, mode permissions and access/change times remain absent.
 
 - **Sizing opens the file** with READ (or WRITE if READ is denied), so a file with neither right cannot be sized, and on a provider URI
   it performs the request (Links sends provider URIs straight to `fopen`). Review proposed failing with ENODEV there, as `opendir` does.
-- **Symlinks:** lookup never follows one, so `stat` and `lstat` of a host symlink fail with ENOTSUP and `readdir` reports `DT_LNK`;
+- **Symlinks:** lookup never follows one, so `open`, `stat` and `lstat` of a host symlink fail with ELOOP and `readdir` reports `DT_LNK`;
   native filesystems have none, `lstat` equals `stat`, and `readlink` is absent.
 - **Access checks:** `access` tests current native grants, not mode bits or backing I/O (directory R_OK needs ENUMERATE, W_OK
   CREATE|REMOVE; X_OK and provider routes return ENOTSUP), per the

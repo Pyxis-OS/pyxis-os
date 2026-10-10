@@ -130,9 +130,10 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Claude** (2026-10-10): [port sweep](../development/experiments/libc-port-sweep/README.md)
-  after the libc closure: Lua 5.5 calendar tables, SDL2's environment, Quake
-  and EDuke32 `fdopen`, Links `getcwd`. Neovim task 6 slice 3 (#678), task 5
+- **Claude** (2026-10-10): [name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links):
+  `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel statuses.
+  The [port sweep](../development/experiments/libc-port-sweep/README.md) (#683),
+  Neovim task 6 slice 3 (#678), task 5
   (#672) and the [system power overlay](system-power-overlay.md) (#659) are
   merged; the overlay's installed-system flush check is pending.
   Presentation timing steps 1 and 2 (#610, #618),

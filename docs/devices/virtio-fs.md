@@ -245,8 +245,10 @@ acquired lookup reference. Node storage must outlive all of its opens. Close and
 final put consume their local records even if the session has failed.
 
 Lookup accepts one component of at most 255 bytes, excluding NUL, slash, `.` and
-`..`. Names need not be UTF-8. Only regular files and directories can be opened;
-symlinks are not followed and special files are unsupported. READDIR still
+`..`; a longer name, or a host ENAMETOOLONG, is NAME_TOO_LONG. Names need not be
+UTF-8. Only regular files and directories can be opened: a symlink is not
+followed and fails with LINK_NOT_FOLLOWED, and other special files are
+unsupported (BAD_OPERATION). READDIR still
 reports their kinds, including unknown types, and skips dot entries. Reads use
 explicit offsets, transfer at most 4 KiB and preserve short reads and EOF. Each
 writable descriptor is sized to that operation's maximum reply, including its

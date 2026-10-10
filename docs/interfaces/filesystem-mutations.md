@@ -43,7 +43,8 @@ Native CREATE, REMOVE and regular-file RENAME use the same capability checks.
 Parents for native rename must belong to one volume; mixed backends return
 BAD_OPERATION. REPLACE requires destination REMOVE even when its name is absent.
 The serial worker stages CREATE's returned capability before publishing the entry;
-failure unwinds that handle. Names are counted UTF-8 components of at most 255 bytes.
+failure unwinds that handle. Names are counted UTF-8 components of at most 255 bytes; a longer one fails
+with NAME_TOO_LONG.
 No on-disk principal or permission grant participates.
 
 Unlink/replacement records DETACHED cleanup in the same transaction as the name

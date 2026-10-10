@@ -46,7 +46,10 @@ struct directory_cursor {
   uint64_t position;
 };
 
-/* LOOKUP and exclusive CREATE request the same name, kind and child rights. */
+/* LOOKUP and exclusive CREATE request the same name, kind and child rights.
+ * Native and host directories refuse a name over 255 bytes with NAME_TOO_LONG;
+ * RAM directories have no name limit. Lookup never follows a host symbolic
+ * link: LINK_NOT_FOLLOWED. Other host special files are BAD_OPERATION. */
 struct directory_child_request {
   uint64_t name;
   uint64_t name_length; /* Bytes excluding NUL; one ordinary component. */

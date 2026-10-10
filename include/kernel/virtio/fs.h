@@ -30,6 +30,8 @@ enum virtio_fs_result {
   VIRTIO_FS_UNAVAILABLE,
   VIRTIO_FS_PROTOCOL,
   VIRTIO_FS_OUTCOME_UNKNOWN,
+  VIRTIO_FS_LINK_NOT_FOLLOWED,
+  VIRTIO_FS_NAME_TOO_LONG,
 };
 
 enum virtio_fs_kind {

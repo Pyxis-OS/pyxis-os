@@ -44,6 +44,10 @@ enum call_status {
   CALL_OUTCOME_UNKNOWN = 27,
   CALL_ABANDONED = 28,
   CALL_WOULD_BLOCK = 29,
+  /* Lookup met a symbolic link; Pyxis follows none. */
+  CALL_LINK_NOT_FOLLOWED = 30,
+  /* One path component exceeds its directory backing's name limit. */
+  CALL_NAME_TOO_LONG = 31,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 
