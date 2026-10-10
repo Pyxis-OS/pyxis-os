@@ -9,6 +9,8 @@ enum renoir_flip_state {
 /* BSP IF=0, before AP startup; private surfaces and register mappings retained. */
 bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer *gop, bool metrics);
 void renoir_flip_cancel_prepare(void);
+/* Opt-in read-only cursor inventory on the prepared flip owner. */
+void renoir_flip_cursor_inventory(const struct boot_info *boot);
 enum renoir_flip_state renoir_flip_state(void);
 const struct framebuffer *renoir_flip_surface(unsigned index);
 const struct framebuffer *renoir_flip_back(void);

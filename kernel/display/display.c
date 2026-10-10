@@ -18,6 +18,7 @@
 #include "internal.h"
 #include "timing.h"
 #include "presentation.h"
+#include "cursor_probe.h"
 
 #define DISPLAY_COPY_BYTES (64 * 1024)
 #define DISPLAY_PANIC_WAIT_LIMIT 1000000
@@ -37,7 +38,7 @@ static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
  * Zero means composition writes the front buffer directly. Fixed for the
  * boot: these drivers never resize. VirtIO composes into its own RAM backing. */
 static uintptr_t staging;
-static bool flip_enabled, flip_pending, flip_completed, presentation_metrics;
+static bool flip_enabled, flip_pending, flip_completed, presentation_metrics, cursor_probe_enabled;
 static uint64_t frame_started, frame_compose, frame_copy;
 static uint64_t compose_total, copy_total, metric_frames;
 static uint64_t compose_max, copy_max;
@@ -106,7 +107,8 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
   }
   panic_surfaces[0] = target;
   const struct boot_options *options = boot_options_get();
-  presentation_metrics = options->display_flip_metrics;
+  presentation_metrics = options->display_flip_metrics || options->display_cursor_probe;
+  cursor_probe_enabled = options->display_cursor_probe;
   if (driver == DISPLAY_BOOT && options->display_flip) {
     flip_enabled = renoir_flip_prepare(boot, target, options->display_flip_metrics);
     if (flip_enabled) {
@@ -114,6 +116,9 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
     }
   } else if (options->display_flip) {
     klog("renoir-flip: unavailable: not a firmware framebuffer backend\n");
+  }
+  if (options->display_cursor_probe) {
+    renoir_flip_cursor_inventory(boot);
   }
   if (!flip_enabled) {
     display_timing_prepare(boot, driver == DISPLAY_BOOT, timing, timing_metrics);
@@ -240,6 +245,9 @@ void display_resize_disable(void)
 
 bool display_begin_frame(void)
 {
+  if (cursor_probe_enabled) {
+    cursor_probe_begin();
+  }
   flip_completed = false;
   if (presentation_metrics) {
     frame_started = arch_monotonic_ns();
@@ -262,6 +270,9 @@ bool display_pointer_hardware(void)
 void display_copy(size_t offset, const void *pixels, size_t bytes)
 {
   KASSERT(offset <= target->size && bytes <= target->size - offset);
+  if (bytes && cursor_probe_enabled) {
+    cursor_probe_compose();
+  }
   const uint8_t *source = pixels;
   while (bytes && !atomic_load(&panic_claimed)) {
     size_t count = bytes < DISPLAY_COPY_BYTES ? bytes : DISPLAY_COPY_BYTES;
@@ -307,6 +318,9 @@ static size_t copy_first_pixel(void)
 
 static void copy_staging(void)
 {
+  if (cursor_probe_enabled) {
+    cursor_probe_copy();
+  }
   size_t row_bytes = target->width * sizeof(uint32_t);
   if (target->pitch == row_bytes) {
     size_t total = row_bytes * target->height;
@@ -337,7 +351,11 @@ static void record_frame_cost(uint64_t compose, uint64_t copy)
   copy_total += copy;
   compose_max = MAX(compose_max, compose);
   copy_max = MAX(copy_max, copy);
-  if (++metric_frames % 120 == 0) {
+  ++metric_frames;
+  if (cursor_probe_enabled) {
+    cursor_probe_record(metric_frames, compose_total, copy_total);
+  }
+  if (metric_frames % 120 == 0) {
     klog("display-flip-metrics: frames=%lu compose-mean=%lu ns compose-max=%lu ns copy-mean=%lu ns copy-max=%lu ns backend=%s\n",
         metric_frames, compose_total / metric_frames, compose_max,
         copy_total / metric_frames, copy_max, flip_enabled ? "flip" : "ordinary");
@@ -346,6 +364,9 @@ static void record_frame_cost(uint64_t compose, uint64_t copy)
 
 static void copy_flip_surface(const struct framebuffer *surface)
 {
+  if (cursor_probe_enabled) {
+    cursor_probe_copy();
+  }
   size_t row_bytes = target->width * sizeof(uint32_t);
   for (size_t y = 0; y < target->height && !display_is_panicking(); ++y) {
     for (size_t x = 0; x < row_bytes && !display_is_panicking();
@@ -464,6 +485,9 @@ static bool end_flip_frame(const struct pointer_frame *frame)
 
 bool display_end_frame(const struct pointer_frame *frame)
 {
+  if (cursor_probe_enabled) {
+    cursor_probe_pointer(frame);
+  }
   if (flip_enabled) {
     return end_flip_frame(frame);
   }
