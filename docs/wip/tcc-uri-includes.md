@@ -1,6 +1,7 @@
 # TCC includes by URI
 
-Status: **proposal, 2026-10-10; three owner decisions open.** This is the
+Status: **accepted 2026-10-10: all three defaults, plus the failure and RFC 3986
+rules; the TCC patch is the first task.** This is the
 [compiler experiment](userspace-scheme-providers.md#compiler-experiment): TCC
 resolving `#include "https://…"` and other `scheme://` names through the caller's
 granted namespace. Nothing below is implemented unless it is listed under what
@@ -100,32 +101,30 @@ A branch name such as `master` moves, and so does the build. TCC cannot tell the
 two kinds apart and does not warn. `tcc -E` output records exactly what was
 compiled, with URIs kept in its line markers.
 
-## Decisions for the owner
+## Accepted decisions
 
 1. **`#pragma once` on fetched headers.** Snapshots have a domain but no object
    ID, so the [native identity rule](../interfaces/file-metadata.md) cannot
    compare them.
-   - **Default:** within one translation unit, two `http(s)` headers are the same
+   - **Accepted:** within one translation unit, two `http(s)` headers are the same
      when their final URLs are equal after RFC 3986 normalization (scheme and
      host case, default port, dot segments, no fragment). A once-marked URI named
      again is skipped without a fetch. A different name is fetched, and skipped
      if it redirects to the same final URL. The first snapshot stays open, as
      once headers do today.
-   - **Alternative:** keep the error, and require include guards in remote
-     headers.
+   - Not chosen: keeping the error and requiring include guards.
 2. **Remote include directories (`-I https://…`).**
-   - **Default:** refuse a URI include or library directory with "include
+   - **Accepted:** refuse a URI include or library directory with "include
      directories must be local; name remote headers in #include". A remote
      directory makes every system-header search a request: five extra in the
      observed run, each revealing a header name to the server and costing up to 30
      seconds when the network fails.
-   - **Alternative:** keep allowing it.
+   - Not chosen: keeping remote directories.
 3. **Pinning.**
-   - **Default:** no cache and no integrity syntax. Immutable URIs are the pin,
+   - **Accepted:** no cache and no integrity syntax. Immutable URIs are the pin,
      and the docs show the GitHub and gist forms above.
-   - **Alternative:** TCC verifies an optional `#sha256=<hex>` fragment on an
-     include URI before using the bytes. Providers never transmit fragments.
-     This needs a SHA-256 in the patch and a decision on the hash spelling.
+   - Possible later work: TCC verifying an optional `#sha256=<hex>` fragment
+     before using the bytes. Providers never transmit fragments.
 
 ## First task after acceptance
 
