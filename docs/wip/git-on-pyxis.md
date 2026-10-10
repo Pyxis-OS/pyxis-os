@@ -351,3 +351,8 @@ The base SDK stays independent of TLS/libgit2. This task changes only the userla
 pin and related docs in Pyxis. No new upstream source or compiler container is
 needed. The original investigation probe branch stays unmerged; task-owned
 qualification processes are stopped. Stop for owner review of task 3.
+
+Shared [working path and environment](../userland/process-state.md) now provide
+`chdir`/`getcwd` and `setenv`/`unsetenv`, superseding those gaps in the earlier
+probe tables. Children receive explicit snapshots; no writable `environ` or
+`putenv` is supplied. The bounded proved `realpath` remains the next slice.

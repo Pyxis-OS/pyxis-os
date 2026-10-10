@@ -6,8 +6,10 @@ requires Lua. Monotonic deadlines are unaffected.
 
 ## Selection and authority
 
-`TZ` comes from the process's startup environment. Absent or empty `TZ` means
-UTC and needs no filesystem capability or allocation. A nonempty value is an
+`TZ` comes from the [mutable process environment](process-state.md), seeded
+from startup. Absent or empty `TZ` means UTC and needs no zone-file capability
+or allocation. Initial environment copying may allocate; lookup failure is
+reported rather than treated as absence. A nonempty value is an
 IANA name such as `Europe/Bucharest`, `Pacific/Auckland` or `Etc/UTC`. Libc reads
 `boot://share/zoneinfo/<name>` through the process's existing `boot` directory
 capability. Names allow ASCII letters, digits, `_`, `-`, `+` and nonempty
@@ -21,7 +23,7 @@ Invalid selections report errors on each conversion, never the previous zone or
 a silent UTC fallback. Files are not watched or reloaded while the name remains
 unchanged. The cache assumes the current one-thread-per-process runtime.
 
-The shell forwards its startup environment to children. There is no new shell
+The shell forwards an explicit snapshot of its current environment to children. There is no new shell
 assignment command or timezone syscall. The default [session configuration](session-configuration.md)
 explicitly selects Bucharest and supplies `TZ` when starting the shell.
 Startup that bypasses the session launcher still uses UTC when `TZ` is absent

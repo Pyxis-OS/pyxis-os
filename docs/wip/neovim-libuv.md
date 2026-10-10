@@ -17,7 +17,7 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | --- | --- | --- | --- |
 | 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Task 1 adds pipe readiness and native try operations** ([pipes](../interfaces/pipes.md#readiness)); libc streams remain blocking, file and provider opens cannot be waited on, and there are no completion tokens. |
 | 2 | User threads | **Unchanged for this purpose** | [Task 1 and later gates](threads.md#small-next-task-and-delivery-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Native create/join, TLS, the pthread profile and thread-safe libc remain later unassigned gates. |
-| 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
+| 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, proved `realpath`, `mktime`, `fdopen`, `iconv`. Shared [working path and environment](../userland/process-state.md) are delivered by task 6's first slice. |
 | 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: non-ASCII input and drawing (the alternate screen, scroll regions and saved cursor came with task 3), and a PTY-style session for child terminals. |
 | 5 | libuv backend | **Native task 4 slice** | Pinned libuv 1.52.1 has a Pyxis platform layer for loop/timers/async, console/pipe streams, explicit child launch/completion and synchronous libc filesystem operations. Excluded workers, async fs, sockets, watches, signals and module loading fail honestly; the [adapter limits](../../ports/libuv/README.md) remain gates for luv/Neovim. |
 | 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; libuv 1.52.1 is added by task 4; Lua 5.1, LPeg, luv, utf8proc, tree-sitter and iconv remain absent. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
@@ -88,15 +88,15 @@ without Neovim.
 6. [ ] **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
    tree-sitter library, iconv) with host generators kept native, plus the libc
    functions its build finds missing. The owner can run `nvim file`, edit with vi
-   keys, save, and quit in a tab and a pane. Expect this task to split once the
-   first full build lists the missing functions, in particular `chdir`,
-   `getcwd`, `setenv`, `mktime`, `fdopen` and `iconv`, each needing its own
-   decision on native objects. The [task 6 groundwork](neovim-groundwork.md)
+   keys, save, and quit in a tab and a pane. The task is split around the
+   accepted shared-libc contract and remaining recipe/qualification work. The [task 6 groundwork](neovim-groundwork.md)
    records the current-SDK build inventory and shared-libc contract accepted
    by the owner on 2026-10-10;
    the groundwork probe is recorded, editor implementation and qualification remain open.
    - [x] Current-SDK probe inventory and native-design proposal.
-   - [ ] Shared-library closure, recipe and full editor qualification after assignment.
+   - [x] Shared libc working path and explicit environment, with consumers and child snapshots.
+   - [ ] Bounded proved realpath, then stdio/calendar/encoding closure after assignment.
+   - [ ] Recipe and full editor qualification after assignment.
 
 Later, each with its own proposal: swap and backup recovery (needs task 2 and a
 lease policy), jobs and `system()` (extra stream delegation and group stop),
