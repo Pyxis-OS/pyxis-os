@@ -1,8 +1,20 @@
 #ifndef KERNEL_USER_MEMORY_H
 #define KERNEL_USER_MEMORY_H
 
+#include <abi/handle.h>
 #include <stddef.h>
 #include <stdint.h>
+
+struct process;
+
+struct user_buffer_lease {
+  struct process *process;
+};
+
+/* IF=0, nonblocking and nested. Covers only a bounded check/copy or commit,
+ * never allocation, an I/O wait or scheduling. Release before root departure. */
+bool user_buffer_lease_acquire(struct user_buffer_lease *lease);
+void user_buffer_lease_release(struct user_buffer_lease *lease);
 
 enum user_buffer_access {
   USER_BUFFER_READ,
@@ -17,20 +29,24 @@ enum user_buffer_access {
 bool user_buffer_check(uintptr_t address, size_t bytes,
                         enum user_buffer_access access);
 
-/* Validate the entire user range before copying; failure leaves the destination
- * untouched. The kernel buffer must be valid for bytes and must not overlap or
- * alias the user range. Zero bytes touches neither buffer. Mappings remain
- * stable because this process has one task, no shared user backing and no
- * concurrent VM mutation. The copy itself never schedules. A blocking syscall
- * must keep the process alive, capture request metadata before side effects,
- * and resume its original task/root before copying checked sources/destinations.
- * Private input stays unchanged while its sole task sleeps, except when that
- * call explicitly releases its region. Such a call must not access it again.
- * Keep IF=0 while copying; other CPUs must never dereference these mappings.
- * No fault recovery is attempted for broken kernel mapping/buffer invariants.
- * A syscall must check all request/reply/data buffers before its side effects;
- * capture request metadata with copy_from_user before interpreting it. */
+/* Validate the entire range under a short mapping lease before copying. Failure
+ * leaves the destination untouched. Kernel buffers must be valid and not alias
+ * user ranges; zero bytes touches neither buffer. Input contents remain untrusted
+ * and can change independently of mapping stability. No allocation, scheduling
+ * or fault recovery. A precheck is not a lease across a later wait: stage inputs
+ * and revalidate final outputs, preserving already committed effects on failure. */
 bool copy_from_user(void *destination, uintptr_t source, size_t bytes);
 bool copy_to_user(uintptr_t destination, const void *source, size_t bytes);
+
+/* Validate both destinations under one lease, then copy data followed by reply.
+ * Overlapping user destinations retain that order; kernel sources must not alias
+ * either. A validation failure writes neither range. */
+bool copy_reply_to_user(uintptr_t reply_address, const void *reply, size_t reply_size,
+    uintptr_t data_address, const void *data, size_t data_size);
+
+/* A failed reply releases only the operation's unreported handle generations.
+ * External creation, launch and device effects are not rolled back. */
+bool copy_returned_handles_to_user(uintptr_t destination, const void *source,
+    size_t bytes, const handle_t *handles, size_t count);
 
 #endif
