@@ -1660,7 +1660,9 @@ editing or deleting a live revision is unsupported.
 The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
 stream/process interests per loop and synchronous filesystem calls. Child
 bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
-APIs are omitted. Luv consumes the native exit reasons and reports unsupported
+APIs are omitted (the `uv_os_*` queries Pyxis can answer are listed in the
+[libuv notes](../ports/libuv/README.md#operating-system-queries); passwd, group,
+priority, CPU, memory and load queries stay refused). Luv consumes the native exit reasons and reports unsupported
 PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
 Neovim must still consume native stat validity and close remaining libc/API gaps
 in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
