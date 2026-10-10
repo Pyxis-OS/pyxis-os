@@ -277,7 +277,7 @@ static void static_layout(struct layout_state *s)
   h->primary = h->earliest = h->inuse = 0;
   h->flip &= ~(FLIP_PENDING | FLIP_IMMEDIATE);
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
-    s->registers.hubp[i].control &= ~HUBP_REQUEST_STATUS;
+    s->registers.hubp[i].control &= ~(HUBP_REQUEST_STATUS | HUBP_IN_BLANK);
     s->registers.hubp[i].clock &= ~HUBP_CLOCK_STATUS;
     if (!(s->scaler_mode[i] & SCALER_MODE_MASK)) {
       s->scaler_mode[i] &= ~SCALER_CURRENT_BANK;
@@ -295,6 +295,123 @@ static bool same_layout(struct layout_state a, struct layout_state b)
   static_layout(&a);
   static_layout(&b);
   return !memcmp(&a, &b, sizeof(a));
+}
+
+/* Failure-only diagnostics name fields using the same normalization as the
+ * immutable comparison, while retaining raw register values in the output. */
+static void report_layout_difference(const struct layout_state *current, const struct layout_state *inherited)
+{
+  struct layout_state a = *current, b = *inherited;
+  static_layout(&a);
+  static_layout(&b);
+  unsigned i = 0;
+#define REPORT_FIELD(field) do { \
+  if (a.field != b.field) { \
+    klog("renoir-flip: difference field=%s index=%u inherited=%lx current=%lx\n", \
+        #field, i, (uint64_t)inherited->field, (uint64_t)current->field); \
+    return; \
+  } \
+} while (0)
+  for (i = 0; i < RENOIR_PIPES; ++i) {
+    REPORT_FIELD(registers.hubp[i].config);
+    REPORT_FIELD(registers.hubp[i].address_config);
+    REPORT_FIELD(registers.hubp[i].tiling);
+    REPORT_FIELD(registers.hubp[i].viewport_start);
+    REPORT_FIELD(registers.hubp[i].viewport_size);
+    REPORT_FIELD(registers.hubp[i].control);
+    REPORT_FIELD(registers.hubp[i].clock);
+    REPORT_FIELD(registers.hubp[i].pitch);
+    REPORT_FIELD(registers.hubp[i].vmid);
+    REPORT_FIELD(registers.hubp[i].surface);
+    REPORT_FIELD(registers.hubp[i].flip);
+    REPORT_FIELD(registers.hubp[i].flip2);
+    REPORT_FIELD(registers.hubp[i].crossbar);
+    REPORT_FIELD(registers.hubp[i].aperture_low);
+    REPORT_FIELD(registers.hubp[i].aperture_high);
+    REPORT_FIELD(registers.hubp[i].tlb);
+    REPORT_FIELD(registers.hubp[i].primary);
+    REPORT_FIELD(registers.hubp[i].metadata);
+    REPORT_FIELD(registers.hubp[i].inuse);
+    REPORT_FIELD(registers.hubp[i].earliest);
+    REPORT_FIELD(registers.otg[i].control);
+    REPORT_FIELD(registers.otg[i].interlace);
+    REPORT_FIELD(registers.otg[i].h_total);
+    REPORT_FIELD(registers.otg[i].h_blank);
+    REPORT_FIELD(registers.otg[i].v_total);
+    REPORT_FIELD(registers.otg[i].v_blank);
+    REPORT_FIELD(registers.otg[i].source);
+    REPORT_FIELD(registers.otg[i].format);
+    REPORT_FIELD(scaler[i].h_ratio);
+    REPORT_FIELD(scaler[i].v_ratio);
+    REPORT_FIELD(scaler[i].h_ratio_c);
+    REPORT_FIELD(scaler[i].v_ratio_c);
+    REPORT_FIELD(scaler[i].h_init);
+    REPORT_FIELD(scaler[i].v_init);
+    REPORT_FIELD(scaler[i].h_init_c);
+    REPORT_FIELD(scaler[i].v_init_c);
+    REPORT_FIELD(scaler[i].v_init_bottom);
+    REPORT_FIELD(scaler[i].v_init_bottom_c);
+    REPORT_FIELD(scaler[i].taps);
+    REPORT_FIELD(scaler[i].control);
+    REPORT_FIELD(scaler[i].two_tap_control);
+    REPORT_FIELD(scaler[i].replicate_control);
+    REPORT_FIELD(registers.mux[i]);
+    REPORT_FIELD(scaler_mode[i]);
+    REPORT_FIELD(scaler_autocal[i]);
+    REPORT_FIELD(recout_start[i]);
+    REPORT_FIELD(recout_size[i]);
+    REPORT_FIELD(mpc_size[i]);
+    REPORT_FIELD(stereo[i]);
+    REPORT_FIELD(lock[i]);
+    REPORT_FIELD(gsl[i]);
+    REPORT_FIELD(flip_interrupt[i]);
+  }
+  for (i = 0; i < RENOIR_MPCCS; ++i) {
+    REPORT_FIELD(registers.mpcc[i].top);
+    REPORT_FIELD(registers.mpcc[i].bottom);
+    REPORT_FIELD(registers.mpcc[i].opp);
+    REPORT_FIELD(registers.mpcc[i].control);
+    REPORT_FIELD(registers.mpcc[i].status);
+    REPORT_FIELD(mpcc_stereo[i]);
+  }
+  for (i = 0; i < DMCUB_CACHE_WINDOWS; ++i) {
+    REPORT_FIELD(registers.cache[i].base);
+    REPORT_FIELD(registers.cache[i].top);
+    REPORT_FIELD(registers.cache[i].low);
+    REPORT_FIELD(registers.cache[i].high);
+  }
+  for (i = 0; i < DMCUB_UNCACHED_WINDOWS; ++i) {
+    REPORT_FIELD(registers.uncached[i].base);
+    REPORT_FIELD(registers.uncached[i].top);
+    REPORT_FIELD(registers.uncached[i].low);
+    REPORT_FIELD(registers.uncached[i].high);
+  }
+  i = 0;
+  REPORT_FIELD(registers.fb_base);
+  REPORT_FIELD(registers.fb_top);
+  REPORT_FIELD(registers.fb_offset);
+  REPORT_FIELD(registers.gc_offset);
+  REPORT_FIELD(registers.mc_base);
+  REPORT_FIELD(registers.mc_top);
+  REPORT_FIELD(registers.memsize);
+  REPORT_FIELD(registers.context_control);
+  REPORT_FIELD(registers.context_base_high);
+  REPORT_FIELD(registers.context_base_low);
+  REPORT_FIELD(registers.context_start_high);
+  REPORT_FIELD(registers.context_start_low);
+  REPORT_FIELD(registers.context_end_high);
+  REPORT_FIELD(registers.context_end_low);
+  REPORT_FIELD(registers.dmcub_control);
+  REPORT_FIELD(registers.dmcub_security);
+#undef REPORT_FIELD
+  const unsigned char *x = (const unsigned char *)&a, *y = (const unsigned char *)&b;
+  for (size_t offset = 0; offset < sizeof(a); ++offset) {
+    if (x[offset] != y[offset]) {
+      klog("renoir-flip: difference field=padding offset=%zu inherited=%x current=%x\n",
+          offset, (unsigned)y[offset], (unsigned)x[offset]);
+      return;
+    }
+  }
 }
 
 static bool owns(uint64_t address)
@@ -320,28 +437,59 @@ static bool current_state(struct hubp_state *out, bool *unstable)
 {
   *unstable = false;
   if (!device_unchanged()) {
+    if (flip.metrics) {
+      klog("renoir-flip: check=device_unchanged failed\n");
+    }
     return false;
   }
-  struct layout_state a, b;
-  snapshot_layout(&a);
-  snapshot_layout(&b);
-  if (qualified_route(&a) != (int)flip.hubp || qualified_route(&b) != (int)flip.hubp ||
-      !same_layout(a, flip.inherited) || !same_layout(b, flip.inherited)) {
-    return false;
+  struct layout_state samples[2];
+  snapshot_layout(&samples[0]);
+  snapshot_layout(&samples[1]);
+  for (unsigned i = 0; i < 2; ++i) {
+    int route = qualified_route(&samples[i]);
+    if (route != (int)flip.hubp) {
+      if (flip.metrics) {
+        klog("renoir-flip: check=route mismatch snapshot=%u inherited=%u current=%d\n",
+            i + 1, flip.hubp, route);
+        report_layout_difference(&samples[i], &flip.inherited);
+      }
+      return false;
+    }
   }
-  const struct hubp_state *x = &a.registers.hubp[flip.hubp];
-  const struct hubp_state *y = &b.registers.hubp[flip.hubp];
-  if (!owns(x->primary) || !owns(y->primary) || !owns(x->earliest) || !owns(y->earliest)) {
-    return false;
+  for (unsigned i = 0; i < 2; ++i) {
+    if (!same_layout(samples[i], flip.inherited)) {
+      if (flip.metrics) {
+        klog("renoir-flip: check=same_layout failed snapshot=%u\n", i + 1);
+        report_layout_difference(&samples[i], &flip.inherited);
+      }
+      return false;
+    }
+    const struct hubp_state *h = &samples[i].registers.hubp[flip.hubp];
+    if (!owns(h->primary) || !owns(h->earliest)) {
+      if (flip.metrics) {
+        klog("renoir-flip: check=owns failed snapshot=%u primary=%lx earliest=%lx owned=%lx/%lx\n",
+            i + 1, h->primary, h->earliest, flip.addresses[0], flip.addresses[1]);
+      }
+      return false;
+    }
   }
+  const struct hubp_state *x = &samples[0].registers.hubp[flip.hubp];
+  const struct hubp_state *y = &samples[1].registers.hubp[flip.hubp];
   *out = *y;
   *unstable = x->primary != y->primary || x->earliest != y->earliest ||
     ((x->flip ^ y->flip) & FLIP_PENDING);
   return true;
 }
 
-static void fail(const char *reason)
+static void fail(const char *reason, const char *operation)
 {
+  if (flip.metrics) {
+    const char *phase = flip.state == RENOIR_FLIP_READY ? "READY" :
+      flip.state == RENOIR_FLIP_PENDING ? "PENDING" : "FALLBACK";
+    klog("renoir-flip: failure operation=%s phase=%s submitted=%lu confirmed=%lu polls=%lu front=%u requested=%u\n",
+        operation, phase, flip.submissions, flip.confirmations, flip.polls,
+        flip.front, flip.requested);
+  }
   flip.state = RENOIR_FLIP_FAILED;
   klog("renoir-flip: unavailable: %s; surfaces pinned, GPU writes stopped\n", reason);
 }
@@ -504,7 +652,7 @@ enum renoir_flip_state renoir_flip_submit(void)
   bool unstable;
   if (!current_state(&h, &unstable) || unstable || (h.flip & FLIP_PENDING) ||
       h.primary != flip.addresses[flip.front] || h.earliest != flip.addresses[flip.front]) {
-    fail("submission ownership/layout changed");
+    fail("submission ownership/layout changed", "submit");
     return flip.state;
   }
   unsigned requested = 1 - flip.front;
@@ -552,13 +700,13 @@ enum renoir_flip_state renoir_flip_poll(void)
     flip.validation_max = MAX(flip.validation_max, elapsed);
   }
   if (!valid) {
-    fail("poll ownership/layout changed");
+    fail("poll ownership/layout changed", "poll");
     return flip.state;
   }
   if (flip.state == RENOIR_FLIP_READY) {
     if (unstable || (h.flip & FLIP_PENDING) || h.primary != flip.addresses[flip.front] ||
         h.earliest != flip.addresses[flip.front]) {
-      fail("free-surface ownership changed");
+      fail("free-surface ownership changed", "poll");
     }
     return flip.state;
   }

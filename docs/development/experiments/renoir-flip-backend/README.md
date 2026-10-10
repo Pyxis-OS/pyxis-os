@@ -239,6 +239,38 @@ rejects a mutation to every scaler ratio/init/tap/control field and active
 coefficient bank. The host check does not establish a fresh native route,
 allocation or successful flip; the next native boot remains decisive.
 
+## Prepared native backend and diagnostic follow-up — 2026-10-10
+
+Luna's `b2f09598` flip-on/metrics boot, masked local `flip-647c.log`, passed
+preparation: HUBP0, spare0x900000, GPU`f400000000/f400900000`, CPU spare
+`810900000` WC. Shortly after presentation started, poll reported ownership or
+layout changed and entered FAILED. The display froze; the owner rebooted through
+the live remote shell. No120-confirmation metrics line appeared, so fewer than
+120 confirmations were observed; the log does not establish whether any completed.
+
+Metrics-only failure output now identifies device validation, route mismatch,
+immutable-layout mismatch or an unowned primary/earliest address, with snapshot
+number. A layout mismatch walks every compared field and logs its first named
+difference with raw inherited/current values; comparison uses the existing live
+status normalization. Failure also records submit/poll, READY/PENDING/FALLBACK,
+submissions, confirmations and poll count before entering the unchanged FAILED
+state. No additional default-boot logging or GPU writes.
+
+Source review confirms one omitted ordinary live status bit:
+[Linux `hubp1_in_blank`](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn10/dcn10_hubp.c#L1314-L1320)
+reads the current blank boolean; the [DCN2.1 definition](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h#L9095-L9130)
+places HUBP_IN_BLANK at0x8. Normalize it alongside request status while retaining
+the separate blank-enable configuration bit0x1. This is a plausible false-FAILED
+cause, not a diagnosis from the old log. Existing pending, request, CLOCK_ON,
+MPCC status and flip-interrupt status masks remain; active scaler bank,
+flip-delay/lock/stereo, timeout/underflow and all configuration remain checked.
+There is no source evidence to exclude additional bits merely to avoid FAILED.
+
+Restage the enabled info/metrics image and retain startup through the first
+failure or120 confirmations. If it fails, retain the check/field/value lines and
+operation/phase/counters. Confirmations, capture/input and visual checks still
+require the paired procedure below; preparation alone does not qualify flips.
+
 ## Paired native qualification — Luna stages, owner judges
 
 Use one submitted revision, same kernel/initrd, same GOP mode and boot configuration,
