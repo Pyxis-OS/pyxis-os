@@ -118,10 +118,9 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-10): [bundles in bin://](bundles-in-bin.md),
   accepted same-name lookup and relocation of the editor/interpreter bundles;
   task 1 starts after the owner merges #686.
-- **Codex alpha** (2026-10-10): [presenter whole-frame skipping](../kernel/presenter-frame-skipping.md),
-  implemented with matched QEMU/native counters and the owner's functional pass;
-  ready for review before merge. [Renoir cursor](renoir-hardware-cursor.md)
-  task 1 is merged; task 2 and scaled game planes remain separate assignments.
+- **Codex alpha** (2026-10-10): [shell reverse history search](../userland/shell.md#commands-and-quoting),
+  owner-assigned Ctrl+R in the shared line editor. [Renoir cursor task 2](renoir-hardware-cursor.md)
+  waits for the owner's Fedora evidence; whole-frame skipping is merged.
 - **Codex** (2026-10-10): [Neovim task 6 slice 4](neovim-groundwork.md#slice-4-contract-accepted-2026-10-10),
   native editor recipe, TUI and runtime, with QEMU tab/pane qualification; review
   before merge. Native qualification and the extended terminal profile follow.

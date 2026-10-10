@@ -103,7 +103,27 @@ as Read-only's, still loads what it can read but saves nothing, without a
 message. The first failed save prints one `shell: history not saved` line, and
 that shell stops saving.
 
-Searching history with Ctrl+R is [deferred](../technical-debt.md#initial-terminal-editor).
+**Reverse history search.** Ctrl+R opens `(reverse-i-search)` with a separate
+query and the current line. Typing finds the newest entry containing that
+case-sensitive ASCII substring, with the matched text highlighted. Ctrl+R again
+steps to older matching entries. Backspace shortens the query and searches from
+the newest entry again.
+
+- Enter runs the shown line. Esc accepts it for editing without running it;
+  Left/Right and Ctrl+A/Ctrl+E also accept it, then move the cursor.
+- Ctrl+G or Ctrl+C cancels search and restores the original line and cursor.
+  Ctrl+C outside search still cancels the line.
+- A failed query or exhausted older matches shows `failed reverse-i-search`
+  and red text, retaining the last successful entry (or the original line if
+  none matched). Enter or Esc still accepts the shown line. The red cue stays
+  visible when a narrow pane crops the label.
+- Clipboard paste accepts the shown line for editing, then inserts literal text
+  under the usual safe-paste rules; it never runs the line automatically.
+
+Search uses this shell's in-memory history, including loaded saved entries and
+private lines; it does not reread the history file. The query has the line's
+1023-byte bound. Framebuffer tabs, mux panes and remote shells use the same
+editor; `--no-echo` and script mode have no history search.
 
 **Tab completion.** Tab completes the word before the cursor, read with the
 parser's quoting rules.

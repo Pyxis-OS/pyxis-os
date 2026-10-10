@@ -41,7 +41,9 @@ client launches an `--embed` server of the same program over pipes, so the
 space needs `launch = true`. It edits and saves native files in a framebuffer
 tab or a multiplexer pane with Vimscript and Lua configuration under `home://`.
 Not in it: swap and backup recovery, jobs and `system()`, `:terminal`, language
-servers, tree-sitter parsers, threads, Unicode beyond ASCII. BusyBox vi stays
+servers, dynamically loaded parsers, threads, Unicode beyond ASCII.
+The [static-parser follow-up](../userland/neovim.md) supplies all seven upstream
+bundled grammars without module loading. BusyBox vi stays
 until the owner accepts the slice, and receives no further editor work.
 
 ### Tasks
@@ -110,10 +112,48 @@ without Neovim.
 Later, each with its own proposal:
 - swap and backup recovery (needs task 2 and a lease policy);
 - jobs and `system()` (extra stream delegation and group stop);
-- `:terminal`, UTF-8 rendering, user threads and the pool, tree-sitter parsers and LuaJIT;
+- terminal input reporting: xterm mouse modes 1000/1002/1006 SGR and focus mode
+  `?1004` (`CSI I` / `CSI O`) in TTY tabs/spaces, mux panes and the remote
+  client. This enables `vim.opt.mouse` and `FocusGained`/`FocusLost`; the owner
+  wants optional save on focus loss with `autocmd FocusLost * silent! wall`.
+  Neither reporting path exists today; mouse and focus are one follow-up task;
+- netrw, currently unavailable natively; native scheme handling in generic
+  runtime path helpers, including the `:checkhealth` frontend;
+- the richer `pyxis` profile: `termguicolors`, underline, bold and italic now
+  that #681 is merged; the first profile remains sixteen colours;
+- `:terminal`, UTF-8 rendering, user threads and the pool, dynamic parsers and LuaJIT;
 - clangd with the [hosted Clang direction](hosted-clang.md);
 - Universal Ctags for tags (parked by the owner 2026-10-10);
 - compiler diagnostics as Neovim diagnostics before clangd (the owner prefers red underlines to jump-to-definition).
+
+### Configuration acceptance target
+
+Owner direction, 2026-10-10: the real `chronium/nvim-configs` configuration
+(lazy.nvim, Primeagen-style) should mostly work on Pyxis. This is a long-term
+acceptance test, not a claim that these plugins were qualified. The first
+acceptance set is `set.lua`, remaps, undotree, a copied-in harpoon, and tokyonight
+once the richer terminal profile lands. Exercise the actual editing/navigation
+bindings, undo history and colours, preserving explicit errors for unavailable
+features.
+
+| Config feature | Required follow-up / acceptance condition |
+| --- | --- |
+| lazy.nvim bootstrap, fugitive, plugin updates | [Git on Pyxis](git-on-pyxis.md) and Neovim jobs/`system()`; install and update real sources through native processes. |
+| `<leader>pv` → `:Ex` | Native netrw directory browsing. |
+| `"+y` / `"+Y` | New Neovim clipboard provider (`g:clipboard` or a provider module) wired to the [native typed clipboard](../interfaces/clipboard.md), with a small native helper if needed; settle authority/activation before implementation. |
+| nvim-treesitter `:TSUpdate` | Runtime parser compile/load remains unavailable; use rebuilt, statically bundled parsers instead. |
+| mason / lspconfig | Native LSP servers; clangd follows [hosted Clang](hosted-clang.md). Mason stays out because it downloads Linux binaries. |
+| telescope | Plenary jobs; ripgrep/fd are optional additional tools. |
+| tmux-sessionizer / chmod | Unix-specific and out; Pyxis mux replaces tmux. |
+| `vim.opt.mouse`, focus/save | The combined terminal input reporting task above; enable `FocusLost` with optional `silent! wall` only once real focus events arrive. |
+
+Stock launch does **not** set `HOME` for Neovim; an explicitly inherited `HOME`
+remains the caller's environment. The profile supplies native standard-path
+defaults without inventing that variable. Replace the config's
+`os.getenv("HOME")` undo-directory construction with
+`vim.fn.stdpath("state") .. "/undo"`; the stock state path is
+`home://.local/state/nvim`. This portable configuration change needs no profile
+or global environment change. Use a writable, existing undo directory.
 
 ### Task 2 contract
 

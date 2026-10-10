@@ -256,7 +256,7 @@ buffering when interactive workloads make the cost material.
 [Saved shell history](userland/shell.md#commands-and-quoting) rewrites `home://.history` (up to 64 KiB) on every recorded line. Two
 shells saving within milliseconds can lose a line, a killed save can leave a `.history.HEX` file that nothing removes, running shells
 don't see each other's new lines, and the file is shared by every space on that home. Revisit if a line loss is noticed in use or the
-per-command cost shows natively ([measurements](development/experiments/shell-history/README.md)). Ctrl+R search is deferred.
+per-command cost shows natively ([measurements](development/experiments/shell-history/README.md)).
 
 ## Presenter-drawn block cursor
 
