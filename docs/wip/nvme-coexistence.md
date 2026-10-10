@@ -1,10 +1,10 @@
 # Pyxis beside Fedora on the internal NVMe
 
-Status: **proposal; nothing is implemented and no task is assigned.** It needs the
-owner's answers to the three decisions below. The direction is the owner's
-(2026-10-10): Fedora stays on the ThinkPad's internal NVMe, Pyxis gets a pool
-beside it, and the installer learns a coexistence mode that never destroys
-anything. It builds on the NVMe and FAT32 items in
+Status: **proposal; nothing is implemented and no task is assigned.** The owner
+accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
+decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
+ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
+coexistence mode that never destroys anything. It builds on the NVMe and FAT32 items in
 [later OS directions](later-os-directions.md), and the
 [native installer](../userland/installer.md), [system updates](../userland/system-updates.md)
 and [installer authority](../devices/installer-authority.md) as they are today.
@@ -31,10 +31,10 @@ of 2026-10-02:
 - **Card reader:** a Realtek RTS522A (`10ec:522a`) at `04:00.0`, class `ff00`,
   unbound by Pyxis.
 
-## Decisions for the owner
+## Decisions
 
-1. **Where the free space comes from.** The disk has none, and Pyxis must not
-   resize anything. Default: **before the installer runs, the owner shrinks
+1. **Where the free space comes from (accepted).** The disk has none, and Pyxis must not
+   resize anything. **Before the installer runs, the owner shrinks
    Fedora's 235.9 GiB partition and its filesystem from Linux with Fedora's own
    tools, leaving at least 64 GiB unallocated at the end of the disk, after a
    verified backup.** The installer only ever uses space that is already
@@ -42,19 +42,16 @@ of 2026-10-02:
    plan that can lose Fedora data, and it is the owner's, outside Pyxis. The
    alternative is another disk or a USB drive for Pyxis, which this milestone
    does not cover.
-2. **How Limine and Fedora coexist.** Default: **Limine is added, not swapped
-   in.** The owner copies the pinned Limine (`boot://share/installer/BOOTX64.EFI`,
-   so loader and `limine.conf` syntax match) to its own ESP directory, writes its
-   `limine.conf` with a Pyxis entry and a Fedora entry that chainloads Fedora's
-   existing `shimx64.efi`, and adds a firmware entry first in the boot order.
-   Fedora's files and its firmware entry stay, so the firmware boot menu still
-   reaches Fedora when Limine is broken, and Fedora updates keep working because
-   nothing of theirs moved. The alternative, Limine loading Fedora's kernels
-   itself, needs the owner to keep `limine.conf` in step with every kernel update.
-   **The installer never edits `limine.conf` or firmware variables.** It writes the
-   Pyxis files and prints the entry text, including the pool's disk GUID, for the
-   owner to paste. Limine updates stay the owner's.
-3. **Write authority and the internal disk.** Default: **the kernel, not the
+2. **Limine replaces GRUB (changed by the owner).** Limine becomes the ESP's boot
+   manager. It boots Fedora directly through its Linux protocol, with Fedora's
+   kernel, initramfs and command line, and boots Pyxis as another entry. The
+   owner dislikes GRUB and multiboot2 and does the swap from Linux, with the old
+   GRUB entry kept as a tested fallback until Limine is proven
+   ([the swap](#limine-as-fedoras-boot-manager)). The installer's part is unchanged:
+   **it never edits `limine.conf` or firmware variables.** It writes the Pyxis
+   files and prints the entry text, including the pool's disk GUID, for the owner
+   to paste.
+3. **Write authority and the internal disk (accepted).** **The kernel, not the
    installer, enforces the boundary.** NVMe writes are off until an explicit boot
    option enables them for qualification. When enabled:
    - the installer gets writes only through partition-confined claims (which
@@ -65,13 +62,13 @@ of 2026-10-02:
      never holds a whole-disk write on a disk with foreign partitions;
    - whole-disk claims are refused on any disk with a foreign partition. This
      narrows what the owner accepted earlier: Read the room could otherwise
-     offer to wipe the Fedora disk, so under this default it cannot, and
+     offer to wipe the Fedora disk, so it cannot, and
      reversing that is an explicit later decision.
 
    The alternative, a whole-disk claim and an installer that is careful, is
    simpler and leaves one userland bug between Pyxis and the Fedora partition.
 
-Assumption to confirm: FAT32 is a freestanding engine library first, used by the
+Accepted assumption: FAT32 is a freestanding engine library first, used by the
 installer through a partition claim (task 2). A mounted FAT32 volume, a
 directory-capability backend for the shell, waits for the
 [userspace scheme-provider direction](userspace-scheme-providers.md) and is not
@@ -85,11 +82,78 @@ in this milestone.
   metadata, a reserved attribute bit, no unused entry or no aligned free extent of
   the requested size. For the ESP: not FAT32 with 512-byte sectors, the dirty
   flag set, a damaged chain, FSInfo that disagrees with the table, too little
-  room, or `EFI/pyxis` holding files the manifest does not name. Also Secure Boot
-  enabled, since the kernel is unsigned.
+  room, or `EFI/pyxis` holding files the manifest does not name. The installer
+  cannot see Secure Boot; it stays off by the owner's choice (see below).
 - Pyxis names live under one ESP directory, `EFI/pyxis`, which is also the only
   place an update may write or remove.
 - No fault injection, no fake success, no resize, no format of the ESP.
+
+## Limine as Fedora's boot manager
+
+Step 0, the owner's, from Linux, needs no Pyxis code and comes before any Pyxis
+write, so Fedora booting through Limine is proven alone first.
+
+**Layout.** Pyxis's pinned Limine (`boot://share/installer/BOOTX64.EFI`, so the
+loader and its `limine.conf` syntax match the Pyxis entry) goes in its own ESP
+directory, with a `limine.conf` where that Limine looks for it (the existing
+images use `boot/limine/limine.conf` on the ESP; the search path is unverified
+here, so rehearse it). A new firmware entry puts Limine first in the boot order.
+Fedora's `\EFI\fedora` files, `\EFI\BOOT` fallback and its firmware entry are
+not modified.
+
+**Fedora entries.** Each is `protocol: linux` with `path` and `module_path` on the
+`/boot` partition by GPT GUID (`guid(...)` rather than `boot()`, which is the ESP),
+the initramfs, and `cmdline` taken from Fedora's own boot entry, so `root=`,
+`rootflags=` and any `rd.luks` options come from Fedora rather than from copies.
+Limine reads ext2, ext3, ext4 and FAT only. If `/boot` is ext4, which is Fedora's
+default but unrecorded in the inventory, nothing is copied; on any other type the
+hook would have to copy kernels onto the 600 MiB ESP, which is a different and
+costlier plan. Loading the kernel through its EFI stub (`protocol: efi`) is the
+alternative; it needs the initramfs handed over by the loader, which is
+unverified, so the Linux protocol is the default. Path syntax and keys are
+checked against Limine 12.9.0's documentation, which this repository does not
+carry, before anything is written.
+
+**Kernel updates.** Fedora's versioned kernel names change with every update and
+there is no stable `vmlinuz` path, so the default is a small `kernel-install`
+plugin, written once, in `/etc/kernel/install.d/`. On every add or remove it
+regenerates only the Fedora block of `limine.conf`, between marker comments, from
+the boot entries in `/boot/loader/entries`: newest first as the default, the
+older kernels kept, rescue included. It writes a temporary file and renames it on
+the ESP, and writes nothing when it would produce no entries, so a failing run
+leaves the previous file. The Pyxis block, the timeout and the global options
+belong to the owner and are never touched. A stable-symlink scheme is the
+alternative, but symlink following in Limine's ext4 driver is unverified. Command
+line changes made with `grubby` are not kernel-install events, so the same script
+is run by hand after them. Whether Fedora 44's kernel packages call
+`kernel-install` this way is confirmed on a Fedora VM before the plugin is
+trusted, with a real kernel update and removal. The script is owner-run host
+tooling; it joins the repository under `scripts/` only if the owner asks.
+
+**Secure Boot and the TPM.** Limine is unsigned, so Secure Boot stays off. The
+2026-10-02 inventory records `SecureBoot disabled`; the owner reruns
+`mokutil --sb-state` before the swap and after any firmware update or reset,
+since the firmware setting can change. Without Secure Boot Fedora's shim is not
+needed to boot. The machine has a TPM 2.0 and the inventory does not say whether
+the root is encrypted or unlocked from it; a binding to boot-loader measurements
+would stop unlocking when the loader changes, so the passphrase is kept at hand.
+
+**Tested fallback.** The old shim and GRUB entry (`Boot0001`) and its files stay
+until Limine has proven itself, and the fallback is exercised before it is
+needed: after adding Limine, the owner boots Fedora from the firmware boot menu's
+GRUB entry once, and again after each kernel update. Limine is proven by several
+cold boots into Fedora and Pyxis, at least two kernel updates and one old-kernel
+removal through the plugin, a Fedora rescue boot, and a clean `fsck.fat` of the
+ESP. Only then does the owner remove the GRUB firmware entry and, separately,
+its files. Removing GRUB packages changes what Fedora's own update scripts expect,
+so it is rehearsed on a Fedora VM first. A Fedora live USB stays regardless.
+
+**Rehearsal.** The same swap and plugin run first on a Fedora VM in QEMU with
+UEFI, a GPT of the same shape and ext4 `/boot`, before the ThinkPad.
+
+**After this step the owner can:** boot Fedora through Limine with a menu entry
+for every installed kernel, keep updating Fedora, and fall back to GRUB from the
+firmware menu.
 
 ## Tasks
 
@@ -173,18 +237,20 @@ layout check stays for the existing modes.
   renumbered table fails closed because the mount does not find a pool.
 - **Limine entry:** the installer prints and saves the entry (`boot():/EFI/pyxis/caelum.elf`
   and the archive, with the pool disk's GUID on the command line) and does not
-  edit `limine.conf`. Verify the chainload key for Fedora's entry against the
-  pinned Limine's documentation; this proposal has not.
+  edit `limine.conf`, whose Fedora block belongs to the step-0 plugin. The owner
+  pastes the Pyxis block outside the plugin's markers. A kernel update and a
+  Pyxis update never share a file.
 - **Update:** the program stage writes the pool as now, the ESP stage touches only
   `EFI/pyxis`, and nothing is formatted or removed elsewhere. The coexistence
   update reports when the shipped Limine differs from the one on the ESP but
-  does not change it.
+  does not change it; the owner updates Limine and re-proves Fedora's entries.
 
 Qualified in QEMU on an NVMe image shaped like the ThinkPad's disk: the same
 three partitions with the gap, a copy of a real Fedora ESP's directory tree, and
 byte comparison of every sector outside the new entry, the GPT, the FAT tables,
-`EFI/pyxis` and the pool. Limine in OVMF boots Pyxis and chainloads a stand-in for
-the Fedora entry.
+`EFI/pyxis` and the pool. Limine in OVMF boots Pyxis and, on the Fedora VM image
+of step 0, its kernel, with the plugin's block left byte-identical by a Pyxis
+update.
 
 **After this task the owner can:** rehearse the whole coexistence install and
 update in QEMU against a faithful copy of the disk layout, boot both entries, and
@@ -192,12 +258,14 @@ inspect the byte-level proof that nothing existing changed.
 
 ### 4. Native qualification on the ThinkPad
 
-Preparation first, all the owner's, with nothing from Pyxis yet:
+Step 0 is done first. Then the preparation, all the owner's, with nothing from
+Pyxis yet:
 
 - Full backups on external media: `dd` of the GPT and protective MBR regions, of
   the ESP and of `/boot`, `sgdisk --backup`, the output of `efibootmgr -v`,
   `lsblk -f`, the ESP's `fsck.fat -n`, and a copy of the root filesystem's
-  contents that matter. A Fedora live USB with the restore commands written down:
+  contents that matter. The ESP and `/boot` copies include Limine's files and the
+  plugin. A Fedora live USB with the restore commands written down:
   `sgdisk --load-backup`, `dd` back of the ESP, `efibootmgr --create` for Fedora.
 - Run `fsck.fat` on the ESP and record cluster size, FATs and dirty flag, which
   the inventory lacks, and the root partition's filesystem and encryption.
@@ -206,14 +274,15 @@ Preparation first, all the owner's, with nothing from Pyxis yet:
 Then in order, each a separate owner-run step with results recorded in an
 experiment record: read-only Pyxis boot and SMART numbers; one conservative write
 phase inside the new partition only (a megabyte pattern, flush, read back,
-compare); the pool format; the ESP additions; a firmware boot of Limine's Pyxis
-entry; the Fedora entry; the update path; a final Fedora boot, `fsck.fat` and a
-`btrfs`/`ext4` check. Fedora's GRUB and firmware entry stay until the owner
-removes them. After the BootOrder change, the owner rechecks it after Fedora
-updates; whether shim or firmware updates rewrite it is unverified.
+compare); the pool format; the ESP additions; Limine's Pyxis entry; Fedora booting
+through Limine again; the update path; a final Fedora boot, `fsck.fat` and a
+`btrfs`/`ext4` check. The GRUB entry stays as the fallback until step 0's proof is
+complete, and the owner removes it, not Pyxis. The owner rechecks the boot order
+after Fedora updates; whether shim or firmware updates rewrite it is unverified.
 
 **After this task the owner can:** use Pyxis on the internal NVMe beside Fedora,
-choosing at boot, with a rehearsed way back to Fedora alone.
+choosing in Limine's menu, with Fedora booting directly and a rehearsed way back
+to Fedora alone.
 
 ## Wear budget
 
@@ -255,6 +324,6 @@ needs none of this and stays first.
 - Resizing or moving Fedora's partitions from Pyxis, or any reuse of Fedora's
   space.
 - Mounting Fedora's filesystems, a mountable FAT32 backend, and Windows.
-- Secure Boot, a signed kernel and TPM measurement.
+- Secure Boot, a signed Limine or kernel and TPM measurement: it stays off.
 - Hibernate and suspend interaction with the shared disk.
 - Keeping Pyxis's pool partition number stable if Fedora tools renumber the table.

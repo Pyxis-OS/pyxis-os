@@ -142,7 +142,8 @@ Chosen by the owner, each starting with a proposal:
   native runs follow its
   [measurements and native steps](../development/experiments/xfer-pipelining/README.md).
 - **Claude** (2026-10-10): [NVMe coexistence proposal](nvme-coexistence.md),
-  Pyxis beside Fedora on the internal disk; docs only, three owner decisions open.
+  Pyxis beside Fedora on the internal disk, with Limine replacing GRUB; docs only,
+  decisions accepted 2026-10-10, no task started.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   task 1 complete for documentation/contracts after native batch #547. All owner
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
