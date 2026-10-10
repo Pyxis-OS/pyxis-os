@@ -155,6 +155,17 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  enum capability_result result = capability_request_reservation(1, &reservation, &slot);
+  if (result != CAP_OK) {
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   bool arm = operation == CONSOLE_ARM_INTERRUPT;
   if (arm) {
     /* Reserve the interval so a concurrent ARM cannot also install from zero. */
@@ -166,24 +177,22 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
     }
     unlock_interrupt(interrupt);
     if (busy) {
+      capability_reservation_release(&reservation, &slot);
       return (struct syscall_result){CALL_BUSY, 0};
     }
   }
 
-  /* The caller's handle keeps object alive across a BSP table-growth loan. */
   uint64_t rights = arm ? CONSOLE_RIGHT_ARMED : CONSOLE_RIGHT_PASSTHROUGH;
-  enum capability_result result;
-  for (;;) {
-    result = capability_insert(&process_current()->capabilities, object, rights, 0,
-        &reply.handle);
-    if (result != CAP_FULL) {
-      break;
-    }
-    result = capability_request_growth();
-    if (result != CAP_OK) {
-      break;
-    }
+  struct capability_grant grant = {0};
+  result = capability_grant_retain(object, rights, 0, &grant);
+  if (result == CAP_OK) {
+    result = capability_validate_grants(reservation.table, &grant, 1);
   }
+  if (result == CAP_OK) {
+    capability_install_reserved(&reservation, &slot, &grant, 1, &reply.handle);
+  }
+  capability_grant_release(&grant);
+  capability_reservation_release(&reservation, &slot);
   if (arm) {
     lock_interrupt(interrupt);
     interrupt->arming = false;

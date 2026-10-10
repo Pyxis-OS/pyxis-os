@@ -11,6 +11,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/random.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 static void destroy_disks(struct kernel_object *object)
@@ -29,19 +30,18 @@ struct kernel_object *disks_create(void)
 }
 
 static enum call_status install_disk(struct kernel_object *object, uint64_t rights,
+    struct capability_reservation *reservation, const struct capability_reserved_slot *slot,
     handle_t *handle)
 {
-  enum capability_result result;
-  for (;;) {
-    result = capability_insert(&process_current()->capabilities, object, rights, 0, handle);
-    if (result != CAP_FULL) {
-      break;
-    }
-    result = capability_request_growth();
-    if (result != CAP_OK) {
-      break;
-    }
+  struct capability_grant grant = {0};
+  enum capability_result result = capability_grant_retain(object, rights, 0, &grant);
+  if (result == CAP_OK) {
+    result = capability_validate_grants(reservation->table, &grant, 1);
   }
+  if (result == CAP_OK) {
+    capability_install_reserved(reservation, slot, &grant, 1, handle);
+  }
+  capability_grant_release(&grant);
   return result == CAP_OK ? CALL_OK : result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
 }
 
@@ -88,6 +88,18 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     id = open.id;
     access = open.access;
   }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  if (operation == DISKS_OPEN) {
+    enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+    if (reserved != CAP_OK) {
+      return (struct syscall_result){reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+    }
+    if (task_stop_requested()) {
+      capability_reservation_release(&reservation, &slot);
+      return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
+  }
   struct npfs_request *request = npfs_request_prepare(operation == DISKS_ENUMERATE ?
       NPFS_RAW_INFO : NPFS_RAW_OPEN);
   request->job.offset = index;
@@ -107,11 +119,15 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
       disk_rights |= DISK_RIGHT_WRITE | DISK_RIGHT_RELEASE;
     }
     struct disk_open_reply reply;
-    status = install_disk(disk, disk_rights, &reply.disk);
-    object_release(disk);
+    status = task_stop_requested() ? CALL_ENDPOINT_CLOSED :
+        install_disk(disk, disk_rights, &reservation, &slot, &reply.disk);
     if (status == CALL_OK) {
       KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
     }
+  }
+  capability_reservation_release(&reservation, &slot);
+  if (disk) {
+    object_release(disk);
   }
   return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};
 }
