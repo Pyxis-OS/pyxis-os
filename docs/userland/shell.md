@@ -654,7 +654,7 @@ launch. The `session` word is removed from the child's arguments.
 
 The successor receives copies of the usual terminal and memory grants, the
 explicit selected root list and working-directory grants, current working-path
-metadata and initial environment, plus an explicit `launcher` resource preserving
+metadata and current environment, plus an explicit `launcher` resource preserving
 the caller's LAUNCH and any CREATE_GROUP authority. An optional `child_launcher`
 is forwarded separately with LAUNCH alone. Other startup
 resources, including the caller's `script`, `host_mount` and `native_mount`, are
@@ -723,9 +723,9 @@ launcher through this policy. Trusted `session` handoff preserves
 `child_launcher` as a distinct resource. If Remote explicitly opts in, that grant
 is bound to the remote session's execution group.
 
-An initial directory chain is copied from startup, preserving its navigation
-boundary. A supplied chain requires a descriptive working path beginning with a
-`NAME://` scheme for prompt display. The path is not resolved to replace the
+The shell uses libc's retained [working-path context](process-state.md), seeded
+from startup with its navigation boundary. Unknown descriptive spelling leaves
+lookup usable and shows `[cwd unavailable]` in the prompt. The path is not resolved to replace the
 chain: actual handles remain authoritative, and insufficient grants
 fail normally. With no initial chain the shell starts at `tmp://`. Explicit
 scheme changes use the bound root's actual grant; each descendant lookup retains
@@ -747,12 +747,11 @@ launch authority follows the separate `child_launcher` policy above. When
 available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.
-The immutable initial environment is forwarded in full using
-libpyxis's borrowed environment-array accessors. No environment mutation or PWD
-maintenance is implemented. Children receive the full current working-path
-display string alongside their directory handles. Display normalization removes
-redundant separators and dot components, but lookup still walks the original
-input: `missing/..` fails rather than skipping the missing directory.
+An owned snapshot of libc's current environment is forwarded explicitly, with
+the existing network overlay. No shell assignment command or automatic PWD
+maintenance is added. Children receive current working-path metadata alongside
+independent directory grants. Display normalization removes redundant separators
+and dot components; lookup still walks the original input, so `missing/..` fails.
 
 The shell never reads terminal input while waiting. Successful wait means child
 resources have been reclaimed; it closes the observers, reports nonzero exits or

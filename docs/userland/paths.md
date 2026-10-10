@@ -85,6 +85,9 @@ context intact. A retained directory
 continues referring to its object if its name later changes; displayed text is
 not used to rediscover it.
 
+Libc and the shell share the mutable [process working path](process-state.md);
+independent native contexts keep their explicit ownership.
+
 ## Removal paths
 
 `path_remove()` walks intermediate components in order, retaining parent grants,
