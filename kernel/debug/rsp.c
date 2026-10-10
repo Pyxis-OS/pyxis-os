@@ -4,7 +4,8 @@
 #include <kernel/memory.h>
 
 #define RSP_PAYLOAD_BYTES 1008
-#define RSP_RAM_BYTES 480
+#define RSP_PACKET_BYTES 0x3f0
+#define RSP_RAM_BYTES (RSP_PACKET_BYTES / 2)
 #define RSP_MONITOR_VALUES 8
 #define RSP_CORE_REGISTERS 40
 #define RSP_INVALID_OPCODE_VECTOR 6
@@ -437,7 +438,8 @@ static DEBUG_CODE bool dispatch(struct rsp_buffer *out, const uint8_t *data, siz
                                 bool *resume)
 {
   if (equals(data, bytes, "qSupported") || prefix(data, bytes, "qSupported:")) {
-    return literal(out, "PacketSize=3f0;qXfer:features:read+");
+    return literal(out, "PacketSize=") && number(out, RSP_PACKET_BYTES, 16) &&
+      literal(out, ";qXfer:features:read+");
   }
   if (prefix(data, bytes, "qXfer:features:read:target.xml:")) {
     uint64_t offset, count;
@@ -655,8 +657,8 @@ DEBUG_CODE bool debug_rsp_handle(uint64_t command, const uint8_t *request, size_
     return false;
   }
   size_t response_capacity = capacity - 5;
-  if (response_capacity > sizeof(response)) {
-    response_capacity = sizeof(response);
+  if (response_capacity > RSP_PACKET_BYTES) {
+    response_capacity = RSP_PACKET_BYTES;
   }
   struct rsp_buffer body = {response, 0, response_capacity};
   bool resume = false;
