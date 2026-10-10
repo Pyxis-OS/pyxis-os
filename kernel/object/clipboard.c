@@ -71,6 +71,7 @@ struct clipboard_receiver {
   uint64_t epoch, transaction_id, deadline, phase, status;
   size_t offset;
   bool boundary, terminator_delivered, interrupt_pending, invalid;
+  bool operation_active; /* Receiver borrow includes input-ownership waits and reply copy. */
 };
 
 static struct clipboard_store shared;
@@ -445,13 +446,18 @@ void clipboard_input_hangup(struct kernel_object *object)
   unlock_clipboard();
 }
 
-static void release_receiver(struct process *process, bool input_complete)
+static bool release_receiver(struct process *process, bool input_complete)
 {
+  lock_clipboard();
   struct clipboard_receiver *receiver = process->paste_receiver;
   if (!receiver) {
-    return;
+    unlock_clipboard();
+    return true;
   }
-  lock_clipboard();
+  if (receiver->operation_active) {
+    unlock_clipboard();
+    return false;
+  }
   KASSERT(!receiver->wait);
   struct clipboard_receiver **link = &receivers;
   while (*link != receiver) {
@@ -474,13 +480,14 @@ static void release_receiver(struct process *process, bool input_complete)
   object_release(receiver->output);
   kfree(receiver);
   readiness_notify();
+  return true;
 }
 
 void clipboard_process_exit(struct process *process)
 {
   if (process->paste_receiver) {
     bool input_complete = space_keyboard_sync_input();
-    release_receiver(process, input_complete);
+    KASSERT(release_receiver(process, input_complete));
   }
   lock_clipboard();
   struct clipboard_space *state = process->space->clipboard;
@@ -604,8 +611,8 @@ static bool graphics_owner_current(struct process *process,
       keyboard_clipboard_owner(space->keyboard, process, action->keyboard_acquisition);
 }
 
-/* BSP/IF=0. The caller is blocked in this request; its owner cannot release or
- * reacquire the keyboard concurrently. Focus and display mutation are BSP-only. */
+/* BSP/IF=0. Match the captured keyboard acquisition and action incarnation;
+ * another admitted caller may release or reacquire the session. */
 static enum call_status graphics_activation(struct clipboard_request *request,
     bool consume, bool committing)
 {
@@ -845,14 +852,27 @@ void clipboard_request_execute(struct clipboard_request *request)
     return;
   }
   if (request->operation == CONSOLE_PASTE_RELEASE || request->operation == CONSOLE_PASTE_ACK) {
-    bool input_complete = space_keyboard_sync_input();
+    lock_clipboard();
     struct clipboard_receiver *receiver = request->process->paste_receiver;
     if (!receiver || receiver->input != request->object || receiver->epoch != request->epoch) {
       request->status = CALL_DENIED;
+      unlock_clipboard();
       return;
     }
+    if (receiver->operation_active) {
+      request->status = CALL_BUSY;
+      unlock_clipboard();
+      return;
+    }
+    if (request->operation == CONSOLE_PASTE_ACK) {
+      receiver->operation_active = true;
+    }
+    unlock_clipboard();
+    bool input_complete = space_keyboard_sync_input();
     if (request->operation == CONSOLE_PASTE_RELEASE) {
-      release_receiver(request->process, input_complete);
+      if (!release_receiver(request->process, input_complete)) {
+        request->status = CALL_BUSY;
+      }
       return;
     }
     lock_clipboard();
@@ -860,6 +880,7 @@ void clipboard_request_execute(struct clipboard_request *request)
         !receiver->terminator_delivered || (receiver->phase != CONSOLE_PASTE_END &&
         receiver->phase != CONSOLE_PASTE_CANCEL)) {
       request->status = CALL_BAD_REQUEST;
+      receiver->operation_active = false;
       unlock_clipboard();
       return;
     }
@@ -898,6 +919,9 @@ void clipboard_request_execute(struct clipboard_request *request)
       }
       unlock_input(input);
     }
+    lock_clipboard();
+    receiver->operation_active = false;
+    unlock_clipboard();
     readiness_notify();
     return;
   }
@@ -1426,10 +1450,10 @@ static struct syscall_result receiver_read(struct clipboard_receiver *receiver,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  if (reply.length) {
-    KASSERT(copy_to_user(request->address, bytes, reply.length));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request->address, bytes, reply.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -1441,7 +1465,6 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct process *process = process_current();
-  struct clipboard_receiver *receiver = process->paste_receiver;
   if (operation == CONSOLE_PASTE_READ) {
     struct console_paste_read_request request = {0};
     if (request_size != sizeof(request) - sizeof(request.header) ||
@@ -1451,10 +1474,23 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
     if (!copy_from_user(&request.epoch, request_address, request_size)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
+    lock_clipboard();
+    struct clipboard_receiver *receiver = process->paste_receiver;
     if (!receiver || receiver->input != input || receiver->epoch != request.epoch) {
+      unlock_clipboard();
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    return receiver_read(receiver, &request, reply_address);
+    if (receiver->operation_active) {
+      unlock_clipboard();
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
+    receiver->operation_active = true;
+    unlock_clipboard();
+    struct syscall_result result = receiver_read(receiver, &request, reply_address);
+    lock_clipboard();
+    receiver->operation_active = false;
+    unlock_clipboard();
+    return result;
   }
   uint64_t payload[2] = {0};
   size_t expected = operation == CONSOLE_PASTE_ACK ? 16 : 8;
@@ -1489,7 +1525,9 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
   capability_release(&output);
   if (status == CALL_OK && operation == CONSOLE_PASTE_REGISTER) {
     struct console_paste_register_reply reply = {.epoch = epoch};
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   return (struct syscall_result){status, 0};
@@ -1547,8 +1585,12 @@ static struct syscall_result graphics_call(struct kernel_object *object, uint64_
   bsp_request_release(&request->request);
   if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_PUBLISH) {
     KASSERT(item);
-    KASSERT(copy_from_user(item->bytes, payload[1], item->length));
-    enum call_status validation = scalar_utf8(item->bytes, item->length) ? CALL_OK : CALL_BAD_REQUEST;
+    enum call_status validation = CALL_OK;
+    if (!copy_from_user(item->bytes, payload[1], item->length)) {
+      validation = CALL_BAD_BUFFER;
+    } else if (!scalar_utf8(item->bytes, item->length)) {
+      validation = CALL_BAD_REQUEST;
+    }
     request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
     request->process = process;
     request->object = object;
@@ -1562,10 +1604,14 @@ static struct syscall_result graphics_call(struct kernel_object *object, uint64_
     bsp_request_release(&request->request);
   } else if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_READ && length) {
     KASSERT(item);
-    KASSERT(copy_to_user(reply_address, item->bytes, length));
+    if (!copy_to_user(reply_address, item->bytes, length)) {
+      status = CALL_BAD_BUFFER;
+    }
   } else if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_HAS) {
     struct clipboard_graphics_has_reply reply = {.has_text = length};
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+      status = CALL_BAD_BUFFER;
+    }
     length = sizeof(reply);
   }
   if (item) {
@@ -1644,8 +1690,9 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   bsp_request_release(&request->request);
   capability_release(&attachment);
   if (item) {
-    KASSERT(copy_from_user(item->bytes, payload[3], item->length));
-    if (!normalize_terminal_text(item)) {
+    if (!copy_from_user(item->bytes, payload[3], item->length)) {
+      status = CALL_BAD_BUFFER;
+    } else if (!normalize_terminal_text(item)) {
       status = CALL_BAD_REQUEST;
     }
     /* Retained accounting charges the allocation, not merely normalized length. */
@@ -1669,7 +1716,9 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   }
   if (status == CALL_OK && operation == CLIPBOARD_PASTE) {
     struct clipboard_paste_reply reply = {.transaction_id = transaction_id};
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   return (struct syscall_result){status, 0};

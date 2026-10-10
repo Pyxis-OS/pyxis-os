@@ -78,7 +78,7 @@ uint64_t keyboard_ready(struct keyboard_object *keyboard, struct process *proces
 static void destroy_keyboard(struct kernel_object *object)
 {
   struct keyboard_object *keyboard = (struct keyboard_object *)object;
-  KASSERT(!keyboard->owner && !keyboard->reader);
+  KASSERT(!keyboard->owner && !keyboard->reader && !keyboard->read_active);
   kfree(keyboard);
 }
 
@@ -286,11 +286,14 @@ static void reset_capture(struct keyboard_object *keyboard)
 
 static void release_keyboard(struct keyboard_object *keyboard)
 {
-  /* One task per process: the owner cannot release/exit while its READ sleeps. */
-  KASSERT(!keyboard->reader);
+  struct task_wait *reader = keyboard->reader;
+  keyboard->reader = NULL;
   clipboard_space_cancel(keyboard->space);
   keyboard->owner = NULL;
   reset_capture(keyboard);
+  if (reader) {
+    task_wait_wake(reader);
+  }
 }
 
 void keyboard_process_exit(struct process *process)
@@ -345,7 +348,7 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     enum call_status status = CALL_OK;
     if (!keyboard_available()) {
       status = CALL_UNAVAILABLE;
-    } else if (keyboard->owner) {
+    } else if (keyboard->owner || keyboard->read_active) {
       status = CALL_BUSY;
     } else if (keyboard->acquisition == UINT64_MAX) {
       status = CALL_LIMIT;
@@ -369,23 +372,34 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     return (struct syscall_result){CALL_DENIED, 0};
   }
   if (operation == KEYBOARD_RELEASE) {
+    if (keyboard->read_active) {
+      unlock_keyboard(keyboard);
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
     release_keyboard(keyboard);
     unlock_keyboard(keyboard);
     readiness_notify();
     return (struct syscall_result){CALL_OK, 0};
   }
 
+  if (keyboard->read_active) {
+    unlock_keyboard(keyboard);
+    return (struct syscall_result){CALL_BUSY, 0};
+  }
+  keyboard->read_active = true;
+  uint64_t acquisition = keyboard->acquisition;
   while (!keyboard->count) {
     if (task_stop_requested()) {
+      keyboard->read_active = false;
       unlock_keyboard(keyboard);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
     if (flags & KEYBOARD_READ_POLL) {
+      keyboard->read_active = false;
       unlock_keyboard(keyboard);
       return (struct syscall_result){CALL_TIMED_OUT, 0};
     }
     struct task_wait *wait = task_wait_prepare();
-    KASSERT(!keyboard->reader);
     keyboard->reader = wait;
     unlock_keyboard(keyboard);
     bool resumed = task_wait_sleep_interruptible(wait);
@@ -393,8 +407,9 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     if (keyboard->reader == wait) {
       keyboard->reader = NULL;
     }
-    KASSERT(!keyboard->reader && keyboard->owner == process);
-    if (!resumed || task_stop_requested()) {
+    if (!resumed || task_stop_requested() || keyboard->owner != process ||
+        keyboard->acquisition != acquisition) {
+      keyboard->read_active = false;
       unlock_keyboard(keyboard);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
@@ -404,6 +419,10 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
   --keyboard->count;
   unlock_keyboard(keyboard);
 
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+  lock_keyboard(keyboard);
+  keyboard->read_active = false;
+  unlock_keyboard(keyboard);
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER,
+    copied ? sizeof(reply) : 0};
 }

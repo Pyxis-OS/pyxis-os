@@ -18,6 +18,7 @@ struct keyboard_object {
   atomic_bool locked;
   struct process *owner; /* Borrowed under lock, cleared before destruction. */
   struct task_wait *reader; /* Task metadata, never a private-stack pointer. */
+  bool read_active; /* Admission through collection, including nonsleeping READ. */
   struct keyboard_event events[KEYBOARD_EVENT_CAPACITY];
   size_t head, count;
   uint64_t acquisition; /* Never reused, including release/reacquisition. */

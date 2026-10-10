@@ -74,7 +74,9 @@ struct syscall_result bluetooth_hci_call(uint64_t rights, uint64_t operation,
 
   uint64_t prefix[2] = {0};
   if (prefix_size) {
-    KASSERT(copy_from_user(prefix, request_address, prefix_size));
+    if (!copy_from_user(prefix, request_address, prefix_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     if (!prefix[1] || prefix[1] == UINT64_MAX) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
@@ -83,17 +85,6 @@ struct syscall_result bluetooth_hci_call(uint64_t rights, uint64_t operation,
       (prefix[0] & ~BLUETOOTH_HCI_ACQUIRE_ALLOW_DEVELOPMENT)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (submit) {
-    uint8_t wire_header[4];
-    size_t header_size = operation == BLUETOOTH_HCI_SUBMIT_COMMAND ? 3 : 4;
-    KASSERT(copy_from_user(wire_header, request_address + prefix_size, header_size));
-    size_t payload_length = operation == BLUETOOTH_HCI_SUBMIT_COMMAND ? wire_header[2] :
-        (size_t)wire_header[2] | ((size_t)wire_header[3] << 8);
-    if (packet_length != header_size + payload_length) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
-    }
-  }
-
   struct bluetooth_hci_request *request =
       (void *)bsp_request_prepare(BSP_SERVICE_BLUETOOTH_HCI);
   request->process = process_current();
@@ -106,7 +97,17 @@ struct syscall_result bluetooth_hci_call(uint64_t rights, uint64_t operation,
   }
   request->packet_length = packet_length;
   if (submit) {
-    KASSERT(copy_from_user(request->data.wire, request_address + prefix_size, packet_length));
+    if (!copy_from_user(request->data.wire, request_address + prefix_size, packet_length)) {
+      bsp_request_cancel_prepared(&request->request);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    size_t header_size = operation == BLUETOOTH_HCI_SUBMIT_COMMAND ? 3 : 4;
+    size_t payload_length = operation == BLUETOOTH_HCI_SUBMIT_COMMAND ? request->data.wire[2] :
+        (size_t)request->data.wire[2] | ((size_t)request->data.wire[3] << 8);
+    if (packet_length != header_size + payload_length) {
+      bsp_request_cancel_prepared(&request->request);
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
   }
   if (operation == BLUETOOTH_HCI_RECEIVE) {
     request->receive_capacity = reply_size - sizeof(struct bluetooth_hci_record);
@@ -128,7 +129,11 @@ struct syscall_result bluetooth_hci_call(uint64_t rights, uint64_t operation,
       reply = &request->data.received;
     }
     if (reply_size) {
-      KASSERT(reply && copy_to_user(reply_address, reply, reply_size));
+      KASSERT(reply);
+      if (!copy_to_user(reply_address, reply, reply_size)) {
+        status = CALL_BAD_BUFFER;
+        reply_size = 0;
+      }
     }
   } else {
     reply_size = 0;

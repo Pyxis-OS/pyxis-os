@@ -497,19 +497,22 @@ static void execute_request(struct bluetooth_hci_request *request)
   } else if (request->process != adapter.owner || !request->epoch || request->epoch != adapter.epoch) {
     complete_request(request, CALL_DENIED);
   } else if (request->operation == BLUETOOTH_HCI_RELEASE) {
-    if (request->deadline_ns <= now) {
+    if (adapter.reader) {
+      complete_request(request, CALL_BUSY);
+    } else if (request->deadline_ns <= now) {
       complete_request(request, CALL_TIMED_OUT);
     } else {
       end_session();
       complete_request(request, adapter.terminal ? CALL_UNAVAILABLE : CALL_OK);
     }
   } else if (request->operation == BLUETOOTH_HCI_RECEIVE) {
-    if (adapter.receive_count) {
+    if (adapter.reader) {
+      complete_request(request, CALL_BUSY);
+    } else if (adapter.receive_count) {
       collect_record(request);
     } else if (request->deadline_ns <= now) {
       complete_request(request, CALL_TIMED_OUT);
     } else {
-      KASSERT(!adapter.reader);
       adapter.reader = request;
     }
   } else if (request->deadline_ns <= now) {
