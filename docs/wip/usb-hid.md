@@ -1,6 +1,6 @@
 # USB HID boot keyboards and mice
 
-Status: **QEMU qualified; native keyboard passed, ASUS mouse recheck pending**.
+Status: **QEMU and native input qualified; ready to merge #654**.
 Implemented behavior and limits live in [USB boot input](../devices/usb-hid.md).
 No public input ABI or task-owned dependency pin changes are needed.
 
@@ -22,6 +22,10 @@ without quarantine is a much-later follow-up.
    boot-present USB 2 hub notifications, preserving storage/HCI progress.
 3. [x] Bind boot HID and integrate shared keyboard/pointer state, repeat and loss.
 4. [x] Qualify QEMU, repeat matched measurements and prepare native batch below.
+5. [x] Qualify native keyboard, shared keyboard holds, keypad and composite mouse
+   input/hotplug on the ThinkPad.
+
+## Native qualification — 2026-10-10
 
 Owner ThinkPad results (2026-10-10, luna build `2d678543`, default entry): direct
 USB-C Keychron Q6 Pro `3434:0660` on `07:00.3` passed letters, modifiers,
@@ -29,8 +33,7 @@ extended keys, repeat, cross-keyboard holds and hotplug. Num Lock/keypad text
 exposed the pre-existing shared-layout gap; `a38f6689` adds digits/operators and
 existing navigation aliases. Full SDK/applications/ports/image rebuild passed;
 QEMU USB input produced `1234567890.+-*/` with Num Lock and Home/Right/Delete/End
-editing without it. GDB confirmed the Home bytes `1b 5b 48`. Native recheck remains.
-LED output is still outside scope.
+editing without it. GDB confirmed the Home bytes `1b 5b 48`.
 
 ASUS `1ea7:0066` on `07:00.4`, full speed, advertises keyboard `03/01/01` and
 mouse `03/01/02`, one endpoint each, but supplied no mouse input. The owner's
@@ -38,16 +41,26 @@ mouse `03/01/02`, one endpoint each, but supplied no mouse input. The owner's
 GET_REPORT stalled on boot and replug, rejecting the whole composite. Owner
 accepted the correction: either interface's initial GET_REPORT STALL starts
 empty after EP0 recovery and does not reject its sibling. Other errors remain
-fatal; mouse SET_IDLE retains its optional-STALL rule. Recovery ordering is
-source-inspected; native operation after this fix remains to be checked. The
-throwaway info probe is not part of this PR.
+fatal; mouse SET_IDLE retains its optional-STALL rule. The throwaway info probe
+is not part of this PR and its branch was deleted after qualification.
+
+Owner recheck on luna's ThinkPad build `79e9d11d`: ASUS mouse motion, buttons
+and replug passed; Quake was played with the USB mouse. Keychron Num Lock,
+numpad digits, arrows with Num Lock off and the home cluster passed. Together
+with the earlier keyboard/shared-hold/hotplug checks, this completes the native
+input task. These are owner-reported native results, not agent measurements.
+The recorded devices were full-speed root attachments; native dock/switch hub
+chains, low-speed devices and Bluetooth/storage coexistence were not reported
+in this batch. LED output and the ASUS wheel remain outside qualification.
 
 The correction's ordinary kernel/image build passed with current SDK/app/ports
 bundles. A matched four-CPU QEMU root keyboard/mouse boot still bound both;
 typing ran `hostname`, and `mousetest` acquired relative lock and a left-button
 press. GDB confirmed live sources, idle EP0 and a healthy controller. This QEMU
-fixture supplies successful GET_REPORT; the STALL fallback is source-inspected
-and awaits the owner's dongle boot/replug recheck.
+fixture supplies successful GET_REPORT; the owner's dongle boot/replug recheck
+above qualifies the fallback. After merging main, the full kernel/SDK/apps/ports/
+image rebuild and the same QEMU checks passed at `79e9d11d`, with userland
+`89c520b6` and ports `9397093c`. Exact-head CI workflow #1667 passed all four jobs.
 
 ## QEMU qualification — 2026-10-10
 
@@ -94,11 +107,12 @@ ran at `5db7669d`, before the unrelated main merge. At `b9e59d8a`, a USB-only
 `-machine q35,i8042=off` boot ran `hostname` and `mousetest`, with both PS/2
 availability flags false and exactly one live USB keyboard and mouse. This fixes
 the stock shell starting before USB input enumeration; the normal PS/2 path and
-steady-state paths measured above are unchanged. Composite parsing, low-speed
-scheduling, real high-speed hub/TT routing and HCI coexistence are source-reviewed,
-not native or QEMU-device qualification. QEMU supplies no composite or low-speed
-fixture here. Its host input dispatcher also cannot establish independent physical
-holds across multiple keyboards; that check belongs to the owner batch.
+steady-state paths measured above are unchanged. The owner's ASUS result
+qualifies composite binding. Low-speed scheduling, real high-speed hub/TT routing
+and HCI coexistence remain source-reviewed, not native or QEMU-device qualification.
+QEMU supplies no composite or low-speed fixture here. Its host input dispatcher
+cannot establish independent physical holds across multiple keyboards; the owner
+qualified shared keyboard holds natively.
 
 Five warmed five-second CPU samples per state, no debugger during CPU sampling.
 Idle shows Caelum with hubs and HID devices present (unbound in controls). Active
@@ -129,7 +143,7 @@ includes guest work, KVM exits and some emulation, not pure guest BSP accounting
 QEMU main is reported separately. Timings include monitor/socket/debugger and
 host scheduling costs, not uninstrumented or native latency. VMs/debuggers stopped.
 
-## Owner native batch
+## Further native coverage
 
 Luna stages through the owner. Record image/ELF revision, controller, actual
 keyboard/dongle descriptors, link speeds and dock/switch hub path; `lsusb -n`
@@ -151,4 +165,4 @@ shows the boot snapshot, not post-boot devices.
 
 Steam Deck lizard mode requires actual boot interfaces; neither it nor later
 Bluetooth HID is qualified by these USB checks. Record native behavior and costs
-before closing the milestone.
+when extending this coverage. These checks do not block the qualified input task.

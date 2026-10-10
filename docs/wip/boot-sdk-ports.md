@@ -102,7 +102,8 @@ status belong in the milestone document and the PR.
 Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-10): [USB HID boot keyboards and mice](usb-hid.md),
-  shared physical input, USB 2 hub chains and bounded leaf hotplug.
+  shared physical input, USB 2 hub chains and bounded leaf hotplug. QEMU and
+  ThinkPad keyboard/composite mouse input are qualified; #654 ready to merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
