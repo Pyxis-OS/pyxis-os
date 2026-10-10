@@ -5,6 +5,14 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## USB switch subtree removal
+
+The accepted [USB HID task](wip/usb-hid.md#accepted-contract) permits controller
+quarantine after hub-subtree removal. A USB switch flip can therefore disable
+devices on that controller until reboot. Surviving the flip without quarantine
+needs proven subtree retirement with mixed storage/Bluetooth DMA ownership;
+the owner deferred it for much later (2026-10-10).
+
 ## Remote transfer memory and staging limits
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
