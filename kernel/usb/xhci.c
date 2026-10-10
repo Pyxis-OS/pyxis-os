@@ -2445,7 +2445,10 @@ enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
                                         unsigned port_index, uint64_t deadline,
                                         struct usb_host_device **output)
 {
+  uint64_t flags = cpu_save_interrupts();
   KASSERT(arch_cpu_index() == 0 && kernel_task_is_current(controller_worker, controller));
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  cpu_restore_interrupts(flags);
   if (!output || port_index >= controller->port_count) {
     return USB_INVALID;
   }
@@ -2658,9 +2661,11 @@ enum usb_result usb_host_hid_retire(struct usb_host_device *device, uint64_t dea
 
 void usb_host_interrupt_ack_loss(struct usb_host_interrupt *stream)
 {
+  uint64_t flags = cpu_save_interrupts();
   KASSERT(arch_cpu_index() == 0 && stream && stream->device);
   KASSERT(kernel_task_is_current(controller_worker, stream->device->controller));
   stream->loss_acknowledged = true;
+  cpu_restore_interrupts(flags);
 }
 
 bool usb_host_hid_input_complete(const struct usb_host_controller *controller)
