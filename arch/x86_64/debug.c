@@ -334,8 +334,6 @@ static ARCH_DEBUG_CODE bool enter_stop(const struct exception_frame *frame, uint
     cpu_restore_interrupts(flags);
     return false;
   }
-  uint64_t coherent_deadline = 0;
-  uint64_t coherent_epoch = atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire);
   for (;;) {
     enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
     if (phase != DEBUG_STOP_PREPARED) {
@@ -345,34 +343,9 @@ static ARCH_DEBUG_CODE bool enter_stop(const struct exception_frame *frame, uint
       }
       /* Keep this caller's original frame/reason until confirmed rearming. */
       await_entry(snapshot);
-      coherent_deadline = 0;
-      coherent_epoch = atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire);
       continue;
     }
     if (!debug_network_ready()) {
-      if (reason != DEBUG_STOP_CHECKPOINT && snapshot != arch_debug_stop.cpus) {
-        /* Local panic drawing may span a worker iteration. Only an AP can
-         * await the still-running BSP's next coherent tail before claiming. */
-        uint64_t exited = atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire);
-        if (exited != coherent_epoch) {
-          coherent_deadline = 0;
-          coherent_epoch = exited;
-        }
-        if (!coherent_deadline) {
-          coherent_deadline = deadline_after(DEBUG_ACQUIRE_NS);
-        }
-        arch_clock_maintain();
-        uint64_t now = arch_monotonic_ns();
-        if (atomic_load_explicit(&snapshot->exit_generation, memory_order_acquire) != coherent_epoch ||
-            atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire) != DEBUG_STOP_PREPARED ||
-            debug_network_ready()) {
-          continue;
-        }
-        if (now < coherent_deadline) {
-          __asm__ volatile("pause");
-          continue;
-        }
-      }
       cpu_restore_interrupts(flags);
       return false;
     }
