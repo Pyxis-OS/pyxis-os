@@ -1,7 +1,7 @@
 # Neovim on Pyxis
 
-Status: **milestone decisions accepted 2026-10-10; tasks 1–3 merged in #651, #656 and #657.**
-Task 4 is implemented for review; its [native contract](#task-4-preflight) and
+Status: **milestone decisions accepted 2026-10-10; tasks 1–4 merged in #651, #656, #657 and #664.**
+Task 4 is delivered; its [native contract](#task-4-preflight) and
 [qualification](../development/experiments/libuv-native/README.md) describe the bounded slice.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
@@ -91,7 +91,11 @@ without Neovim.
    keys, save, and quit in a tab and a pane. Expect this task to split once the
    first full build lists the missing functions, in particular `chdir`,
    `getcwd`, `setenv`, `mktime`, `fdopen` and `iconv`, each needing its own
-   decision on native objects.
+   decision on native objects. The [task 6 groundwork](neovim-groundwork.md)
+   records the current-SDK build inventory and pending shared-libc designs;
+   the groundwork probe is recorded, editor implementation and qualification remain open.
+   - [x] Current-SDK probe inventory and native-design proposal.
+   - [ ] Shared-library closure, recipe and full editor qualification after decisions.
 
 Later, each with its own proposal: swap and backup recovery (needs task 2 and a
 lease policy), jobs and `system()` (extra stream delegation and group stop),
