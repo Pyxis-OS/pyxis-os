@@ -128,25 +128,52 @@ packaged [session configuration](session-configuration.md) names it
 | `CSI top;bottom r` | Set the scroll region (DECSTBM), one-based and inclusive, and move to the top-left cell; missing or zero values select the screen edges |
 | `CSI n L` / `CSI n M` | Insert/delete lines at the cursor row within the scroll region, moving to column one; ignored outside it |
 | `ESC M` | Reverse index: move up, scrolling the region down at its top margin |
-| `ESC 7` / `ESC 8`, `CSI s` / `CSI u` | Save/restore the cursor position, colors, reverse video and pending wrap |
+| `ESC 7` / `ESC 8`, `CSI s` / `CSI u` | Save/restore the cursor position, colours, attributes and pending wrap |
 | `CSI ? 1049 h/l` | Enter/leave the alternate screen |
 | `CSI ? 25 h/l` | Show/hide the nonblinking block cursor |
-| `CSI ... m` | Reset, reverse video, palette/default foreground and background |
+| `CSI 0 m` (or `CSI m`) | Reset colours and attributes |
+| `CSI 1/22 m` | Bold on/off |
+| `CSI 3/23 m` | Italic on/off |
+| `CSI 4/24 m` | Underline on/off |
+| `CSI 7/27 m` | Reverse video on/off |
+| `CSI 30–37/90–97 m`, `CSI 40–47/100–107 m` | Palette foreground/background, indices 0–15 |
+| `CSI 39/49 m` | Separate terminal default foreground/background |
+| `CSI 38;5;n m`, `CSI 48;5;n m` | Indexed foreground/background, `n` in 0–255 |
+| `CSI 38;2;r;g;b m`, `CSI 48;2;r;g;b m` | RGB foreground/background, each component in 0–255 |
 | `ESC ( x`, `ESC ) x`, `ESC * x`, `ESC + x` | Character set designation: consumed and ignored |
 
 `CSI` is Escape followed by `[`. Movement defaults to one; position defaults to
-row/column one. Erasing does not move the cursor. Style parameters are 0 (reset),
-7/27 (reverse on/off), 30–37/90–97 (foreground), 40–47/100–107 (background), and
-39/49 (separate terminal defaults). Unsupported controls are ignored, including
+row/column one. Erasing does not move the cursor. SGR parameters can be combined
+in one CSI. Palette entries 0–15 come from each TTY's active scheme (Aardvark in
+every space today); 16–231 use the xterm 6×6×6 cube, with component levels
+0, 95, 135, 175, 215 and 255, and 232–255 use greys 8 through 238 in steps of 10.
+Bold leaves the colour index unchanged. Mux retains and emits indices or RGB;
+the outer TTY resolves indices. The interactive host client resolves them with
+the same shared Aardvark definitions. Scheme configuration remains deferred.
+
+The framebuffer's 8×16 bitmap font renders underline as one foreground pixel
+row at the bottom, bold as a clipped one-pixel right overstrike, and italic as
+a clipped right shear of two pixels in the upper third, one in the middle and
+zero in the lower third. These are synthetic styles; underline can intersect
+descenders. Cells stay 8×16. The remote client emits the styles for its host
+font to render.
+
+Unsupported controls are ignored, including
 `CSI ? 47/1047/1048 h/l`, origin mode, character insert/delete and other escape
-sequences. At most four parameters of up to 65535 are accepted; malformed or
-oversized CSI commands are discarded through their final byte. A new Escape
+sequences. At most 16 parameters of up to 65535 are accepted. SGR applies
+transactionally: a truncated colour group, missing colour operand, out-of-range
+component, unknown colour mode, numeric overflow or excess parameters discards
+the whole CSI without changing attributes or colours. Colour operands never
+become separate attributes. Only semicolon RGB/indexed forms are supported;
+colon forms discard the whole CSI too. Malformed CSI is consumed through its
+final byte. A new Escape
 starts a fresh sequence. This is a focused subset, not a claim of full ANSI/VT
 compatibility, and it is ASCII only.
 
 **Scroll region.** LF on the region's bottom margin scrolls only the region; LF
 on the screen's last row below the region does not scroll. Wrapping follows LF.
-Scrolled and inserted rows take the current colors without reverse video. An
+Erased, scrolled and inserted blank cells take the current colours with all
+attributes off. An
 invalid region (top not above bottom, or past the screen) is ignored. Switching
 screens and resizing reset the region to the whole screen.
 
@@ -157,9 +184,11 @@ cleared second screen; leaving restores the first screen's cells, colors and
 saved cursor. Each screen has its own saved cursor. Entering while already on
 the alternate screen, or leaving while not, does nothing. Selection is cleared
 on either switch. Both screens keep their cells across resize, cropped like
-the visible one. The kernel TTY keeps glyph and style cells for both screens:
-six bytes per cell, preallocated with the space: 93,600 bytes for 240x65 cells at
-1920x1080, against 15,600 for glyphs alone before. In a
+the visible one. Each stored cell uses 12 bytes for its glyph, attributes and
+tagged index/default/RGB colours. The kernel preallocates both screens with the
+space: 24 bytes per grid position, or 374,400 bytes for 240×65 cells at
+1920×1080. Selection staging retains glyph attributes; the block caret changes
+raster colours while keeping the styled shape. In a
 multiplexer pane, the alternate screen has no history; see
 [multiplexer history](multiplexer.md#full-screen-programs-and-history).
 

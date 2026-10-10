@@ -171,24 +171,23 @@ Package the runtime Vimscript and core Lua modules under a delegated native
 Retain runtime search/source/autocommand support; `.h` defaults to C++ unless
 `g:c_syntax_for_h` selects C. Task 5 is still needed for core Lua/filetype loading.
 
-Both [kernel TTY and mux](../userland/terminal.md#tty-output-controls) support **16 palette
-colours, defaults and reverse**, not 256-colour/RGB SGR or bold/italic/underline.
-Extended SGR is not safely interchangeable: `38;5;7` can activate reverse and
-five-parameter RGB sequences exceed the four-parameter parser bound.
+Both [kernel TTY and mux](../userland/terminal.md#tty-output-controls) support
+256 palette entries, semicolon RGB, defaults, reverse and synthetic
+bold/italic/underline. The bounded SGR interpreter is shared with the interactive
+remote client; malformed colour groups change no attributes.
 
 Upstream has no `pyxis` built-in terminfo and falls back to eight-colour ANSI
-(`tui/terminfo.c:71–125`). Add a truthful static entry matching task 3, including
-bright SGR and alternate screen, with no unsupported attributes/colour capability.
-Use `notermguicolors` and a small 16-colour Vimscript scheme explicitly assigning
-Comment/Statement/Type/PreProc/Constant/String groups with `cterm=NONE`; upstream's
+(`tui/terminfo.c:71–125`). The task 6 static entry must advertise the implemented
+sequence table, including indexed/RGB colour controls and the rendered styles.
+Neovim can use `termguicolors` on this profile; a small Vimscript scheme can assign
+Comment/Statement/Type/PreProc/Constant/String groups explicitly. Upstream's
 default dark groups do not all assign a terminal foreground.
 
 Suppress unsupported Pyxis DCS/OSC probes (`tui/tui.c:482–495`): both current
 parsers otherwise draw query payload as text. Set upstream's `NVIM_NOTTYFAST=1`
 **before startup**, since setting `nottyfast` in user configuration is too late;
 leave `COLORTERM` unset. This is a bounded port profile, not a renderer expansion.
-Later terminal OSC/DCS consumption, 256/truecolour and Unicode rendering remain
-separate work.
+Later terminal OSC/DCS consumption and Unicode rendering remain separate work.
 
 ## Proposed delivery slices
 
