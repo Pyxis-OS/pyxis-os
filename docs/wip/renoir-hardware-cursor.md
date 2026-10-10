@@ -1,9 +1,10 @@
 # Renoir hardware cursor
 
-**Proposal only, 2026-10-10. No implementation or new register authority.**
-The owner assigned this display track after #658 merged; the three defaults
-below are pending owner acceptance. Scaled game planes remain a separate later
-decision. This proposal builds on the [Renoir flip backend](../kernel/renoir-flip.md),
+**Design accepted 2026-10-10; not implemented.**
+The owner accepted all three defaults after assigning this display track following
+#658. Task 1 awaits proposal merge and the orchestrator's explicit go-ahead; no
+implementation, allocation or register writes are authorized by acceptance alone.
+Scaled game planes remain a separate later decision. This proposal builds on the [Renoir flip backend](../kernel/renoir-flip.md),
 the [pointer contract](../interfaces/pointer.md) and the existing
 [VirtIO cursor path](../kernel/display.md#hardware-pointer).
 
@@ -24,7 +25,7 @@ must add no base compose, copy or flip for cursor-only movement. This does not
 promise to eliminate the existing periodic full-frame cadence; content-driven
 frame scheduling would be a separate task. No new cost measurement is claimed.
 
-## Linux sequence and proposed write set
+## Linux sequence and accepted write set
 
 Reference: AMD DC in Linux v6.19.10, pinned commit
 `271f8eab9590b57a2ff0c8c9eee357723c4a85cb`, the same source as the flip backend.
@@ -47,7 +48,7 @@ uses `CUR_VUPDATE_LOCK_SET`, not a surface flip lock or an OTG blank operation.
 The proposed implementation retains these requirements rather than assuming
 that address/position writes alone are sufficient.
 
-Proposed allowlist additions for **only the verified route**:
+Accepted allowlist additions for **only the verified route**:
 
 | Block/register | Writable fields/purpose | Instance 0 DWORD offset |
 | --- | --- | --- |
@@ -80,7 +81,7 @@ owns and deliberately updates; it does not mask unexplained live changes.
 
 ## Image storage, format and coordinates
 
-Recommended storage: one additional **64 KiB-aligned, 64 KiB UMA reservation**
+Accepted storage: one additional **64 KiB-aligned, 64 KiB UMA reservation**
 under the same [Linux-derived exclusion standard](../kernel/renoir-flip.md#surfaces-and-memory),
 with two 16 KiB image slots and remaining padding reserved. For the captured
 layout the first candidate is offset `0x10f0000`, immediately after the rounded
@@ -148,7 +149,7 @@ otherwise publish no FILE. Shape retirement and capture latch proof are distinct
 requirements. This is a presented software snapshot, not atomic photon-time
 capture of two independently updated planes.
 
-| Condition | Proposed behavior |
+| Condition | Accepted behavior |
 | --- | --- |
 | Unsupported/invalid preparation before activation | Existing software composition; no cursor writes or allocation from unproven memory. |
 | Cursor-only failure with route/owned set still fully provable | Bounded guarded disable, prove it latched, then fresh software composition. Abort any unmatched capture and retain backing until fetch retirement is proven. |
@@ -157,8 +158,9 @@ capture of two independently updated planes.
 | FAILED | No further cursor or flip writes, no speculative disable, pinned backing, existing unavailable behavior. |
 | Panic | Preserve no GPU commands; paint possible base fronts under existing panic ownership. Pin cursor backing; a still-enabled hardware cursor may overlay panic pixels. |
 
-The timeout-disable exception must be accepted explicitly: today's FALLBACK
-stops GPU writes. An unsuccessful disable or missing latch proof means unavailable,
+The owner accepted the single guarded disable-only timeout exception on
+2026-10-10: today's FALLBACK otherwise stops GPU writes. An unsuccessful disable
+or missing latch proof means unavailable,
 not a silently doubled or stale software fallback. In particular, today's
 `finish_flip(FALLBACK)` immediately copies retained staging; hardware-mode staging
 is cursor-free. It must not count as successful software fallback after disable
@@ -166,24 +168,26 @@ or publish its capture. Fresh software composition is required. Resize/mode chan
 reuses old geometry/addresses; first slice supports only the inherited fixed
 mode, and boot/refusal keeps current software behavior.
 
-## Owner decisions — all pending
+## Accepted owner decisions — 2026-10-10
 
-1. **Register authority and gate. Recommended default:** opt-in cursor support
+1. **Register authority and gate. Accepted:** opt-in cursor support
    only with the qualified mono flip backend; extend its write allowlist by the
    exact HUBP/HUBPREQ, DPP and MPC cursor fields above. Full validation and the
    writer/panic claim guard every transaction. No power/clock/firmware changes.
-2. **Image contract and memory. Recommended default:** retain 1–64 straight BGRA8
+2. **Image contract and memory. Accepted:** retain 1–64 straight BGRA8
    publicly; convert to premultiplied ARGB8888 internally at fixed 64-pixel pitch.
    Reserve one revalidated 64 KiB UMA region with two immutable-in-use slots;
    hardware support waits for proven image retirement and clock/latch evidence.
-3. **Independence, capture and failure. Recommended default:** cursor updates may
+3. **Independence, capture and failure. Accepted:** cursor updates may
    run during write-free pending flips with their own full validation; capture
    freezes its visual snapshot until base and cursor confirmation. Permit one
    guarded disable-only exception on timeout before software fallback; FAILED or
    lost ownership performs no GPU writes and pins backing. Default boot stays
    unchanged until native qualification and a separate default-enablement decision.
 
-Acceptance records the contract; it does not assign an implementation task.
+All three defaults are accepted. Acceptance records the contract; it does not
+assign an implementation task. The owner merges the proposal; task 1 begins
+only on the orchestrator's subsequent go-ahead.
 
 ## Tasks and owner outcomes
 
