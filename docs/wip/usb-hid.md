@@ -1,6 +1,6 @@
 # USB HID boot keyboards and mice
 
-Status: **implementation assigned; baseline first**. Owner decisions accepted
+Status: **baseline captured; implementation in progress**. Owner decisions accepted
 2026-10-10. No public raw-USB interface or new input grant is added.
 
 ## Accepted contract
@@ -39,7 +39,7 @@ remains a snapshot; runtime attachment does not silently rewrite it.
 
 ## Delivery
 
-1. [ ] Capture unchanged-source input/CPU baseline; record matched configurations,
+1. [x] Capture unchanged-source input/CPU baseline; record matched configurations,
    revisions, repeated samples and debugger perturbation.
 2. [ ] Extend private interrupt endpoints, bounded leaf attachment/retirement and
    boot-present hub monitoring without breaking Bluetooth or storage progress.
@@ -69,3 +69,32 @@ Reference: [USB HID 1.11](https://www.usb.org/sites/default/files/hid1_11.pdf),
 especially §§7.2.4–7.2.6 and appendices B/C; QEMU 10.2.2's
 [mouse report implementation](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/hw/input/hid.c)
 establishes its fourth-byte wheel extension. No upstream code is copied.
+
+## Baseline — 2026-10-10
+
+Source `b0e2d1c6` changes only documentation from main `dc91a4c6`; LLVM 23 builder
+`49e2c1a`, kernel `make -j16 image PREBUILT="sdk userspace ports"`, unchanged
+userland `8cbd9f87`, ports `19fb10b0`, fs `b427df29`, lwIP `a1aadb91`. Verified
+local SDK/application/ports bundles have these pins and the matching public ABI.
+QEMU 10.2.2: Q35, nested KVM, four host CPUs, 2 GiB, raw OVMF, standard VGA
+1280×800, VirtIO RNG/network, `qemu-xhci`, two chained full-speed `usb-hub`s,
+`usb-kbd` at `1.1.1` and `usb-mouse` at `1.1.2`. Enumeration completed; HID was
+unbound, as expected. Five five-second idle samples on Caelum, no debugger:
+
+| Host-thread CPU (% of one CPU) | Median | Range |
+| --- | ---: | ---: |
+| BSP vCPU | 9.8 | 9.6–10.0 |
+| QEMU main | 0.0 | 0.0–0.0 |
+
+These `/proc` thread times include KVM execution/exits; they are not pure guest
+accounting, and emulation can also run in a vCPU thread. After removing the two
+unbound HID leaves and selecting Development, five five-second samples of PS/2
+F1 (40 ms) plus relative mouse motion at 10 Hz gave BSP 9.0% (8.6–10.2%) and
+QEMU main 0.6% (0.4–0.6%). The hubs remained attached.
+
+Eight debugger-observed host injection-to-route samples per source used HMP
+`sendkey a 40` / `mouse_move 1 0`, with conditional hardware breakpoints at
+`keyboard_route_event` / `pointer_handle_input`: keyboard median 11.390 ms,
+range 4.242–19.275 ms; pointer median 10.903 ms, range 3.380–16.820 ms. Socket,
+debugger and host scheduling costs are included; this is not native or
+uninstrumented latency. Raw samples stay local. Baseline VM/debugger stopped.
