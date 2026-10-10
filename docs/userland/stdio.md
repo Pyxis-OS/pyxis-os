@@ -27,18 +27,30 @@ Only the final file may be created; intermediate directories must exist. Lookup
 of an existing writable file does not require CREATE. A competing creator is
 handled by opening the entry it published. Temporary path storage is allocated
 from the path length and initial chain depth, without a fixed path/depth limit.
-The FILE wrapper and descriptor storage are reserved before opening or truncating
-the file. Path workspace allocation and authority resolution also precede
-truncation. Publishing a successfully truncated stream requires no allocation;
-failure releases the wrapper and slot reservation, and attempts to release any
-opened file handle under the close policy below.
+The FILE wrapper, open object and descriptor storage are reserved before opening
+or truncating the file. Path workspace allocation and authority resolution also
+precede truncation. Publishing a successfully truncated stream requires no allocation;
+failure releases the wrapper, object and slot reservation, and attempts to release
+any opened file handle under the close policy below.
 
-A private process-local descriptor entry owns the native handle, access mode,
-append policy and file cursor. FILE has a non-owning, invalidatable association
-with that entry and owns its EOF/error indicators. The association adds no native
-reference. Closing the entry invalidates the FILE before releasing the handle or
-reusing its number; the old FILE cannot access or close a later occupant. Closing
-a FILE releases its live descriptor and wrapper metadata, not the directory entry.
+A process-local descriptor slot references an open object owning the native
+handle, access, append policy, cursor and input read-ahead. `dup` selects the
+lowest free slot and shares that object; only its final close releases the
+native handle. Each slot has at most one invalidatable FILE association, with
+its own selected access and EOF/error/pushback state. Closing a slot invalidates
+its FILE before number reuse; the old wrapper cannot affect a later occupant.
+Closing one alias leaves other aliases and unread read-ahead alive. Children
+still receive explicit native grants, not the parent's shared cursor or buffers.
+
+`fdopen` accepts the same modes as `fopen`, validates the mode and allocates the
+wrapper before association. Failure leaves the descriptor unchanged and with
+its caller; success transfers that slot's close responsibility to `fclose`.
+Invalid descriptors or unavailable access report EBADF; an otherwise compatible
+existing association reports EBUSY. Position and read-ahead stay intact; `w` does not truncate or create. FILE access is narrowed:
+`r` cannot write even when the underlying descriptor is read/write. `a` enables
+shared non-atomic append for every alias without moving the current cursor;
+other modes never clear the descriptor's append policy. `freopen`, `setvbuf` and
+`setbuf` remain later steps; output stays unbuffered.
 
 Descriptors use the lowest free number, including absent or closed standard
 slots. The first three entries use static storage; later growth uses the heap.
@@ -49,8 +61,7 @@ stream or its descriptor is closed; the stream still owns it, so close it with
 `fclose`. Descriptor reads bypass FILE pushback but consume descriptor read-ahead;
 seeking discards that read-ahead. Pread bypasses both without consuming them;
 pwrite discards descriptor read-ahead before a nonempty native write and leaves
-FILE pushback/indicators unchanged. `fstat` is unaffected. fdopen and duplication are not
-exposed.
+FILE pushback/indicators unchanged. `fstat` is unaffected.
 
 Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
@@ -63,7 +74,8 @@ copies presence flags, status, redirect count, final URL and media type without
 changing cursor, indicators or native authority. It returns zero for a valid
 stream, including local/inherited streams with absent metadata; NULL arguments
 use EINVAL and closed/invalid streams EBADF. Failure clears the output; success
-preserves errno. Metadata belongs to the descriptor and is freed on close.
+preserves errno. Metadata belongs to the shared open object and is freed on its
+final descriptor close.
 Failed fopen exposes errno only. See the [redirect contract](http-fetch.md#redirect-chains).
 
 ## Descriptor I/O
@@ -80,8 +92,8 @@ Open returns the lowest free descriptor through the same resolver as fopen.
 It creates no FILE wrapper and grants no additional authority. Descriptor
 storage and path workspace are reserved before exclusive creation or truncation,
 with no fallible descriptor publication afterward. Read/write requests require
-both native rights. lseek uses the same private descriptor position as stdio;
-descriptor duplication remains absent. O_APPEND moves each write() to the
+both native rights. lseek uses the same process-local open-object position as
+stdio and every duplicate. O_APPEND moves each write() to the
 current end of the file, through the same non-atomic SIZE then WRITE as
 fopen's "a".
 
@@ -94,7 +106,7 @@ and host restrictions remain authoritative. Virtio-fs still requests 0644.
 See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
 
 `unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync`,
-`unlink`, `pread`, `pwrite`, `access`, `rmdir` and `isatty`, and defines
+`unlink`, `pread`, `pwrite`, `dup`, `access`, `rmdir` and `isatty`, and defines
 STDIN_FILENO, STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `isatty` returns 1
 for a console stream, the startup binding to the space's terminal, and 0 with
 ENOTTY for files and pipes; `fstat` reports the same console as a character
@@ -187,8 +199,8 @@ within the RAM filesystem, not disk durability or a whole-path snapshot.
 
 `fread` and `fwrite` return complete element counts and check size/count overflow
 before I/O. A partial final element may have transferred bytes even though it
-is not included in that count. File position belongs to the associated descriptor,
-with no shared seek position in the underlying capability. File writes use that
+is not included in that count. File position belongs to the shared open object;
+the underlying native capability has no seek position. File writes use that
 offset. Native file calls transfer at most 4,088 bytes per read or 4,080 bytes per
 write; `fread`/`fwrite` continue across those boundaries using their existing loops.
 File, terminal and pipe output continue positive short writes until complete or
@@ -229,9 +241,9 @@ remain ENOTSUP. A successful short transfer remains successful progress.
 
 ### Input read-ahead
 
-Each descriptor entry owns an optional BUFSIZ read-ahead buffer beside its handle
-and logical position. `fread`, and the `fgetc`/`getc`/`getchar`, `fgets` and
-`getline` input built on it, may fill that buffer with one backend transfer from
+Each open object owns an optional BUFSIZ read-ahead buffer beside its handle
+and logical position, shared by all descriptor aliases. `fread`, and the character
+and line input built on it, may fill that buffer with one backend transfer from
 a file or pipe and return the excess on later reads. Requests of at least BUFSIZ
 bytes read directly into the caller's memory. A file fill stays below LONG_MAX,
 the stdio position range, which also keeps it inside `host://`'s signed offset
@@ -240,16 +252,17 @@ it, the read is exact, so speculation never turns a valid read into an error
 such as EOVERFLOW. A fill happens only while the buffer is empty: EOF or a
 backend error reaches the request that caused it, after every buffered byte.
 Consoles are never read ahead: their input is shared with the parent shell, and
-ISO C treats them as interactive. `read` and `fread_some` return buffered bytes
-first, otherwise one exact transfer, so mixing them with stdio on one descriptor
+ISO C treats them as interactive. `read` and `fread_some` consume buffered bytes
+first and never read ahead, so mixing them with stdio through aliases
 loses no bytes and exact consumers such as head stay exact.
 
-The buffer is allocated on the first buffered read and freed on close. If
-allocation fails, the descriptor stays unbuffered without an error. Only file
-read-ahead is discarded before close, because a file can fetch it again: writes
-on update streams, successful seeks and input `fflush` drop it. Pipe read-ahead
-survives until close. Buffered file bytes can be stale if another descriptor or
-process writes the file; seeking or input `fflush` refetches them.
+The buffer is allocated on the first buffered read and freed on final descriptor
+close. If allocation fails, the open object stays unbuffered without an error.
+File writes, successful seeks and input `fflush` discard shared file read-ahead
+because files can refetch it at the logical position. Pipe read-ahead survives
+until consumed or the final alias closes. Buffered file bytes can be stale if an
+independently opened descriptor or another process writes the file; seeking or
+input `fflush` refetches them.
 
 Read-ahead is private process memory and never accompanies a delegated stream.
 A child given the same pipe sees only bytes not yet fetched; a child given a
@@ -415,13 +428,15 @@ requested exit status. Exit handlers and `.fini_array` run before this cleanup,
 so they can still write to the streams; see
 [startup and exit](../development/sdk.md#startup-exit-and-layout). `_Exit` and
 fatal faults bypass libc cleanup; the kernel still reclaims process resources.
-There are no buffering controls, wide I/O or fdopen. `fseeko` and `ftello`
+There are no buffering controls or wide I/O. `fseeko` and `ftello`
 behave exactly like `fseek` and `ftell`, because `off_t` is `long`. Scanning
 and one-byte pushback are described above.
 
-`fclose` invalidates the association and makes one native close attempt. Success
-returns zero without changing errno. Failure returns EOF with the translated
-errno and still disposes of the wrapper; static standard wrappers remain invalid.
+`fclose` invalidates its slot's association and releases that descriptor reference.
+Other aliases retain the open object; only its final reference makes one native
+close attempt. Success returns zero without changing errno. Failure returns EOF
+with the translated errno and still disposes of the wrapper; static standard
+wrappers remain invalid.
 Closing a stale FILE returns EOF/EBADF without touching a reused descriptor.
 Native CLOSE currently returns only success or BAD_HANDLE; neither leaves an
 owned native entry. Other native failures retain their errno translation, while

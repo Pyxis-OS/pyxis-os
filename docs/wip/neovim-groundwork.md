@@ -1,21 +1,34 @@
 # Neovim task 6 groundwork
 
 **Owner accepted the three defaults on 2026-10-10. Working path and environment
-are implemented in the first slice; later slices remain unassigned.**
+are implemented in slice 1; proved realpath and fdopen/dup are implemented in
+slice 2. Calendar/encoding and the editor recipe remain unassigned.**
 This splits [task 6](neovim-libuv.md#tasks); task 5's Lua/luv delivery remains a
 prerequisite. The shared libc work also serves [hosted Clang](hosted-clang.md)
 and [Git](git-on-pyxis.md). Existing first-slice exclusions remain in force.
 
-## First implementation slice
+## Delivered slices
 
 The [process-state reference](../userland/process-state.md) describes shared libc
 `chdir`/`getcwd`, copied mutable environment and explicit child snapshots, with
 shell and port consumers updated together. [Qualification](../development/experiments/process-state/README.md)
 records the fresh-main baseline, matched launch costs and QEMU child-snapshot run.
-The bounded proved `realpath` is deliberately the next slice, requiring live
-identity validation of the returned spelling. Stdio, calendar, encoding and the
-Neovim recipe remain later work. The probe inventory below describes its original
-baseline, not current availability of the delivered cwd/environment APIs.
+Slice 2 delivers [proved realpath](../userland/paths.md#proved-realpath) and
+[fdopen/shared descriptor objects](../userland/stdio.md#opening-and-ownership),
+including the libuv realpath adapter. `freopen` and buffering controls remain
+separate small steps; calendar, encoding and the Neovim recipe remain later work.
+The probe inventory below describes its original baseline, not current
+availability of the delivered slice 1/2 APIs.
+
+## Editor integration still required
+
+The diagnostic Neovim pin's `path.c:path_full_dir_name` (2298) returns descriptive
+cwd for empty input and promotes cwd plus a relative suffix after realpath
+failure. The future Pyxis recipe must instead prove `.` or return failure; no
+cwd-text fallback may claim canonical resolution. `os/fs.c:os_realpath` (1338)
+uses `xstrlcpy` yet reports success after truncation: reject insufficient capacity
+before copying a proved result. No Neovim recipe or runnable editor is delivered
+by this slice.
 
 ## Probe and limits
 
@@ -80,7 +93,7 @@ headers in inactive branches are not target gaps. Secondary pointer-conversion,
 `mask`, `init_termios` and incomplete-type errors follow the missing declarations
 above, rather than requiring additional APIs.
 
-### Behaviour still missing despite declarations
+### Original baseline behaviour despite declarations
 
 These are **source-inspected**, not target runtime failures:
 
@@ -190,15 +203,14 @@ leave `COLORTERM` unset. This is a bounded port profile, not a renderer expansio
 Later terminal OSC/DCS consumption, 256/truecolour and Unicode rendering remain
 separate work.
 
-## Proposed delivery slices
+## Remaining delivery slices
 
-After separate implementation assignments: shared working path/explicit
-environment; stdio/descriptor association; calendar/encoding and
-remaining numeric/string closure; Neovim native platform/TUI/runtime recipe;
+After separate implementation assignments: stream rebinding/buffering;
+calendar/encoding and remaining numeric/string closure; Neovim native platform/TUI/runtime recipe;
 then the full target link and manual tab/pane qualification. Re-run against task
 5's actual libraries, with no placeholders, before claiming editor delivery.
 Keep save durability/identity validity, child pipe authority, unsupported features
-and cleanup in that qualification. No task 6 implementation starts in this PR.
+and cleanup in that qualification. Each remaining slice needs its own assignment.
 
 ## Later work
 
