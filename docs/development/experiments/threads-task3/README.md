@@ -223,3 +223,62 @@ No sleep or guest `exit` follows the session command: stdin EOF closes the parke
 shell only after its successor finishes, and the client drains through FINAL.
 Check each JSONL for 100 verified passes, zero failure/rejection and FINAL status
 0/drain complete; client exit alone is not the benchmark result.
+
+
+## Native A/B reported by the owner
+
+ThinkPad, 12 CPUs, AC, PXE, hands-free; fresh boots A1/B1/A2/B2. A is main
+`2a1e4f99` (owner ELF prefix `72d1a0d1`), B is PR head `2a958d57` (luna build,
+ELF prefix `1465bac0`). Main `2a1e4f99`'s initrd is identical across all runs.
+Each boot ran the four commands above with 256 messages/100 rounds. Raw JSONL:
+`/shared/present/batch2/ab684/684{A1,B1,A2,B2}/`. Local inspection verified all
+16 files: **1600 successful verified timed passes**, zero CALL failures/SEND
+rejections, and every FINAL status 0/drain complete. Hardware/build identity is
+owner-reported; raw output was independently inspected. This adds IPC evidence,
+not native launch/IPI measurements.
+
+Owner-reported medians in milliseconds, 100 verified samples per cell:
+
+| Workload | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 complete | 1.240 | 1.245 | 1.230 | 1.215 |
+| CALL4096 complete | 2.087 | 2.086 | 2.050 | 2.005 |
+| SEND64 complete | 0.519 | 0.505 | 0.371 | 0.374 |
+| SEND64 admit | 0.081 | 0.102 | 0.062 | 0.065 |
+| SEND4096 complete | 1.151 | 1.257 | 1.118 | 1.244 |
+| SEND4096 admit | 0.230 | 0.235 | 0.230 | 0.242 |
+
+SEND4096 completion rises in both pairs: +0.106/+0.126 ms per 256 messages,
++9.2%/+11.3%, or about **0.41–0.49 µs/message**. Admission rises +2–5%.
+CALL and SEND64 completion show no corresponding repeated increase. All raw
+samples are retained; SEND4096 completion ranges A1/B1/A2/B2 are
+0.416–1.752 / 0.413–2.008 / 0.411–1.747 / 0.409–1.747 ms. Clock calibration
+is 136–307 ns/read across the 16 commands, never subtracted. Unlike the nested
+repeat, this native paired result merits recording as a regression budget.
+
+**Source attribution, not a profile.** The benchmark has no payload attachments.
+A batch performs 256 raw SENDs and data RECEIVEs/FINISHes, plus 32 DRAIN control
+CALLs (eight messages/group). SEND adds no reply slot claim or grant retain;
+it initializes the new reservation metadata. RECEIVE claims one receipt slot,
+checks its generation and moves the queue's initial receipt reference. DRAIN
+CALLs claim four reply slots and release them during grantless collection;
+REPLY policy validation sees zero grants. These are the relevant reservation
+changes inside completion, not four slots or reply grants per raw SEND.
+
+The RECEIVE path actually reduces table-guard acquisitions from three to two
+and removes a receipt retain/release pair relative to A; it adds claim markers,
+generation checks and reservation accounting. The payload copy operations and
+userland code are unchanged, with no extra 4 KiB copy. Delivery records grow
+8544→8624 bytes; matching-ELF offline GDB shows request/reply offsets moving
+352/4448→432/4528. That changes buffer alignment and pool stride, so a cache/layout
+effect is plausible, but unmeasured. Reservation work is size-independent;
+the source does **not** establish which change causes the 4096-only increase,
+or assign the whole delta to atomic installation.
+
+**Recommendation:** accept the measured sub-0.5 µs/message completion budget
+for this correctness milestone. No demonstrated cheap fix is identified.
+Removing claims would violate the accepted delivery contract; rearranging buffers
+or fusing helpers without profiling would be speculative. Keep the code unchanged
+for merge and revisit this path if native profiling identifies a specific hot
+operation or sustained workload makes the budget material. This recommends the
+tradeoff; it does not mark owner acceptance of the regression as already given.
