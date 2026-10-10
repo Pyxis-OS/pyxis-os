@@ -302,8 +302,9 @@ latency. The games' tear-free result is the owner's visual judgment.
 
 About 8 × 369 µs gives roughly 3 ms cumulative BSP validation elapsed per frame,
 including clock/preemption overhead; it is a cost estimate, not a separately
-profiled CPU sample. A [separate polling proposal](../../../wip/renoir-flip-polling.md)
-addresses this without changing task 2 code. Metrics-gated failure diagnostics
+profiled CPU sample. The separately authorized [poll-cost follow-up](../renoir-poll-cost/README.md)
+implements cheap pending observations; its native performance qualification
+remains pending and does not change the `9254f5c8` result above. Metrics-gated failure diagnostics
 remain: they perform no formatting, field walk or extra register reads on the
 healthy path or with metrics off. No default-boot logging was added.
 
@@ -353,4 +354,5 @@ paths as source-reviewed/QEMU-unexercisable, not measured. Task 3 remains separa
 - [x] Owner native normal-flip completion, games and latency qualification at `9254f5c8`.
 
 Native timeout/panic/capture and remaining input checks stay explicit limits;
-task 3 and the cheaper-poll implementation require separate authorization.
+task 3 requires separate authorization. The authorized poll-cost follow-up has
+its own outstanding native qualification.

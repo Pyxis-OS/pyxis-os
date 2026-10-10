@@ -25,7 +25,7 @@ status belong in the milestone document and the PR.
   two-surface GOP page flips (#631, #632, #638, #647); normal flips and
   Quake and Chocolate Quake play natively qualified, default off, with the
   [remaining qualification](../technical-debt.md#renoir-flip-backend-qualification)
-  and a separate [cheaper-polling proposal](renoir-flip-polling.md). Presentation
+  and a separate [poll-cost follow-up](renoir-flip-polling.md). Presentation
   [timing and pacing](presentation-timing.md) keeps its unassigned step 3.
 - [Cheaper timekeeping](../kernel/timekeeping.md#clock-reads-in-timer-handling),
   2026-10-10: fewer clock reads per timer event (#571) and the TSC with HPET
@@ -119,6 +119,8 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
+- **Codex alpha** (2026-10-10): [Renoir flip polling](renoir-flip-polling.md),
+  the authorized poll-cost follow-up to the completed flip backend.
 - **Claude** (2026-10-09): no milestone after closing SDL game ports.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's

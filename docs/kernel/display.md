@@ -386,6 +386,14 @@ reports for matched disabled/enabled boots. Neither flag adds default-boot logs.
 A qualified flip backend skips the failed counter-derived timing/blank-copy
 observer. Disabled/refused paths retain it without making it a flip authority.
 
+PENDING polls use two flip-control/earliest observations only to keep waiting.
+Full device/route/layout/owned-set validation remains before surface stores,
+submission, completion/retirement/capture, timeout fallback and fallback copies.
+Unexpected light observations latch FAILED; full samples cannot erase them.
+The 50 ms/50-poll bound, 1 ms sleep, primary/earliest confirmation and retained
+surfaces are unchanged. The [poll-cost record](../development/experiments/renoir-poll-cost/README.md)
+distinguishes the implemented guard split from pending native cost qualification.
+
 ## Qualification and cost
 
 Earlier tasks qualified boot and post-handoff direct panic output, serial-only

@@ -1,34 +1,30 @@
-# Cheaper Renoir flip polling
+# Renoir flip polling qualification
 
-Status: **proposal only; a follow-up is in progress and no polling change is
-implemented.** It concerns the pending-flip polling of the
-[Renoir flip backend](../kernel/renoir-flip.md).
+Owner authorized the poll-cost follow-up on 2026-10-10, including delayed
+layout-loss detection during the bounded, write-free PENDING interval.
+Implementation is in draft #658. The [reference](../kernel/renoir-flip.md#pending-poll-validation)
+records the light observations and full action guards. No default enablement,
+new GPU write authority or presentation-timing step 3 is authorized.
 
-The native run measured 369 µs mean validation elapsed, 3.9 ms maximum and about
-8 polls per flip, roughly 3 ms cumulative validation elapsed per frame. The
-metrics include preemption and clock overhead, so neither the observed wait nor
-this estimate establishes an optimization gain.
+The earlier owner-reported native `9254f5c8` run measured 369 µs mean full
+validation elapsed, 3.9 ms maximum and about 8 polls per flip: roughly 3 ms
+cumulative validation elapsed per frame, including preemption/clock overhead.
+The [poll-cost record](../development/experiments/renoir-poll-cost/README.md)
+records baseline/candidate revisions, sealed matched inputs, builds and
+interleaved QEMU unavailable-path checks. QEMU ordinary compose means ranged
+0.354–0.449 ms and copy means 0.294–0.347 ms; it has no DCN and does not establish
+native poll-cost improvement. Native A–B–A–B results have not been supplied.
 
-Recommended default: while a flip is PENDING, read a stable flip-control and
-earliest-in-use tuple as a hint for scheduling the full check. Keep one
-outstanding request, the 1 ms sleeping polls and the 50 ms/50-poll bound. Full
-device, route, immutable-layout and owned-set validation stays mandatory before a
-back-surface pixel write, before GPU submission, before front retirement or
-capture publication, and before timeout fallback or any fallback copy.
-Confirmation must still verify stable primary **and** earliest addresses equal to
-the request with pending clear. Light reads alone never authorize a write, reuse
-or release. A full-check failure or unknown ownership remains FAILED with the
-surfaces pinned. No new masks, write authority, allocations, interrupt or
-firmware changes are proposed.
+- [x] Capture the pre-change baseline and prior native metrics.
+- [x] Implement light pending observations with full validation at every guarded action.
+- [ ] Qualify interleaved native A–B–A–B cost, confirmations and both games.
 
-This moves repeated full pending-poll checks to the guarded actions above: expect
-fewer full checks plus small tuple reads, with matched native cost and input
-qualification required.
-
-**Owner decision before implementation:** accept delayed layout-loss detection
-during the write-free PENDING interval, bounded by candidate completion or the
-existing 50 ms/50-poll deadline, while full validation stays at every action
-above. That cadence is proposed, not accepted. Measure validation and poll cost
-separately at the same revision, options and workloads; repeat both games and
-confirm that retirement, capture, fallback and FAILED guards remain intact. The
-debt entry is [Renoir steady-state validation cost](../technical-debt.md#renoir-steady-state-validation-cost).
+Use the existing **Flip: on + metrics** entry with info/UDP logging and
+`display.timing=off`. Ask the orchestrator to have Luna stage the sealed A/B sets;
+Alpha does not stage PXE. Compare the same idle, native Quake and unchanged 72 Hz
+Chocolate Quake workloads, repeated warm windows, full/light/submission costs,
+polls per confirmation and BSP observation elapsed per frame. Require matching
+confirmations, no timeout/FAILED and no visual/input regression. Exact commands,
+input manifests and steps are in the record. Retain the
+[cost debt](../technical-debt.md#renoir-steady-state-validation-cost) until measured
+results establish the outcome; trim this WIP when qualification is complete.
