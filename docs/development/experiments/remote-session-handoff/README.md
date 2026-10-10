@@ -2,8 +2,11 @@
 
 2026-10-10, separate from threads PR #671 (unchanged). Worktree
 `pyxis-remote-session-handoff`, branch `remote/session-handoff`, fresh main
-`441fcd4aad7420224c4133425cdb1b9df6362c04`. Implementation awaits the material
-handoff-lifetime choice below; no fix or post-fix qualification yet.
+`441fcd4aad7420224c4133425cdb1b9df6362c04`; rebased onto current main
+`fa390738fc` for delivery. The owner accepted the waiting-supervisor default;
+userland fix `4d64f51f7e9ce1585517332fc253601c7ce81a1c` is published in
+[#203](https://git.internal/PyxisOS/pyxis-userland/pulls/203). Merge userland first,
+then the parent pin/docs PR. Native post-fix results remain an owner check.
 
 ## Cause: inspected and reproduced
 
@@ -24,8 +27,8 @@ Inspected current userland `3bd6c21fc6733ec8a683f993ddc6678bd92cbc9b`:
   including warmup, are deferred until work/cleanup returns. Forced termination
   prevents that reporting; the daemon's status 0 describes the original shell.
 
-The unchanged policy is documented in [remote consumers](../../../userland/remote-terminal.md#consumers-and-limits)
-and [shell handoff](../../../userland/shell.md). It is a remote/session lifetime
+The corrected policy is documented in [remote consumers](../../../userland/remote-terminal.md#consumers-and-limits)
+and [shell handoff](../../../userland/shell.md#session-handoff). It is a remote/session lifetime
 failure, not evidence of lost stderr or a normal early benchmark return.
 
 ## Unmodified QEMU baseline
@@ -66,34 +69,80 @@ committed kind 3 (PROCESS_TERMINATED) through `task_syscall_leave`, rather than
 a normal program return. The original shell had already completed.
 
 Raw JSONL/debugger/build captures remain in ignored `build/remote-handoff-baseline`.
-The sleeping producers, clients, debugger and QEMU were stopped afterward;
-ports 2323/2324/12831 are closed. No benchmark, boot runner, fault injection or
+The baseline sleeping producers, clients, debugger and QEMU were stopped afterward.
+No benchmark, boot runner, fault injection or
 test infrastructure was added. These are functional nested-VM results, not
 performance or native post-fix evidence.
 
-## Material choice — pending
+## Accepted behavior and implementation
 
-**Default: explicit remote waiting-supervisor mode.** After successful session
+**Accepted by the owner, 2026-10-10: remote waiting-supervisor mode.** After successful session
 launch, keep the original shell parked until its successor completes; never
 resume the original command reader. Preserve ordinary root-exit/background
 cleanup and unconditional group termination on disconnect. Propagate normal
 successor exit status; fault/termination becomes failure. Chained handoffs must
 propagate this mode to successor shells and retain one shell per handoff.
-Local caller-exits-without-wait behavior remains unchanged. This needs no kernel
-or remote-wire change, but changes the remote caller lifetime and completion
-timing and must be accepted before implementation.
+Local caller-exits-without-wait behavior remains unchanged. No kernel, public ABI
+or remote-wire change is needed.
 
-Alternative: acknowledged transfer of a WAIT-only successor observer to the
-daemon before the old shell exits. This releases old shells and observes the
-actual successor, but adds a larger handoff protocol with acknowledgment,
-failure/uncertain-reply and chained-handoff contracts.
+The remote server sets private runtime policy `PYXIS_SESSION_WAIT=1`; shells
+capture it at startup and pass it only through session launches. It grants no
+authority. The borrowed environment-variable array is filtered before launch,
+with allocation preflight; the owned environment snapshot is untouched. Waiting
+callers retain the returned process observer and never resume their input reader.
+Both script endings propagate successor status. Ordinary launches remove the
+marker. The daemon's disconnect path and local terminal-event authority remain
+unchanged. See [retained resources](../../../technical-debt.md#parked-remote-handoff-shells).
 
 Do not merely remove group termination or seal on root exit: the former leaves
 ordinary background descendants alive, the latter prevents the successor from
 launching receivers. A pipe lifetime token alone cannot report the successor's
 exit status and would change FINAL's meaning.
 
-After the decision: implement the generic cause in userland, qualify all four
-remote IPC commands plus chained handoff, error status and disconnect cleanup,
-publish userland PR before the parent gitlink/docs PR, record merge order and
-exact-head CI. Native owner rerun and hands-free commands follow qualification.
+## Post-fix qualification
+
+Verified current-main bundles from workflow
+[#1731](https://git.internal/PyxisOS/pyxis-os/actions/runs/1731) supplied kernel,
+SDK and ports; userland was rebuilt from clean fix `4d64f51` atop userland main
+`0b1ede1ebb27b7f4fa85a92ff00e1d6433f5347b`. Ordinary
+`make -j16 image PREBUILT="kernel sdk ports" REMOTE_BEACON=t14` passed without
+warnings with the same existing compiler. ELF SHA-256
+`a2b4a4dc63ef39884ca6b6ce84bb6e58a6b42c1ff662278af6bf3afdcc17b00e`;
+ISO `08e79519c6ca9330250b4833cef12da6bad6f3f3133aa8277812062de6adfd79`.
+Baseline and delivery main have no kernel/public-header source difference, but
+the bundle/SDK refresh produced different ELF hashes; this is functional
+qualification, not a performance comparison. Effective kernel configuration
+SHA-256 is `ac12acc93c3fcbbdff1ace10d95b8f3cdf883e1c09d21ce413ba09df8324a98b`.
+
+With the same QEMU configuration and reverse client:
+
+- The original 300-second-stdin command delivered headers, warmup, five verified
+  passes, summary and FINAL exited 0/drain complete. The sleeping producer was
+  stopped only after FINAL; its host interrupt is not a guest failure.
+- All four call/send × 64/4096 commands also completed with immediate stdin EOF,
+  256 messages and five rounds: warmup, five verified passes, summary, FINAL 0
+  and complete drain; each client returned 0. No pacing, guest exit or reattach.
+- Lua exit -7 propagated as FINAL -7; two chained successor shells propagated
+  final Lua status 23. Shebang scripts propagated 29 with final newline and 31
+  without one. Each negative-status client returned failure as expected.
+- An ordinary child saw no policy marker; a session successor saw value 1.
+  Root exit still terminated an ordinary infinite-loop background child.
+- On client disconnect, interactive GDB observed three group members: the root
+  and successor shell parked in native waits, with the Lua successor active.
+  Existing termination reclaimed all three; group state reached zero members,
+  launches and cleanup pending, with no first member. A fresh reverse session
+  was then admitted. No injected target calls, writes or faults were used.
+
+Fault-to-failure mapping was source-inspected, not fault-injected. An independent
+source review found no correctness issue in environment ownership, wait-observer
+cleanup, status propagation, input/event authority or disconnect behavior. Raw
+JSONL, build and GDB captures remain in ignored `build/remote-handoff-after`.
+No new test infrastructure, klog lines or benchmark changes. The userland
+repository has no existing CI tasks; parent exact-head integration CI is checked
+at delivery rather than treating that absence as a pass.
+
+The [LAN command loop](../../../userland/remote-terminal.md#consumers-and-limits)
+is the owner rerun recipe. For QEMU NAT only, add
+`--beacon-address 127.0.0.1`. Stage this same fixed userland in both #671 A/B
+images, retaining kernels A `d71e4dfd` and B `ea39ff9f`; label captures A1/B1/A2/B2.
+This change does not modify #671 or establish native post-fix performance.

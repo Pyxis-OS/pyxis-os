@@ -450,6 +450,14 @@ to about a second after discovery opens plus network, scheduling and cleanup del
 owner's ThinkPad PXE check; macOS listener behavior is unqualified ([qualification](development/remote-debugging.md#qualification)).
 Revisit if a multi-host or unattended workflow needs more.
 
+## Parked remote handoff shells
+
+Remote [`session` handoffs](userland/shell.md#session-handoff) retain one parked
+shell with its stack, heap and grants per chained handoff, as accepted by the
+owner. Disconnect still reclaims the whole execution group. Revisit with an
+acknowledged observer transfer to the daemon if deep or long-lived chains make
+the retained resources material; no handoff-depth quota is supplied.
+
 ## Kernel log retention and LAN visibility
 
 The [kernel log](interfaces/kernel-log.md) keeps 256 KiB in static storage, evicting whole oldest lines and discarding oversized ones;
