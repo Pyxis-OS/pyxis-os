@@ -83,22 +83,28 @@ In a tab and in a pane on the final image, by screenshots:
   rows were kept and the new area was blank. Leaving restored the shell screen
   from before the resize. Growing again to 1400x873 kept the shell working.
 
-## Native steps for the owner
+## Native results
 
-On the ThinkPad, at the panel's native mode, with this branch's PXE build:
+On the ThinkPad, 2026-10-10, the owner booted a PXE build of this branch from
+the default entry, at the panel's native mode:
+- **Tab:** `vi`, `kilo`, `ls boot:// | less` and `links` each returned the
+  shell's screen intact on quitting.
+- **Multiplexer pane: pending.** The live image has no multiplexer space; the
+  owner checks it on the installed stick after the next update.
 
-1. In a tab, run `ls boot://`, then `vi home://t.txt`; type `ihello`, Escape,
-   `:wq`. The `ls` output should still be on screen, with the prompt below it.
+The pending pane check, with the same programs as in a tab:
+
+1. Run `ls boot://`, then `vi home://t.txt`; type `ihello`, Escape, `:wq`. The
+   `ls` output should still be on screen, with the prompt below it.
 2. Repeat with `kilo home://k.txt` (Ctrl-S, Ctrl-Q), `ls boot:// | less` (`q`)
    and `links home://t.txt` (`q`, then `y`).
-3. Repeat steps 1 and 2 in a multiplexer pane, if a space has one, and scroll
-   back with the wheel afterwards: history shows the shell's output, not the
-   programs' screens.
+3. Scroll back with the wheel afterwards: history shows the shell's output,
+   not the programs' screens.
 4. Note any flicker, leftover text or a misplaced cursor after quitting.
 
 ## Limits
 
-- QEMU only; no native timing.
+- Native: tab behaviour checked, pane behaviour pending; no native timing.
 - Pane timings measure queueing; mux's drawing shows only in the CPU window,
   which also includes QEMU's own work.
 - The resize check used growth only; shrinking follows the same cropping as
