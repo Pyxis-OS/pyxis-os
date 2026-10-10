@@ -119,7 +119,7 @@ remain serial-only: no emergency queue, command, reset or GPU allocation.
 The owner confirmed normal ThinkPad boot-framebuffer output in
 [PR #471](https://git.internal/PyxisOS/pyxis-os/pulls/471); native panic remains
 unqualified. The ThinkPad's [opt-in Renoir flip backend](#opt-in-renoir-flips) retains the GOP mode;
-native flips remain unqualified.
+normal flips are natively qualified as recorded below; native panic is not.
 
 ## VirtIO GPU
 
@@ -374,8 +374,10 @@ Pending-clear plus matching earliest-in-use confirms retirement. Timeout pins
 both surfaces, stops GPU writes and copies each subsequent image to both;
 changed identity makes output unavailable. Panic paints both possible fronts
 after claiming/draining direct writers, without GPU access. Capture publishes
-only after confirmation or completed fallback. Native positive/timeout/panic
-paths remain unqualified. The [backend record](../development/experiments/renoir-flip-backend/README.md)
+only after confirmation or completed fallback. The owner qualified normal native
+flips and tear-free Quake/Chocolate Quake play at `9254f5c8`, 2026-10-10;
+timeout recovery, panic visibility and unreported capture/input checks remain
+unqualified. The [backend record](../development/experiments/renoir-flip-backend/README.md)
 contains limits, pitch reasoning, MIT provenance, QEMU checks and exact native steps.
 
 `DISPLAY_FLIP_METRICS=1` independently enables info-level cost/confirmation

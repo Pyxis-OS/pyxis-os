@@ -1,12 +1,14 @@
 # Renoir flip presentation
 
-**Design accepted 2026-10-09. Task 2 authorized; opt-in backend prepared for review.**
-Read-only task 1 is complete. Native writes/completion remain unqualified; task 3 is not assigned.
+**Design accepted 2026-10-09. Task 2 implemented and natively qualified 2026-10-10.**
+Read-only task 1 is complete. The owner qualified normal flips and game play at
+`9254f5c8`; default remains off. Task 3 and polling optimization are not assigned.
 The owner redirected presentation step 2 after native batch 2 failed on main
 `11d35fa6`: inaccurate counter-derived periods, excessive uncertainty and worse
 tearing/input delay in blank-copy mode. The separate observer safety fix keeps
 ordinary software cadence, immediate copies and trace-only repeated losses.
-Neither that fix nor this proposal qualifies native tear-free presentation.
+The observer safety fix does not qualify native timed copies; native flip results
+are recorded separately below.
 
 Present complete frames by changing the existing GOP pipe's scanout address at
 the display engine's synchronized flip point. Keep its mode, clocks, power,
@@ -19,7 +21,7 @@ a later option, not hardware triple-buffer enablement.
 
 This is the first Pyxis AMD GPU register **write** path. It overturns #622's
 read-only boundary for the bounded backend only, as accepted in decision 1
-below on 2026-10-09. Task 2 is authorized; the opt-in flip backend is implemented for review.
+below on 2026-10-09. Task 2 is implemented and its normal path natively qualified; the backend stays opt-in.
 The separate timing observer remains read-only.
 
 The kernel's BSP display driver exclusively owns the device, mappings and
@@ -281,13 +283,14 @@ task 2 adds the narrowly allowed mono write path, default off.
    the owner accepted the exclusion standard and PSP/SMU risk on 2026-10-09.
    **What the owner sees:** the [inventory report](../development/experiments/renoir-flip-inventory/README.md),
    no allocation or GPU writes; task 2 preserves the owner-qualified effective stride.
-2. **Qualified two-surface backend — implemented, native qualification pending.** Implement
-   private allocation/ownership, fenced offscreen copies, the exact mono flip
-   sequence, bounded completion polling, capture, timeout fallback and panic.
-   Boot/Bochs/VirtIO retain their own paths; default remains GOP copy until native
-   qualification passes.
-   **What the owner sees:** an opt-in two-surface backend PR with QEMU fallback
-   checks and exact native qualification commands; GOP copy remains the default.
+2. **Qualified two-surface backend — complete.** Private allocation/ownership,
+   fenced offscreen copies, mono flips, bounded completion polling, capture,
+   timeout fallback and panic are implemented. At `9254f5c8`, the owner reported
+   3120 submitted/confirmed flips, zero timeouts/FAILED, no tearing in native
+   Quake or Chocolate Quake and negligible perceived latency. Boot/Bochs/VirtIO
+   retain their own paths; default remains GOP copy.
+   **What the owner sees:** the [native record](../development/experiments/renoir-flip-backend/README.md#native-success--2026-10-10),
+   explicit remaining qualification limits and an opt-in backend ready to merge.
 3. **Native qualification and references.** Owner's ThinkPad: same revision and
    unchanged mode, info logging, opt-in disabled/enabled paired boots. Record
    source/reservation evidence, register snapshots before/after, requested versus
@@ -328,6 +331,35 @@ No synthetic DCN device, new tests or fault injection is implicit in this plan.
    unsynchronized copies to the known owned set; unknown routing makes display
    unavailable. Three surfaces, interrupts and blanking are deferred.
 
-Acceptance records the design. Task 1 is complete and task 2 is authorized and
-implemented for review, default off. No native flip success is claimed. Task 3
-still requires the owner's explicit assignment.
+Tasks 1 and 2 are complete; normal native flips and game play are qualified on
+the recorded firmware layout. Default remains off. Task 3 still requires the
+owner's explicit assignment; timeout/panic/capture and unreported input checks
+remain unqualified.
+
+## Proposed cheaper steady-state polling
+
+Separate follow-up, proposed only; no polling change in task 2. The native run
+measured 369 µs mean validation elapsed, 3.9 ms maximum and about 8 polls per
+flip, or roughly 3 ms cumulative validation elapsed per frame. Metrics include
+preemption/clock overhead; neither observed wait nor this estimate establishes
+an optimization gain.
+
+Recommended default: while PENDING, read a stable flip-control/earliest-in-use
+tuple as a hint for scheduling the full check. Keep one outstanding request,
+1 ms sleeping polls and the 50 ms/50-poll bound. Full device/route/immutable
+layout/owned-set validation remains mandatory before a back-surface pixel
+write, before GPU submission, before front retirement or capture publication,
+and before timeout fallback or any fallback copy. Confirmation must still
+verify stable primary **and** earliest addresses equal the request with pending
+clear. Light reads alone never authorize a write, reuse or release. Full-check
+failure or unknown ownership remains FAILED with surfaces pinned. No new masks,
+write authority, allocations or interrupt/firmware changes are proposed.
+
+This moves repeated full pending-poll checks to the frame's guarded actions;
+expect fewer full checks plus small tuple reads, with matched native cost/input
+qualification required. **Owner decision before implementation:** accept delayed
+layout-loss detection during write-free PENDING, bounded by candidate completion
+or the existing 50 ms/50-poll deadline, while retaining full validation at every
+action above. That detection cadence is proposed, not accepted. Measure validation
+and poll cost separately at the same revision/options/workloads; repeat both
+games and confirm retirement, capture, fallback and FAILED guards remain intact.

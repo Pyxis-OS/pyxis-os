@@ -1,8 +1,10 @@
 # Renoir two-surface flip backend
 
 Task 2 implements the [accepted bounded backend](../../../wip/renoir-flip-presentation.md).
-Default is off. No native flip, memory-write safety, timeout recovery, panic
-visibility or tear reduction is qualified by the QEMU checks below.
+Default is off. The owner qualified native completion and observed tear-free
+Quake/Chocolate Quake play on `9254f5c8`, 2026-10-10. Timeout recovery, panic
+visibility and unreported capture/input scenarios remain unqualified; QEMU
+cannot qualify native GPU behavior.
 
 ## Qualification and authority
 
@@ -37,7 +39,7 @@ the complete active scaler state against the boot snapshot on every validation,
 including all ratios, phases, taps, boundary, two-tap, replicate and coefficient
 bank fields. These fields remain read-only. This acceptance does not assert that
 any particular chroma or two-tap field is unused, and does not generalize to a
-new firmware layout. Native positive flips still require qualification.
+new firmware layout. Native qualification is limited to the recorded capture.
 
 The 512 MiB UMA bounds are recomputed from DCN/MMHUB/GC/NBIF and correlated
 through stable BAR0 to original GOP offset zero. Require supported, uniquely
@@ -185,8 +187,8 @@ changes surface addresses independently of DPP scaler programming. All scaler
 registers remain RO in their existing audited pages; no new mappings, write
 allowlist entries, modeset or IRQ changes. Metrics-gated preparation/refusal
 records now include the read ratios and inherited phase/control state. Missing
-or non-unity H/V ratios still refuse, even with equal dimensions. Native success
-remains pending a restaged boot; it is not inferred from the old dump.
+or non-unity H/V ratios still refuse, even with equal dimensions. Subsequent
+native success is recorded below; it was not inferred from the old dump.
 
 ## RGB chroma refusal — 2026-10-10
 
@@ -242,7 +244,7 @@ allocation or successful flip; the next native boot remains decisive.
 ## Prepared native backend and diagnostic follow-up — 2026-10-10
 
 Luna's `b2f09598` flip-on/metrics boot, masked local `flip-647c.log`, passed
-preparation: HUBP0, spare0x900000, GPU`f400000000/f400900000`, CPU spare
+preparation: HUBP0, spare 0x900000, GPU`f400000000/f400900000`, CPU spare
 `810900000` WC. Shortly after presentation started, poll reported ownership or
 layout changed and entered FAILED. The display froze; the owner rebooted through
 the live remote shell. No120-confirmation metrics line appeared, so fewer than
@@ -267,9 +269,43 @@ flip-delay/lock/stereo, timeout/underflow and all configuration remain checked.
 There is no source evidence to exclude additional bits merely to avoid FAILED.
 
 Restage the enabled info/metrics image and retain startup through the first
-failure or120 confirmations. If it fails, retain the check/field/value lines and
+failure or 120 confirmations. If it fails, retain the check/field/value lines and
 operation/phase/counters. Confirmations, capture/input and visual checks still
 require the paired procedure below; preparation alone does not qualify flips.
+
+## Native success — 2026-10-10
+
+Owner-reported ThinkPad PXE result from Luna's build of `9254f5c8`,
+"Flip: on + metrics": info logging, `display.flip=1 display.flip.metrics=1
+ display.timing=off`, inherited 1920×1080 mode. The owner's reported counters
+and visual/input observations establish this result; no new raw log was supplied
+with the success report. Earlier refusal/FAILED logs are distinct evidence.
+
+| Observation | Result |
+| --- | --- |
+| Submissions / confirmations | 3120 / 3120 |
+| Timeouts / FAILED | 0 / none |
+| Observed completion wait mean / maximum | 9.7 ms / 18.4 ms |
+| Validation elapsed mean / maximum | 369 µs / 3.9 ms |
+| Polls per flip | About 8 |
+| Native Quake and Chocolate Quake | No more tearing observed |
+| Perceived latency | "basically not there, but the tiniest bit" |
+| Hiccups, freezes or stale frames | None reported |
+
+Preparation used HUBP0, two surfaces, spare 0x900000, GPU addresses
+`f400000000/f400900000` and CPU spare `810900000` WC. The native run qualifies
+the normal synchronized flip/completion path and the owner's game/latency
+assessment on this inherited layout. It does not qualify timeout recovery,
+panic visibility, a remote screenshot or input scenarios absent from the report.
+The wait metric bounds software observation of completion, not pixel-to-photon
+latency. The games' tear-free result is the owner's visual judgment.
+
+About 8 × 369 µs gives roughly 3 ms cumulative BSP validation elapsed per frame,
+including clock/preemption overhead; it is a cost estimate, not a separately
+profiled CPU sample. A [separate polling proposal](../../../wip/renoir-flip-presentation.md#proposed-cheaper-steady-state-polling)
+addresses this without changing task 2 code. Metrics-gated failure diagnostics
+remain: they perform no formatting, field walk or extra register reads on the
+healthy path or with metrics off. No default-boot logging was added.
 
 ## Paired native qualification — Luna stages, owner judges
 
@@ -288,7 +324,7 @@ reboot and existing UDP capture on horse.
    Confirm the only new command-line option is `display.flip=1`; kernel/initrd
    checksums must match the disabled set. Luna stages it after the disabled run.
 3. Per boot, capture startup and at least60s idle/moving-pointer metrics. Enabled
-   must report prepared with recomputed spare0x900000, inherited raw0x780/effective
+   must report prepared with recomputed spare 0x900000, inherited raw0x780/effective
    7680, H/V ratio fields `0x01000000`, captured mode1/AutoCal0x100 (or
    the pre-existing bypass path), correct addresses and many matching confirmations
    with no timeout/loss.
@@ -310,8 +346,11 @@ reboot and existing UDP capture on horse.
    owner's visual/input observations; do not commit raw serials/MACs/EDID.
 
 No native timeout injection or panic trigger is authorized here. Report those
-paths as source-reviewed/QEMU-unexercisable, not measured. Task3 remains separate.
+paths as source-reviewed/QEMU-unexercisable, not measured. Task 3 remains separate.
 
 - [x] Bounded two-surface backend and private memory ownership implemented.
 - [x] Capture, panic and bounded pending/fallback paths implemented.
-- [ ] Owner native paired qualification; success is not assumed.
+- [x] Owner native normal-flip completion, games and latency qualification at `9254f5c8`.
+
+Native timeout/panic/capture and remaining input checks stay explicit limits;
+task 3 and the cheaper-poll implementation require separate authorization.

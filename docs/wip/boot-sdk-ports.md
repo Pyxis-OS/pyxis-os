@@ -107,8 +107,8 @@ Chosen by the owner, each starting with a proposal:
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
 - **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
-  task 2 qualified two-surface backend authorized, implemented for review, default off.
-  Task 1 and exclusion/stride decisions complete; paired native qualification pending.
+  tasks 1–2 complete; normal flips/game play natively qualified, default off.
+  Task 3 and cheaper steady-state polling require separate assignments.
 - **Claude** (2026-10-09): no milestone after closing SDL game ports.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
