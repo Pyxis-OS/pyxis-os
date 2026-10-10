@@ -18,6 +18,9 @@ const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
  * Failure is permanent and retains all runtime DMA storage until reboot. */
 bool virtio_gpu_start(void);
 bool virtio_gpu_present(void);
+/* Same owner/context, between frames: read transport status and poll any
+ * outstanding cursor completion/deadline without waiting or posting commands. */
+bool virtio_gpu_service(void);
 /* After successful normal presentation, within the same immutable frame lease.
  * Ordinary commands may remain posted in driver-owned storage. Capture drains
  * matching completion, confirming consumption rather than acknowledged display.

@@ -8,6 +8,7 @@
 #include <kernel/string.h>
 #include <kernel/user/launch.h>
 #include <remote/beacon.h>
+#include <pointer-synthetic-config.h>
 
 static char command_line_storage[BOOT_COMMAND_LINE_SIZE];
 static struct boot_options options;
@@ -130,6 +131,9 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
   const char *display_flip = NULL, *display_flip_metrics = NULL;
   const char *display_cursor_probe = NULL;
+#if POINTER_SYNTHETIC_ENABLED
+  const char *pointer_synthetic = NULL;
+#endif
 
   char *cursor = command_line_storage;
   while (*cursor) {
@@ -186,6 +190,10 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&display_inventory, key, value);
     } else if (same_text(key, "display.cursor.probe")) {
       take_option(&display_cursor_probe, key, value);
+#if POINTER_SYNTHETIC_ENABLED
+    } else if (same_text(key, "pointer.synthetic")) {
+      take_option(&pointer_synthetic, key, value);
+#endif
     } else {
       panic("unknown kernel option: %s", key);
     }
@@ -237,6 +245,14 @@ const struct boot_options *boot_options_parse(const char *command_line)
     flag_option("display.flip.metrics", display_flip_metrics);
   options.display_cursor_probe = display_cursor_probe &&
     flag_option("display.cursor.probe", display_cursor_probe);
+#if POINTER_SYNTHETIC_ENABLED
+  if (pointer_synthetic) {
+    if (!same_text(pointer_synthetic, "schedule")) {
+      panic("kernel option pointer.synthetic accepts only the value schedule");
+    }
+    options.pointer_synthetic = true;
+  }
+#endif
   return &options;
 }
 

@@ -10,6 +10,7 @@
 struct input_source {
   struct input_source *next;
   bool registered, keyboard_live, pointer_live;
+  bool synthetic; /* Diagnostic origin; never excludes physical input. */
   bool keys[KEY_COUNT], suppressed_keys[KEY_COUNT], keyboard_unresolved;
   bool keyboard_initial_hold, pointer_initial_hold;
   enum key_code repeat_key;

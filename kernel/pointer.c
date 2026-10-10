@@ -26,6 +26,9 @@ static uint32_t device_buttons, consumed_buttons, drag_buttons;
 static struct pointer_destination drag;
 static struct pointer_object *hover;
 static struct pointer_object *locked_pointer;
+static struct pointer_frame observed_frame;
+static bool observed_frame_valid;
+static uint64_t visual_generation;
 static uint8_t arrow_pixels[16 * 24 * 4], terminal_pixels[9 * 20 * 4];
 
 /* Black outline, white fill, transparent space. */
@@ -341,6 +344,16 @@ void pointer_image_release(struct pointer_image *image)
   }
 }
 
+static bool same_visual(const struct pointer_frame *a, const struct pointer_frame *b)
+{
+  if (a->visible != b->visible) {
+    return false;
+  }
+  return !a->visible || (a->x == b->x && a->y == b->y && a->pixels == b->pixels &&
+      a->width == b->width && a->height == b->height &&
+      a->hotspot_x == b->hotspot_x && a->hotspot_y == b->hotspot_y);
+}
+
 void pointer_frame_snapshot(struct pointer_frame *frame)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -370,6 +383,18 @@ void pointer_frame_snapshot(struct pointer_frame *frame)
       frame->hotspot_y = image->hotspot_y;
     }
   }
+  if (!observed_frame_valid || !same_visual(frame, &observed_frame)) {
+    ++visual_generation;
+    pointer_image_release(observed_frame.image);
+    observed_frame = frame->visible ? *frame : (struct pointer_frame){0};
+    /* Keep the compared identity alive even between presenter frame leases. */
+    if (observed_frame.image) {
+      KASSERT(observed_frame.image->references < SIZE_MAX);
+      ++observed_frame.image->references;
+    }
+    observed_frame_valid = true;
+  }
+  frame->generation = visual_generation;
 }
 
 void pointer_frame_release(struct pointer_frame *frame)

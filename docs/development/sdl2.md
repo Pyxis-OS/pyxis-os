@@ -114,7 +114,11 @@ refusal; it retains other video drivers' behavior.
 ## Related development interfaces
 
 - **libc:** `fileno` (the stream's existing descriptor, or -1 with `EBADF`),
-  `fseeko`/`ftello`, a "C"-only `setlocale`, `roundf`, `sqrtf` and `wcslen`. See
+  `fseeko`/`ftello`, a "C"-only `setlocale`, `roundf`, `sqrtf` and `wcslen`.
+  SDL's environment calls use libc's `getenv` and `setenv`, so a value set with
+  `SDL_setenv` is visible to `SDL_getenv` and libc; before the port declared
+  `setenv`, SDL kept such values in a private table that lookups never read.
+  `SDL_strtokr` and `SDL_trunc` also use libc; `SDL_iconv` stays SDL's own. See
   the [libc reference](../kernel/userspace.md#foundational-libc) and
   [stdio](../userland/stdio.md).
 - **One US key layout** in `lib/key_layout.c`, compiled by the kernel and

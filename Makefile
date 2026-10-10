@@ -55,7 +55,13 @@ DISPLAY_INVENTORY ?= 0
 DISPLAY_FLIP ?= 0
 DISPLAY_FLIP_METRICS ?= 0
 DISPLAY_CURSOR_PROBE ?= 0
-export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE
+POINTER_SYNTHETIC ?= 0
+ifneq ($(POINTER_SYNTHETIC),0)
+ifneq ($(POINTER_SYNTHETIC),1)
+$(error POINTER_SYNTHETIC must be 0 or 1)
+endif
+endif
+export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -84,6 +90,7 @@ OVMF_CODE ?= /usr/share/OVMF/x64/OVMF_CODE.4m.fd
 OVMF_VARS ?= /usr/share/OVMF/x64/OVMF_VARS.4m.fd
 
 CPPFLAGS := -Ibuild -Iinclude -Iarch/x86_64/include -Ithird_party/limine -Ithird_party/tlsf
+CPPFLAGS += -DPOINTER_SYNTHETIC_ENABLED=$(POINTER_SYNTHETIC)
 CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
           -fno-pic -fno-pie -mno-red-zone -mgeneral-regs-only -mcmodel=kernel \
           -fno-omit-frame-pointer -Wall -Wextra -Wshadow -Wstrict-prototypes \
@@ -95,6 +102,9 @@ LDFLAGS += -Wl,--oformat=elf
 
 C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
+ifeq ($(POINTER_SYNTHETIC),1)
+C_SOURCES += kernel/input/synthetic_pointer.c
+endif
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
@@ -247,6 +257,15 @@ build/kernel-log-config.h: FORCE
 	@printf '#define KLOG_TRACE_ENABLED %s\n' $(TRACE_ENABLED) > $@.tmp
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
+
+# Rebuild the gated consumers when the flag changes, including 1 back to 0.
+build/pointer-synthetic-config.h: FORCE
+	@mkdir -p $(@D)
+	@printf '#define POINTER_SYNTHETIC_ENABLED %s\n' $(POINTER_SYNTHETIC) > $@.tmp
+	@cmp -s $@.tmp $@ || mv $@.tmp $@
+	@rm -f $@.tmp
+
+build/kernel/input.o build/kernel/boot/options.o build/kernel/input/synthetic_pointer.o build/kernel/display/display.o: build/pointer-synthetic-config.h
 
 # Only identity depends on HEAD. Preserve the timestamp for unchanged revisions.
 build/kernel-build-revision.h: scripts/kernel-build-revision.sh FORCE

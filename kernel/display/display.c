@@ -19,6 +19,7 @@
 #include "timing.h"
 #include "presentation.h"
 #include "cursor_probe.h"
+#include <pointer-synthetic-config.h>
 
 #define DISPLAY_COPY_BYTES (64 * 1024)
 #define DISPLAY_PANIC_WAIT_LIMIT 1000000
@@ -183,9 +184,63 @@ const struct framebuffer *display_layout(void)
   return target;
 }
 
+#if POINTER_SYNTHETIC_ENABLED
+void display_cursor_probe_boundary(const char *window, uint64_t scheduled_elapsed,
+    uint64_t actual_elapsed, uint64_t synthetic_reports)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct pointer_probe_stats input = pointer_probe_snapshot();
+  klog("pointer-synthetic: source=synthetic window=%s scheduled=%lu ns elapsed=%lu ns metrics=%u frames=%lu compose-total=%lu ns copy-total=%lu ns synthetic-reports=%lu reports=%lu relative-motion=%lu screen-moves=%lu\n",
+      window, scheduled_elapsed, actual_elapsed, (unsigned)cursor_probe_enabled,
+      metric_frames, compose_total, copy_total, synthetic_reports,
+      input.reports, input.relative_motion, input.screen_moves);
+  cpu_restore_interrupts(flags);
+}
+#endif
+
 static void update_gpu_availability(void)
 {
   set_availability(virtio_gpu_available());
+}
+
+bool display_service(void)
+{
+  KASSERT(!flip_pending && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  flip_completed = false;
+  if (cursor_probe_enabled) {
+    cursor_probe_service(metric_frames, compose_total, copy_total);
+  }
+  if (!display_available()) {
+    return false;
+  }
+  if (driver == DISPLAY_VIRTIO_GPU) {
+    bool ready = virtio_gpu_service();
+    if (!ready) {
+      update_gpu_availability();
+    }
+  }
+  return display_available();
+}
+
+bool display_skip_frame(void)
+{
+  KASSERT(!flip_pending && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  if (cursor_probe_enabled) {
+    cursor_probe_skip();
+  }
+  if (!display_available()) {
+    return false;
+  }
+  if (flip_enabled) {
+    /* Changed frames prove ownership before their copy/submit. Idle ticks
+     * retain the same full READY/FALLBACK check without writing either front. */
+    enum renoir_flip_state state = renoir_flip_poll();
+    if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+      atomic_store(&flip_failed, true);
+      set_availability(false);
+    }
+  }
+  return display_available();
 }
 
 const struct framebuffer *display_resize_prepare(void)
@@ -353,7 +408,7 @@ static void record_frame_cost(uint64_t compose, uint64_t copy)
   copy_max = MAX(copy_max, copy);
   ++metric_frames;
   if (cursor_probe_enabled) {
-    cursor_probe_record(metric_frames, compose_total, copy_total);
+    cursor_probe_record();
   }
   if (metric_frames % 120 == 0) {
     klog("display-flip-metrics: frames=%lu compose-mean=%lu ns compose-max=%lu ns copy-mean=%lu ns copy-max=%lu ns backend=%s\n",

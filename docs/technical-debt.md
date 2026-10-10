@@ -316,6 +316,19 @@ Owner decision, 2026-10-10: flips stay opt-in for now. The prerequisite set for
 a default, one deliberate native panic with flips on showing its message, passed
 the same day; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
 
+## Presenter dirty regions
+
+Whole-frame skipping avoids unchanged frames across boot, Bochs, VirtIO and
+Renoir, but each visible change still composes and copies/submits a whole frame.
+Software pointer motion, selection and small UI changes therefore retain the
+full-frame pixel budget. Native whole-frame-skipping qualification removes about
+99% of idle compose/copy work, while continuous software-pointer motion retains
+about 2.1 ms of measured compose/copy elapsed time per frame; see the
+[record](development/experiments/presenter-frame-skipping/README.md#native-abab-result--2026-10-10).
+Dirty-region tracking remains deferred. Revisit when profiling the remaining
+visible-change costs or a measured consumer bottleneck; any partial-frame design
+must preserve capture, overlays, frame handoff and backend ownership proofs.
+
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)
@@ -570,8 +583,8 @@ presentation breadth with a non-development deployment or text consumer; remote 
 
 The [descriptor portability slice](userland/libc-portability.md) supplies open/read/write/close and `lseek`; public O_RDWR and
 exclusive O_CREAT|O_EXCL use native constructs ([qualification](userland/libc-portability.md#readwrite-and-exclusive-create-qualification)),
-and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [SDL2 port](development/sdl2.md)). `fdopen` and duplication
-are absent: a consumer needs a separately agreed extension, and duplication must first settle shared open-state and cursor ownership.
+and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [SDL2 port](development/sdl2.md)). `fdopen` and `dup`
+share one descriptor object and cursor ([stdio](userland/stdio.md#opening-and-ownership)); `dup2`, `fcntl`, `freopen` and `setvbuf` are absent.
 Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
 Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
@@ -931,9 +944,9 @@ exist, and the recipe's libbb adapter covers only the selected vi and less helpe
 
 [Quake](userland/quake.md#saves-and-configuration) (config, saves, screenshots) and [vi](userland/vi.md) write a synced `NAME.XXXXXX` file beside
 the target and rename it over the target; a failure keeps the old file. Libc cannot sync a directory (a descriptor cannot open one), so a crash
-can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Libc has no
-`fdopen`, so Quake reopens the name `mkstemp` reserved. Saving needs directory CREATE and REMOVE, not only file WRITE, with no in-place fallback.
-A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md)) or `fdopen`.
+can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Quake
+writes through the descriptor `mkstemp` returns, with `fdopen`. Saving needs directory CREATE and REMOVE, not only file WRITE, with no
+in-place fallback. A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md)).
 
 ## less pager limits
 
@@ -1559,13 +1572,13 @@ until their report layout is established. Doom has no mouse support.
 ## Lua build runtime limits
 
 [Lua](userland/lua.md) supplies io/os, pure-Lua modules and native build helpers; `file:setvbuf`, `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, debug, full math and
-dynamic modules are absent, and `os.time` accepts wall time only (calendar-table conversion needs a `mktime` policy for ambiguous and nonexistent local input). Revisit each
+dynamic modules are absent, and `os.time(table)` raises upstream's error for DST gaps and unsettled folds ([calendar limits](#calendar-and-encoding-profile)). Revisit each
 for a concrete consumer. `os.tmpname` reserves a real exclusive empty file that callers must remove, and `io.tmpfile` creates then immediately unlinks one, so abrupt death
 between those operations or a failed unlink can leave a named file with no stale-name cleanup (revisit atomic anonymous creation only for a lifecycle need; reserved names
 are not ISO C `tmpnam`). `pyxis.run` inherits live C streams, omitting closed ones, but cursors, append mode, pushback and read-ahead belong to the parent runtime, so child
 streams begin at zero, unread buffered pipe bytes stay in Lua and `io.input`/`io.output` rebinding is local; revisit shared stream state only with a native ownership design.
 C-locale `strftime` supports standard conversions and E/O forms without width or flag extensions, `%z` loses historical offset seconds at minute precision (`tm_gmtoff` keeps
-them), a `tm_zone` designation is borrowed until timezone-cache replacement or exit, and locale selection and reverse calendar conversion are deferred.
+them), a `tm_zone` designation is borrowed until timezone-cache replacement or exit, and locale selection is deferred.
 
 ## Sorted ls memory and live file details
 
@@ -1668,8 +1681,7 @@ imports its musl table or rule explicitly.
 The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
 `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
 `popen`/`system`, `clock`, locales, `setvbuf` and dynamic loading. `os.time(table)` returns `nil` for DST gaps and unsettled
-folds ([calendar limits](#calendar-and-encoding-profile)). The Lua 5.5 `lua` port still refuses calendar tables and compares
-with `strcmp`; switching it to libc's `mktime` and `strcoll` is a small follow-up. luv reports TCP, UDP, DNS, watches, signals, work queues,
+folds ([calendar limits](#calendar-and-encoding-profile)). luv reports TCP, UDP, DNS, watches, signals, work queues,
 callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
 descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
 [task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.
