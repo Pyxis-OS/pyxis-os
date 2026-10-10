@@ -1,7 +1,7 @@
 # Bundles in bin://
 
 Task 1 implements the owner's accepted 2026-10-10 direction from
-[#686](https://git.internal/PyxisOS/pyxis-os/pulls/686). Qualification is in progress.
+[#686](https://git.internal/PyxisOS/pyxis-os/pulls/686). QEMU qualification is complete; owner review is pending.
 Current layout and update contracts are in [system layout](../userland/system-layout.md)
 and [system updates](../userland/system-updates.md). This page retains the remaining
 ZIP/index work; it authorizes neither.
@@ -65,14 +65,17 @@ lifetime. ZIP recognition, packaging and adapter tasks need separate owner go.
 
 ## Tasks
 
-- [ ] **Task 1: unpacked bin lookup and relocation of the two existing bundles.**
+- [x] **Task 1: unpacked bin lookup and relocation of the two existing bundles.**
   Shared shell/Lua lookup, both bundle moves and bundled notices, recursive
   installer copy/verification/filtering/cleanup. Preserve manifest/grant/stack
   admission. Userland and ports PRs precede the Pyxis integration; no new mirror
   or compiler-container rebuild. Capture exact-main baseline before code and
   matched one-/four-CPU launch, Neovim startup and session-backing runs; qualify
   live and installed npfs roots, errors, updates, recursive cleanup and interrupted
-  program-copy recovery. Results will be linked here when qualification finishes.
+  program-copy recovery. See the [qualification record](../development/experiments/bundles-in-bin/README.md).
+  Plain-launch ranges overlap and session backing is unchanged. Installed Nvim
+  runtime startup is substantially slower than archive startup; its measured
+  backend cost is recorded for separate follow-up.
 
   **After this task, the owner can:** run `nvim file.c` and `lua5.1 script.lua`
   without a catalog on live media and installed revisions, with runtime and

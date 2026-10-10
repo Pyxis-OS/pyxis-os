@@ -1097,6 +1097,17 @@ Each Update copies every moved program into a new `bin/REVISION` directory even 
 directory follows the running kernel's revision, so programs cannot be updated without a new kernel and ESP. The
 [system layout](userland/system-layout.md#programs) accepted this as interim; revisit when a final program update scheme is designed.
 
+## Installed bundle runtime reads
+
+Neovim's bundled runtime now lives in installed `bin://` alongside its executable.
+The [one-/four-CPU QEMU samples](development/experiments/bundles-in-bin/README.md#installed-startup-cost)
+show substantially slower internal startup from npfs than the live archive.
+Configuration/backend differences prevent attributing this to a particular
+operation; native synchronous file/directory access and whole-tree installation
+remain the current path. Revisit runtime read costs/caching in a separately
+assigned filesystem or bundle revision-cache task; no optimization is included
+in bin lookup.
+
 ## Archive-only network configuration
 
 Network profiles live only in `boot://config/network.lua`, so on an installed system changing them needs an Update, while spaces can change through

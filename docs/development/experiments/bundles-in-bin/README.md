@@ -22,7 +22,11 @@ A later rebase incorporates the installer restart offer from main #688:
 userspace `6b1d8ca3`, same ports, parent `fdd2aa1562642d7379d86354b5528d5727cee29c`.
 That ordinary image build also passed. Measured `echo.pxe` and Lua 5.5 `lua.pxe`
 are byte-identical in the rebased image. The changed installer is qualified
-separately; no compiler-container rebuild or mirror change is required.
+separately. Final qualification is `d3a985fc34f59d73b903a83656c8cf5b5b8f7981`,
+with userspace `6b1d8ca3` and ports `6979bf0f`, rebased onto main's Neovim undo
+and libuv O_NOFOLLOW fixes. Its full ordinary image build and exact-head CI #1780
+passed. Echo and Lua 5.5 remain byte-identical to the measured after image;
+no compiler-container rebuild or mirror change is required.
 
 QEMU 10.2.2, q35, nested KVM, `-cpu max`, 512 MiB, one socket with one or four
 cores/one thread per core, UTC RTC, standard VGA at 1280x800, modern VirtIO
@@ -116,5 +120,59 @@ retains a `nvim.pxb-prefix-marker` neighbor. Installed `:help` reads help text;
 the same missing-vimdoc-parser warning also occurs on the frozen baseline and live
 image; after acknowledging it, help text is readable. This existing editor profile
 limit is independent of bundle placement.
-Same-revision rerun, two successive real-revision updates, recursive cleanup,
-mounted-target refusal and interrupted program-copy/rerun checks remain in progress.
+Same-revision rerun, two successive real-revision updates and recursive cleanup
+passed. The real revision sequence is `aee7d8ebfc62` → `fdd2aa156264` →
+`d3a985fc34f5`; no revision record was fabricated. Cold structural checks pass,
+current bundle trees match the actual final ISO through read-only FUSE, and bin
+contains exactly fdd2 and d3a after aee's complete tree was removed. A synced
+home marker survives both the cold check and installed native read.
+
+The first fdd2 copy was stopped at an existing native directory-create path,
+before creating runtime `ftplugin` and before ESP mutation. The entire 512 MiB
+ESP remained byte-identical to the successful aee snapshot; cold fsck passed
+with intact aee and a partial fdd2 tree. Booting the old revision worked. The
+rerun cleared/replaced the partial tree, synced/verified and updated successfully.
+Journal control was EMPTY at interruption; this is not a replay or arbitrary
+power-loss claim.
+
+During same-revision Update, the actual trusted installer's DISKS ENUMERATE/OPEN
+grant issued native `DISKS_OPEN` READ_WRITE against its retained target pool.
+It returned CALL_BUSY, zero reply bytes, no raw claim, and unchanged QMP
+write/flush counters. Saved registers and scratch stack bytes were restored
+before resuming. An ordinary installed shell's missing disk authority would not
+prove this rule.
+
+The initial sample source has 45 program units and 2,315 file/directory entries,
+including 2,141 Neovim files. Initial install required 18,198 observed flushes;
+same-revision rewrite 36,923; the final update plus recursive old-tree removal
+36,930, all with zero observed write/flush failures. Confirmation-to-observed
+success was about 126 s for initial install, 222 s for the fdd2 retry and 239 s
+for final d3a; these include manual confirmation/observation delay, not exact
+internal phase timing. The same-revision interval also includes debugger work
+and is not compared. Whole-tree transfer remains a real cost of this slice.
+
+## Installed startup cost
+
+One Neovim open per boot, three samples per CPU count, uses the final target
+without live media, the same QEMU CPU/memory/VGA settings and an additional
+VirtIO block disk. Default installed configuration has one Pyxis space and
+npfs home/bin; live timing has the five-space fixture and RAM home/archive bin.
+Logfiles were synced natively, then read from the stopped guest's cold pool
+with the existing read-only inspector. Both process headers and markers were
+checked. The first four-CPU boot had also run cat/Lua 5.1 before Neovim; no build,
+other task VM or debugger ran during these startup samples.
+
+| Installed Neovim startup | Samples (ms) |
+| --- | --- |
+| 1 CPU, UI | 185.355, 212.453, 186.287 |
+| 1 CPU, server | 628.485, 627.300, 580.898 |
+| 4 CPUs, UI | 304.041, 218.141, 208.582 |
+| 4 CPUs, server | 607.734, 685.614, 696.136 |
+
+Installed runtime startup is materially slower than the live archive. This
+backend/configuration comparison also includes main's small intervening port
+fixes; it does not isolate lookup, loading or individual filesystem operations.
+Source inspection establishes native synchronous file/directory access;
+no profile attributes the time to a particular operation. The cost remains
+[recorded debt](../../../technical-debt.md#installed-bundle-runtime-reads) for
+separate read-cost/caching work. This task changes no filesystem caching policy.

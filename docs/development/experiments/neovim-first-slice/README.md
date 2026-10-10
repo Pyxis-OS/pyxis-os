@@ -64,8 +64,9 @@ Raw logs/screenshots remain local under `<worktree>/build/neovim/`.
 
 ## Owner native slice
 
-Run `boot://share/neovim/nvim.pxb home://file.c` in a tab and configured mux
-pane. Insert C with vi keys, save, reopen, inspect `:syntax`, change cwd with
+Run `nvim home://file.c` in a tab and configured mux pane. Current builds
+resolve `bin://nvim.pxb`; the measurements above retain their historical inputs.
+Insert C with vi keys, save, reopen, inspect `:syntax`, change cwd with
 `:cd`, resize and quit. Check restored shell screen/input and shell cwd. On the
 selected writable native backing, replace a loaded target, confirm ordinary
 write refusal and explicit force. Native qualification and the richer terminal
