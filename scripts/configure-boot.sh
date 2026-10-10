@@ -7,11 +7,30 @@ case "$BOOT_MENU_TIMEOUT" in
   ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;
 esac
 command_line="init=$boot_init"
-case "${DEBUG_CHECKPOINT:-0}" in
-  0) ;;
-  1) command_line="$command_line debug.checkpoint=1" ;;
-  *) echo 'DEBUG_CHECKPOINT must be 0 or 1.' >&2; exit 1 ;;
+debug_net=${DEBUG_NET:-}
+debug_wait=${DEBUG_WAIT:-0}
+case "$debug_wait" in
+  0|1) ;;
+  *) echo 'DEBUG_WAIT must be 0 or 1.' >&2; exit 1 ;;
 esac
+if [ -n "$debug_net" ]; then
+  if [ "${#debug_net}" -gt 63 ] ||
+      ! printf '%s' "$debug_net" | LC_ALL=C tr -d '!-~' | cmp -s - /dev/null; then
+    echo 'DEBUG_NET must name 1..63 printable ASCII bytes without spaces.' >&2
+    exit 1
+  fi
+  # This external token identifies the exact staged ELF; no self-hash is linked
+  # into that ELF and the target does not claim to measure its running bytes.
+  debug_checksum=$(sha256sum build/caelum.elf)
+  debug_image=${debug_checksum%% *}
+  command_line="$command_line debug.net=\${PYXIS_DEBUG_NET} debug.image=$debug_image"
+  if [ "$debug_wait" = 1 ]; then
+    command_line="$command_line debug.wait=1"
+  fi
+elif [ "$debug_wait" = 1 ]; then
+  echo 'DEBUG_WAIT=1 requires DEBUG_NET.' >&2
+  exit 1
+fi
 case "${LOG_UDP:-0}" in
   0) ;;
   1) command_line="$command_line log.udp=1" ;;
@@ -78,17 +97,20 @@ fi
 mkdir -p build
 PYXIS_NORMAL_LINE="$command_line" PYXIS_RESCUE_LINE="$rescue_line" \
 PYXIS_BEACON_NAME="$remote_beacon" PYXIS_DISPLAY_SIZE="$display_size" PYXIS_DISPLAY_TIMING="$display_timing" \
+PYXIS_DEBUG_NAME="$debug_net" \
 PYXIS_DISPLAY_TIMING_METRICS="$display_timing_metrics" PYXIS_DISPLAY_INVENTORY="$display_inventory" \
 awk -v timeout="$BOOT_MENU_TIMEOUT" '
   BEGIN {
     normal = ENVIRON["PYXIS_NORMAL_LINE"]; rescue = ENVIRON["PYXIS_RESCUE_LINE"]
     beacon = ENVIRON["PYXIS_BEACON_NAME"]
+    debug_name = ENVIRON["PYXIS_DEBUG_NAME"]
     display = ENVIRON["PYXIS_DISPLAY_SIZE"]
     timing = ENVIRON["PYXIS_DISPLAY_TIMING"]
     timing_metrics = ENVIRON["PYXIS_DISPLAY_TIMING_METRICS"] == "1"
     inventory = ENVIRON["PYXIS_DISPLAY_INVENTORY"] == "1"
     normal_bytes = length(normal)
     if (beacon != "") normal_bytes += length(beacon) - length("${PYXIS_REMOTE_BEACON}")
+    if (debug_name != "") normal_bytes += length(debug_name) - length("${PYXIS_DEBUG_NET}")
     if (display != "") normal_bytes += length(display) - length("${PYXIS_DISPLAY_SIZE}")
     install_bytes = length("init=boot://init-install.pxe boot.install=1")
     if (display != "") install_bytes += length(" display.size=") + length(display)
@@ -101,6 +123,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
       exit 1
     }
     if (beacon != "") print "${PYXIS_REMOTE_BEACON}=" beacon
+    if (debug_name != "") print "${PYXIS_DEBUG_NET}=" debug_name
     if (display != "") print "${PYXIS_DISPLAY_SIZE}=" display
   }
   /^\// { skip = $0 == "/Pyxis OS (rescue)" && rescue == "" }

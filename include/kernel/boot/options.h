@@ -10,7 +10,9 @@ struct boot_options {
   bool default_config;
   const char *remote_beacon;
   bool log_udp;
-  bool debug_checkpoint;
+  const char *debug_net;
+  bool debug_wait;
+  uint8_t debug_image[32];
   const char *display_size;
   const char *display_timing;
   bool display_timing_metrics;
