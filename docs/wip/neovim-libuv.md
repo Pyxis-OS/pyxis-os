@@ -100,7 +100,8 @@ without Neovim.
    - [x] Current-SDK probe inventory and native-design proposal.
    - [x] Shared libc working path and explicit environment, with consumers and child snapshots.
    - [x] Bounded proved realpath and fdopen/shared descriptor association (`dup`).
-   - [ ] Stream rebinding/buffering, calendar/encoding and remaining closure after assignment.
+   - [x] Calendar (`mktime`), encoding (`iconv`) and the numeric/string closure.
+   - [ ] Stream rebinding/buffering after assignment.
    - [ ] Recipe and full editor qualification after assignment.
 
 Later, each with its own proposal:

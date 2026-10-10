@@ -196,9 +196,26 @@ bases 2–36, with base 0 selecting the radix. They include C23 binary prefixes;
 see [C23 draft 7.24.1.7](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf#page=379).
 Range errors saturate and set `ERANGE` while consuming the full digit sequence.
 No conversion leaves the end pointer at the input; successful calls leave
-`errno` unchanged. Invalid bases return zero with `EINVAL`. `atoi` provides
-decimal conversion without reliable range diagnostics. No locale state or
-floating conversion is added by these functions.
+`errno` unchanged. Invalid bases return zero with `EINVAL`. `strtoimax` is
+`strtol` for `intmax_t`, which is `long`. `atoi` and `atol` provide decimal
+conversion without reliable range diagnostics. No locale state or floating
+conversion is added by these functions.
+
+`strtok_r` splits a string in place at runs of separator bytes, keeping its
+position in a caller-supplied pointer. `strcoll` compares in `strcmp`'s byte
+order, since "C" is the only locale.
+
+`iconv_open`, `iconv` and `iconv_close` convert between UTF-8, ASCII,
+ISO-8859-1 and byte-order-mark-free UTF-16LE/UTF-16BE, matching names such as
+`UTF-8`, `utf8` or `LATIN1` without case or punctuation. Other encodings, the
+empty locale name and `//TRANSLIT` or `//IGNORE` suffixes fail with `EINVAL`.
+Conversion advances the caller's pointers by whole characters and stops with
+`E2BIG` when the output is full, `EINVAL` when the input ends inside a
+character, and `EILSEQ` at an invalid sequence or at a character the
+destination cannot represent; nothing is transliterated or substituted. The
+conversions keep no state, so a null input is an immediate reset. The routine
+is reduced from the pinned musl; its local changes are in userland's musl
+provenance.
 
 `atof` is `strtod` without an end pointer. `rand` returns 0 through `RAND_MAX`
 (32767) from ISO C's example linear congruential generator; the sequence starts
@@ -237,13 +254,15 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
-The `<math.h>` subset provides `floor`, `floorf`, `ceil`, `ceilf`, `round`, `roundf`,
+The `<math.h>` subset provides `floor`, `floorf`, `ceil`, `ceilf`, `round`, `roundf`, `trunc`,
 `rintf`, `lrint`, `lrintf`, `llrintf`, `modf`, `fmod`, `fmodf`, `pow`, `powf`,
 `exp`, `expf`, `expm1`, `log`, `logf`, `log10`, `log10f`, `sqrt`, `sqrtf`, `sin`,
 `sinf`, `cos`, `cosf`, `tan`, `tanf`, `asin`, `acos`, `acosf`, `atan`, `atanf`,
 `atan2`, `atan2f`, `sinh`, `cosh`, `tanh`, `frexp`, `ldexp`, `scalbn`, `fabs`, `fabsf`, `scalbnl`, `ldexpl`,
 `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources,
-and POSIX's `M_*` constants with musl's values. The `rint` family rounds in the
+and POSIX's `M_*` constants with musl's values. The `isnan` and `isinf` macros
+classify any real floating type through compiler builtins; the other C
+classification macros are not provided. The `rint` family rounds in the
 current rounding mode. `round` and `roundf`
 round halfway cases away from zero. `sqrt` and `sqrtf` use SSE2 `sqrtsd` and
 `sqrtss`; the trigonometric functions take radians and reduce

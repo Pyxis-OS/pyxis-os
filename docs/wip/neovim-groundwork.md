@@ -2,7 +2,9 @@
 
 **Owner accepted the three defaults on 2026-10-10. Working path and environment
 are implemented in slice 1; proved realpath and fdopen/dup are implemented in
-slice 2. Calendar/encoding and the editor recipe remain unassigned.**
+slice 2; calendar, encoding and the numeric/string closure are implemented for
+review in slice 3. Stream rebinding/buffering and the editor recipe remain
+unassigned.**
 This splits [task 6](neovim-libuv.md#tasks); task 5's Lua/luv delivery remains a
 prerequisite. The shared libc work also serves [hosted Clang](hosted-clang.md)
 and [Git](git-on-pyxis.md). Existing first-slice exclusions remain in force.
@@ -16,9 +18,17 @@ records the fresh-main baseline, matched launch costs and QEMU child-snapshot ru
 Slice 2 delivers [proved realpath](../userland/paths.md#proved-realpath) and
 [fdopen/shared descriptor objects](../userland/stdio.md#opening-and-ownership),
 including the libuv realpath adapter. `freopen` and buffering controls remain
-separate small steps; calendar, encoding and the Neovim recipe remain later work.
+separate small steps; the Neovim recipe remains later work.
+Slice 3 delivers [`mktime`](../userland/timezones.md#c-interface) with the
+accepted fold/gap rule, the reduced musl [`iconv`](../kernel/userspace.md#foundational-libc),
+and the integer/string/math rows of the inventory: `strtoimax`, `atol`,
+`strtok_r`, `strcoll`, `trunc`, `isnan` and `isinf`, plus the `E2BIG` errno.
+Its [qualification](../development/experiments/calendar-encoding/README.md)
+compares a table of times and conversions with host glibc. The filesystem
+row's `EINTR`, `NAME_MAX`, `O_NOFOLLOW` and permission constants are not part
+of this slice.
 The probe inventory below describes its original baseline, not current
-availability of the delivered slice 1/2 APIs.
+availability of the delivered slice 1–3 APIs.
 
 ## Editor integration still required
 
