@@ -5,9 +5,24 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## USB HID native coverage
+
+The [USB boot input](devices/usb-hid.md) is natively qualified for a full-speed root
+keyboard and a composite dongle ([record](development/experiments/usb-hid/README.md#native-owner-thinkpad)).
+Not exercised natively: the real dock or switch hub chain with low and full-speed leaves
+(letters, locks, repeat and fresh chords; unplugging and replugging a leaf without its hub,
+with held-key removal, held-button lock revocation and buttonless-survivor lock
+preservation); input during USB storage or Bluetooth work with ktrace for admission or
+loss; keyboard LED output; and the ASUS wheel. Low-speed scheduling and high-speed hub
+and transaction-translator routing are source-reviewed only, and QEMU has no composite or
+low-speed fixture. Steam Deck lizard mode would need its actual boot interfaces, and
+Bluetooth HID is separate. Revisit when a native batch includes the dock or when a device
+fails to bind; luna stages these runs through the owner and records image revision,
+controller, descriptors, link speeds and hub path (`lsusb -n` shows only the boot snapshot).
+
 ## USB switch subtree removal
 
-The accepted [USB HID task](wip/usb-hid.md#accepted-contract) permits controller
+The accepted [USB HID contract](devices/usb-hid.md#binding-and-ownership) permits controller
 quarantine after hub-subtree removal. A USB switch flip can therefore disable
 devices on that controller until reboot. Surviving the flip without quarantine
 needs proven subtree retirement with mixed storage/Bluetooth DMA ownership;
@@ -267,18 +282,29 @@ raw pitch `0x780` on 2026-10-09. Preserve that register; the Linux convention
 would normally write `0x77f`. Other inherited modes remain unqualified. The owner accepted
 Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
 reservations if new firmware/client ranges appear; retain the low prefix and
-last-16-MiB guard. Task 1 allocated nothing or wrote GPU registers. The [task-2 backend](development/experiments/renoir-flip-backend/README.md)
-is opt-in: normal completion and game play were natively qualified at `9254f5c8`
-on 2026-10-10. Timeout recovery, panic visibility and unreported capture/input
-checks remain unqualified; revisit in task 3. Interrupts, three surfaces and
-blanking stay deferred.
+last-16-MiB guard. The [flip backend](kernel/renoir-flip.md) is opt-in; its
+[remaining native qualification](#renoir-flip-backend-qualification) is below.
+Interrupts, three surfaces and blanking stay deferred.
+
+## Renoir flip backend qualification
+
+The [flip backend](kernel/renoir-flip.md) is opt-in and natively qualified for
+normal flips and Quake/Chocolate Quake play (`9254f5c8`, owner, 2026-10-10).
+Unqualified on the ThinkPad: timeout recovery, native panic visibility, remote
+screenshots with a visible cursor and selection, and the owner's ordinary input
+checks (tabs, selection, layers, lock and relock) not reported in that run. The
+paired disabled/enabled boots with camera clips, compose/copy costs and poll
+counts were not taken as a set. No native timeout injection or panic trigger is
+authorized. Revisit when the backend is proposed as a default, or after a change
+to its failure, panic or capture paths; the paired steps are in the
+[backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
 ## Renoir steady-state validation cost
 
 The [native flip run](development/experiments/renoir-flip-backend/README.md#native-success--2026-10-10)
 spends roughly 3 ms cumulative validation elapsed per frame (about 8 polls at 369 µs
 mean). Full double-snapshot PCI/route/layout checks on every poll occupy the BSP.
-Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-presentation.md#proposed-cheaper-steady-state-polling):
+Revisit with the [separate cheaper-poll proposal](wip/renoir-flip-polling.md):
 light reads are hints; full validation must guard writes, retirement, capture and
 fallback. Detection cadence needs owner acceptance; no optimization is implemented.
 
@@ -679,7 +705,7 @@ and held the clock through a native session of more than 15 minutes on 2026-10-0
 take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
 qualifies with an error bound up to 100 ppm on top of the HPET's crystal error, and CPUID `0x15` is only logged. Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
-calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. Revisit with a target that shows a warp or needs better accuracy.
+calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp, needs better accuracy or is an Intel CPU.
 
 ## Doom configuration and save-format limits
 
@@ -859,7 +885,7 @@ The owner checked the [SDL game ports](development/sdl-game-ports.md) on the Thi
 with `DUKE3D_DATA`, info logging, wired, AC, 1920x1080). The SDL path cost about 2.0 ms per frame in Chocolate Quake's timedemo (about 1.2 ms in
 QEMU) and about 1.6 ms in Chocolate Doom's, from an earlier batch ([Quake](development/experiments/chocolate-quake/README.md#native-results),
 [Doom](development/experiments/chocolate-doom/README.md#native-results)). Chocolate Quake played, with clearly more tearing than native Quake:
-about three drifting tear lines at once, an input to the [Renoir flip qualification](wip/renoir-flip-presentation.md#tasks-and-native-qualification).
+about three drifting tear lines at once, an input to the [Renoir flip qualification](#renoir-flip-backend-qualification).
 EDuke32 played smoothly at the native resolution with smooth pointer motion; its SDL cursor showed through the system pointer, some tearing
 appeared, and a mouse suits it better than the trackpad. Still pending natively: Chocolate Doom's matched configuration and a play
 check, and EDuke32's level load time, frame rates capped and uncapped, and save, load and quit. Revisit when the owner
@@ -1415,7 +1441,7 @@ Revisit broader profiles or reusable resources for a concrete device, with a bou
 
 Ordinary HID leaves have fenced slot retirement. Failed fences, unowned events, active non-HID removal and hub-subtree loss can still disable the whole controller,
 including storage/Bluetooth, until reboot; automatic interrupt STALL recovery is absent. Revisit recovery and subtree retirement separately, preserving DMA ownership.
-The [HID qualification record](wip/usb-hid.md#qemu-qualification--2026-10-10) does not establish native periodic-transfer coverage.
+The [HID qualification record](development/experiments/usb-hid/README.md) does not establish native periodic-transfer coverage.
 
 ## USB descriptor bounds and per-port preparation
 

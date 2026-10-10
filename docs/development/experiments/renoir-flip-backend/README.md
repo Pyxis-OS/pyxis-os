@@ -1,6 +1,6 @@
 # Renoir two-surface flip backend
 
-Task 2 implements the [accepted bounded backend](../../../wip/renoir-flip-presentation.md).
+The [bounded backend reference](../../../kernel/renoir-flip.md) describes the implemented design; this is its qualification record.
 Default is off. The owner qualified native completion and observed tear-free
 Quake/Chocolate Quake play on `9254f5c8`, 2026-10-10. Timeout recovery, panic
 visibility and unreported capture/input scenarios remain unqualified; QEMU
@@ -302,7 +302,7 @@ latency. The games' tear-free result is the owner's visual judgment.
 
 About 8 × 369 µs gives roughly 3 ms cumulative BSP validation elapsed per frame,
 including clock/preemption overhead; it is a cost estimate, not a separately
-profiled CPU sample. A [separate polling proposal](../../../wip/renoir-flip-presentation.md#proposed-cheaper-steady-state-polling)
+profiled CPU sample. A [separate polling proposal](../../../wip/renoir-flip-polling.md)
 addresses this without changing task 2 code. Metrics-gated failure diagnostics
 remain: they perform no formatting, field walk or extra register reads on the
 healthy path or with metrics off. No default-boot logging was added.

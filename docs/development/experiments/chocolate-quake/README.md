@@ -99,7 +99,7 @@ default info logging. Values are approximate, one summary per configuration:
   lines lower, drifting noticeably. This is an observation, not a diagnosis; a
   beat between the 72 Hz frame pacing and the 60 Hz panel, with unsynchronized
   copies, is one possibility. It is an input to the
-  [Renoir flip qualification](../../../wip/renoir-flip-presentation.md#tasks-and-native-qualification).
+  [Renoir flip qualification](../../../technical-debt.md#renoir-flip-backend-qualification).
 
 ## Limits
 
