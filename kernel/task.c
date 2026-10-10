@@ -13,6 +13,7 @@
 #include <abi/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/process_vm.h>
 #include <kernel/space.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
@@ -53,6 +54,10 @@ struct task {
   struct arch_user_state cpu;
   size_t cpu_index;
   bool exited, in_syscall;
+  atomic_bool vm_continuation;
+  size_t vm_borrowers; /* Process VM guard; owned by this task's active accesses. */
+  struct process_vm_held vm_held;
+  bool vm_parked; /* queues_locked; separate from resource waits. */
   bool relocate; /* Leave this CPU at syscall return; set under queues_locked. */
   atomic_bool stop_requested;
   struct execution_group *cleanup_group;
@@ -145,6 +150,39 @@ struct process *process_current(void)
   return task && task->kind == TASK_USER ? task->process : NULL;
 }
 
+struct task *task_current_user(void)
+{
+  struct task *task = schedulers ? local_scheduler()->current_task : NULL;
+  return task && task->kind == TASK_USER ? task : NULL;
+}
+
+bool task_vm_continuation(struct task *task)
+{
+  return atomic_load_explicit(&task->vm_continuation, memory_order_acquire);
+}
+
+void task_vm_set_continuation(struct task *task, bool admitted)
+{
+  atomic_store_explicit(&task->vm_continuation, admitted, memory_order_release);
+}
+
+size_t task_vm_borrow_count(struct task *task)
+{
+  return task->vm_borrowers;
+}
+
+void task_vm_borrow_enter(struct task *task)
+{
+  KASSERT(task->vm_borrowers != SIZE_MAX);
+  ++task->vm_borrowers;
+}
+
+void task_vm_borrow_leave(struct task *task)
+{
+  KASSERT(task->vm_borrowers);
+  --task->vm_borrowers;
+}
+
 bool task_stop_requested(void)
 {
   struct task *task = schedulers ? local_scheduler()->current_task : NULL;
@@ -193,6 +231,10 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
   struct task *task = scheduler->current_task;
   KASSERT(task && task->kind == TASK_USER && !task->exited);
   KASSERT(!task->bsp_request && !task->deferred_request && !task->wait);
+  KASSERT(!task->vm_borrowers);
+  if (task_vm_continuation(task)) {
+    process_vm_syscall_leave(task->process, task);
+  }
   process_set_result(task->process, result);
   task->exited = true;
   arch_context_switch(&task->saved_stack, scheduler->stack);
@@ -206,10 +248,19 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
 
 void task_syscall_enter(void)
 {
-  if (task_stop_requested()) {
-    terminate_task();
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  for (;;) {
+    if (task_stop_requested()) {
+      terminate_task();
+    }
+    if (process_vm_syscall_enter(task->process, task)) {
+      break;
+    }
+    arch_user_save(&task->cpu);
+    arch_context_switch(&task->saved_stack, scheduler->stack);
   }
-  local_scheduler()->current_task->in_syscall = true;
+  task->in_syscall = true;
 }
 
 void task_syscall_leave(void)
@@ -219,8 +270,10 @@ void task_syscall_leave(void)
   }
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
+  process_vm_syscall_leave(task->process, task);
   task->in_syscall = false;
-  if (task->relocate || atomic_load_explicit(&user_hold, memory_order_acquire)) {
+  if (task->relocate || atomic_load_explicit(&user_hold, memory_order_acquire) ||
+      process_vm_execution_closed(task->process)) {
     /* The caller's space no longer allows this CPU, or user tasks are held.
      * Switch out before any user instruction runs; the scheduler requeues or
      * holds the task, and the rest of the syscall return later runs from this
@@ -373,6 +426,28 @@ static void enqueue(struct scheduler *scheduler, struct task *task)
   notify_remote_cpu(cpu_index);
 }
 
+struct process_vm_held *task_vm_hold(struct task *task)
+{
+  lock_queues();
+  KASSERT(task->kind == TASK_USER && !task->vm_parked && !task->wait &&
+      !task->parked && !task->vm_held.next && !task->vm_borrowers);
+  task->vm_parked = true;
+  task->vm_held.task = task;
+  unlock_queues();
+  return &task->vm_held;
+}
+
+void task_vm_resume(struct task *task)
+{
+  lock_queues();
+  KASSERT(task->vm_parked && !task->vm_held.next);
+  task->vm_parked = false;
+  size_t cpu_index = task->cpu_index;
+  enqueue_locked(&schedulers[cpu_index], task);
+  unlock_queues();
+  notify_remote_cpu(cpu_index);
+}
+
 struct task_wait *task_wait_prepare(void)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -412,6 +487,7 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bo
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
   KASSERT(task && wait == &task->wait_record && wait->task == task && !task->exited);
+  KASSERT(!task->vm_borrowers);
   KASSERT(task->kind == TASK_USER || arch_cpu_index() == 0);
 
   lock_queues();
@@ -508,6 +584,7 @@ void task_request_stop(struct task *task)
   }
   size_t cpu_index = task->cpu_index;
   unlock_queues();
+  process_vm_unhold(task->process, task);
   notify_remote_cpu(cpu_index);
 }
 
@@ -573,7 +650,7 @@ void task_bsp_request_release(struct bsp_request *request)
 {
   struct task *task = current_user_task();
   KASSERT(task->bsp_request == request && !task->deferred_request);
-  KASSERT(request->state == BSP_REQUEST_COMPLETE);
+  KASSERT(request->state == BSP_REQUEST_COMPLETE || request->state == BSP_REQUEST_PREPARED);
   task->bsp_request = NULL;
 }
 
@@ -715,6 +792,7 @@ static enum mm_result allocate_task(struct task **result)
   }
   memset(task, 0, sizeof(*task));
   atomic_init(&task->stop_requested, false);
+  atomic_init(&task->vm_continuation, false);
 
   enum mm_result status = vm_alloc(vm_kernel_space(), TASK_STACK_SIZE,
                                     PAGE_SIZE, PAGE_WRITE, &task->kernel_stack);
@@ -1068,6 +1146,10 @@ void kernel_task_yield_if_runnable(void)
       scheduler->current_task = NULL;
       continue;
     }
+    if (task->kind == TASK_USER && !process_vm_dispatch(task->process, task)) {
+      scheduler->current_task = NULL;
+      continue;
+    }
 
     /* Reload CR3 before touching a newly published task stack. This also
      * discards translations from a previous use of its kernel virtual range. */
@@ -1085,6 +1167,9 @@ void kernel_task_yield_if_runnable(void)
     KASSERT(vm_space_activate(vm_kernel_space()) == MM_OK);
     arch_user_set_kernel_stack(0);
     scheduler->current_task = NULL;
+    if (task->kind == TASK_USER) {
+      process_vm_root_depart(task->process);
+    }
     if (task->exited) {
       complete_task(task);
     } else if (task->deferred_request) {
@@ -1141,6 +1226,10 @@ void task_preempt(bool user_mode)
      completed_head != NULL);
   unlock_queues();
   if (task->kind == TASK_USER && atomic_load_explicit(&user_hold, memory_order_acquire)) {
+    schedule_needed = true;
+  }
+  if (task->kind == TASK_USER && user_mode &&
+      process_vm_execution_closed(task->process)) {
     schedule_needed = true;
   }
   if (arch_cpu_index() == 0 && object_reap_pending()) {

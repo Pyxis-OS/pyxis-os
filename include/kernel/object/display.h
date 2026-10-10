@@ -29,8 +29,8 @@ struct display_request {
   enum call_status result;
 };
 
-/* BSP, IF=0, after deferred publication lends the inactive private space.
- * Every operation, including SUBMIT, uses this same handoff. */
+/* BSP, IF=0, after deferred publication. ACQUIRE/REPLACE/RELEASE execute under
+ * the drained mutation token; SIZE/SUBMIT preserve the ordinary handoff. */
 void display_request_execute(struct display_request *request);
 
 /* BSP, IF=0: the session owns one reference per slot, plus one for the frame

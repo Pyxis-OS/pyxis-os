@@ -5,6 +5,7 @@
 #include <kernel/object/capability.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/spinlock.h>
+#include <kernel/process_vm.h>
 #include <abi/process.h>
 
 struct space;
@@ -27,6 +28,7 @@ enum process_lifetime {
 struct process {
   struct space *space;
   struct vm_space *address_space;
+  struct process_vm_activity vm;
   struct capability_table capabilities;
   struct process_control *control; /* Owned reference through final reclamation. */
   struct execution_group *execution_group; /* Owned storage through member completion. */

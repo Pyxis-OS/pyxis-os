@@ -11,6 +11,18 @@ struct bsp_request;
 struct task;
 struct execution_group;
 struct space;
+struct process_vm_held;
+
+/* VM admission helpers, IF=0. The process VM guard owns continuation changes
+ * and held links; scheduler parking/enqueue helpers take only the queue guard. */
+struct task *task_current_user(void);
+bool task_vm_continuation(struct task *task);
+void task_vm_set_continuation(struct task *task, bool admitted);
+size_t task_vm_borrow_count(struct task *task);
+void task_vm_borrow_enter(struct task *task);
+void task_vm_borrow_leave(struct task *task);
+struct process_vm_held *task_vm_hold(struct task *task);
+void task_vm_resume(struct task *task);
 
 /* Current user task only; false for workers and before scheduler setup. A stop
  * request is permanent. Interruptible sleeps resume kernel cleanup, never

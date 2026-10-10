@@ -10,6 +10,7 @@
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/process_vm.h>
 #include <kernel/space.h>
 #include <kernel/user_memory.h>
 
@@ -374,7 +375,20 @@ void display_request_execute(struct display_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && request->loan && request->display);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING ||
+      request->request.state == BSP_REQUEST_FORWARDED);
+  if (request->operation == DISPLAY_ACQUIRE || request->operation == DISPLAY_REPLACE ||
+      request->operation == DISPLAY_RELEASE) {
+    process_vm_require_mutation(request->loan);
+    if (request->operation != DISPLAY_RELEASE &&
+        !process_vm_buffer_check(request->loan, request->reply_address,
+          sizeof(struct display_buffer), true)) {
+      request->result = CALL_BAD_BUFFER;
+      request->loan = NULL;
+      request->display = NULL;
+      return;
+    }
+  }
   request->result = service_display(request->display, request->loan,
       request->operation, request->generation, request->slot, request->reply_address,
       &request->reply);
@@ -384,12 +398,17 @@ void display_request_execute(struct display_request *request)
 
 static enum call_status request_display(struct display_object *display,
     uint64_t operation, uint64_t generation, uint64_t slot, uintptr_t reply_address,
-    union display_reply *reply)
+    union display_reply *reply, bool *reply_owned)
 {
   struct display_request *request =
       (struct display_request *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
   request->loan = process_current();
   KASSERT(request->loan);
+  if (operation == DISPLAY_ACQUIRE || operation == DISPLAY_REPLACE ||
+      operation == DISPLAY_RELEASE) {
+    request->request.vm_process = request->loan;
+    request->request.vm_mutator = task_current_user();
+  }
   request->display = display;
   request->operation = operation;
   request->generation = generation;
@@ -399,6 +418,7 @@ static enum call_status request_display(struct display_object *display,
 
   bsp_request_submit_and_wait(&request->request);
   *reply = request->reply;
+  *reply_owned = request->request.vm_reply_owned;
   enum call_status result = request->result;
   bsp_request_release(&request->request);
   return result;
@@ -451,13 +471,23 @@ struct syscall_result display_call(struct display_object *display, uint64_t righ
     }
   }
 
+  bool reply_owned;
   enum call_status status = request_display(display, operation,
       operation == DISPLAY_REPLACE ? argument : 0,
-      operation == DISPLAY_SUBMIT ? argument : 0, reply_address, &reply);
-  if (status != CALL_OK || !reply_size) {
-    return (struct syscall_result){status, 0};
+      operation == DISPLAY_SUBMIT ? argument : 0, reply_address, &reply, &reply_owned);
+  size_t copied = 0;
+  if (status == CALL_OK && reply_size) {
+    bool valid = copy_to_user(reply_address, &reply, reply_size);
+    /* Mapping mutations rechecked output under the exclusive transaction. */
+    KASSERT(valid || !reply_owned);
+    if (valid) {
+      copied = reply_size;
+    } else {
+      status = CALL_BAD_BUFFER;
+    }
   }
-  /* New mappings are disjoint; REPLACE refuses to retire the checked reply. */
-  KASSERT(copy_to_user(reply_address, &reply, reply_size));
-  return (struct syscall_result){CALL_OK, reply_size};
+  if (reply_owned) {
+    process_vm_reply_finish(process_current());
+  }
+  return (struct syscall_result){status, copied};
 }

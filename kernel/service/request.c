@@ -13,6 +13,8 @@
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
+#include <kernel/object/memory.h>
+#include <kernel/process_vm.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
 #include <kernel/audio.h>
@@ -59,6 +61,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct pointer_request, request)},
   [BSP_SERVICE_DISPLAY] = {sizeof(struct display_request), alignof(struct display_request),
       offsetof(struct display_request, request)},
+  [BSP_SERVICE_MEMORY] = {sizeof(struct memory_request), alignof(struct memory_request),
+      offsetof(struct memory_request, request)},
   [BSP_SERVICE_CAPABILITY_GROW] = {sizeof(struct capability_growth_request), alignof(struct capability_growth_request),
       offsetof(struct capability_growth_request, request)},
   [BSP_SERVICE_NAMESPACE_CREATE] = {sizeof(struct namespace_create_request), alignof(struct namespace_create_request),
@@ -163,6 +167,7 @@ static bool requires_handoff(enum bsp_service service)
     return false;
   case BSP_SERVICE_POINTER:
   case BSP_SERVICE_DISPLAY:
+  case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_SCREEN_CAPTURE:
     return true;
   default:
@@ -230,6 +235,17 @@ void bsp_request_release(struct bsp_request *request)
   *request = (struct bsp_request){0};
 }
 
+void bsp_request_cancel_prepared(struct bsp_request *request)
+{
+  KASSERT(request && request == task_bsp_request_current());
+  KASSERT(request->state == BSP_REQUEST_PREPARED && !request->next &&
+      !request->vm_process && !request->vm_mutator && !request->vm_reply_owned);
+  request->wait = NULL;
+  request->cleanup_group = NULL;
+  task_bsp_request_release(request);
+  *request = (struct bsp_request){0};
+}
+
 void bsp_request_complete(struct bsp_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -238,9 +254,11 @@ void bsp_request_complete(struct bsp_request *request)
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
         request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
         request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
-        request->service == BSP_SERVICE_BLUETOOTH_HCI) &&
+        request->service == BSP_SERVICE_BLUETOOTH_HCI ||
+        request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
+  KASSERT(!request->vm_process && !request->vm_mutator);
   struct task_wait *wait = request->wait;
   request->wait = NULL;
   request->cleanup_group = NULL;
@@ -330,8 +348,17 @@ static void service_request(struct bsp_request *request)
     pointer_request_execute((struct pointer_request *)request);
     break;
   case BSP_SERVICE_DISPLAY:
+    if (request->vm_process) {
+      object_cleanup_leave(previous);
+      process_vm_mutation_forward(request);
+      return;
+    }
     display_request_execute((struct display_request *)request);
     break;
+  case BSP_SERVICE_MEMORY:
+    object_cleanup_leave(previous);
+    process_vm_mutation_forward(request);
+    return;
   default:
     KASSERT(false);
   }
@@ -395,5 +422,6 @@ void bsp_requests_init(void)
   }
   readiness_init();
   clipboard_init();
+  process_vm_init();
   initialized = true;
 }

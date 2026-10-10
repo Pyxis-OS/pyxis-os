@@ -34,6 +34,8 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
     .space = space, .address_space = address_space, .lifetime = PROCESS_PREPARING,
   };
   atomic_init(&process->lifetime_lock.locked, false);
+  atomic_init(&process->vm.lock.locked, false);
+  atomic_init(&process->vm.phase, PROCESS_VM_OPEN);
   atomic_init(&process->result_set, false);
   process->group_member.process = process;
   process->control = process_control_create();
@@ -51,6 +53,7 @@ static enum mm_result destroy_process(struct process *process)
   KASSERT(arch_cpu_index() == 0);
   KASSERT(process->lifetime != PROCESS_SUBMITTED && !process->task &&
       !process->task_storage);
+  process_vm_retire(process);
 
   clipboard_process_exit(process);
   keyboard_process_exit(process);
@@ -155,6 +158,8 @@ void process_task_detach(struct process *process, struct task *task)
       atomic_load_explicit(&process->result_set, memory_order_acquire));
   process->task = NULL;
   spin_unlock(&process->lifetime_lock);
+  /* Close VM admission before the reaper releases task stack or metadata. */
+  process_vm_retire(process);
 }
 
 void process_task_reclaimed(struct process *process)

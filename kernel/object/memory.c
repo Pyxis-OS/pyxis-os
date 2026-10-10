@@ -8,6 +8,7 @@
 #include <kernel/object/memory.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/process_vm.h>
 #include <kernel/service/profile.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
@@ -46,6 +47,31 @@ static void record_memory_profile(struct profile_snapshot *profile, uint64_t ope
   profile_duration_add(&profile->flags, &stats->service, service_started_ns,
       service_ended_ns);
   profile_duration_add(&profile->flags, &stats->total, started_ns, ended);
+}
+
+void memory_request_execute(struct memory_request *request)
+{
+  KASSERT(request->request.state == BSP_REQUEST_FORWARDED && request->process);
+  process_vm_require_mutation(request->process);
+  request->service_started_ns = request->profiled ? arch_monotonic_ns() : 0;
+  if (request->operation == MEMORY_ALLOCATE &&
+      !process_vm_buffer_check(request->process, request->reply_address,
+        sizeof(struct memory_region), true)) {
+    request->result = MM_INVALID;
+    request->status = CALL_BAD_BUFFER;
+    request->service_ended_ns = request->profiled ? arch_monotonic_ns() : 0;
+    request->process = NULL;
+    return;
+  }
+  request->result = request->operation == MEMORY_ALLOCATE ?
+    private_memory_allocate(request->process, request->region.size, &request->region.address) :
+    private_memory_release(request->process, request->region.address, request->region.size);
+  KASSERT(request->result == MM_OK || request->result == MM_INVALID ||
+      request->result == MM_NO_MEMORY);
+  request->service_ended_ns = request->profiled ? arch_monotonic_ns() : 0;
+  request->status = request->result == MM_OK ? CALL_OK :
+    request->result == MM_INVALID ? CALL_BAD_REQUEST : CALL_NO_MEMORY;
+  request->process = NULL;
 }
 
 struct syscall_result memory_call(uint64_t rights, uint64_t operation,
@@ -89,25 +115,34 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     }
   }
 
-  /* This task is the process's only one and runs here with IF=0, so no other
-   * CPU uses or caches its address space while the mappings change. */
   struct process *process = process_current();
   KASSERT(process);
-  uint64_t service_started_ns = profiled ? arch_monotonic_ns() : 0;
-  enum mm_result result = operation == MEMORY_ALLOCATE ?
-      private_memory_allocate(process, region.size, &region.address) :
-      private_memory_release(process, region.address, region.size);
-  uint64_t service_ended_ns = profiled ? arch_monotonic_ns() : 0;
-
-  struct syscall_result reply = {CALL_OK, 0};
-  if (result != MM_OK) {
-    KASSERT(result == MM_INVALID || result == MM_NO_MEMORY);
-    reply.status = result == MM_INVALID ? CALL_BAD_REQUEST : CALL_NO_MEMORY;
-  } else if (operation == MEMORY_ALLOCATE) {
-    /* ALLOCATE adds a disjoint region; the checked reply mapping remains valid.
-     * RELEASE never touches user memory again after changing the mappings. */
+  struct memory_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_MEMORY);
+  pending->process = process;
+  pending->operation = operation;
+  pending->region = region;
+  pending->reply_address = reply_address;
+  pending->profiled = profiled;
+  pending->result = MM_INVALID;
+  pending->request.vm_process = process;
+  pending->request.vm_mutator = task_current_user();
+  bsp_request_submit_and_wait(&pending->request);
+  region = pending->region;
+  enum mm_result result = pending->result;
+  uint64_t service_started_ns = pending->service_started_ns;
+  uint64_t service_ended_ns = pending->service_ended_ns;
+  bool reply_owned = pending->request.vm_reply_owned;
+  struct syscall_result reply = {pending->status, 0};
+  bsp_request_release(&pending->request);
+  if (reply.status == CALL_OK && operation == MEMORY_ALLOCATE) {
+    /* BSP rechecked this output before effects; REPLY ownership prevents
+     * intervening mapping changes until the final copy has finished. */
     KASSERT(copy_to_user(reply_address, &region, sizeof(region)));
     reply.reply_size = sizeof(region);
+  }
+  if (reply_owned) {
+    /* RELEASE performs only kernel cleanup after unmapping its captured input. */
+    process_vm_reply_finish(process);
   }
   if (profiled) {
     record_memory_profile(profile, operation, &region, result, started_ns,
