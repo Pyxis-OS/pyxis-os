@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/ps2.h>
+#include <arch/smp.h>
 #include <kernel/input.h>
 #include <kernel/mouse.h>
 #include <kernel/panic.h>
@@ -217,6 +218,13 @@ void input_keyboard_snapshot(struct input_source *source, const bool keys[KEY_CO
   if (source->keyboard_unresolved) {
     source->keyboard_unresolved = false;
     source->repeat_deadline = now + USB_REPEAT_DELAY_NS;
+    /* Rollover hid these edges; reappearance is not a fresh physical press. */
+    for (size_t key = 1; key < KEY_COUNT; ++key) {
+      if (keys[key] && !source->keys[key]) {
+        source->keys[key] = true;
+        source->suppressed_keys[key] = true;
+      }
+    }
   }
   for (size_t key = 1; key < KEY_COUNT; ++key) {
     if (source->keys[key] && !keys[key]) {
@@ -240,7 +248,22 @@ void input_keyboard_unresolved(struct input_source *source)
 {
   assert_input_owner();
   KASSERT(source && source->keyboard_live);
-  source->keyboard_unresolved = true;
+  if (!source->keyboard_unresolved) {
+    unsigned previous_locks = locks;
+    reset_keyboard();
+    locks = previous_locks;
+    source->keyboard_unresolved = true;
+  }
+}
+
+static bool keyboard_sources_resolved(void)
+{
+  for (const struct input_source *source = sources; source; source = source->next) {
+    if (source->keyboard_live && source->keyboard_unresolved) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool keyboard_available(void)
@@ -266,7 +289,7 @@ bool keyboard_read_event(struct key_event *event)
       if (!now) {
         now = arch_monotonic_ns();
       }
-      if (now >= source->repeat_deadline && usb_hid_input_complete()) {
+      if (now >= source->repeat_deadline && keyboard_sources_resolved() && usb_hid_input_complete()) {
         source->repeat_deadline = now + USB_REPEAT_INTERVAL_NS;
         queue_key(key, KEY_REPEAT);
       }
@@ -286,14 +309,15 @@ bool keyboard_sync_device(void)
 {
   assert_input_owner();
   bool ps2_complete = !ps2_keyboard_available() || ps2_keyboard_sync_device();
-  return keyboard_available() && ps2_complete && usb_hid_input_complete();
+  return keyboard_available() && ps2_complete && keyboard_sources_resolved() && usb_hid_input_complete();
 }
 
 bool keyboard_input_complete(void)
 {
   assert_input_owner();
   return keyboard_available() && !key_count &&
-      (!ps2_keyboard_available() || ps2_keyboard_input_complete()) && usb_hid_input_complete();
+      (!ps2_keyboard_available() || ps2_keyboard_input_complete()) &&
+      keyboard_sources_resolved() && usb_hid_input_complete();
 }
 
 static uint32_t pointer_buttons(bool suppression)
