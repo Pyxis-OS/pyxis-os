@@ -100,7 +100,10 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
 
 1. **Identity — live backend objects within one boot, using a comparable
    64-bit domain/object pair.** Domains follow backing instances/volumes, not
-   root grants. Delegated paths share RAM/archive object identities; native
+   root grants. A reserved common domain for provider-private byte snapshots
+   is explicitly disjoint from native backing; it supplies no object identity.
+   Generic exports/proxies must report their actual domain or remain unknown.
+   Delegated paths share RAM/archive object identities; native
    wrappers for one mounted volume/inode compare equal, different volumes
    unequal. HOST maps the session and complete FUSE node incarnation losslessly
    into native IDs, never using wrapper IDs, pointers, hashes or a libc cache.

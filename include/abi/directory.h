@@ -3,6 +3,7 @@
 
 #include <abi/handle.h>
 #include <abi/message.h>
+#include <abi/file_info.h>
 #include <stddef.h>
 
 #define DIRECTORY_RIGHT_LOOKUP (UINT64_C(1) << 0)
@@ -24,6 +25,7 @@
 #define DIRECTORY_RENAME UINT64_C(5)
 #define DIRECTORY_SYNC UINT64_C(6)
 #define DIRECTORY_FILESYSTEM_INFO UINT64_C(7)
+#define DIRECTORY_INFO UINT64_C(8)
 
 #define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
 #define DIRECTORY_RENAME_REPLACE UINT64_C(1)

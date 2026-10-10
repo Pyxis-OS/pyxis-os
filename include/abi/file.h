@@ -2,6 +2,7 @@
 #define ABI_FILE_H
 
 #include <abi/message.h>
+#include <abi/file_info.h>
 #include <stddef.h>
 
 /* Operations use explicit offsets. SIZE accepts either READ or WRITE; WRITE
@@ -15,6 +16,7 @@
 #define FILE_WRITE UINT64_C(3)
 #define FILE_RESIZE UINT64_C(4)
 #define FILE_SYNC UINT64_C(5)
+#define FILE_INFO UINT64_C(6)
 
 /* Payloads contain no caller addresses. The native message header is separate;
  * exported delivery carries protocol/operation in its transport metadata.
