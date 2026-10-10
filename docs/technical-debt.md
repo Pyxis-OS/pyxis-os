@@ -450,6 +450,14 @@ to about a second after discovery opens plus network, scheduling and cleanup del
 owner's ThinkPad PXE check; macOS listener behavior is unqualified ([qualification](development/remote-debugging.md#qualification)).
 Revisit if a multi-host or unattended workflow needs more.
 
+## Parked remote handoff shells
+
+Remote [`session` handoffs](userland/shell.md#session-handoff) retain one parked
+shell with its stack, heap and grants per chained handoff, as accepted by the
+owner. Disconnect still reclaims the whole execution group. Revisit with an
+acknowledged observer transfer to the daemon if deep or long-lived chains make
+the retained resources material; no handoff-depth quota is supplied.
+
 ## Kernel log retention and LAN visibility
 
 The [kernel log](interfaces/kernel-log.md) keeps 256 KiB in static storage, evicting whole oldest lines and discarding oversized ones;
@@ -1637,9 +1645,31 @@ editing or deleting a live revision is unsupported.
 ## Native libuv first-slice limits
 
 The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
-stream/process interests per loop and synchronous filesystem calls. Child cwd,
+stream/process interests per loop and synchronous filesystem calls. Child
 bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
-APIs are omitted. Luv/Neovim must consume native stat validity and exit reasons,
-handle unsupported PIDs/signals, and close remaining libc/API gaps. Revisit in
-[Neovim tasks 5 and 6](wip/neovim-libuv.md#tasks); serving providers in a libuv
-loop needs a receiver adapter. Shared-process threads require a separate milestone.
+APIs are omitted. Luv consumes the native exit reasons and reports unsupported
+PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
+Neovim must still consume native stat validity and close remaining libc/API gaps
+in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
+receiver adapter. Shared-process threads require a separate milestone.
+
+## Calendar and encoding profile
+
+Libc's [`mktime`](userland/timezones.md#c-interface) fails with ENOTSUP for wall times in a DST gap and for folds that a
+nonnegative `tm_isdst` cannot settle, including standard-offset changes. Callers that expect glibc's adjustment across
+gaps or its choice in folds get an error instead. [`iconv`](kernel/userspace.md#foundational-libc)
+converts only UTF-8, ASCII, ISO-8859-1 and UTF-16LE/BE: Neovim reports other `fileencoding` values as unconvertible
+(it converts Latin-1, Latin-9 and the Unicode forms itself), and Git's BOM-detecting `UTF-16` working-tree encoding fails.
+There is no transliteration. Revisit when a port or user needs another encoding or gap normalization; each addition
+imports its musl table or rule explicitly.
+
+## Lua 5.1 and luv limits
+
+The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
+`io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
+`popen`/`system`, `clock`, locales, `setvbuf` and dynamic loading. `os.time(table)` returns `nil` for DST gaps and unsettled
+folds ([calendar limits](#calendar-and-encoding-profile)). The Lua 5.5 `lua` port still refuses calendar tables and compares
+with `strcmp`; switching it to libc's `mktime` and `strcoll` is a small follow-up. luv reports TCP, UDP, DNS, watches, signals, work queues,
+callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
+descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
+[task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.

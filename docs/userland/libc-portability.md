@@ -44,22 +44,25 @@ or support returns a real error, never a successful stub.
 
 Userland's private `libc/descriptor.c` stores the native handle, backend kind,
 selected access mode, append policy, cursor and any
-[input read-ahead](stdio.md#input-read-ahead) directly in each entry. The
+[input read-ahead](stdio.md#input-read-ahead) in a reference-counted open object.
+`dup` shares that object through an independent descriptor slot. The
 lowest free slot is reserved for an open, including closed or absent standard
 slots. Descriptors 0–2 use static startup storage; later growth uses the heap.
 Allocation failure reports ENOMEM and descriptor-number exhaustion EMFILE.
 
 FILE stores a descriptor number, never a pointer into the relocatable table.
 Each entry has at most one non-owning FILE back-pointer. The association adds
-no native reference: close releases the handle and invalidates the association
-before the number can be reused. After `close(1)`, nonempty output through the
-old stdout fails with EBADF; neither later output nor fclose of that wrapper
-can affect a new occupant of descriptor 1. Public open creates no FILE wrapper.
+no native reference: close invalidates this slot before its number can be reused;
+final object close releases the native handle. After `close(1)`, nonempty output
+through the old stdout fails with EBADF; neither later output nor fclose of that
+wrapper can affect a new occupant of descriptor 1. Public open creates no FILE wrapper.
 
-Fopen allocates its wrapper and reserves descriptor capacity before opening or
-truncating. Path workspace allocation and authority resolution also precede
-truncation. Publication after successful truncation requires no allocation;
-failure releases reservations and attempts to release opened handles under the
+Fopen allocates its wrapper, open object and descriptor capacity before opening
+or truncating. `fdopen` allocates before associating an existing slot and preserves
+its position/read-ahead without truncation. FILE access can narrow the descriptor
+mode; association failure preserves caller ownership. Path workspace allocation
+and authority resolution also precede truncation. Publication after successful
+truncation requires no allocation; failure releases reservations and attempts to release opened handles under the
 close policy below. Existing r/w/a modes, update forms, seeking and non-atomic
 append use this same ownership/cursor machinery.
 
@@ -156,12 +159,12 @@ x86-64 LP64 interface is:
 | Header | Supported interface |
 | --- | --- |
 | `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x100, O_TRUNC = 0x200, O_EXCL = 0x400, O_APPEND = 0x800 |
-| `unistd.h` | read, write, pread, pwrite, close, lseek, ftruncate, fsync, unlink, rmdir, access, isatty; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
+| `unistd.h` | read, write, pread, pwrite, dup, close, lseek, ftruncate, fsync, unlink, rmdir, access, isatty; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
 | `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size; independently valid st_dev/st_ino/st_mtim under st_valid |
 | `arpa/inet.h` | htonl, htons, ntohl, ntohs only; no socket or address parsing/formatting declarations |
 | `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int; dev_t and ino_t as uint64_t |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
-| `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
+| `stdio.h` | FILE interface, including fdopen; BUFSIZ = 8192 |
 | `inttypes.h` | PRId/PRIi/PRIo/PRIu/PRIx/PRIX output macros for fixed-width 8/16/32/64-bit, pointer and greatest-width types |
 
 Open selects exactly one of read-only, write-only or read/write access. Create
@@ -189,10 +192,10 @@ Descriptor calls neither inspect nor update FILE indicators.
 
 The [descriptor I/O reference](stdio.md#descriptor-io) and
 [native errno mapping](stdio.md#native-error-translation) give the detailed
-contract. lseek changes the descriptor's private position; pread/pwrite use an
-explicit file offset without changing it. There is no shared cursor.
-O_APPEND gives a descriptor fopen's "a" policy; fdopen and duplication remain
-absent.
+contract. lseek changes the open-object position shared by descriptor aliases;
+pread/pwrite use an explicit file offset without changing it. O_APPEND gives the
+shared object fopen's "a" policy. `fdopen` associates a FILE without changing the
+cursor or truncating; its selected access can narrow descriptor access.
 fileno exposes an existing FILE descriptor without adding an alias.
 
 ### Read/write and exclusive-create qualification
@@ -248,12 +251,12 @@ zero without touching bytes or the backend, but negative offsets and nonfiles
 are still refused. Backend offset/range restrictions retain their real errors.
 
 Pread bypasses read-ahead without consuming or filling it. Nonempty pwrite drops
-that descriptor's read-ahead before the native call; it stays discarded on
+the shared open object's read-ahead before the native call; it stays discarded on
 uncertain failure so later reads refetch current bytes. Neither operation changes
 the private position, append flag, associated FILE pushback or EOF/error state.
 Pwrite uses its explicit offset even through fileno on an append FILE. A caller's
-ungetc byte is FILE state, not speculative file data. Other open descriptors'
-buffers retain the existing [read-ahead limits](stdio.md#input-read-ahead).
+ungetc byte is FILE state, not speculative file data. Independently opened
+objects retain the existing [read-ahead limits](stdio.md#input-read-ahead).
 
 The helpers snapshot the already-owned handle before blocking and never access
 a descriptor-entry pointer afterward. The current one-user-task-per-process
@@ -393,12 +396,14 @@ failure to -1 and discards both the status and malformed-reply distinction;
 it cannot provide this translation. Libc uses this native syscall directly.
 
 - An invalid/already-closed descriptor returns -1 with EBADF without a native
-  call. For a valid descriptor, detach its native handle and invalidate the
-  entry and every associated FILE before making one native close attempt.
-  The descriptor remains free for reuse regardless of that result.
+  call. For a valid descriptor, invalidate its slot and associated FILE before
+  number reuse, then release its open-object reference. Other aliases retain the
+  shared state and native handle; this close returns 0 without a native call.
+  Only the final reference makes one native close attempt. The descriptor remains
+  free for reuse regardless of that result.
 - CALL_OK with zero reply bytes returns 0 and leaves errno unchanged.
   CALL_BAD_HANDLE with zero reply bytes returns -1/EBADF. Neither current
-  outcome leaves a native capability owned by that entry: success released it;
+  outcome leaves a native capability owned by that object: success released it;
   BAD_HANDLE says it was already absent. Do not retry either outcome.
 - A different in-range failure with zero reply bytes returns -1 using
   libc_call_errno. It is not an outcome produced by today's CLOSE path, and
@@ -411,9 +416,9 @@ it cannot provide this translation. Libc uses this native syscall directly.
   delay pipe peer closure until then. Libc does not retain a hidden native
   copy, retry list or live descriptor to make an uncertain release look like
   success. This is a failure-containment rule, not normal deferred close.
-- Discard the closed entry's open-state metadata without allocation or another
-  release attempt. An existing FILE may retain only the metadata needed for
-  its invalid association and indicators until fclose/exit; it owns no native
+- Final-reference close discards the shared open-state metadata without allocation
+  or another release attempt. An existing FILE may retain only the metadata
+  needed for its invalid association and indicators until fclose/exit; it owns no native
   reference. Later fclose of that stale FILE returns EOF/EBADF and disposes of
   the wrapper without touching a reused descriptor. Fclose of a live FILE
   applies the same release policy, disposes of its wrapper even on failure,
@@ -528,4 +533,5 @@ signals and cross-process shared offsets require separate design work; this
 milestone does not select a successor or promise full POSIX coverage.
 
 Shared `chdir`/`getcwd`, mutable environment and explicit child snapshots are
-documented in [process state](process-state.md). `realpath` is the next slice.
+documented in [process state](process-state.md). Bounded
+[proved realpath](paths.md#proved-realpath) is available separately from descriptive cwd.

@@ -95,3 +95,48 @@ ordinary boot completed `cd tm<Tab>` to `tmp://`, then `cat al<Tab>` to the
 relative file `alpha` and read its contents. Ordinary image inputs were restored;
 all task-owned VMs/debuggers stopped. Earlier launch samples retain their original
 inputs; this refresh did not change the launch implementation.
+
+## Realpath and descriptor slice (2026-10-10)
+
+Baseline: Pyxis main `fa390738`, userland `0b1ede1e`, ports `9f64d683`.
+Implementation: userland `9f70b758`, ports `22b8b4b2`; kernel unchanged. Ordinary
+`make -j16 image` and libuv/uv-relay builds passed with the same LLVM 23.1.3
+builder. The authorized local scratch program built against the refreshed SDK.
+Four-CPU Q35 nested KVM, host CPU, 256 MiB, standard VGA, matching OVMF, SCSI CD
+and RNG; GDB read-only inspection confirmed zero failures:
+
+- Realpath proved files/directories, normalized relative spellings, preserved
+  aliases and a LOOKUP-only directory grant. Ordered missing/.., file/..,
+  boundary escapes, bound overflow and a live provider without OPEN failed.
+  A native child with real cwd grants but no description retained relative
+  authority while getcwd/relative proof failed; explicit scheme proof worked.
+  Removing and recreating a held empty cwd left getcwd descriptive and caused
+  relative proof to fail. Libuv returned a proved result or ENOENT and cleaned up.
+- Fdopen mode/access/association failures left ownership unchanged. FILE r/w
+  selection narrowed O_RDWR; w preserved size/cursor. Dup shared cursor and
+  read-ahead across raw/FILE I/O; closing one file or pipe alias kept unread data
+  alive. Final fclose invalidated its descriptor; a closed association did not
+  regain access. Append applied across aliases.
+
+Before code, existing `iobench` read of a verified 1 MiB RAM fixture measured
+0.328–0.356 ms payload time. Matched frozen ordinary ISOs then alternated in one
+VM, three samples per boot after one warmup. Commands through the existing
+remote client: `iobench write tmp://io.bin --rounds 3`, then
+`iobench read tmp://io.bin --rounds 3`. Modern VirtIO network/user forwarding;
+no HOST, disk, profiler or debugger in timed boots. Payload medians, ms:
+
+| Pair | Before | After |
+| --- | --- | --- |
+| 1 | 0.335 | 0.343 |
+| 2 | 0.361 | 0.315 |
+| 3 | 0.330 | 0.341 |
+
+Nine samples each: before median **0.335 (0.328–0.475)**, after **0.341
+(0.315–0.716)**. Every fixture and child completion passed, with full drain.
+Ranges overlap and paired differences change sign; no stable read-cost change
+established. These are RAM descriptor reads, not physical storage or isolated
+realpath/fdopen timing. Allocation-failure ordering, missing identity and one-shot
+close uncertainty were inspected, not injected. No native qualification. Raw
+programs/logs remain under local `build/slice2-{baseline,qual}`; ordinary image
+inputs restored and task-owned processes stopped. Freopen/buffering and the
+Neovim recipe remain later work.
