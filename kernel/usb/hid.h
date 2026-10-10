@@ -13,7 +13,7 @@ struct usb_hid_interface {
   struct usb_host_interrupt *stream;
   uint16_t receive_bytes, descriptor_bytes;
   uint8_t number, protocol;
-  bool qemu_wheel_candidate, qemu_wheel;
+  bool qemu_wheel_candidate, qemu_wheel, qemu_keyboard_candidate, qemu_keyboard;
 };
 
 struct usb_hid_binding {
@@ -23,7 +23,7 @@ struct usb_hid_binding {
   struct usb_ticket ticket;
   uint64_t deadline;
   enum usb_result result;
-  unsigned stage, interface;
+  unsigned stage, interface, initial_observations;
   uint8_t configuration;
   bool initial_keys[KEY_COUNT];
   unsigned initial_buttons;

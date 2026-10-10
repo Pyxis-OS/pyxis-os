@@ -33,9 +33,12 @@
 #define USB_QEMU_PRODUCT 0x0001
 #define USB_QEMU_MOUSE_PACKET 4
 #define USB_QEMU_MOUSE_DESCRIPTOR_BYTES 52
+#define USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES 67
+#define USB_QEMU_KEYBOARD_PACKET 8
+#define USB_QEMU_QUEUE_ENTRIES 16
 
 enum hid_stage {
-  HID_ENDPOINTS, HID_CONFIGURATION, HID_WHEEL_DESCRIPTOR, HID_PROTOCOL,
+  HID_ENDPOINTS, HID_CONFIGURATION, HID_PROFILE_DESCRIPTOR, HID_PROTOCOL,
   HID_IDLE, HID_INITIAL, HID_START, HID_FINISHED,
 };
 
@@ -85,6 +88,17 @@ static const uint8_t qemu_mouse_descriptor[USB_QEMU_MOUSE_DESCRIPTOR_BYTES] = {
   0x81, 0x01, 0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,
   0x15, 0x81, 0x25, 0x7f, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,
   0xc0, 0xc0,
+};
+
+/* QEMU v10.2.2 hw/usb/dev-hid.c: identify its buffered-snapshot keyboard. */
+static const uint8_t qemu_keyboard_descriptor[USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES] = {
+  0x05, 0x01, 0x09, 0x06, 0xa1, 0x01, 0x75, 0x01, 0x95, 0x08,
+  0x05, 0x07, 0x19, 0xe0, 0x29, 0xe7, 0x15, 0x00, 0x25, 0x01,
+  0x81, 0x02, 0x95, 0x01, 0x75, 0x08, 0x81, 0x01, 0x95, 0x05,
+  0x75, 0x01, 0x05, 0x08, 0x19, 0x01, 0x29, 0x05, 0x15, 0x00,
+  0x25, 0x01, 0x91, 0x02, 0x95, 0x01, 0x75, 0x03, 0x91, 0x01,
+  0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0xff, 0x05, 0x07,
+  0x19, 0x00, 0x29, 0xff, 0x81, 0x00, 0xc0,
 };
 
 static uint16_t read16(const uint8_t *bytes)
@@ -154,6 +168,12 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
   if (!candidate.interfaces[0].protocol && !candidate.interfaces[1].protocol) {
     return;
   }
+  struct usb_hid_interface *keyboard = &candidate.interfaces[0];
+  keyboard->qemu_keyboard_candidate = keyboard->protocol && vendor == USB_QEMU_VENDOR &&
+    product == USB_QEMU_PRODUCT && candidate.configuration == 1 && !keyboard->number &&
+    keyboard->endpoint.address == 0x81 && keyboard->endpoint.packet == USB_QEMU_KEYBOARD_PACKET &&
+    !keyboard->endpoint.transactions &&
+    keyboard->descriptor_bytes == USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES;
   struct usb_hid_interface *mouse = &candidate.interfaces[1];
   mouse->qemu_wheel_candidate = mouse->protocol && vendor == USB_QEMU_VENDOR &&
     product == USB_QEMU_PRODUCT && candidate.configuration == 1 && !mouse->number &&
@@ -255,11 +275,11 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
     .index = interface->number,
   };
   switch (binding->stage) {
-  case HID_WHEEL_DESCRIPTOR:
+  case HID_PROFILE_DESCRIPTOR:
     setup.request_type = USB_REQUEST_INTERFACE_IN;
     setup.request = USB_REQUEST_GET_DESCRIPTOR;
     setup.value = USB_DESCRIPTOR_REPORT << 8;
-    setup.length = USB_QEMU_MOUSE_DESCRIPTOR_BYTES;
+    setup.length = interface->descriptor_bytes;
     break;
   case HID_CONFIGURATION:
     setup = (struct usb_setup){.request = USB_REQUEST_SET_CONFIGURATION,
@@ -340,8 +360,9 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   if (binding->stage != HID_CONFIGURATION) {
     while (binding->interface < USB_HID_ENDPOINTS_PER_DEVICE &&
            (!binding->interfaces[binding->interface].protocol ||
-            (binding->stage == HID_WHEEL_DESCRIPTOR &&
-             !binding->interfaces[binding->interface].qemu_wheel_candidate))) {
+            (binding->stage == HID_PROFILE_DESCRIPTOR &&
+             !binding->interfaces[binding->interface].qemu_wheel_candidate &&
+             !binding->interfaces[binding->interface].qemu_keyboard_candidate))) {
       ++binding->interface;
     }
     if (binding->interface == USB_HID_ENDPOINTS_PER_DEVICE) {
@@ -380,19 +401,30 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
   bool optional_stall = completion.result == USB_STALL &&
       ((binding->stage == HID_IDLE && interface->protocol == USB_PROTOCOL_MOUSE) ||
-       binding->stage == HID_WHEEL_DESCRIPTOR);
+       binding->stage == HID_PROFILE_DESCRIPTOR);
   if ((completion.result != USB_OK && !optional_stall) ||
       (!setup.length && completion.bytes)) {
     return bind_failed(binding, completion.result == USB_OK ? USB_IO : completion.result);
   }
-  if (binding->stage == HID_WHEEL_DESCRIPTOR) {
-    interface->qemu_wheel = completion.result == USB_OK &&
+  if (binding->stage == HID_PROFILE_DESCRIPTOR) {
+    interface->qemu_wheel = completion.result == USB_OK && interface->qemu_wheel_candidate &&
       completion.bytes == sizeof(qemu_mouse_descriptor) &&
       !memcmp(report, qemu_mouse_descriptor, sizeof(qemu_mouse_descriptor));
+    interface->qemu_keyboard = completion.result == USB_OK && interface->qemu_keyboard_candidate &&
+      completion.bytes == sizeof(qemu_keyboard_descriptor) &&
+      !memcmp(report, qemu_keyboard_descriptor, sizeof(qemu_keyboard_descriptor));
   } else if (binding->stage == HID_INITIAL) {
     if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
       bool unresolved;
-      if (!keyboard_snapshot(report, completion.bytes, binding->initial_keys, &unresolved) || unresolved) {
+      if (!keyboard_snapshot(report, completion.bytes, binding->initial_keys, &unresolved)) {
+        return bind_failed(binding, USB_IO);
+      }
+      /* QEMU consumes one scan byte per GET_REPORT, even an invisible prefix.
+       * Its 16-entry FIFO must be consumed before publishing a current snapshot. */
+      if (interface->qemu_keyboard && ++binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
+        return USB_BUSY;
+      }
+      if (unresolved) {
         return bind_failed(binding, USB_IO);
       }
     } else {
@@ -401,7 +433,18 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
         return bind_failed(binding, USB_IO);
       }
       binding->initial_buttons = report[0] & 7;
+      /* A nonzero QEMU motion report can leave its FIFO head partially consumed.
+       * Sixteen zero-motion observations drain every pre-existing queue entry. */
+      if (interface->qemu_wheel) {
+        if (!report[1] && !report[2] && !report[3]) {
+          ++binding->initial_observations;
+        }
+        if (binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
+          return USB_BUSY;
+        }
+      }
     }
+    binding->initial_observations = 0;
   }
   if (binding->stage == HID_CONFIGURATION) {
     next_stage(binding);
