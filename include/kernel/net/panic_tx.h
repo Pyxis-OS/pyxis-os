@@ -38,15 +38,19 @@ static inline bool net_panic_gate_enter(struct net_panic_gate *gate, unsigned op
   if (net_log_udp_panicking()) {
     return false;
   }
-  uint_fast64_t expected = atomic_load_explicit(&gate->state, memory_order_relaxed);
-  if (expected & (NET_PANIC_GATE_BUSY | NET_PANIC_GATE_FATAL | NET_PANIC_GATE_DEBUG)) {
+  uint_fast64_t expected = 0;
+  uint_fast64_t state = (uint64_t)net_panic_context_cpu() << NET_PANIC_CPU_SHIFT |
+      (uint64_t)operation << NET_PANIC_OPERATION_SHIFT | NET_PANIC_GATE_BUSY;
+  /* Keep the ordinary log-only successful path to its original single CAS. */
+  if (atomic_compare_exchange_strong_explicit(&gate->state, &expected, state,
+        memory_order_acquire, memory_order_relaxed)) {
+    return true;
+  }
+  if (expected != NET_PANIC_GATE_PIPELINE) {
     return false;
   }
-  uint_fast64_t state = (uint64_t)net_panic_context_cpu() << NET_PANIC_CPU_SHIFT |
-      (uint64_t)operation << NET_PANIC_OPERATION_SHIFT | NET_PANIC_GATE_BUSY |
-      (expected & NET_PANIC_GATE_PIPELINE);
-  return atomic_compare_exchange_strong_explicit(&gate->state, &expected, state,
-      memory_order_acquire, memory_order_relaxed);
+  return atomic_compare_exchange_strong_explicit(&gate->state, &expected,
+      state | NET_PANIC_GATE_PIPELINE, memory_order_acquire, memory_order_relaxed);
 }
 
 static inline void net_panic_gate_leave(struct net_panic_gate *gate)
