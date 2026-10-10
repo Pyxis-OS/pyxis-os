@@ -106,6 +106,9 @@ with Shift, Control or Alt also held. The Escape press, repeats and matching
 release are consumed even when Super is released first. The game remains
 running on its selected layer with keyboard capture intact. Focus/layer loss,
 device reset, subscription/display release and owner exit also revoke lock.
+While the Ctrl+Alt+Delete [power overlay](../wip/system-power-overlay.md) is
+shown, the active space's surfaces count as unfocused: opening it revokes lock
+the same way, and pointer input goes to the overlay until it closes.
 
 After such revocation, the space retains a fresh-activation requirement across
 new subscriptions, display sessions and processes. A fresh left press on its

@@ -1,7 +1,9 @@
 # System power overlay
 
-Status: **proposal, 2026-10-10. Not agreed; nothing here authorizes code.**
-Code inspected at `3c3f9cfe`.
+Status: **decisions accepted 2026-10-10; task 1 implemented in this PR, native
+check pending.** Code inspected at `3c3f9cfe`. The sections below describe the
+implemented behaviour; [qualification](../development/experiments/power-overlay/README.md)
+records the QEMU checks.
 
 Ctrl+Alt+Delete opens a full-screen system overlay offering **Shut down**,
 **Reboot** and **Cancel**, chosen by mouse click or keyboard. It works in any
@@ -32,11 +34,11 @@ lock, and no program can intercept or produce it.
   refusal unseals the pools, releases the tasks and returns the status; the
   system stays up.
 
-## Proposal
+## Behaviour
 
 ### The chord
 
-Delete pressed while Control and Alt are held is taken in
+Delete, or keypad Delete (keypad period), pressed while Control and Alt are held is taken in
 `handle_space_input_locked()`, beside Super+Escape and ahead of the volume,
 clipboard and navigation checks. Either Control and either Alt count, and
 extra Shift or Super does not prevent it. Like Super+Escape, the Delete press,
@@ -50,7 +52,8 @@ USB and Bluetooth keyboards as they arrive. Nothing else does. A future
 if it needs one, it gets its own action.
 
 The chord is taken in every tab, including Caelum's, and while the overlay is
-open a second chord does nothing.
+open a second chord does nothing. Before presentation has started, or without
+a display, the chord is consumed and ignored.
 
 ### Drawing and authority
 
@@ -81,22 +84,30 @@ system-wide surface layer and a helper that is always alive.
   Space activates, Escape cancels. **Cancel is selected when it opens.**
   Keys used in the overlay are consumed until their release, as in the
   volume popup.
-- **Pointer:** opening revokes relative lock exactly as Super+Escape does,
-  so the system cursor appears. A click on a button activates it; other
-  clicks are consumed. Hover highlights.
-- **While open:** Super+arrows, the volume chords and clipboard actions are
-  ignored. An open volume popup closes. Resize redraws the overlay at the
-  new size; it does not close it.
+- **Pointer:** while the overlay is shown, the active space's graphics and
+  terminal pointer surfaces count as unfocused. Opening therefore revokes
+  relative lock with the same fresh-activation requirement as Super+Escape,
+  ends drags and sends LEAVE, and the default arrow appears. A click on a
+  button activates it; other clicks are consumed. Hover outlines a button.
+- **While open:** Super+arrows, Super+Escape, the volume chords and clipboard
+  actions are ignored. An open volume popup closes. A display resize waits
+  until the overlay closes, because applying one takes the output lock (see
+  [emergency coverage](#emergency-coverage)).
 
 ### Shut down and Reboot
 
-The chosen button issues the same power request as the power button, run by
-the ACPI worker. The overlay then shows what happens:
-- "Flushing pools; shutting down" (or "restarting") while the worker runs;
+The chosen button calls `acpi_power_local()`, which hands the operation to
+the ACPI worker with the power button's authority; the worker runs the same
+[power-off sequence](../kernel/acpi.md#power-off-and-restart). The overlay then
+shows what happens:
+- "Shutting down: flushing pools..." (or "Restarting: ...") while the worker
+  runs, with the buttons disabled; Escape does nothing then, because programs
+  are already held;
 - on failure, "Shutdown failed (status N); the system stays up." with Cancel
   selected, so the user can retry or return;
-- "Another power operation is running" for BUSY, and "Power control is
-  unavailable" when there is no ACPI worker (no RSDP or a failed namespace).
+- "Another power operation is running." for BUSY, and "Power control is
+  unavailable on this machine." when there is no ACPI worker (no RSDP or a
+  failed namespace).
 
 No new kernel log line: the worker's existing `power:` lines record the
 operation.
@@ -121,11 +132,42 @@ restored:** the space needs a fresh activation click, as after Super+Escape.
   holding off power operations while the installer writes is the existing
   [Battery-aware Update](later-os-directions.md#power-and-acpi) follow-up.
 
+### Emergency coverage
+
+The overlay is meant to work when something else has stopped working.
+- **Covered:** wedged programs. The chord is read by the kernel before any
+  program, and overlay frames are composed from the overlay alone: not from
+  the active space's frame or TTY, the bar or the battery reading, without the
+  global output lock and without allocating. A program that spins, floods its
+  console, or holds keyboard capture and display and never reads or submits
+  again cannot delay it. The [qualification](../development/experiments/power-overlay/README.md)
+  measured this on one CPU.
+- **Covered:** the power operation itself. User tasks are held during the
+  flush, but the overlay is kernel work and keeps drawing, so progress and
+  failure stay visible.
+- **Not covered: a stuck presenter.** The presenter task reads the keyboard
+  between frames. If it never returns to that loop, the chord is not read.
+  Examples are a CPU holding the global output lock forever (ordinary TTY
+  composition waits for it), the BSP stuck with interrupts disabled, or a
+  kernel fault. Opening the overlay during a terminal selection drag also
+  takes the output lock once, to end the drag.
+- **Not covered: a display that stops completing frames.** Nothing can be
+  drawn; the drivers' existing timeouts mark the display unavailable.
+- **Not covered: a stuck ACPI worker or flush.** The overlay keeps showing
+  "flushing pools" without a time limit.
+
+In those cases, a short press of the power button asks the ACPI worker
+directly, independently of the presenter and the keyboard, and holding it
+forces power-off without flushing.
+
 ### Debugger and panic
 
-- **Panic** disables interrupts and halts. No key is read, so the chord does
-  nothing; the last presented frame stays, and panic output still goes to
-  serial, UDP and the log ring. Only the firmware's forced power-off works.
+- **Panic** disables interrupts and halts, or with the network debugger
+  enabled stops in the debugger for good. No key is read, so the chord does
+  nothing. Panic text is written directly to the screen where the display
+  allows it, over the overlay if it was shown (VirtIO stays serial-only), and
+  also goes to serial, UDP and the log ring. Only the firmware's forced
+  power-off works.
 - **A stopped kernel debugger** (the
   [network debugger](network-debugger.md)'s all-stop, or QEMU's stub) reads no
   input. Keys pressed while stopped may be processed after resume, opening the
@@ -133,44 +175,39 @@ restored:** the space needs a fresh activation click, as after Super+Escape.
   unchanged. The overlay draws only on the BSP in normal operation, never
   from a stopped context.
 
-## Owner decisions
+## Accepted decisions
+
+Accepted by the owner on 2026-10-10:
 
 1. **Authority and drawing:** the kernel draws the overlay and requests power
-   with physical-access authority, like the power button. *Default: yes.*
-   Alternative: a trusted helper holding `power`, after Continuum.
+   with physical-access authority, like the power button. A trusted helper
+   holding `power` was not chosen.
 2. **Availability:** the overlay is always available from local keyboards,
-   whatever spaces have `power = true`. A boot-configuration switch to
+   whatever spaces have `power = true`. It is an **emergency screen**: it must
+   keep working when a space or the presenter is wedged where that is
+   achievable, and its limits are stated. A boot-configuration switch to
    disable it comes only with a profile that needs one, such as a future
-   public server. *Default: always on.*
-   Alternative: offer Shut down and Reboot only when some local space has
-   `power = true`.
+   public server.
 3. **Cancel and lock:** Cancel returns focus and keeps capture but does not
    restore relative lock; the program needs a fresh click, as after
-   Super+Escape. *Default: no restore.* Alternative: the kernel restores the
-   lock the overlay revoked.
+   Super+Escape.
 
-## First task
+## Tasks
 
-One focused PR implementing the proposal above as accepted:
-- the chord in `kernel/space.c`;
-- a kernel overlay beside `kernel/volume_ui.c`, drawn at presentation time
-  over the whole display, with keyboard and pointer handling;
-- a power request from the overlay through the ACPI worker, with its status
-  returned to the overlay.
-
-**Validation:** QEMU with standard VGA and VirtIO (hardware cursor), one and
-four CPUs: open the overlay over the shell, a mux pane and Quake with lock
-held; Cancel by Escape and by click; Shut down and Reboot from a live image and
-from an installed disk image, checking the pool's journal afterwards. Then
-check the failure display with a throwaway, unmerged forced flush failure.
-Native steps on the ThinkPad for the owner.
-
-**After this task the owner can** press Ctrl+Alt+Delete in any tab, even in a
-game with mouse lock, and shut down, reboot or return with a click or the
-keyboard.
+1. [x] **The overlay.** The chord in `kernel/space.c`, the overlay in
+   `kernel/ui/power_overlay.c` composed by the presenter, pointer routing in
+   `kernel/pointer.c`, and `acpi_power_local()` in the ACPI worker. Checked in
+   QEMU on both display drivers, one and four CPUs, live and installed; the
+   [qualification](../development/experiments/power-overlay/README.md) lists the
+   checks and the owner's native steps. **After this task the owner can**
+   press Ctrl+Alt+Delete in any tab, even in a game with mouse lock, and shut
+   down, reboot or return with a click or the keyboard.
 
 ## Later
 
+- Bounded output-lock waits in the presenter, so a stuck writer drops frames
+  instead of stopping input. This changes ordinary presentation and needs a
+  decision first.
 - A live-image warning that RAM volumes are lost.
 - Holding off power operations while the installer writes.
 - Other entries (lock screen, switch space) only with users and sessions.

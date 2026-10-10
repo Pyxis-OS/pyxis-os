@@ -37,6 +37,16 @@ struct acpi_power_request {
  * runs it completes with BUSY. */
 void acpi_power_forward(struct acpi_power_request *request);
 
+/* BSP, IF=0. A power operation chosen at a local keyboard, with the power
+ * button's physical-access authority. Returns UNAVAILABLE without a running
+ * worker and BUSY while another operation is pending or running; otherwise
+ * OK, and the worker runs it. Success never returns. */
+enum call_status acpi_power_local(enum acpi_power_action action);
+
+/* BSP, IF=0. True once a local operation has failed and the system stayed
+ * up, with its status; each failure is reported once. */
+bool acpi_power_local_failed(enum call_status *status);
+
 /* The batteries' combined charge, polled every few seconds. Without a battery,
  * or before the first reading, present is false. */
 struct acpi_battery_status {

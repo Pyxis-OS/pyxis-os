@@ -47,6 +47,10 @@ static uint64_t sci_rearm_at;
 static size_t unclaimed_scis;
 /* Set by the power button's fixed event, which runs in SCI service. */
 static bool button_pressed;
+/* A local power operation from acpi_power_local(), pending until it fails. */
+static bool local_pending, local_failed;
+static enum acpi_power_action local_action;
+static enum call_status local_status;
 static char worker_identity;
 
 /* Bootstrap only, then read by the worker. */
@@ -96,7 +100,7 @@ static void wake_worker(void)
 void acpi_power_forward(struct acpi_power_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!ready || power_request || power_running) {
+  if (!ready || power_request || power_running || local_pending) {
     request->status = ready ? CALL_BUSY : CALL_UNAVAILABLE;
     bsp_request_complete(&request->request);
     return;
@@ -104,6 +108,33 @@ void acpi_power_forward(struct acpi_power_request *request)
   power_request = request;
   power_started = false;
   wake_worker();
+}
+
+enum call_status acpi_power_local(enum acpi_power_action action)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!ready) {
+    return CALL_UNAVAILABLE;
+  }
+  if (power_request || power_running || local_pending) {
+    return CALL_BUSY;
+  }
+  local_pending = true;
+  local_failed = false;
+  local_action = action;
+  wake_worker();
+  return CALL_OK;
+}
+
+bool acpi_power_local_failed(enum call_status *status)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!local_failed) {
+    return false;
+  }
+  local_failed = false;
+  *status = local_status;
+  return true;
 }
 
 void acpi_interrupt(void)
@@ -158,7 +189,8 @@ static void sleep_for_events(uint64_t deadline, bool work_wakes)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  bool power = (power_request && !power_started) || button_pressed;
+  bool power = (power_request && !power_started) || button_pressed ||
+      (local_pending && !power_running);
   if (!sci_pending && !(work_wakes && (work_head || power))) {
     struct task_wait *wait = task_wait_prepare();
     worker_wait = wait;
@@ -358,6 +390,30 @@ static void run_power_request(void)
   cpu_restore_interrupts(flags);
 }
 
+/* Top level only. Like a press, a local operation needs no capability; it
+ * returns only when the operation failed. */
+static void run_local_request(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool pending = local_pending;
+  enum acpi_power_action action = local_action;
+  if (pending) {
+    power_running = true;
+  }
+  cpu_restore_interrupts(flags);
+  if (!pending) {
+    return;
+  }
+
+  enum call_status status = run_power(action);
+  flags = cpu_save_interrupts();
+  power_running = false;
+  local_pending = false;
+  local_status = status;
+  local_failed = true;
+  cpu_restore_interrupts(flags);
+}
+
 /* SCI service, IF=0. The press itself needs no authority (decision 16); the
  * worker runs the same power-off as a request. */
 static uacpi_interrupt_ret power_button(uacpi_handle context)
@@ -419,6 +475,7 @@ static void acpi_worker(void *argument)
     service_sci();
     run_work();
     run_power_request();
+    run_local_request();
     run_button_press();
     uint64_t now = arch_monotonic_ns();
     uint64_t sci_due = rearm_sci(now);

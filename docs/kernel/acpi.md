@@ -199,6 +199,13 @@ press's power-off runs completes with BUSY. If that power-off fails, the system
 stays up and the next press tries again. Only the fixed-feature power button is
 supported; a control-method button (`PNP0C0C` sending `Notify` 0x80) is not.
 
+The Ctrl+Alt+Delete [power overlay](../wip/system-power-overlay.md) has the same
+physical-access authority. `acpi_power_local()` hands its power-off or restart
+to the worker, which runs it like a press and records a failure's status for
+the overlay to collect; it returns BUSY while another operation is pending or
+running, and UNAVAILABLE without a worker. A request or press arriving during
+it is answered as during a press's power-off. It adds no log line of its own.
+
 A call travels as the `BSP_SERVICE_POWER` request: the executor forwards it to
 the ACPI worker, which runs one power operation at a time. A second request
 while one runs completes with BUSY; without a running ACPI worker, because
