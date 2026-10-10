@@ -27,6 +27,7 @@ void fs_metadata_touch(struct fs_metadata *metadata)
 
 bool fs_metadata_create(struct fs_metadata *metadata, bool archive)
 {
+  *metadata = (struct fs_metadata){0};
   uint64_t *domain = archive ? &archive_domain : &ram_domain;
   if ((!*domain && !fs_metadata_allocate_id(domain)) ||
       !fs_metadata_allocate_id(&metadata->object)) {
