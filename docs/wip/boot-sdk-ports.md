@@ -121,9 +121,9 @@ Chosen by the owner, each starting with a proposal:
 - **Codex alpha** (2026-10-10): [shell reverse history search](../userland/shell.md#commands-and-quoting),
   owner-assigned Ctrl+R in the shared line editor. [Renoir cursor task 2](renoir-hardware-cursor.md)
   waits for the owner's Fedora evidence; whole-frame skipping is merged.
-- **Codex** (2026-10-10): [Neovim task 6 slice 4](neovim-groundwork.md#slice-4-contract-accepted-2026-10-10),
-  native editor recipe, TUI and runtime, with QEMU tab/pane qualification; review
-  before merge. Native qualification and the extended terminal profile follow.
+- **Codex** (2026-10-10): [ThinkPad pointer input quality](pointer-input-quality.md),
+  accepted USB report mice and Synaptics absolute mode/palm-rejection plan;
+  natural defaults for both sources. Implementation tasks need a separate go.
 - **Codex delta** (2026-10-10): [threads task 3](threads.md#shared-capability-and-vm-ownership),
   owner-assigned shared-table delivery, growth, reservations and owned inputs;
   still one user task. Tasks 1–2 are merged; later gates need separate assignment.

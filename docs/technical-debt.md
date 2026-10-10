@@ -385,6 +385,14 @@ button and loss rules. Bluetooth input, acceleration, absolute-mode scrolling,
 remote pointer transport and multiple-display composition remain separate work.
 Revisit each when a concrete consumer or native device needs it.
 
+## Pointer gestures and alternative transports
+
+The pointer has no pinch, swipe/rotation, momentum or explicit touch-contact API.
+The [pointer quality proposal](wip/pointer-input-quality.md) keeps these separate,
+with tapping off and no new I2C-HID/RMI4 transport. Revisit gesture/contact work
+for a concrete consumer, or another transport if native PS/2 capabilities cannot
+meet the palm/two-finger contract. USB gamepads/Deck mode switching remain later work.
+
 ## VirtIO cursor frontend limits
 
 The owner accepted [GTK on X11, relative PS/2 and unscaled 1:1 committed guest geometry](development/qemu.md#hardware-pointer-frontend)
@@ -1566,7 +1574,7 @@ hardware is available, keeping trust claims separate from the health and RFC che
 The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
 packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
 would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
-revisit Synaptics absolute mode for gestures or scrolling. [USB boot mice](devices/usb-hid.md) are independent sources; unknown native wheel extensions remain undecoded
+the [pointer quality proposal](wip/pointer-input-quality.md) considers absolute-mode palm rejection and scrolling; no code is authorized yet. [USB boot mice](devices/usb-hid.md) are independent sources; unknown native wheel extensions remain undecoded
 until their report layout is established. Doom has no mouse support.
 
 ## Lua build runtime limits
