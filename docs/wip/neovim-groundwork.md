@@ -1,6 +1,6 @@
 # Neovim task 6 groundwork
 
-**Inventory and proposal only, 2026-10-10. No implementation decisions accepted.**
+**Owner accepted the three defaults on 2026-10-10; implementation is unassigned.**
 This splits [task 6](neovim-libuv.md#tasks); task 5's Lua/luv delivery remains a
 prerequisite. The shared libc work also serves [hosted Clang](hosted-clang.md)
 and [Git](git-on-pyxis.md). Existing first-slice exclusions remain in force.
@@ -88,13 +88,12 @@ These are **source-inspected**, not target runtime failures:
   adaptation. Pool, async filesystem, watches, sockets, modules, jobs and PTYs
   retain their existing exclusion, not fake successful handles.
 
-## Three owner decisions, pending
+## Accepted contract (owner, 2026-10-10)
 
-1. **Working path — default: one mutable libc context backed by retained native
+1. **Working path: one mutable libc context backed by retained native
    directory capabilities**, shared by all libc path functions and libuv.
-   Alternative: leave libc startup-only and require explicit contexts in each
-   port, duplicating adaptation for Neovim/Clang/Git. Default gives `:cd`, `:lcd`
-   and `:tcd` a real process-working-path operation without a kernel cwd.
+   `:cd`, `:lcd` and `:tcd` use a real process-working-path operation without
+   a kernel cwd.
    Preallocate the new chain and descriptive path, perform `path_change`, then
    publish atomically; failure preserves the previous state/rights. `getcwd`
    returns the tracked normalized `scheme://` description, not reconstructed
@@ -102,17 +101,15 @@ These are **source-inspected**, not target runtime failures:
    scheme change establishes it; external rename can leave that description
    stale while held capabilities remain valid. Do not make `PWD` authoritative.
    Children receive a snapshot of the current chain/path; an explicit child cwd
-   is resolved in a separate temporary context. For `realpath`, propose a
-   bounded native profile: prove the target exists through capability lookup,
+   is resolved in a separate temporary context. The bounded `realpath`
+   profile must prove the target exists through capability lookup,
    re-resolve the candidate scheme spelling and compare valid live identity
    with the held original target before returning it. Refuse providers,
    unavailable identity and stale/unknown ancestry; aliases are not collapsed.
    Neovim's cwd-text fallback after failed realpath needs the same distinction:
    a descriptive name must not be treated as proved canonical resolution.
 
-2. **Environment — default: copied mutable libc store with explicit child
-   snapshots.** Alternative: retain immutable startup variables and refuse
-   mutations, which breaks editor configuration and common Clang/Git uses.
+2. **Environment: copied mutable libc store with explicit child snapshots.**
    `getenv`/`setenv`/`unsetenv` share one store seeded from startup; names are
    case-sensitive, nonempty and exclude `=`; empty values differ from absence.
    Allocation failure leaves state unchanged, `overwrite` is honored, and an
@@ -123,10 +120,9 @@ These are **source-inspected**, not target runtime failures:
    replaces it, including an empty one. Startup accessors stay immutable.
    Libuv and each port must use these helpers rather than the original block.
 
-3. **Shared library closure — default: bounded real userland libc extensions,
-   including the existing pinned musl subset; alternative: broader GNU libiconv
-   1.17 plus a larger hosted compatibility profile.** No kernel POSIX layer.
-   Proposed contracts for the bounded route:
+3. **Shared library closure: bounded real userland libc extensions, including
+   the existing pinned musl subset.** No kernel POSIX layer. Contracts:
+
    - `fdopen` validates mode and allocates before taking ownership; failure
      leaves the descriptor with its caller, successful `fclose` closes it.
      Preserve position/read-ahead; `w` does not truncate. Retain one FILE per
@@ -136,23 +132,20 @@ These are **source-inspected**, not target runtime failures:
      object; `freopen` and buffering follow as separate small libc steps.
    - `mktime` normalizes calendar fields and inverts the selected real TZif zone
      using the pinned calendar arithmetic. UTC only when `TZ` is absent/empty;
-     missing/invalid zones fail as current localtime does. Proposed bounded DST
-     rule: `tm_isdst` may select a unique fold candidate; ambiguous input without
-     a unique selection and nonexistent gap times fail ENOTSUP as a stated
-     profile restriction, not as overflow. Overflow and
-     failure preserve the input `tm`; success updates it. Automatic fold/gap
-     normalization would be a broader alternative requiring a separately audited
-     inverse-zone algorithm. Mutable `TZ` follows the current lazy reload and
-     borrowed-zone-name lifetime; no system timezone configuration is added.
+     missing/invalid zones fail as current localtime does. The bounded DST
+     rule is: `tm_isdst` may select a unique fold candidate; ambiguous input
+     without a unique selection and nonexistent gap times fail ENOTSUP as a stated
+     profile restriction, not as overflow. Overflow and failure preserve the
+     input `tm`; success updates it. Mutable `TZ` follows the current lazy reload
+     and borrowed-zone-name lifetime; no system timezone configuration is added.
    - `iconv` imports audited conversion routines/tables from the existing musl
      1.2.5 pin (`0784374d`), preserving notices. Initial repertoire: UTF-8,
      ASCII, ISO-8859-1 and explicit-endian UTF-16LE/BE; other names fail EINVAL.
      Implement streaming pointer/count updates, reset, E2BIG, incomplete EINVAL
      and invalid-sequence EILSEQ. Valid characters unrepresentable in the
      destination also fail EILSEQ; audit/adapt upstream substitution behavior.
-     No byte-copy substitute, transliteration,
-     locale-based encoding choice or dynamic converter plugins. The GNU probe
-     establishes build gaps, not approval to import its full library. Recheck
+     No byte-copy substitute, transliteration, locale-based encoding choice
+     or dynamic converter plugins. The GNU probe establishes build gaps, not approval to import its full library. Recheck
      Neovim/Git conversion-name usage against this repertoire before delivery.
 
 ## Highlighted C in the first slice
@@ -187,10 +180,19 @@ separate work.
 
 ## Proposed delivery slices
 
-After owner decisions and separate implementation assignments: shared working
-path/explicit environment; stdio/descriptor association; calendar/encoding and
+After separate implementation assignments: shared working path/explicit
+environment; stdio/descriptor association; calendar/encoding and
 remaining numeric/string closure; Neovim native platform/TUI/runtime recipe;
 then the full target link and manual tab/pane qualification. Re-run against task
 5's actual libraries, with no placeholders, before claiming editor delivery.
 Keep save durability/identity validity, child pipe authority, unsupported features
 and cleanup in that qualification. No task 6 implementation starts in this PR.
+
+## Later work
+
+**Queued owner direction, 2026-10-10; not assigned:** grow SGR in both the kernel
+TTY and mux panes: underline for diagnostics, bold and italic as the font allows,
+and a 256-colour palette. Entries 0–15 come from the active scheme (the owner
+uses Aardvark from the terminal colour-scheme collection); 16–255 use the standard
+colour cube and greys. Once implemented, the Neovim profile can advertise these
+capabilities. True colour requires a separate owner decision.

@@ -92,10 +92,11 @@ without Neovim.
    first full build lists the missing functions, in particular `chdir`,
    `getcwd`, `setenv`, `mktime`, `fdopen` and `iconv`, each needing its own
    decision on native objects. The [task 6 groundwork](neovim-groundwork.md)
-   records the current-SDK build inventory and pending shared-libc designs;
+   records the current-SDK build inventory and shared-libc contract accepted
+   by the owner on 2026-10-10;
    the groundwork probe is recorded, editor implementation and qualification remain open.
    - [x] Current-SDK probe inventory and native-design proposal.
-   - [ ] Shared-library closure, recipe and full editor qualification after decisions.
+   - [ ] Shared-library closure, recipe and full editor qualification after assignment.
 
 Later, each with its own proposal: swap and backup recovery (needs task 2 and a
 lease policy), jobs and `system()` (extra stream delegation and group stop),
