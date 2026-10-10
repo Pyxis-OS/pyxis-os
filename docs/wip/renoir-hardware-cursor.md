@@ -1,6 +1,6 @@
 # Renoir hardware cursor
 
-**Design accepted 2026-10-10. Task 1 authorized; probe implemented, native evidence pending.**
+**Design accepted 2026-10-10. Task 1 complete; native software baseline recorded.**
 The owner merged #665 and assigned the read-only inventory/software baseline.
 Hardware cursor support remains unimplemented; tasks 2–3 need separate go-aheads.
 Scaled game planes remain a separate later decision. This proposal builds on the [Renoir flip backend](../kernel/renoir-flip.md),
@@ -22,7 +22,8 @@ remove pointer pixels from ordinary base-frame composition and service changed
 cursor state independently, including between pending-flip input drains. It
 must add no base compose, copy or flip for cursor-only movement. This does not
 promise to eliminate the existing periodic full-frame cadence; content-driven
-frame scheduling would be a separate task. No new cost measurement is claimed.
+frame scheduling would be a separate task. The task-1 native record measures the existing software baseline; no hardware
+cursor improvement is claimed.
 
 ## Linux sequence and accepted write set
 
@@ -189,17 +190,19 @@ on 2026-10-10. Tasks 2–3 still require separate assignments.
 
 ## Tasks and owner outcomes
 
-- [ ] **1. Read-only cursor prerequisites and baseline.** Authorized 2026-10-10.
-  `DISPLAY_CURSOR_PROBE=1` implements the bounded register/clock inventory and
-  software motion/frame/copy counters, without cursor allocation or new GPU
-  writes. The [record and one-boot native steps](../development/experiments/renoir-cursor-inventory/README.md)
-  distinguish source/QEMU checks from pending native inventory and idle/motion
-  measurements. Linux's setters do not prove transaction-correlated cursor
-  latch/disable/old-fetch retirement from the observed status fields; that gap
-  blocks task 2's writes until resolved. **What the owner can do after this task:**
-  run one Luna-staged probe boot, obtain the current software control costs and
-  review cursor prerequisites before assigning the bounded backend. Task 1's
-  native record/closure checkbox remains open until those results arrive.
+- [x] **1. Read-only cursor prerequisites and baseline.** Authorized and completed
+  2026-10-10. `DISPLAY_CURSOR_PROBE=1` implements the bounded register/clock
+  inventory and software counters, without cursor allocation or new GPU writes.
+  The [native record](../development/experiments/renoir-cursor-inventory/README.md#native-result--2026-10-10)
+  contains the owner-run ThinkPad evidence at `d81c731a`: stable disabled cursors,
+  checked UMA candidate, and two interior motion/idle pairs at 59.52 frames/s.
+  Idle still composes/copies every frame at 1.188–1.228/0.940–0.953 ms per frame.
+  Linux's setters and idle native bits do not prove transaction-correlated cursor
+  latch/disable/old-fetch retirement; that gap blocks task 2's writes.
+  **What the owner can do after this task:** compare future work against the
+  measured software control and review the remaining cursor prerequisites.
+  The owner queued whole-frame skipping before cursor task 2; it is a separate
+  presenter task, with decisions required before implementation.
 - [ ] **2. Bounded cursor backend and presenter integration.** Separately assigned:
   implement the accepted allowlist, owned images, independent updates,
   lock/hidden behavior, capture and proven fallback transitions; vendor only the
@@ -218,6 +221,6 @@ on 2026-10-10. Tasks 2–3 still require separate assignments.
   outcome:** a measured cursor-cost result and qualified scope, with remaining
   limits in debt and implemented behavior in the display/flip references.
 
-No native cursor baseline or hardware-cursor writes/qualification have yet
-been performed for this track. No SDL2/pointer ABI, input-device track or scaled-plane work
+The native software baseline is recorded; hardware-cursor writes and
+qualification have not been performed for this track. No SDL2/pointer ABI, input-device track or scaled-plane work
 is included.

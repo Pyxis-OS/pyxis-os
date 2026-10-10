@@ -1,8 +1,8 @@
 # Renoir cursor inventory and software baseline
 
 Task 1 of the [accepted cursor track](../../../wip/renoir-hardware-cursor.md),
-2026-10-10. Read-only inventory and optional software counters are implemented;
-native register evidence and motion costs await one owner-run boot. No cursor
+2026-10-10. Read-only inventory, optional software counters and the owner-run native
+software baseline are complete. Hardware cursor support remains unimplemented. No cursor
 writes, cursor backing allocation or new GPU write allowlist is implemented.
 Existing opt-in flips still perform their qualified writes.
 
@@ -46,9 +46,9 @@ Numeric ATOM dce_info v4.1–4.3 crystal metadata is copied from the validated V
 image before paging, with bounded table reads. No raw BIOS, EDID, serial or MAC
 is logged. REFCLK, global hub timer and every DTO control/phase/modulo are read;
 Linux's DCHUB reference arithmetic is labelled a candidate, not clock authority.
-Pixel source/reference provenance and cursor power/address-domain interpretation
-remain unqualified until the native values are assessed. Nothing programs clocks
-or powers up a cursor block.
+Native reference-clock metadata supports the 48 MHz DCHUB candidate below;
+pixel source/reference provenance and cursor power-state semantics still need
+proof before cursor programming. Nothing programs clocks or powers up a cursor block.
 
 The 64 KiB storage candidate is recomputed after the owned spare extent using
 the same memory-policy checks as scanout preparation, including reserved boot/EFI
@@ -135,34 +135,83 @@ firmware/Bochs. VirtIO retains its separate cursor state; its QMP framebuffer
 dump is not a visual check of that hardware cursor. QEMU has no DCN: it
 cannot check the native register, clock, cursor-power or memory evidence.
 
-## One native boot — Luna stages, owner moves the pointer
+## Native result — 2026-10-10
 
-1. Ask the orchestrator to have Luna stage the set (or exact-head rebuild) as a
-   temporary **Cursor inventory + software baseline** entry cloned from
-   **Flip: on + metrics**. Preserve rollback and record kernel/initrd hashes.
-   Its normal command line must include `display.flip=1 display.flip.metrics=1
-   display.cursor.probe=1 display.timing=off log.udp=1`; LOG_LEVEL is info.
-   Alpha does not stage PXE. Reboot once remotely; horse's UDP collector retains
-   the startup dump. Keep the ThinkPad on AC and the existing 1920x1080 GOP mode.
-2. Require the existing prepared HUBP/two-surface summary, a read-only cursor dump
-   and continuing `backend=flip` confirmations. If preparation refuses, a failure
-   occurs or timeouts appear, retain the masked log; do not call it a successful
-   flip-mode baseline. The cursor remains software in every case.
-3. Select the local Development terminal prompt, keeping klog output offscreen.
-   Use the PS/2 touchpad/TrackPoint, leaving other pointers idle. Wait ten seconds,
-   then use a host timer for **30s idle, 30s continuous motion, 30s idle, 30s motion**.
-   Keep the pointer inside the same terminal body; no clicks, selection, wheel,
-   edge clamping or space changes during these windows. Record the host UTC
-   boundaries; sampling is about every 120 frames, so use interior complete
-   metric intervals and retain that boundary uncertainty. Check the software
-   I-beam follows motion and input/tearing behavior remains the usual flip path.
-4. Retain paired cumulative cursor/display/flip metric lines at each boundary.
-   Report repeated idle/motion ranges for frame/copy/confirmation rate, routed
-   motion and screen moves, changed-position frames, compositions per move and
-   mean elapsed compose/copy cost from interval differences. Preserve wait,
-   validation, timeout and FAILED output. This becomes the task 2 control;
-   do not combine the four windows into one average or claim hardware improvement.
-5. Send the masked log location, exact revisions/hashes, window boundaries and
-   owner observations. Do not send raw EDID/BIOS/serial data. The inventory report
-   will assess actual cursor/clock/storage evidence and append the software
-   measurements; native results are currently pending.
+Owner-run ThinkPad on AC, 1920x1080 GOP, PS/2 touchpad/TrackPoint, Development
+terminal prompt. Luna built PR head `d81c731a8f8d60490efb09eb7fe68c0de5ddbe6b`
+with the make flags above. PXE **Cursor inventory** used
+`display.flip=1 display.flip.metrics=1 display.cursor.probe=1 display.timing=off
+ log.udp=1`, LOG_LEVEL=info. Luna's kernel/initrd hashes were not supplied;
+the local artifact hashes are not hashes of this native build. The masked
+650-line log remains at `/shared/present/batch2/cursor-670.log`, not in Git.
+
+After a ten-second wait, the owner used **motion, idle, motion, idle**, about
+30 seconds each, rather than the requested idle-first order. No clicks or space
+changes. Host note places the first window at approximately 12:01:17 UTC;
+the log has no timestamps. Moved-frame deltas place motion near frames
+1080–2880 and 4680–6480. These complete interior windows exclude transitions.
+Every window spans 1560 frames in 26.208–26.209 seconds; differences of cumulative
+counters, not whole-boot means, give:
+
+| Window, sample endpoints | Screen moves | Changed-position frames | Compose mean/frame | Copy mean/frame | Compositions/move |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Motion 1200–2760 | 2109 | 1547 | 1.199 ms | 0.954 ms | 0.740 |
+| Idle 3000–4560 | 0 | 0 | 1.228 ms | 0.953 ms | unavailable |
+| Motion 4800–6360 | 2091 | 1542 | 1.218 ms | 0.954 ms | 0.746 |
+| Idle 6600–8160 | 0 | 0 | 1.188 ms | 0.940 ms | unavailable |
+
+All four windows have **1560 compositions, 1560 CPU scanout copies and 1560
+confirmed flips**, at 59.52 frames/s; motion reports equal screen moves.
+Motion coalesces into rendered snapshots. Idle still pays 2.128–2.181 ms/frame
+of composition plus copy. The periodic presenter recomposes independently of
+pointer activity; this is not a measurement of marginal work caused by a report.
+The owner's queued whole-frame-skipping task addresses that separate cost before
+hardware cursor task 2. Wall spans include preemption and opt-in metrics overhead.
+
+Throughout, backend=flip, timeouts=0, front=`0xf400000000`, with no FAILED line.
+The final available sample is **8160**, beyond the owner's 7680 checkpoint:
+8160 submitted/confirmed/compositions/copies, 4861 motion reports/screen moves,
+3576 moved frames; cumulative compose mean 1.219 ms, copy mean 0.954 ms.
+Flip wait mean/max is 12.092/16.733 ms, validation mean/max 362.737/6442.701 µs,
+light-read mean/max 7.230/251.111 µs. Existing reported poll/BSP observation costs
+are 0.815/1.136 ms per confirmed frame; they remain separate from compose/copy.
+
+### What the inventory establishes
+
+Two samples confirm the mono route **OTG0 ← OPP0 ← MPCC0 ← DPP0/HUBP0**.
+Every HUBP cursor has enable=0, address=0, size=0, position/hotspot=0; inherited
+control is `0x01000000`, TMZ/snoop/system fields zero. DPP cursor control is
+`0x84` on all instances: enable=0, mode=0, pixel inversion and alpha modulation
+bits set, update-pending clear. No firmware cursor image is configured in these
+snapshots. The selected MPC pending/taken/ACK, DPP pending and OPP lock are zero;
+OTG cursor pending/taken are clear. These are idle observations, not a completed
+cursor transaction.
+
+Cursor memory power control is `0x20` on all instances: force=0, disable=0,
+LS_MODE=2. Power-state field is 1 on HUBP0 and 0 on HUBP1–3. The pinned masks
+identify fields, but do not establish their state enums or prove that enabling
+cursor fetch requires no power write. DPP clock-enable (bit 4) is set only for
+DPP0 (`0xf0000010`; others `0xf0000000`). Keep the raw distinction without
+interpreting other status bits as permission to change clocks or power.
+
+ATOM dce_info v4.3 supplies a 48 MHz crystal. REFCLK=0 and global timer=`0x1001`
+match Linux's 48 MHz DCHUB reference candidate. Active DTO control=`0x10`,
+phase=138700000, modulo=598875000; the phase agrees numerically with the Fedora
+138.700 MHz reference, but the source/reference and modulo relationship still
+need qualification. OTG totals are 2080×1111, blank 1108..28, VSTARTUP=13;
+Linux's VUPDATE candidate is 16..18. Two advancing position samples and idle
+keepout bits do not qualify the future cursor-write execution bound.
+
+The storage-policy candidate passed unchanged UMA exclusion checks:
+64 KiB at offset `0x10f0000`, CPU `0x8110f0000`, GPU `0xf4010f0000`, immediately
+after the owned spare's rounded extent. It was **not reserved, mapped or stored**.
+Disabled zero-address images remove an inherited configured image from this
+capture; they do not establish future image-slot retirement or latch semantics.
+
+**Task 1 outcome:** the owner now has the inherited configuration, a checked
+storage candidate and repeated software control windows. **Task 2 remains
+unassigned and blocked on transaction-correlated latch, disable and old-fetch
+retirement evidence**, plus the clock/power/keepout qualifications above. No
+native cursor write was performed, so this run cannot observe those transitions.
+A stable idle pending/taken/ACK value, register readback or guessed delay cannot
+justify image reuse, capture publication or software fallback after disable.
