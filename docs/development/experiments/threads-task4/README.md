@@ -46,3 +46,106 @@ Clock calibration: 32,185–37,541 ns/read across the IPC invocations. Nested-VM
 costs are not native performance. Raw captures in ignored
 `build/task4-baseline/{1,4}-A1`; VMs/clients stopped before implementation.
 Later comparison and native evidence will be recorded separately.
+
+## Implemented comparison
+
+Frozen B `9c556ae6` built ordinarily from source with the same compiler, config,
+SDK/userland/ports bundles and byte-identical initrd. ELF SHA-256
+`7076583e14b80194e1c51bf174e6cb6075c4722961ff32bc3dc160e6ae098771`, ISO
+`5f8e942f889b554a59d0f9342f8cd5c0cce57f232ed4c5b9c52ff9eb6ccefeb5`.
+Fresh boots, the same commands/configuration above, no debugger or build during
+timings: 1 CPU A2/B1/A3/B2; 4 CPU A1/B1/A2/B2. All 3,200 timed IPC passes
+verified, all 24 page runs had 800 allocations/releases and zero failures, all
+24 launch sessions reported 1,024 children, and all FINAL records were 0/complete.
+Eight IPC invocations sets also included an untimed pass per workload; eight
+launch warmups reported 16 children. Clock calibration 32,185–36,961 ns/read.
+
+Per-boot medians, milliseconds except launch seconds; the chronological columns
+are A/B/A/B. IPC has 100 samples per cell, pages and launch three:
+
+| 1 CPU | A2 | B1 | A3 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 complete | 84.182 | 83.967 | 83.862 | 84.090 |
+| CALL4096 complete | 84.262 | 84.233 | 83.794 | 84.370 |
+| SEND64 admit / complete | 1.184 / 13.009 | 1.199 / 12.997 | 1.176 / 12.911 | 1.207 / 13.071 |
+| SEND4096 admit / complete | 1.237 / 13.084 | 1.246 / 13.096 | 1.228 / 13.060 | 1.253 / 13.146 |
+| Pages | 66.361 | 184.172 | 64.920 | 184.128 |
+| 1024 launches, seconds | 4.39 | 3.13 | 4.12 | 3.15 |
+
+| 4 CPU | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 complete | 75.047 | 95.291 | 101.352 | 99.641 |
+| CALL4096 complete | 72.759 | 95.344 | 95.941 | 95.411 |
+| SEND64 admit / complete | 1.193 / 12.186 | 1.209 / 15.391 | 1.189 / 16.346 | 1.215 / 14.348 |
+| SEND4096 admit / complete | 1.257 / 11.944 | 1.272 / 15.553 | 1.252 / 16.002 | 1.276 / 14.604 |
+| Pages | 59.639 | 421.901 | 59.670 | 260.007 |
+| 1024 launches, seconds | 3.19 | 4.10 | 3.17 | 3.13 |
+
+Across the comparison, 1-CPU CALL ranged 83.244–91.475 ms and SEND completion
+12.726–18.574 ms; 4-CPU CALL 67.156–126.894 ms and SEND completion
+10.656–25.018 ms. SEND admission ranges overlap (1 CPU 1.164–2.231 ms,
+4 CPU 1.071–2.370 ms); B medians are slightly higher. Launch ranged 3.11–4.76 s.
+These shared-host results do not establish an IPC/launch regression or absence
+of native cost. Raw JSONL and decoded median/range data remain in ignored
+`build/task4-{baseline,after}`; no samples were filtered.
+
+Pages show a clear cost: A 64.876–70.956 / 58.519–59.723 ms versus B
+183.188–184.513 / 258.901–423.150 ms on 1/4 CPUs. MEMORY formerly mutated locally;
+each allocation/release now suspends its caller, departs the private root and
+makes a BSP request/reply round trip. A preliminary worker-only B `c06bc146`
+added a second handoff even when already drained (1 CPU 618.023–1344.957 ms,
+median 838.523). `4937b053` removes that unnecessary handoff: ready transactions
+execute directly in the BSP executor, preserving the same gate and final-copy
+ownership; unready ones remain asynchronously drainable. Preliminary artifacts
+and samples are retained in `build/task4-preliminary`. Remaining round-trip cost
+is inherent in the accepted BSP ownership here; native evidence is pending, and
+it must be assessed before concurrent entry. No allocator batching/API change.
+
+## Interactive inspection and limits
+
+QEMU's GDB, with matching ELF and injected calls disabled, inspected 1/4-CPU
+MEMORY: MUTATING on BSP/kernel CR3 with zero roots/borrowers; caller resumed in
+REPLY on its private CR3, exactly one root and no borrowers; final reply returned
+OPEN with no pending request or mutator. `9c556ae6` reconfirmed the ready path's
+`request_worker -> finish_mutation` stack on both CPU counts; the 4-CPU caller
+resumed on CPU1. Earlier `0e3305db` inspected the asynchronous worker path,
+request-reference cleanup before final copy and nested FILE leases (2 -> 1, IF=0).
+Normal allocbench and pipebench completed after debugger detach.
+
+On `0e3305db`, remote provider reads, pipe transfer, RAM create/read/rename/remove
+and capture/remove completed; missing-file status 1 reached the shell. With four
+CPUs, manual local `mousetest` in Development exercised DISPLAY ACQUIRE/RELEASE:
+BSP MUTATING with 0/0 counts, AP REPLY on its private root, normal Escape released
+the display and restored the prompt. Remote mousetest correctly lacked display
+authority. No fault injection, sibling tasks or new test infrastructure.
+
+Source audit covers late BAD_BUFFER, exact returned-generation unwind, scoped
+operation claims, queued-device cleanup and the bounded precommit BUSY path.
+Those races/timeouts are not measured with the retained single user task.
+Dynamic DISPLAY REPLACE, HOST/NPFS, disk, HCI and audio hardware remain unqualified
+in this run. Task 5 must qualify sibling entry, held-task/retirement races and
+these concurrent refusals. No public ABI or new kernel log lines.
+
+## Native hands-free comparison (pending)
+
+Use one matching initrd for A and B, fresh PXE boots A/B/A/B, bridge/client on
+horse. Four sessions, redirect each JSONL to a distinct file:
+
+```sh
+for mode in call send; do
+  for size in 64 4096; do
+    printf 'session bin://ipcbench.pxe %s --size %s --messages 256 --rounds 100\n' "$mode" "$size" |
+      pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323 >"$mode-$size.jsonl"
+  done
+done
+printf 'allocbench pages --size 65536 --live 8 --rounds 100\nexit\n' |
+  pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323 >pages.jsonl
+printf 'session bin://lua.pxe -e "for i=1,1024 do assert(pyxis.run{\047echo\047,\047-n\047}==0) end; print(\047launches=1024\047)"\n' |
+  pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323 >launch.jsonl
+```
+
+EOF drains a session successor; do not send `exit` to a session or sleep waiting
+for its output. Repeat pages/launch three times with separate output files;
+precede launches with the same command using 16 children. Time launch client wall
+time externally, as above, including discovery. Record exact kernel/ELF/initrd
+identities and complete FINAL status. Native results will be added separately.
