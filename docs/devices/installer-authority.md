@@ -32,8 +32,9 @@ for both. These assets are available through read-only `boot`.
 
 `init-install` opens `boot://installer.pxe` and creates the `install` space
 with it as the first process. It delegates only the disk service, the two
-source files, private memory, read-only clock and randomness, read-only `boot`
-and read-only SYSTEM_INFO. The kernel adds the space's own console, keyboard,
+source files, private memory, read-only clock and randomness, read-only `boot`,
+read-only SYSTEM_INFO and, when it holds `power`, that resource narrowed to the
+RESTART right for the [restart offer](../userland/installer.md#restart). The kernel adds the space's own console, keyboard,
 pointer, display and title grants and the standard streams. SYSTEM_INFO supplies
 the live kernel build revision for display and the installed ESP record.
 `init-install` drops the space factory, waits for the installer and reports its

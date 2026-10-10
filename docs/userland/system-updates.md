@@ -132,10 +132,11 @@ Success requires a disk flush, release of the partition claim without a GPT
 rescan, FAT directory traversal with byte-for-byte comparison against the boot
 sources, then a normal read-only reopen of partition 2's `system` root. The
 installer then recursively removes every `bin` revision directory except the
-new one and the one the disk booted until now; when that one is unknown, as after damaged
-boot files, it removes none. Cleanup is best effort: a failure reports a warning
-after the update has succeeded. The installer then reports `updated`. Remove
-the live medium and boot the target. Verification
+new one and the one the disk booted until now; when that one is unknown, as after
+damaged boot files, it removes none. Cleanup is best effort: a failure reports a
+warning after the update has succeeded. The installer then reports `updated` and
+[offers a restart](installer.md#restart). Remove the live medium and boot the
+target. Verification
 retains the pool until reboot, so a second update needs another live-media boot.
 The reopen establishes that the system root can be opened; it does not compare
 ordinary user files or replace whole-pool fsck.

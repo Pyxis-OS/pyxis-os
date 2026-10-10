@@ -231,7 +231,8 @@ boot init receives `disks`, `boot_kernel` and `boot_archive`.
 
 `init-install` is a boot init. It creates the `install` space with
 `boot://installer.pxe` as its first process, forwards its bounded installer
-resources and the read-only `boot://` root, drops the space factory and waits,
+resources, the read-only `boot://` root and `power` narrowed to restart only,
+drops the space factory and waits,
 then reports the installer's result on the Caelum tab. The installer implements
 the [interactive installation flow](installer.md). See
 [installer authority](../devices/installer-authority.md) for the source-file,
