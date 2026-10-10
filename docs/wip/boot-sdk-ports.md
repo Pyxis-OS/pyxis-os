@@ -17,6 +17,19 @@ status belong in the milestone document and the PR.
 
 ## Recently completed
 
+- [USB HID boot keyboards and mice](../devices/usb-hid.md), 2026-10-10: one shared
+  keyboard path, USB 2 hub chains and bounded leaf hotplug (#654); QEMU and
+  ThinkPad keyboard and composite mouse input qualified, with
+  [native coverage still open](../technical-debt.md#usb-hid-native-coverage).
+- [Renoir flip presentation](../kernel/renoir-flip.md), 2026-10-10: opt-in
+  two-surface GOP page flips (#631, #632, #638, #647); normal flips and
+  Quake and Chocolate Quake play natively qualified, default off, with the
+  [remaining qualification](../technical-debt.md#renoir-flip-backend-qualification)
+  and a separate [cheaper-polling proposal](renoir-flip-polling.md). Presentation
+  [timing and pacing](presentation-timing.md) keeps its unassigned step 3.
+- [Cheaper timekeeping](../kernel/timekeeping.md#clock-reads-in-timer-handling),
+  2026-10-10: fewer clock reads per timer event (#571) and the TSC with HPET
+  fallback (#577), natively qualified; [measurements](../development/experiments/tsc-clock/README.md).
 - [SDL game ports](../development/sdl-game-ports.md), 2026-10-09: Chocolate
   Doom and Chocolate Quake in ordinary images and EDuke32 as an opt-in
   personal build, all without sound (#623, #634, #646); QEMU comparisons
@@ -101,15 +114,9 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-10): [USB HID boot keyboards and mice](usb-hid.md),
-  shared physical input, USB 2 hub chains and bounded leaf hotplug. QEMU and
-  ThinkPad keyboard/composite mouse input are qualified; #654 ready to merge.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Codex alpha** (2026-10-09): [Renoir flip presentation](renoir-flip-presentation.md),
-  tasks 1–2 complete; normal flips/game play natively qualified, default off.
-  Task 3 and cheaper steady-state polling require separate assignments.
 - **Claude** (2026-10-09): no milestone after closing SDL game ports.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
@@ -126,10 +133,6 @@ Chosen by the owner, each starting with a proposal:
   [#564](https://git.internal/PyxisOS/pyxis-os/pulls/564).
   Actual service/connection traffic remains task 4's qualification gate; later
   tasks need explicit assignment.
-- **Claude** (2026-10-09): [cheaper timekeeping](cheaper-timekeeping.md)
-  accepted 2026-10-09: fewer clock reads per timer event (task A, merged in
-  #571), then TSC with extended-HPET fallback (task B, #577); native
-  qualification is in the ThinkPad batch.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
