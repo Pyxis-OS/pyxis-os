@@ -292,8 +292,13 @@ Interactive commands and scripts use the same redirection rules.
 
 Paths use the shell's current directory and root grants. The shell first opens the
 executable, then opens all redirect targets in written order. Input must exist;
-output is opened or created without truncation. Only after every target is open
-are output files truncated, in written order, and the child launched. The child
+output is opened or created without truncation. After wiring pipes, the shell
+compares every explicit output with every stage's final FILE stdin, including
+inherited input. Different known domains prove distinctness even without object
+IDs; within one domain both IDs must be available and different. An alias,
+unknown domain, missing required identity or failed query aborts before any
+truncation. See [file metadata](../interfaces/file-metadata.md).
+Only after this check are outputs truncated, in written order, and children launched. The child
 receives independent native file grants, not filenames to reopen. Temporary shell
 handles close after launch or failure. `<` withholds keyboard and pointer grants.
 If stdout remains a console, the final foreground stage receives named terminal
@@ -308,8 +313,8 @@ shebang interpreter, allocation or launch failure may leave outputs truncated.
 There is no rollback or atomic multi-file update. Shell preparation errors use the
 shell's own stderr; `2>` redirects the child's stderr only.
 
-There is no same-file protection: `cat file > file` and `cat < file > file` truncate
-the input before it is consumed. Different path spellings may alias the same file.
+`cat < file > alias` is protected even through different root/path spellings.
+Argument files are outside the check: `cat file > file` can still destroy its input.
 stdout and stderr each start at offset zero, even for `> out 2> out`; their
 independent writes can overwrite one another. This is not a merged output stream.
 

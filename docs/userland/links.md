@@ -70,7 +70,8 @@ between Links' internal threads.
 Userland libc gained the functions Links calls:
 
 - `opendir`/`readdir`/`closedir` over native enumeration;
-- `stat`/`fstat` with a `struct stat` holding only file-type bits and size;
+- `stat`/`fstat` for file-type bits and size; libc now also reports optional
+  [identity/time](../interfaces/file-metadata.md), which this port has not adopted;
 - `lseek`, `fsync`, `unlink` and `strcspn`.
 
 The [libc metadata limits](../technical-debt.md#narrow-libc-file-metadata)

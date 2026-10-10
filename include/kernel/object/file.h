@@ -3,6 +3,7 @@
 
 #include <abi/syscall.h>
 #include <kernel/mm/types.h>
+#include <kernel/fs/metadata.h>
 #include <kernel/object/object.h>
 #include <kernel/wait.h>
 
@@ -30,6 +31,7 @@ enum file_backing {
 struct file_object {
   struct kernel_object object;
   enum file_backing backing;
+  struct fs_metadata metadata; /* RAM/archive, under operation ownership. */
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
   struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
   const void *data; /* Boot-file bytes only. */

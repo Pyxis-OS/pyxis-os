@@ -157,9 +157,9 @@ x86-64 LP64 interface is:
 | --- | --- |
 | `fcntl.h` | `open(path, flags, ...)`; O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x100, O_TRUNC = 0x200, O_EXCL = 0x400, O_APPEND = 0x800 |
 | `unistd.h` | read, write, pread, pwrite, close, lseek, ftruncate, fsync, unlink, rmdir, access, isatty; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
-| `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size |
+| `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size; independently valid st_dev/st_ino/st_mtim under st_valid |
 | `arpa/inet.h` | htonl, htons, ntohl, ntohs only; no socket or address parsing/formatting declarations |
-| `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int |
+| `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int; dev_t and ino_t as uint64_t |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | Existing FILE interface and BUFSIZ = 8192 |
 | `inttypes.h` | PRId/PRIi/PRIo/PRIu/PRIx/PRIX output macros for fixed-width 8/16/32/64-bit, pointer and greatest-width types |

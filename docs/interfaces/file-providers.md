@@ -69,6 +69,11 @@ most 4,088 read bytes or 4,080 write bytes per helper call. Providers check the
 kernel-authenticated invoking rights for each operation. Clients validate counts,
 reply extents and application status; unexpected attachments are closed.
 
+`FILE_INFO` reports independently valid size, domain, object and modification
+time through the same dispatch. HTTP/text private snapshots report a domain
+disjoint from native backing, with no object ID or mtime. Generic exports do not
+gain that domain merely by being exported; see [file metadata](file-metadata.md).
+
 Transport and operation failures remain distinct until the helper maps them to
 its native status. A delivered mutation whose transport fails reports
 OUTCOME_UNKNOWN. No automatic retry, reconnection or rebinding occurs. Existing
