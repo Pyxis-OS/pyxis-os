@@ -6,6 +6,7 @@
 #include <kernel/object/launcher.h>
 #include <abi/profile.h>
 #include <abi/pipe.h>
+#include <kernel/object/pipe.h>
 #include <abi/space.h>
 #include <abi/udp.h>
 #include <abi/tcp.h>
