@@ -107,6 +107,13 @@ Zero-size calls still succeed after closure. Closure-only masks, two distinct
 pipe interests, attenuated rights, invalid masks, whole-list rejection and
 unchanged raw error outputs matched the ABI.
 
+A four-CPU writer fills the queue and waits with a positive deadline. A child
+reading 13 bytes wakes WRITABLE; the subsequent 64-byte try-write reports
+exactly 13 bytes and fills the queue again. The second wait wakes WRITE_CLOSED
+when that child closes the last reader, and a nonempty try-write reports
+ENDPOINT_CLOSED with zero progress. Real child completion is successful,
+all expectations match, and GDB observes zero remaining pipe registrations.
+
 A child-output viewer waits on PIPE, console input and process completion,
 drains with try-read until WOULD_BLOCK, and prints six child chunks 700 ms
 apart. On one and four CPUs it remains responsive to manually typed keys,
