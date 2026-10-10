@@ -3,8 +3,8 @@
 2026-10-10, separate from threads PR #671 (unchanged). Worktree
 `pyxis-remote-session-handoff`, branch `remote/session-handoff`, fresh main
 `441fcd4aad7420224c4133425cdb1b9df6362c04`; rebased onto current main
-`fa390738fc` for delivery. The owner accepted the waiting-supervisor default;
-userland fix `4d64f51f7e9ce1585517332fc253601c7ce81a1c` is published in
+`93beb07abd` for delivery. The owner accepted the waiting-supervisor default;
+userland fix `79e597b4e679b7723c0d2886c999f3dcf56421a4` is published in
 [#203](https://git.internal/PyxisOS/pyxis-userland/pulls/203). Merge userland first,
 then the parent pin/docs PR. Native post-fix results remain an owner check.
 
@@ -17,7 +17,7 @@ without samples. The input producer stayed alive for 300 seconds; kernel output
 reported terminated tasks, no fault. Native raw JSONL remains on horse at
 `~/xf/ipc-long.jsonl`; these are owner-reported results, not independently read.
 
-Inspected current userland `3bd6c21fc6733ec8a683f993ddc6678bd92cbc9b`:
+Inspected baseline userland `3bd6c21fc6733ec8a683f993ddc6678bd92cbc9b`:
 
 - `shell/launch.c`: successful SHELL_SESSION launch closes the successor observer
   and returns COMMAND_EXIT. `shell/main.c` reports builtin success and exits 0.
@@ -140,6 +140,18 @@ JSONL, build and GDB captures remain in ignored `build/remote-handoff-after`.
 No new test infrastructure, klog lines or benchmark changes. The userland
 repository has no existing CI tasks; parent exact-head integration CI is checked
 at delivery rather than treating that absence as a pass.
+
+After main advanced with descriptor/stdio changes, delivery fix was rebased to
+`79e597b` atop userland main `9f70b75`. Verified kernel/SDK/ports bundles from
+[#1736](https://git.internal/PyxisOS/pyxis-os/actions/runs/1736), parent main
+`93beb07abd`, then rebuilt source userland and image warning-free with the same
+command. A fresh matched QEMU boot again returned all four IPC summaries, all
+five passes verified with zero failures/rejections, FINAL 0/complete and client
+status 0. Signed -7 and chained 23 status propagation passed again. Final ELF
+SHA-256 `0e803aab9ae6b4b659268c6095f03a2db57af0cfac6898fc7421f85b2a04b68d`;
+ISO `16f0d1a956eace0bf4af95335718b0790ddaab56a7a133016512c21f02a2a7c0`.
+Captures are in ignored `build/remote-handoff-refresh`. The initial artifact
+selection and final source provenance were verified before qualification.
 
 The [LAN command loop](../../../userland/remote-terminal.md#consumers-and-limits)
 is the owner rerun recipe. For QEMU NAT only, add

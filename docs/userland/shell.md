@@ -172,7 +172,8 @@ including invalid builtin arguments, report builtin success (0) or failure (1);
 `session` and `service` remain builtin transactions even though they launch
 processes, and `exit` or a successful `session` handoff reports success before
 the shell leaves (after the successor wait in a remote handoff). The successor's
-outcome is propagated to shell exit, not the builtin status. Parse errors, command-form errors such as a builtin in a
+outcome is propagated to shell exit, not the builtin status. Parse errors,
+command-form errors such as a builtin in a
 pipeline or with redirection, and submitted line-limit rejection report
 rejection. Diagnostics are written before the completion. This outcome is
 reporting only: script stopping, `exit` and fatal handling are unchanged.
@@ -664,8 +665,8 @@ not forwarded. Launching another script supplies that target's own READ script
 grant through `program_launch`.
 
 Successful launch ends script execution immediately: later lines do not run,
-and the caller never reads terminal input again. A local caller closes its process observer
-and exits, releasing only its own references; the successor keeps its own
+and the caller never reads terminal input again. A local caller closes its process
+observer and exits, releasing only its own references; the successor keeps its own
 references and can read input and launch programs after the caller is reclaimed.
 There is no wait for application readiness: success means the launch was
 accepted, not that the new program will initialize successfully. A later exit or
