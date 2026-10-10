@@ -1,8 +1,8 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Tasks 1–2 are implemented; task 2 was assigned on 2026-10-09. Tasks 3–4 remain
-unimplemented and unassigned. Goal: GDB on the
+Tasks 1–2 are implemented; task 3 is assigned on 2026-10-10 and unimplemented.
+Task 4 remains unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
 
@@ -356,7 +356,7 @@ entry restriction and qualification above.
 
 ## Accepted task split and qualification
 
-Tasks 1–2 are complete; tasks 3–4 await assignment. Accepted task 1 control:
+Tasks 1–2 are complete; task 3 is assigned, task 4 awaits assignment. Accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
 QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
@@ -389,7 +389,7 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    Dedicated translation/copy windows and fault fixup, RAM classification and
    integer register export; no network attach yet.
 
-3. **VirtIO and RTL8111 transport, bridge and native read-only attach.**
+3. [ ] **VirtIO and RTL8111 transport, bridge and native read-only attach.**
 
    Owner can then use GDB on the ThinkPad at `debug.wait` or a terminal panic,
    inspecting CPU threads/registers, guarded RAM and documented safe Renoir registers.
@@ -401,6 +401,19 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    `pci read` include the read-side-effect caveat above. Qualify native RTL8111/PXE
    here. QEMU discovery requires **TAP/bridge LAN networking**, not user-mode NAT.
    Writes, software breakpoints, step and detach/kill are not advertised yet.
+
+   Accepted task 3 bounds (2026-10-10): enter at a coherent BSP network-worker
+   checkpoint after active net0/IPv4, or a prepared late terminal panic/fault.
+   Timer-assisted running break-in stays in task 4; retain clock-reentry
+   qualification. While stopped, consume/repost ordinary RX frames and discard
+   their protocol delivery, serving only debugger UDP and bounded ARP. Pauses
+   can lose ordinary packets; there is no replay queue or deadline rebasing.
+   MMIO reads admit only already sized compatible BAR extents plus the audited
+   Renoir register windows; refuse unknown ranges and the unsized remainder of
+   BAR5. Device reads may have side effects and duplicate commands must not
+   repeat them. QEMU uses a task-owned isolated TAP/bridge (host
+   `192.168.77.1/24`, guest `.2`), removed after qualification. Native bridge
+   runs on horse, on the ThinkPad LAN; Luna staging is coordinated by the owner.
 
 4. **Mutation and execution control.**
 
