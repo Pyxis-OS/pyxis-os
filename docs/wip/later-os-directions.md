@@ -352,7 +352,8 @@ Ideas recorded when npfs was planned, none of them agreed:
   [machine settings proposal](machine-settings.md) develops it.
 - **NVMe.** Installing onto the ThinkPad's internal disk needs an NVMe driver.
   With it, the Fedora disk would appear under Read the room as a foreign disk,
-  which the owner accepted.
+  which the owner accepted. The [coexistence proposal](nvme-coexistence.md)
+  develops the driver, FAT32 and a non-destructive installer mode beside Fedora.
 
 ## References
 
