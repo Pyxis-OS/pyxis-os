@@ -101,6 +101,8 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
+  the small first step is implemented and qualified; review before merge.
 - **Codex** (2026-10-10): [USB HID boot keyboards and mice](usb-hid.md),
   shared physical input, USB 2 hub chains and bounded leaf hotplug. QEMU and
   ThinkPad keyboard/composite mouse input are qualified; #654 ready to merge.

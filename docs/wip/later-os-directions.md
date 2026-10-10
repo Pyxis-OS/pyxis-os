@@ -95,22 +95,25 @@ Settle these before any implementation:
 - limits on outstanding operations per process and per receiver;
 - ordering between completions and readiness on the same object.
 
-A smaller step comes first and is useful to both models: endpoint receivers
-cannot yet be waited on with `wait_many`, so a program cannot wait for "a
-provider message or a key press" in one call. This adds no prerequisites to
-the current milestones, and [BSP service requests](../kernel/bsp-service-requests.md)
-remain synchronous until a contract replaces them.
+A smaller step is useful to both models:
 
-Receiver readiness is assigned; owner accepted 2026-10-10: the creating process
+- [x] [Endpoint receiver readiness](../interfaces/endpoints.md#receiver-readiness)
+  with `wait_many`, qualified with mixed receiver/console providers and
+  [matched CALL/SEND runs](../development/experiments/endpoint-readiness/README.md).
+
+This adds no prerequisites to the current milestones, and
+[BSP service requests](../kernel/bsp-service-requests.md) remain synchronous
+until a contract replaces them.
+
+Receiver contract accepted 2026-10-10 and implemented: the creating process
 needs RECEIVE transport authority, with CONTROL remaining export management.
 READABLE covers queued messages, cancellation and retirement notices; it also
 reports CLOSED on receiver shutdown, without ERROR and with READABLE suppressed.
 Explicit CLOSED interests use the same authority. Export withdrawal and final
 client closure do not close the receiver. Registration precedes the first scan;
 only real readiness/closure transitions notify, only with registered interests.
-RECEIVE remains unchanged and readiness reserves nothing. Capture endpoint
-CALL/SEND baselines, repeat matched interleaved runs, and qualify mixed receiver/
-console or pipe waits before delivery. The larger completion model is unassigned.
+RECEIVE remains unchanged and readiness reserves nothing. The larger completion
+model is unassigned.
 
 ## Additional ports
 
