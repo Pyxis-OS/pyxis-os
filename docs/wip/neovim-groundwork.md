@@ -201,30 +201,22 @@ and cleanup in that qualification. No task 6 implementation starts in this PR.
 
 ## Terminal SGR follow-up
 
-Accepted 2026-10-10; implementation and qualification are in progress.
+Accepted and implemented 2026-10-10.
 
-- [ ] Deliver the shared SGR profile in the kernel TTY, mux pane emulator and
+- [x] Deliver the shared SGR profile in the kernel TTY, mux pane emulator and
   interactive pyxis-remote, with matched before/after qualification.
 
-Palette entries 0–15 use each TTY's active scheme (Aardvark for every space
-currently); mux panes retain and emit indices for the outer TTY to resolve.
-The host client shares the Aardvark definitions. Scheme configuration is deferred.
-Entries 16–255 use the xterm cube and greys.
+The [sequence table](../userland/terminal.md#tty-output-controls) now advertises
+bold, italic, underline, 256 palette indices and semicolon RGB, enabling the
+Neovim static profile to use `termguicolors`. Colon forms are rejected, the
+16-parameter bound remains, and malformed groups change no attributes.
+Per-TTY palette entries 0–15 use the active scheme (Aardvark everywhere today,
+shared with the host); the remaining entries use the xterm cube and greys.
+The bitmap styles are synthetic and stay within 8×16 cells.
 
-The 8×16 bitmap renderer uses bottom-row one-pixel underline, one-pixel bold
-overstrike and a small clipped italic row shear. These are synthetic styles;
-bold does not change the colour index. They survive stored cells, saved cursors,
-screen switches, selection and repaint. Remote rendering uses the host font.
-
-Support indexed SGR 38/48;5;n and semicolon RGB 38/48;2;r;g;b with 0–255
-components. Reject colon forms as a whole CSI without attribute changes. Keep
-16 bounded parameters and reject malformed/oversized SGR before changing any
-attribute. Colour arguments never become independent attributes.
-
-Use 12-byte cells with tagged index/default/RGB colours. Keep 1,024 history
-rows per mux pane, allocate at creation/resize and preserve existing failure
-rollback. Measure actual backing, cell copying/scrolling, alternate-screen and
-terminal throughput costs with interleaved workloads. Preserve remote transfer
-controls. Update the single [sequence table](../userland/terminal.md#tty-output-controls)
-and the Pyxis terminal profile to advertise RGB and rendered attributes once
-delivered, enabling Neovim termguicolors. No new kernel log lines.
+Cells use tagged index/default/RGB colours in 12 bytes; mux retains 1,024
+history rows per pane and the existing eager creation/resize rollback.
+[Qualification and measured costs](../development/experiments/terminal-sgr/README.md)
+cover tab, pane, remote transfer and live resize, including the backing increase
+and small measured output costs. Allocation-failure rollback is inspected,
+not injected. Scheme configuration and Unicode rendering remain deferred.
