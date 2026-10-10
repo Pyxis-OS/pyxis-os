@@ -71,6 +71,20 @@ stale handle valid again. Userspace must not decode handles or use them as
 global object identifiers. The table implementation, console call and userspace
 close use this encoding.
 
+Handle admission captures rights and transport plus an owned storage reference
+under the table guard. CALL holds it through blocking continuations and cleanup;
+secondary handles and readiness interests use the same admission. No entry
+pointer survives table growth. These storage references confer no extra grant
+authority or open-end ownership. CLOSE detaches the exact generation first,
+then applies protocol close and grant release outside the guard; an admitted
+operation cannot make that handle usable again. Process teardown applies the
+same logical close effects to its detached entries.
+
+There is still exactly one user task per process. Growth, installations and
+teardown retain exclusive ownership, including explicit BSP table loans; the
+short guard does not yet make those operations safe for concurrent siblings.
+See the [thread gates](../wip/threads.md#shared-capability-and-vm-ownership).
+
 Each space would have a capability table describing resources available to its
 environment. A process would receive an explicit subset with equal or reduced
 rights, selected by the authorized launcher or supervisor. Membership in the
