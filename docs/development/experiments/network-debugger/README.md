@@ -247,3 +247,12 @@ not reserved while drawing; the extra AP wait was removed rather than adding
 a new BSP ownership contract. No native screen requalification is claimed.
 Frozen hashes, screenshots and state captures remain in
 `pyxis-debug-network/build/qualification/local-panic-integrated-notes.md`.
+
+After removing that extra wait, primary `2b03a341` again built without warnings
+(ELF SHA-256 `e0837751dd34342b12bd87bde0496dd89ca0343b5173adb72d1f2d9e27842bfe`).
+Final unmerged BSP probe `1b528c61` repeated the full visible message and
+COMPLETE terminal generation 2 with all four matching ACKs. Registers/stack/RAM
+reads passed; continue returned E01. Enabled UDP logging remained outside panic
+mode, fatal owner zero, NIC exclusively debugger-owned. Raw identities, screen
+and commands remain in `build/qualification/local-panic-final-notes.md` in the
+primary worktree. All task-owned QEMU/bridge/GDB jobs were stopped.
