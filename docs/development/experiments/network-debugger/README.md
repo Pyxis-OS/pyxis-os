@@ -1,8 +1,8 @@
 # Network debugger task 3 qualification
 
 QEMU and the final interleaved option-off comparison completed, 2026-10-10.
-Native RTL8111 checkpoint inspection and client-loss recovery were reported by
-the owner. Terminal panic, PXE identity changes and cable/bridge loss remain pending.
+Native RTL8111 checkpoint, inspection, loss and terminal-panic checks were
+completed by the owner. Local panic-display follow-up is being qualified in QEMU.
 
 ## Before-code baseline
 
@@ -156,7 +156,7 @@ zero, no failure and active networking. Remote echo exited 0 with complete drain
 Raw commands/results: `pyxis-debug-network/build/qualification/final-enabled-notes.md`.
 All task-owned QEMU, bridge and GDB jobs were stopped.
 
-## Native owner report and remaining checks
+## Native owner qualification
 
 Owner-reported, 2026-10-10: Luna built `d5c1f608`, ELF digest prefix
 `c7cfdcd9…` (full digest not supplied here), `debug.net=t14 debug.wait=1` and the
@@ -175,16 +175,32 @@ about 30 seconds later. Normal network/log recovery was not separately reported.
 `info registers rflags` was refused by GDB's register naming. Our AMD64 core XML
 uses the standard `eflags`; use `info registers eflags` or `p/x $eflags`.
 [GDB's required feature](https://sourceware.org/gdb/current/onlinedocs/gdb.html/i386-Features.html)
-specifies that name. Its native value still needs confirmation.
+specifies that name; the subsequent native panic check returned `0x46`.
 
-Remaining checks use the existing Luna `d5c1f608` ordinary image for actual
-bridge/cable loss, network/log recovery and cross-PXE attachment refusal. Panic
-uses unmerged `probe/debug-network-panic-bsp` at `ad607f4f`: runtime source differs
-only by the existing panic include/call after checkpoint release. Ordinary probe
-build passed; the guard refresh was inspected/built, not rebooted locally. The
-preceding hook was qualified in QEMU above. Both continue and checkpoint expiry
-trigger this probe's panic; neither the hook nor a panic option enters the PR.
-Staging/check instructions are in [#652](https://git.internal/PyxisOS/pyxis-os/pulls/652).
-Return full ELF hashes and outcomes before checking task 3 complete. Native
-terminal behavior, remaining loss variants and 32-bit HPET wrap/reentry remain
-unqualified; task 4 timer entry remains unassigned.
+The owner completed the remaining native checks on the ThinkPad, with horse
+bridge/GDB and Luna builds. Ordinary source `d5c1f608`, rebuilt ELF SHA-256
+`68a4ee0a2877927915fa896bcf346c62df2223ff2cd42c2dcb333e15909b431a`:
+bridge termination after client exit resumed the kernel about 30 seconds later.
+With GDB held attached and Ethernet unplugged for about 40 seconds, the bridge
+closed its connection for lost target link; the kernel resumed and boot completed.
+Detailed post-loss network/log traffic was not separately reported.
+
+After link loss, the same bridge process discovered a PXE reboot as a fresh
+generation-1 target and established a new image-bound session; GDB attached
+normally, with no stale state presented. This qualifies fresh discovery after
+loss/reboot, rather than an old still-attached connection or raw-datagram replay.
+
+Unmerged panic source `ad607f4f`, native ELF SHA-256
+`08ebbd278bee43fd28e91976890796a6216f25d6b210f532001998dbcf2c80b9`:
+checkpoint continue reached SIGABRT, 12 terminal CPU threads, generation 2,
+reason 1. Symbolized backtrace showed `enter_stop(DEBUG_STOP_PANIC) <- panic <-
+debug_network_checkpoint`; stack RAM was readable and `p/x $eflags` was `0x46`.
+Further continue was refused; detach returned E01. After GDB disconnected, the
+owner observed no log lines for 60 seconds and reported no resume. QEMU's
+independent post-loss stop-state inspection above remains separate evidence.
+
+That native probe stopped before local panic output: only a frozen display was
+visible. The owner also observed three power-LED flashes at debugger stops;
+no EC diagnosis was performed. The local-output correction is qualified below,
+not claimed as a new native screen result. Probe branches remain unmerged.
+Native 32-bit HPET wrap/reentry remains unqualified; timer entry stays in task 4.
