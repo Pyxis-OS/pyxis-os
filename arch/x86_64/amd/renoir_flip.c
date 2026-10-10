@@ -125,6 +125,8 @@ static struct {
   bool prepared, submitted_once, metrics;
   uint64_t submissions, confirmations, polls, timeouts, wait_total, wait_max;
   uint64_t validation_count, validation_total, validation_max;
+  uint64_t submit_validation_count, submit_validation_total, submit_validation_max;
+  uint64_t light_count, light_total, light_max;
 } flip;
 
 static void snapshot_layout(struct layout_state *s)
@@ -650,7 +652,15 @@ enum renoir_flip_state renoir_flip_submit(void)
   KASSERT(flip.state == RENOIR_FLIP_READY);
   struct hubp_state h;
   bool unstable;
-  if (!current_state(&h, &unstable) || unstable || (h.flip & FLIP_PENDING) ||
+  uint64_t started = flip.metrics ? arch_monotonic_ns() : 0;
+  bool valid = current_state(&h, &unstable);
+  if (flip.metrics) {
+    uint64_t elapsed = arch_monotonic_ns() - started;
+    ++flip.submit_validation_count;
+    flip.submit_validation_total += elapsed;
+    flip.submit_validation_max = MAX(flip.submit_validation_max, elapsed);
+  }
+  if (!valid || unstable || (h.flip & FLIP_PENDING) ||
       h.primary != flip.addresses[flip.front] || h.earliest != flip.addresses[flip.front]) {
     fail("submission ownership/layout changed", "submit");
     return flip.state;
@@ -735,8 +745,18 @@ enum renoir_flip_state renoir_flip_poll(void)
       klog("renoir-flip: metrics submitted=%lu confirmed=%lu polls=%lu timeouts=%lu wait-mean=%lu ns wait-max=%lu ns front=%lx\n",
           flip.submissions, flip.confirmations, flip.polls, flip.timeouts,
           flip.wait_total / flip.confirmations, flip.wait_max, h.earliest);
-      klog("renoir-flip: metrics validation-count=%lu validation-mean=%lu ns validation-max=%lu ns\n",
-          flip.validation_count, flip.validation_total / flip.validation_count, flip.validation_max);
+      klog("renoir-flip: metrics validation-count=%lu validation-mean=%lu ns validation-max=%lu ns validation-total=%lu ns\n",
+          flip.validation_count, flip.validation_total / flip.validation_count, flip.validation_max,
+          flip.validation_total);
+      klog("renoir-flip: metrics submit-validation-count=%lu submit-validation-mean=%lu ns submit-validation-max=%lu ns submit-validation-total=%lu ns\n",
+          flip.submit_validation_count, flip.submit_validation_total / flip.submit_validation_count,
+          flip.submit_validation_max, flip.submit_validation_total);
+      klog("renoir-flip: metrics light-count=%lu light-mean=%lu ns light-max=%lu ns light-total=%lu ns\n",
+          flip.light_count, flip.light_count ? flip.light_total / flip.light_count : 0,
+          flip.light_max, flip.light_total);
+      klog("renoir-flip: metrics poll-observation-per-frame=%lu ns bsp-observation-per-frame=%lu ns\n",
+          (flip.validation_total + flip.light_total) / flip.confirmations,
+          (flip.validation_total + flip.light_total + flip.submit_validation_total) / flip.confirmations);
     }
   }
   return flip.state;
