@@ -4,7 +4,7 @@ Recorded 2026-10-10 for [Neovim task 4](../../../wip/neovim-libuv.md#task-4-pref
 These are nested-KVM measurements and manual observations, not owner-hardware
 results. Raw captures and scratch consumers remain in ignored
 `build/libuv-baseline`, `build/libuv-after`, `build/libuv-qualification` and
-`build/libuv-console-qualification`. No benchmark infrastructure, in-tree tests, CI jobs or
+`build/libuv-console-qualification` and `build/libuv-echo-review`. No benchmark infrastructure, in-tree tests, CI jobs or
 klog lines were added.
 
 ## Revisions and configuration
@@ -49,13 +49,43 @@ per image/CPU alternate before/after; medians and ranges are seconds:
 | 1 | 21.21 (18.53–23.89) | 18.80 (18.39–19.20) |
 | 4 | 14.51 (14.28–14.73) | 15.09 (14.97–15.21) |
 
-Four-CPU whole-session time is about 4% higher in these two pairs; the ranges do
-not overlap. One-CPU ranges overlap widely. This includes transport, command
-framing, startup and final group drain, rather than isolated loader latency.
-The echo image grows from 71,147 to 72,539 serialized bytes with the descriptor
+The initial four-CPU comparison was about 4% higher, with non-overlapping
+ranges from only two pairs. Review qualification added three interleaved
+four-CPU pairs using the same control `4236efc7` ISO and an ordinary rebuild of
+exact task revision `0e3ecd28`, userland `3dafe88` and ports `ede19861`.
+The rebuild finished before timing. One QEMU alternated control/task ISO and
+reset for each sample, retaining its OVMF variables and the configuration above.
+The same client and 1,025-line command input were reused:
+
+```text
+/usr/bin/time -f %e -o sample.seconds build/libuv-baseline/pyxis-remote --machine --no-shell-echo --columns 120 --rows 40 127.0.0.1 24644 < build/libuv-baseline/plain-launch.txt > sample.jsonl
+```
+
+| Added pair | Before (s) | After (s) |
+| --- | --- | --- |
+| 3 | 14.33 | 13.61 |
+| 4 | 14.45 | 14.45 |
+| 5 | 15.09 | 13.99 |
+
+All six added sessions completed exactly 1,024 normally exiting children,
+then the shell builtin exit with normal process completion and complete drain.
+Across all five pairs, before is **14.45 s (14.28–15.09)** and after is
+**14.45 s (13.61–15.21)**; the median paired difference is zero. The three
+added pairs alone have medians 14.45/13.99 s. The initial 4% slowdown did not
+reproduce; the wider ranges overlap. These shared-host nested-VM sessions include
+transport, command framing, startup and final group drain, rather than isolated
+loader latency. They establish neither a speedup nor an absence of smaller costs.
+
+Source inspection found that exact `echo -n` emits no payload and the shell's
+completion/interrupt wait does not request output readiness or its locks.
+The descriptor bridge is linked through the existing descriptor archive member;
+ordinary descriptor I/O is unchanged. The echo image grows from 71,147 to 72,539 serialized bytes with the descriptor
 bridge, but retains 24 eagerly backed image pages and a 96 KiB mapped span;
-its stack remains 1 MiB. These observations neither attribute the four-CPU
-increase nor establish an absence of smaller regressions or a speedup.
+its stack remains 1 MiB. Both also retain 20 loader scratch-map/copy/unmap
+iterations. The extra payload is 1,392 copied bytes per child (1,425,408 bytes
+across 1,024 launches), with no added image pages or mapping operations. This is
+an inspected cost, not a measured explanation of the original timing difference.
+No reproducible regression or justified code correction was found.
 
 Existing iobench uses one warmup and five verified samples per invocation:
 
