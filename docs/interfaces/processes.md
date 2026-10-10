@@ -539,19 +539,22 @@ at every level. It rejects null-page, higher-half, noncanonical, overflowing,
 unmapped and insufficiently permitted ranges. It never uses scratch slots,
 VM range metadata, allocation, or an address-space switch.
 
-Validation remains valid through the copy because user backing is eager and
-the process has one task with stable, private mappings. Copy helpers never
-schedule. A blocking endpoint operation captures input before sleeping and
-keeps its process alive; it resumes its original task and root before writing
-to the checked user destination. This path does not recover from kernel mapping
-corruption or invalid kernel buffers. Future shared user backing, concurrent
-unmapping or external task cancellation would require revisiting that invariant.
+Validation and copying hold a short process mapping lease. Copy helpers never
+allocate or schedule; a mapping lease must end before any indefinite wait or
+root departure. Inputs are captured into kernel-owned staging before blocking
+and remain untrusted. User contents can change independently of mapping stability.
+A precheck does not pin a range across a wait: revalidate final outputs under a
+new short lease. Late failure returns BAD_BUFFER without rolling back consumed
+input, rendered/transmitted bytes or committed file/device/launch effects.
 
-Object calls must capture request metadata into kernel storage and
-validate all reply/data buffers before producing side effects. A copy helper
-only validates its own range; it does not validate an entire operation. See the
-[user-memory interface](../../include/kernel/user_memory.h). The current character
-syscalls remain unchanged and do not yet use these helpers.
+Paired outputs validate both ranges together, then write data followed by reply.
+An invalid range writes neither. Returned handles publish under the output lease
+where possible; otherwise failed output closes only that operation's exact
+returned generations, preserving reused slots and existing logical CLOSE effects.
+Kernel buffer corruption is not recoverable. See the
+[user-memory interface](../../include/kernel/user_memory.h) and
+[VM transaction](../kernel/memory.md#execution). Character-only syscalls do not
+pass user pointers and retain their existing behavior.
 
 ## Implemented process completion
 

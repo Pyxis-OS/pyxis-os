@@ -46,28 +46,30 @@ subdivide acquired regions without entering the kernel for each small allocation
 
 ## Execution
 
-ALLOCATE and RELEASE run in the caller's own syscall, on whichever CPU runs it,
-with interrupts disabled. They change the caller's private address space while
-it is active on that CPU, and nothing is lent to the BSP.
+ALLOCATE and RELEASE capture their request, then park outside the private root
+and kernel entry stack. BSP executes them under the process VM mutation
+transaction shared with DISPLAY mapping changes. Dispatch reserves root activity
+before CR3 activation; departure acknowledges it after loading the kernel root.
+New admission closes during mutation, while previously admitted continuations
+can finish bounded copies. Only active roots and mapping borrowers must drain;
+a blocked staged I/O call holds no mapping lease.
 
-This relies on the single-task process model. The process's only task is the
-only user of its address space, and it cannot move to another CPU during a
-syscall. A CPU that stops running a task switches roots, and with PCID and
-global pages off that flushes its TLB. No other CPU can therefore hold this
-address space's translations, so unmapping needs only a local `invlpg`.
-Display requests, which still lend the space to the BSP, cannot overlap a
-memory call, because the task is inside one syscall at a time.
+An already quiescent process is serviced in the BSP executor. Otherwise a
+separate VM worker scans pending processes without blocking that executor.
+The current one-second quiescence budget is an implementation choice, not an ABI
+operation deadline. Failure returns BUSY before effects and preserves mappings
+and backing. Competing mutation also returns BUSY. Final retirement requires
+closed admission and zero root/borrow/request activity before reclamation.
 
-The heap, physical allocator and scratch mappings underneath are safe on any
-CPU ([SMP](smp.md#memory-and-output-boundaries)). Range records come from the
-kernel heap, frames are zeroed through the caller's CPU's own scratch slot, and
-a failed allocation unwinds its partial backing before returning NO_MEMORY.
+BSP revalidates ALLOCATE's output before effects, then admits only the mutator's
+root until its final reply copy and cleanup finish. ALLOCATE adds a disjoint
+region; RELEASE touches no user memory after unmapping its captured request.
+Stop/group termination still takes effect after the synchronous call unwinds.
+Exactly one user task remains; this transaction does not enable siblings.
 
-Allocation writes its already validated reply after changing the mappings; it
-cannot invalidate that reply because it adds a disjoint range. Release makes no
-user-memory access afterwards. A stop or group termination takes effect when
-the syscall returns, so a process's address space and allocation records are
-never torn down while its memory call runs.
+The heap, physical allocator and per-CPU scratch mappings retain their
+[SMP contracts](smp.md#memory-and-output-boundaries). BSP zeroes frames using its
+scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
 
 ## Native use
 
@@ -78,5 +80,5 @@ writes no output, so its descriptor need not outlive the call.
 
 Hello uses temporary acquired regions for file reads, releasing each after use.
 Its path workspace has process lifetime and is reclaimed on exit, after hello
-has closed its memory handle. The libc allocator choice remains the next task;
-this service implements only private backing.
+has closed its memory handle. Libc suballocates these private regions; this service provides backing rather
+than a userspace allocator.
