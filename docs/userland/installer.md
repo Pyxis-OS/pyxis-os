@@ -76,6 +76,28 @@ refuse. A selected committed journal must first be recovered by booting the
 installed system. No wipe marker is needed. See
 [system updates](system-updates.md) for admission, recovery and qualification.
 
+## Restart
+
+After the final `installed` or `updated` message the installer asks to restart,
+reminding the user to remove the medium first:
+
+```text
+Remove the install medium before the machine restarts.
+Press Enter to restart, or type stay to remain here:
+```
+
+Only an empty line restarts. Any other text, Ctrl+C or a failed read leaves the
+installer with status 0, as before the offer. Failures and cancellations never
+offer a restart. Restart is the kernel's [power restart](../kernel/acpi.md#power-off-and-restart):
+it holds user tasks, flushes and checkpoints every mounted native pool, including
+the one the installer retains, then resets. If the call returns, the installer
+prints its status, says the installation or update is complete and to restart by
+hand, and exits 0. Without the medium removed, the restart boots the live image
+again.
+
+`init-install` gives the installer its `power` resource narrowed to the RESTART
+right, so the installer cannot power off. A boot without `power` offers nothing.
+
 Installation writes allocated metadata and boot-file storage, without secure
 erasure of free space. A failed installation may leave a partial disk; the failure message
 directs you to run the installer again and choose **Read the room**. Boot the

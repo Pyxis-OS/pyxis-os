@@ -11,7 +11,6 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
-| Reboot at the end of installation | 2026-10-07, owner, after a successful native install | Native, in the [installer](../userland/installer.md) | The installer could finish with "press Enter to restart". `init-install` receives the kernel's `power` resource but does not forward it to the installer, so this needs a small authority decision: forward restart only. |
 | Moving directories | 2026-10-10, owner, after `mv` learned to move into a directory | Native, with libc `rename` | `mv` moves files only; libc `rename` and the native rename are file-only. A directory move needs an agreed native contract first, with no copy-and-delete fallback. |
 
 The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
