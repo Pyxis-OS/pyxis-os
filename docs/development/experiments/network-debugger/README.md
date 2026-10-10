@@ -1,7 +1,8 @@
 # Network debugger task 3 qualification
 
 QEMU and the final interleaved option-off comparison completed, 2026-10-10.
-Native RTL8111/PXE qualification remains pending; no native result is claimed.
+Native RTL8111 checkpoint inspection and client-loss recovery were reported by
+the owner. Terminal panic, PXE identity changes and cable/bridge loss remain pending.
 
 ## Before-code baseline
 
@@ -155,11 +156,35 @@ zero, no failure and active networking. Remote echo exited 0 with complete drain
 Raw commands/results: `pyxis-debug-network/build/qualification/final-enabled-notes.md`.
 All task-owned QEMU, bridge and GDB jobs were stopped.
 
-Native gate: Luna stages the ordinary PR image and separate unmerged BSP panic
-probe through the owner, with matching ELF/config digests. The bridge runs on
-horse. Follow [task 3 operation](../../../wip/network-debugger.md#task-3-operation-and-qualification)
-and check exact image binding, CPU/register/RAM reads, owner-chosen safe Renoir
-MMIO, refusal paths, ordinary continue/network recovery, paired idle release,
-and terminal panic attach/no release after bridge loss. Return hashes/results
-before checking task 3 complete. Native RTL8111, Renoir read admission and 32-bit
-HPET behavior remain unmeasured here.
+## Native owner report and remaining checks
+
+Owner-reported, 2026-10-10: Luna built `d5c1f608`, ELF digest prefix
+`c7cfdcd9…` (full digest not supplied here), `debug.net=t14 debug.wait=1` and the
+matching `debug.image`. Horse bridge/GDB 16 bound t14 at 192.168.0.50 over RTL8111,
+12 CPUs, checkpoint reason 0/generation 1. Threads included APIC IDs; CPU 0
+was in `enter_stop` from `network_debug_worker`, peers in `cpu_wait_interrupt`.
+RIP/RSP/RBP, symbolized backtrace and CPU 4 stack RAM (`x/4gx $rsp`) were readable.
+
+Typed PCI `0000:07:00.0`, offset 0/32 bits returned `0x16361002`.
+Renoir MMIO 32-bit reads returned `0x00000f21` at `0xfd314030` twice and
+`0x0230007c` at `0xfd314028`. These are successful native read admission/results,
+not execution-count or read-side-effect proofs. `detach` returned E01 as scoped.
+After GDB exited, the bridge reported idle loss and presentation/boot resumed
+about 30 seconds later. Normal network/log recovery was not separately reported.
+
+`info registers rflags` was refused by GDB's register naming. Our AMD64 core XML
+uses the standard `eflags`; use `info registers eflags` or `p/x $eflags`.
+[GDB's required feature](https://sourceware.org/gdb/current/onlinedocs/gdb.html/i386-Features.html)
+specifies that name. Its native value still needs confirmation.
+
+Remaining checks use the existing Luna `d5c1f608` ordinary image for actual
+bridge/cable loss, network/log recovery and cross-PXE attachment refusal. Panic
+uses unmerged `probe/debug-network-panic-bsp` at `ad607f4f`: runtime source differs
+only by the existing panic include/call after checkpoint release. Ordinary probe
+build passed; the guard refresh was inspected/built, not rebooted locally. The
+preceding hook was qualified in QEMU above. Both continue and checkpoint expiry
+trigger this probe's panic; neither the hook nor a panic option enters the PR.
+Staging/check instructions are in [#652](https://git.internal/PyxisOS/pyxis-os/pulls/652).
+Return full ELF hashes and outcomes before checking task 3 complete. Native
+terminal behavior, remaining loss variants and 32-bit HPET wrap/reentry remain
+unqualified; task 4 timer entry remains unassigned.

@@ -2,8 +2,9 @@
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
 Tasks 1–2 are implemented. Task 3 code, QEMU qualification and the interleaved
-option-off comparison are complete (2026-10-10); owner-run RTL8111/PXE checks
-remain pending.
+option-off comparison are complete (2026-10-10). Native RTL8111 checkpoint,
+register/RAM/device reads and client-loss release were reported by the owner;
+terminal panic, PXE identity changes and cable/bridge loss checks remain pending.
 Task 4 remains unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
@@ -332,6 +333,9 @@ monitor phys read 0x1000 32 1
 monitor mmio read PHYSICAL_REGISTER_ADDRESS 32 1
 monitor pci read 0:00:00.0 0 32
 ```
+
+The AMD64 target XML names the flags register `eflags`: use
+`info registers eflags` or `p/x $eflags`, rather than `rflags`.
 
 Unsupported widths, addresses, writes and control requests return errors.
 Normal `continue` has no address/signal argument; GDB waits for the next terminal
