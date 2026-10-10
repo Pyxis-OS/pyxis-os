@@ -287,6 +287,7 @@ static void send_hello(struct bridge *bridge, uint64_t now)
   payload[32] = length;
   memcpy(payload + DEBUG_HELLO_FIXED_BYTES, bridge->name, length);
   struct debug_packet packet = packet_header(bridge, DEBUG_HELLO);
+  packet.ack = 0;
   packet.payload = payload;
   packet.length = DEBUG_HELLO_FIXED_BYTES + length;
   if (bridge->waiting_continue) {
@@ -480,7 +481,8 @@ static void receive_offer(struct bridge *bridge, const struct debug_packet *pack
       }
       return;
     }
-    if (bridge->phase == BRIDGE_RUNNING && (!new_stop || new_boot)) {
+    if (bridge->phase == BRIDGE_RUNNING &&
+        (packet->generation <= bridge->generation || new_boot)) {
       return;
     }
   }
