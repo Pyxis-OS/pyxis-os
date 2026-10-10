@@ -15,8 +15,8 @@ and VirtIO retain their existing paths. Failed preparation retains GOP copies.
 Before AP startup, numeric VFCT/ATOM metadata is copied by the bootstrap adapter.
 Require one unique already-D0/memory-enabled Renoir display, no other display,
 one enabled progressive 1920x1080 OTG and one unsplit mono OPP/MPCC/HUBP path.
-Require actual active dimensions, current master enable, scaler bypass and
-matching recout/MPC/viewport, no stereo/update lock/GSL/triple buffering, disabled flip/flip-away interrupt
+Require actual active dimensions, current master enable, scaler bypass or the
+verified inherited unity RGB state described below, matching recout/MPC/viewport, no stereo/update lock/GSL/triple buffering, disabled flip/flip-away interrupt
 enables (read only, never changed), opaque MPCC global alpha/gain,
 linear ARGB8888 with matching crossbar, no DCC/TMZ/VM translation, and stable
 BAR/MC/DCN/GOP correspondence. Mask live request/clock/coefficient-bank status
@@ -108,6 +108,73 @@ Changed-image final checks and exact-head CI are recorded in the PR. QEMU has no
 DCN2.1 and cannot exercise positive memory proof, writes or flip completion.
 No synthetic device, tests, fault injection or boot/output automation was added.
 
+## Native refusal and inherited unity gate — 2026-10-10
+
+Luna's build of `3808c852`, ThinkPad PXE, info logging, flip-on plus metrics:
+the second boot in the masked local `flip-647.log` (boot stamp ending `0dec2e9c`,
+stream from line132) refused qualification before spare mapping or register
+writes. `backend=ordinary` throughout; no flip completion or tear reduction was
+measured. The owner saw tearing as before, perceived worse. Both boots used the
+ordinary presenter; boot-to-boot beat phase can vary, and this does not establish
+a regression caused by actual flips.
+
+The recorded pipe0 fields identify this failing term:
+
+| Predicate | Native value | Evaluation |
+| --- | --- | --- |
+| Old bypass-only `scaler_mode & 7` must be zero | `1 & 7 = 1` | Fails. |
+| `scaler_autocal & 3` must be zero | `0x100 & 3 = 0` | Passes. |
+| Flip/flip-away enable mask `0x5` must be zero | `0x50000 & 0x5 = 0` | Passes. |
+
+`AUTOCAL=0x100` means mode0 (**OFF**), NUM_PIPE field1 and PIPE_ID field0.
+Do not infer the raw NUM_PIPE encoding or its off-mode hardware treatment from
+its name: the source does not spell that out. The source identifies mode0 as
+off and states manual RECOUT programming takes effect with AutoCal disabled.
+`flip-interrupt=0x50000` is FLIP_OCCURRED (`0x10000`) plus FLIP_AWAY_OCCURRED
+(`0x40000`); enable bits0/2 and interrupt-status bits17/19 are clear. Keep these
+sticky occurred bits untouched. Existing enable and status handling is correct.
+Other route fields not present in the refusal dump cannot be exhaustively
+reconstructed; the mode term is the confirmed failure, not proof that all
+remaining qualification groups passed. The previous boot did not record ratios.
+
+Pinned Linux v6.19.10 evidence:
+
+- [DCN2.1 DPP construction](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/resource/dcn21/dcn21_resource.c#L499-L511)
+  selects `dpp2_construct`; the [DPP2 table](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/dpp/dcn20/dcn20_dpp.c#L374-L422)
+  selects `dpp1_dscl_set_scaler_manual_scale`.
+- [Mode enum and selection](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/dpp/dcn10/dcn10_dpp_dscl.c#L62-L154):
+  mode1 is RGB4:4:4 scaling enabled. All four unity ratios select bypass only
+  when `debug.always_scale` is false; with that setting RGB can remain mode1
+  at unity. Thus mode1 alone neither proves nor disproves a scale factor of one.
+- [Manual programming](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/dpp/dcn10/dcn10_dpp_dscl.c#L508-L705)
+  writes the four ratios as `dc_fixpt_u3d19(ratio) << 5`: unity is `0x01000000`
+  in mask `0x03ffffff`. AutoCal off selects the manual phase/ratio path.
+- [Viewport programming](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn21/dcn21_hubp.c#L186-L226)
+  supplies the HUBP source rectangle. Existing primary origin0 and1920x1080
+  checks, RECOUT origin0/1920x1080 and MPC1920x1080 establish equal extents.
+- [DCN2.1 ratio/AutoCal definitions](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h#L12925-L13023)
+  and [flip interrupt definitions](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h#L9301-L9322)
+  distinguish fields from full register values.
+
+The added gate accepts only the captured raw mode1/AutoCal0x100 combination,
+existing mono/nonrotated RGB layout checks, matching viewport/RECOUT/MPC and
+**all four independently read ratio fields equal unity**. Preserve mode-zero
+acceptance. Freeze ratios, phase/init (including bottom fields), taps, boundary,
+two-tap and replicate controls during the existing double-snapshot and runtime
+layout validation. Do not impose invented canonical tap/phase values: Linux
+computes phase from taps and clipping. Compare the coefficient bank in active
+mode; only bypass masks its unused current-bank status.
+
+This verifies unity geometry and unchanged inherited sampling behavior for
+same-layout address replacement; it does not claim filter bypass or pixel-identical
+filtering. The [DCN2.1 mono address writer](https://github.com/gregkh/linux/blob/v6.19.10/drivers/gpu/drm/amd/display/dc/hubp/dcn21/dcn21_hubp.c#L594-L723)
+changes surface addresses independently of DPP scaler programming. All scaler
+registers remain RO in their existing audited pages; no new mappings, write
+allowlist entries, modeset or IRQ changes. Metrics-gated preparation/refusal
+records now include the read ratios and inherited phase/control state. Missing
+or non-unity ratios still refuse, even with equal dimensions. Native success
+remains pending a restaged boot; it is not inferred from the old dump.
+
 ## Paired native qualification — Luna stages, owner judges
 
 Use one submitted revision, same kernel/initrd, same GOP mode and boot configuration,
@@ -126,7 +193,9 @@ reboot and existing UDP capture on horse.
    checksums must match the disabled set. Luna stages it after the disabled run.
 3. Per boot, capture startup and at least60s idle/moving-pointer metrics. Enabled
    must report prepared with recomputed spare0x900000, inherited raw0x780/effective
-   7680, correct addresses and many matching confirmations with no timeout/loss.
+   7680, all four ratio fields `0x01000000`, captured mode1/AutoCal0x100 (or
+   the pre-existing bypass path), correct addresses and many matching confirmations
+   with no timeout/loss.
    Refusal is a safe negative result: retain its numeric metrics dump, do not
    force-enable. Timeout/unavailable is not qualification success; restore off.
 4. In Development, run the same moving native Quake scene/demo on both boots,
