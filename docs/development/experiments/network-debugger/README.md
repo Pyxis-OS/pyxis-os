@@ -84,5 +84,7 @@ On four-CPU Q35/KVM, CPU 1 owned terminal generation 2; CPU 2's backtrace showed
 `await_entry -> enter_stop -> panic`, proving a second terminal origin joined.
 All four CPUs acknowledged generation 2 with no missing flags; continue returned
 E01. At 44 seconds of host wall time after bridge exit, COMPLETE/terminal,
-resume generation 1 and retained NIC gate 8/generation 2 persisted. A separate
-`LOG_UDP=1` repeat is pending to check enabled legacy-fatal coexistence.
+resume generation 1 and retained NIC gate 8/generation 2 persisted. The same probe repeated with `LOG_UDP=1` verified enabled logging and TX
+reservation, all four ACKs, retained debugger ownership and legacy fatal owner
+zero. This time CPU 2 owned entry and CPU 1 joined; admitted MMIO worked and
+terminal continue was refused. Both probe jobs were stopped.
