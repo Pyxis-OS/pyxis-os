@@ -115,8 +115,9 @@ status belong in the milestone document and the PR.
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex epsilon** (2026-10-10): [Neovim task 4](neovim-libuv.md#task-4-preflight),
-  native libuv backend. Tasks 1–3 are merged.
+- **Codex epsilon** (2026-10-10): [bundles in bin://](bundles-in-bin.md),
+  accepted same-name lookup and relocation of the editor/interpreter bundles;
+  task 1 starts after the owner merges #686.
 - **Codex alpha** (2026-10-10): [presenter whole-frame skipping](../kernel/presenter-frame-skipping.md),
   implemented with matched QEMU/native counters and the owner's functional pass;
   ready for review before merge. [Renoir cursor](renoir-hardware-cursor.md)

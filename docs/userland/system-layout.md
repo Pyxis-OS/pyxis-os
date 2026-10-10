@@ -52,6 +52,11 @@ resolution after an absent ordinary `bin://NAME.pxe`; `bin://NAME` selects a
 registered logical alias. This is launcher resolution, not a new filesystem
 directory backend. See [development bundle lookup](../wip/program-bundles.md#unpacked-development-lookup).
 
+The owner accepted flat bundle placement and same-name bare lookup on
+2026-10-10; these are not implemented yet. The
+[bin bundle proposal](../wip/bundles-in-bin.md) covers archive/install placement,
+lookup precedence, the development catalog and future ZIP/index integration.
+
 One directory per revision is interim, until a final program update scheme
 replaces it.
 
