@@ -471,6 +471,7 @@ it is 32-bit and does not provide these ownership/stop contracts. No example
 code is copied here; protocol implementation does not import GDB itself. Any later import needs a pinned owner mirror/cache source,
 per-file licence/provenance and preserved notices; audit other GDB files separately.
 
-Task 1 adds the checkpoint foundation only. No network stub, bridge, hardware
-monitor access or qualification infrastructure is added; later tasks require
-separate owner assignment.
+Task 3 adds original MPL-2.0 transport/RSP/bridge code. Host SHA-256 reuses the
+existing attributed public-domain source in `tools/remote/vendor`; no GDB stub
+example is imported. Task 4 remains a separate owner assignment. No test or
+qualification framework is added.

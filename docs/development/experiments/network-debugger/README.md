@@ -72,4 +72,7 @@ checkpoint generation 1 continued; the same GDB connection rediscovered terminal
 generation 2 and reported SIGABRT. Four CPU frames and the genuine panic call
 stack were readable. A 1024-byte snapshot dump matched an independent QEMU GDB
 dump byte-for-byte, spanning pages/chunks. Terminal continue was refused.
-Transport-loss terminal retention is being inspected before stopping this probe.
+After bridge/client exit, independent QEMU inspection 119.967 seconds after the
+last valid peer traffic still showed COMPLETE/terminal generation 2, resume
+generation 1 and retained NIC gate 8/generation 2. All probe jobs were stopped;
+this probe stays unmerged.
