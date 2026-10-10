@@ -392,7 +392,8 @@ submission, completion/retirement/capture, timeout fallback and fallback copies.
 Unexpected light observations latch FAILED; full samples cannot erase them.
 The 50 ms/50-poll bound, 1 ms sleep, primary/earliest confirmation and retained
 surfaces are unchanged. The [poll-cost record](../development/experiments/renoir-poll-cost/README.md)
-distinguishes the implemented guard split from pending native cost qualification.
+records the qualified guard split and owner-run native A–B–A–B costs: BSP
+observation elapsed per frame fell about 67%, with no timeout/FAILED or tearing.
 
 ## Qualification and cost
 

@@ -1,8 +1,8 @@
 # Renoir pending-poll cost
 
 Owner authorized the [guard split](../../../kernel/renoir-flip.md#pending-poll-validation)
-on 2026-10-10. Implementation and local builds/review pass; native interleaved
-qualification is pending. Default boot and the GPU write allowlist are unchanged.
+on 2026-10-10. The owner qualified the interleaved native comparison on the
+ThinkPad the same day. Default boot and the GPU write allowlist are unchanged.
 
 ## Baselines and revisions
 
@@ -12,24 +12,11 @@ with info logging, UDP logging, `display.flip=1 display.flip.metrics=1
 Pins: userland `89c520b6`, ports `9397093c`, fs `b427df29`, lwIP `a1aadb91`.
 Existing LLVM23.1.3 builder; no toolchain or dependency change.
 
-The PR was rebased onto main `4236efc7` after #661 moved the reference. The
-sealed A/B sets below retain their original revisions and inputs; the rebase
-does not relabel them or turn earlier measurements into rebased-head results.
-
-The earlier owner-reported native `9254f5c8` run had 3120 submissions and
-confirmations, zero timeouts/FAILED, full-poll validation mean 369 µs/max 3.9 ms
-and about 8 polls per flip. About 3 ms cumulative polling validation elapsed per
-frame is an estimate; it excludes submission validation and is not separately
-profiled CPU time. See the [normal-flip native result](../renoir-flip-backend/README.md#native-success--2026-10-10).
-
-Native A is `4e2c8ebc`: original full validation on every poll, with expanded
-metrics only. Native B is `bc4dc9eb`: the light pending path, same accounting.
-Sealed sets: `build/native-poll-before/` and `build/native-poll-after/`, each
-with kernel/initrd/limine.conf/REVISION/INPUTS/SHA256SUMS. B deliberately uses
-the exact A initrd; the code delta is private kernel C with no SDK/ABI change.
-Both use identical options and consumer binaries. A full rebuild changed some
-application payloads/SDK provenance despite unchanged pins; those rebuilt
-payloads are preserved locally and excluded from the native comparison.
+The PR was rebased onto main `4236efc7` after #661 moved the reference; the
+poll code was unchanged. Final delivery rebases onto main `036f3287`; native
+results retain the exact A/B revisions below. The earlier owner-reported `9254f5c8` run estimated
+roughly 3 ms polling validation elapsed per frame (369 µs mean, about 8 polls).
+The accounted A/B comparison below measures cumulative totals directly.
 
 ## Guards and metrics
 
@@ -82,29 +69,71 @@ Both revisions refuse absent Renoir and remain OFF/unprepared with no register
 mappings; shell/tab/ls/caret/I-beam checks pass. New private polling code does
 not execute on this path; these varying costs do not establish a native gain.
 
-## Native A–B–A–B: Luna stages, existing flip-on entry
+## Native A–B–A–B — owner-run, 2026-10-10
 
-1. Ask the orchestrator to have Luna stage A first, then B, then A, then B.
-   Alpha does not stage PXE. Reuse **Flip: on + metrics** with info logging,
-   UDP capture, `display.flip=1 display.flip.metrics=1 display.timing=off`.
-   Keep the same panel/GOP mode, power setting, game binaries/data and workloads.
-   Verify each set's manifest and INPUTS; retain prior rollback files.
-2. Per boot, retain startup, discard the first 120 confirmations as warm-up,
-   then capture at least 60s idle and equal-duration moving native Quake and
-   unchanged 72 Hz Chocolate Quake scenes/play. Check keys/pointer and the same
-   space/layer/lock/unlock interactions for perceived latency, stale frames,
-   tearing, hiccups and freezes. Retain camera clips/owner judgment when possible.
-3. Record per-run validation/light/submission mean/max/count/total, polls per
-   confirmation, both observation-per-frame fields, compose/copy and wait costs.
-   Compare the same workloads/windows. Cumulative totals permit subtraction of
-   warm-up/previous windows; divide delta total by delta confirmations rather
-   than treating cumulative means as per-window measurements. Keep repeated-run
-   ranges; do not infer improvement from fewer calls alone.
-4. Require many matching confirmations, no timeout/FAILED and no visual/input
-   regression. Unexpected tuples and full-check failure retain the existing
-   pinned FAILED behavior; timeout fallback still requires full validation.
-   Native timeout/panic injection is not authorized. A safe refusal/failure is
-   not qualification success; preserve its diagnostics and restore baseline.
-5. Send the masked log locations, manifests/revisions and owner observations.
-   Update this record with actual interleaved results before claiming cost
-   reduction or completing the follow-up. Native results are not yet available.
+ThinkPad on AC, existing **Flip: on + metrics** entry made the default for the
+session, info/UDP logging, `display.flip=1 display.flip.metrics=1
+ display.timing=off`; remote reboots. Luna built both kernels. Every boot used
+the same A initrd: B's rebuild differed in 15 payload files, so it was excluded
+and only the kernel varied. Native inputs:
+
+| Input | Revision | SHA-256 |
+| --- | --- | --- |
+| A kernel | `5f187a971bacd1abb06cc3f8adf83c6518b6beea` | `418152769590902970979a23a268214cf3c81967b61f658db98c85256e0edd7e` |
+| B kernel | `f4f71bc6cf165bf0f1e4002f5da56c25a73dd101` | `6585ab1b2445b3c11bbb325dc6869a37080692c65ad98c0699f42d000581f888` |
+| Shared A initrd | A build | `9cde80a0f2069bfb400365f946577635bb65f9f489f8a78203ff02b1730c7ded` |
+
+Per boot the owner spent about one minute idle at the prompt, one minute moving
+in native Quake and one minute in Chocolate Quake. These are **whole-boot
+cumulative totals**, including warm-up; no per-workload or warm-window splits
+were supplied. Final metric files inspected locally:
+`/shared/present/batch2/poll-ab/ab-{A1,B1,A2,B2}.txt`. Raw logs stay outside Git.
+
+| Run | Submitted = confirmed | Polls / per flip | Wait mean / max (ms) | Full validation count | Full mean / max (µs) | Poll observation / frame (ms) | BSP observation / frame (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A1 | 11280 | 122546 / 10.86 | 12.858 / 29.661 | 133826 | 265.742 / 25996.542 | 3.152770 | 3.414532 |
+| B1 | 11040 | 145167 / 13.15 | 12.833 / 28.741 | 22080 | 350.164 / 19156.383 | 0.796039 | 1.116441 |
+| A2 | 11400 | 121146 / 10.63 | 12.599 / 27.824 | 132546 | 268.806 / 8494.945 | 3.125376 | 3.392792 |
+| B2 | 11280 | 149156 / 13.22 | 12.917 / 48.121 | 22560 | 349.866 / 9687.901 | 0.796159 | 1.116199 |
+
+| Run | Submission validation mean / max (µs) | Light count | Light mean / max (µs) |
+| --- | --- | --- | --- |
+| A1 | 261.761 / 610.177 | 0 | 0 / 0 |
+| B1 | 320.402 / 628.359 | 145167 | 7.278 / 2278.966 |
+| A2 | 267.416 / 2181.136 | 0 | 0 / 0 |
+| B2 | 320.039 / 2715.298 | 149156 | 7.292 / 1546.898 |
+
+All runs had zero timeouts. The owner reported no FAILED or timeout-fallback
+lines and no tearing. A1/A2 felt the same as before; B1/B2 felt more responsive.
+Poll-observation elapsed per frame fell about 74.5–74.8%; including submission
+validation, BSP observation elapsed fell about 67.1–67.3% (3.393–3.415 ms to
+1.116 ms). This is a matched repeated whole-boot result, not task CPU profiling
+or a separately measured improvement for either game. B performs more polls
+per flip because the intervening checks cost less; full poll validation falls
+to two checks per confirmed frame rather than one per pending poll plus READY.
+Mean confirmation wait stayed 12.60–12.92 ms across all four boots.
+
+B2's 48.121 ms wait maximum is below, but close to, the unchanged 50 ms deadline.
+The interval starts after the flip address write and ends after full completion
+validation. A producer/game stall before submission is excluded. It includes
+sleep wakeup scheduling, input service between polls, preemption, register reads
+and final validation; delayed observation or hardware completion can increase
+it. Only final cumulative maxima were retained, so the event cannot be placed
+in a workload, attributed to a scheduling or hardware cause, or counted. A
+maximum does not establish that it happened only once. No timeout occurred;
+this is not a pixel-to-photon measurement or evidence for relaxing the bound.
+
+B's full-validation mean is about 350 µs versus A's 266–269 µs with identical
+check code. The samples differ: A includes every pending poll, whereas B keeps
+READY and candidate-completion checks. Less frequent checks may also leave
+colder caches; B's submission-check mean rises too. Cache state was not profiled,
+so colder caches are plausible rather than established. The relevant cumulative
+cost still falls substantially despite the higher mean per remaining full check.
+
+- [x] Capture the baseline before optimization.
+- [x] Implement light waits with full guards and qualify the QEMU unavailable path.
+- [x] Qualify repeated native costs, matching confirmations and both games.
+
+This completes the poll-cost follow-up. Timeout recovery, native panic and other
+unreported scenarios remain in the separate
+[backend qualification debt](../../../technical-debt.md#renoir-flip-backend-qualification).

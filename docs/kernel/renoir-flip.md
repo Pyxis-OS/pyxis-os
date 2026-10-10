@@ -115,8 +115,12 @@ submission-validation and light-observation mean/max/count/total. Cumulative
 observation elapsed per confirmed frame includes BSP clock, interrupt and
 preemption overhead, excludes sleeping between polls, and is not separately
 profiled CPU execution time. The [poll-cost record](../development/experiments/renoir-poll-cost/README.md)
-holds matched builds and QEMU checks; [native cost qualification](../wip/renoir-flip-polling.md)
-remains pending.
+records the owner-run ThinkPad A–B–A–B qualification: BSP observation elapsed
+per frame fell from 3.393–3.415 ms to 1.116 ms (about 67%), with zero timeouts
+or FAILED and tear-free native Quake/Chocolate Quake. The owner found B more
+responsive. These whole-boot metrics include preemption and are not CPU profiling;
+B2 had one reported maximum of 48.121 ms, close to the unchanged 50 ms deadline,
+whose cause and frequency cannot be determined from the final totals.
 
 ## Surfaces and memory
 
@@ -192,6 +196,6 @@ optc blank helpers are not vendored.
   scenarios are unqualified. A framebuffer screenshot or an FPS figure does not
   establish a tear-free panel.
 - Three surfaces, display interrupts and OTG blanking are deferred.
-- The original full-poll native run spent roughly 3 ms cumulative validation
-  elapsed per frame. Light polling is implemented; its
-  [interleaved native cost qualification](../wip/renoir-flip-polling.md) is pending.
+- Light polling is qualified on the ThinkPad, with whole-boot cost measurements.
+  Per-game cost splits, the cause of the 48.121 ms confirmation-wait maximum and
+  separately profiled CPU execution time are not established.
