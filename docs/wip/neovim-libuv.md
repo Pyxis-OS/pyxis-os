@@ -1,7 +1,7 @@
 # Neovim on Pyxis
 
-Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651.**
-Task 2 is implemented in the current review, with its accepted contract and qualification linked below.
+Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651 and task 2 in #656.**
+Task 3 is implemented in the current review, with its decisions and qualification linked below.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -17,7 +17,7 @@ The 2026-09-29 investigation proposed six milestones. Their state now:
 | 1 | Event waits | **Partly done** | [`wait_many`](../../include/abi/wait.h) waits on up to 32 interests and an absolute deadline (at most 30 s; zero polls), level-triggered: console and terminal input and output, interrupt and resize, TCP with [try operations](../devices/tcp.md#readiness-and-transfer-attempts), process and group completion, keyboard, pointer, display. **Task 1 adds pipe readiness and native try operations** ([pipes](../interfaces/pipes.md#readiness)); libc streams remain blocking, file and provider opens cannot be waited on, and there are no completion tokens. |
 | 2 | User threads | **Unchanged for this purpose** | [Task 1](threads.md#first-task-and-later-gates) (#612) split process lifetime from task retirement; a process still has exactly one task. Create/join, TLS, `pthread.h` and thread-safe libc are tasks 2 to 4, unassigned. |
 | 3 | File metadata and identity | **Identity/time added by task 2** | Libc now has `sys/stat.h` (type/size and independently valid identity/time), `dirent.h`, `mkdir`, `O_RDWR`/`O_EXCL`/`O_APPEND`, `pread`/`pwrite`/`lseek`/`ftruncate`/`fsync`, `mkstemp`, `rename`, `strftime`, and atomic saves are in use ([vi](../userland/vi.md), [Quake](../userland/quake.md#saves-and-configuration), [Links](../userland/links.md)). Remaining metadata limits are [scoped identity](../technical-debt.md#file-identity-across-capability-paths) and ownership; also missing: `dup`/`fcntl`, `chdir`/`getcwd`, `setenv`, `mktime`, `fdopen`, `iconv`. |
-| 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: alternate screen, scroll regions and saved cursor ([TTY subset](../userland/terminal.md#tty-output-controls); mux adds no alternate-screen protocol), non-ASCII input and drawing, and a PTY-style session for child terminals. |
+| 4 | Terminal sessions | **Mostly done; rendering gaps remain** | [Independent sessions](../userland/terminal-sessions.md) have duplex queues, resize generations with `WAIT_RESIZED`, hangup and interrupt passthrough, and the [multiplexer](../userland/multiplexer.md) runs a shell per pane. Missing: non-ASCII input and drawing (the alternate screen, scroll regions and saved cursor came with task 3), and a PTY-style session for child terminals. |
 | 5 | libuv backend | **Unchanged** | No libuv, luv or Neovim recipe exists in `ports`. Libc still lacks `pthread.h`, `poll.h`, `termios.h`, `dlfcn.h`, `sys/socket.h`, `sys/mman.h` and `iconv.h`, so upstream `uv.h` does not compile; the backend needs its own platform layer, not those headers. |
 | 6 | Dependency closure | **Unchanged** | `ports` has Lua 5.5.1 with selected libraries and no `luaL_openlibs`; none of Lua 5.1, LPeg, luv, libuv, utf8proc, tree-sitter or iconv exists. The pins listed [below](#exact-baseline-and-source-pins) are still Neovim 0.12.5's manifest. |
 
@@ -60,11 +60,13 @@ without Neovim.
    `#pragma once`. See the [accepted contract](#task-2-contract),
    [metadata reference](../interfaces/file-metadata.md) and
    [qualification and matched costs](../development/experiments/file-identity/README.md).
-3. [ ] **Terminal profile for a full-screen editor.** Alternate screen, scroll
+3. [x] **Terminal profile for a full-screen editor.** Alternate screen, scroll
    region and saved cursor in the framebuffer TTY and the multiplexer, and the
    `TERM` name that advertises exactly what is supported. ASCII only. The owner
    can run a full-screen program that finds the shell screen intact on exit, in
-   a tab and in a pane.
+   a tab and in a pane. Implemented as the [`pyxis` profile](../userland/terminal.md#tty-output-controls),
+   with vi, less, Kilo and Links moved onto the alternate screen;
+   [qualification and matched costs](../development/experiments/terminal-profile/README.md).
 4. [ ] **libuv backend.** libuv 1.52.1 with a Pyxis platform layer: loop, timers,
    async wake over a pipe pair, console and pipe streams, synchronous file calls,
    and child launch through the launcher. Pool, threads, sockets, file watches,
@@ -148,6 +150,17 @@ host provides, not the image.
    in the packaged configuration, and no threads, jobs or `:terminal`. BusyBox
    vi stays until the owner accepts the slice. Swap and backup need the identity
    contract and a lease and recovery policy first.
+
+Accepted 2026-10-10 for task 3, before implementation:
+
+4. **Multiplexer history.** The alternate screen keeps no history; wheel
+   browsing and selection stay on the live screen while it is up, and the
+   shell's screen and history return unchanged.
+5. **`TERM=pyxis`** in the packaged session configuration, with one documented
+   sequence table implemented by both terminals, including insert/delete line
+   and reverse index, and charset designations consumed.
+6. **Existing programs** move onto the alternate screen through small ports
+   patches: BusyBox vi and less, Links and Kilo.
 
 The thread-free bet is checked early, in task 4, not task 6.
 

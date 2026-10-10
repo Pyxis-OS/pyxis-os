@@ -115,11 +115,11 @@ static void fb_free(struct framebuffer *fb)
   }
 }
 
-static uint8_t *tty_cells_try_alloc(const struct framebuffer *fb)
+static uint8_t *tty_storage_try_alloc(const struct framebuffer *fb)
 {
-  size_t bytes;
-  if (__builtin_mul_overflow(fb->width / bizcat.width, fb->height / bizcat.height, &bytes) ||
-      !bytes) {
+  size_t cells, bytes;
+  if (__builtin_mul_overflow(fb->width / bizcat.width, fb->height / bizcat.height, &cells) ||
+      !cells || __builtin_mul_overflow(cells, TTY_STORAGE_BYTES_PER_CELL, &bytes)) {
     return NULL;
   }
   return kmalloc(bytes);
@@ -144,16 +144,18 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
 
   tty->fg = aardvark_scheme.foreground;
   tty->bg = aardvark_scheme.background;
+  tty->foreground = TTY_DEFAULT_COLOR;
+  tty->background = TTY_DEFAULT_COLOR;
 
   tty->font = &bizcat;
   tty->scheme = &aardvark_scheme;
   tty->fb = fb;
 
-  tty->cells = tty_cells_try_alloc(fb);
-  if (!tty->cells) {
+  uint8_t *storage = tty_storage_try_alloc(fb);
+  if (!storage) {
     panic("cannot allocate space TTY cells");
   }
-  memset(tty->cells, ' ', (size_t)tty->width * tty->height);
+  tty_attach_storage(tty, storage);
   tty_clear(tty);
 
   tty->initialized = true;
@@ -714,7 +716,7 @@ static bool begin_presenting(void)
 struct resize_space {
   struct space *space;
   struct framebuffer *fb;
-  uint8_t *cells;
+  uint8_t *storage;
   struct resize_space *next;
 };
 
@@ -735,7 +737,7 @@ static void resize_buffers_free(struct resize_buffers *buffers)
     struct resize_space *entry = buffers->spaces;
     buffers->spaces = entry->next;
     fb_free(entry->fb);
-    kfree(entry->cells);
+    kfree(entry->storage);
     kfree(entry);
   }
   fb_free(buffers->navigation);
@@ -765,8 +767,8 @@ static bool resize_buffers_prepare(struct resize_buffers *buffers,
     if (!entry->fb) {
       return false;
     }
-    entry->cells = tty_cells_try_alloc(entry->fb);
-    if (!entry->cells) {
+    entry->storage = tty_storage_try_alloc(entry->fb);
+    if (!entry->storage) {
       return false;
     }
   }
@@ -846,9 +848,9 @@ static void resize_display(void)
   size_t count = 0;
   for (struct resize_space *entry = buffers.spaces; entry; entry = entry->next) {
     struct framebuffer *old = entry->space->fb;
-    uint8_t *old_cells = entry->space->tty->cells;
-    tty_resize(entry->space->tty, entry->fb, entry->cells);
-    entry->cells = old_cells;
+    uint8_t *old_storage = entry->space->tty->storage;
+    tty_resize(entry->space->tty, entry->fb, entry->storage);
+    entry->storage = old_storage;
     entry->space->fb = entry->fb;
     entry->fb = old;
     ++count;

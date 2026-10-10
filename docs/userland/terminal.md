@@ -108,27 +108,57 @@ as before. The [shell](shell.md#commands-and-quoting) completes command names.
 
 ## TTY output controls
 
-The TTY keeps its parser state across writes. The supported subset is:
+The TTY keeps its parser state across writes. The
+[multiplexer's](multiplexer.md) pane terminal implements the same set, and the
+packaged [session configuration](session-configuration.md) names it
+`TERM=pyxis`, which promises exactly this table:
 
 | Bytes | Effect |
 | --- | --- |
 | LF / CR / BS | New row at column zero / column zero / one column left without erasing |
 | HT (`\t`) | Move to the next tab stop (eight columns by default), clamped to the last column, without erasing |
-| `CSI n A/B/C/D` | Move up/down/right/left, clamped to screen edges |
+| `CSI n A/B/C/D` | Move up/down/right/left, clamped to screen edges; up/down stop at the scroll region's margins when the cursor is inside it |
 | `CSI n G` | Set column (one-based) |
 | `CSI row;column H` | Set position (one-based) |
 | `CSI 0/1/2 K` | Erase line after/before/around cursor, including its cell |
 | `CSI 0/1/2 J` | Erase screen after/before/around cursor, including its cell |
+| `CSI top;bottom r` | Set the scroll region (DECSTBM), one-based and inclusive, and move to the top-left cell; missing or zero values select the screen edges |
+| `CSI n L` / `CSI n M` | Insert/delete lines at the cursor row within the scroll region, moving to column one; ignored outside it |
+| `ESC M` | Reverse index: move up, scrolling the region down at its top margin |
+| `ESC 7` / `ESC 8`, `CSI s` / `CSI u` | Save/restore the cursor position, colors, reverse video and pending wrap |
+| `CSI ? 1049 h/l` | Enter/leave the alternate screen |
 | `CSI ? 25 h/l` | Show/hide the nonblinking block cursor |
 | `CSI ... m` | Reset, reverse video, palette/default foreground and background |
+| `ESC ( x`, `ESC ) x`, `ESC * x`, `ESC + x` | Character set designation: consumed and ignored |
 
 `CSI` is Escape followed by `[`. Movement defaults to one; position defaults to
 row/column one. Erasing does not move the cursor. Style parameters are 0 (reset),
 7/27 (reverse on/off), 30–37/90–97 (foreground), 40–47/100–107 (background), and
-39/49 (separate terminal defaults). Unsupported controls are ignored. At most
-four parameters of up to 65535 are accepted; malformed or oversized CSI commands
-are discarded through their final byte. A new Escape starts a fresh sequence.
-This is a focused subset, not a claim of full ANSI/VT compatibility.
+39/49 (separate terminal defaults). Unsupported controls are ignored, including
+`CSI ? 47/1047/1048 h/l`, origin mode, character insert/delete and other escape
+sequences. At most four parameters of up to 65535 are accepted; malformed or
+oversized CSI commands are discarded through their final byte. A new Escape
+starts a fresh sequence. This is a focused subset, not a claim of full ANSI/VT
+compatibility, and it is ASCII only.
+
+**Scroll region.** LF on the region's bottom margin scrolls only the region; LF
+on the screen's last row below the region does not scroll. Wrapping follows LF.
+Scrolled and inserted rows take the current colors without reverse video. An
+invalid region (top not above bottom, or past the screen) is ignored. Switching
+screens and resizing reset the region to the whole screen.
+
+**Alternate screen.** libterm's `term_alternate_screen(term, enabled)` writes
+`CSI ? 1049 h/l`. vi, less, Kilo and Links run on the alternate screen, so
+quitting returns the shell's screen as it was. Entering saves the cursor as `ESC 7` does and shows a
+cleared second screen; leaving restores the first screen's cells, colors and
+saved cursor. Each screen has its own saved cursor. Entering while already on
+the alternate screen, or leaving while not, does nothing. Selection is cleared
+on either switch. Both screens keep their cells across resize, cropped like
+the visible one. The kernel TTY keeps glyph and style cells for both screens:
+six bytes per cell, preallocated with the space: 93,600 bytes for 240x65 cells at
+1920x1080, against 15,600 for glyphs alone before. In a
+multiplexer pane, the alternate screen has no history; see
+[multiplexer history](multiplexer.md#full-screen-programs-and-history).
 
 Horizontal tab stops are at multiples of the TTY's tab width from column zero. A tab at a
 stop advances to the next one. Tabs only move the cursor: they preserve existing
