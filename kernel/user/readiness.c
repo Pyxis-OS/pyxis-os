@@ -10,6 +10,7 @@
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
@@ -75,6 +76,9 @@ void readiness_complete(struct readiness_request *request, enum call_status stat
   }
   struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
   for (size_t i = 0; i < request->count; ++i) {
+    if (request->interests[i].object->type == OBJECT_ENDPOINT_RECEIVER) {
+      endpoint_readiness_unregister((struct endpoint *)request->interests[i].object);
+    }
     object_release(request->interests[i].object);
     request->interests[i].object = NULL;
   }
@@ -115,6 +119,10 @@ bool readiness_service(struct bsp_request **active_list)
     for (size_t i = 0; !stopped && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
+      case OBJECT_ENDPOINT_RECEIVER:
+        interest->ready = endpoint_receiver_ready((struct endpoint *)interest->object,
+            interest->events);
+        break;
       case OBJECT_PIPE:
         interest->ready = pipe_ready((struct pipe_end *)interest->object, interest->events);
         break;
@@ -211,6 +219,9 @@ void readiness_submit(struct readiness_request *request)
   bool watches_tcp = false;
   for (size_t i = 0; i < request->count; ++i) {
     enum object_type type = request->interests[i].object->type;
+    if (type == OBJECT_ENDPOINT_RECEIVER) {
+      endpoint_readiness_register((struct endpoint *)request->interests[i].object);
+    }
     request->watches_pipe |= type == OBJECT_PIPE;
     if (type == OBJECT_TCP || type == OBJECT_TCP_LISTENER) {
       watches_tcp = true;

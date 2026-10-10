@@ -1,4 +1,5 @@
 #include <abi/endpoint.h>
+#include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
@@ -9,6 +10,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
 enum delivery_state { DELIVERY_FREE, DELIVERY_FILLING, DELIVERY_QUEUED,
@@ -67,6 +69,7 @@ struct endpoint_state {
   size_t export_count;
   struct task_wait *waiting_receiver;
   size_t storage_references;
+  size_t readiness_waiters;
   bool closed;
 };
 
@@ -83,6 +86,73 @@ static void lock_endpoint(struct endpoint_state *state)
 static void unlock_endpoint(struct endpoint_state *state)
 {
   atomic_store_explicit(&state->locked, false, memory_order_release);
+}
+
+static uint64_t receiver_events(struct endpoint_state *state)
+{
+  if (state->closed) {
+    return WAIT_CLOSED;
+  }
+  if (state->head) {
+    return WAIT_READABLE;
+  }
+  for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
+    if (state->deliveries[i].cancel_pending) {
+      return WAIT_READABLE;
+    }
+  }
+  for (struct endpoint_export *export = state->exports; export; export = export->next) {
+    if (export->retire_pending) {
+      return WAIT_READABLE;
+    }
+  }
+  return 0;
+}
+
+static uint64_t begin_endpoint_update(struct endpoint_state *state)
+{
+  lock_endpoint(state);
+  return state->readiness_waiters ? receiver_events(state) : 0;
+}
+
+static void end_endpoint_update(struct endpoint_state *state, uint64_t before)
+{
+  bool notify = state->readiness_waiters && (receiver_events(state) & ~before);
+  unlock_endpoint(state);
+  /* Keep only the decision after unlock: a SEND may already be finished. */
+  if (notify) {
+    readiness_notify();
+  }
+}
+
+void endpoint_readiness_register(struct endpoint *receiver)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  ++state->readiness_waiters;
+  unlock_endpoint(state);
+}
+
+void endpoint_readiness_unregister(struct endpoint *receiver)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  KASSERT(state->readiness_waiters);
+  --state->readiness_waiters;
+  unlock_endpoint(state);
+}
+
+uint64_t endpoint_receiver_ready(struct endpoint *receiver, uint64_t events)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  uint64_t ready = receiver_events(state) & (events | WAIT_CLOSED);
+  unlock_endpoint(state);
+  cpu_restore_interrupts(flags);
+  return ready;
 }
 
 static enum call_status grant_status(enum capability_result result)
@@ -154,11 +224,11 @@ static void destroy_export_storage(struct kernel_object *object)
 static void destroy_export_client(struct kernel_object *object)
 {
   struct endpoint_export *export = (struct endpoint_export *)object;
-  lock_endpoint(export->endpoint);
+  uint64_t ready_before = begin_endpoint_update(export->endpoint);
   KASSERT(export->client_live && !export->in_flight);
   export->client_live = false;
   retire_export(export);
-  unlock_endpoint(export->endpoint);
+  end_endpoint_update(export->endpoint, ready_before);
   object_release(&export->storage);
 }
 
@@ -274,9 +344,9 @@ void endpoint_receipt_release(struct kernel_object *object)
 {
   struct endpoint_delivery_record *record = (struct endpoint_delivery_record *)object;
   struct endpoint_state *state = record->endpoint;
-  lock_endpoint(state);
+  uint64_t ready_before = begin_endpoint_update(state);
   bool destroy = release_receipt(record);
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   if (destroy) {
     object_release(&state->storage);
   }
@@ -341,13 +411,13 @@ void endpoint_handle_close(struct kernel_object *object)
 {
   if (object->type == OBJECT_ENDPOINT_RECEIVER) {
     struct endpoint_state *state = ((struct endpoint *)object)->state;
-    lock_endpoint(state);
+    uint64_t ready_before = begin_endpoint_update(state);
     close_endpoint(state);
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
   } else if (object->type == OBJECT_ENDPOINT_RECEIPT) {
     struct endpoint_delivery_record *record = (struct endpoint_delivery_record *)object;
     struct endpoint_state *state = record->endpoint;
-    lock_endpoint(state);
+    uint64_t ready_before = begin_endpoint_update(state);
     if (record->state == DELIVERY_RECEIVED) {
       record->state = DELIVERY_COMPLETE;
       record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
@@ -356,7 +426,7 @@ void endpoint_handle_close(struct kernel_object *object)
     }
     record->cancel_pending = false;
     record->receipt_handle = HANDLE_INVALID;
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
   }
 }
 
@@ -373,13 +443,13 @@ static void destroy_endpoint(struct kernel_object *object)
     }
     *link = endpoint->owner_next;
   }
-  lock_endpoint(state);
+  uint64_t ready_before = begin_endpoint_update(state);
   if (object->type == OBJECT_ENDPOINT_RECEIVER) {
     endpoint->owner = NULL;
     close_endpoint(state);
   }
   bool destroy = --state->storage_references == 0;
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   if (destroy) {
     object_release(&state->storage);
   }
@@ -393,11 +463,11 @@ void endpoint_process_exit(struct process *owner)
   while (endpoint) {
     struct endpoint *next = endpoint->owner_next;
     struct endpoint_state *state = endpoint->state;
-    lock_endpoint(state);
+    uint64_t ready_before = begin_endpoint_update(state);
     endpoint->owner = NULL;
     endpoint->owner_next = NULL;
     close_endpoint(state);
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     endpoint = next;
   }
 }
@@ -600,11 +670,11 @@ static struct syscall_result control_export(struct endpoint *receiver,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   struct endpoint_state *state = receiver->state;
-  lock_endpoint(state);
+  uint64_t ready_before = begin_endpoint_update(state);
   struct endpoint_export *export = find_export(state, id);
   if (state->closed || !export) {
     enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED : CALL_NOT_FOUND;
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     return (struct syscall_result){status, 0};
   }
   if (operation == ENDPOINT_WITHDRAW) {
@@ -620,12 +690,12 @@ static struct syscall_result control_export(struct endpoint *receiver,
       cancel_delivery(state, record, reason);
     }
     retire_export(export);
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     return (struct syscall_result){CALL_OK, 0};
   }
   KASSERT(operation == ENDPOINT_RETIRE_ACK);
   if (!export->retire_delivered || export->in_flight) {
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     return (struct syscall_result){CALL_BUSY, 0};
   }
   struct endpoint_export **link = &state->exports;
@@ -637,7 +707,7 @@ static struct syscall_result control_export(struct endpoint *receiver,
   export->linked = false;
   export->withdrawn = true;
   --state->export_count;
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   object_release(&export->storage);
   return (struct syscall_result){CALL_OK, 0};
 }
@@ -769,18 +839,18 @@ static enum call_status admit_message(struct endpoint *endpoint,
   if (message->size) {
     KASSERT(copy_from_user(record->request, message->buffer, message->size));
   }
-  lock_endpoint(state);
+  uint64_t ready_before = begin_endpoint_update(state);
   bool expired = wait && deadline_expired(message->deadline_ns);
   if (expired || state->closed || (target && target->withdrawn)) {
     record->state = DELIVERY_FREE;
     status = expired ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     release_grants(grants, rights, message->grant_count);
     return status;
   }
   if (target && !object_retain(&target->client)) {
     record->state = DELIVERY_FREE;
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     release_grants(grants, rights, message->grant_count);
     return CALL_LIMIT;
   }
@@ -822,7 +892,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
     *result = record;
   }
   wake_waiter(&state->waiting_receiver);
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   return CALL_OK;
 }
 
@@ -889,7 +959,7 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
       task_wait_sleep_interruptible(wait);
 
   struct endpoint_state *state = endpoint->state;
-  lock_endpoint(state);
+  uint64_t ready_before = begin_endpoint_update(state);
   if (!resumed || task_stop_requested()) {
     if (record->state != DELIVERY_COMPLETE) {
       cancel_delivery(state, record, CALL_ENDPOINT_CLOSED);
@@ -899,7 +969,7 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
     record->reply_count = 0;
     record->caller_active = false;
     free_delivery(record);
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   if (record->state != DELIVERY_COMPLETE) {
@@ -927,12 +997,12 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   }
   release_grants(record->reply_grants, record->reply_rights, record->reply_count);
   record->reply_count = 0;
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   struct syscall_result result = write_packet(reply_address, &output, record->reply, status);
-  lock_endpoint(state);
+  ready_before = begin_endpoint_update(state);
   record->caller_active = false;
   free_delivery(record);
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   return result;
 }
 
@@ -941,9 +1011,9 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
   struct endpoint_state *state = endpoint->state;
   for (;;) {
     struct task_wait *wait = task_wait_prepare();
-    lock_endpoint(state);
+    uint64_t ready_before = begin_endpoint_update(state);
     if (task_stop_requested() || state->closed) {
-      unlock_endpoint(state);
+      end_endpoint_update(state, ready_before);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
     for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
@@ -967,7 +1037,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
         .protocol = cancel->target ? cancel->target->protocol : 0,
         .operation = cancel->operation, .rights = cancel->rights, .reason = cancel->status};
       cancel->cancel_pending = false;
-      unlock_endpoint(state);
+      end_endpoint_update(state, ready_before);
       return write_packet(reply_address, &output, NULL, CALL_OK);
     }
     for (struct endpoint_export *export = state->exports; export; export = export->next) {
@@ -976,7 +1046,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
           .object_id = export->object_id, .protocol = export->protocol};
         export->retire_pending = false;
         export->retire_delivered = true;
-        unlock_endpoint(state);
+        end_endpoint_update(state, ready_before);
         return write_packet(reply_address, &output, NULL, CALL_OK);
       }
     }
@@ -984,14 +1054,14 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     if (!record) {
       KASSERT(!state->waiting_receiver);
       state->waiting_receiver = wait;
-      unlock_endpoint(state);
+      end_endpoint_update(state, ready_before);
       bool resumed = task_wait_sleep_interruptible(wait);
-      lock_endpoint(state);
+      ready_before = begin_endpoint_update(state);
       if (state->waiting_receiver == wait) {
         state->waiting_receiver = NULL;
       }
       bool stopped = !resumed || task_stop_requested();
-      unlock_endpoint(state);
+      end_endpoint_update(state, ready_before);
       if (stopped) {
         return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
       }
@@ -999,7 +1069,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     }
     size_t count = record->request_count;
     if (capability_free_slots(&process_current()->capabilities) < count + 1) {
-      unlock_endpoint(state);
+      end_endpoint_update(state, ready_before);
       enum call_status status = reserve_handles(count + 1);
       if (status != CALL_OK) {
         return (struct syscall_result){status, 0};
@@ -1020,7 +1090,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     enum capability_result result = capability_insert_batch(&process_current()->capabilities,
         objects, rights, transport, count + 1, handles);
     if (result != CAP_OK) {
-      unlock_endpoint(state);
+      end_endpoint_update(state, ready_before);
       return (struct syscall_result){grant_status(result), 0};
     }
     state->head = record->next;
@@ -1043,7 +1113,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     release_grants(record->request_grants, record->request_rights, count);
     record->request_count = 0;
     object_release(&record->receipt);
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     return write_packet(reply_address, &output, record->request, CALL_OK);
   }
 }
@@ -1066,27 +1136,27 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
     return (struct syscall_result){status, 0};
   }
   struct endpoint_state *state = record->endpoint;
-  lock_endpoint(state);
+  uint64_t ready_before = begin_endpoint_update(state);
   if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {
     expire_delivery(state, record);
   }
   if (record->state != DELIVERY_RECEIVED || state->closed) {
     status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     release_grants(grants, rights, message.grant_count);
     return (struct syscall_result){status, 0};
   }
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   if (message.size) {
     KASSERT(copy_from_user(record->reply, message.buffer, message.size));
   }
-  lock_endpoint(state);
+  ready_before = begin_endpoint_update(state);
   if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {
     expire_delivery(state, record);
   }
   if (record->state != DELIVERY_RECEIVED || state->closed) {
     status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
-    unlock_endpoint(state);
+    end_endpoint_update(state, ready_before);
     release_grants(grants, rights, message.grant_count);
     return (struct syscall_result){status, 0};
   }
@@ -1101,7 +1171,7 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   record->status = CALL_OK;
   record->state = DELIVERY_COMPLETE;
   wake_waiter(&record->wait);
-  unlock_endpoint(state);
+  end_endpoint_update(state, ready_before);
   KASSERT(capability_close(&process_current()->capabilities, handle) == CAP_OK);
   return (struct syscall_result){CALL_OK, 0};
 }
