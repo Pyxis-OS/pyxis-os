@@ -61,26 +61,42 @@ checks that the sources fit before mutation.
 
 ## Program stage
 
-The installed boot archive keeps only the rescue set: the executables named in
-`boot://share/installer/rescue.list` and every non-executable entry. The other
-`.pxe` executables move to the pool's `bin` volume, one directory per kernel
-revision. The installer releases its whole-disk claim and mounts the pool
+The installed boot archive keeps the executables named in
+`boot://share/installer/rescue.list` and shared data outside selected programs.
+Other root-level `.pxe` files and complete root-level `.pxb` directories move to
+the pool's `bin` volume, one directory per kernel revision. The installer
+releases its whole-disk claim and mounts the pool
 through the disk handle. It creates an empty `home` volume when the pool has
 none, without opening it, and stops there if that fails. It creates the `bin`
-volume when it is missing, writes
-every moved executable into `bin/REVISION`, syncs the pool and compares each
-copy with its source. A rerun replaces the files of an earlier partial
-`bin/REVISION`. Builds without a revision use `bin/unknown`.
+volume when it is missing, copies every selected program into `bin/REVISION`,
+syncs the pool, then verifies names, kinds, structure, sizes and bytes against
+the immutable boot source. Bundle copy preserves empty directories; verification
+detects missing and extra entries at every level. A rerun recursively clears and
+rewrites an earlier partial `bin/REVISION`. Builds without a revision use
+`bin/unknown`.
+
+Traversal uses bounded heap storage, one directory pair per level, and bounded
+file buffers. Its current installer settings admit at most 32 directory levels
+below the revision root, 65,536 selected entries in total, and native destination
+names up to 255 bytes. Program staging that exceeds these bounds fails before
+the ESP switch.
+
+This is an offline target update: READ_WRITE disk admission refuses any retained
+npfs pool on that disk. Installed programs cannot retain app/bin handles while
+the target is admitted for update. Held development directories are not snapshots;
+do not modify or delete published development trees while programs use them.
+Online or program-only updates need a separate revision lifetime contract.
 
 Writing the programs before the ESP is the commit rule. Until the ESP holds the
 new kernel, the disk boots its old kernel, and boot init binds that kernel's
 own `bin/REVISION`. An Update interrupted in the program stage therefore leaves
-the previous revision running.
+a different previous revision bootable.
 
-When the new revision equals the running one, as on a rerun, the program stage
-rewrites the directory `bin://` is bound to. An interruption can then leave it
-mixed until an Update completes. Builds of the same commit have the same files,
-so this matters mainly for builds without a revision, which share `bin/unknown`.
+When the new revision equals the installed one, as on a rerun, the program stage
+rewrites the directory that installed boot binds as `bin://`. An interruption can
+leave that tree incomplete until an Update completes. An unknown previous
+revision also prevents a guarantee that the rewritten directory is different.
+There is no atomic same-revision replacement.
 
 ## Replacement and verification
 
@@ -94,8 +110,10 @@ Update creates a fresh FAT32 filesystem inside the existing ESP and writes:
 - `boot/revision`.
 
 The kernel comes from the live boot's original immutable source file. The
-installed archive is the live archive without the moved executables, filtered
-in memory. The configuration comes from the packaged template, using the
+installed archive is the live archive without the moved program roots and bundle
+descendants, filtered in memory. Descendant matching respects path components:
+removing `nvim.pxb/` leaves an unrelated name such as `nvim.pxb-extra` intact.
+The configuration comes from the packaged template, using the
 existing disk GUID, the three-second menu and the normal and rescue entries,
 with no Install entry. The revision
 record comes from the running live kernel's SYSTEM_INFO. Install and Update
@@ -113,17 +131,21 @@ kernels or fallback entry.
 Success requires a disk flush, release of the partition claim without a GPT
 rescan, FAT directory traversal with byte-for-byte comparison against the boot
 sources, then a normal read-only reopen of partition 2's `system` root. The
-installer then removes every `bin` revision directory except the new one and
-the one the disk booted until now; when that one is unknown, as after damaged
-boot files, it removes none. Only then does the installer report `updated`. Remove the live medium and boot the target. Verification
+installer then recursively removes every `bin` revision directory except the
+new one and the one the disk booted until now; when that one is unknown, as after damaged
+boot files, it removes none. Cleanup is best effort: a failure reports a warning
+after the update has succeeded. The installer then reports `updated`. Remove
+the live medium and boot the target. Verification
 retains the pool until reboot, so a second update needs another live-media boot.
 The reopen establishes that the system root can be opened; it does not compare
 ordinary user files or replace whole-pool fsck.
 
 ## Recovery and qualification
 
-A failure in the program stage reports that the disk still boots its previous
-revision. A failure after the ESP claim reports that the EFI files may be
+A failure in the program stage reports that a different known previous revision
+remains bootable. For a same-revision rewrite or unknown previous revision it
+reports that the program revision may be partially rewritten. A failure after
+the ESP claim reports that the EFI files may be
 partially rebuilt. Both direct the user to boot the live image again and choose
 Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks

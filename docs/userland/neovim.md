@@ -4,10 +4,14 @@ The [recipe](../../ports/neovim/README.md) packages Neovim 0.12.5 as a native
 terminal bundle. From a local shell with launcher and pipe authority:
 
 ```text
-boot://share/neovim/nvim.pxb file.c
+nvim file.c
 ```
 
-A configured catalog may name the same bundle `nvim`. Ordinary commands and
+Bare `nvim` selects `bin://nvim.pxb` on live media and in an installed revision,
+without a catalog. `bin://nvim.pxb file.c` explicitly selects the same default
+entry. Port notes and source provenance live under `app/metadata/`; application
+and linked-dependency notices live under `app/metadata/licenses/`; read them at
+`bin://nvim.pxb/app/metadata/`. Ordinary commands and
 bundles do not inherit authority the shell lacks. The bundle needs memory,
 clock READ/SLEEP, launcher and pipe CREATE, plus a console and the directory
 roots for the files being edited. Its read-only `nvim_runtime://` resource
