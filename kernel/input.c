@@ -3,6 +3,10 @@
 #include <arch/ps2.h>
 #include <arch/smp.h>
 #include <kernel/input.h>
+#include <pointer-synthetic-config.h>
+#if POINTER_SYNTHETIC_ENABLED
+#include <kernel/input/synthetic_pointer.h>
+#endif
 #include <kernel/mouse.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
@@ -33,6 +37,9 @@ struct pending_pointer {
 static struct pending_pointer pointer_events[INPUT_POINTER_EVENTS];
 static size_t pointer_read, pointer_count;
 static bool pointer_reset_pending;
+#if POINTER_SYNTHETIC_ENABLED
+static uint32_t drained_physical_buttons;
+#endif
 
 static void assert_input_owner(void)
 {
@@ -415,28 +422,8 @@ uint32_t input_pointer_suppressed_buttons(void)
   return pointer_buttons(true);
 }
 
-void input_pointer_drain(void)
+static void drain_pointer_events(void)
 {
-  _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
-      MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
-      MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "normalized pointer button bits");
-  uint64_t flags = cpu_save_interrupts();
-  assert_input_owner();
-  struct mouse_event event;
-  while (mouse_read_event(&event)) {
-    if (!ps2_pointer.pointer_live) {
-      input_source_attach(&ps2_pointer, false, true);
-    }
-    if (event.reset) {
-      input_source_lost(&ps2_pointer);
-      ps2_pointer.suppressed_buttons = INPUT_BUTTONS;
-    } else {
-      input_pointer_report(&ps2_pointer, event.dx, event.dy, event.wheel, event.buttons);
-    }
-  }
-  if (mouse_available() && !ps2_pointer.pointer_live) {
-    input_source_attach(&ps2_pointer, false, true);
-  }
   if (pointer_reset_pending) {
     pointer_reset_pending = false;
     pointer_source_lost(pointer_buttons(false));
@@ -446,6 +433,11 @@ void input_pointer_drain(void)
     pointer_read = (pointer_read + 1) % INPUT_POINTER_EVENTS;
     --pointer_count;
     struct input_source *source = pending.source;
+#if POINTER_SYNTHETIC_ENABLED
+    if (!source->synthetic) {
+      drained_physical_buttons |= source->buttons | pending.report.buttons;
+    }
+#endif
     if (pending.loss) {
       uint32_t previous_buttons = pointer_buttons(false) | source->buttons;
       source->buttons = 0;
@@ -471,5 +463,37 @@ void input_pointer_drain(void)
       pointer_handle_input(&pending.report);
     }
   }
+}
+
+void input_pointer_drain(void)
+{
+  _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
+      MOUSE_BUTTON_RIGHT == POINTER_BUTTON_RIGHT &&
+      MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "normalized pointer button bits");
+  uint64_t flags = cpu_save_interrupts();
+  assert_input_owner();
+  struct mouse_event event;
+  while (mouse_read_event(&event)) {
+    if (!ps2_pointer.pointer_live) {
+      input_source_attach(&ps2_pointer, false, true);
+    }
+    if (event.reset) {
+      input_source_lost(&ps2_pointer);
+      ps2_pointer.suppressed_buttons = INPUT_BUTTONS;
+    } else {
+      input_pointer_report(&ps2_pointer, event.dx, event.dy, event.wheel, event.buttons);
+    }
+  }
+  if (mouse_available() && !ps2_pointer.pointer_live) {
+    input_source_attach(&ps2_pointer, false, true);
+  }
+#if POINTER_SYNTHETIC_ENABLED
+  drained_physical_buttons = 0;
+#endif
+  drain_pointer_events();
+#if POINTER_SYNTHETIC_ENABLED
+  pointer_synthetic_tick(drained_physical_buttons | pointer_buttons(false));
+  drain_pointer_events();
+#endif
   cpu_restore_interrupts(flags);
 }

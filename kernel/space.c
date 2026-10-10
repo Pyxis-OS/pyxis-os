@@ -81,7 +81,7 @@ static struct framebuffer *spaces_nav_fb;
 /* One text row of the space area. The cursor's row is composed here, cursor
  * included, so the screen never shows that row without the cursor. */
 static struct framebuffer *cursor_row_fb;
-static uint8_t *selection_row_glyphs;
+static struct terminal_cell *selection_row_cells;
 
 static struct framebuffer *fb_try_alloc(const struct framebuffer *layout,
     size_t width, size_t height)
@@ -155,10 +155,10 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   tty->geometry_generation = caelum_space ?
     caelum_space->tty->geometry_generation : 1;
 
-  tty->fg = aardvark_scheme.foreground;
-  tty->bg = aardvark_scheme.background;
-  tty->foreground = TTY_DEFAULT_COLOR;
-  tty->background = TTY_DEFAULT_COLOR;
+  tty->style = (struct terminal_style){
+    .foreground = TERMINAL_COLOR_DEFAULT,
+    .background = TERMINAL_COLOR_DEFAULT,
+  };
 
   tty->font = &bizcat;
   tty->scheme = &aardvark_scheme;
@@ -303,8 +303,8 @@ void space_init(void)
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(screen, screen->width, SPACES_NAV_HEIGHT);
   cursor_row_fb = fb_alloc(screen, screen->width, bizcat.height);
-  selection_row_glyphs = kmalloc(screen->width / bizcat.width);
-  if (!selection_row_glyphs) {
+  selection_row_cells = kmalloc(screen->width / bizcat.width * sizeof(*selection_row_cells));
+  if (!selection_row_cells) {
     panic("cannot allocate selection row");
   }
   pointer_init();
@@ -741,7 +741,7 @@ struct resize_buffers {
   struct resize_space *spaces;
   struct framebuffer *navigation;
   struct framebuffer *cursor;
-  uint8_t *glyphs;
+  struct terminal_cell *cells;
 };
 
 /* A missing remote flush acknowledgement keeps one old batch mapped for the
@@ -759,7 +759,7 @@ static void resize_buffers_free(struct resize_buffers *buffers)
   }
   fb_free(buffers->navigation);
   fb_free(buffers->cursor);
-  kfree(buffers->glyphs);
+  kfree(buffers->cells);
   *buffers = (struct resize_buffers){0};
 }
 
@@ -791,8 +791,8 @@ static bool resize_buffers_prepare(struct resize_buffers *buffers,
   }
   buffers->navigation = fb_try_alloc(layout, layout->width, SPACES_NAV_HEIGHT);
   buffers->cursor = fb_try_alloc(layout, layout->width, bizcat.height);
-  buffers->glyphs = kmalloc(layout->width / bizcat.width);
-  return buffers->navigation && buffers->cursor && buffers->glyphs;
+  buffers->cells = kmalloc(layout->width / bizcat.width * sizeof(*buffers->cells));
+  return buffers->navigation && buffers->cursor && buffers->cells;
 }
 
 /* Sole presenter, between frame leases. Device waits retain the published
@@ -878,9 +878,9 @@ static void resize_display(void)
   old = cursor_row_fb;
   cursor_row_fb = buffers.cursor;
   buffers.cursor = old;
-  uint8_t *old_glyphs = selection_row_glyphs;
-  selection_row_glyphs = buffers.glyphs;
-  buffers.glyphs = old_glyphs;
+  struct terminal_cell *old_cells = selection_row_cells;
+  selection_row_cells = buffers.cells;
+  buffers.cells = old_cells;
   display_resize_commit();
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
@@ -1110,7 +1110,8 @@ void space_present()
     composed = false;
     goto frame_done;
   }
-  uint32_t background = space->tty->bg;
+  uint32_t background = terminal_color_rgb(space->tty->style.background,
+      space->tty->scheme->palette, space->tty->scheme->background);
   const struct font *font = space->tty->font;
   const struct color_scheme *scheme = space->tty->scheme;
   size_t rows = space->tty->height;
@@ -1140,8 +1141,8 @@ void space_present()
       if (selected || caret) {
         memcpy((void *)cursor_row_fb->address, pixels + row * row_bytes, row_bytes);
         if (selected) {
-          memcpy(selection_row_glyphs + first, tty->cells + row * tty->width + first,
-              last - first + 1);
+          memcpy(selection_row_cells + first, tty->cells + row * tty->width + first,
+              (last - first + 1) * sizeof(*selection_row_cells));
         }
       }
       log_end(locked);
@@ -1154,8 +1155,9 @@ void space_present()
           row_start - copied);
       if (selected) {
         for (size_t column = first; column <= last; ++column) {
-          tty_plot_char_raw(cursor_row_fb, font, selection_row_glyphs[column],
-              column * font->width, 0, scheme->selection, scheme->selection_background);
+          tty_plot_char_styled(cursor_row_fb, font, (char)selection_row_cells[column].glyph,
+              column * font->width, 0, scheme->selection, scheme->selection_background,
+              selection_row_cells[column].attributes);
         }
       }
       if (caret) {

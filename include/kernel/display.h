@@ -10,6 +10,11 @@ struct pointer_frame;
  * AP startup: retain the boot mapping and prepare the first supported device. */
 void display_init(const struct boot_info *boot, const char *size, const char *timing,
                   bool timing_metrics);
+/* Built only with POINTER_SYNTHETIC=1. BSP/IF=0 schedule checkpoints reuse
+ * existing cumulative display/input metrics; no frame is forced here. */
+void display_cursor_probe_boundary(const char *window, uint64_t scheduled_elapsed,
+    uint64_t actual_elapsed, uint64_t synthetic_reports);
+
 /* Sole BSP presenter, IF=1, once. Failure leaves presentation unavailable. */
 bool display_start(void);
 /* BSP display services: acquisition/presentation fail after backend failure. */

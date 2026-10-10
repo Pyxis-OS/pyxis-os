@@ -137,6 +137,10 @@ cannot check the native register, clock, cursor-power or memory evidence.
 
 ## Native result — 2026-10-10
 
+For subsequent hands-free frame-skipping qualification, see the
+[synthetic motion schedule](#synthetic-motion-schedule) below. The original
+owner-operated baseline follows.
+
 Owner-run ThinkPad on AC, 1920x1080 GOP, PS/2 touchpad/TrackPoint, Development
 terminal prompt. Luna built PR head `d81c731a8f8d60490efb09eb7fe68c0de5ddbe6b`
 with the make flags above. PXE **Cursor inventory** used
@@ -215,3 +219,161 @@ retirement evidence**, plus the clock/power/keepout qualifications above. No
 native cursor write was performed, so this run cannot observe those transitions.
 A stable idle pending/taken/ACK value, register readback or guessed delay cannot
 justify image reuse, capture publication or software fallback after disable.
+
+## Synthetic motion schedule
+
+Owner-authorized diagnostic tool, 2026-10-10, for the hands-free native A/B of
+[whole-frame skipping (#676)](https://git.internal/PyxisOS/pyxis-os/pulls/676).
+Code commit `dc237005c9171cf4e3f463fcd4a5c44f1b50f225` is separate from the
+qualification documentation, and cherry-picks cleanly onto both control and
+candidate. It changes no dependency pins or GPU write permissions.
+
+`POINTER_SYNTHETIC=1` builds the source and adds `pointer.synthetic=schedule`
+to normal/rescue boot entries; installer entries omit it. Default zero omits
+both source and option. The source requires the exact boot option; a build with
+the source but without the option stays inactive. A normal build does not
+recognize the option. Changing the flag regenerates the configuration header
+and rebuilds its consumers, preventing stale opt-in code after a flag change.
+
+One retained, synthetic-tagged input source submits normalized relative reports
+through the ordinary per-source pointer queue and aggregation path, after
+physical input is drained. It never supplies buttons, wheel or user activation.
+The kernel currently has PS/2 as its physical pointer source; the tool does not
+add a USB driver. Physical reports remain additive and are not suppressed.
+
+The schedule starts when an ordinary local terminal is shown with no held
+buttons, pointer lock or power overlay. It retains that space, layer and geometry.
+Normal startup uses **Caelum's log terminal**; the source never selects Development
+or changes spaces. One positioning report during settle places the pointer at
+the circle's rightmost point. Its centre is the terminal body's centre; radius
+is at most 128 pixels, with a 64-pixel inset from the bar and display edges.
+The smooth integer circle has a ten-second period and at most one report per
+1/60-second slot; late service coalesces missed slots rather than emitting a
+burst. Integer rounding can produce zero-displacement reports. The second
+motion window resumes from the first window's held endpoint.
+
+| Marker | Scheduled elapsed | Following window |
+| --- | ---: | --- |
+| `settle` | 0 s | 10 s setup/settle |
+| `idle-1` | 10 s | 30 s idle |
+| `motion-1` | 40 s | 30 s motion |
+| `idle-2` | 70 s | 30 s idle |
+| `motion-2` | 100 s | 30 s motion |
+| `done` | 130 s | source detached; no restart |
+
+Every marker includes scheduled/actual nanoseconds, confirmed frame count,
+compose/copy cumulative totals, synthetic reports and ordinary pointer counters.
+`metrics=1` means the cursor probe is enabled. Marker frame/cost totals describe
+completed presentations, while input counters can include motion serviced during
+a pending flip; they are not a photon-time snapshot. Use complete interior
+sample intervals and marker order, excluding transition intervals. A's periodic
+samples count 120 presented frames; B's updated probe counts 120 service ticks
+and includes `services`/`skips`, so idle windows remain observable. Markers reuse
+the confirmed-frame counter on both builds; they do not advance it themselves.
+
+A space/layer/geometry change, lock, power overlay, any physical button press
+(including press/release within one drain), or motion about to leave the inset
+aborts permanently with `window=aborted`. It cannot click, select, scroll or
+change focus. Do not move a physical pointer during measurement. Run the short
+functional pass only after `done` on one B boot.
+
+Opt-in metrics and boundary logs remain visible on Caelum: they cause occasional
+idle redraws on B. These windows mean **no synthetic motion**, not no pixel
+changes. Do not compare their costs directly to #670's manually exercised
+Development prompt. Compare A and B with the same flags, space and logging.
+The tool adds no benchmark framework and no normal-build log lines.
+
+### Hands-free native A/B/A/B
+
+Luna builds two kernels with this identical tool commit:
+
+- **A:** `4b6550a6` plus `dc237005`; verified cherry-pick result
+  `2037ea410c3df3305004a5124ff4b4eac35acd34`.
+- **B:** #676 head `87e0301442692c2ef1157ec52a74b66ee4908677` plus `dc237005`;
+  verified cherry-pick result `a1dfbccd06d652c0347602e1e37fad3273c0d56c`.
+
+Cherry-pick result hashes can differ with committer metadata; record Luna's
+actual full revisions and kernel hashes. Use clean worktrees and their pinned
+submodules. Neither variant uses this tool PR's newer dependency pins.
+
+```sh
+git cherry-pick dc237005c9171cf4e3f463fcd4a5c44f1b50f225
+make -j16 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
+  DISPLAY_FLIP_METRICS=1 DISPLAY_TIMING=off DISPLAY_CURSOR_PROBE=1 \
+  POINTER_SYNTHETIC=1
+```
+
+Use **one identical initrd** for all four boots, including the existing native
+Quake/Chocolate Quake data for the later functional pass. Verify its hash at
+staging rather than relying on separately rebuilt payloads. Local A/B builds
+reuse the same verified unchanged SDK/userland/ports bundles and produce initrd
+SHA256 `e4c6dba0858c466c6c2cb0b6bf7db0f1422b0f612f092fc515b13a2d522298e7`;
+this local image is not the owner's game-data image. Local kernel SHA256:
+A `78a8f7fe081bed5fa2b554887bd39c7389e056ead33d822d453674e5878b215f`,
+B `21cff28432d9d97f0bc55dace16912752c34970fcedccd7371ac9cf7c5710dde`.
+
+PXE entry options, unchanged between A and B:
+
+```text
+display.flip=1 display.flip.metrics=1 display.cursor.probe=1 pointer.synthetic=schedule display.timing=off log.udp=1
+```
+
+Keep AC power and the 1920x1080 GOP mode. Remote reboot A, B, A, B, collecting
+separate UDP logs. Leave local input untouched until each boot emits
+`window=done` (130 seconds after `settle`, plus boot time); no stopwatch or UTC
+notes are needed. A reboot can follow that marker. On one B boot, do the owner's
+short functional pass after `done`, then reboot. An aborted schedule, refused
+flip preparation, FAILED state or timeout must be reported rather than treated
+as a matched motion run. Luna stages; this tool does not stage or reboot hardware.
+
+Extract the existing counters and new boundaries from each masked log:
+
+```sh
+rg 'pointer-synthetic:|display-cursor-probe:|display-flip-metrics:|renoir-flip: (metrics|unavailable|refused|timeout)|FAILED|surfaces pinned' BOOT.log
+```
+
+Report per-window counter differences and wall spans, including compositions,
+copies, submissions and screen moves. For B idle, compare total compose/copy work
+per elapsed second as well as per presented frame; per-frame averages alone
+hide the work avoided by skipping. Preserve the separate flip-validation/poll
+costs and input/device service checks. Native flip safety and owner visual
+judgement are still required; QEMU has no DCN.
+
+### Synthetic tool local checks
+
+The full source opt-in image and the source-disabled image build with the
+existing LLVM23 builder. Both exact A/B cherry-picks above build using verified
+unchanged bundles and the identical initrd hash recorded above. Flag 1→0
+rebuilds the gated consumers: the final source-disabled ELF has no synthetic
+source or boundary helper symbol, and its boot configuration omits the option.
+
+Manual QEMU 10.2.2, Q35/nested KVM, max CPU, four CPUs, 2 GiB, fresh OVMF,
+relative PS/2, VirtIO-SCSI CD/RNG, no NIC/disk/USB/audio. A and B each complete
+all six markers and detach at 130 seconds without abort or panic. Both target
+Caelum's 1280×768 body below the 32-pixel bar, centre (640,416), radius 128.
+At each idle boundary the report count stays unchanged until motion resumes.
+After `done`, counters remain unchanged until physical input; no restart.
+
+| Marker | A confirmed frames | B confirmed frames |
+| --- | ---: | ---: |
+| settle | 0 | 0 |
+| idle-1 | 599 | 8 |
+| motion-1 | 2394 | 23 |
+| idle-2 | 4193 | 1811 |
+| motion-2 | 5990 | 1827 |
+| done | 7774 | 3613 |
+
+The last boundary is 130.014 s on A, 130.002 s on B. Routed/synthetic reports
+match (3584 A, 3593 B); screen moves are 3562 and 3574. Missed slots and integer
+rounding explain these differences; the source promises a wall-time schedule,
+not identical report counts. The VMs ran concurrently for schedule validation,
+so these checks establish functional behaviour, not matched CPU performance.
+QEMU uses the absent-Renoir ordinary-copy path; native flip qualification remains
+for the owner's A/B/A/B. No pixel-work savings are claimed from this tool check.
+
+A source-enabled ELF booted with the option removed remains silent and has zero
+pointer reports through 26 seconds before physical input. Physical relative
+motion, Super+Right space navigation and `echo probe` work. The source-disabled
+image also boots without any synthetic output/reports. Shell syntax, whitespace
+and relative documentation links/anchors pass. Task-owned QEMU processes are
+stopped; no test or boot-output automation is committed.

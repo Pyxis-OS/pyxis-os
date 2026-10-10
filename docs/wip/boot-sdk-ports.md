@@ -122,15 +122,17 @@ Chosen by the owner, each starting with a proposal:
   task 1 is merged; task 2 and scaled game planes remain separate assignments.
 - **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
   the small first step is implemented and qualified; review before merge.
-- **Codex delta** (2026-10-10): [shared-address-space threads proposal](threads.md),
-  docs only after merged process-lifetime task #612; capability/VM ownership,
-  native lifecycle, TLS, stacks and libc/runtime gates. Implementation unassigned.
+- **Codex delta** (2026-10-10): [threads task 2](threads.md#shared-capability-and-vm-ownership),
+  owned call references and detached-generation CLOSE, still one user task and
+  exclusive BSP table loans. Review before merge; task 3 remains unassigned.
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Claude** (2026-10-10): [system power overlay](system-power-overlay.md),
-  a kernel-drawn Ctrl+Alt+Delete emergency screen with Shut down, Reboot and
-  Cancel; task 1 in #659, natively checked except the installed-system flush.
+- **Claude** (2026-10-10): [port sweep](../development/experiments/libc-port-sweep/README.md)
+  after the libc closure: Lua 5.5 calendar tables, SDL2's environment, Quake
+  and EDuke32 `fdopen`, Links `getcwd`. Neovim task 6 slice 3 (#678), task 5
+  (#672) and the [system power overlay](system-power-overlay.md) (#659) are
+  merged; the overlay's installed-system flush check is pending.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its

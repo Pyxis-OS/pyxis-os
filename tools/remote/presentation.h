@@ -4,6 +4,7 @@
 #include "buffer.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <terminal/style.h>
 
 struct presentation {
   struct byte_buffer *output;
@@ -15,12 +16,11 @@ struct presentation {
   bool wrap_pending;
   enum { PRESENT_TEXT, PRESENT_ESCAPE, PRESENT_CSI_ENTRY,
          PRESENT_CSI, PRESENT_CSI_IGNORE } state;
-  uint16_t parameters[4];
+  uint16_t parameters[TERMINAL_CSI_PARAMETERS];
+  uint16_t parameters_present;
   unsigned parameter_index;
   bool private_csi;
-  unsigned foreground;
-  unsigned background;
-  bool reverse;
+  struct terminal_style style;
 };
 
 void presentation_begin(struct presentation *screen);

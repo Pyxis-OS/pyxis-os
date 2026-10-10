@@ -19,6 +19,7 @@
 #include "timing.h"
 #include "presentation.h"
 #include "cursor_probe.h"
+#include <pointer-synthetic-config.h>
 
 #define DISPLAY_COPY_BYTES (64 * 1024)
 #define DISPLAY_PANIC_WAIT_LIMIT 1000000
@@ -182,6 +183,20 @@ const struct framebuffer *display_layout(void)
 {
   return target;
 }
+
+#if POINTER_SYNTHETIC_ENABLED
+void display_cursor_probe_boundary(const char *window, uint64_t scheduled_elapsed,
+    uint64_t actual_elapsed, uint64_t synthetic_reports)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct pointer_probe_stats input = pointer_probe_snapshot();
+  klog("pointer-synthetic: source=synthetic window=%s scheduled=%lu ns elapsed=%lu ns metrics=%u frames=%lu compose-total=%lu ns copy-total=%lu ns synthetic-reports=%lu reports=%lu relative-motion=%lu screen-moves=%lu\n",
+      window, scheduled_elapsed, actual_elapsed, (unsigned)cursor_probe_enabled,
+      metric_frames, compose_total, copy_total, synthetic_reports,
+      input.reports, input.relative_motion, input.screen_moves);
+  cpu_restore_interrupts(flags);
+}
+#endif
 
 static void update_gpu_availability(void)
 {

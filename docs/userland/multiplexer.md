@@ -121,8 +121,18 @@ VT escape set remain deferred.
 
 Each pane terminal implements the kernel TTY's
 [sequence table](terminal.md#tty-output-controls), including the alternate
-screen, scroll regions and saved cursor. History follows the primary screen
-only:
+screen, scroll regions and saved cursor.
+
+Each live, alternate and history cell is 12 bytes, retaining tagged colours and
+attributes. History still reserves 1,024 rows at the largest width seen; steady
+output allocates nothing. Creation and resize allocate new backing before
+publication and leave the old state intact on failure. The frame and previous
+frame use the same cells and compare fields rather than padding. At 160 columns,
+46 pane rows and a 160×48 outer frame, one pane's two screens, history and width
+array plus the frame pair request 2,335,232 bytes, excluding allocator overhead.
+
+History follows the primary screen only:
+
 - **Alternate screen:** it keeps no history. Rows scrolled off it are
   discarded, and while it is live, wheel and keyboard browsing and selection
   stay on the live screen. Entering it ends browsing. Leaving it returns the

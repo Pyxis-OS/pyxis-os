@@ -460,6 +460,14 @@ to about a second after discovery opens plus network, scheduling and cleanup del
 owner's ThinkPad PXE check; macOS listener behavior is unqualified ([qualification](development/remote-debugging.md#qualification)).
 Revisit if a multi-host or unattended workflow needs more.
 
+## Parked remote handoff shells
+
+Remote [`session` handoffs](userland/shell.md#session-handoff) retain one parked
+shell with its stack, heap and grants per chained handoff, as accepted by the
+owner. Disconnect still reclaims the whole execution group. Revisit with an
+acknowledged observer transfer to the daemon if deep or long-lived chains make
+the retained resources material; no handoff-depth quota is supplied.
+
 ## Kernel log retention and LAN visibility
 
 The [kernel log](interfaces/kernel-log.md) keeps 256 KiB in static storage, evicting whole oldest lines and discarding oversized ones;
@@ -528,9 +536,11 @@ authority, lifetime, capacity and failure rules are open and nothing is agreed, 
 ## Terminal profile limits
 
 The [`pyxis` terminal profile](userland/terminal.md#tty-output-controls) is ASCII only and has no origin mode, character insert, delete or
-erase (`CSI @`, `P`, `X`), `CSI ? 47/1047/1048`, horizontal margins or colors beyond the 16-entry palette; those sequences are ignored. The kernel TTY and the
-multiplexer's pane terminal implement the table separately and must change together; there is no shared parser across the kernel and
-userland boundary. Neovim is to be built without terminfo, and its built-in table has no `pyxis` entry, so the Neovim recipe must add one
+erase (`CSI @`, `P`, `X`), `CSI ? 47/1047/1048`, horizontal margins or colon-form colour controls. The kernel TTY and the
+multiplexer's pane terminal implement the sequence table separately and must change together; bounded SGR interpretation and
+palette definitions are shared with the host client. Scheme configuration is deferred (Aardvark everywhere today). Bitmap bold/italic/underline
+are synthetic and clipped to 8×16 cells; Unicode rendering needs a separate width/font contract. Neovim is to be built without terminfo,
+and its built-in table has no `pyxis` entry, so the Neovim recipe must add one
 matching the profile ([Neovim task 6](wip/neovim-libuv.md)). Revisit with UTF-8 rendering or when a program needs a missing sequence.
 
 ## Initial terminal multiplexer limits
@@ -538,7 +548,7 @@ matching the profile ([Neovim task 6](wip/neovim-libuv.md)). Revisit with UTF-8 
 The [multiplexer](userland/multiplexer.md) has one window and up to eight panes. Its native terminal subset has no Unicode widths or
 detach. History keeps 1,024 scrolled-off rows with no reflow or
 erased-screen archive; rows cropped by resize are not inserted into history (retaining them is a proposed follow-up), presentation crops
-at the session maximum and history storage keeps the largest width seen. Steady text storage is about 2.5 MiB per pane (resize can
+at the session maximum and history storage keeps the largest width seen. With 12-byte cells, steady live/alternate/history storage is about 9 MiB per pane at maximum geometry (resize can
 briefly double one pane's), with no per-group CPU or memory quota.
 
 A full pane input queue can hold a prefix behind already staged input, since bounded lossless storage cannot bypass a pending paste.
@@ -570,8 +580,8 @@ presentation breadth with a non-development deployment or text consumer; remote 
 
 The [descriptor portability slice](userland/libc-portability.md) supplies open/read/write/close and `lseek`; public O_RDWR and
 exclusive O_CREAT|O_EXCL use native constructs ([qualification](userland/libc-portability.md#readwrite-and-exclusive-create-qualification)),
-and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [SDL2 port](development/sdl2.md)). `fdopen` and duplication
-are absent: a consumer needs a separately agreed extension, and duplication must first settle shared open-state and cursor ownership.
+and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [SDL2 port](development/sdl2.md)). `fdopen` and `dup`
+share one descriptor object and cursor ([stdio](userland/stdio.md#opening-and-ownership)); `dup2`, `fcntl`, `freopen` and `setvbuf` are absent.
 Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
 Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
@@ -931,9 +941,9 @@ exist, and the recipe's libbb adapter covers only the selected vi and less helpe
 
 [Quake](userland/quake.md#saves-and-configuration) (config, saves, screenshots) and [vi](userland/vi.md) write a synced `NAME.XXXXXX` file beside
 the target and rename it over the target; a failure keeps the old file. Libc cannot sync a directory (a descriptor cannot open one), so a crash
-can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Libc has no
-`fdopen`, so Quake reopens the name `mkstemp` reserved. Saving needs directory CREATE and REMOVE, not only file WRITE, with no in-place fallback.
-A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md)) or `fdopen`.
+can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Quake
+writes through the descriptor `mkstemp` returns, with `fdopen`. Saving needs directory CREATE and REMOVE, not only file WRITE, with no
+in-place fallback. A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md)).
 
 ## less pager limits
 
@@ -1559,13 +1569,13 @@ until their report layout is established. Doom has no mouse support.
 ## Lua build runtime limits
 
 [Lua](userland/lua.md) supplies io/os, pure-Lua modules and native build helpers; `file:setvbuf`, `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, debug, full math and
-dynamic modules are absent, and `os.time` accepts wall time only (calendar-table conversion needs a `mktime` policy for ambiguous and nonexistent local input). Revisit each
+dynamic modules are absent, and `os.time(table)` raises upstream's error for DST gaps and unsettled folds ([calendar limits](#calendar-and-encoding-profile)). Revisit each
 for a concrete consumer. `os.tmpname` reserves a real exclusive empty file that callers must remove, and `io.tmpfile` creates then immediately unlinks one, so abrupt death
 between those operations or a failed unlink can leave a named file with no stale-name cleanup (revisit atomic anonymous creation only for a lifecycle need; reserved names
 are not ISO C `tmpnam`). `pyxis.run` inherits live C streams, omitting closed ones, but cursors, append mode, pushback and read-ahead belong to the parent runtime, so child
 streams begin at zero, unread buffered pipe bytes stay in Lua and `io.input`/`io.output` rebinding is local; revisit shared stream state only with a native ownership design.
 C-locale `strftime` supports standard conversions and E/O forms without width or flag extensions, `%z` loses historical offset seconds at minute precision (`tm_gmtoff` keeps
-them), a `tm_zone` designation is borrowed until timezone-cache replacement or exit, and locale selection and reverse calendar conversion are deferred.
+them), a `tm_zone` designation is borrowed until timezone-cache replacement or exit, and locale selection is deferred.
 
 ## Sorted ls memory and live file details
 
@@ -1645,9 +1655,30 @@ editing or deleting a live revision is unsupported.
 ## Native libuv first-slice limits
 
 The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
-stream/process interests per loop and synchronous filesystem calls. Child cwd,
+stream/process interests per loop and synchronous filesystem calls. Child
 bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
-APIs are omitted. Luv/Neovim must consume native stat validity and exit reasons,
-handle unsupported PIDs/signals, and close remaining libc/API gaps. Revisit in
-[Neovim tasks 5 and 6](wip/neovim-libuv.md#tasks); serving providers in a libuv
-loop needs a receiver adapter. Shared-process threads require a separate milestone.
+APIs are omitted. Luv consumes the native exit reasons and reports unsupported
+PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
+Neovim must still consume native stat validity and close remaining libc/API gaps
+in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
+receiver adapter. Shared-process threads require a separate milestone.
+
+## Calendar and encoding profile
+
+Libc's [`mktime`](userland/timezones.md#c-interface) fails with ENOTSUP for wall times in a DST gap and for folds that a
+nonnegative `tm_isdst` cannot settle, including standard-offset changes. Callers that expect glibc's adjustment across
+gaps or its choice in folds get an error instead. [`iconv`](kernel/userspace.md#foundational-libc)
+converts only UTF-8, ASCII, ISO-8859-1 and UTF-16LE/BE: Neovim reports other `fileencoding` values as unconvertible
+(it converts Latin-1, Latin-9 and the Unicode forms itself), and Git's BOM-detecting `UTF-16` working-tree encoding fails.
+There is no transliteration. Revisit when a port or user needs another encoding or gap normalization; each addition
+imports its musl table or rule explicitly.
+
+## Lua 5.1 and luv limits
+
+The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
+`io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
+`popen`/`system`, `clock`, locales, `setvbuf` and dynamic loading. `os.time(table)` returns `nil` for DST gaps and unsettled
+folds ([calendar limits](#calendar-and-encoding-profile)). luv reports TCP, UDP, DNS, watches, signals, work queues,
+callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
+descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
+[task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.

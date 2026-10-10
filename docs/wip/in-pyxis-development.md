@@ -116,7 +116,7 @@ only. Agreed 2026-10-06/07 and implemented with the following bounded contracts:
 - `os.tmpname` reserves an exclusive empty `tmp://` file; the caller removes it.
   `io.tmpfile` creates and unlinks a real file immediately. `file:setvbuf` stays
   absent. No stale temporary names are automatically deleted.
-- `os.time()` reads wall time; calendar tables are rejected. `os.date` uses
+- `os.time()` reads wall time and `os.time(table)` uses libc's `mktime`. `os.date` uses
   real C-locale `strftime` and actual UTC/TZif designations. `os.clock`,
   `os.setlocale` and dynamic modules remain absent.
 

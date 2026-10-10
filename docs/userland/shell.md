@@ -171,7 +171,9 @@ background command reports launch, not its later exit. Recognized builtins,
 including invalid builtin arguments, report builtin success (0) or failure (1);
 `session` and `service` remain builtin transactions even though they launch
 processes, and `exit` or a successful `session` handoff reports success before
-the shell leaves. Parse errors, command-form errors such as a builtin in a
+the shell leaves (after the successor wait in a remote handoff). The successor's
+outcome is propagated to shell exit, not the builtin status. Parse errors,
+command-form errors such as a builtin in a
 pipeline or with redirection, and submitted line-limit rejection report
 rejection. Diagnostics are written before the completion. This outcome is
 reporting only: script stopping, `exit` and fatal handling are unchanged.
@@ -645,7 +647,8 @@ when held; it cannot restore an omitted grant.
 ## Session handoff
 
 `session program [arguments...]` launches a successor in the same space and on
-its assigned CPU, then exits the calling shell successfully without waiting.
+its assigned CPU. Local callers exit successfully without waiting; remote
+callers park until the successor completes, as described below.
 For example, an init script can finish with `session boot://shell.pxe`. The
 command also works interactively; failed launch returns to the prompt, while
 script mode reports the script name/line and exits with failure as usual.
@@ -654,7 +657,7 @@ launch. The `session` word is removed from the child's arguments.
 
 The successor receives copies of the usual terminal and memory grants, the
 explicit selected root list and working-directory grants, current working-path
-metadata and initial environment, plus an explicit `launcher` resource preserving
+metadata and current environment, plus an explicit `launcher` resource preserving
 the caller's LAUNCH and any CREATE_GROUP authority. An optional `child_launcher`
 is forwarded separately with LAUNCH alone. Other startup
 resources, including the caller's `script`, `host_mount` and `native_mount`, are
@@ -662,19 +665,27 @@ not forwarded. Launching another script supplies that target's own READ script
 grant through `program_launch`.
 
 Successful launch ends script execution immediately: later lines do not run,
-and the caller never reads terminal input again. Closing its process observer
-and exiting releases only the caller's references; the successor keeps its own
+and the caller never reads terminal input again. A local caller closes its process
+observer and exits, releasing only its own references; the successor keeps its own
 references and can read input and launch programs after the caller is reclaimed.
 There is no wait for application readiness: success means the launch was
 accepted, not that the new program will initialize successfully. A later exit or
 fault does not bring back the original shell or restart the session.
 
-This is explicit delegation followed by caller exit, not process replacement
-or a terminal ownership protocol. It does not add supervision or `exec`.
+The remote server initializes the private `PYXIS_SESSION_WAIT=1` runtime policy.
+Each shell captures it at startup and forwards it only to `session` successors,
+including shebang scripts; ordinary commands, background jobs and services do
+not inherit it. The marker creates no authority. A waiting caller keeps the
+successor's observer, propagates its signed normal exit status and maps fault or
+termination to failure. Script handoffs also propagate this outcome. No waiting
+shell arms foreground interruption or reads input again, and `terminal_events`
+is never forwarded. One shell remains parked per chained handoff, retaining its
+stack, heap and grants until completion or disconnect cleanup.
 
-In a remote session, root-shell exit causes the server to terminate all remaining
-group members, including a session successor. Remote `session` handoff therefore
-cannot keep a successor running after that shell exits.
+This is explicit delegation with caller exit or a parked caller, without process
+replacement or application readiness acknowledgment. The remote server still
+terminates remaining descendants on root-shell exit and the entire group on
+disconnect; the parked root lets a successor finish before that exit.
 
 ## Power-off and restart
 
@@ -723,9 +734,9 @@ launcher through this policy. Trusted `session` handoff preserves
 `child_launcher` as a distinct resource. If Remote explicitly opts in, that grant
 is bound to the remote session's execution group.
 
-An initial directory chain is copied from startup, preserving its navigation
-boundary. A supplied chain requires a descriptive working path beginning with a
-`NAME://` scheme for prompt display. The path is not resolved to replace the
+The shell uses libc's retained [working-path context](process-state.md), seeded
+from startup with its navigation boundary. Unknown descriptive spelling leaves
+lookup usable and shows `[cwd unavailable]` in the prompt. The path is not resolved to replace the
 chain: actual handles remain authoritative, and insufficient grants
 fail normally. With no initial chain the shell starts at `tmp://`. Explicit
 scheme changes use the bound root's actual grant; each descendant lookup retains
@@ -747,12 +758,11 @@ launch authority follows the separate `child_launcher` policy above. When
 available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.
-The immutable initial environment is forwarded in full using
-libpyxis's borrowed environment-array accessors. No environment mutation or PWD
-maintenance is implemented. Children receive the full current working-path
-display string alongside their directory handles. Display normalization removes
-redundant separators and dot components, but lookup still walks the original
-input: `missing/..` fails rather than skipping the missing directory.
+An owned snapshot of libc's current environment is forwarded explicitly, with
+the existing network overlay. No shell assignment command or automatic PWD
+maintenance is added. Children receive current working-path metadata alongside
+independent directory grants. Display normalization removes redundant separators
+and dot components; lookup still walks the original input, so `missing/..` fails.
 
 The shell never reads terminal input while waiting. Successful wait means child
 resources have been reclaimed; it closes the observers, reports nonzero exits or

@@ -5,6 +5,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/object.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 
@@ -23,32 +24,40 @@ struct capability_entry {
 enum capability_result capability_grow(struct capability_table *table)
 {
   KASSERT(arch_cpu_index() == 0 && table);
+  spin_lock(&table->lock);
+  size_t previous_capacity = table->capacity;
+  spin_unlock(&table->lock);
   size_t limit = SIZE_MAX / sizeof(*table->entries);
   if (limit > HANDLE_SLOT_COUNT) {
     limit = HANDLE_SLOT_COUNT;
   }
-  if (table->capacity == limit) {
+  if (previous_capacity == limit) {
     return CAP_LIMIT;
   }
 
-  size_t capacity = table->capacity ? table->capacity : INITIAL_CAPACITY;
-  if (table->capacity) {
-    capacity = table->capacity > limit / 2 ? limit : table->capacity * 2;
+  size_t capacity = previous_capacity ? previous_capacity : INITIAL_CAPACITY;
+  if (previous_capacity) {
+    capacity = previous_capacity > limit / 2 ? limit : previous_capacity * 2;
   }
   struct capability_entry *entries = kmalloc(capacity * sizeof(*entries));
   if (!entries) {
     return CAP_NO_MEMORY;
   }
 
-  if (table->capacity) {
-    memcpy(entries, table->entries, table->capacity * sizeof(*entries));
-  }
-  for (size_t i = table->capacity; i < capacity; ++i) {
+  for (size_t i = previous_capacity; i < capacity; ++i) {
     entries[i] = (struct capability_entry){.generation = 1};
   }
-  kfree(table->entries);
+  spin_lock(&table->lock);
+  /* The existing exclusive BSP loan still covers allocation and publication. */
+  KASSERT(table->capacity == previous_capacity);
+  struct capability_entry *previous_entries = table->entries;
+  if (previous_capacity) {
+    memcpy(entries, previous_entries, previous_capacity * sizeof(*entries));
+  }
   table->entries = entries;
   table->capacity = capacity;
+  spin_unlock(&table->lock);
+  kfree(previous_entries);
   return CAP_OK;
 }
 
@@ -90,39 +99,47 @@ enum capability_result capability_insert(struct capability_table *table,
     return CAP_DENIED;
   }
 
+  spin_lock(&table->lock);
   size_t index;
   for (index = 0; index < table->capacity; ++index) {
     if (!table->entries[index].object && table->entries[index].generation) {
       break;
     }
   }
-  if (index == table->capacity) {
+  bool full = index == table->capacity;
+  spin_unlock(&table->lock);
+  if (full) {
     return CAP_FULL;
   }
   if (!object_grant_retain(object, rights)) {
     return CAP_LIMIT;
   }
 
+  spin_lock(&table->lock);
   struct capability_entry *entry = &table->entries[index];
+  KASSERT(!entry->object && entry->generation);
   entry->object = object;
   entry->rights = rights;
   entry->transport = transport;
   *handle = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | index;
+  spin_unlock(&table->lock);
   return CAP_OK;
 }
 
-size_t capability_free_slots(const struct capability_table *table)
+size_t capability_free_slots(struct capability_table *table)
 {
   if (!table) {
     return 0;
   }
 
+  spin_lock(&table->lock);
   size_t free_slots = 0;
   for (size_t i = 0; i < table->capacity; ++i) {
     if (!table->entries[i].object && table->entries[i].generation) {
       ++free_slots;
     }
   }
+  spin_unlock(&table->lock);
   return free_slots;
 }
 
@@ -152,6 +169,7 @@ enum capability_result capability_insert_batch(struct capability_table *table,
     }
   }
 
+  spin_lock(&table->lock);
   size_t slots[CAPABILITY_BATCH_MAX];
   size_t selected = 0;
   for (size_t i = 0; i < table->capacity && selected < count; ++i) {
@@ -159,6 +177,7 @@ enum capability_result capability_insert_batch(struct capability_table *table,
       slots[selected++] = i;
     }
   }
+  spin_unlock(&table->lock);
   if (selected != count) {
     return CAP_FULL;
   }
@@ -173,13 +192,16 @@ enum capability_result capability_insert_batch(struct capability_table *table,
     }
   }
 
+  spin_lock(&table->lock);
   for (size_t i = 0; i < count; ++i) {
     struct capability_entry *entry = &table->entries[slots[i]];
+    KASSERT(!entry->object && entry->generation);
     entry->object = objects[i];
     entry->rights = rights[i];
     entry->transport = transport[i];
     handles[i] = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | slots[i];
   }
+  spin_unlock(&table->lock);
   return CAP_OK;
 }
 
@@ -216,44 +238,59 @@ static struct capability_entry *find_entry(struct capability_table *table,
   return entry;
 }
 
-enum capability_result capability_resolve(struct capability_table *table,
+enum capability_result capability_acquire(struct capability_table *table,
     handle_t handle, uint64_t required_rights, uint64_t required_transport,
-    struct kernel_object **object, uint64_t *rights, uint64_t *transport)
+    struct capability_reference *reference)
 {
-  if (rights) {
-    *rights = 0;
-  }
-  if (transport) {
-    *transport = 0;
-  }
-  if (!object) {
+  if (!reference) {
     return CAP_INVALID;
   }
-  *object = NULL;
-
-  struct capability_entry *entry = find_entry(table, handle);
-  if (!entry) {
+  *reference = (struct capability_reference){0};
+  if (!table) {
     return CAP_BAD_HANDLE;
   }
-  if ((entry->rights & required_rights) != required_rights ||
+  spin_lock(&table->lock);
+  struct capability_entry *entry = find_entry(table, handle);
+  enum capability_result result = CAP_OK;
+  if (!entry) {
+    result = CAP_BAD_HANDLE;
+  } else if ((entry->rights & required_rights) != required_rights ||
       (entry->transport & required_transport) != required_transport) {
-    return CAP_DENIED;
+    result = CAP_DENIED;
+  } else if (!object_retain(entry->object)) {
+    result = CAP_LIMIT;
+  } else {
+    *reference = (struct capability_reference){entry->object, entry->rights, entry->transport};
   }
-  *object = entry->object;
-  if (rights) {
-    *rights = entry->rights;
+  spin_unlock(&table->lock);
+  return result;
+}
+
+void capability_release(struct capability_reference *reference)
+{
+  struct kernel_object *object = reference->object;
+  *reference = (struct capability_reference){0};
+  if (object) {
+    object_release(object);
   }
-  if (transport) {
-    *transport = entry->transport;
-  }
-  return CAP_OK;
+}
+
+static void release_closed_grant(struct kernel_object *object, uint64_t rights)
+{
+  endpoint_handle_close(object);
+  object_grant_release(object, rights);
 }
 
 enum capability_result capability_close(struct capability_table *table,
                                          handle_t handle)
 {
+  if (!table) {
+    return CAP_BAD_HANDLE;
+  }
+  spin_lock(&table->lock);
   struct capability_entry *entry = find_entry(table, handle);
   if (!entry) {
+    spin_unlock(&table->lock);
     return CAP_BAD_HANDLE;
   }
 
@@ -265,7 +302,8 @@ enum capability_result capability_close(struct capability_table *table,
   /* Unsigned wrap gives zero, which install skips rather than resurrecting
    * any handle previously issued for this slot. */
   ++entry->generation;
-  object_grant_release(object, rights);
+  spin_unlock(&table->lock);
+  release_closed_grant(object, rights);
   return CAP_OK;
 }
 
@@ -278,27 +316,36 @@ enum capability_result capability_grant(struct capability_table *destination,
     return CAP_INVALID;
   }
   *result = HANDLE_INVALID;
-  struct kernel_object *object;
-  enum capability_result status = capability_resolve(source, handle, rights,
-      transport, &object, NULL, NULL);
+  struct capability_reference reference;
+  enum capability_result status = capability_acquire(source, handle, rights,
+      transport, &reference);
   if (status != CAP_OK) {
     return status;
   }
-  if (object->type == OBJECT_ENDPOINT_RECEIPT ||
-      object->type == OBJECT_ENDPOINT_RECEIVER) {
-    return CAP_DENIED;
+  if (reference.object->type == OBJECT_ENDPOINT_RECEIPT ||
+      reference.object->type == OBJECT_ENDPOINT_RECEIVER) {
+    status = CAP_DENIED;
+  } else {
+    status = capability_install(destination, reference.object, rights, transport, result);
   }
-  return capability_install(destination, object, rights, transport, result);
+  capability_release(&reference);
+  return status;
 }
 
 void capability_table_destroy(struct capability_table *table)
 {
   KASSERT(arch_cpu_index() == 0);
-  for (size_t i = 0; i < table->capacity; ++i) {
-    if (table->entries[i].object) {
-      object_grant_release(table->entries[i].object, table->entries[i].rights);
+  spin_lock(&table->lock);
+  struct capability_entry *entries = table->entries;
+  size_t capacity = table->capacity;
+  table->entries = NULL;
+  table->capacity = 0;
+  table->execution_group = NULL;
+  spin_unlock(&table->lock);
+  for (size_t i = 0; i < capacity; ++i) {
+    if (entries[i].object) {
+      release_closed_grant(entries[i].object, entries[i].rights);
     }
   }
-  kfree(table->entries);
-  *table = (struct capability_table){0};
+  kfree(entries);
 }

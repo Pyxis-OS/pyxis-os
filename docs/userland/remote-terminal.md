@@ -261,6 +261,11 @@ The presentation tracks the native TTY subset across output records: LF resets
 the column, tabs move without erasing and clamp to the edge, wrapping is delayed,
 and FRESH_LINE cancels an incomplete escape. Non-ASCII output is displayed as
 one `?` cell; machine mode preserves every byte.
+Interactive SGR uses the shared [colour and attribute rules](terminal.md#tty-output-controls):
+bold, italic, underline, reverse, 256 indices and semicolon RGB, with atomic
+rejection of malformed or oversized sequences. It resolves indices using
+Aardvark and emits RGB and glyph attributes for the host font. Transfer controls
+are intercepted before presentation as before; machine output remains byte-exact.
 
 Machine mode requires no controlling terminal:
 
@@ -418,6 +423,14 @@ session disconnection even if input bytes remain buffered; clients must use the
 END_INPUT frame for graceful stdin EOF. This policy does not change native TCP
 read semantics, where buffered bytes drain before read returns EOF.
 
+For a successful `session` handoff, the remote root shell stays parked until its
+successor finishes, then exits with the successor's signed normal exit status
+(fault or termination becomes failure). Chained handoffs retain one parked shell
+per handoff. The old input reader never resumes. The builtin success event
+reports the accepted handoff after this wait; FINAL carries the propagated shell
+outcome. Remaining descendants and disconnected sessions still use the same
+group termination and cleanup path.
+
 During orderly closure the server drains accepted terminal output, awaits group
 cleanup, emits FINAL, shuts down TCP writes and waits for the peer to close.
 A five-second deadline covers closing output and transport shutdown. Expiry
@@ -442,11 +455,31 @@ framebuffer.
 
 Ordinary remote commands receive no launcher or pipe-creation service.
 `ipcbench` and `iobench pipe` require the `session` handoff to obtain those grants.
-That handoff replaces the root shell; its exit causes remote group termination,
-so these successor workloads are not a persistent remote-shell benchmark path.
-Run those launch-dependent benchmarks from the local Development session.
+The parked shell lets these successors finish and report their results.
 Ordinary `allocbench` and non-pipe `iobench` modes use the configured remote grants.
-This limitation does not grant an ordinary child supervision or launch authority.
+Ordinary children still receive no supervision or launch authority.
+
+On the LAN host, this captures all four IPC workloads hands-free, one reverse
+connection per command. stdin EOF ends input while the client receives output;
+no sleep, guest `exit` or session reattachment is needed. Set `run_dir` separately
+for each staged A/B boot, and use the same fixed userland in both images.
+
+```sh
+run_dir="$HOME/xf/A1"
+mkdir -p "$run_dir"
+for mode in call send; do
+  for size in 64 4096; do
+    printf 'session bin://ipcbench.pxe %s --size %s --messages 256 --rounds 5\n' "$mode" "$size" |
+      pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323 \
+        >"$run_dir/${mode}-${size}.jsonl" || exit 1
+  done
+done
+```
+
+Each file contains warmup, five verified passes, a summary and FINAL with status
+0 and complete drain. See the [before/after qualification](../development/experiments/remote-session-handoff/README.md)
+for the QEMU NAT adaptation and inspected cleanup. Native post-fix qualification
+remains an owner check.
 
 The underlying [terminal sessions](terminal-sessions.md),
 [TCP listener/readiness contract](../devices/tcp.md),

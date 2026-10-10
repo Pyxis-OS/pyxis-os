@@ -85,6 +85,28 @@ context intact. A retained directory
 continues referring to its object if its name later changes; displayed text is
 not used to rediscover it.
 
+Libc and the shell share the mutable [process working path](process-state.md);
+independent native contexts keep their explicit ownership.
+
+## Proved realpath
+
+Libc `realpath` resolves the original input through native capabilities before
+normalizing its candidate `scheme://` spelling. It holds the original target,
+re-resolves that candidate and requires matching valid live identity domain and
+object IDs. Relative input also re-resolves the tracked cwd description and
+compares every retained ancestor, with both chains held. Unknown or stale
+ancestry and unavailable identity cannot become successful proof. Provider
+routes are refused before OPEN; missing components and denied authority remain
+real errors. `missing/..` still fails. Aliases keep their selected scheme names.
+
+The bounded profile accepts input and output fitting `PATH_MAX` (4096 bytes
+including NUL), without imposing that bound on other path helpers. A supplied
+result buffer must hold PATH_MAX bytes and stays unchanged on failure;
+`realpath(path, NULL)` allocates a result released with `free`. Libuv's synchronous
+`uv_fs_realpath` owns its proved result until request cleanup. Proof samples
+identity while references are held, freezes no names or contents and promises
+nothing about a later lookup after return. A descriptive `getcwd` is not a proof.
+
 ## Removal paths
 
 `path_remove()` walks intermediate components in order, retaining parent grants,
