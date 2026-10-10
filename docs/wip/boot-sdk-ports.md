@@ -121,8 +121,9 @@ Chosen by the owner, each starting with a proposal:
   implemented with matched QEMU/native counters and the owner's functional pass;
   ready for review before merge. [Renoir cursor](renoir-hardware-cursor.md)
   task 1 is merged; task 2 and scaled game planes remain separate assignments.
-- **Codex** (2026-10-10): [endpoint receiver readiness](later-os-directions.md#completion-based-asynchronous-operations),
-  the small first step is implemented and qualified; review before merge.
+- **Codex** (2026-10-10): [Neovim task 6 slice 4](neovim-groundwork.md#slice-4-contract-accepted-2026-10-10),
+  native editor recipe, TUI and runtime, with QEMU tab/pane qualification; review
+  before merge. Native qualification and the extended terminal profile follow.
 - **Codex delta** (2026-10-10): [threads task 3](threads.md#shared-capability-and-vm-ownership),
   owner-assigned shared-table delivery, growth, reservations and owned inputs;
   still one user task. Tasks 1–2 are merged; later gates need separate assignment.

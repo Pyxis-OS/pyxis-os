@@ -89,20 +89,23 @@ without Neovim.
    and child processes through luv. Implemented as the [`lua51` recipe](../../ports/lua51/README.md)
    and the `boot://share/lua51/lua5.1.pxb` bundle;
    [qualification](../development/experiments/lua51-luv/README.md).
-6. [ ] **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
+6. [x] **Neovim recipe and first slice.** Neovim 0.12.5 and its closure (utf8proc,
    tree-sitter library, iconv) with host generators kept native, plus the libc
    functions its build finds missing. The owner can run `nvim file`, edit with vi
    keys, save, and quit in a tab and a pane. The task is split around the
    accepted shared-libc contract and remaining recipe/qualification work. The [task 6 groundwork](neovim-groundwork.md)
    records the current-SDK build inventory and shared-libc contract accepted
    by the owner on 2026-10-10;
-   the groundwork probe is recorded, editor implementation and qualification remain open.
+   the native [editor reference](../userland/neovim.md) and [QEMU qualification](../development/experiments/neovim-first-slice/README.md) describe the delivered slice.
    - [x] Current-SDK probe inventory and native-design proposal.
    - [x] Shared libc working path and explicit environment, with consumers and child snapshots.
    - [x] Bounded proved realpath and fdopen/shared descriptor association (`dup`).
    - [x] Calendar (`mktime`), encoding (`iconv`) and the numeric/string closure.
-   - [ ] Stream rebinding/buffering after assignment.
-   - [ ] Recipe and full editor qualification after assignment.
+   - [x] Stream rebinding and explicit output buffering.
+   - [x] Recipe, full link and QEMU tab/pane qualification.
+7. [ ] **Owner native qualification and closure.** Repeat the slice 4 editor
+   checks on the ThinkPad; retain the profile exclusions. Native checks and
+   the richer terminal-profile follow-up remain separate assignments.
 
 Later, each with its own proposal:
 - swap and backup recovery (needs task 2 and a lease policy);
