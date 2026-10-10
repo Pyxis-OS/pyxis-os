@@ -1,17 +1,21 @@
 # Keyboard input
 
-The PS/2 keyboard delivers physical key events through
+PS/2 and [USB boot keyboards](usb-hid.md) deliver physical key events through
 [`keyboard_read_event()`](../../include/kernel/keyboard.h). One BSP kernel task
 consumes them; the call is nonblocking and preserves interrupt state. The
 presentation task drains pending events before drawing and sleeping.
 
 Each event identifies a key, press/release/repeat action, and modifier state
 after that action. Key names describe PC key positions, not text: `KEY_A` does
-not choose a character or keyboard layout. Lock modifiers toggle on the first
-press; their LEDs are not updated. Pause produces a press/release pair because
-its ordinary scan sequence has no separate release.
+not choose a character or keyboard layout. Lock modifiers toggle on the first accepted press; their LEDs are not updated.
+Per-device held keys aggregate across keyboards: releasing one device does not
+release another device's key. USB repeat begins after 500 ms and then every
+33 ms on the latest repeatable key, without catching up missed intervals.
+PS/2 hardware typematic is unchanged. Repeats create no clipboard activation.
+PS/2 Pause produces a press/release pair because its scan sequence has no
+separate release.
 
-The IRQ handler only collects bytes into a bounded queue. The consuming task
+The PS/2 IRQ handler only collects bytes into a bounded queue. The consuming task
 decodes them. If bytes are lost, the next read reports `KEY_STATE_RESET` with
 `KEY_NONE` and clears held keys and modifiers. Discard any held-key state in the
 consumer too. A false return leaves the event unchanged.
@@ -30,8 +34,9 @@ Initialization uses ACPI to find the keyboard's I/O APIC route and directs it to
 the BSP. The controller uses untranslated scan set 2. The auxiliary port carries
 the [mouse](mouse.md); controller bytes are routed by the status register's
 auxiliary bit, and a mouse failure never affects keyboard setup.
-`keyboard_available()` is false if firmware reports no usable route
-or controller, or keyboard initialization fails. Serial input is separate.
+A failed PS/2 setup leaves that source unavailable; `keyboard_available()`
+is true while either PS/2 or a live USB keyboard is available. Serial input
+is separate.
 
 An ACKed `F0 02` selects scan set 2. Setup then queries the set while scanning
 is disabled. The query commands still require ACKs, but the ID byte is optional:
@@ -176,7 +181,9 @@ notification in the reader's execution.
 The session queue holds 64 events. Overflow drops the queued events and the
 event that overflowed it, clears accepted presses, and queues `KEY_STATE_RESET`.
 Subsequent fresh presses may follow that reset; orphan repeats/releases are
-ignored. Device scan loss similarly resets all application destinations. These
+ignored. Device scan loss, USB source removal and USB rollover similarly reset all
+application destinations. Surviving physical holds are quarantined until released.
+A resolved report after rollover cannot turn an unknown hold into a fresh press. These
 notifications wake a blocked reader even while graphics is hidden or its space
 is inactive. Without focus or a notification, a blocking READ can keep waiting;
 focus loss does not suspend the process.

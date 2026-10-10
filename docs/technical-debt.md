@@ -318,12 +318,10 @@ natively in the boot log, raw terminals and mux on 2026-10-09; that correction n
 
 [Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as printable ASCII; non-ASCII glyphs,
 original tabs, soft wraps and intentional trailing spaces have the [initial delivery limits](#initial-clipboard-delivery-limits).
-Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. PS/2 is the only
-pointer source, with raw counts and relative-mode Synaptics behavior; Bluetooth aggregation, USB HID, acceleration, absolute-mode
-scrolling, remote pointer transport and multiple-display composition are separate tracks. The current PS/2 reset hook alone does not
-implement the accepted conditional multi-source rules: revisit input routing through the
-[pointer source boundary](interfaces/pointer.md#input-source-coordination) when another trusted source is integrated, so independent
-masks never release a surviving source's held buttons.
+Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. [USB boot mice](devices/usb-hid.md) and PS/2 now share the accepted multi-source
+button and loss rules. Bluetooth input, acceleration, absolute-mode scrolling,
+remote pointer transport and multiple-display composition remain separate work.
+Revisit each when a concrete consumer or native device needs it.
 
 ## VirtIO cursor frontend limits
 
