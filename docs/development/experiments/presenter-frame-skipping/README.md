@@ -96,8 +96,8 @@ forced wedged writer, timeout or panic run is added.
 
 Native-option QEMU checks the absent-Renoir refusal path; it cannot check DCN
 idle validation. Local raw captures/GDB output remain in `/tmp`. Default logging
-adds no new lines. The complete [native-option steps](#native-qualification--luna-stages-owner-checks)
-below cover the remaining host qualification.
+adds no new lines. The [native results](#native-abab-result--2026-10-10) below
+cover paired-boot counters; the short functional pass remains pending.
 
 ## Native A–B–A–B result — 2026-10-10
 
