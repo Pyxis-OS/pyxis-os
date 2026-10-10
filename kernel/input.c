@@ -216,6 +216,7 @@ void input_keyboard_snapshot(struct input_source *source, const bool keys[KEY_CO
   KASSERT(source && source->keyboard_live && keys);
   drain_ps2_keyboard();
   if (source->keyboard_initial_hold) {
+    source->keyboard_unresolved = false;
     bool any_held = false;
     for (size_t key = 1; key < KEY_COUNT; ++key) {
       any_held |= keys[key];
