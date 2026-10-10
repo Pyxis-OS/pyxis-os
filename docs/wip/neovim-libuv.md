@@ -1,7 +1,7 @@
 # Neovim on Pyxis
 
 Status: **milestone decisions accepted 2026-10-10; task 1 merged in #651.**
-Task 2 is assigned; its contract below awaits owner decisions before code.
+Task 2 is assigned; its contract is accepted and implementation authorized.
 Later tasks start only on the owner's go. The owner
 wants Neovim as the development editor (vi bindings now, clangd later) instead
 of patching BusyBox vi. The initial re-check used code and document inspection
@@ -96,9 +96,7 @@ LuaJIT, and clangd with the [hosted Clang direction](hosted-clang.md).
 
 ### Task 2 contract
 
-**Proposed, not accepted or implemented.** Inspected main `df0885f2`, userspace
-`5aede1c2`, ports `19fb10b0`, fs `b427df29`. No task 2 baseline or runtime claim.
-Three material decisions, with defaults:
+**Accepted 2026-10-10; implementation authorized, not yet implemented.**
 
 1. **Identity — live backend objects within one boot, using a comparable
    64-bit domain/object pair.** Domains follow backing instances/volumes, not
@@ -135,11 +133,15 @@ Three material decisions, with defaults:
    providers and special objects. Only unsupported-query BAD_OPERATION permits
    fallback to SIZE; operational/malformed failures remain errors.
 
-3. **Consumers — fail closed when an identity comparison is required; retain
+3. **Consumers — refuse a redirect only when distinctness cannot be proved; retain
    TCC once-header streams until translation-unit cleanup.** Before any resize,
    the shell compares every explicit output with every stage's final FILE stdin,
-   including inherited input. Alias, unknown identity or failed query aborts
-   before truncation; no FILE input/output pair needs no comparison. Created
+   including inherited input. Domain availability is independent of object-ID
+   availability: objects in proven different domains are distinct even if an
+   object ID is unavailable (for example a private HTTP snapshot and a home
+   volume file). Within one domain, an alias or unavailable identity aborts
+   before truncation. Unknown domain or failed required query cannot prove
+   distinctness and aborts too; no FILE input/output pair needs no comparison. Created
    outputs may remain, and later resize/launch failure has no rollback. Argument
    files are outside this check: `cat < input > alias` is covered,
    `cat input > alias` is not.
@@ -160,7 +162,7 @@ Evidence: [RAM](../../kernel/object/file.c),
 not continuity after final FORGET; [virtiofsd](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/passthrough/inode_store.rs)
 uses host inode/device/mount internally, but GETATTR omits the filesystem device.
 
-After acceptance, capture baseline before code: existing small-file iobench
+Capture baseline before code: existing small-file iobench
 open/read rounds, include-heavy TCC preprocessing and a bounded manual open/stat
 workload on RAM, HOST and installed-image npfs. Repeat matched samples and record
 ranges/configuration; end-to-end costs are not isolated stat latency. No new
