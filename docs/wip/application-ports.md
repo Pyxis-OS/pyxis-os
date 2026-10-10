@@ -19,7 +19,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 
 | Candidate | Intended use and initial investigation |
 | --- | --- |
-| POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi and less use it; grep, sed and awk remain later candidates. |
+| POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi, less and grep use it; sed and awk remain later candidates. |
 | fastfetch | [Implemented native port](../userland/fastfetch.md), packaged in the normal image with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
 | zlib | [Implemented development library](../development/ports.md#zlib-development-library), first consumed by [screenshot PNG output](../userland/screenshot.md). Jar files and BusyBox `gzip`/`unzip` remain later consumers. |
 | libpng | [Implemented development library](../development/ports.md#libpng-development-library), with explicit zlib input and screenshot RGB8 write qualification; target decoding, viewers and drawing tools remain later work. |
@@ -33,7 +33,8 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
 | uniq | [Implemented sbase port](../userland/uniq.md), packaged in the normal image with libc `getline`/`isblank` and validated against host upstream output. |
 | wc, tail, sort | [Implemented sbase ports](../userland/wc-tail-sort.md), packaged in the normal image and validated against host upstream output. `tail -f` is refused, as Pyxis cannot wait for a file to grow; see [technical debt](../technical-debt.md#sbase-tail-follow-and-sort-limits). |
-| grep, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. Pure text filters can be ports; commands that inspect system state are native. |
+| grep | [Implemented sbase port](../userland/grep.md) with `-r` over the native directory listing, packaged in the normal image and validated against host upstream and GNU output. |
+| hexdump | Still undecided: port or implement natively. A pure byte filter can be a port; this is not a commitment to a complete Unix utility suite. |
 | Everyday gaps | Small missing commands and options noticed in use are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. Implemented native commands are covered in [everyday commands](../userland/everyday-commands.md). |
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
