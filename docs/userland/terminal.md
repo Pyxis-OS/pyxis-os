@@ -148,6 +148,7 @@ packaged [session configuration](session-configuration.md) names it
 | `CSI 39/49 m` | Separate terminal default foreground/background |
 | `CSI 38;5;n m`, `CSI 48;5;n m` | Indexed foreground/background, `n` in 0–255 |
 | `CSI 38;2;r;g;b m`, `CSI 48;2;r;g;b m` | RGB foreground/background, each component in 0–255 |
+| UTF-8 text | One cell per supported scalar; unsupported scalars and invalid bytes use the visible replacement below |
 | `ESC ( x`, `ESC ) x`, `ESC * x`, `ESC + x` | Character set designation: consumed and ignored |
 
 `CSI` is Escape followed by `[`. Movement defaults to one; position defaults to
@@ -176,7 +177,36 @@ become separate attributes. Only semicolon RGB/indexed forms are supported;
 colon forms discard the whole CSI too. Malformed CSI is consumed through its
 final byte. A new Escape
 starts a fresh sequence. This is a focused subset, not a claim of full ANSI/VT
-compatibility, and it is ASCII only.
+compatibility. Text follows the bounded UTF-8 repertoire below.
+
+**UTF-8 text.** Kernel TTYs, mux panes and interactive pyxis-remote share one
+stream decoder and repertoire. The Bizcat atlas is unchanged. In addition to
+ASCII U+0020–007E, the exact single-cell set is:
+
+- Box drawing: U+2500 `─`, U+2502 `│`, U+250C `┌`, U+2510 `┐`, U+2514 `└`,
+  U+2518 `┘`, U+251C `├`, U+2524 `┤`, U+252C `┬`, U+2534 `┴`, U+253C `┼`.
+- Arrows: U+2190–2193 `← ↑ → ↓`.
+- Latin-1 U+00A0–00FF except U+00A4, A6–A8, AC–AD, AF, B1–B9 and BC–BE.
+  These 19 missing scalars use replacement; NBSP is a blank cell.
+
+Every supported scalar occupies one 8×16 cell. A valid unsupported code point,
+including combining marks, C1 controls, wide characters and supplementary
+scalars, produces one U+FFFD cell, without combining or width changes. Invalid
+UTF-8 produces one replacement per invalid byte. Native rendering uses the
+atlas's distinct outlined placeholder at slot FF; it is not ASCII `?`.
+U+00FF (`ÿ`) uses its real glyph at slot FB. The remote client emits UTF-8 for
+supported scalars and U+FFFD for replacement; its host font determines shapes.
+Machine output and transfer payloads remain byte-exact.
+
+Partial UTF-8 persists across writes and resize. A raw C0 control or DEL
+interrupts a partial sequence, replacing each pending byte before its existing
+control behavior; raw control bytes never select the atlas's graphic slots.
+An explicit fresh-line boundary also flushes an incomplete sequence. Screen
+clear resets parser state. Cells retain scalars rather than atlas slots, in the
+same 12-byte backing; history and alternate screens preserve them. Line editing
+and safe terminal Paste remain ASCII-only. `tree` emits the supported box
+characters by default. Its explicit `--ascii` branch option supports byte-oriented
+consumers such as the current less; it does not change filename encoding.
 
 **Scroll region.** LF on the region's bottom margin scrolls only the region; LF
 on the screen's last row below the region does not scroll. Wrapping follows LF.
@@ -192,7 +222,7 @@ cleared second screen; leaving restores the first screen's cells, colors and
 saved cursor. Each screen has its own saved cursor. Entering while already on
 the alternate screen, or leaving while not, does nothing. Selection is cleared
 on either switch. Both screens keep their cells across resize, cropped like
-the visible one. Each stored cell uses 12 bytes for its glyph, attributes and
+the visible one. Each stored cell uses 12 bytes for its scalar, attributes and
 tagged index/default/RGB colours. The kernel preallocates both screens with the
 space: 24 bytes per grid position, or 374,400 bytes for 240×65 cells at
 1920×1080. Selection staging retains glyph attributes; the block caret changes
@@ -329,7 +359,7 @@ lock and published through the ordinary readiness notification.
 
 ## Local visible-cell selection
 
-Local framebuffer terminals retain their visible 8-bit glyphs alongside the
+Local framebuffer terminals retain their visible single-cell Unicode scalars alongside the
 raster. The [system pointer](../interfaces/pointer.md#terminal-control-and-selection)
 routes a left press to a pending anchor. It clears the previous selection, but
 selects nothing until the pointer enters a different cell while left is held.
@@ -350,9 +380,9 @@ This applies to Caelum's kernel-log terminal too. An acquired mux controller
 instead owns its spatial queue and selects from its own pane cells/history.
 Ordinary local TTY wheel input does not scroll: there is no kernel scrollback.
 Selection alone does not copy. [Terminal clipboard](../interfaces/clipboard.md)
-Copy freezes a completed selection as owned printable-ASCII text, LF-joins
-physical rows and trims trailing spaces. Selected non-ASCII glyphs refuse the
-entire operation. Ctrl+Shift+C/V uses the space-local layer; Super+Shift+C/V uses
+Copy freezes a completed selection as owned UTF-8 text, LF-joins physical
+rows and trims trailing ASCII spaces. The 64 KiB limit counts encoded bytes;
+over-limit Copy refuses the whole operation. Ctrl+Shift+C/V uses the space-local layer; Super+Shift+C/V uses
 the shared layer. Caelum's log supports Copy without an application paste target.
 
 ## Clipboard paste in line readers

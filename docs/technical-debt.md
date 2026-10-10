@@ -378,7 +378,7 @@ natively in the boot log, raw terminals and mux on 2026-10-09; that correction n
 
 ## System pointer selection and input limits
 
-[Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as printable ASCII; non-ASCII glyphs,
+[Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as bounded UTF-8;
 original tabs, soft wraps and intentional trailing spaces have the [initial delivery limits](#initial-clipboard-delivery-limits).
 Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. [USB boot mice](devices/usb-hid.md) and PS/2 now share the accepted multi-source
 button and loss rules. Bluetooth input, acceleration, absolute-mode scrolling,
@@ -546,13 +546,15 @@ authority, lifetime, capacity and failure rules are open and nothing is agreed, 
 
 ## Terminal profile limits
 
-The [`pyxis` terminal profile](userland/terminal.md#tty-output-controls) is ASCII only and has no origin mode, character insert, delete or
-erase (`CSI @`, `P`, `X`), `CSI ? 47/1047/1048`, horizontal margins or colon-form colour controls. The kernel TTY and the
-multiplexer's pane terminal implement the sequence table separately and must change together; bounded SGR interpretation and
-palette definitions are shared with the host client. Scheme configuration is deferred (Aardvark everywhere today). Bitmap bold/italic/underline
-are synthetic and clipped to 8×16 cells; Unicode rendering needs a separate width/font contract. Neovim is to be built without terminfo,
-and its built-in table has no `pyxis` entry, so the Neovim recipe must add one
-matching the profile ([Neovim task 6](wip/neovim-libuv.md)). Revisit with UTF-8 rendering or when a program needs a missing sequence.
+The [`pyxis` profile](userland/terminal.md#tty-output-controls) has a fixed
+single-cell UTF-8 repertoire, synthetic clipped bitmap styles and no combining
+or wide-cell layout. Nineteen Latin-1 scalars use replacement. Origin mode,
+character insert/delete/erase, horizontal margins and colon colours remain
+absent; the kernel/mux sequence parsers must stay in step. Scheme configuration
+and the Neovim Unicode profile follow-up are separate work. Revisit with a
+consumer needing broader text or missing controls. The owner's
+[far-future scalable-font direction](wip/neovim-groundwork.md#terminal-utf-8-first-slice)
+is unassigned.
 
 ## Initial terminal multiplexer limits
 
@@ -581,8 +583,8 @@ exhaust the server, and there is no idle timeout, authentication, encryption, re
 QEMU entry point, but any process reaching it gets the configured shell privileges, with shared roots, space and CPU and no separate
 principals or quotas. Live/PXE Remote explicitly enables power: any reachable LAN peer can reboot or power off the machine, an owner-accepted
 sole-user home-LAN exposure; installed remote defaults omit it. Revisit power delegation with authentication or a broader deployment.
-Address changes invalidate the listener without automatic rebinding. The interactive host renderer shows one `?`
-cell for non-ASCII bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
+Address changes invalidate the listener without automatic rebinding. The interactive host renderer follows the bounded UTF-8 terminal repertoire and
+emits U+FFFD for unsupported scalars or invalid bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
 then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
 ([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and
 presentation breadth with a non-development deployment or text consumer; remote resize negotiation and reconnect are separate work.
@@ -850,11 +852,10 @@ for behavior, measured/manual evidence and validation limits.
 - **One line:** LF/Tab become spaces and insertion needs a fresh Enter after
   completion. Multi-line documents cannot be preserved by these line readers;
   revisit with a multiline/raw-program receiver, preserving newline safety.
-- **Selection fidelity:** ASCII-only Copy refuses non-ASCII glyphs, LF-joins
-  physical rows and trims trailing spaces, including intentional whitespace.
-  Tabs and soft wraps cannot be reconstructed from retained glyph cells. Revisit
-  with a verified font mapping and terminal text/provenance work, not by labeling
-  arbitrary bytes UTF-8.
+- **Selection fidelity:** UTF-8 Copy LF-joins physical rows and trims trailing
+  ASCII spaces, including intentional whitespace. Tabs, soft wraps and unsupported
+  source scalars cannot be reconstructed from retained cells. Revisit with
+  terminal text/provenance work; safe Paste remains ASCII-only.
 - **Storage:** One current item per local/shared layer; RAM only, no history,
   lost at reboot. Revisit history/persistence as separate owner-chosen work.
 - **Admission:** 64 KiB text and 8 MiB aggregate current/staging/active-snapshot

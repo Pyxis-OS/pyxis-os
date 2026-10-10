@@ -257,7 +257,7 @@ Suppress unsupported Pyxis DCS/OSC probes (`tui/tui.c:482–495`): both current
 parsers otherwise draw query payload as text. Set upstream's `NVIM_NOTTYFAST=1`
 **before startup**, since setting `nottyfast` in user configuration is too late;
 leave `COLORTERM` unset. This is a bounded port profile, not a renderer expansion.
-Later terminal OSC/DCS consumption and Unicode rendering remain separate work.
+Later terminal OSC/DCS consumption and a broader Unicode repertoire remain separate work.
 
 ## Remaining delivery slices
 
@@ -289,4 +289,25 @@ history rows per pane and the existing eager creation/resize rollback.
 [Qualification and measured costs](../development/experiments/terminal-sgr/README.md)
 cover tab, pane, remote transfer and live resize, including the backing increase
 and small measured output costs. Allocation-failure rollback is inspected,
-not injected. Scheme configuration and Unicode rendering remain deferred.
+not injected. Scheme configuration and a broader Unicode repertoire remain deferred.
+
+## Terminal UTF-8 first slice
+
+Owner decisions accepted 2026-10-10; implementation in progress.
+
+- [ ] Deliver bounded UTF-8 in kernel TTY, mux and interactive remote, UTF-8
+  selection Copy and tree box drawing, with matched terminal qualification.
+
+Keep the Bizcat atlas and advertise only the exact
+[terminal repertoire](../userland/terminal.md#tty-output-controls). Its 19
+missing Latin-1 scalars use replacement. Native U+FFFD maps to the atlas's
+outlined placeholder, distinct from `?`. Partial sequences survive writes;
+unsupported scalars produce one cell, invalid bytes one replacement each, and
+raw controls retain their meaning. Supported scalars stay in 12-byte cells;
+Copy exports UTF-8 under the existing byte limit. Safe Paste and line editing
+stay ASCII-only. The Neovim Unicode profile change is a separate follow-up.
+
+Far-future owner direction, 2026-10-10 (unassigned): scalable fonts, choosing
+TTF/OTF/WOFF by implementation ease, for example an stb_truetype-style rasterizer
+with a glyph cache. This slice adds no font source, dependency or scalable-font
+contract.
