@@ -38,8 +38,9 @@ the copy with the panel. Application frames arrive whole through the
 
 The sole BSP presenter snapshots physical position, image, hotspot and effective
 visibility alongside the chosen graphics frame with IF=0, after a successful
-frame begin. A custom immutable image retains a reference through display and
-capture completion; replacement or owner exit releases only its published
+frame begin. A separate decision snapshot observes visual changes without
+consuming an application slot. A custom immutable image retains a reference
+through display and capture completion; replacement or owner exit releases only its published
 reference. Static arrow and terminal defaults need no allocated image lease.
 Surface ownership, routing, visibility and warp are described in
 [system pointer](../interfaces/pointer.md#userspace-pointer-sessions).
@@ -59,10 +60,11 @@ background and unused pixel bits. Device row padding passes through unchanged.
 Final spans enter the existing capture tee once; application, TTY and navigation
 backing remain cursor-free.
 
-Boot and Bochs use this software path with the existing full repaint and
-approximately 60 Hz cadence. The next repaint restores the old pointer location;
-mouse packets add no frame submission. There is no additional full-screen
-buffer. A 64x64 image bounds blending to 4,096 pixels per frame; measured cost
+Boot and Bochs use this software path on changed frames. The presenter services
+input/devices at approximately 60 Hz; unchanged frames skip all pixel work and
+submission. Visible pointer changes force a full repaint that restores the old
+location. See [whole-frame skipping](../wip/presenter-frame-skipping.md). There
+is no additional full-screen buffer. A 64x64 image bounds blending to 4,096 pixels per frame; measured cost
 and runtime coverage are recorded separately in
 [system pointer qualification](../development/system-pointer-qualification.md).
 VirtIO uses the hardware pointer described below and this software blend only
@@ -161,8 +163,8 @@ changes use MOVE_CURSOR without another upload; unchanged posted state adds
 no cursor request. Ordinary frames post the command and release their image
 lease: command bytes and uploaded image storage are owned by the driver. The
 cache describes the last posted state; its outstanding descriptor distinguishes
-unconfirmed state. The next frame polls completion without sleeping, allowing
-cursor work to overlap disjoint framebuffer copies and control commands. Slot or
+unconfirmed state. Each presenter service tick polls completion without sleeping,
+including idle skips, allowing cursor work to overlap disjoint framebuffer copies and control commands. Slot or
 cursor-backing reuse and resize drain any previous command before mutation.
 Capture additionally drains the command matching its leased snapshot before
 publication, including unchanged state whose earlier command is still pending.
@@ -187,10 +189,10 @@ not those resources. Terminal failure retains device storage and adds no softwar
 fallback. Panic remains serial-only without cursor, control, reset or allocation
 work.
 
-Normal VirtIO scanout remains cursor-free. Full-frame copies, transfers and
-approximately 60 Hz cadence remain unchanged; mouse reports add no independent
-frame submission. This does not reduce the full-frame pixel budget. Matched
-nested-KVM synchronous MOVE frames originally measured 5.263–6.614 ms against
+Normal VirtIO scanout remains cursor-free. Changed frames still copy/transfer
+in full, including visible pointer changes in this task; unchanged service ticks
+skip transfer and submission. Independent cursor-only updates remain later work.
+Matched nested-KVM synchronous MOVE frames originally measured 5.263–6.614 ms against
 the software baseline's 3.659–4.388 ms; one cursor wait measured 1.69 ms. The
 review fix removes that post-command wait from ordinary frames. Warm moves add
 no allocation or control upload. The review follow-up measured 5.31 ms warm
