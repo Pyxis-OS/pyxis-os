@@ -54,7 +54,7 @@ Initial A1 medians (range), milliseconds except launch seconds:
 | CALL4096 complete | 87.249 (86.368..99.328) | 95.763 (75.399..132.791) |
 | SEND64 admit / complete | 1.189 (1.165..1.985) / 13.591 (12.737..14.212) | 1.199 (1.117..1.866) / 14.772 (11.226..23.509) |
 | SEND4096 admit / complete | 1.252 (1.236..2.524) / 13.713 (12.930..16.943) | 1.262 (1.203..2.598) / 12.900 (11.475..25.019) |
-| 1024 launches, seconds | 4.30 (3.36..4.33) | pending extraction |
+| 1024 launches, seconds | 4.30 (3.36..4.33) | 4.41 (3.96..6.11) |
 | Pages, ms | 5.251 (5.232..6.280) | 4.886 (4.868..5.018) |
 
 After code, complete matched per-CPU A1/B1/A2/B2 boot order using the exact same

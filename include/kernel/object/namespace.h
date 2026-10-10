@@ -4,6 +4,7 @@
 #include <abi/namespace.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/object/capability.h>
 #include <kernel/service/request.h>
 #include <stdbool.h>
 
@@ -11,15 +12,16 @@ struct capability_table;
 
 struct namespace_create_request {
   struct bsp_request request;
-  struct capability_table *table;
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
   handle_t handle;
   enum call_status result;
 };
 
-/* BSP executor, IF=0, with exclusive table ownership. */
+/* BSP executor, IF=0, with a reserved destination slot. */
 void namespace_create_execute(struct namespace_create_request *request);
 
-/* BSP, IF=0. Creation borrows an exclusively owned caller table. */
+/* BSP, IF=0. Creation publishes into the caller's reserved slot. */
 struct kernel_object *namespace_service_create(void);
 
 /* IF=0, caller holds a namespace reference. Presence includes dead exports;

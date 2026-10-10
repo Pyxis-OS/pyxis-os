@@ -4,21 +4,23 @@
 #include <abi/screen_capture.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/object/capability.h>
 #include <kernel/service/request.h>
 
 struct capability_table;
 
 struct screen_capture_request {
   struct bsp_request request;
-  struct capability_table *table; /* Exclusive parked-caller loan until completion. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
   struct screen_capture_reply reply;
   enum call_status status;
 };
 
 /* BSP/IF=0, owned reference to observation of the whole local screen. */
 struct kernel_object *screen_capture_create(void);
-/* Current user syscall, IF=0. Validates output before handing off the caller's
- * capability table; the presenter installs the immutable FILE before wakeup. */
+/* Current user syscall, IF=0. Reserves the result slot before submission;
+ * the presenter installs the immutable FILE before wakeup. */
 struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity);
 

@@ -4,6 +4,7 @@
 #include <abi/terminal.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/object/capability.h>
 #include <kernel/service/request.h>
 
 struct capability_table;
@@ -12,7 +13,8 @@ struct space;
 
 struct terminal_create_service_request {
   struct bsp_request request;
-  struct capability_table *table; /* Exclusive loan through completion. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[4];
   struct space *space;
   uint64_t columns, rows;
   struct terminal_create_reply reply;

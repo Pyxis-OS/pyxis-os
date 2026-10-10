@@ -4,6 +4,7 @@
 #include <abi/pipe.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/object/capability.h>
 #include <kernel/service/request.h>
 
 struct pipe_pair;
@@ -11,7 +12,8 @@ struct capability_table;
 
 struct pipe_create_request {
   struct bsp_request request;
-  struct capability_table *table; /* Exclusive loan until completion. */
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[2];
   struct pipe_create_reply reply;
   enum call_status result;
 };

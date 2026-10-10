@@ -97,42 +97,36 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  struct capability_reference reference;
-  enum capability_result result = capability_acquire(&process->capabilities,
-      source, rights, transport, &reference);
+  struct capability_grant grant;
+  enum capability_result result = flags & HANDLE_COPY_SAME_RIGHTS ?
+      capability_grant_acquire_same(&process->capabilities, source, &grant) :
+      capability_grant_acquire(&process->capabilities, source, rights, transport, &grant);
   if (result != CAP_OK) {
     KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED || result == CAP_LIMIT);
     enum call_status status = result == CAP_LIMIT ? CALL_LIMIT :
         result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
     return (struct syscall_result){status, 0};
   }
-  if (reference.object->type == OBJECT_ENDPOINT_RECEIPT ||
-      reference.object->type == OBJECT_ENDPOINT_RECEIVER) {
-    capability_release(&reference);
-    return (struct syscall_result){CALL_DENIED, 0};
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  result = capability_validate_grants(&process->capabilities, &grant, 1);
+  if (result == CAP_OK) {
+    result = capability_request_reservation(1, &reservation, &slot);
   }
-  if (flags & HANDLE_COPY_SAME_RIGHTS) {
-    rights = reference.rights;
-    transport = reference.transport;
-  }
-
-  handle_t handle;
-  for (;;) {
-    result = capability_insert(&process->capabilities, reference.object, rights,
-        transport, &handle);
-    if (result != CAP_FULL) {
-      break;
-    }
-    result = capability_request_growth();
-    if (result != CAP_OK) {
-      break;
-    }
-  }
-  capability_release(&reference);
   if (result != CAP_OK) {
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+    capability_grant_release(&grant);
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
+    enum call_status status = result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+        result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+    return (struct syscall_result){status, 0};
   }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    capability_grant_release(&grant);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  handle_t handle;
+  capability_install_reserved(&reservation, &slot, &grant, 1, &handle);
   /* Private mappings stay stable while the sole user task is blocked. */
   KASSERT(copy_to_user(destination, &handle, sizeof(handle)));
   return (struct syscall_result){CALL_OK, sizeof(handle)};

@@ -162,39 +162,55 @@ static enum call_status pipe_install_status(enum capability_result result)
 
 void pipe_create_execute(struct pipe_create_request *request)
 {
-  KASSERT(arch_cpu_index() == 0 && request->table);
+  KASSERT(arch_cpu_index() == 0 && request->reservation.table);
   struct pipe_end *reader, *writer;
   request->result = CALL_NO_MEMORY;
   if (pipe_pair_create(&reader, &writer)) {
-    handle_t read_handle, write_handle;
-    enum capability_result result = capability_install(request->table,
-        &reader->object, PIPE_RIGHT_READ, 0, &read_handle);
+    struct capability_grant grants[2] = {0};
+    enum capability_result result = capability_grant_retain(&reader->object,
+        PIPE_RIGHT_READ, 0, &grants[0]);
     if (result == CAP_OK) {
-      result = capability_install(request->table,
-          &writer->object, PIPE_RIGHT_WRITE, 0, &write_handle);
+      result = capability_grant_retain(&writer->object, PIPE_RIGHT_WRITE, 0, &grants[1]);
       if (result == CAP_OK) {
-        request->reply = (struct pipe_create_reply){read_handle, write_handle};
+        KASSERT(capability_validate_grants(request->reservation.table, grants, 2) == CAP_OK);
+        handle_t handles[2];
+        capability_install_reserved(&request->reservation, request->slots, grants, 2, handles);
+        request->reply = (struct pipe_create_reply){handles[0], handles[1]};
         request->result = CALL_OK;
       } else {
-        KASSERT(capability_close(request->table, read_handle) == CAP_OK);
         request->result = pipe_install_status(result);
       }
     } else {
       request->result = pipe_install_status(result);
     }
+    for (size_t i = 0; i < 2; ++i) {
+      capability_grant_release(&grants[i]);
+    }
     object_release(&reader->object);
     object_release(&writer->object);
   }
-  request->table = NULL;
+  capability_reservation_release(&request->reservation, request->slots);
 }
 
 static enum call_status create_pipe(struct pipe_create_reply *reply)
 {
   struct process *process = process_current();
   KASSERT(process);
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[2];
+  enum capability_result reserved = capability_request_reservation(2, &reservation, slots);
+  if (reserved != CAP_OK) {
+    return pipe_install_status(reserved);
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, slots);
+    return CALL_ENDPOINT_CLOSED;
+  }
   struct pipe_create_request *request =
       (struct pipe_create_request *)bsp_request_prepare(BSP_SERVICE_PIPE_CREATE);
-  request->table = &process->capabilities;
+  request->reservation = reservation;
+  memcpy(request->slots, slots, sizeof(slots));
+  reservation = (struct capability_reservation){0};
   request->reply = (struct pipe_create_reply){0};
   request->result = CALL_NO_MEMORY;
 

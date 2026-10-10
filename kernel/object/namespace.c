@@ -6,6 +6,7 @@
 #include <kernel/object/namespace.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/task.h>
 #include <kernel/string.h>
 #include <kernel/user_memory.h>
 
@@ -120,10 +121,10 @@ struct kernel_object *namespace_service_create(void)
   return service;
 }
 
-static enum call_status namespace_create(struct capability_table *table, handle_t *handle)
+static enum call_status namespace_create(struct namespace_create_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
-  *handle = HANDLE_INVALID;
+  request->handle = HANDLE_INVALID;
   struct namespace_object *namespace = kmalloc(sizeof(*namespace));
   if (!namespace) {
     return CALL_NO_MEMORY;
@@ -131,28 +132,46 @@ static enum call_status namespace_create(struct capability_table *table, handle_
   memset(namespace, 0, sizeof(*namespace));
   atomic_init(&namespace->locked, false);
   object_init(&namespace->object, OBJECT_NAMESPACE, destroy_namespace);
-  enum capability_result result = capability_install(table,
-      &namespace->object, NAMESPACE_RIGHTS, 0, handle);
+  struct capability_grant grant;
+  enum capability_result result = capability_grant_retain(&namespace->object,
+      NAMESPACE_RIGHTS, 0, &grant);
+  if (result == CAP_OK) {
+    KASSERT(capability_validate_grants(request->reservation.table, &grant, 1) == CAP_OK);
+    capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
+        &request->handle);
+  }
   object_release(&namespace->object);
   return grant_status(result);
 }
 
 void namespace_create_execute(struct namespace_create_request *request)
 {
-  KASSERT(arch_cpu_index() == 0 && request->table);
+  KASSERT(arch_cpu_index() == 0 && request->reservation.table);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_SERVICING);
-  request->result = namespace_create(request->table, &request->handle);
-  request->table = NULL;
+  request->result = namespace_create(request);
+  capability_reservation_release(&request->reservation, &request->slot);
 }
 
 static enum call_status create_namespace(handle_t *handle)
 {
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+  if (reserved != CAP_OK) {
+    return grant_status(reserved);
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return CALL_ENDPOINT_CLOSED;
+  }
   struct namespace_create_request *request =
       (struct namespace_create_request *)bsp_request_prepare(BSP_SERVICE_NAMESPACE_CREATE);
   struct process *process = process_current();
   KASSERT(process);
-  request->table = &process->capabilities;
+  request->reservation = reservation;
+  request->slot = slot;
+  reservation = (struct capability_reservation){0};
   bsp_request_submit_and_wait(&request->request);
   *handle = request->handle;
   enum call_status result = request->result;
