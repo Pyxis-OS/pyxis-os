@@ -315,3 +315,25 @@ with `--messages 256 --rounds 100`, on fresh A1/B1/A2/B2 boots. That adds sample
 with fresh receivers; it does not lengthen an individual admission interval.
 Longer per-pass `--messages` needs a separately scoped benchmark change. Another
 native run is not required for this recommendation.
+
+## Delivery refresh after native results
+
+Merged main `3d4bb733` into the PR after recording the native A/B. The only
+conflict was the Neovim status table: retain main's completed libc/port work and
+this branch's corrected threads anchor. No task-2 optimization or new task was
+added. The measured native B remains `ea39ff9f`; the refreshed integration is
+separate qualification, not another native timing sample.
+
+Clean merge head `5e61e525` built the ordinary kernel/image warning-free with
+verified main [#1741](https://git.internal/PyxisOS/pyxis-os/actions/runs/1741)
+SDK/userland/ports bundles and the same compiler. ELF SHA-256
+`c46e24fffc392bb1f54af8c459159c69fb593da9559eb519ae141cc4b384f7af`;
+ISO `a74c5a13c232d4e02d73fa078cf0c7bc39f2e6d25ddbb3108c3e26a90aad8809`.
+Matched Q35/nested-KVM fresh boots: 4-CPU CALL64 and SEND64 each returned verified
+warmup/five passes, summary and FINAL 0/complete; ordinary echo/exit also passed.
+1-CPU CALL64 did likewise; pipe warmup/sample verified 1 MiB with zero errors.
+The existing reverse client used the documented loopback-beacon NAT adaptation.
+Captures are in ignored `build/task2-native-integration`; all task-owned QEMU and
+client jobs were stopped. Earlier debugger lifetime inspection remains above.
+The PR was already open for review, not draft; exact submitted-head CI is checked
+after this documentation update.
