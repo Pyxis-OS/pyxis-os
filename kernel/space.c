@@ -1100,6 +1100,7 @@ static void handle_space_input_locked(void)
     if (event.action == KEY_STATE_RESET) {
       memset(navigation_held, 0, sizeof(navigation_held));
       memset(volume_held, 0, sizeof(volume_held));
+      escape_held = false;
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
       clipboard_key_event(active_space, &event);
