@@ -22,6 +22,14 @@ changes neither the timed programs nor their kernel/runtime paths. An ordinary
 `make -j16 image` rebuilt the submitted dependencies and image using the existing
 `pyxis-llvm23.1.3-49e2c1a` builder; no compiler-container rebuild.
 
+Integration refresh: endpoint readiness/network debugger main `036f3287` was
+merged at `83d3e535`, with userland rebased to published `fbce73bf` (contains
+main `6e12b5f4`) and ports unchanged at `4326582`. The ordinary image rebuild
+passed, followed by one/four-CPU relay smoke checks: six child chunks, timers,
+interleaved typed input and normal completion. Main `3d73637e` was then merged,
+preserving the Renoir poll-cost work. The matched timings below remain tied to
+the earlier revisions; they were not repeated for these integration merges.
+
 Timed QEMU 10.2.2: Q35, nested KVM, `-cpu host`, 256 MiB, one or four CPUs,
 standard VGA/headless, matching raw OVMF CODE/VARS, VirtIO RNG and modern
 VirtIO networking over the user backend. No HOST mount, disk, profiler or
