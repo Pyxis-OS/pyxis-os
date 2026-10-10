@@ -4,16 +4,17 @@ Owner-accepted defaults, 2026-10-10, subject to the native-kernel condition belo
 Task 1, process lifetime, is merged in
 [#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); exactly one user task per
 process remains. Task 2 requires a separate owner go; later implementation is
-unassigned. This refresh inspects Pyxis
-`4236efc7` and userland `51bcb56b`; it adds no code, compile probe or runtime
-measurement. Existing [task 1 qualification](../development/experiments/threads-task1/README.md)
+unassigned. This refresh inspects Pyxis `4236efc7` and userland `51bcb56b`;
+it adds no code, compile probe or runtime measurement. Existing
+[task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
 
 The owner already accepted parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault,
 and process-private address wait/wake. Those directions and the three defaults
-below are settled; detailed interfaces remain proposals, not implemented APIs. Moving kernel services
-[off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
+below are settled; detailed interfaces remain proposals, not implemented APIs.
+Moving kernel services [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp)
+is independent.
 
 ## Current gaps
 
@@ -104,7 +105,7 @@ stay process-owned and release at final process teardown, not each thread EXIT.
 
 ## TLS and runtime synchronization
 
-Propose static executable TLS: initialized template, zero tail and alignment,
+Accepted TLS scope: static executable TLS with initialized template, zero tail and alignment,
 with an x86-64 local-exec layout and FS-addressed libc thread record. Establish
 the initial FS/errno record through allocation-free bootstrap before TLS-using C,
 malloc or constructors; siblings receive prepared FS before user entry. Kernel
@@ -265,6 +266,7 @@ does not assign implementation; task 2 still requires a separate owner go.
    settle template/FS bootstrap with a focused compiler probe before changing the
    fork, prefer ordinary load segments when possible. Dynamic/module TLS is later.
 3. **First runtime profile — accepted:** joinable threads and only the C11/pthread
-   subset implemented by its delivery task, with workers joined before orderly process finalizers.
+   subset implemented by its delivery task, with workers joined before orderly
+   process finalizers.
    Detach/automatic collection and asynchronous cancellation stay unadvertised
    until their lifetime/recovery contracts are separately accepted and qualified.
