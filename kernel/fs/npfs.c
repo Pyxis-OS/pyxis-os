@@ -369,7 +369,7 @@ static void destroy_nodes(struct npfs_node *list)
 static enum call_status check_name(const char *name, size_t count)
 {
   if (count > NPFS_NAME_MAX) {
-    return CALL_LIMIT;
+    return CALL_NAME_TOO_LONG;
   }
   return npfs_name_valid((const uint8_t *)name, count) ? CALL_OK : CALL_BAD_REQUEST;
 }

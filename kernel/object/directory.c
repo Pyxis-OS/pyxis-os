@@ -217,7 +217,7 @@ static enum call_status check_child_request(struct directory_object *directory, 
       return CALL_BAD_REQUEST;
     }
     if (request->name_length > NPFS_NAME_MAX) {
-      return CALL_LIMIT;
+      return CALL_NAME_TOO_LONG;
     }
   }
   if (!user_buffer_check(reply_address, sizeof(struct directory_child_reply), USER_BUFFER_WRITE)) {
@@ -294,7 +294,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
   }
 
   if (directory->backing == DIRECTORY_HOST && request->name_length > VIRTIO_FS_NAME_MAX) {
-    return (struct syscall_result){CALL_LIMIT, 0};
+    return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;
@@ -386,7 +386,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     return (struct syscall_result){status, 0};
   }
   if (directory->backing == DIRECTORY_HOST && request->name_length > VIRTIO_FS_NAME_MAX) {
-    return (struct syscall_result){CALL_LIMIT, 0};
+    return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }
   if (directory->backing != DIRECTORY_NPFS && directory->backing != DIRECTORY_HOST &&
       directory->backing != DIRECTORY_RAM) {
@@ -510,7 +510,7 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (directory->backing == DIRECTORY_NPFS && request->name_length > NPFS_NAME_MAX) {
-    return (struct syscall_result){CALL_LIMIT, 0};
+    return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }
   enum call_status status = check_name(request->name, request->name_length);
   if (status != CALL_OK) {
@@ -531,7 +531,7 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
   }
   if (directory->backing == DIRECTORY_HOST) {
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
-      return (struct syscall_result){CALL_LIMIT, 0};
+      return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
     }
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_REMOVE);
     pending->node = directory->host;
@@ -634,7 +634,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
   }
   if (native && (request->source_length > NPFS_NAME_MAX ||
       request->destination_length > NPFS_NAME_MAX)) {
-    return (struct syscall_result){CALL_LIMIT, 0};
+    return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }
   enum call_status status = check_name(request->source_name, request->source_length);
   if (status == CALL_OK) {
@@ -679,7 +679,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     }
     if (request->source_length > VIRTIO_FS_NAME_MAX ||
         request->destination_length > VIRTIO_FS_NAME_MAX) {
-      return (struct syscall_result){CALL_LIMIT, 0};
+      return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
     }
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_RENAME);
     pending->node = source->host;

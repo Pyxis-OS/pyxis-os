@@ -27,7 +27,10 @@ and the integer/string/math rows of the inventory: `strtoimax`, `atol`,
 Its [qualification](../development/experiments/calendar-encoding/README.md)
 compares a table of times and conversions with host glibc. The filesystem
 row's `EINTR`, `NAME_MAX`, `O_NOFOLLOW` and permission constants are not part
-of this slice.
+of this slice. Slice 4 adds `EINTR`. A later libc step adds `NAME_MAX`, accepts
+`O_NOFOLLOW` and reports ELOOP and ENAMETOOLONG
+([name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links));
+permission constants and `umask` stay out.
 The probe inventory below describes its original baseline, not current
 availability of the delivered slice 1–3 APIs.
 

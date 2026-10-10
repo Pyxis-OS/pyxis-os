@@ -181,6 +181,8 @@ and accepts only 0666 as native creation policy; other modes fail with ENOTSUP
 before lookup, even for existing files. No mode argument is read otherwise.
 This creates no permission system or additional rights; virtio-fs retains its
 0644 creation request. Paths follow the existing [capability resolver](paths.md).
+O_NOFOLLOW is accepted and changes nothing, because lookup follows no
+[symbolic link](#name-limits-and-symbolic-links).
 
 Read/write first check descriptor and access validity (EBADF), then reject
 counts above SSIZE_MAX (EINVAL). A valid zero-count call returns zero without
@@ -327,7 +329,8 @@ EINVAL; missing, denied and intermediate-file paths return ENOENT, EACCES and
 ENOTDIR. A close failure is reported, without retry or successful fake cleanup.
 
 `lstat` is equivalent to `stat` only while native filesystems have no symlinks
-and lookup never follows host symlinks (ENOTSUP). This condition is recorded
+and lookup never follows host symlinks
+([ELOOP](#name-limits-and-symbolic-links)). This condition is recorded
 beside its declaration; it does not expose symlink metadata. Existing sizing
 authority and provider-request behavior are inherited from `stat`.
 
@@ -379,6 +382,61 @@ Task-owned QEMU, debugger, client and virtiofsd processes are stopped. No kernel
 change, tests, fault injection or boot/output automation was added. Persistent
 backend removal, races and allocation-failure paths were not qualified by these
 RAM-file observations.
+
+## Name limits and symbolic links
+
+`NAME_MAX` in `limits.h` is 255: the longest path component, in bytes, that
+native (npfs) and host directories accept. The kernel refuses a longer
+component there with NAME_TOO_LONG in lookup, creation, removal and rename, and
+libc reports ENAMETOOLONG. RAM directories (`tmp://`, and `home://` on live
+boots) accept longer names, so `NAME_MAX` is not their bound. There is no
+`pathconf` or `fpathconf`: libc cannot ask which backing a directory has, and
+one answer for every path would be invented.
+
+Lookup never follows a symbolic link, and only host directories contain them.
+A host symlink anywhere in a path fails with LINK_NOT_FOLLOWED, which libc
+reports as ELOOP from `open`, `stat`, `lstat`, `access` and `realpath`, with or
+without O_NOFOLLOW. O_NOFOLLOW is therefore accepted and changes nothing. A FIFO,
+socket or device on a host share is still ENOTSUP. O_CREAT|O_EXCL on a symlink's
+name fails with EEXIST from the host, as POSIX specifies.
+
+Both kernel statuses have one meaning, so libc maps them everywhere rather than
+guessing from a component's length. LIMIT keeps EOVERFLOW for size, count and
+reference limits.
+
+### Name limit and link qualification
+
+QEMU 10.2.2 with the local AHCI fix, nested KVM, q35, 4 CPUs, 8 GiB, standard
+VGA, on main `a6f2a1ad` with this change. A scratch C program, never committed,
+ran in a live image against a virtio-fs share holding a file, `link -> file.txt`,
+`dirlink -> sub` and a FIFO, against live `home://` and `tmp://` (RAM), and on
+the host (Linux, glibc) against the same layout. An installed image covered npfs
+through the shell and Neovim.
+
+| Case | Pyxis host share | Linux |
+| --- | --- | --- |
+| `open` file, with and without O_NOFOLLOW | success | success |
+| `open` link / with O_NOFOLLOW | ELOOP / ELOOP | follows / ELOOP |
+| `open` link O_WRONLY\|O_CREAT | ELOOP | follows |
+| `open` link O_CREAT\|O_EXCL\|O_NOFOLLOW | EEXIST | EEXIST |
+| `open` `dirlink/inner.txt`, with and without O_NOFOLLOW | ELOOP | follows |
+| `open` FIFO / `lstat` FIFO | ENOTSUP / ENOTSUP | success / success |
+| `stat`, `lstat`, `access`, `realpath` of link | ELOOP | follows (`lstat` succeeds) |
+| create 255-byte name | success | success |
+| create, open, `stat`, `mkdir`, rename to and remove a 256-byte name | ENAMETOOLONG | ENAMETOOLONG |
+
+- **RAM:** `tmp://` and live `home://` created, renamed and removed 256-byte
+  names.
+- **npfs:** `mkdir` of a 255-byte name succeeded; `mkdir` and shell redirection
+  to a 256-byte name printed "Name too long". Neovim's `:w` of a 256-byte name
+  reported "Can't open native file for writing: name too long".
+- **Messages:** `strerror(ELOOP)` is "Symbolic link not followed"; `cat` of a
+  link or a path through `dirlink` printed the same, and the FIFO "Operation
+  not supported".
+- **Flags:** an unknown open flag is still EINVAL.
+- **Neovim:** `writefile(['x'], 'home://wp/a/b.txt', 'p')` created both
+  directories and the file. Upstream maps that flag to O_CREAT only when
+  O_NOFOLLOW is defined, so without it a new file could not be created.
 
 ## Close failure and cleanup
 

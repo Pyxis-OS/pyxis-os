@@ -95,8 +95,14 @@ detached under the lock and disposed on the BSP after borrowed readers finish.
 [Directory requests](../../include/abi/directory.h) distinguish file and directory
 kinds explicitly. LOOKUP takes one case-sensitive name, an expected kind and
 requested rights. The name is counted bytes, excluding NUL, with no fixed ABI
-length limit. Empty names, embedded NUL, `/`, `.` and `..` are invalid. The
+length limit. Native (npfs) and host directories refuse a name over 255 bytes
+with NAME_TOO_LONG, in lookup, creation, removal and rename; RAM directories
+accept longer names. Empty names, embedded NUL, `/`, `.` and `..` are invalid. The
 kernel compares bounded chunks without allocating on an AP.
+
+Lookup never follows a symbolic link. Only host directories contain them, and
+a host symlink fails with LINK_NOT_FOLLOWED; other host special files fail with
+BAD_OPERATION. Enumeration still reports symlinks with their own kind.
 
 | Authority on the parent | Permits |
 | --- | --- |

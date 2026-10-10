@@ -46,6 +46,12 @@ lease: concurrent changes remain possible, and equal times do not prove equal
 bytes. Saving retains the existing checked write/sync path.
 
 Swap, backup/writebackup and patchmode are unavailable; defaults disable them.
+Persistent undo (`:wundo`, `'undofile'`) fails with E828: Neovim creates the
+undo file with the edited file's permission bits, and libc's `open` accepts only
+the [0666 creation mode](../technical-debt.md#public-open-creation-mode). Names
+longer than 255 bytes fail with "name too long" on `home://` installed volumes
+and `host://`, and a `host://` symbolic link is never followed
+([name limits and links](libc-portability.md#name-limits-and-symbolic-links)).
 External jobs, `system()`, `:terminal`, PTYs, listeners, signals, numeric PIDs,
 workers, asynchronous filesystem calls, file watches, dynamic Lua modules and
 tree-sitter grammar loading remain unavailable. Explicit requests return errors;
