@@ -101,5 +101,6 @@ query's native source.
 
 [First-slice qualification](../development/experiments/neovim-first-slice/README.md)
 and [static-parser qualification](../development/experiments/neovim-static-parsers/README.md)
-record editing, highlighting, safe-save checks, startup time and cleanup.
+record editing, highlighting, safe-save checks, startup time and cleanup,
+including [new-name saves](../development/experiments/neovim-first-slice/README.md#new-name-saves-2026-10-10).
 Native qualification is the milestone's next slice.
