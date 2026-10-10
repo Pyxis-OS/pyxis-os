@@ -14,6 +14,8 @@
   as the milestone index. Read the selected milestone, its unchecked task and
   relevant subsystem docs/code, not the entire
   planning backlog. Milestone order is flexible; the user's current choice wins.
+- Task PRs never edit the milestone index; record progress and checkboxes in the
+  milestone's own document. Only assignment, completion or a plan change does.
 - A new thread should recover scope from the user's request, milestone checklist,
   Git history and open PRs. Do not rely on private chat history for a decision.
   Check whether a prior PR was merged before selecting the next task. If that
