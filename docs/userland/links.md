@@ -55,8 +55,8 @@ between Links' internal threads.
   input to wait for, it sleeps on the named clock. There is no busy polling,
   because nothing else in the process can make a pipe ready while it waits.
 - **Terminal.** The size is read when the terminal starts. Mouse-mode
-  sequences are not sent, and on exit the screen is cleared with the cursor at
-  the top, because the terminal has no saved cursor.
+  sequences are not sent. Links runs on the alternate screen, so on exit the
+  shell's screen and cursor return as they were.
 - **Configuration.** Links keeps `links.cfg`, `html.cfg`, bookmarks, cookies and
   the URL history in `home://links/`, made at startup, and loads them from there.
   Links' own save writes an exclusive temporary file, syncs it and renames it over

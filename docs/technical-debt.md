@@ -481,10 +481,18 @@ connection sets make these costs material. A persistent wait-set object (registe
 without a per-call input array, epoll/kqueue style) is a proposed later direction, for example for a many-connection web server;
 authority, lifetime, capacity and failure rules are open and nothing is agreed, scheduled or added.
 
+## Terminal profile limits
+
+The [`pyxis` terminal profile](userland/terminal.md#tty-output-controls) is ASCII only and has no origin mode, character insert, delete or
+erase (`CSI @`, `P`, `X`), `CSI ? 47/1047/1048`, horizontal margins or colors beyond the 16-entry palette; those sequences are ignored. The kernel TTY and the
+multiplexer's pane terminal implement the table separately and must change together; there is no shared parser across the kernel and
+userland boundary. Neovim is to be built without terminfo, and its built-in table has no `pyxis` entry, so the Neovim recipe must add one
+matching the profile ([Neovim task 6](wip/neovim-libuv.md)). Revisit with UTF-8 rendering or when a program needs a missing sequence.
+
 ## Initial terminal multiplexer limits
 
-The [multiplexer](userland/multiplexer.md) has one window and up to eight panes. Its native terminal subset has no alternate screen,
-Unicode widths or detach, and full-screen applications reuse the shell's screen. History keeps 1,024 scrolled-off rows with no reflow or
+The [multiplexer](userland/multiplexer.md) has one window and up to eight panes. Its native terminal subset has no Unicode widths or
+detach. History keeps 1,024 scrolled-off rows with no reflow or
 erased-screen archive; rows cropped by resize are not inserted into history (retaining them is a proposed follow-up), presentation crops
 at the session maximum and history storage keeps the largest width seen. Steady text storage is about 2.5 MiB per pane (resize can
 briefly double one pane's), with no per-group CPU or memory quota.

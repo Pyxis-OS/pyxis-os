@@ -54,7 +54,7 @@ patch changes only the Unix-specific parts:
 | --- | --- |
 | termios raw/cooked mode, `VERASE` | libterm passthrough; console input is already raw. BS and DEL both erase. |
 | `poll` on stdin | A timed libterm key read that keeps the key for the next read |
-| stdout drawing, alternate screen | Buffered output to the named console, flushed before waiting for input. The screen is cleared on start and exit. |
+| stdout drawing, alternate screen | Buffered output to the named console, flushed before waiting for input. Upstream's alternate screen is kept, so on exit the shell's screen and cursor return as they were. |
 | `fstat` size and `S_ISREG` | Read to EOF. Opening a directory fails with its native error. |
 | `access(W_OK)` and mode bits | `[Readonly]` when the file cannot be opened for WRITE now |
 | `stat` before `:w NAME` | Refuse unless opening NAME reports ENOENT; `:w!` overrides |
@@ -119,7 +119,7 @@ using host import analysis and a compile probe against the Pyxis SDK.
   memory-mapped as piece-table storage, always requires regex and assumes UTF-8
   widths.
 - **neatvi** was rejected. It needs scroll regions and insert/delete line,
-  which the terminal ignores, and uses fork/exec and sockets for filters and LSP.
+  which the terminal then ignored, and uses fork/exec and sockets for filters and LSP.
 
 The owner agreed on 2026-10-04 to use BusyBox, keep upstream's
 write-then-truncate save via a libc `ftruncate`, and add the string functions to

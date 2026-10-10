@@ -115,8 +115,22 @@ of kernel stack. The readiness request fits the existing 4,928-byte reserved
 task area, sized by HOST; increasing this bound from 17 to 32 does not grow it.
 
 Multiple windows, ratio adjustment, detach/reattach, Unicode widths and a broader
-VT escape set remain deferred. Full-screen programs share the same retained
-screen as their shell; no alternate-screen protocol is introduced.
+VT escape set remain deferred.
+
+## Full-screen programs and history
+
+Each pane terminal implements the kernel TTY's
+[sequence table](terminal.md#tty-output-controls), including the alternate
+screen, scroll regions and saved cursor. History follows the primary screen
+only:
+- **Alternate screen:** it keeps no history. Rows scrolled off it are
+  discarded, and while it is live, wheel and keyboard browsing and selection
+  stay on the live screen. Entering it ends browsing. Leaving it returns the
+  shell's screen and its whole history unchanged.
+- **Scroll regions:** on the primary screen, rows leaving a region that starts
+  at the top row enter history; rows leaving a region that starts lower are
+  discarded. Scrolling anything but the whole screen clears the selection,
+  whose rows are counted against history.
 
 ## Local pointer input
 

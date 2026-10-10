@@ -32,6 +32,8 @@ The pager holds [Ctrl+C passthrough](foreground-interruption.md) throughout its
 session; Ctrl+C is input and `q` exits. `-N` adds line numbers, `-m`/`-M` show
 extended status, `-E` exits on reaching the end and `-F` exits when the file fits
 on the first screen. `-~` suppresses the end-of-file markers.
+It pages on the alternate screen, so leaving returns the shell's screen and
+cursor as they were.
 
 ## Limits
 
