@@ -2,6 +2,7 @@
 #define KERNEL_FS_HOSTFS_H
 
 #include <abi/directory.h>
+#include <abi/file_info.h>
 #include <abi/syscall.h>
 #include <kernel/service/request.h>
 #include <kernel/user/image_capture.h>
@@ -22,6 +23,7 @@ enum hostfs_operation {
   HOSTFS_WRITE,
   HOSTFS_RESIZE,
   HOSTFS_SIZE,
+  HOSTFS_INFO,
   HOSTFS_SYNC,
   HOSTFS_ENUMERATE,
 };
@@ -44,6 +46,7 @@ struct hostfs_request {
   enum hostfs_operation operation;
   struct hostfs_node *node;
   uint64_t kind, offset;
+  struct file_info_reply info;
   size_t count;
   /* CAPTURE transfers complete BSP-only page backing; failure leaves it empty.
    * No capture retry or coherent-host-snapshot guarantee. The caller moves the

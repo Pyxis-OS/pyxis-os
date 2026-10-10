@@ -3,6 +3,7 @@
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
+#include <kernel/fs/metadata.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/capability.h>
@@ -14,18 +15,30 @@
 #include <kernel/task.h>
 #include <kernel/virtio/pci.h>
 
+/* One reference per native wrapper; transport lookup/open ownership stays
+ * independent. No entry survives the retirement of its last wrapper. */
+struct hostfs_identity {
+  struct hostfs_identity *next;
+  struct virtio_fs_session *session;
+  uint64_t node_id, generation, object;
+  size_t references;
+};
+
 struct hostfs_node {
   struct hostfs_node *next;
   struct kernel_object *object;
   struct execution_group *cleanup_group;
   struct virtio_fs_node node;
   struct virtio_fs_open opened, writer;
+  struct hostfs_identity *identity;
   uint64_t cursor_identity;
 };
 
 /* Queue links are BSP/IF=0. Only the worker uses session and node protocol
  * state. Its scratch stays off the task stack and is never lent to a caller. */
 static struct virtio_fs_session *session;
+static uint64_t domain;
+static struct hostfs_identity *first_identity;
 static bool starting;
 static enum call_status startup_failure = CALL_UNAVAILABLE;
 static struct hostfs_request *first_request, *last_request;
@@ -210,6 +223,7 @@ void hostfs_start(struct virtio_fs_session *started)
   KASSERT(arch_cpu_index() == 0 && !session && started->ready);
   uint64_t flags = cpu_save_interrupts();
   session = started;
+  fs_metadata_allocate_id(&domain);
   starting = false;
   cpu_restore_interrupts(flags);
 }
@@ -251,6 +265,67 @@ void hostfs_retire(struct hostfs_node *node)
   virtio_fs_pci_wake();
 }
 
+/* BSP/IF=0, sole worker. Reserve before host mutations so binding a returned
+ * incarnation never needs allocation or a fallible identity reservation. */
+static enum call_status prepare_identity(struct hostfs_node *node)
+{
+  if (!domain) {
+    return CALL_LIMIT;
+  }
+  struct hostfs_identity *identity = kmalloc(sizeof(*identity));
+  if (!identity) {
+    return CALL_NO_MEMORY;
+  }
+  *identity = (struct hostfs_identity){0};
+  if (!fs_metadata_allocate_id(&identity->object)) {
+    kfree(identity);
+    return CALL_LIMIT;
+  }
+  node->identity = identity;
+  return CALL_OK;
+}
+
+static void attach_identity(struct hostfs_node *node)
+{
+  struct hostfs_identity *identity = node->identity;
+  KASSERT(identity && !identity->references && node->node.references);
+  for (struct hostfs_identity *existing = first_identity; existing; existing = existing->next) {
+    if (existing->session == node->node.session && existing->node_id == node->node.id &&
+        existing->generation == node->node.generation) {
+      KASSERT(existing->references && existing->references < SIZE_MAX);
+      ++existing->references;
+      node->identity = existing;
+      kfree(identity);
+      return;
+    }
+  }
+  identity->session = node->node.session;
+  identity->node_id = node->node.id;
+  identity->generation = node->node.generation;
+  identity->references = 1;
+  identity->next = first_identity;
+  first_identity = identity;
+}
+
+static void release_identity(struct hostfs_identity *identity)
+{
+  if (!identity) {
+    return;
+  }
+  if (identity->references) {
+    if (--identity->references) {
+      return;
+    }
+    struct hostfs_identity **link = &first_identity;
+    while (*link != identity) {
+      KASSERT(*link);
+      link = &(*link)->next;
+    }
+    *link = identity->next;
+  }
+  kfree(identity);
+}
+
 static void destroy_node(struct hostfs_node *node)
 {
   if (node->opened.node) {
@@ -265,6 +340,7 @@ static void destroy_node(struct hostfs_node *node)
   /* Failure already stops the session. Local ownership still retires; these
    * allocations were never exposed as DMA storage and can be freed normally. */
   uint64_t flags = cpu_save_interrupts();
+  release_identity(node->identity);
   kfree(node->object);
   kfree(node);
   cpu_restore_interrupts(flags);
@@ -280,11 +356,17 @@ static enum call_status create_node(struct hostfs_request *request)
   }
   uint64_t flags = cpu_save_interrupts();
   struct hostfs_node *node = kmalloc(sizeof(*node));
-  cpu_restore_interrupts(flags);
   if (!node) {
+    cpu_restore_interrupts(flags);
     return CALL_NO_MEMORY;
   }
   *node = (struct hostfs_node){0};
+  enum call_status status = prepare_identity(node);
+  cpu_restore_interrupts(flags);
+  if (status != CALL_OK) {
+    destroy_node(node);
+    return status;
+  }
 
   enum virtio_fs_result result;
   if (request->operation == HOSTFS_ROOT) {
@@ -292,7 +374,7 @@ static enum call_status create_node(struct hostfs_request *request)
   } else {
     result = virtio_fs_lookup(&request->node->node, request->name, request->count, &node->node);
   }
-  enum call_status status = call_result(result);
+  status = call_result(result);
   if (status == CALL_OK && request->operation == HOSTFS_LOOKUP &&
       native_kind(node->node.kind) != request->kind) {
     status = CALL_WRONG_TYPE;
@@ -314,6 +396,9 @@ static enum call_status create_node(struct hostfs_request *request)
     if (file) {
       node->object = &file->object;
     }
+  }
+  if (node->object) {
+    attach_identity(node);
   }
   cpu_restore_interrupts(flags);
   if (!node->object) {
@@ -338,6 +423,12 @@ static enum call_status create_child(struct hostfs_request *request)
     return CALL_NO_MEMORY;
   }
   *node = (struct hostfs_node){0};
+  enum call_status status = prepare_identity(node);
+  if (status != CALL_OK) {
+    kfree(node);
+    cpu_restore_interrupts(flags);
+    return status;
+  }
   if (directory) {
     struct directory_object *object = directory_create(DIRECTORY_HOST);
     if (object) {
@@ -352,6 +443,7 @@ static enum call_status create_child(struct hostfs_request *request)
     }
   }
   if (!node->object) {
+    release_identity(node->identity);
     kfree(node);
     cpu_restore_interrupts(flags);
     return CALL_NO_MEMORY;
@@ -382,6 +474,9 @@ static enum call_status create_child(struct hostfs_request *request)
     destroy_node(node);
     return call_result(result);
   }
+  flags = cpu_save_interrupts();
+  attach_identity(node);
+  cpu_restore_interrupts(flags);
   object_release(node->object); /* Only the installed capability owns it now. */
   return CALL_OK;
 }
@@ -594,6 +689,31 @@ static enum call_status perform(struct hostfs_request *request)
       request->offset = attributes.size;
     }
     return call_result(result);
+  }
+  case HOSTFS_INFO: {
+    struct virtio_fs_attributes attributes;
+    enum virtio_fs_result result = virtio_fs_getattr(&request->node->node, &attributes);
+    if (result != VIRTIO_FS_OK) {
+      return call_result(result);
+    }
+    request->info = (struct file_info_reply){
+      .valid = FILE_INFO_MTIME_VALID,
+      .modified_seconds = attributes.modified_seconds,
+      .modified_nanoseconds = attributes.modified_nanoseconds,
+    };
+    if (attributes.kind == VIRTIO_FS_FILE) {
+      request->info.valid |= FILE_INFO_SIZE_VALID;
+      request->info.size = attributes.size;
+    }
+    if (domain) {
+      request->info.valid |= FILE_INFO_DOMAIN_VALID;
+      request->info.domain = domain;
+      if (request->node->identity) {
+        request->info.valid |= FILE_INFO_OBJECT_VALID;
+        request->info.object = request->node->identity->object;
+      }
+    }
+    return CALL_OK;
   }
   case HOSTFS_SYNC: {
     struct hostfs_node *node = request->node;

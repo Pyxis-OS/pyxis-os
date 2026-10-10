@@ -335,7 +335,15 @@ enum virtio_fs_result virtio_fs_getattr(struct virtio_fs_node *node,
   if (mode_kind(reply.attr.mode) != node->kind) {
     return fail_session(node->session, VIRTIO_FS_PROTOCOL, "FUSE node changed type while retained");
   }
-  *attributes = (struct virtio_fs_attributes){.kind = node->kind, .size = reply.attr.size};
+  if (reply.attr.mtime_nsec >= UINT32_C(1000000000)) {
+    return fail_session(node->session, VIRTIO_FS_PROTOCOL, "invalid FUSE modification time");
+  }
+  *attributes = (struct virtio_fs_attributes){
+    .kind = node->kind, .size = reply.attr.size,
+    /* Signed host seconds travel as unsigned wire bits. */
+    .modified_seconds = (int64_t)reply.attr.mtime,
+    .modified_nanoseconds = reply.attr.mtime_nsec,
+  };
   return VIRTIO_FS_OK;
 }
 
