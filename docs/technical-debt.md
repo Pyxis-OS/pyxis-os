@@ -1385,13 +1385,16 @@ full transport, encrypted bond/reconnect and HID/pointer compatibility rule.
 
 ### USB interrupt-IN initial profile and failure retention
 
-The private [interrupt-IN path](devices/usb-interrupt-in.md) follows the owner's initial profile for
-[Bluetooth task 3a](devices/ax200-bluetooth.md#accepted-interrupt-in-decisions): boot-present, root-connected full-speed endpoints only, so behind-hub periodic endpoints and
-other speeds (including HID consumers on them) are unavailable; revisit admission and periodic/TT handling when a device needs another profile, with its descriptors and
-hardware evidence. Qualification covers AX200 passthrough behind emulated xHCI, not native periodic transfers. For the internal AX200, active removal may quarantine the whole
-controller and stop unrelated storage, retaining backing until reboot, and a STALL is a terminal stream failure with DMA backing and ring identity retained until reboot and
-no automatic recovery, so a stalled stream cannot resume that boot and controller-wide removal handling is the usual case for a persistent receive. Revisit with separately
-scoped endpoint and device retirement and periodic recovery before widening hotplug or recovery guarantees; confirmed halt alone does not change the retention contract.
+The private [interrupt-IN path](devices/usb-interrupt-in.md) keeps HCI at boot-present root-connected full speed, while boot HID supports low/full/high speed on roots
+and supported USB 2 hub paths through at most five external hubs. Runtime attachment is limited to low/full-speed HID leaves on roots or boot-present supported USB 2
+chains. Thirty-two retained HID attachment records per controller include boot claims, failed attempts and retired generations; exhaustion refuses further attachment
+until reboot. HID receive capacity is 1024 bytes; HCI/hub capacities remain 257, with independent endpoint pools. There is no general HID report interpreter, runtime
+high-speed/HCI admission, new hub topology or USB 3 periodic support; revisit these profiles with a concrete device and bounded lifetime design.
+
+Ordinary HID leaf retirement proves endpoint and Disable Slot fences before numeric slot reuse, retaining all old DMA/TD backing. FIFO loss and HID transport errors
+release that source; unowned/corrupt events, failed fences and unsupported subtree removal can quarantine the whole controller and stop unrelated storage/Bluetooth.
+HCI active removal retains that quarantine policy and no automatic interrupt STALL recovery is supplied. Revisit broader subtree retirement, recovery and resource
+reclamation separately; confirmed halt alone does not change retention, and the original HCI qualification record does not establish native HID/periodic coverage.
 
 ## USB descriptor bounds and per-port preparation
 
@@ -1415,14 +1418,16 @@ high-speed hubs and the dock's SuperSpeedPlus USB 3 hub with reads from its Supe
 ([native run](targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)); recovery, other link or firmware profiles and broader TT
 qualification are pending. Only standard symmetric Gen1/Gen2 one- and two-lane downstream links attach (absent or ambiguous controller profiles stay partial; do not
 pick a speed ID), and categorical inventory omits directional rates and lane counts, with SSP isochronous byte budgets uninterpreted until non-control scheduling
-needs them. Hub descendants are not monitored after publication, so idle downstream removal retains slots and backing until reboot (root removal retires the subtree
-and active request errors quarantine the controller); revisit with hotplug and lifetime work. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
+needs them. Supported boot-present USB 2 hubs have bounded notification streams for low/full-speed HID leaf hotplug; USB 3 descendants remain unmonitored after
+publication. New hub topology and runtime storage/Bluetooth admission remain unsupported, ordinary HID leaves have fenced slot retirement, and unsupported subtree
+removal can quarantine the controller. Revisit broader monitoring and subtree lifetime with concrete requirements. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
 inventory is not full USB 3 conformance (revisit with path-latency accounting before power management or non-control scheduling, never sending zero placeholders), and
 USB 3 traversal keeps the conservative USB 2 stability and recovery delays with no explicit warm-reset retry.
 
-Each device admits one active control request and each admitted BOT device serializes private bulk exchanges. Owned stalls have bounded endpoint recovery (including TT
-cleanup and safe dequeue retirement), while other early errors, deadlines or removal during active work stop the whole controller and retain unresolved DMA until
-reboot. BOT probes and kernel block reads ran 512/4096-byte reads and large-LBA SCSI commands in QEMU, including hub descendants and several controllers; GPT waits for
+Each device admits one active control request and each admitted BOT device serializes private bulk exchanges. Owned control/bulk stalls have bounded endpoint recovery
+(including TT cleanup and safe dequeue retirement). Admitted HID leaf loss can use per-device endpoint/slot retirement; deadlines, unowned/corrupt events, failed fences
+and active non-HID removal can stop the whole controller, retaining unresolved DMA until reboot. BOT probes and kernel block reads ran 512/4096-byte reads and
+large-LBA SCSI commands in QEMU, including hub descendants and several controllers; GPT waits for
 terminal USB discovery and scans retained candidates without treating partial discovery as a global failure. Stall, TT and reset recovery, active abandonment, ring
 wrap and nonzero alternate selection are source-reviewed without forced-error validation (revisit with natural device evidence).
 
@@ -1460,8 +1465,9 @@ failure and abandonment, MODE SENSE fallback, unsupported flush and malformed qu
 
 xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers (such as the ThinkPad's Realtek DASH EHCI) remain unsupported inventory records, `lsusb`
 reports partial coverage, and disks behind them are invisible to configured mounts and the installer. [USB storage](devices/usb-storage.md) uses Bulk-Only Transport only: a
-device offering UAS as an alternate is used through BOT (throughput cost unmeasured), a UAS-only device is unsupported, and classes other than hubs and storage, including
-HID, stay unbound. Revisit when a target device or workflow needs another controller type, UAS or a USB input class, adding each through the existing
+device offering UAS as an alternate is used through BOT (throughput cost unmeasured), and a UAS-only device is unsupported. Checked boot keyboard/mouse HID and the
+bounded AX200 HCI binder now join hubs and storage; other class profiles remain unbound. Revisit when a target device or workflow needs another controller type, UAS
+or broader HID support, adding each through the existing
 [layer boundaries](devices/usb-installation.md#layers-and-ownership).
 
 ## Random generator trust and availability
