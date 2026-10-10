@@ -14,8 +14,9 @@ read-only evidence it rests on.
 
 Normal flips and tear-free native Quake and Chocolate Quake play were qualified
 by the owner on the ThinkPad at `9254f5c8` (2026-10-10): 3120 submitted and
-confirmed flips, no timeouts or failures, negligible perceived latency. Timeout
-recovery, panic visibility and unreported capture and input scenarios are not
+confirmed flips, no timeouts or failures, negligible perceived latency. Panic
+visibility was qualified natively the same day with a deliberate panic probe
+(below). Timeout recovery and unreported capture and input scenarios are not
 qualified; see [technical debt](../technical-debt.md#renoir-flip-backend-qualification).
 
 ## Authority
@@ -168,6 +169,12 @@ low-address write, polls no flip and issues no GPU command from the faulting CPU
 it paints every owned surface that may be scanned. A mode or power change outside
 the verified scope can still defeat visible panic.
 
+Native panic visibility (owner, ThinkPad, 2026-10-10): an unmerged probe,
+`probe/flip-panic` at `b50a2482`, panics from the BSP input path on
+Ctrl+Alt+Shift+P only with `probe.panic_key=1`. Booted with `display.flip=1
+display.flip.metrics=1 probe.panic_key=1`, the panic message was visible both
+during native Quake and at the shell after quitting it.
+
 ## What it replaced
 
 The counter-derived period and phase scheduling, CPU blank-copy admission and
@@ -192,8 +199,8 @@ optc blank helpers are not vendored.
 - QEMU has no DCN 2.1: it checks refusal, the unchanged boot, Bochs and VirtIO
   paths, lifetimes and input, not register writes, VRAM ownership, completion,
   native panic or tearing.
-- Timeout recovery, native panic visibility, remote screenshots and some input
-  scenarios are unqualified. A framebuffer screenshot or an FPS figure does not
+- Timeout recovery, remote screenshots and some input scenarios are
+  unqualified. A framebuffer screenshot or an FPS figure does not
   establish a tear-free panel.
 - Three surfaces, display interrupts and OTG blanking are deferred.
 - Light polling is qualified on the ThinkPad, with whole-boot cost measurements.
