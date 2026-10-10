@@ -33,6 +33,8 @@ static struct popup_layout frame_popup, drawn_popup;
 static bool drawn_valid, open, focused, dragging;
 static bool canceled_drag;
 static uint64_t cancel_generation, frame_cancel_generation;
+static uint64_t visual_generation, observed_audio_generation;
+static bool observed_audio_valid, observed_audio_available;
 static struct space *target, *focus_space;
 static uint32_t popup_pixels[POPUP_WIDTH * POPUP_HEIGHT];
 
@@ -118,6 +120,9 @@ static void set_focus(bool next)
 
 void volume_ui_cancel(void)
 {
+  if (open || drawn_popup.shown) {
+    ++visual_generation;
+  }
   ++cancel_generation;
   canceled_drag |= dragging;
   set_focus(false);
@@ -137,12 +142,38 @@ static bool show_popup(struct space *space, bool keyboard_focus)
       !target_slot(&drawn_layout, space, &x) || !enabled(space)) {
     return false;
   }
+  if (!open || target != space) {
+    ++visual_generation;
+  }
   target = space;
   open = true;
   if (keyboard_focus) {
     set_focus(true);
   }
   return true;
+}
+
+void volume_ui_update(void)
+{
+  struct audio_volume_snapshot snapshot;
+  audio_volume_snapshot(NULL, &snapshot);
+  if (!observed_audio_valid || snapshot.volume_generation != observed_audio_generation ||
+      snapshot.available != observed_audio_available) {
+    ++visual_generation;
+    observed_audio_generation = snapshot.volume_generation;
+    observed_audio_available = snapshot.available;
+    observed_audio_valid = true;
+  }
+  size_t slot_x;
+  if (open && (!drawn_valid || !popup_fits(&drawn_layout) ||
+      !target_slot(&drawn_layout, target, &slot_x) || !enabled(target))) {
+    volume_ui_cancel();
+  }
+}
+
+uint64_t volume_ui_generation(void)
+{
+  return visual_generation;
 }
 
 static bool in_popup(int64_t x, int64_t y)

@@ -199,6 +199,7 @@ static enum call_status acquire_display(struct display_object *display,
   ++display->mapping_identity;
   display->owner = process;
   display->user_address = reply->address;
+  ++display->visual_generation;
   return CALL_OK;
 }
 
@@ -249,6 +250,7 @@ static void release_display(struct display_object *display)
   display->visible = false;
   display->owner = NULL;
   display->user_address = 0;
+  ++display->visual_generation;
   space_display_changed(display->space, false);
 }
 
@@ -260,6 +262,7 @@ void display_select_layer(struct display_object *display, bool graphics)
   }
   clipboard_space_cancel(display->space);
   display->visible = graphics;
+  ++display->visual_generation;
   space_display_changed(display->space, graphics);
 }
 
@@ -293,6 +296,7 @@ static enum call_status replace_display(struct display_object *display,
   clipboard_space_cancel(display->space);
   ++display->mapping_identity;
   pointer_geometry_changed(display->space);
+  ++display->visual_generation;
   return CALL_OK;
 }
 
@@ -305,6 +309,7 @@ static enum call_status submit_display(struct display_object *display, uint64_t 
   }
   bool dropped = display->pending != DISPLAY_SLOT_COUNT;
   display->pending = slot;
+  ++display->visual_generation;
   size_t next = 0;
   while (next == display->pending || display->slots[next] == display->current) {
     ++next;

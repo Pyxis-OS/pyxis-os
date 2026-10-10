@@ -16,13 +16,14 @@ keep their current paths. No program gets register or surface-address authority;
 input focus, lock, Super+Esc, custom cursor ownership and geometry stay unchanged.
 
 Today Renoir frames include the software pointer through cursor row composition
-and `pointer_present_copy`. The BSP presenter already recomposes periodically;
-a mouse report does not separately submit a frame. Hardware support should
+and `pointer_present_copy`. Task 1 measured periodic full-frame recomposition.
+The owner then assigned [whole-frame skipping](../kernel/presenter-frame-skipping.md):
+unchanged frames avoid pixel work, while visible software pointer changes still
+require a complete frame. Hardware support should
 remove pointer pixels from ordinary base-frame composition and service changed
 cursor state independently, including between pending-flip input drains. It
 must add no base compose, copy or flip for cursor-only movement. This does not
-promise to eliminate the existing periodic full-frame cadence; content-driven
-frame scheduling would be a separate task. The task-1 native record measures the existing software baseline; no hardware
+replace the separately assigned content-driven frame scheduling. The task-1 native record measures the existing software baseline; no hardware
 cursor improvement is claimed.
 
 ## Linux sequence and accepted write set

@@ -316,6 +316,19 @@ Owner decision, 2026-10-10: flips stay opt-in for now. The prerequisite set for
 a default, one deliberate native panic with flips on showing its message, passed
 the same day; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
 
+## Presenter dirty regions
+
+Whole-frame skipping avoids unchanged frames across boot, Bochs, VirtIO and
+Renoir, but each visible change still composes and copies/submits a whole frame.
+Software pointer motion, selection and small UI changes therefore retain the
+full-frame pixel budget. Native whole-frame-skipping qualification removes about
+99% of idle compose/copy work, while continuous software-pointer motion retains
+about 2.1 ms of measured compose/copy elapsed time per frame; see the
+[record](development/experiments/presenter-frame-skipping/README.md#native-abab-result--2026-10-10).
+Dirty-region tracking remains deferred. Revisit when profiling the remaining
+visible-change costs or a measured consumer bottleneck; any partial-frame design
+must preserve capture, overlays, frame handoff and backend ownership proofs.
+
 ## Native Renoir presentation qualification
 
 The [read-only Renoir observer](kernel/display.md#read-only-renoir-firmware-timing)

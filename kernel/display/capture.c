@@ -48,6 +48,13 @@ void screen_capture_submit(struct screen_capture_request *request)
   complete_capture(request, status);
 }
 
+bool screen_capture_pending(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  return pending != NULL;
+}
+
 void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
 {
   uint64_t flags = cpu_save_interrupts();
