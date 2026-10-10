@@ -34,7 +34,8 @@ caller can edit or submit it. It must fit the caller's buffer.
 All non-success results discard the initial text just as they discard typed
 text. The existing line helpers start empty.
 
-Editing supports insertion, Backspace, Delete, Left/Right, Home/End and Enter.
+Editing supports insertion, Backspace, Delete, Left/Right, Home/End (also
+Ctrl+A/Ctrl+E) and Enter.
 A steady block cursor marks the editing position, including the blank cell
 after the last character. The prompt and line wrap with the TTY, including when
 older output scrolls upward. The helper redraws the line and uses relative row
@@ -70,6 +71,13 @@ The line editor ignores Escape and Page Up/Down. With a caller-owned
 recall submitted lines with Up/Down and set `recorded` when they appended the
 line; other entry points ignore them. `term_history_add` applies the same
 recording rules, for example to lines loaded from a file.
+History-enabled readers also support [Ctrl+R reverse search](shell.md#commands-and-quoting).
+Search uses a separate bounded query, keeps the original line/cursor for
+Ctrl+G/Ctrl+C cancellation, and redraws its prompt on resize. Enter submits the
+shown entry; Escape/navigation accepts it for editing. Entries that exceed the
+caller buffer are skipped rather than truncated by search. Failed searches
+retain the shown line and mark the visible text red. Quiet readers and readers
+without history ignore Ctrl+R. Allocation failure leaves ordinary editing usable.
 Non-ASCII input is ignored, and so is Tab unless the reader has [completion](#tab-completion); Unicode widths remain later work. `CALL_INPUT_LOST` abandons the
 line and returns a distinct result, so the caller can explain the loss and retry.
 On an output failure, the screen/cursor may be partially updated and must not be
