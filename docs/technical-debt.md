@@ -32,8 +32,9 @@ the owner deferred it for much later (2026-10-10).
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
 (owner decision, 2026-10-08) and read the source twice because the digest is announced first. Data moves in a 64 KiB window of
-2 KiB chunks ([measurements](development/experiments/xfer-pipelining/README.md)); native rates after windowing await the owner's
-batch. Before it, 15 MiB took 6.5 s up and 7.5 s down natively. In nested QEMU both directions are bound by BSP work per frame.
+2 KiB chunks ([measurements](development/experiments/xfer-pipelining/README.md)). Natively, 700 MiB now takes about 19.5 s up and
+28 s down (36 and 25 MiB/s); before windowing, 15 MiB took 6.5 s up and 7.5 s down. The native bound is unattributed. In nested QEMU
+both directions are bound by BSP work per frame.
 Guest names are limited to 200 UTF-8 bytes and host paths to 1024.
 
 The mandatory SHA-256 extension excludes stock kitty peers, and transfers are single regular files without resume, compression or

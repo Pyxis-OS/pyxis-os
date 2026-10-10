@@ -110,9 +110,28 @@ pressing `y` to the prompt. Between downloads, remove `x.bin` from `DIR`.
 After the change, 15 MiB may take under a second, close to stopwatch
 resolution, so the 700 MiB runs carry the rate.
 
+## Native results
+
+2026-10-10, ThinkPad wired on AC, booted over PXE from `b50a2482` (main
+`d01fe599` plus an inert probe commit), host files on the desktop's disk. The
+client was horse's existing `pyxis-remote` build, driven through a tmux pane: a
+script answered the upload/download prompt and timed from that answer until the
+shell prompt returned (not a stopwatch). One remote session, idle local console.
+
+| Transfer | Up (`xfer receive`) | Down (`xfer send`) |
+| --- | --- | --- |
+| 15 MiB, three runs | 0.42, 0.47, 0.42 s | 0.78, 0.78, 0.84 s |
+| 700 MiB, three runs | 19.42, 19.45, 19.80 s | 27.90, 28.37, 28.56 s |
+
+That is about 36 MiB/s up and 25 MiB/s down for 700 MiB; before windowing,
+15 MiB took 6.5 s up and 7.5 s down natively. Every transfer was SHA-256
+verified by xfer, and the host copies matched the sources. `fastfetch` showed
+789.17 MiB allocated both before and after the 700 MiB set, with the uploaded
+file held in `tmp://`. The main-before-change comparison was not rerun, since
+the change merged on 2026-10-09; the earlier 15 MiB native figures stand in for it.
+
 ## Limits
 
-- **Native rates are unmeasured.**
 - **Next bound, natively:** unknown. Candidates are per-frame work (base64,
   SHA-256, OSC parsing and terminal copies), the remote server's rounds, and,
   for uploads, the 4 KiB guest input queue, which this work kept unchanged.
