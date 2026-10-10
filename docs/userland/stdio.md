@@ -1,7 +1,7 @@
 # File, terminal and pipe I/O
 
-The freestanding C library exposes a `FILE` subset, with unbuffered output and
-file/pipe input read-ahead, in
+The freestanding C library exposes a `FILE` subset, with unbuffered output by
+default, explicit output buffering and file/pipe input read-ahead, in
 [`stdio.h`](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/libc/include/stdio.h). It uses native file, directory,
 console and pipe capabilities; there is no kernel descriptor table or POSIX
 syscall layer.
@@ -22,6 +22,11 @@ such as `tmp://notes.txt` and libc's retained [current working chain](process-st
 for relative paths. `chdir` affects later path operations, not already open
 streams. Lookup adds no authority; roots are borrowed and cwd handles retained.
 An open stream owns its handle independently.
+
+[`realpath`](paths.md#proved-realpath) proves a bounded native spelling while
+original and candidate references are held; it does not collapse scheme aliases.
+Providers, missing components and unavailable identity fail. Descriptive cwd text
+alone is not proof, and a successful result freezes no later lookup or contents.
 
 Only the final file may be created; intermediate directories must exist. Lookup
 of an existing writable file does not require CREATE. A competing creator is
@@ -49,8 +54,18 @@ Invalid descriptors or unavailable access report EBADF; an otherwise compatible
 existing association reports EBUSY. Position and read-ahead stay intact; `w` does not truncate or create. FILE access is narrowed:
 `r` cannot write even when the underlying descriptor is read/write. `a` enables
 shared non-atomic append for every alias without moving the current cursor;
-other modes never clear the descriptor's append policy. `freopen`, `setvbuf` and
-`setbuf` remain later steps; output stays unbuffered.
+other modes never clear the descriptor's append policy. `freopen` remains
+unsupported; output buffering is selected separately before stream I/O.
+
+`dup2(source, target)` shares the source object at the requested target number.
+It validates the source and reserves storage before closing the target; those
+failures preserve the target. An existing target FILE association and its
+selected access remain, while pushback and EOF are cleared on success. The
+error indicator remains. Selected access grants no new rights: a readable FILE redirected to a write-only object
+later reads with EBADF. Source cursor and read-ahead remain shared. Pending
+target FILE output rejects replacement with EBUSY; flush it first. A failed
+native target close leaves the target invalidated and reports its error without
+retrying release. Source equal to target validates and returns unchanged.
 
 Descriptors use the lowest free number, including absent or closed standard
 slots. The first three entries use static storage; later growth uses the heap.
@@ -106,7 +121,7 @@ and host restrictions remain authoritative. Virtio-fs still requests 0644.
 See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
 
 `unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync`,
-`unlink`, `pread`, `pwrite`, `dup`, `access`, `rmdir` and `isatty`, and defines
+`unlink`, `pread`, `pwrite`, `dup`, `dup2`, `access`, `rmdir` and `isatty`, and defines
 STDIN_FILENO, STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `isatty` returns 1
 for a console stream, the startup binding to the space's terminal, and 0 with
 ENOTTY for files and pipes; `fstat` reports the same console as a character
@@ -198,17 +213,19 @@ within the RAM filesystem, not disk durability or a whole-path snapshot.
 ## Transfers and positions
 
 `fread` and `fwrite` return complete element counts and check size/count overflow
-before I/O. A partial final element may have transferred bytes even though it
-is not included in that count. File position belongs to the shared open object;
-the underlying native capability has no seek position. File writes use that
-offset. Native file calls transfer at most 4,088 bytes per read or 4,080 bytes per
+before I/O. A partial final element may have consumed or queued bytes even though
+it is not included in that count. Unbuffered `fwrite` counts confirmed backend
+progress; buffered `fwrite` counts bytes accepted into FILE ownership, including
+retained bytes after a flush error. Check `ferror` and `fflush` even for a full
+return count. File position belongs to the shared open object; the underlying
+native capability has no seek position. File writes use that offset. Native file calls transfer at most 4,088 bytes per read or 4,080 bytes per
 write; `fread`/`fwrite` continue across those boundaries using their existing loops.
 File, terminal and pipe output continue positive short writes until complete or
 an error, submitting only the remaining suffix. Zero progress or an excessive
 count is rejected; file position advances only for confirmed bytes. On a later
-failure, the position includes any partial final element, the return counts
-only whole elements, and `ferror`/`errno` retain the failure. Neither `fwrite`
-nor formatting helpers automatically retry an error. Append re-queries the end
+failure, the position includes confirmed bytes of any partial final element,
+while `ferror`/`errno` retain the failure. Neither `fwrite` nor formatting helpers
+automatically retry an error. Append re-queries the end
 before each native write and remains non-atomic across all these calls.
 
 OUTCOME_UNKNOWN maps to EIO: the current native mutation may have taken effect
@@ -239,6 +256,31 @@ mode and native rights remain separate: invalid entries and wrong modes report
 EBADF, while native authority denial remains EACCES and unsupported operations
 remain ENOTSUP. A successful short transfer remains successful progress.
 
+### Output buffering
+
+Output defaults to `_IONBF`. `setvbuf` before stream I/O selects `_IOFBF` to
+flush a full output buffer, `_IOLBF` to additionally flush through each newline,
+or `_IONBF` for immediate output and exact future input reads by that FILE.
+Existing shared input read-ahead is still consumed. Full/line buffering on an
+input-only FILE fails with ENOTSUP; writable update streams retain the existing
+input read-ahead policy unless `_IONBF` is selected.
+
+A supplied output buffer is borrowed until `fclose` and needs nonzero size;
+NULL allocates the requested size, or BUFSIZ when size is zero. Allocation or
+configuration failure preserves the previous selection. Invalid modes, late
+configuration and zero-sized supplied buffered storage report EINVAL.
+`setbuf(stream, buffer)` selects full buffering with BUFSIZ bytes;
+`setbuf(stream, NULL)` selects `_IONBF`.
+
+Queued output belongs to FILE, separately from the shared descriptor object.
+Flush removes only confirmed prefixes and retains the unconfirmed suffix on
+failure. A previously failed queue must drain before a later `fwrite` accepts
+new bytes, including after `clearerr`; a failed drain accepts zero new bytes.
+Recover queued output with `fflush`, rather than repeating bytes already accepted.
+Flush before direct descriptor I/O, close/replacement or stream delegation.
+`fflush` drains output without a native SYNC or durability promise; uncertain
+native mutation outcomes still have the EIO limitation described above.
+
 ### Input read-ahead
 
 Each open object owns an optional BUFSIZ read-ahead buffer beside its handle
@@ -267,7 +309,8 @@ input `fflush` refetches them.
 Read-ahead is private process memory and never accompanies a delegated stream.
 A child given the same pipe sees only bytes not yet fetched; a child given a
 file-backed stream starts at offset 0, as before. Read a stream you will
-delegate only with `read` or `fread_some`.
+delegate only with `read`, `fread_some`, or FILE input selected with `_IONBF`
+before any read-ahead occurs.
 
 #### Read-ahead validation
 
@@ -335,12 +378,19 @@ prevent retrying I/O; EOF suppresses reads until cleared or repositioned.
 `fseek` supports SET/CUR/END on files, including past the current end. Subsequent
 writes can create zero-filled gaps through the native file operation. Negative
 resulting positions are rejected. `ftell` fails with EOVERFLOW if the current
-offset cannot fit in long. Terminal and pipe seeks fail with ESPIPE. `ftell`
-reports the logical position, excluding read-ahead. A seek is validated before
-it drops read-ahead; a failed seek, including ESPIPE, keeps buffered bytes, the
-position and both indicators. A write on an update stream drops read-ahead
-first, so no `fseek` is needed between reading and writing. ISO C requires one;
-omitting it is a Pyxis guarantee, not portable behavior.
+offset plus queued output cannot fit in long. Terminal and pipe positions fail
+with ESPIPE. `ftell` excludes input read-ahead and includes queued output;
+pending append output uses the held file's current size rather than its read or
+seek cursor. Size-query or overflow failure changes neither queue nor cursor.
+Without pending output it reports the current cursor.
+
+`fseek` flushes queued output before moving. A flush failure prevents the seek;
+a later seek failure can still follow successful output delivery and cursor
+advancement. The descriptor seek itself validates before discarding input
+read-ahead, so failed input-only seeks preserve read-ahead and indicators.
+A write on an update stream drops file read-ahead first, so no `fseek` is needed
+between reading and writing. ISO C requires one; omitting it is a Pyxis
+guarantee, not portable behavior.
 
 ## Pushback and scanning
 
@@ -400,9 +450,9 @@ EPIPE when their last reader closes.
 
 `startup_stream(index)` borrows the handle owned by the corresponding descriptor;
 the immutable snapshot retains no reference, and native code must not close its
-handle independently. After the owner closes, the snapshot is stale and must
-neither be used nor forwarded to a child. Descriptor-number reuse does not
-refresh it. Before owner close, native code may explicitly copy a borrowed handle
+handle independently. After the owner closes or its descriptor is replaced by
+`dup2`, the snapshot is stale and must neither be used nor forwarded to a child.
+Descriptor-number reuse does not refresh it. Before owner close, native code may explicitly copy a borrowed handle
 when it needs a separately owned reference, but must close that copy itself.
 For native launch adapters, `<pyxis/stdio.h>` provides
 `pyxis_stdio_stream(FILE *, struct startup_stream *)`. It checks the current FILE
@@ -410,33 +460,36 @@ registry and descriptor association, returning a borrowed protocol/handle.
 Closed or absent standard wrappers return NONE; descriptor-number reuse never
 reconnects them. Success preserves errno, indicators, cursor, pushback and
 read-ahead, and acquires no reference. The caller must not close the handle or
-use it after owner close. This lets [Lua](lua.md) delegate live C streams without
-reusing the stale startup snapshot. Child files begin at offset zero; buffered
-pipe bytes and append state are not transferred.
+use it after owner close or descriptor replacement. Flush queued output before
+delegating. This lets [Lua](lua.md) delegate live C streams without reusing the
+stale startup snapshot. Child files begin at offset zero; buffered pipe bytes,
+queued output and append state are not transferred.
 
 Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
 resources; libc never uses them to fill a missing standard-stream binding.
 
-Output is unbuffered, so `fflush` has no pending bytes to write. On an input
-file stream it drops read-ahead so later reads refetch; on a pipe it keeps them.
-ISO C leaves input `fflush` undefined, so this is a Pyxis guarantee.
-`fflush(NULL)` does not touch input, and no flush clears an earlier error
-indicator.
+`fflush(stream)` drains queued output, then drops FILE pushback and file
+read-ahead so later reads refetch; pipe read-ahead remains. ISO C leaves input
+`fflush` undefined, so this is a Pyxis guarantee. `fflush(NULL)` attempts all
+registered output queues, reports the first error after trying the others, and
+leaves input alone. No flush clears an earlier error indicator.
 Normal exit calls it, closes each live descriptor once, then disposes of FILE
 metadata, including invalid associations. Cleanup errors do not replace the
 requested exit status. Exit handlers and `.fini_array` run before this cleanup,
 so they can still write to the streams; see
 [startup and exit](../development/sdk.md#startup-exit-and-layout). `_Exit` and
 fatal faults bypass libc cleanup; the kernel still reclaims process resources.
-There are no buffering controls or wide I/O. `fseeko` and `ftello`
+There is no wide I/O. `fseeko` and `ftello`
 behave exactly like `fseek` and `ftell`, because `off_t` is `long`. Scanning
 and one-byte pushback are described above.
 
-`fclose` invalidates its slot's association and releases that descriptor reference.
+`fclose` attempts to flush, then invalidates its association and closes the
+descriptor even after a flush failure. It preserves the first error, frees owned
+output storage and disposes of the wrapper; caller storage remains caller owned.
 Other aliases retain the open object; only its final reference makes one native
 close attempt. Success returns zero without changing errno. Failure returns EOF
-with the translated errno and still disposes of the wrapper; static standard
-wrappers remain invalid.
+with errno; queued output cannot be recovered from that closed FILE. Static
+standard wrappers remain invalid.
 Closing a stale FILE returns EOF/EBADF without touching a reused descriptor.
 Native CLOSE currently returns only success or BAD_HANDLE; neither leaves an
 owned native entry. Other native failures retain their errno translation, while

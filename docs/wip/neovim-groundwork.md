@@ -1,10 +1,10 @@
 # Neovim task 6 groundwork
 
-**Owner accepted the three defaults on 2026-10-10. Working path and environment
+**Owner accepted the three groundwork defaults on 2026-10-10. Working path and environment
 are implemented in slice 1; proved realpath and fdopen/dup are implemented in
 slice 2; calendar, encoding and the numeric/string closure are implemented for
-review in slice 3. Stream rebinding/buffering and the editor recipe remain
-unassigned.**
+slice 3. The editor recipe and QEMU qualification are delivered in slice 4; owner native
+qualification follows as slice 5.**
 This splits [task 6](neovim-libuv.md#tasks); task 5's Lua/luv delivery remains a
 prerequisite. The shared libc work also serves [hosted Clang](hosted-clang.md)
 and [Git](git-on-pyxis.md). Existing first-slice exclusions remain in force.
@@ -17,8 +17,9 @@ shell and port consumers updated together. [Qualification](../development/experi
 records the fresh-main baseline, matched launch costs and QEMU child-snapshot run.
 Slice 2 delivers [proved realpath](../userland/paths.md#proved-realpath) and
 [fdopen/shared descriptor objects](../userland/stdio.md#opening-and-ownership),
-including the libuv realpath adapter. `freopen` and buffering controls remain
-separate small steps; the Neovim recipe remains later work.
+including the libuv realpath adapter. `freopen` remains separate; slice 4 adds
+`dup2`, `setbuf` and explicit output buffering without changing the default
+unbuffered streams.
 Slice 3 delivers [`mktime`](../userland/timezones.md#c-interface) with the
 accepted fold/gap rule, the reduced musl [`iconv`](../kernel/userspace.md#foundational-libc),
 and the integer/string/math rows of the inventory: `strtoimax`, `atol`,
@@ -30,15 +31,57 @@ of this slice.
 The probe inventory below describes its original baseline, not current
 availability of the delivered slice 1–3 APIs.
 
-## Editor integration still required
+## Slice 4 contract (accepted 2026-10-10)
 
-The diagnostic Neovim pin's `path.c:path_full_dir_name` (2298) returns descriptive
-cwd for empty input and promotes cwd plus a relative suffix after realpath
-failure. The future Pyxis recipe must instead prove `.` or return failure; no
-cwd-text fallback may claim canonical resolution. `os/fs.c:os_realpath` (1338)
-uses `xstrlcpy` yet reports success after truncation: reject insufficient capacity
-before copying a proved result. No Neovim recipe or runnable editor is delivered
-by this slice.
+Implemented in the [native editor reference](../userland/neovim.md), with
+[QEMU qualification](../development/experiments/neovim-first-slice/README.md).
+Real Lua 5.1/luv/LPeg/libuv, utf8proc and tree-sitter archives link; iconv is libc.
+Generators and help tags run on native host Lua, never the target editor.
+
+1. **Internal child authority: explicit native spawn delegation.**
+   Neovim's `ui_client_start_server` starts the same image with `--embed`.
+   Its loop requires pipe/create, but ordinary libuv children deliberately
+   receive only memory/clock/launcher. Add a native spawn extension with explicit
+   caller-selected child resource grants; Neovim selects pipe/create for this
+   internal server, leaving ordinary `uv_spawn` attenuation unchanged. Directional
+   pipes use slots 0–2 and flags zero; redirected stdin needing fd 3 is refused
+   before launch. Qualify both loops and
+   child cleanup; never silently delegate the grant to ordinary jobs.
+
+2. **Cached metadata and overwrite: held reference and explicit force.**
+   Keep one reference per loaded file buffer until unload; comparison metadata
+   includes validity. Compare the actual held writable target before truncation,
+   retaining the original throughout. Ordinary `:w` refuses replacement or
+   unavailable comparison metadata; `:w!` explicitly selects the current native
+   target when freshness cannot be established. Never treat unknown zero IDs or
+   times as equality, or retain freshness caches with unknown mtime. Qualify replacement, unavailable
+   metadata and reference cleanup. This supplies no mutation lease: names and
+   contents can change after sampling, and equal mtime never proves equal bytes.
+
+Comparison metadata follows the backing, not the scheme spelling:
+
+| Current path/backing | Held identity | Modification time and ordinary `:w` |
+| --- | --- | --- |
+| `home://` on a live image; `tmp://` RAM | Valid | Recorded when wall time is available; files whose sampled time is unavailable need `:w!`. |
+| `home://` on an installed image; other npfs volumes | Valid | Per-inode modified-time validity; records without it need `:w!`, not every npfs file. |
+| `host://` VirtIO-FS | Valid within the live mount/session | Fresh GETATTR supplies mtime; normal same-object comparisons work. Query failures remain errors. |
+| `boot://` archive | Valid | Authored mtime unavailable, but the archive is read-only: `:w!` cannot overwrite it; save to a writable path. |
+
+None of the writable backends always lacks identity or mtime. RAM without a
+valid wall-clock sample and npfs records with unavailable modified time require
+explicit force. A valid zero timestamp still participates in comparison.
+
+Source evidence: libuv `pyxis/process.c` resource selection and `core.c` loop
+admission; Neovim `ui_client.c`, `event/libuv_proc.c`, `os/fs.c`, `fileio.c` and
+`bufwrite.c`; [live metadata lifetime](../interfaces/file-metadata.md).
+
+Existing contracts cover native observer termination/exit reasons, raw console
+input with a held passthrough grant, and generation-based resize without Unix
+signals. Numeric PID operations remain unsupported; PID metadata is omitted.
+Keep the current 16-colour profile, suppress probes and shutdown query waits,
+set NVIM_NOTTYFAST before startup, and leave COLORTERM unset. A delegated runtime
+root survives internal-child launch without forwarding the parent's app root.
+Both defaults are accepted and implemented; native owner qualification remains.
 
 ## Probe and limits
 
@@ -185,14 +228,14 @@ These are **source-inspected**, not target runtime failures:
 
 ## Highlighted C in the first slice
 
-**Feasible after the closure and TUI adaptations; not demonstrated by this probe.**
+**Delivered by slice 4; the original probe did not demonstrate it.**
 Legacy syntax does not need tree-sitter parsers. Upstream enables filetypes and
 legacy syntax during ordinary startup (`main.c:485–501`,
 `runtime/syntax/syntax.vim`); `runtime/syntax/c.vim:579–636` links C token groups.
 Package the runtime Vimscript and core Lua modules under a delegated native
 `VIMRUNTIME` path, with configuration under the agreed `home://` location.
 Retain runtime search/source/autocommand support; `.h` defaults to C++ unless
-`g:c_syntax_for_h` selects C. Task 5 is still needed for core Lua/filetype loading.
+`g:c_syntax_for_h` selects C. Merged task 5 supplies core Lua/filetype loading.
 
 Both [kernel TTY and mux](../userland/terminal.md#tty-output-controls) support
 256 palette entries, semicolon RGB, defaults, reverse and synthetic
@@ -200,9 +243,10 @@ bold/italic/underline. The bounded SGR interpreter is shared with the interactiv
 remote client; malformed colour groups change no attributes.
 
 Upstream has no `pyxis` built-in terminfo and falls back to eight-colour ANSI
-(`tui/terminfo.c:71–125`). The task 6 static entry must advertise the implemented
-sequence table, including indexed/RGB colour controls and the rendered styles.
-Neovim can use `termguicolors` on this profile; a small Vimscript scheme can assign
+(`tui/terminfo.c:71–125`). Slice 4 deliberately keeps its first-run static entry
+at sixteen colours.
+A separate small follow-up can advertise indexed/RGB controls and rendered
+styles, then select `termguicolors`; a small Vimscript scheme can assign
 Comment/Statement/Type/PreProc/Constant/String groups explicitly. Upstream's
 default dark groups do not all assign a terminal foreground.
 
@@ -214,12 +258,13 @@ Later terminal OSC/DCS consumption and Unicode rendering remain separate work.
 
 ## Remaining delivery slices
 
-After separate implementation assignments: stream rebinding/buffering;
-calendar/encoding and remaining numeric/string closure; Neovim native platform/TUI/runtime recipe;
-then the full target link and manual tab/pane qualification. Re-run against task
-5's actual libraries, with no placeholders, before claiming editor delivery.
-Keep save durability/identity validity, child pipe authority, unsupported features
-and cleanup in that qualification. Each remaining slice needs its own assignment.
+- [x] Stream rebinding/output buffering and native editor recipe, full target
+  link, manual tab/pane editing, legacy C syntax, save, cwd and cleanup.
+- [ ] Owner native qualification (slice 5): run the bundle in a tab and configured
+  mux pane, edit/save/reopen C, inspect syntax, use `:cd`, resize and quit. Confirm
+  ordinary replacement refusal and explicit force on the selected native backing.
+- [ ] Separate profile follow-up after the first sixteen-colour run: advertise
+  the merged RGB and bold/italic/underline support. No implementation assignment yet.
 
 ## Terminal SGR follow-up
 

@@ -525,3 +525,14 @@ behaviour is left out of the standard libraries rather than imitated, and luv
 reports unsupported libuv families, PIDs and signals as ENOSYS; exit callbacks
 receive the native exit reason. See [Neovim task 5](../wip/neovim-libuv.md#task-5-decisions)
 and its [qualification](experiments/lua51-luv/README.md).
+
+## Neovim
+
+The ordinary ports build includes Neovim 0.12.5, utf8proc and tree-sitter.
+Native host Lua generators build source/help files; target linking uses real
+Lua 5.1/luv/LPeg/libuv and SDK libc iconv. The staged unpacked bundle is
+`boot://share/neovim/nvim.pxb`; it stays outside the default command catalog.
+See the [editor reference](../userland/neovim.md) for authority, runtime/config,
+16-colour C highlighting and unsupported features, and the
+[qualification record](experiments/neovim-first-slice/README.md) for QEMU evidence.
+No compiler-container rebuild is needed.

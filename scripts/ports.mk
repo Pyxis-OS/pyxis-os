@@ -53,6 +53,16 @@ LIBUV_INPUTS := $(wildcard ports/libuv/*.lua ports/libuv/Makefile ports/libuv/PO
 LUA51_INPUTS := $(wildcard ports/lua51/*.lua ports/lua51/Makefile ports/lua51/manifest.json \
                          ports/lua51/patches/*.patch) ports/ports.lua ports/build.lua
 
+UTF8PROC_INPUTS := $(wildcard ports/utf8proc/*.lua ports/utf8proc/Makefile ports/utf8proc/PORT-NOTICE) \
+                   ports/ports.lua ports/build.lua
+TREE_SITTER_INPUTS := $(wildcard ports/tree-sitter/*.lua ports/tree-sitter/Makefile \
+                               ports/tree-sitter/PORT-NOTICE ports/tree-sitter/patches/*.patch) \
+                     ports/ports.lua ports/build.lua
+NEOVIM_INPUTS := $(wildcard ports/neovim/*.lua ports/neovim/*.json ports/neovim/*.md \
+                           ports/neovim/host/*.lua ports/neovim/runtime/*.vim \
+                           ports/neovim/runtime/colors/*.vim ports/neovim/patches/*.patch) \
+                ports/ports.lua ports/build.lua
+
 LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile \
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
                  ports/ports.lua ports/build.lua
@@ -106,6 +116,9 @@ PICOHTTPPARSER_OUTPUTS := $(call port_outputs,picohttpparser)
 ZLIB_OUTPUTS := $(call port_outputs,zlib)
 LIBUV_OUTPUTS := $(call port_outputs,libuv)
 LUA51_OUTPUTS := $(call port_outputs,lua51)
+UTF8PROC_OUTPUTS := $(call port_outputs,utf8proc)
+TREE_SITTER_OUTPUTS := $(call port_outputs,tree-sitter)
+NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -120,7 +133,7 @@ all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPU
      $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
-all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS)
+all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 ifneq ($(DIABLO_DATA),)
 all: $(DEVILUTIONX_OUTPUTS)
 endif
@@ -212,6 +225,21 @@ $(LIBUV_OUTPUTS) &: $(LIBUV_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(LUA51_OUTPUTS) &: $(LUA51_INPUTS) $(SDK_INPUTS) $(LIBUV_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/lua51
 	$(LUA) ports/build.lua lua51 --sdk $(abspath build/sdk) --work $(abspath build/ports/lua51) --libuv $(abspath build/ports/libuv/stage/dev)
+
+$(UTF8PROC_OUTPUTS) &: $(UTF8PROC_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/utf8proc
+	$(LUA) ports/build.lua utf8proc --sdk $(abspath build/sdk) --work $(abspath build/ports/utf8proc)
+
+$(TREE_SITTER_OUTPUTS) &: $(TREE_SITTER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/tree-sitter
+	$(LUA) ports/build.lua tree-sitter --sdk $(abspath build/sdk) --work $(abspath build/ports/tree-sitter)
+
+$(NEOVIM_OUTPUTS) &: $(NEOVIM_INPUTS) $(SDK_INPUTS) $(LUA51_OUTPUTS) $(LIBUV_OUTPUTS) \
+                    $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/neovim
+	$(LUA) ports/build.lua neovim --sdk $(abspath build/sdk) --work $(abspath build/ports/neovim) \
+	  --lua51 $(abspath build/ports/lua51/stage/dev) --libuv $(abspath build/ports/libuv/stage/dev) \
+	  --utf8proc $(abspath build/ports/utf8proc/stage/dev) --tree-sitter $(abspath build/ports/tree-sitter/stage/dev)
 
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng
