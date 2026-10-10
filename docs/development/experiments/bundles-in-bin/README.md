@@ -28,11 +28,12 @@ and libuv O_NOFOLLOW fixes. Its full ordinary image build and exact-head CI #178
 passed. Echo and Lua 5.5 remain byte-identical to the measured after image;
 no compiler-container rebuild or mirror change is required.
 
-Later refresh on main `917f6a8a` uses integration `60a9d4cf`, userland
-`6f5671f1` and ports `50988f86`. The ordinary image build and bare `nvim`
-help/static-parser and `lua5.1` version/execution smoke checks pass. All six
-new grammar notices are inside the bundle. This preserves main's static-parser
-registration and shell history search; the earlier measurements and install
+Later refresh on main `f6ef6fdf` uses integration `c0a638e0`, userland
+`6f5671f1` and ports `cdc02116`. The ordinary image build and bare `nvim`
+Lua-file startup, insert-mode Tab and write/quit smoke checks pass. The preceding
+refresh also checked help/static-parser and `lua5.1` execution. All six grammar
+licences and native libuv OS-query notices are inside the bundle. This preserves
+main's static parsers, shell history search and Neovim Tab fix; the earlier measurements and install
 qualification above remain on their recorded revisions.
 
 QEMU 10.2.2, q35, nested KVM, `-cpu max`, 512 MiB, one socket with one or four
