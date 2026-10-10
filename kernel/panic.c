@@ -1,10 +1,19 @@
 #include <arch/cpu.h>
+#include <arch/debug.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+#include <kernel/fb/early_console.h>
 
 [[noreturn]] void panic(const char *format, ...)
 {
   cpu_disable_interrupts();
+  if (arch_debug_enabled) {
+    va_list local_args;
+    va_start(local_args, format);
+    early_console_panic_vprintf(format, local_args);
+    va_end(local_args);
+    arch_debug_terminal(NULL, 0, DEBUG_STOP_PANIC);
+  }
   klog_panic_begin();
   klog("\nCaelum panic: ");
   va_list args;

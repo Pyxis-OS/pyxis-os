@@ -147,3 +147,34 @@ bool pci_msix_disable(struct pci_msix *msix)
   return masked &&
     (control & (PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK)) == PCI_MSIX_FUNCTION_MASK;
 }
+
+bool pci_msix_mask_prepared_entry(const struct pci_msix *msix,
+    unsigned entry, uint32_t *saved_control)
+{
+  if (!msix || !msix->table.mapping.address || entry >= msix->entries ||
+      !saved_control) {
+    return false;
+  }
+  volatile struct pci_msix_entry *table =
+    (volatile struct pci_msix_entry *)msix->table.mapping.address;
+  uint32_t control = table[entry].control;
+  if (control == UINT32_MAX) {
+    return false;
+  }
+  *saved_control = control;
+  table[entry].control = control | PCI_MSIX_VECTOR_MASK;
+  return table[entry].control == (control | PCI_MSIX_VECTOR_MASK);
+}
+
+bool pci_msix_restore_prepared_entry(const struct pci_msix *msix,
+    unsigned entry, uint32_t saved_control)
+{
+  if (!msix || !msix->table.mapping.address || entry >= msix->entries ||
+      saved_control == UINT32_MAX) {
+    return false;
+  }
+  volatile struct pci_msix_entry *table =
+    (volatile struct pci_msix_entry *)msix->table.mapping.address;
+  table[entry].control = saved_control;
+  return table[entry].control == saved_control;
+}

@@ -1,8 +1,12 @@
 # Network kernel debugger
 
 Owner-accepted plan, 2026-10-09; code inspected at `b0a050b7`.
-Tasks 1–2 are implemented; task 2 was assigned on 2026-10-09. Tasks 3–4 remain
-unimplemented and unassigned. Goal: GDB on the
+Tasks 1–2 are implemented. Task 3 core QEMU qualification, the interleaved
+option-off comparison and owner-run native RTL8111 qualification are complete
+(2026-10-10). The local panic display follow-up shows the complete message
+before BSP terminal entry. AP entry can lose the published readiness window
+while drawing and use the accepted pre-ownership fatal fallback instead.
+Task 4 remains unassigned. Goal: GDB on the
 owner's host inspecting Caelum on the ThinkPad during a PXE driver bring-up loop,
 including Renoir display work.
 
@@ -47,11 +51,12 @@ availability and still offer this network service. Earlier boot faults retain
 existing log/serial behavior. Independent early NIC bring-up and in-kernel TCP
 are outside the accepted route.
 
-Proposed options: `debug.net=NAME` enables the service, `debug.wait=1` waits once
+Task 3 options: `debug.net=NAME` enables the service, `debug.wait=1` waits once
 at its readiness checkpoint; the latter without the former is invalid. Same
 case-sensitive printable-name limits as `remote.beacon`, but a new debugger tag
 and UDP port **2326**, distinct from remote discovery 2324 and logs 2325.
-`remote.beacon=t14` and `log.udp=1` remain independent.
+`debug.image=SHA256` is mandatory with `debug.net`; generated images derive it
+from the completed ELF. `remote.beacon=t14` and `log.udp=1` remain independent.
 
 The bridge first discovers one named/MAC-filtered target using host-advertised
 HELLO datagrams, like reverse-terminal discovery. The current beacon service is
@@ -157,6 +162,13 @@ rather than promise network-delivered NMI to a wedged service CPU.
 Recognized #BP/#DB and the readiness checkpoint enter the recoverable path.
 Panic/kernel-fault entry must be intercepted before irreversible log/NIC panic
 handoff, capture what is safe and serve **read-only terminal inspection**.
+With debugging enabled, `panic()` first attempts local-only direct framebuffer
+text, without entering the log or fatal UDP paths. Other terminal origins
+boundedly wait for that message to finish before stopping its writer. This
+requires no clock, heap, GS or ordinary lock. A fault during rendering cancels
+the message and retains fault inspection: a failing display may show partial
+text, a stale frame or nothing. No panic-time GPU reset or scanout programming
+is attempted; a selected VirtIO GPU has no direct panic target.
 Fault/panic continue, step and mutation are rejected; detach leaves it stopped.
 Fatal recursion or unsafe transport retains uncertain storage and falls back
 to best-effort reporting. Once debug mode owns the NIC, fatal text must use that
@@ -209,16 +221,15 @@ merely by a page walk. Mutation is only for a complete ordinary stop.
 Use **the exact staged `caelum.elf`**, not a later build at the same path.
 Kernel link base is fixed `0xffffffff80000000`; KASLR is not enabled. Build ID is
 currently disabled, so do not claim an ELF build-ID handshake. Stage ELF and PXE
-configuration together; a manifest records SHA-256/revision/config, and proposed
-`debug.image=SHA256` in that boot entry supplies the image token to HELLO. The
+configuration together; a manifest records SHA-256/revision/config, and `debug.image=SHA256` in that boot entry supplies the image token to HELLO. The
 bridge verifies its `--kernel` file against the token and refuses mismatch.
 The digest is supplied outside ELF (no self-referential embedded full-file hash),
 and is an operator staging claim, not a runtime measurement of loaded bytes or
-authentication. The operator must publish the matching ELF/config pair. Proposed usage:
+authentication. The operator must publish the matching ELF/config pair. Task 3 usage:
 
 ```sh
 pyxis-gdb-bridge --target t14 --kernel /exact/staged/caelum.elf
-# prints verified ELF path, MAC, boot/session identity and local TCP endpoint
+# verifies the supplied ELF digest before accepting commands
 
 gdb -q /exact/staged/caelum.elf
 ```
@@ -240,70 +251,46 @@ five-second network/block deadlines; drain confirmed completions on return,
 then honor existing failure/retention rules for still-owned requests. Stopping
 inside an interrupted mutation is not a coherent snapshot of device state.
 
-## Implemented checkpoint foundation
+## Implemented stop foundation
 
-`make debug DEBUG_CHECKPOINT=1 CPUS=4` opts into the one-shot BSP checkpoint;
-normal images omit the option. The stop occurs after initial task publication,
-before BSP scheduling. Each CPU has a permanent caller-owned 16 KiB RW/NX IST
-stack with an unmapped guard on each side. An inactive IDT copy is prepared before
-AP startup; only opted-in CPUs load its NMI gate. Disabled boots allocate no
-checkpoint state/stacks/IDT and add no timer, scheduler or ordinary IPI polling.
-No new normal log lines are emitted. Unexpected NMIs retain fatal reporting.
+`debug.net` prepares permanent 16 KiB RW/NX per-CPU IST stacks with unmapped
+adjacent guards and opt-in NMI/#PF/#GP gates before AP startup. Default-off boots
+allocate no debugger stacks, snapshots, windows or identity task; the ordinary
+worker has no debugger iteration polling. New normal log lines are absent.
+Unexpected NMIs retain fatal reporting.
 
-A self-NMI captures the BSP's real frame and moves service onto its IST. The
-GS-independent entry/handler never swaps or writes GS bases, captures all integer
-registers/return state, actual CR3 and both GS bases, and leaves that state unchanged
-on IRET. The BSP sends one NMI per peer. Snapshots precede release-published
-acknowledgements; COMPLETE requires every online CPU. The one-second acquisition
-budget covers dispatch and acknowledgement. INCOMPLETE freezes missing-CPU flags,
-keeps resources and captured peers parked, ignores release/expiry even after late ACKs,
-and maintains the clock until physical/QEMU reset. NMI source attribution while
-armed has the limitation described above. The parked path executes no IRET,
-so further NMIs stay blocked until its return
+A single atomic PREPARED-to-PENDING transition claims entry before publishing
+its generation. Secondary terminal origins join the active stop; after a
+recoverable release they retry their preserved fault instead of taking the
+legacy NIC path. A GS-independent self-NMI captures the BSP return frame and moves service onto
+its IST; no GS-base rewrite occurs. A terminal origin may forward from an AP,
+retaining its actual fault frame, root, GS bases and CR2 separately from the NMI
+return frame. The BSP sends NMIs to peers. COMPLETE requires every CPU's matching
+snapshot/acknowledgement within the one-second acquisition budget. INCOMPLETE
+freezes missing-CPU flags and stays terminal, including after late ACKs. The
+parked path keeps NMI blocking until its eventual IRET
 ([AMD64 Volume 2, §8.1.4](https://docs.amd.com/v/u/en-US/24593_3.44_APM_Vol2)).
 
-At COMPLETE, release requests are cleared and the fixed 30-second monotonic
-expiry starts. A matching generation request or expiry releases all peers;
-a mismatched request does not. QEMU's GDB inspects owned snapshots and sets only
-the control field; this is not a kernel memory-write/debugger protocol feature:
-
-```gdb
-set may-call-functions off
-target remote 127.0.0.1:1234
-watch arch_debug_stop.phase
-continue
-# Repeat continue through PREPARED/ACQUIRING until COMPLETE, then inspect:
-p arch_debug_stop
-p *arch_debug_stop.cpus@4
-set var arch_debug_stop.release_generation = arch_debug_stop.generation
-delete breakpoints
-continue
-```
-
-Keep the exact image ELF. The scaffold has no NIC/RSP, arbitrary break-in,
-panic interception, target writes, breakpoints or stepping.
-Qualification: ordinary kernel/image builds with verified unchanged SDK/userland/
-ports bundles, then interactive Q35/KVM/GDB with one and four CPUs. Complete
-snapshots, IST use, unmapped guards, mismatched/matching release, original BSP
-register restoration and 30-second expiry were inspected. Holding APs with GDB
-reached INCOMPLETE; late ACKs and a matching release still left all CPUs parked
-past 30 seconds. Normal network/remote echo worked after complete release.
-QEMU used a direct 64-bit HPET; native 32-bit wrap maintenance and syscall-window
-entry were inspected in code, not physically exercised. Performance qualification
-is recorded in [matched checkpoint qualification](../development/experiments/debug-checkpoint/README.md).
-The review's interleaved five-boot-per-image follow-up met its acceptance criterion:
-baseline/option-off medians 0.52/0.49 s, both ranges 0.49–0.52 s. No measurable
-option-off slowdown was reproduced in that run; the timing gate is closed.
-No isolated IPI-latency, speedup or native debugger result is claimed.
+Only confirmed NIC TX/mask restoration permits ordinary resume. Per-CPU exit
+ACKs precede register restoration/IRET; they are not proof IRET executed. The
+origin waits for all exit ACKs before rearming a new generation. Terminal stops
+never return. Before transport ownership, unsafe/unavailable entry falls back
+to existing fatal reporting; retained uncertainty stays quiet and terminal.
+Readiness is an opportunity, not a reservation: an AP can finish panic drawing
+then find the BSP has entered ordinary network work. That entry is refused
+before taking the NIC; AP panic attachment is not guaranteed. Stronger
+availability would need a separately designed BSP coherence reservation.
+`debug.checkpoint`, `release_generation` and the inspection mailbox were task 1–2
+scaffolding and are removed, with no compatibility option. Their historical
+qualification remains in [checkpoint](../development/experiments/debug-checkpoint/README.md)
+and [guarded inspection](../development/experiments/debug-inspection/README.md).
 
 ## Implemented guarded inspection
 
-While COMPLETE, the parked BSP services `arch_debug_inspect`: captured integer
-registers/return frame, CR3 and both GS bases, or 1–1024 bytes of virtual RAM
-through the selected CPU's captured root. All other CPUs must have acknowledged
+While COMPLETE, the parked BSP exports captured integer registers/return frame,
+CR3, FS and both GS bases, or bounded virtual RAM through the selected CPU's root. All other CPUs must have acknowledged
 the generation. No function injection, target writes, allocation, ordinary VM
-scratch, locks or logging. Each request is bounded; it never refreshes the fixed
-30-second expiry. Results precede release publication of `completion`.
+scratch, locks or logging. Valid pinned-peer traffic refreshes the recoverable stopped-idle budget.
 
 Two permanent reserved kernel pages provide dedicated translation/data windows;
 boot establishes their ancestors and retains their shared leaf pointers. Only
@@ -327,36 +314,62 @@ the failed load is not retried. Other faults enter the original ISR with their
 original hardware frame. This does not protect against machine checks/poisoned
 RAM or qualify arbitrary interrupted contexts.
 
-Use the exact staged ELF with QEMU GDB and `set may-call-functions off`. Stop
-at `hbreak arch_debug_inspect_service`, after COMPLETE, then submit fields before
-a new nonzero sequence (do not reuse a sequence or modify an outstanding request):
+Task 3 uses GDB RSP instead of the temporary mailbox: unavailable FP state is
+reported unavailable, and RAM reads return a real error on refusal. Monitor
+accesses preflight the complete range and use exact aligned widths. Physical
+RAM/device monitors exclude debugger infrastructure and the selected transport's
+BAR/DMA ranges; virtual RAM inspection retains the accepted broader read policy.
+The only unsized Renoir admission is BAR5 offsets `[0x13000,0x15000)`; no BAR
+sizing, power change or device write occurs. Device reads can have side effects.
 
-```gdb
-set var arch_debug_inspect.generation = arch_debug_stop.generation
-set var arch_debug_inspect.cpu = 0
-set var arch_debug_inspect.operation = DEBUG_INSPECT_RAM
-set var arch_debug_inspect.address = (unsigned long)&arch_debug_enabled
-set var arch_debug_inspect.length = 1
-set var arch_debug_inspect.request = 1
-continue
-p arch_debug_inspect.completion
-p arch_debug_inspect.status
-p arch_debug_inspect.bytes
-x/1bx arch_debug_inspect.data
+## Task 3 operation and qualification
+
+```sh
+make -C tools gdb-bridge
+make image DEBUG_NET=t14 DEBUG_WAIT=1
+build/tools/pyxis-gdb-bridge --target t14 --kernel /exact/staged/caelum.elf
 ```
 
-Use `DEBUG_INSPECT_REGISTERS` for `arch_debug_inspect.registers`; unavailable
-FP/SIMD state is not synthesized. Requests outside COMPLETE are not serviced.
-This mailbox is temporary task 1–2 scaffolding, replaced by task 3 transport.
-Ordinary builds, interactive QEMU/GDB checks and the before-code/interleaved
-option-off comparison are recorded in
-[guarded inspection qualification](../development/experiments/debug-inspection/README.md).
-Task 2 does not qualify NMI reentry into clock maintenance; retain the task 3/4
-entry restriction and qualification above.
+The bridge runs on horse for native PXE, with UDP 2326 reachable on the ThinkPad
+LAN. `--bind IPv4`, `--beacon-address IPv4` and optional `--source MAC` select that
+LAN/target. TCP is fixed to localhost port 1235. A real entropy read supplies the
+boot nonce; failure leaves attach unavailable. Name/nonce/digest/MAC are routing
+and stale-session checks, not authentication: any peer on the LAN can inspect
+kernel RAM/registers and privileged device state while this opt-in service runs.
+
+GDB monitor grammar is deliberately small (addresses/BDF/offset hexadecimal,
+width and count decimal; widths are bits; at most eight values):
+
+```gdb
+monitor phys read 0x1000 32 1
+monitor mmio read PHYSICAL_REGISTER_ADDRESS 32 1
+monitor pci read 0:00:00.0 0 32
+```
+
+The AMD64 target XML names the flags register `eflags`: use
+`info registers eflags` or `p/x $eflags`, rather than `rflags`.
+
+Unsupported widths, addresses, writes and control requests return errors.
+Normal `continue` has no address/signal argument; GDB waits for the next terminal
+stop in the same boot/image. Running Ctrl+C is unavailable in task 3. GDB/bridge
+exit stops heartbeats, allowing ordinary idle release; detach/kill remain refused.
+A bound terminal stop retains its session until reboot: losing the bridge/client
+requires a fresh PXE boot for another attachment, and never resumes the kernel.
+Retries use 250 ms stop-and-wait transport and a separate command identity/cache,
+so retransmitted device reads are not reissued. RELEASED gets a bounded 750 ms
+notice opportunity; unreachable peers cannot prevent expiry. Hardware restoration
+has its own bounded wait; uncertainty keeps ownership and CPUs parked.
+
+[Task 3 qualification](../development/experiments/network-debugger/README.md)
+records baseline, manual QEMU checks, option-off interleaving and native results.
+Timer-assisted entry remains task 4. Current clock code reloads the HPET sample
+after each failed extension CAS and holds no interrupted-reader lock; this is
+source evidence, not native 32-bit HPET/NMI reentry qualification.
 
 ## Accepted task split and qualification
 
-Tasks 1–2 are complete; tasks 3–4 await assignment. Accepted task 1 control:
+Tasks 1–3 are complete. Task 4 awaits assignment.
+Historical accepted task 1 control:
 `debug.checkpoint=1`, absent/default off, stops once after CPU/task initialization
 and before BSP scheduling. A complete stop resumes on whichever comes first:
 QEMU's GDB setting the matching `release_generation`, or a fixed 30-second
@@ -389,7 +402,7 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    Dedicated translation/copy windows and fault fixup, RAM classification and
    integer register export; no network attach yet.
 
-3. **VirtIO and RTL8111 transport, bridge and native read-only attach.**
+3. [x] **VirtIO and RTL8111 transport, bridge and native read-only attach.**
 
    Owner can then use GDB on the ThinkPad at `debug.wait` or a terminal panic,
    inspecting CPU threads/registers, guarded RAM and documented safe Renoir registers.
@@ -401,6 +414,19 @@ remain terminal. `debug.checkpoint` is task 1–2 scaffolding, replaced by
    `pci read` include the read-side-effect caveat above. Qualify native RTL8111/PXE
    here. QEMU discovery requires **TAP/bridge LAN networking**, not user-mode NAT.
    Writes, software breakpoints, step and detach/kill are not advertised yet.
+
+   Accepted task 3 bounds (2026-10-10): enter at a coherent BSP network-worker
+   checkpoint after active net0/IPv4, or a prepared late terminal panic/fault.
+   Timer-assisted running break-in stays in task 4; retain clock-reentry
+   qualification. While stopped, consume/repost ordinary RX frames and discard
+   their protocol delivery, serving only debugger UDP and bounded ARP. Pauses
+   can lose ordinary packets; there is no replay queue or deadline rebasing.
+   MMIO reads admit only already sized compatible BAR extents plus the audited
+   Renoir register windows; refuse unknown ranges and the unsized remainder of
+   BAR5. Device reads may have side effects and duplicate commands must not
+   repeat them. QEMU uses a task-owned isolated TAP/bridge (host
+   `192.168.77.1/24`, guest `.2`), removed after qualification. Native bridge
+   runs on horse, on the ThinkPad LAN; Luna staging is coordinated by the owner.
 
 4. **Mutation and execution control.**
 
@@ -432,11 +458,11 @@ confirm normal network/log operation; inspect a planned terminal panic. Check
 quiet attached inspection, idle-loss release from ordinary stops and no release
 from panic. Repeat PXE boots, stale-session refusal and cable/bridge loss. Task 4
 adds patch/step, typed writes and detach/kill restoration; qualify a deliberate
-ordinary breakpoint before any GPU register write. No native result is claimed
-here. Early boot/IF-clear hangs and a failed NIC remain outside this initial
+ordinary breakpoint before any GPU register write. Owner-run task 3 results
+are recorded in the linked qualification record. Early boot/IF-clear hangs and a failed NIC remain outside this initial
 coverage; keep physical reset available.
 
-## Accepted owner decisions (2026-10-09; transport/features not implemented)
+## Accepted owner decisions (2026-10-09; task 4 not implemented)
 
 1. **Transport/availability:** polled UDP plus localhost TCP bridge,
    one opt-in named/MAC-selected same-LAN peer after active net0/IPv4. Defer
@@ -462,6 +488,7 @@ it is 32-bit and does not provide these ownership/stop contracts. No example
 code is copied here; protocol implementation does not import GDB itself. Any later import needs a pinned owner mirror/cache source,
 per-file licence/provenance and preserved notices; audit other GDB files separately.
 
-Task 1 adds the checkpoint foundation only. No network stub, bridge, hardware
-monitor access or qualification infrastructure is added; later tasks require
-separate owner assignment.
+Task 3 adds original MPL-2.0 transport/RSP/bridge code. Host SHA-256 reuses the
+existing attributed public-domain source in `tools/remote/vendor`; no GDB stub
+example is imported. Task 4 remains a separate owner assignment. No test or
+qualification framework is added.

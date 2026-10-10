@@ -1,6 +1,8 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/log.h>
+#include <kernel/boot/options.h>
+#include <kernel/debug.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/config.h>
@@ -12,6 +14,7 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/net/driver.h>
+#include <kernel/net/debug.h>
 #include <kernel/net/log_udp.h>
 #include <stdatomic.h>
 
@@ -37,12 +40,15 @@ static struct task_wait *worker_wait;
 static bool worker_notified;
 
 static void network_worker(void *argument);
+static void network_debug_worker(void *argument);
 
 void net_worker_assert_context(void)
 {
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
-  KASSERT((flags & RFLAGS_INTERRUPT_ENABLE) && kernel_task_is_current(network_worker, NULL));
+  KASSERT((flags & RFLAGS_INTERRUPT_ENABLE) &&
+      (kernel_task_is_current(network_worker, NULL) ||
+       kernel_task_is_current(network_debug_worker, NULL)));
   cpu_restore_interrupts(flags);
 }
 
@@ -235,11 +241,45 @@ static void network_worker(void *argument)
   }
 }
 
+static void network_debug_worker(void *argument)
+{
+  (void)argument;
+  net_lwip_init();
+  for (;;) {
+    debug_network_update(false);
+    bool transport_busy = net_driver_debug_service();
+    bool serviced = net_config_service();
+    serviced |= net_log_udp_service();
+    serviced |= net_udp_service();
+    serviced |= net_echo_service();
+    net_lwip_service();
+    net_arp_service();
+    unsigned handled = 0;
+    while (handled < NET_WORK_BUDGET) {
+      struct net_packet *packet = next_packet();
+      if (!packet) {
+        break;
+      }
+      receive_packet(packet);
+      ++handled;
+    }
+    serviced |= net_tcp_service();
+    debug_network_update(true);
+    debug_network_checkpoint();
+    if (transport_busy || serviced || handled == NET_WORK_BUDGET) {
+      kernel_task_sleep_until(0);
+    } else {
+      wait_for_work();
+    }
+  }
+}
+
 enum mm_result net_init(void)
 {
   KASSERT(arch_cpu_index() == 0 && !net_worker_available());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  enum mm_result result = kernel_task_create(network_worker, NULL);
+  enum mm_result result = kernel_task_create(boot_options_get()->debug_net ?
+      network_debug_worker : network_worker, NULL);
   if (result == MM_OK) {
     atomic_store_explicit(&worker_ready, true, memory_order_release);
     net_lwip_identity_start();

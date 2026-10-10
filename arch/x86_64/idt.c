@@ -210,6 +210,9 @@ void interrupt_handler(struct exception_frame *frame)
     frame->vector != EXCEPTION_NMI && frame->vector != EXCEPTION_DOUBLE_FAULT &&
     frame->vector != EXCEPTION_MACHINE_CHECK;
   if (!user_exception) {
+    if (arch_debug_enabled) {
+      arch_debug_terminal(frame, fault_address, DEBUG_STOP_FAULT);
+    }
     klog_panic_begin();
   }
 

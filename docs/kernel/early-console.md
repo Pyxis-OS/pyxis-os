@@ -126,6 +126,15 @@ claims either `ACTIVE` or `RETIRED` by compare-exchange; `PANIC` is terminal:
 A failed remote-writer takeover or framebuffer fault remains serial-only. See
 [technical debt](../technical-debt.md#early-console-and-post-handoff-panics).
 
+With the network debugger enabled, `panic()` streams its formatted message
+through this direct renderer before terminal debugger entry, without the log
+lock, serial output or fatal UDP takeover. One atomic message owner completes
+and fences the text; other terminal origins use a bounded, clock-free wait
+before stopping it. A recursive rendering fault revokes drawing and proceeds
+with fault inspection. Failed takeover or a failing display can leave partial
+text, a frozen frame or no text; debugger inspection does not depend on display
+success. VirtIO has no panic target, and this path makes no GPU register writes.
+
 ## Physical display interface
 
 [`display.h`](../../include/kernel/display.h) separates the physical screen

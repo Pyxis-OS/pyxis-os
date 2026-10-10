@@ -3,6 +3,7 @@
 
 #include <kernel/boot.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/debug.h>
 
 /* BSP/IF=0 before AP startup. Prepare each supported controller independently;
  * allocate rings with DMA/delivery disabled. Retain uncertain ownership. */
@@ -40,5 +41,19 @@ void rtl8111_interrupt(void);
 bool rtl8111_panic_begin(struct rtl8111_controller *controller);
 bool rtl8111_panic_transmit(struct rtl8111_controller *controller,
     const void *frame, size_t length);
+
+/* Native debugger owner; same stopped/worker contracts as net/debug.h. */
+bool rtl8111_debug_ready(struct rtl8111_controller *controller,
+    struct net_debug_device *device);
+bool rtl8111_debug_service(struct rtl8111_controller *controller);
+enum net_debug_status rtl8111_debug_begin(struct rtl8111_controller *controller,
+    uint64_t generation);
+enum net_debug_status rtl8111_debug_poll(struct rtl8111_controller *controller,
+    uint64_t generation, void *frame, size_t capacity, size_t *length);
+enum net_debug_status rtl8111_debug_transmit(struct rtl8111_controller *controller,
+    uint64_t generation, const void *frame, size_t length);
+enum net_debug_status rtl8111_debug_restore(struct rtl8111_controller *controller,
+    uint64_t generation);
+bool rtl8111_debug_retained(const struct rtl8111_controller *controller);
 
 #endif

@@ -155,9 +155,9 @@ Other candidates; current assignments are listed above.
   through a native VFS.
 - [Developer tools](later-os-directions.md#developer-tools): a capability
   inspector and `top`.
-- [Network kernel debugger](network-debugger.md): owner-requested planning for
-  opt-in LAN GDB during native PXE bring-up; checkpoint foundation assigned,
-  transport and later tasks await assignment.
+- [Network kernel debugger](network-debugger.md): checkpoint and guarded
+  inspection implemented; task 3 assigned for both NICs, bridge and native
+  read-only LAN attach during PXE bring-up.
 - [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after
   the completed analog playback milestone.
 - [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture

@@ -53,6 +53,13 @@ _Static_assert(offsetof(struct virtio_net_config, status) == VIRTIO_NET_MAC_BYTE
 
 struct virtio_net_controller {
   struct net_panic_gate panic_gate;
+  struct {
+    uint32_t msix_control;
+    uint16_t tx_owned;
+    bool failed;
+    struct virtio_net_completion rx[VIRTIO_NET_QUEUE_SIZE];
+    unsigned rx_count, rx_next;
+  } debug;
   uint32_t controller_id;
   struct virtio_net_controller *next;
   struct virtio_pci_transport pci;
@@ -86,7 +93,7 @@ enum virtio_net_operation {
 static bool enter_network(struct virtio_net_controller *controller,
     enum virtio_net_operation operation, uint64_t *flags)
 {
-  bool guard_interrupts = net_log_udp_enabled() ||
+  bool guard_interrupts = net_panic_context_enabled() ||
       operation == NET_OPERATION_ACTIVATE || operation == NET_OPERATION_RESET;
   *flags = guard_interrupts ? cpu_save_interrupts() : 0;
   if (!net_panic_gate_enter(&controller->panic_gate, operation)) {
@@ -757,4 +764,229 @@ bool virtio_net_ready(const struct virtio_net_controller *controller)
 {
   return controller && !net_panic_gate_closed(&controller->panic_gate) &&
     controller->active && !controller->config_unstable;
+}
+
+bool virtio_net_debug_ready(struct virtio_net_controller *controller,
+    struct net_debug_device *device)
+{
+  if (!virtio_net_available(controller) ||
+      atomic_load_explicit(&controller->panic_gate.state, memory_order_acquire)) {
+    return false;
+  }
+  device->controller_id = controller->controller_id;
+  memcpy(device->mac, controller->mac, sizeof(device->mac));
+  const struct pci_claim *claim = &controller->pci.claim;
+  device->pci = claim->device->address;
+  for (unsigned i = 0; i < PCI_BAR_COUNT; ++i) {
+    device->bars[i] = (struct net_debug_range){claim->bars[i].physical, claim->bars[i].bytes};
+  }
+  device->dma[0] = (struct net_debug_range){controller->rx.physical,
+    PAGE_SIZE + VIRTIO_NET_QUEUE_SIZE * VIRTIO_NET_BUFFER_BYTES};
+  device->dma[1] = (struct net_debug_range){controller->tx.physical,
+    PAGE_SIZE + VIRTIO_NET_QUEUE_SIZE * VIRTIO_NET_BUFFER_BYTES};
+  device->dma_count = 2;
+  return true;
+}
+
+bool virtio_net_debug_service(struct virtio_net_controller *controller)
+{
+  if (!controller) {
+    return false;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool entered = net_panic_gate_pipeline_begin(&controller->panic_gate);
+  cpu_restore_interrupts(flags);
+  if (!entered) {
+    return false;
+  }
+  bool busy = virtio_net_service(controller);
+  flags = cpu_save_interrupts();
+  net_panic_gate_pipeline_end(&controller->panic_gate);
+  cpu_restore_interrupts(flags);
+  return busy;
+}
+
+static enum net_debug_status debug_failed(struct virtio_net_controller *controller)
+{
+  controller->debug.failed = true;
+  return NET_DEBUG_FAILED;
+}
+
+static bool debug_device_valid(const struct virtio_net_controller *controller)
+{
+  return controller->active && !controller->stopping &&
+    virtio_pci_common(&controller->pci)->device_status ==
+      (VIRTIO_NET_READY | VIRTIO_STATUS_DRIVER_OK);
+}
+
+enum net_debug_status virtio_net_debug_begin(struct virtio_net_controller *controller,
+    uint64_t generation)
+{
+  if (!controller || !generation) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  if (!net_panic_gate_debug_begin(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  memset(&controller->debug, 0, sizeof(controller->debug));
+  if (!debug_device_valid(controller) || controller->config_unstable ||
+      !controller->link_up ||
+      !pci_msix_mask_prepared_entry(&controller->pci.msix, VIRTIO_NET_MSIX_ENTRY,
+        &controller->debug.msix_control) ||
+      !virtio_net_queue_debug_coherent(&controller->rx) ||
+      !virtio_net_queue_debug_coherent(&controller->tx) ||
+      controller->rx.outstanding != VIRTIO_NET_QUEUE_SIZE) {
+    return debug_failed(controller);
+  }
+  uint8_t mac[VIRTIO_NET_MAC_BYTES], config_generation;
+  bool link;
+  if (!sample_network_config(controller, mac, &link, &config_generation) || !link ||
+      memcmp(mac, controller->mac, sizeof(mac))) {
+    return debug_failed(controller);
+  }
+  return NET_DEBUG_OK;
+}
+
+static enum net_debug_status debug_tx_complete(struct virtio_net_controller *controller)
+{
+  if (controller->debug.failed || !debug_device_valid(controller)) {
+    return debug_failed(controller);
+  }
+  struct virtio_net_completion completed[VIRTIO_NET_QUEUE_SIZE];
+  unsigned count;
+  if (!virtio_net_queue_complete(&controller->tx, completed, &count)) {
+    return debug_failed(controller);
+  }
+  for (unsigned i = 0; i < count; ++i) {
+    controller->debug.tx_owned &= ~(1u << completed[i].id);
+  }
+  controller->completed += count;
+  return NET_DEBUG_OK;
+}
+
+enum net_debug_status virtio_net_debug_poll(struct virtio_net_controller *controller,
+    uint64_t generation, void *frame, size_t capacity, size_t *length)
+{
+  *length = 0;
+  if (!controller || !net_panic_gate_debug_owned(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  if (debug_tx_complete(controller) != NET_DEBUG_OK) {
+    return NET_DEBUG_FAILED;
+  }
+  if (!frame || capacity < ETHERNET_FRAME_MAX) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  if (controller->debug.rx_next == controller->debug.rx_count) {
+    controller->debug.rx_next = 0;
+    if (!virtio_net_queue_complete(&controller->rx, controller->debug.rx,
+        &controller->debug.rx_count)) {
+      return debug_failed(controller);
+    }
+  }
+  if (controller->debug.rx_next == controller->debug.rx_count) {
+    return NET_DEBUG_IDLE;
+  }
+  const struct virtio_net_completion *entry =
+    &controller->debug.rx[controller->debug.rx_next];
+  const struct virtio_net_header *header =
+    (const struct virtio_net_header *)(controller->rx.storage + PAGE_SIZE +
+      entry->id * VIRTIO_NET_BUFFER_BYTES);
+  bool valid = entry->length >= sizeof(*header) + ETHERNET_HEADER_BYTES &&
+    entry->length <= sizeof(*header) + ETHERNET_FRAME_MAX &&
+    header->gso_type == VIRTIO_NET_GSO_NONE && !(header->flags & VIRTIO_NET_HDR_NEEDS_CSUM);
+  if (valid) {
+    *length = entry->length - sizeof(*header);
+    memcpy(frame, header + 1, *length);
+    ++controller->received;
+  } else {
+    ++controller->malformed;
+  }
+  if (!virtio_net_queue_debug_post(&controller->rx, entry->id, VIRTIO_NET_BUFFER_BYTES)) {
+    *length = 0;
+    return debug_failed(controller);
+  }
+  ++controller->debug.rx_next;
+  virtio_net_queue_notify(&controller->rx);
+  return valid ? NET_DEBUG_OK : NET_DEBUG_IDLE;
+}
+
+enum net_debug_status virtio_net_debug_transmit(struct virtio_net_controller *controller,
+    uint64_t generation, const void *frame, size_t length)
+{
+  if (!controller || !net_panic_gate_debug_owned(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  if (debug_tx_complete(controller) != NET_DEBUG_OK) {
+    return NET_DEBUG_FAILED;
+  }
+  if (!frame || length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
+    return NET_DEBUG_UNAVAILABLE;
+  }
+  uint8_t mac[VIRTIO_NET_MAC_BYTES], config_generation;
+  bool link;
+  if (!sample_network_config(controller, mac, &link, &config_generation) ||
+      memcmp(mac, controller->mac, sizeof(mac))) {
+    return debug_failed(controller);
+  }
+  if (!link) {
+    return NET_DEBUG_PENDING;
+  }
+  unsigned capacity = controller->tx.panic_reserved ? VIRTIO_NET_PANIC_DESCRIPTOR :
+    VIRTIO_NET_QUEUE_SIZE;
+  unsigned id;
+  for (id = 0; id < capacity; ++id) {
+    if (!controller->tx.device_owned[id]) {
+      break;
+    }
+  }
+  if (id == capacity) {
+    return NET_DEBUG_PENDING;
+  }
+  struct virtio_net_header *header =
+    (struct virtio_net_header *)(controller->tx.storage + PAGE_SIZE + id * VIRTIO_NET_BUFFER_BYTES);
+  *header = (struct virtio_net_header){0};
+  memcpy(header + 1, frame, length);
+  if (!virtio_net_queue_debug_post(&controller->tx, id, sizeof(*header) + length)) {
+    return debug_failed(controller);
+  }
+  controller->debug.tx_owned |= 1u << id;
+  virtio_net_queue_notify(&controller->tx);
+  ++controller->transmitted;
+  return NET_DEBUG_OK;
+}
+
+enum net_debug_status virtio_net_debug_restore(struct virtio_net_controller *controller,
+    uint64_t generation)
+{
+  if (!controller || !net_panic_gate_debug_owned(&controller->panic_gate, generation)) {
+    return NET_DEBUG_UNSAFE;
+  }
+  if (debug_tx_complete(controller) != NET_DEBUG_OK) {
+    return NET_DEBUG_FAILED;
+  }
+  while (controller->debug.rx_next < controller->debug.rx_count) {
+    unsigned id = controller->debug.rx[controller->debug.rx_next].id;
+    if (!virtio_net_queue_debug_post(&controller->rx, id, VIRTIO_NET_BUFFER_BYTES)) {
+      return debug_failed(controller);
+    }
+    ++controller->debug.rx_next;
+  }
+  virtio_net_queue_notify(&controller->rx);
+  if (controller->debug.tx_owned) {
+    return NET_DEBUG_PENDING;
+  }
+  if (!virtio_net_queue_debug_coherent(&controller->rx) ||
+      !virtio_net_queue_debug_coherent(&controller->tx) ||
+      !pci_msix_restore_prepared_entry(&controller->pci.msix, VIRTIO_NET_MSIX_ENTRY,
+        controller->debug.msix_control)) {
+    return debug_failed(controller);
+  }
+  net_panic_gate_debug_release(&controller->panic_gate);
+  return NET_DEBUG_OK;
+}
+
+bool virtio_net_debug_retained(const struct virtio_net_controller *controller)
+{
+  return controller && net_panic_gate_debug_retained(&controller->panic_gate);
 }

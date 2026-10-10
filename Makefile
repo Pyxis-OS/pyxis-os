@@ -46,14 +46,15 @@ MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
 REMOTE_BEACON ?=
 LOG_UDP ?= 0
-DEBUG_CHECKPOINT ?= 0
+DEBUG_NET ?=
+DEBUG_WAIT ?= 0
 DISPLAY_SIZE ?=
 DISPLAY_TIMING ?=
 DISPLAY_TIMING_METRICS ?= 0
 DISPLAY_INVENTORY ?= 0
 DISPLAY_FLIP ?= 0
 DISPLAY_FLIP_METRICS ?= 0
-export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_CHECKPOINT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS
+export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -91,7 +92,7 @@ LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
 # The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
 LDFLAGS += -Wl,--oformat=elf
 
-C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c kernel/*.c kernel/random/*.c kernel/audio/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
+C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
@@ -265,6 +266,10 @@ build/%.o: %.S | check-toolchain
 
 build/limine.conf: boot/limine/limine.conf scripts/configure-boot.sh FORCE
 	./scripts/configure-boot.sh
+
+ifneq ($(strip $(DEBUG_NET)),)
+build/limine.conf: build/caelum.elf
+endif
 
 image: build/pyxis.iso
 
