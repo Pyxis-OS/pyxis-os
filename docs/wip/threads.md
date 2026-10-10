@@ -12,7 +12,8 @@ merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
 matched comparison and 1/4-CPU inspection. Task 4, VM activity and buffer leases,
 is owner-assigned and implemented on this branch; its
 [qualification](../development/experiments/threads-task4/README.md) separates
-nested-QEMU evidence from the pending native A/B. The remaining proposal originally inspected Pyxis `4236efc7`
+nested-QEMU evidence from the pending native A/B. The remaining proposal
+originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
@@ -30,7 +31,7 @@ is independent.
 | --- | --- |
 | [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns group membership and lifetime, but its task/retiring-storage fields and terminal-result writer are still singular. |
 | [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown still requires drained activity; sibling membership/entry remains task 5. |
-| [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Competing endpoint operations remain part of the pre-sibling audit. |
+| [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
 | [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases and BSP mutation transactions are implemented; sibling runtime admission remains task 5. |
 | [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Owned inputs/claims and root/borrow drainage replace exclusive table/VM loans. Actual sibling execution and process membership remain later gates. |
 | [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | FS is saved per task, but starts at zero; no public FS setup or sibling entry exists. |

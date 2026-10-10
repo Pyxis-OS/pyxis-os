@@ -87,7 +87,7 @@ survive later CLOSE. Ordinary CALL/readiness references remain storage-only.
 
 There is still exactly one user task per process. Growth and installation use
 the shared-table protocols below; teardown requires drained activity and claims.
-This does not enable concurrent siblings or stable shared user mappings.
+This does not enable concurrent siblings.
 See the [thread gates](../wip/threads.md#shared-capability-and-vm-ownership).
 
 Each space would have a capability table describing resources available to its
@@ -340,9 +340,10 @@ preparation and publish together after successful task submission.
 Requests carry owned inputs/claims instead of an exclusive table loan. Their
 admitted caller and uninterruptible completion keep destination storage alive;
 stop unwinds references and claims before retirement. Final table teardown still
-requires all activity drained. VM leases, competing device operations and actual
-siblings remain separate [thread gates](../wip/threads.md). The kernel result
-enum remains separate from public syscall statuses.
+requires all activity drained. VM leases and scoped device admission are
+implemented; actual sibling entry remains a separate
+[thread gate](../wip/threads.md). The kernel result enum remains separate from
+public syscall statuses.
 
 Objects have an atomic reference count and a destruction callback, with no
 global object registry or operation dispatch. The last release links the object
@@ -511,11 +512,11 @@ disabled, with no BSP request:
 under the same 128 MiB per-image ceiling as host and native files. Boot-archive
 executables are read in place. See [image capture](../kernel/program-loading.md#file-capture-and-costs).
 
-The current single-task/private-mapping contract keeps checked user sources and
-replies stable across waits. Only the resumed caller accesses them. Request
-metadata is captured before any data/reply write, including overlapping buffers.
-All fallible work precedes mutation. Shared user memory, task cancellation or
-multiple tasks per process would require revisiting these assumptions.
+Request metadata and write payloads are captured before waiting or committing,
+including overlapping buffers. Read output is validated and copied under a short
+mapping lease after acquiring file ownership; no lease crosses that wait. Late
+output failure is BAD_BUFFER and does not undo committed effects. There is still
+one user task; sibling entry must qualify concurrent file/device operations.
 
 [Libpyxis wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) return native status for all four
 operations and validate reply sizes/counts; failure clears output values.

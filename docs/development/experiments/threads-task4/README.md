@@ -57,7 +57,7 @@ Fresh boots, the same commands/configuration above, no debugger or build during
 timings: 1 CPU A2/B1/A3/B2; 4 CPU A1/B1/A2/B2. All 3,200 timed IPC passes
 verified, all 24 page runs had 800 allocations/releases and zero failures, all
 24 launch sessions reported 1,024 children, and all FINAL records were 0/complete.
-Eight IPC invocations sets also included an untimed pass per workload; eight
+Eight boot workload sets also included an untimed pass per IPC workload; eight
 launch warmups reported 16 children. Clock calibration 32,185–36,961 ns/read.
 
 Per-boot medians, milliseconds except launch seconds; the chronological columns
@@ -126,10 +126,40 @@ Dynamic DISPLAY REPLACE, HOST/NPFS, disk, HCI and audio hardware remain unqualif
 in this run. Task 5 must qualify sibling entry, held-task/retirement races and
 these concurrent refusals. No public ABI or new kernel log lines.
 
+## Main integration
+
+Merged main `97336d9a` into integration `c1e24cc8` after freezing the comparison.
+The clipboard conflict keeps both fallible captured input and main's UTF-8 Copy
+normalization; independent source review found no blocker. Ordinary source image
+and host client builds passed with matching SDK/userland/ports from successful
+main [#1811](https://git.internal/PyxisOS/pyxis-os/actions/runs/1811).
+Userland `d2674ca576e39ff0614f06611743e77d0616d639`, ports
+`df3210b04142295206d0b60850cbe5959dd2cffa`; fs/lwIP/compiler unchanged.
+Integration ELF SHA-256
+`9fd8a413906e2ab4e1ef66d576209349eaf57a802770e8eab390f23c12c4e1e3`, ISO
+`15e467553eea3af9c4d819f3fc75f322ace1686cec19aa78a2ce6b0e596bbe3d`, initrd
+`e1f6959ad2ec41069bf9bdb8210cb40a3703204bf78c6ea174412b35843a25c0`.
+
+Fresh 1/4-CPU boots and matching-ELF GDB reconfirmed BSP MUTATING 0/0 on kernel
+CR3, direct executor completion, private-root REPLY 1/0 and OPEN cleanup; the
+four-CPU caller resumed on CPU1. Normal page allocate/release completed after
+detach. Provider/pipe and RAM create/read/rename/remove passed; screenshot data
+passed an eight-byte PNG signature check through Lua. Denied boot:// creation
+left no file, and missing-file status reached the client. Five 4-KiB SEND rounds
+of 256 messages verified with zero rejects and FINAL 0/complete. An attempted
+`hexdump --help` returned command-not-found (not used as a capture check); the
+replacement Lua check passed. One early GDB breakpoint before firmware mapped
+the kernel was refused; after ordinary boot, the same matching-ELF inspection
+passed. These runs are functional qualification, not additional timing samples.
+Integration captures remain in ignored `build/task4-integration`; owned VMs,
+debuggers and clients were stopped.
+
 ## Native hands-free comparison (pending)
 
-Use one matching initrd for A and B, fresh PXE boots A/B/A/B, bridge/client on
-horse. Four sessions, redirect each JSONL to a distinct file:
+Use main `97336d9a` as A and the submitted integration head as B, one matching
+current initrd for both, fresh PXE boots A/B/A/B, client on horse. This is a new
+native comparison, distinct from frozen nested-QEMU A/B above. Four sessions,
+redirect each JSONL to a distinct file:
 
 ```sh
 for mode in call send; do

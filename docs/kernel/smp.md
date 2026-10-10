@@ -282,8 +282,9 @@ publication; growth prepares backing on BSP outside it. CLOSE invokes logical ef
 and releases its detached grant outside that guard. These storage references
 drain during syscall cleanup before `task_syscall_leave` and retirement; they do
 not prolong controller authority or pipe open directions. Grant-producing capture
-additionally retains logical authority and rechecks the source generation/masks. Shared-table delivery is implemented; sibling activity
-and VM admission remain [later thread gates](../wip/threads.md).
+additionally retains logical authority and rechecks the source generation/masks.
+Shared-table delivery and VM admission are implemented; sibling entry remains a
+[later thread gate](../wip/threads.md).
 
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
