@@ -128,10 +128,11 @@ Chosen by the owner, each starting with a proposal:
 - **Codex epsilon** (2026-10-09): [Claude on Pyxis proposal](claude-on-pyxis.md),
   prepared HTTPS files and shell API testing, then the Lua harness; Hax after.
   Docs only. ZIP defaults are accepted in #639; delivery tasks need separate go-aheads.
-- **Claude** (2026-10-10): [Neovim task 5](neovim-libuv.md#task-5-decisions),
-  Lua 5.1.5 with LPeg, luv and lua-compat-5.3. The
-  [system power overlay](system-power-overlay.md) is merged (#659); its
-  installed-system flush check is pending.
+- **Claude** (2026-10-10): [Neovim task 6 slice 3](neovim-groundwork.md#delivered-slices),
+  libc `mktime`, `iconv` and the numeric/string closure; Lua 5.1's
+  `os.time(table)` uses `mktime`. Task 5 (#672) and the
+  [system power overlay](system-power-overlay.md) (#659) are merged; the
+  overlay's installed-system flush check is pending.
   Presentation timing steps 1 and 2 (#610, #618),
   saved shell history (#609) and xfer pipelining (#600) are merged; xfer's
   native runs follow its

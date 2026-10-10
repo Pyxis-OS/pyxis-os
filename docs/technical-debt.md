@@ -1651,11 +1651,23 @@ Neovim must still consume native stat validity and close remaining libc/API gaps
 in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
 receiver adapter. Shared-process threads require a separate milestone.
 
+## Calendar and encoding profile
+
+Libc's [`mktime`](userland/timezones.md#c-interface) fails with ENOTSUP for wall times in a DST gap and for folds that a
+nonnegative `tm_isdst` cannot settle, including standard-offset changes. Callers that expect glibc's adjustment across
+gaps or its choice in folds get an error instead. [`iconv`](kernel/userspace.md#foundational-libc)
+converts only UTF-8, ASCII, ISO-8859-1 and UTF-16LE/BE: Neovim reports other `fileencoding` values as unconvertible
+(it converts Latin-1, Latin-9 and the Unicode forms itself), and Git's BOM-detecting `UTF-16` working-tree encoding fails.
+There is no transliteration. Revisit when a port or user needs another encoding or gap normalization; each addition
+imports its musl table or rule explicitly.
+
 ## Lua 5.1 and luv limits
 
 The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
-`io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules, and reject `os.time(table)`, until libc has
-`popen`/`system`, `clock`, locales, `setvbuf`, `mktime` and dynamic loading. luv reports TCP, UDP, DNS, watches, signals, work queues,
+`io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
+`popen`/`system`, `clock`, locales, `setvbuf` and dynamic loading. `os.time(table)` returns `nil` for DST gaps and unsettled
+folds ([calendar limits](#calendar-and-encoding-profile)). The Lua 5.5 `lua` port still refuses calendar tables and compares
+with `strcmp`; switching it to libc's `mktime` and `strcoll` is a small follow-up. luv reports TCP, UDP, DNS, watches, signals, work queues,
 callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
 descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
 [task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.
