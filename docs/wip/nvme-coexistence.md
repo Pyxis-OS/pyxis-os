@@ -20,7 +20,8 @@ of 2026-10-02:
 - **Partitions:** three, 600 MiB (the ESP, starting at LBA 2048), 2 GiB (Fedora's
   `/boot`) and 235.9 GiB. Their sizes add up to the whole 238.5 GiB disk, so
   **there is no free space today.** The inventory does not record filesystem types,
-  encryption, the ESP's FAT geometry or its dirty flag.
+  the ESP's FAT geometry or its dirty flag. The owner states that the root is not
+  encrypted (owner-stated, not captured by the inventory).
 - **Firmware entries:** Fedora's `shimx64.efi` on that ESP is `Boot0001` and first
   in the boot order. A `Windows Boot Manager` entry also names that ESP (the
   inventory does not say whether the files exist), so it may hold Microsoft files,
@@ -102,17 +103,19 @@ Fedora's `\EFI\fedora` files, `\EFI\BOOT` fallback and its firmware entry are
 not modified.
 
 **Fedora entries.** Each is `protocol: linux` with `path` and `module_path` on the
-`/boot` partition by GPT GUID (`guid(...)` rather than `boot()`, which is the ESP),
-the initramfs, and `cmdline` taken from Fedora's own boot entry, so `root=`,
-`rootflags=` and any `rd.luks` options come from Fedora rather than from copies.
-Limine reads ext2, ext3, ext4 and FAT only. If `/boot` is ext4, which is Fedora's
-default but unrecorded in the inventory, nothing is copied; on any other type the
-hook would have to copy kernels onto the 600 MiB ESP, which is a different and
-costlier plan. Loading the kernel through its EFI stub (`protocol: efi`) is the
-alternative; it needs the initramfs handed over by the loader, which is
-unverified, so the Linux protocol is the default. Path syntax and keys are
-checked against Limine 12.9.0's documentation, which this repository does not
-carry, before anything is written.
+partition that holds the kernels, selected by GPT GUID (`guid(...)` rather than
+`boot()`, which is the ESP), the initramfs, and `cmdline` taken from Fedora's own
+boot entry, so `root=` and `rootflags=` come from Fedora rather than from copies.
+On a default Fedora install `/boot/efi` is the FAT32 ESP, which is what UEFI
+requires, while `/boot` is usually a separate ext4 partition holding the kernels,
+initramfs and boot entries; the 2 GiB partition fits that. Limine reads ext2, ext3,
+ext4 and FAT, so the Linux-protocol default works either way and nothing is
+copied to the 600 MiB ESP. The owner confirms which it is with
+`findmnt /boot /boot/efi` from Fedora. Loading the kernel through its EFI stub
+(`protocol: efi`) is the alternative; it needs the initramfs handed over by the
+loader, which is unverified, so the Linux protocol is the default. Path syntax and
+keys are checked against Limine 12.9.0's documentation, which this repository does
+not carry, before anything is written.
 
 **Kernel updates.** Fedora's versioned kernel names change with every update and
 there is no stable `vmlinuz` path, so the default is a small `kernel-install`
@@ -134,9 +137,9 @@ tooling; it joins the repository under `scripts/` only if the owner asks.
 2026-10-02 inventory records `SecureBoot disabled`; the owner reruns
 `mokutil --sb-state` before the swap and after any firmware update or reset,
 since the firmware setting can change. Without Secure Boot Fedora's shim is not
-needed to boot. The machine has a TPM 2.0 and the inventory does not say whether
-the root is encrypted or unlocked from it; a binding to boot-loader measurements
-would stop unlocking when the loader changes, so the passphrase is kept at hand.
+needed to boot. The machine has a TPM 2.0; with the root not encrypted (owner-stated), no
+unlock is bound to boot-loader measurements, so replacing the loader does not
+affect Fedora's start.
 
 **Tested fallback.** The old shim and GRUB entry (`Boot0001`) and its files stay
 until Limine has proven itself, and the fallback is exercised before it is
@@ -268,7 +271,8 @@ Pyxis yet:
   plugin. A Fedora live USB with the restore commands written down:
   `sgdisk --load-backup`, `dd` back of the ESP, `efibootmgr --create` for Fedora.
 - Run `fsck.fat` on the ESP and record cluster size, FATs and dirty flag, which
-  the inventory lacks, and the root partition's filesystem and encryption.
+  the inventory lacks, `findmnt /boot /boot/efi`, and the root partition's
+  filesystem, which sets the tool for the shrink.
 - Shrink the root partition per decision 1 and boot Fedora once.
 
 Then in order, each a separate owner-run step with results recorded in an
