@@ -1,6 +1,6 @@
 # USB HID boot keyboards and mice
 
-Status: **implemented and QEMU qualified; owner native batch pending**.
+Status: **QEMU qualified; native keyboard passed, ASUS mouse investigation open**.
 Implemented behavior and limits live in [USB boot input](../devices/usb-hid.md).
 No public input ABI or task-owned dependency pin changes are needed.
 
@@ -23,7 +23,21 @@ without quarantine is a much-later follow-up.
 3. [x] Bind boot HID and integrate shared keyboard/pointer state, repeat and loss.
 4. [x] Qualify QEMU, repeat matched measurements and prepare native batch below.
 
-Native results have not been supplied; this is not native milestone closure.
+Owner ThinkPad results (2026-10-10, luna build `2d678543`, default entry): direct
+USB-C Keychron Q6 Pro `3434:0660` on `07:00.3` passed letters, modifiers,
+extended keys, repeat, cross-keyboard holds and hotplug. Num Lock/keypad text
+exposed the pre-existing shared-layout gap; `a38f6689` adds digits/operators and
+existing navigation aliases. Full SDK/applications/ports/image rebuild passed;
+QEMU USB input produced `1234567890.+-*/` with Num Lock and Home/Right/Delete/End
+editing without it. GDB confirmed the Home bytes `1b 5b 48`. Native recheck remains.
+LED output is still outside scope.
+
+ASUS `1ea7:0066` on `07:00.4`, full speed, advertises keyboard `03/01/01` and
+mouse `03/01/02`, one endpoint each, but supplied no mouse input. Diagnosis is
+pending the temporary ASUS-only info probe `probe/usb-hid-native` at `3e684a0d`
+(selected interfaces, bind stages/EP0 completions and eight distinct report
+prefixes per interface). Probe code is not part of this PR. No report layout or
+failed stage is inferred from the inventory alone; native closure remains open.
 
 ## QEMU qualification — 2026-10-10
 
