@@ -4,7 +4,8 @@ Status: **shared milestone proposal, owner direction 2026-10-11; not implemented
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-cli-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. The three defaults below are proposed, not accepted.
+owner go. Direct launch is accepted as the first profile (2026-10-11); the two
+remaining defaults below are proposed, not accepted. No implementation is assigned.
 
 ## Deliverable and boundary
 
@@ -21,9 +22,9 @@ Consumers are the [Claude harness](claude-on-pyxis.md),
 [Lua](../userland/lua.md), the [ports runner](../development/ports.md#building-and-packaging),
 [source builds](source-builds.md) and [libuv/Neovim jobs](neovim-libuv.md).
 The first shared profile is direct programs and explicitly described pipelines,
-with no child launch authority. Git's fork callbacks/sideband adaptation, dynamic
-descendants (including make launching cc), PTYs, background jobs and full build-tool
-ports remain consumer work. No HTTP, credential-store, thread or FAT32 implementation.
+with no child launch authority. Descendant containment is the required shared
+follow-up below; Git's fork callbacks/sideband adaptation, PTYs, background jobs
+and full build-tool ports remain consumer work. No HTTP, credential-store, thread or FAT32 implementation.
 
 ## Inspected foundation and direct-launch assessment
 
@@ -68,21 +69,27 @@ and libc `system`/`popen` are absent; the host ports runner quotes argv into she
 APIs. Libuv already launches pipe children asynchronously but rejects inherited
 FILEs and adds resources to its inherited inventory instead of replacing it exactly.
 
-## Proposed defaults requiring owner decisions
+## Accepted first profile (owner, 2026-10-11)
 
-1. **Direct launch through the client's existing launcher.** One userland job
-   core retains each returned process observer and uses per-process TERMINATE/WAIT;
-   a job is local owned state, not a new kernel object or copied job-lease protocol.
-   Use explicit image READ, argv, selected roots/namespace, owned cwd/env snapshots
-   and exact child resources. Omit descendant launchers, space factories, other
-   administrative grants and launch-capable brokers, including through bundle/
-   namespace resources; never add authority implicitly. Libc owns descriptor/FILE bridging,
-   userland owns execution, and Lua/ports supply bindings. Preserve ordinary
-   `pyxis.run`/`uv_spawn` behavior. Keep the caller-death and deferred-cleanup limits
-   above visible; do not replay an uncertain launch. Trusted ungrouped Claude
-   supervision remains an optional existing-group backend with its accepted
-   fresh-group/sole-CONTROL contract, not a prerequisite for ordinary clients.
-2. **First capture keeps the accepted Claude storage/authority profile.** Separate
+Use the client's existing, possibly bound launcher and per-process WAIT/TERMINATE.
+Job children receive **no descendant launcher in this milestone** and stay inside
+that client's group and cleanup when it is group-bound. No same-space executor,
+sibling-group task or new job-lease protocol. Keep the caller-death, no-descendant
+and deferred-cleanup limits above. A local owned job record retains each observer;
+normal cancel/error paths explicitly stop and observe all stages.
+
+Use explicit image READ, argv, selected roots/namespace, owned cwd/env snapshots
+and exact child resources. Omit space factories, administrative grants and
+launch-capable brokers, including through bundle/namespace resources; never add
+authority implicitly or replay an uncertain launch. Libc owns descriptor/FILE
+bridging, userland execution ownership, and Lua/ports application bindings.
+Preserve ordinary `pyxis.run`/`uv_spawn` behavior and the accepted Claude harness's
+trusted fresh-group/sole-CONTROL backend. Its stronger lifetime is not a
+prerequisite for ordinary direct jobs.
+
+## Remaining owner decisions — proposed defaults
+
+1. **First capture keeps the accepted Claude storage/authority profile.** Separate
    private RAM stdout/stderr FILEs are created then unlinked under an explicitly
    provisioned private work root; shared `tmp://` or a filename is not privacy.
    Give children stream WRITE and selected project/runtime/network grants; omit
@@ -101,7 +108,7 @@ FILEs and adds resources to its inherited inventory instead of replacing it exac
    Check expiry when launch returns: synchronous HOST/image preparation cannot
    be interrupted by a userland deadline, so admission and cleanup have no hard
    wall-time bound. A stop race may yield an already committed normal exit or fault.
-3. **Pipelines pump concurrently and return all stage results.** Use explicit
+2. **Pipelines pump concurrently and return all stage results.** Use explicit
    stage arrays, batch publication and directional pipes; close unused endpoints
    promptly and pump input/stdout/stderr with try-I/O/readiness. Avoid serial
    blocking drains or waiting before draining a full pipe. Short counts, EOF,
@@ -137,21 +144,20 @@ FILEs and adds resources to its inherited inventory instead of replacing it exac
   exact-resource selection as opt-in, preserving ordinary `uv_spawn` inheritance
   and loop/callback behavior. Give ports native argv run/capture replacements
   for host `os.execute`/`io.popen`; full recipes still need tools, adaptation and
-  the descendant profile below. Qualify caller exit/fault limits separately from
+  the required nested-group direction below. Qualify caller exit/fault limits separately from
   session cleanup.
   **After this task the owner can:** run/capture direct commands and native
   pipelines from Lua or the shell, with real deadlines and results.
 
-## Deferred descendant supervision
+## Required descendant follow-up
 
-The first consumer needing descendants (Git child/helper chains, make→cc, or
-another profile requiring fail-closed job lifetime) must stop for an authority/
-lifetime proposal. A per-process stop cannot cover unknown descendants. Evaluate
-an outside-group executor/sibling groups then; no executor, job-lease objects or
-nested-group kernel design is assigned by this milestone. Such a proposal must
-settle copied ownership vs observation, lost handoffs, client/coordinator death,
-sibling-group cleanup and responsive admission despite blocking native launch/
-HOST preparation. It must fit the [capability-valued environment direction](capability-environment.md).
+[Nested execution groups](nested-execution-groups.md) are a parked **required**
+direction accepted by the owner on 2026-10-11. They precede Git descendant helpers,
+Clang driver-launched tools and real make/ports builds. They replace the former
+executor-first proposal; they are not an optional broker workaround or part of
+this milestone's implementation. A per-process stop cannot cover unknown
+children; the future subgroup tree must keep them in the parent's stop/cleanup
+boundary. No nested-group code is authorized here.
 
 Assigned tasks use ordinary builds and interactive 1/4-CPU QEMU/GDB, with matched
 baselines where existing paths change. Exercise denied/absent streams, exact

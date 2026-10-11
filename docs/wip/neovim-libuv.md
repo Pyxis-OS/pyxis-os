@@ -114,7 +114,9 @@ Later, each with its own proposal:
 - jobs and `system()` consume [native command execution](native-command-execution.md)
   for opt-in FILE/resource selection and supervised capture/deadlines; Neovim
   retains its job/terminal integration. Existing ordinary `uv_spawn` behavior
-  stays the default, without requiring executor authority;
+  stays the default, without requiring executor authority. Libuv/Neovim
+  descendant jobs require [nested execution groups](nested-execution-groups.md),
+  a parked required direction, before those jobs are delivered;
 - terminal input reporting: xterm mouse modes 1000/1002/1006 SGR and focus mode
   `?1004` (`CSI I` / `CSI O`) in TTY tabs/spaces, mux panes and the remote
   client. This enables `vim.opt.mouse` and `FocusGained`/`FocusLost`; the owner

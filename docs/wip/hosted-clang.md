@@ -109,6 +109,11 @@ and multiple-source invocations therefore still launch cc1 externally.
 `-fuse-ld=lld` does not embed the linker. The first completion keeps compilation
 and native LLD launch separate.
 
+The driver launching LLD or external cc1 requires
+[nested execution groups](nested-execution-groups.md), a parked required direction
+for contained descendant execution. It does not change the accepted first
+completion: the caller compiles one source and separately invokes LLD.
+
 `lldMain` in `lld/include/lld/Common/Driver.h` is the later library-entry route;
 embedding must respect `canRunAgain`, context cleanup and fatal-exit containment.
 Integrated cc1 enables signal-based crash recovery

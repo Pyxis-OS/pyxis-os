@@ -70,7 +70,8 @@ than throwaway work.
   `os.execute`/`io.popen` backend. This shared milestone can deliver independently
   of source builds. Native recipe adaptation, hosted build tools and selected
   source/build/SDK authority remain runner work; tools such as make that launch
-  children also need the separately proposed descendant-supervision profile.
+  children require [nested execution groups](nested-execution-groups.md), a parked
+  required direction. Running real ports recipes on Pyxis depends on that gate.
   No POSIX shell is implied.
 - **Writing `bin://`.** Today only the installer writes it, and spaces receive it
   read-only. A builder needs a staged directory, verification and a switch, like

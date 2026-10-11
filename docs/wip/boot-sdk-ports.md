@@ -41,8 +41,8 @@ The contract is accepted; task 1 is held and later tasks need separate assignmen
 
 [Native command execution](native-command-execution.md): Codex delta (2026-10-11),
 a shared proposal for selected native streams, capture/deadlines and shell/Lua
-pipelines, extracted from Claude/Git/ports/libuv. Owner decisions and every
-implementation task need a separate go; FAT32 proposal follows after review.
+pipelines, extracted from Claude/Git/ports/libuv. Direct launch without descendants
+is accepted; remaining decisions and every implementation task need a separate go; FAT32 proposal follows after review.
 
 [Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
@@ -164,6 +164,11 @@ display, pointer and keyboard interfaces as the kernel.
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, clock
 source, power, storage.
+
+[Nested execution groups](nested-execution-groups.md): parked REQUIRED direction
+(2026-10-11), contained subgroups and default child launchers before Git descendant
+helpers, driver-launched Clang tools, native make/ports builds and libuv/Neovim
+descendant jobs. No design/API or implementation is assigned.
 
 [Program bundles and ZIP archives](program-bundles.md): ZIP 2b/2c parked by the
 owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and
