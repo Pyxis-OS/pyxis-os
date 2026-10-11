@@ -1,7 +1,8 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11; docs only.** No delivery task is assigned; each needs a separate go.
+2026-10-11.** Task 1 is owner-assigned, starting after #712 merges. All later
+tasks need separate go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](program-bundles.md).
@@ -182,10 +183,12 @@ prove that installed bytes were not modified after installation.
 
 ## Dependencies and ordered delivery
 
-All tasks need an owner go. Progress can land independently before curses or
-coexistence. No new kernel configuration model is proposed.
+Task 1 was assigned by the owner on 2026-10-11, starting after #712 merges.
+Later tasks need separate go-aheads. Progress can land independently before
+curses or coexistence. No new kernel configuration model is proposed.
 
-1. [ ] **Complete progress coverage.** Audit every installer I/O phase, including
+1. [ ] **Complete progress coverage — assigned 2026-10-11, after #712 merges.**
+   Audit every installer I/O phase, including
    source/target inspection and copy verification; share reporting with plain
    output and later TUI. Capture current install/update costs, then matched runs.
    **After this task the owner can:** see which phase is active throughout an
