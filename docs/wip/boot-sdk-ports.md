@@ -59,11 +59,6 @@ prepared POST, streamed GET/POST without an artificial response-size cap, and
 shell/Lua delivery.
 No implementation task is assigned; the command-execution proposal is separate.
 
-[Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
-guest VT composition with trusted remote pane creation and cleanup supervision.
-The plan is merged (#721); tasks 1–2 are delivered (#728) and live resize (task 3)
-needs a separate go.
-
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
