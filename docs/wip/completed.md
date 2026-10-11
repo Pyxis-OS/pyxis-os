@@ -53,6 +53,10 @@ ChaCha20 with hardware reseeding; see the
 
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md), 2026-10-06.
 
+[Name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links),
+2026-10-10 (#687): `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel
+statuses.
+
 [Network throughput](../development/network-throughput.md), 2026-10-09: on-link
 segments, larger windows and Nagle off, natively measured; see the
 [remaining limits](../technical-debt.md#tcp-throughput-limits).
@@ -93,6 +97,9 @@ see the [remaining native checks](../technical-debt.md#sdl-game-ports-native-qua
 [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream SDL 2.32.10
 and [DevilutionX](../userland/devilutionx.md) as the first consumer;
 [checked natively](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+
+[Shell reverse history search](../userland/shell.md), 2026-10-10 (#696): Ctrl+R in
+the shared line editor.
 
 [System layout](../userland/system-layout.md), 2026-10-07: `boot://`, `bin://`,
 boot init with a Lua configuration, and a persistent home.
