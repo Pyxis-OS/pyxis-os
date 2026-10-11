@@ -50,10 +50,11 @@ for Clang differ in the fast types: exact/least types
 use 8/16/32/64 bits, fast types use 32 bits through `int_fast32_t` and 64 bits
 for `int_fast64_t`, and pointer/max types use `long`/`unsigned long`. Limits and
 constant suffixes preserve the Pyxis choices first made with GCC. `MB_LEN_MAX` is 4
-for libc's stateless UTF-8 `mbtowc` and bounded `iconv`; the limits headers
-themselves add no runtime facilities, and signals and wide-character I/O are
-absent. Only the C locale exists
-(`setlocale`, no `localeconv`).
+for libc's UTF-8 conversion and bounded `iconv`; the limits headers add no
+runtime facilities. Signals remain absent. The C-only locale supplies
+`setlocale` and `localeconv`; [wide FILE I/O](../userland/stdio.md#wide-file-io)
+and [restartable conversion](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion)
+are bounded native facilities.
 
 `inttypes.h` includes stdint.h and supplies PRId/PRIi/PRIo/PRIu/PRIx/PRIX
 output macros for the 8/16/32/64-bit, pointer and greatest-width types and
@@ -181,6 +182,14 @@ include path so `-MMD` tracks them.
 | Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>` | `<iostream>`, `<locale>`, `<regex>` and wide characters |
 | `system_clock` and `steady_clock` | `<filesystem>`, `random_device`, time zones |
 | Aligned `new` up to 4096 bytes | Most of `<cmath>`, which follows libc's [math subset](../kernel/userspace.md#foundational-libc) |
+
+This table describes installed pin `49e2c1a`. The hosted-Clang
+[task 2 closure](experiments/hosted-clang-cxx.md) builds streams, the native C-only
+locale, wide facilities and `random_device` in the fork. The SDK script enables
+that profile only when the installed compiler's exact runtime source contains
+its native locale backend. Adoption waits for an owner-published matching
+container; it does not silently move the fork pin. Thread/filesystem/TZdb
+settings stay separate.
 
 The headers of absent features still include, but their names do not exist, so
 a program using one fails to compile. `thread_local` and `_Thread_local` are

@@ -115,7 +115,25 @@ NUL), and rejects incomplete, overlong, surrogate and out-of-range sequences
 with `-1` and `EILSEQ`. A NULL input resets the stateless decoder and returns
 zero. A NULL output discards the decoded value; errors leave output unchanged.
 `wchar.h` provides the compiler's 32-bit `wchar_t`, unsigned `wint_t` and `WEOF`.
-No restartable conversion, wide I/O or locale state is added.
+Restartable `mbrtowc/mbrlen` retain incomplete UTF-8 in an all-zero-initializable
+`mbstate_t`; invalid input reports EILSEQ and resets the state. `wcrtomb`,
+`mbsrtowcs/wcsrtombs` and their bounded `n` forms encode/decode whole scalars;
+count-only calls preserve source and state. `btowc/wctob` accept ASCII only.
+Implicit conversion states are not a concurrent-use contract; explicit states
+belong to their caller. `mbstate_t` is now 12 bytes: rebuild dependent runtimes
+and applications with matching SDK headers.
+
+C-locale wide comparison/search/collation, numeric `wcsto*` conversions and
+`swprintf/vswprintf` support the reached stock C++ runtime. Formatting supports
+numeric conversions, Unicode literals and wide/narrow character/string forms;
+unsupported conversions (including `%n`) fail with EINVAL, and insufficient
+capacity returns negative. Full wide scanning is absent. [Wide FILE I/O](stdio.md#wide-file-io)
+uses UTF-8 with real orientation and whole-character pushback.
+
+`setlocale` accepts only `"C"` or the empty name. `localeconv` returns immutable
+classic data: decimal point `.`, no grouping/currency and unspecified monetary
+fields. `strxfrm/wcsxfrm` use identity collation; unavailable locales are not
+substituted silently.
 
 `wctype.h` provides all twelve standard `isw*` classifications, `wctype`,
 `iswctype`, `towlower` and `towupper`. Classification and case conversion are
@@ -597,3 +615,14 @@ milestone does not select a successor or promise full POSIX coverage.
 Shared `chdir`/`getcwd`, mutable environment and explicit child snapshots are
 documented in [process state](process-state.md). Bounded
 [proved realpath](paths.md#proved-realpath) is available separately from descriptive cwd.
+
+## Entropy adapter
+
+`getentropy` in `<sys/random.h>` (also included by `<unistd.h>`) uses the
+startup `random` and `clock` grants. It supplies 0–256 bytes atomically with a
+checked absolute five-second deadline; larger requests fail with EIO and missing
+grants with ENODEV. Failure leaves the destination unchanged, and no fallback
+bytes are generated. Zero-length calls still require the grants. Native source,
+queue, authority and timeout failures retain their errno translations. libc++
+`random_device` uses this adapter: the default `/dev/urandom` token is a selector,
+not a path; other tokens refuse and `entropy()` reports zero (no estimate).

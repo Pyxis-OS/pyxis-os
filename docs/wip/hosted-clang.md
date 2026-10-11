@@ -135,7 +135,7 @@ threads gates 5–8.
    changing those paths. **Owner check:** inspect platform contracts and ordinary
    Support builds; QEMU copied read/write, path/identity and error checks, without
    claiming a runnable compiler before the thread gates.
-2. [ ] **SDK C++ source closure — assigned 2026-10-11.** Audit and build the stream/C-locale/time-format
+2. [x] **SDK C++ source closure — delivered 2026-10-11.** Audit and build the stream/C-locale/time-format
    subset above, including real libc dependencies and the reached wide/random
    facilities. Keep filesystem/time-zone expansion out unless reached. Coordinate
    configuration and shared libc edits with delta. **Owner check:** ordinary SDK
@@ -165,10 +165,13 @@ threads gates 5–8.
 Inspected current Pyxis `466d2ed5`, userland `df210f1a` and merged Support fork
 `6951d3c9`. The ordinary, unchanged SDK builds with installed compiler/runtime
 pin `49e2c1a`; its libc++/ABI/unwind archives are 605,368/587,078/76,198 bytes.
-No implementation or runtime configuration edits yet. Compiling the five reached
-raw-stream, Mustache, UTF-wrapper, lock-manager and preprocessor units against
-this SDK confirms missing stream/wide/random facilities; existing thread gates
-remain. These attempts do not link a compiler. Local logs stay in build.
+The unchanged SDK initially failed the five reached raw-stream, Mustache,
+UTF-wrapper, lock-manager and preprocessor units at disabled stream/wide/random
+facilities. With the real task 2 runtime and libc closure they all compile.
+[Userland #216](https://git.internal/PyxisOS/pyxis-userland/pulls/216) and
+[fork #5](https://git.internal/PyxisOS/pyxis-llvm/pulls/5) supply the closure;
+[qualification and costs](../development/experiments/hosted-clang-cxx.md) record
+the builds and QEMU checks. No compiler link or threaded runtime is claimed.
 
 The retained consumers need stream write/tell (`raw_os_ostream.cpp`), floating
 insertion into `ostringstream` (`Mustache.cpp`), C-locale `stringstream` and

@@ -72,6 +72,12 @@ Choices made while implementing:
 - **fmt follows libc++'s feature macros.** Two patches turn off its locale
   support and leave out one `std::wstring` helper.
 
+The hosted-Clang [task 2](../wip/hosted-clang.md)
+extends the fork with a real C-only locale, streams, wide UTF-8/FILE facilities
+and grant-backed random_device. The installed `49e2c1a` profile remains the subset
+above until the owner publishes and adopts a matching container. See the
+[build/QEMU record](experiments/hosted-clang-cxx.md); thread settings are unchanged.
+
 ## Measurements
 
 Taken on 2026-10-08 in Claude's Fedora VM (nested KVM, 8 vCPUs; QEMU with 4

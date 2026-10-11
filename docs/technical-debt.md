@@ -608,8 +608,8 @@ Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGP
 support). Public O_APPEND exists, but tee still rejects -a because the sbase
 restriction patch (`ports/sbase/patches/0002-restrict-tee-options-and-close-outputs.patch`) predates it; atomic append needs a native operation
 ([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics
-and wide I/O are outside the slice; output is unbuffered unless `setvbuf` or `setbuf` selects
-[buffering](userland/stdio.md#output-buffering); pushback is one byte per FILE, scanning covers narrow conversions only and
+and full wide stdio are outside the slice; output is unbuffered unless `setvbuf` or `setbuf` selects
+[buffering](userland/stdio.md#output-buffering); byte pushback is one byte per FILE (wide I/O has one scalar), scanning covers narrow conversions only and
 fixed-width inttypes input (SCN) macros are absent. Revisit only for a concrete consumer, defining the native blocking and lifetime
 behavior it needs; no successful placeholder APIs exist.
 
@@ -785,17 +785,16 @@ The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliber
 
 - **No threads or thread-local storage:** `<thread>`, `<mutex>`, `thread_local` and non-lock-free atomics are absent and local statics
   use single-threaded guards, so thread-starting programs cannot be ported yet.
-- **No localization or wide characters:** `<iostream>`, `<locale>`, `<regex>` and wide strings are absent, as are the fmt headers needing
-  them (`chrono.h`, `ostream.h`, `std.h`, `xchar.h`, `printf.h`). libc has a "C"-only `setlocale` (no `localeconv`) and `wcslen`, but
-  `std::cout` ports still need the other wide-character functions (58 of the 59 names in `<cwchar>`).
+- **Installed localization/wide/random profile:** pin `49e2c1a` still disables these facilities.
+  [Hosted-Clang task 2](development/experiments/hosted-clang-cxx.md) supplies the real native C-only locale, wide FILE/UTF-8 and entropy
+  closure in libc and the fork; enabling it waits for the owner-published matching container. Full locale databases/wide scanning remain absent.
 - **Most of `<cmath>` is missing:** libc's math subset leaves 161 of the 186 imported names undefined, so first use fails to compile.
 - **Exceptions cannot cross C frames** (no unwind tables), so one thrown through a `qsort` comparator terminates the program; uncaught
   ones name mangled types (`St11logic_error`) because the 184 KB demangler is left out.
-- **No `<filesystem>`, `random_device` or time zones**, and fmt's license is not staged for the boot payload (a port shipping an fmt
+- **No `<filesystem>` or time zones**, and fmt's license is not staged for the boot payload (a port shipping an fmt
   program must install it).
 
-Revisit threads and TLS with the Clang hosting milestone, and localization, wide characters and `<cmath>` when a selected port such as
-DevilutionX needs them. Additions belong in libc or the runtime configuration, never in a port-local stub.
+Revisit threads/TLS with the Clang hosting milestone and the remaining math/locale facilities when a reached consumer needs them. Additions belong in libc or the runtime configuration, never in a port-local stub.
 
 ## HD Audio volume control
 
