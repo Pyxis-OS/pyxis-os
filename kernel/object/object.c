@@ -21,6 +21,7 @@
 #include <abi/terminal_pointer.h>
 #include <abi/clock.h>
 #include <abi/system_info.h>
+#include <abi/input_policy.h>
 #include <abi/log.h>
 #include <abi/display.h>
 #include <abi/screen_capture.h>
@@ -84,6 +85,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_SCREEN_CAPTURE;
   case OBJECT_BLUETOOTH_HCI:
     return PROTOCOL_BLUETOOTH_HCI;
+  case OBJECT_INPUT_POLICY:
+    return PROTOCOL_INPUT_POLICY;
   case OBJECT_SYSTEM_INFO:
     return PROTOCOL_SYSTEM_INFO;
   case OBJECT_LOG:
@@ -271,6 +274,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~NET_CONFIG_RIGHTS);
   case OBJECT_ECHO:
     return !(rights & ~ECHO_RIGHT_SEND);
+  case OBJECT_INPUT_POLICY:
+    return !(rights & ~INPUT_POLICY_RIGHT_INSTALL_ONCE);
   case OBJECT_SYSTEM_INFO:
     return !(rights & ~(SYSTEM_INFO_RIGHT_READ | SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE));
   case OBJECT_LOG:

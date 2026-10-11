@@ -35,7 +35,7 @@ void volume_ui_update(void);
 uint64_t volume_ui_generation(void);
 
 /* BSP, IF=0. Consumed physical buttons remain suppressed by pointer routing. */
-bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
+bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t scroll_y,
     uint32_t buttons, uint32_t pressed, bool content_drag);
 bool volume_ui_pointer_over(int64_t x, int64_t y);
 bool volume_ui_keyboard_input(const struct key_event *event);

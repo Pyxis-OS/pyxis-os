@@ -32,11 +32,47 @@ static struct volume_ui_layout frame_layout, drawn_layout;
 static struct popup_layout frame_popup, drawn_popup;
 static bool drawn_valid, open, focused, dragging;
 static bool canceled_drag;
+static struct space *scroll_target;
+static int64_t scroll_remainder;
+static unsigned scroll_view; /* Zero outside, one icon, two popup. */
 static uint64_t cancel_generation, frame_cancel_generation;
 static uint64_t visual_generation, observed_audio_generation;
 static bool observed_audio_valid, observed_audio_available;
 static struct space *target, *focus_space;
 static uint32_t popup_pixels[POPUP_WIDTH * POPUP_HEIGHT];
+
+static void reset_scroll(void)
+{
+  scroll_remainder = 0;
+  scroll_target = NULL;
+  scroll_view = 0;
+}
+
+static void scroll_level(struct space *space, unsigned view, int32_t units, bool pressed)
+{
+  if (pressed || scroll_view != view || scroll_target != space) {
+    reset_scroll();
+    scroll_view = view;
+    scroll_target = space;
+  }
+  int64_t total = scroll_remainder + units;
+  int64_t steps = total / POINTER_SCROLL_UNITS_PER_DETENT;
+  scroll_remainder = total % POINTER_SCROLL_UNITS_PER_DETENT;
+  if (steps) {
+    /* Viewport-up increases volume, preserving the wheel's existing action. */
+    int percent = steps > 20 ? -100 : steps < -20 ? 100 : (int)-steps * 5;
+    audio_volume_control(space, AUDIO_VOLUME_ADJUST_PERCENT, percent);
+  }
+}
+
+static bool same_layout(const struct volume_ui_layout *a, const struct volume_ui_layout *b)
+{
+  return a->first_space == b->first_space && a->tab_x == b->tab_x &&
+      a->tab_width == b->tab_width && a->tab_count == b->tab_count &&
+      a->master_x == b->master_x && a->screen_width == b->screen_width &&
+      a->screen_height == b->screen_height && a->master_shown == b->master_shown &&
+      a->spaces_shown == b->spaces_shown;
+}
 
 static bool contains(int64_t x, int64_t y, size_t left, size_t top,
     size_t width, size_t height)
@@ -115,11 +151,13 @@ static void set_focus(bool next)
     keyboard_set_overlay(focus_space->keyboard, false);
     focus_space = NULL;
   }
+  reset_scroll();
   focused = next;
 }
 
 void volume_ui_cancel(void)
 {
+  reset_scroll();
   if (open || drawn_popup.shown) {
     ++visual_generation;
   }
@@ -197,10 +235,11 @@ static void track_level(const struct popup_layout *popup, int64_t y)
   audio_volume_control(target, AUDIO_VOLUME_SET_PERCENT, value);
 }
 
-bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
+bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t scroll_y,
     uint32_t buttons, uint32_t pressed, bool content_drag)
 {
   if (canceled_drag) {
+    reset_scroll();
     /* A canceled gesture stays consumed until the physical release, even
      * across source-loss suppression or a different space's layout. */
     if (!(buttons & POINTER_BUTTON_LEFT)) {
@@ -209,9 +248,11 @@ bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
     return true;
   }
   if (!drawn_valid || content_drag) {
+    reset_scroll();
     return false;
   }
   if (dragging) {
+    reset_scroll();
     if (buttons & POINTER_BUTTON_LEFT) {
       track_level(&drawn_popup, y);
     } else {
@@ -229,9 +270,10 @@ bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
     if (enabled(space) && (pressed & POINTER_BUTTON_LEFT)) {
       audio_volume_control(space, AUDIO_VOLUME_TOGGLE_MUTE, 0);
     }
-    if (enabled(space) && wheel) {
-      audio_volume_control(space, AUDIO_VOLUME_ADJUST_PERCENT,
-          wheel > 20 ? 100 : wheel < -20 ? -100 : wheel * 5);
+    if (enabled(space)) {
+      scroll_level(space, 1, scroll_y, pressed != 0);
+    } else {
+      reset_scroll();
     }
     return true;
   }
@@ -247,12 +289,10 @@ bool volume_ui_pointer_input(int64_t x, int64_t y, int32_t wheel,
         track_level(&drawn_popup, y);
       }
     }
-    if (wheel) {
-      audio_volume_control(target, AUDIO_VOLUME_ADJUST_PERCENT,
-          wheel > 20 ? 100 : wheel < -20 ? -100 : wheel * 5);
-    }
+    scroll_level(target, 2, scroll_y, pressed != 0);
     return true;
   }
+  reset_scroll();
   if (open && pressed) {
     volume_ui_cancel();
     return true;
@@ -414,6 +454,9 @@ void volume_ui_end_frame(bool presented)
     cpu_restore_interrupts(flags);
   }
   if (presented) {
+    if (!same_layout(&drawn_layout, &frame_layout)) {
+      reset_scroll();
+    }
     drawn_layout = frame_layout;
     drawn_popup = frame_popup;
     /* A lock/focus boundary can cancel while this immutable frame composes.
