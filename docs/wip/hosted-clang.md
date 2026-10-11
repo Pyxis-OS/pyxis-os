@@ -49,11 +49,12 @@ Concrete absent headers: `machine/endian.h`, `sys/time.h`, `sys/wait.h`,
 `sys/statvfs.h`, `dlfcn.h`, `pwd.h`, `poll.h`, `pthread.h`.
 These describe the existing Unix backend, not a requirement to supply Unix APIs.
 
-## Current source audit (2026-10-11)
+## Planning source audit (2026-10-11)
 
 Checked Pyxis `2fca30fd`, pinned/current userland `df210f1a`, ports `df3210b0`,
 and the unchanged LLVM fork `49e2c1a1518b`. This is source/header inspection,
-not a repeat of the earlier compile/link probe or a newly built SDK. References
+before task 1. Its later target build and resolved platform gaps are recorded
+[separately](../development/experiments/hosted-clang-support.md). References
 below are relative to that [LLVM source](https://git.internal/PyxisOS/pyxis-llvm/src/commit/49e2c1a1518b3e4687b52ceb6001069c1b6d261e).
 
 | Area | Current boundary and work |
@@ -88,6 +89,12 @@ policy belongs in LLVM Support.
 | `strerror_r` / `llvm/lib/Support/Errno.cpp` | Configure absence correctly: `Errno.cpp:59` already falls back to real `strerror`, whose current messages are immutable. Not a first-slice blocker. If later needed, implement bounded libc copying with one explicit return contract. |
 | `ECHILD/ENOEXEC/EXDEV` | Still absent; `EINTR` exists as vocabulary without signal interruption. They are not proved first-path requirements: `ECHILD` appears in a Unix wait comment, `EXDEV` in Apple clone-copy fallback, no execution use of `ENOEXEC` found. Native failure translations remain distinct; add vocabulary only when reached. |
 
+Task 1's real target build additionally reaches `tolower` in
+`Support/CachePruning.cpp:112` and `FP_ILOGB0`/`FP_ILOGBNAN` in
+`libc/src/__support/FPUtil/ManipulationFunctions.h:86–87` through `APFloat.cpp`.
+These remain task 3 libc closure work; no shared libc/runtime edit was made.
+The native backend removes Unix header consumers rather than supplying fakes.
+
 The old probe's absent Unix headers (`signal.h`, `spawn.h`, `sys/mman.h`,
 `sys/wait.h`, `pthread.h`, and others) are not a kernel API shopping list.
 [Native libc portability](../userland/libc-portability.md) remains authoritative.
@@ -111,10 +118,13 @@ This is not permission to add crash helpers or start embedding work.
 
 ## Parallel delivery tasks
 
-Task 1 is owner-assigned on 2026-10-11. Later tasks need separate owner
+Task 1 is delivered in the [native Support fork PR](https://git.internal/PyxisOS/pyxis-llvm/pulls/4),
+with its [contracts](../development/llvm-support.md) and
+[qualification record](../development/experiments/hosted-clang-support.md).
+The installed fork pin remains unchanged. Later tasks need separate owner
 go-aheads; this line proceeds alongside delta's threads gates 5–8.
 
-1. [ ] **LLVM Support platform and header fixes — assigned 2026-10-11.** Implement Pyxis Path/FILE,
+1. [x] **LLVM Support platform and header fixes — delivered 2026-10-11.** Implement Pyxis Path/FILE,
    Process/Program, private Memory and fault-policy equivalents in the fork,
    with precise refusals and owned references. Configure selects Pyxis explicitly;
    native host TableGen remains native. Capture baseline I/O/launch costs before
@@ -148,7 +158,7 @@ go-aheads; this line proceeds alongside delta's threads gates 5–8.
 
 ### Compiler-container boundary
 
-This docs PR moves no pin. Task 1's Support/header changes and any task 2 libc++
+Task 1 leaves the installed pin unchanged. Its Support/header changes and any task 2 libc++
 fork changes are fork PRs, not ports-only patches. A local investigation can build
 that fork with the existing host compiler. **Before a parent PR adopts the new
 fork pin**, the owner must build/publish the matching compiler container and the
