@@ -101,6 +101,8 @@ absolute tablet attached; the tablet does not become an input source. A separate
 archive-authored policy boot installs mouse traditional (1) and touchpad natural
 (0), confirmed in GDB. Live startup has no installed machine keys; invalid
 installed-key fallback remains code-inspected rather than natively qualified.
+An additional QEMU boot with `intel-hda`, `hda-output` and a null audio sink
+confirms natural wheel pull on the master icon raises 50% to 55%.
 
 Inspection, not QEMU coverage: multi-ID button snapshots, multi-packet report
 termination, scoped multiplier Feature RMW/readback, horizontal/high-resolution
