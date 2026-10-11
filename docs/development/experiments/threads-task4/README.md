@@ -207,17 +207,19 @@ prefix reads, launch, wait and cleanup; these now pay syscall/root accounting
 and copy leases repeatedly. Parent mallocs reuse retained TLSF pools; `echo -n`
 uses static stdio and copies allocator authority at startup, without inherently
 allocating a heap pool. Therefore MEMORY round trips cannot explain every child.
-A concrete amplification is `launcher.c:capture_string`: one `copy_from_user`
-per character for argv, resource/root names, environment and cwd now acquires
-and releases a guarded borrower for every byte. This is avoidable. No native
+The original `launcher.c:capture_string` called `copy_from_user` per character
+for argv, resource/root names, environment and cwd, acquiring and releasing a
+guarded borrower for every byte. The bounded-capture change below removes that
+amplification. No native
 trace apportions the observed roughly 229–265 microseconds extra per launch
 among string capture, other accounting, occasional heap growth and client time.
 
 **Owner accepted:** retain the generic zero-activity fast path and accept the
 remaining BSP MEMORY round trip (about 1.6–4.2 microseconds per mutation) as a
 [latency follow-up](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation),
-without a task-count bypass. Fix bounded string capture before merge and rerun
-native pages, launch and IPC; that rerun remains pending.
+without a task-count bypass. Bounded string capture and the native rerun are
+complete. The IPC fixed cost is accepted for #700 merge, with a bounded
+investigation before task 5; this does not authorize its implementation.
 
 ### Bounded capture qualification
 
@@ -250,7 +252,34 @@ create/read/rename/remove passed. Pages had 800 allocations/releases and zero
 failures on each CPU count. These are functional checks; debugger runs and single
 page samples establish no timing improvement. Invalid-pointer injection and new
 test infrastructure were not added. Captures are in ignored `build/task4-string`;
-owned VMs/debuggers/clients stopped. Native benefit awaits the owner's rerun.
+owned VMs/debuggers/clients stopped. Native results follow below.
+
+### Native rerun on the final kernel head, 2026-10-11
+
+[Owner-reported results](https://git.internal/PyxisOS/pyxis-os/pulls/700#issuecomment-8315):
+ThinkPad T14 Gen 1, 12 CPUs, AC, PXE, hands-free A/B/A/B fresh boots. A main
+`97336d9a` (ELF prefix `67154e97`), B `a573f473` (`7f86f475`), one A initrd and
+byte-identical kernel.config. Same workloads and parameters; new runs A3/A4/B3/B4,
+raw `/shared/present/batch2/ab700-rerun/`. Local inspection verified all 1,600
+IPC passes, page runs and launches with FINAL 0/complete. The comparison also
+uses yesterday's runs; the 2.71 s launch outlier is retained. Multimodal IPC
+medians are noisy, so the fixed per-message comparison uses fastest passes.
+
+| Workload | A (main) | B (`a573f473`) | Change | Before string fix (`b7a00f7d`) |
+| --- | --- | --- | --- | --- |
+| Pages, ns/op, three runs each | 22,071–22,398 | 23,739–23,800; two higher runs 25,390–25,605 | +7.5% typical | +7–19% |
+| 1024 launches, wall seconds | 1.21–1.39; median 1.25 | 1.24–1.49; median 1.30; one 2.71 outlier | about +4%, noisy | +16–19% |
+| CALL64 fastest pass, ns/round trip | 3,313–3,348 | 3,823–3,874 | +0.53 microseconds (+16%) | 3,865–3,881 |
+| CALL4096 fastest pass, ns/round trip | 3,994–4,054 | 4,631–5,027 | about +0.6 microseconds (+15%) | 4,659–4,665 |
+| SEND64 fastest pass, ns/message | 222–223 | 318–320 | +97 ns (+44%); 222 -> 319 ns | 318–319 |
+| SEND4096 completion median | 1.117–1.214 ms | 1.162–1.204 ms | unchanged | — |
+
+Bounded capture removes most of the launch penalty; it does not change the IPC
+fixed cost. The owner accepts merge with the per-message IPC cost recorded as
+[technical debt](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation).
+Its relative impact is largest for short messages. A bounded investigation of
+copy/activity leases follows before task 5 and does not block #700's merge.
+Causal phase attribution and any optimization remain unmeasured/unimplemented.
 
 ### Hands-free commands
 
