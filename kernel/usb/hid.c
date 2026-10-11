@@ -791,6 +791,38 @@ enum usb_result usb_hid_bind_boot(struct usb_hid_binding *binding,
   return result;
 }
 
+static void diagnose_loss(struct usb_hid_binding *binding, struct usb_hid_interface *interface,
+    enum usb_result result, size_t bytes, bool decoded)
+{
+  if (!boot_options_get()->usb_xhci_diagnose) {
+    return;
+  }
+  klog("usb HID diag: %x:%x interface=%u protocol=%s loss-result=%u bytes=%zu\n",
+      binding->vendor, binding->product, interface->number,
+      interface->report_protocol ? "report" : "boot", result, bytes);
+  usb_host_interrupt_diagnose_loss(interface->stream);
+  if (!decoded || !interface->report_protocol) {
+    return;
+  }
+  const struct usb_hid_mouse_reports *mouse = &binding->mouse;
+  unsigned id = bytes && mouse->ids ? binding->control[0] : 0;
+  size_t expected = 0;
+  for (unsigned i = 0; i < mouse->layout_count; ++i) {
+    if (mouse->layouts[i].id == id) {
+      expected = usb_hid_report_bytes(mouse, i, HID_INPUT);
+      break;
+    }
+  }
+  klog("usb HID diag: decode-failure=%u ID=%u expected=%zu\n",
+      mouse->decode_failure, id, expected);
+  if (mouse->decode_failure == HID_DECODE_RANGE || mouse->decode_failure == HID_DECODE_ARRAY) {
+    const struct usb_hid_report_field *field = &mouse->fields[mouse->decode_field];
+    klog("usb HID diag: field=%u kind=%u offset=%u bits=%u value=%lld range=%lld..%lld\n",
+        mouse->decode_field, field->kind, field->offset, field->size,
+        (long long)mouse->decode_value, (long long)field->minimum, (long long)field->maximum);
+  }
+}
+
 void usb_hid_collect(struct usb_hid_binding *binding)
 {
   if (!binding->active) {
@@ -814,12 +846,14 @@ void usb_hid_collect(struct usb_hid_binding *binding)
       }
       if (result != USB_OK) {
         usb_hid_lost(binding);
+        diagnose_loss(binding, interface, result, 0, false);
         return;
       }
       bool keys[KEY_COUNT], unresolved;
       if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
         if (!keyboard_snapshot(binding->control, completion.bytes, keys, &unresolved)) {
           usb_hid_lost(binding);
+          diagnose_loss(binding, interface, USB_INVALID, completion.bytes, false);
           return;
         }
         uint64_t flags = cpu_save_interrupts();
@@ -836,6 +870,7 @@ void usb_hid_collect(struct usb_hid_binding *binding)
           boot_mouse_sample(interface, binding->control, completion.bytes, &sample);
         if (!valid) {
           usb_hid_lost(binding);
+          diagnose_loss(binding, interface, USB_INVALID, completion.bytes, true);
           return;
         }
         uint64_t flags = cpu_save_interrupts();

@@ -132,6 +132,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *display_flip = NULL, *display_flip_metrics = NULL;
   const char *display_cursor_probe = NULL;
   const char *usb_hid_describe = NULL;
+  const char *usb_xhci_diagnose = NULL;
   const char *nvme_write = NULL;
 #if POINTER_SYNTHETIC_ENABLED
   const char *pointer_synthetic = NULL;
@@ -168,6 +169,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&install, key, value);
     } else if (same_text(key, "usb.hid.describe")) {
       take_option(&usb_hid_describe, key, value);
+    } else if (same_text(key, "usb.xhci.diagnose")) {
+      take_option(&usb_xhci_diagnose, key, value);
     } else if (same_text(key, "nvme.write")) {
       take_option(&nvme_write, key, value);
     } else if (same_text(key, "boot.default_config")) {
@@ -251,6 +254,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.display_flip_metrics = display_flip_metrics &&
     flag_option("display.flip.metrics", display_flip_metrics);
   options.usb_hid_describe = usb_hid_describe && flag_option("usb.hid.describe", usb_hid_describe);
+  options.usb_xhci_diagnose = usb_xhci_diagnose && flag_option("usb.xhci.diagnose", usb_xhci_diagnose);
   options.display_cursor_probe = display_cursor_probe &&
     flag_option("display.cursor.probe", display_cursor_probe);
 #if POINTER_SYNTHETIC_ENABLED

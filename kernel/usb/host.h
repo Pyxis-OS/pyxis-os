@@ -96,6 +96,10 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
 
 /* BSP/IF=0. Notify the owning controller worker without allocating. */
 void usb_host_notify(struct usb_host_controller *controller);
+/* BSP/IF=0 observer, gated by usb.xhci.diagnose; reads retained state only. */
+void usb_host_diagnose_tick(void);
+/* Owning worker, after releasing class input; no transfer data is logged. */
+void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream);
 
 /* Separate prepared HCI, HID and hub pools. Each handle names one IN endpoint;
  * slot, DCI and physical TD identity retain hardware ownership. Configure before

@@ -8,6 +8,7 @@
 #include <kernel/format.h>
 #include <kernel/bluetooth.h>
 #include <kernel/log.h>
+#include <kernel/boot/options.h>
 #include <kernel/memory.h>
 #include <kernel/mm/dma.h>
 #include <kernel/mm/heap.h>
@@ -54,10 +55,15 @@
 #define XHCI_ENDPOINT_STATE_ERROR 4
 
 #define XHCI_RING_TRBS (PAGE_SIZE / XHCI_TRB_BYTES)
+#define XHCI_DIAGNOSE_INTERVAL_NS UINT64_C(5000000000)
 
 struct xhci_trb {
   uint64_t parameter;
   uint32_t status, control;
+};
+struct xhci_diagnostic_registers {
+  uint32_t status, command, management;
+  uint64_t dequeue;
 };
 struct xhci_erst_entry {
   uint64_t base;
@@ -104,6 +110,7 @@ struct usb_host_interrupt {
   enum usb_result result;
   enum usb_interrupt_kind kind;
   bool cycle, configured, started, successful_short_traced, loss_acknowledged;
+  struct xhci_trb diagnostic_event;
 };
 enum async_bulk_receive_state { ASYNC_BULK_FREE, ASYNC_BULK_POSTED, ASYNC_BULK_HELD };
 struct xhci_async_bulk_receive {
@@ -216,6 +223,10 @@ struct usb_host_controller {
   } command;
   uint64_t interrupts, commands_completed, events_consumed;
   const char *failure;
+  struct xhci_trb diagnostic_event;
+  uint64_t diagnostic_next_ns, diagnostic_worker_ns;
+  const char *diagnostic_stage, *diagnostic_first_failure;
+  bool diagnostic_stopped;
 };
 
 static struct usb_host_controller *controllers;
@@ -264,6 +275,104 @@ static uintptr_t operational(const struct usb_host_controller *controller)
 static uintptr_t interrupter(const struct usb_host_controller *controller)
 {
   return controller->registers.address + controller->runtime + XHCI_INTERRUPTER_ZERO;
+}
+
+static struct xhci_diagnostic_registers diagnostic_registers(struct usb_host_controller *controller)
+{
+  uintptr_t op = operational(controller), intr = interrupter(controller);
+  return (struct xhci_diagnostic_registers){
+    .status = read32(op, XHCI_OP_STATUS), .command = read32(op, XHCI_OP_COMMAND),
+    .management = read32(intr, XHCI_INTR_MANAGEMENT), .dequeue = read64(intr, XHCI_INTR_DEQUEUE),
+  };
+}
+
+static void diagnose_controller(struct usb_host_controller *controller, bool endpoints,
+    const struct xhci_diagnostic_registers *saved)
+{
+  uint64_t now = arch_monotonic_ns();
+  uint64_t age = controller->diagnostic_worker_ns ? now - controller->diagnostic_worker_ns : 0;
+  struct xhci_diagnostic_registers registers = saved ? *saved : diagnostic_registers(controller);
+  volatile const struct xhci_trb *ring = (const volatile struct xhci_trb *)controller->event_ring.address;
+  dma_read_barrier();
+  klog("usb xhci diag %x:%x.%u: sample=%s status=%x command=%x iman=%x erdp=%llx "
+      "dequeue=%u cycle=%u irq=%llu events=%llu running=%u failed=%u stage=%s "
+      "worker-age-ms=%llu pending-command=%u type=%u wait=%u notified=%u head=%x/%x\n",
+      controller->address.bus, controller->address.device, controller->address.function,
+      saved ? "pre-quarantine" : "live", registers.status, registers.command,
+      registers.management, (unsigned long long)registers.dequeue,
+      controller->event_dequeue, controller->event_cycle,
+      (unsigned long long)controller->interrupts, (unsigned long long)controller->events_consumed,
+      controller->running, controller->failed,
+      controller->diagnostic_stage ? controller->diagnostic_stage : "startup",
+      (unsigned long long)(age / UINT64_C(1000000)), controller->command.pending, controller->command.type,
+      controller->wait != NULL, controller->notified,
+      ring[controller->event_dequeue].status, ring[controller->event_dequeue].control);
+  if (!endpoints && !controller->failed) {
+    return;
+  }
+  klog("usb xhci diag: failure=%s first-failure=%s command-slot=%u command-trb=%llx\n",
+      controller->failure ? controller->failure : "none",
+      controller->diagnostic_first_failure ? controller->diagnostic_first_failure : "none",
+      controller->command.slot, (unsigned long long)controller->command.physical);
+  const struct xhci_trb *last = &controller->diagnostic_event;
+  klog("usb xhci diag: last-event type=%u cc=%u pointer=%llx status=%x control=%x "
+      "head-pointer=%llx head-status=%x head-control=%x\n",
+      (last->control >> XHCI_TRB_TYPE_SHIFT) & XHCI_TRB_TYPE_MASK,
+      last->status >> XHCI_EVENT_COMPLETION_SHIFT, (unsigned long long)last->parameter,
+      last->status, last->control, (unsigned long long)ring[controller->event_dequeue].parameter,
+      ring[controller->event_dequeue].status, ring[controller->event_dequeue].control);
+  if (!endpoints) {
+    return;
+  }
+  for (unsigned i = 0; i < controller->interrupt_count; ++i) {
+    const struct usb_host_interrupt *stream = &controller->interrupt_streams[i];
+    if (!stream->device || !stream->started) {
+      continue;
+    }
+    const struct usb_host_device *device = stream->device;
+    volatile const uint32_t *context = (const volatile uint32_t *)(device->output.address +
+        stream->dci * controller->context_bytes);
+    klog("usb xhci diag: slot=%u dci=%u result=%u bytes=%zu queued=%u sequence=%llu "
+        "endpoint=%x configuration=%x tx-info=%x hardware-dequeue=%llx enqueue=%u cycle=%u removed=%u retiring=%u "
+        "stopping-dci=%u stopped-trb=%llx\n",
+        device->slot, stream->dci, stream->result, stream->receive_bytes, stream->queue_count,
+        (unsigned long long)stream->sequence, context[0], context[1], context[4],
+        (unsigned long long)(((uint64_t)context[3] << 32) | context[2]),
+        stream->enqueue, stream->cycle, device->removed, device->retiring,
+        device->stopping_dci, (unsigned long long)device->stopped_trb);
+    for (unsigned j = 0; j < USB_INTERRUPT_RECEIVES; ++j) {
+      klog("usb xhci diag: slot=%u dci=%u receive=%u state=%u trb=%llx\n",
+          device->slot, stream->dci, j, stream->receive[j].state,
+          (unsigned long long)stream->receive[j].trb);
+    }
+  }
+}
+
+static bool diagnose_failed(struct usb_host_controller *controller)
+{
+  if (boot_options_get()->usb_xhci_diagnose && !controller->diagnostic_first_failure) {
+    controller->diagnostic_first_failure = controller->failure;
+  }
+  return false;
+}
+
+void usb_host_diagnose_tick(void)
+{
+  if (!boot_options_get()->usb_xhci_diagnose) {
+    return;
+  }
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  uint64_t now = arch_monotonic_ns();
+  for (struct usb_host_controller *controller = controllers; controller; controller = controller->next) {
+    if (!controller->prepared || now < controller->diagnostic_next_ns) {
+      continue;
+    }
+    controller->diagnostic_next_ns = now + XHCI_DIAGNOSE_INTERVAL_NS;
+    /* The presenter observes a parked worker too. These racy hardware reads
+     * diagnose progress; they never establish ownership or change USB state. */
+    diagnose_controller(controller, false, NULL);
+  }
 }
 
 static void set_interrupt_enable(struct usb_host_controller *controller, bool enabled)
@@ -1240,6 +1349,11 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
   }
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
+  if (boot_options_get()->usb_xhci_diagnose && interrupt->result == USB_OK &&
+      ((completion != XHCI_EVENT_SUCCESS && completion != XHCI_EVENT_SHORT_PACKET) ||
+       residue > interrupt->receive_bytes)) {
+    interrupt->diagnostic_event = *event;
+  }
   bool successful_short = completion == XHCI_EVENT_SUCCESS && residue &&
       residue <= interrupt->receive_bytes;
   if ((completion != XHCI_EVENT_SUCCESS && completion != XHCI_EVENT_SHORT_PACKET) ||
@@ -1267,6 +1381,9 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
       return true;
     }
     if (interrupt->queue_count == USB_INTERRUPT_COMPLETIONS || interrupt->sequence == UINT64_MAX) {
+      if (boot_options_get()->usb_xhci_diagnose) {
+        interrupt->diagnostic_event = *event;
+      }
       interrupt->result = USB_DISCONTINUITY;
       return true;
     }
@@ -1625,6 +1742,9 @@ static bool drain_events(struct usb_host_controller *controller)
     }
     dma_read_barrier();
     struct xhci_trb event = {.parameter = entry->parameter, .status = entry->status, .control = control};
+    if (boot_options_get()->usb_xhci_diagnose) {
+      controller->diagnostic_event = event;
+    }
     unsigned type = (control >> XHCI_TRB_TYPE_SHIFT) & XHCI_TRB_TYPE_MASK;
     if (type == XHCI_EVENT_COMMAND) {
       if (!consume_command(controller, &event)) {
@@ -1679,7 +1799,7 @@ static bool controller_healthy(struct usb_host_controller *controller)
   if (status & (XHCI_STATUS_HALTED | XHCI_STATUS_SYSTEM_ERROR | XHCI_STATUS_CONTROLLER_ERROR |
                 XHCI_STATUS_NOT_READY)) {
     controller->failure = "controller stopped or reported an error";
-    return false;
+    return diagnose_failed(controller);
   }
   return true;
 }
@@ -1691,7 +1811,7 @@ static bool run_command_flags(struct usb_host_controller *controller, unsigned t
   if (task_deadline_expired(deadline)) {
     controller->command.timed_out = true;
     controller->failure = "controller command deadline expired before admission";
-    return false;
+    return diagnose_failed(controller);
   }
   volatile struct xhci_trb *ring = (volatile struct xhci_trb *)controller->command_ring.address;
   unsigned index = controller->command_enqueue;
@@ -1721,7 +1841,7 @@ static bool run_command_flags(struct usb_host_controller *controller, unsigned t
   write32(controller->registers.address, controller->doorbells, 0);
   while (controller->command.pending) {
     if (!controller_healthy(controller) || !drain_events(controller)) {
-      return false;
+      return diagnose_failed(controller);
     }
     if (!controller->command.pending) {
       return true;
@@ -1729,7 +1849,7 @@ static bool run_command_flags(struct usb_host_controller *controller, unsigned t
     if (task_deadline_expired(deadline)) {
       controller->command.timed_out = true;
       controller->failure = "controller command deadline expired";
-      return false;
+      return diagnose_failed(controller);
     }
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
     wait_activity(controller, poll < deadline ? poll : deadline);
@@ -1938,6 +2058,13 @@ static bool update_ports(struct usb_host_controller *controller)
 
 static void stop_controller(struct usb_host_controller *controller)
 {
+  bool diagnostic = boot_options_get()->usb_xhci_diagnose && !controller->diagnostic_stopped;
+  struct xhci_diagnostic_registers registers = {0};
+  if (diagnostic) {
+    controller->diagnostic_stopped = true;
+    diagnose_failed(controller);
+    registers = diagnostic_registers(controller);
+  }
   uint64_t flags = cpu_save_interrupts();
   controller->interrupt_ready = false;
   set_interrupt_enable(controller, false);
@@ -2004,6 +2131,11 @@ static void stop_controller(struct usb_host_controller *controller)
   }
   bluetooth_hci_transport_failed(controller);
   usb_hid_controller_failed(controller);
+  if (diagnostic) {
+    /* Quarantine first. Endpoint/software metadata is post-stop; only these
+     * saved controller registers describe the state before containment. */
+    diagnose_controller(controller, true, &registers);
+  }
   klog("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
        controller->address.bus, controller->address.device, controller->address.function,
        controller->failure, halted, interrupts_disabled);
@@ -3226,6 +3358,17 @@ enum usb_result usb_host_interrupt_take(struct usb_host_interrupt *interrupt, vo
   return USB_OK;
 }
 
+void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream)
+{
+  if (!boot_options_get()->usb_xhci_diagnose || !stream->diagnostic_event.control) {
+    return;
+  }
+  const struct xhci_trb *event = &stream->diagnostic_event;
+  klog("usb xhci diag: lost stream slot=%u dci=%u cc=%u pointer=%llx status=%x control=%x\n",
+      stream->device->slot, stream->dci, event->status >> XHCI_EVENT_COMPLETION_SHIFT,
+      (unsigned long long)event->parameter, event->status, event->control);
+}
+
 static void set_bulk_endpoint(struct usb_host_device *device, struct xhci_bulk_endpoint *endpoint,
                               size_t average_bytes)
 {
@@ -3846,17 +3989,30 @@ static void controller_worker(void *argument)
   ktrace("xHCI %x:%x.%u: boot USB enumeration finished\n",
          controller->address.bus, controller->address.device, controller->address.function);
   for (;;) {
+    if (boot_options_get()->usb_xhci_diagnose) {
+      controller->diagnostic_worker_ns = arch_monotonic_ns();
+      controller->diagnostic_stage = "events";
+    }
     if (!controller_healthy(controller) || !drain_events(controller) ||
         !control_deadlines(controller) || !update_ports(controller)) {
       stop_controller(controller);
       return;
+    }
+    if (boot_options_get()->usb_xhci_diagnose) {
+      controller->diagnostic_stage = "bluetooth";
     }
     bluetooth_hci_progress(controller);
     if (!recover_boot_bulk(controller)) {
       stop_controller(controller);
       return;
     }
+    if (boot_options_get()->usb_xhci_diagnose) {
+      controller->diagnostic_stage = "storage";
+    }
     usb_storage_process(controller->discovery);
+    if (boot_options_get()->usb_xhci_diagnose) {
+      controller->diagnostic_stage = "hid";
+    }
     usb_hid_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;
@@ -3864,6 +4020,9 @@ static void controller_worker(void *argument)
     if (!controller_healthy(controller)) {
       stop_controller(controller);
       return;
+    }
+    if (boot_options_get()->usb_xhci_diagnose) {
+      controller->diagnostic_stage = "wait";
     }
     wait_activity(controller, task_deadline_after_ms(USB_WORKER_POLL_MS));
   }

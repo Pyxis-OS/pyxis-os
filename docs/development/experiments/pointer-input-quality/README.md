@@ -174,6 +174,96 @@ Then repeat wheel/buttons/mux and the on-board keyboard chord. Captured AC Pan
 establishes a supported layout, not that each physical mouse offers an accessible
 horizontal control. Native report-mode wheel/button behavior remains pending.
 
+## Native burst freeze, investigation still open
+
+Owner-reported retest, ThinkPad, 2026-10-11 about 17:10, `7491e419` with
+`USB_HID_DESCRIBE=1 usb.hid.describe=1`: both receivers now select report
+protocol, Logitech Button 1–16 / ASUS Button 1–8, Wheel/Pan enabled at 120/1.
+After testing the G502 (suspected free-spin wheel), both USB mice stop permanently
+and replug does not recover. PS/2 keyboard, touchpad/TrackPoint and RTL8111 remote
+shell continue. This establishes native report admission; burst stability and
+functional device closure fail. The owner identifies the retest log on horse at
+`~/shared/batch-2026-10-09/caelum-4.log`, after its last Caelum-ready marker.
+That retest copy was not yet present locally during this inspection; these
+native facts are the owner's report, not a decoded interrupt capture.
+
+The xHCI change in task 1 was the pre-start HID receive-length setter; transfer
+and event rings remain one page/256 TRBs, with two posted receives per stream.
+The original G502 boot fallback requested **32 bytes**, ASUS eight; report mode
+requests nine/eight. A nine-byte TD on a 32-byte endpoint is valid. Existing
+worker passes check USBSTS HCH/HSE/HCE/CNR, advance ERDP and clear EHB after a
+bounded drain, then rearm and collect. Input arithmetic is signed 64-bit before
+int32 saturation; mux history changes are bounded/clamped. The retained controller
+quarantine is intentionally permanent until reboot if ownership/fencing fails.
+No particular error or quarantine chain is established yet; recovery policy is
+unchanged. [xHCI specification](https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf)
+§§4.9.4 and 4.10 cover event/TD semantics.
+
+QEMU `7491e419`, same four-CPU Q35/KVM boot framebuffer and two USB2 hubs,
+USB keyboard plus two mice, archive-authored mux with 51 history rows: an
+interactive QMP flood sent 20,505 wheel-down commands/15 s, 20,976 wheel-up/15 s,
+and 39,808 alternating HMP ±127 wheel commands/15 s. Mux reached/clamped its
+history endpoints, remained responsive, and both USB mice, keyboard and replug
+continued. GDB found running=true, failed=false, failure=NULL, 5,947 events and
+5,945 IRQs, no pending command, three live pointers and an empty pointer queue.
+This **did not reproduce** native failure. Stock QEMU's mouse endpoint cadence
+is 8/10 ms, so command rate is not a 1 kHz transfer-rate claim. Its descriptor
+has no Pan; no QEMU hardware Pan coverage is claimed. Raw evidence remains local
+in `build/usb-burst-7491/`; QEMU/debugger are stopped.
+
+Default/diagnostic image builds and host fixture checks passed. The default
+QEMU boot emitted no diagnostic lines; the opt-in boot emitted correctly formatted
+five-second observations and survived another 14,392 wheel commands/12 s with
+1,593 events, running=true, failed=false. The host fixture also confirms that
+Wheel −128 is outside both descriptors' declared −127..127 range: it remains
+rejected (reason 3, Logitech field 18 / ASUS field 10). Whether native hardware
+actually emits that value is unknown. No fault was injected into the kernel.
+
+### One diagnostic retest through luna
+
+A temporary `usb.xhci.diagnose=1` option adds info-level observations only, with
+no default-boot output, packet dump or USB recovery-policy change. The presenter's
+BSP/IF=0 service samples retained controller mappings once per five seconds,
+even if the USB worker is parked: USBSTS, USBCMD, IMAN, ERDP, software dequeue/
+cycle, live head status/control, IRQ/event counts, running/failed, last worker
+stage/age, command state and wait/notification flags.
+These hardware reads are diagnostic samples, not coherent ownership proof.
+
+On controller quarantine, registers are captured before containment; the
+existing interrupt/Run/bus-master quarantine happens before printing. Error
+metadata includes first failure before a fence helper can overwrite it, last
+and ring-head event type/CC/pointer, and retained endpoint/dequeue/TD ownership.
+Endpoint detail includes configuration/Tx Info and retained receive identities.
+Endpoint/software detail is post-stop, explicitly distinct from the saved
+pre-quarantine registers. A binding loss reports transport status or decode
+length/ID/failed Mouse field/range, with the failed stream completion preserved
+independently of later events. Class input is released before logging. No keyboard
+payload, key identities, device
+strings or serials are logged. Decode failures remain failures. One source loss
+record per lost binding, one full quarantine dump per controller, five-second
+summaries; no unbounded per-successful-report logging.
+
+Luna builds this diagnostic head with the same existing builder and
+`make -j16 image USB_HID_DESCRIBE=1 LOG_LEVEL=info`. Keep the owner's prior PXE
+options, adding **`usb.xhci.diagnose=1`** alongside `usb.hid.describe=1 log.udp=1`.
+No trace log level or new build flag is needed. This option requires the new
+kernel; `7491e419` does not recognize it. Keep the same receiver topology and
+ordinary terminal/mux workload; no modes, device firmware or polling settings
+are changed.
+
+1. Wait ten seconds for two baseline summaries, then try ordinary input from
+   both receivers and the G502's free-spin wheel.
+2. On freeze, leave devices untouched for ten seconds so the independent
+   summaries show whether the worker still advances. Verify PS/2 input and run
+   `echo alive` and `lsusb` from the remote shell.
+3. Replug one receiver once, wait another ten seconds, and retain the full UDP
+   log from the final Caelum-ready marker. Mask MACs; keep the raw log outside
+   the repo. Filter `usb xhci diag`, `usb HID diag` and `xHCI` for review.
+
+Logging can perturb burst timing; this is diagnosis, not cost qualification.
+After the cause/fix is established, remove these temporary observations or move
+error detail to ktrace and repeat native qualification with the option off.
+
 ## One owner/luna native boot
 
 Luna builds the submitted Pyxis head and published dependency pins with

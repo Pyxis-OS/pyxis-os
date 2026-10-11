@@ -17,6 +17,9 @@ enum usb_hid_report_type { HID_INPUT, HID_OUTPUT, HID_FEATURE, HID_REPORT_TYPES 
 enum usb_hid_field_kind {
   HID_X, HID_Y, HID_WHEEL, HID_PAN, HID_BUTTON, HID_BUTTON_ARRAY, HID_MULTIPLIER,
 };
+enum usb_hid_decode_failure {
+  HID_DECODE_EMPTY, HID_DECODE_ID, HID_DECODE_LENGTH, HID_DECODE_RANGE, HID_DECODE_ARRAY,
+};
 
 struct usb_hid_report_layout {
   uint32_t bits[HID_REPORT_TYPES];
@@ -70,6 +73,10 @@ struct usb_hid_mouse_reports {
   uint32_t pan_multiplier, wheel_multiplier;
   uint16_t input_bytes;
   bool ids, wheel_enabled, pan_enabled;
+  /* Written only on a failed decode; no successful-report payload is retained. */
+  enum usb_hid_decode_failure decode_failure;
+  unsigned decode_field;
+  int64_t decode_value;
 };
 
 struct usb_hid_mouse_sample {

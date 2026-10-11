@@ -109,6 +109,9 @@ scroll or extra buttons. Runtime failure never switches protocol silently.
 protocol/layout/multiplier dumps at info level, for native qualification. Normal
 boots add no dump or packet logging. Device string/serial descriptors are never
 read or printed by this diagnostic.
+The temporary `usb.xhci.diagnose=1` [burst-freeze capture](../development/experiments/pointer-input-quality/README.md#one-diagnostic-retest-through-luna)
+adds bounded controller/HID-loss observations at info level; it changes no
+recovery rules and is not a timing qualification.
 Dumping consumes the existing admission/progress budget; use it on a small
 qualification topology, not as a timing measurement. Maximum descriptor/field
 output is roughly 35 KiB per binding (about three seconds at 115200 baud before

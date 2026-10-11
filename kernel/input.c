@@ -583,5 +583,6 @@ void input_pointer_drain(void)
   pointer_synthetic_tick(drained_physical_buttons | pointer_buttons(false));
   drain_pointer_events();
 #endif
+  usb_hid_diagnose_tick();
   cpu_restore_interrupts(flags);
 }

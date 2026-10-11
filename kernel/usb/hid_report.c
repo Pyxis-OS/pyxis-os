@@ -641,19 +641,31 @@ uint32_t usb_hid_mouse_buttons(const struct usb_hid_mouse_reports *mouse)
   return buttons;
 }
 
+static bool decode_failed(struct usb_hid_mouse_reports *mouse,
+    enum usb_hid_decode_failure failure, unsigned field, int64_t value)
+{
+  mouse->decode_failure = failure;
+  mouse->decode_field = field;
+  mouse->decode_value = value;
+  return false;
+}
+
 bool usb_hid_mouse_decode(struct usb_hid_mouse_reports *mouse, const uint8_t *report,
                           size_t bytes, struct usb_hid_mouse_sample *sample)
 {
   if (!bytes) {
-    return false;
+    return decode_failed(mouse, HID_DECODE_EMPTY, 0, 0);
   }
   unsigned layout = 0;
   uint8_t id = mouse->ids ? report[0] : 0;
   while (layout < mouse->layout_count && mouse->layouts[layout].id != id) {
     ++layout;
   }
-  if (layout == mouse->layout_count || bytes != usb_hid_report_bytes(mouse, layout, HID_INPUT)) {
-    return false;
+  if (layout == mouse->layout_count) {
+    return decode_failed(mouse, HID_DECODE_ID, 0, 0);
+  }
+  if (bytes != usb_hid_report_bytes(mouse, layout, HID_INPUT)) {
+    return decode_failed(mouse, HID_DECODE_LENGTH, 0, 0);
   }
   const uint8_t *payload = report + (mouse->ids ? 1 : 0);
   int64_t x = 0, y = 0, wheel = 0, pan = 0;
@@ -668,7 +680,7 @@ bool usb_hid_mouse_decode(struct usb_hid_mouse_reports *mouse, const uint8_t *re
       if (field->null_state) {
         continue;
       }
-      return false;
+      return decode_failed(mouse, HID_DECODE_RANGE, index, value);
     }
     switch (field->kind) {
     case HID_X: x += value; break;
@@ -686,7 +698,7 @@ bool usb_hid_mouse_decode(struct usb_hid_mouse_reports *mouse, const uint8_t *re
         if (field->null_state) {
           break;
         }
-        return false;
+        return decode_failed(mouse, HID_DECODE_ARRAY, index, value);
       }
       unsigned button = mouse->usages[field->usage_start + usage_index] & UINT16_MAX;
       if (button >= 1 && button <= 32) {
