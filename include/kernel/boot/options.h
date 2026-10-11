@@ -8,6 +8,7 @@ struct boot_options {
   struct mount_config mount;
   bool install;
   bool nvme_write;
+  bool usb_hid_describe;
   bool default_config;
   const char *remote_beacon;
   bool log_udp;

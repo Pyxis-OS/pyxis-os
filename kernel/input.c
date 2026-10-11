@@ -150,9 +150,11 @@ static void change_key(struct input_source *source, enum key_code key, bool down
     bool typematic, uint64_t now)
 {
   if (source->keys[key] == down) {
-    if (down && typematic && !source->suppressed_keys[key]) {
+    if (down && typematic) {
+      /* A recognized hardware repeat is typing even when its delivery is
+       * quarantined after another source loses continuity. */
       record_typing(source, key, now);
-      if (repeat_owner[key] == source) {
+      if (!source->suppressed_keys[key] && repeat_owner[key] == source) {
         queue_key(key, KEY_REPEAT);
       }
     }
