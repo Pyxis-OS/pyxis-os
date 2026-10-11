@@ -69,7 +69,9 @@ than throwaway work.
   result/cleanup for Lua and the ports runner, replacing its host
   `os.execute`/`io.popen` backend. This shared milestone can deliver independently
   of source builds. Native recipe adaptation, hosted build tools and selected
-  source/build/SDK authority remain runner work; no POSIX shell is implied.
+  source/build/SDK authority remain runner work; tools such as make that launch
+  children also need the separately proposed descendant-supervision profile.
+  No POSIX shell is implied.
 - **Writing `bin://`.** Today only the installer writes it, and spaces receive it
   read-only. A builder needs a staged directory, verification and a switch, like
   [system updates](../userland/system-updates.md), with new authority to do so.

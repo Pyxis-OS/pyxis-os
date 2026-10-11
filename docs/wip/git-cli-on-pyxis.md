@@ -368,7 +368,9 @@ is implied by these docs or ordinary libc/port work.
    [native command execution](native-command-execution.md). Git retains its
    executable bundle/grant policy, helper flow and non-fork callback/sideband
    adaptation; remove shell/fork fallback without a kernel POSIX process model.
-   Qualify Git-specific short transfers, EOF, failures and deadlock bounds.
+   Descendant-enabled helper chains need the shared doc's separate supervision
+   proposal; its first direct-child profile does not deliver them. Qualify
+   Git-specific short transfers, EOF, failures and deadlock bounds.
    **After this task the owner can:** use supported internal Git child commands
    and pack ingestion with native lifecycle/error reporting, before network use.
 4. **Shared dependency: native HTTP requests (moved, not completed).**
