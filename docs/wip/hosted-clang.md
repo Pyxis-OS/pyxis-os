@@ -160,7 +160,7 @@ threads gates 5–8.
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
 
-### Task 2 source audit and pending decisions — 2026-10-11
+### Task 2 source audit and accepted contract — 2026-10-11
 
 Inspected current Pyxis `466d2ed5`, userland `df210f1a` and merged Support fork
 `6951d3c9`. The ordinary, unchanged SDK builds with installed compiler/runtime
@@ -202,25 +202,25 @@ ASCII classification. Use private immutable libc++ locale tokens and real C
 `locale_t/newlocale/uselocale` or mutable locale machinery is needed. This does
 not change the existing libc locale contract.
 
-**Two pending owner choices, before implementation:**
+**Both defaults accepted by the owner, 2026-10-11:**
 
-1. **Wide facilities. Default: implement the actual stock wide runtime closure
+1. **Wide facilities: implement the actual stock wide runtime closure
    above, including real restartable UTF-8 and the reached wide FILE operations.**
    Preserve read-ahead/position/error behavior; no repeated-byte-pushback shortcut
-   for `ungetwc`. Alternative: add an explicitly smaller libc++ wide facility
-   boundary for strings/conversion while excluding wide standard streams; this
-   needs new fork guards rather than enabling an existing option.
-2. **Randomness. Default: real libc `getentropy` over startup `random`/`clock`
+   for `ungetwc`.
+2. **Randomness: real libc `getentropy` over startup `random`/`clock`
    grants, 0–256 bytes, using the existing five-second maximum wait.** Checked
    absolute deadline, all-or-nothing output, honest authority/queue/timeout/source
    failures, no fallback. Select libc++'s getentropy backend: its default
    `"/dev/urandom"` token is an API selector, never a path lookup; other tokens
-   refuse. `entropy()` returns zero because no estimate is provided. Alternative:
-   a direct libc++ native-grant backend with explicit owned per-instance grants.
+   refuse. `entropy()` returns zero because no estimate is provided.
 
 Coordinate `libc/include/{locale,wchar,stdio}.h`, FILE internals/pushback,
 new wide/entropy sources and the libc source list, plus `scripts/cxx-runtime.sh`,
-with delta through the owner before editing. Do not alter errno/TLS storage,
+with delta through the owner. Its #709 owns `lib/thread.c`, `lib/memory.c`,
+`include/thread.h`, `include/memory.h` and boot/session/shell/mux launch grants;
+this task does not edit those. New libc sources use the existing source wildcard,
+without a runtime.mk/startup edit. Do not alter errno/TLS storage,
 allocator locking, timezone/static-result locking or startup ownership here.
 The actual fork runtime can be built locally with the existing compiler and SDK;
 ordinary SDK adoption waits for the matching owner-built container, as below.
