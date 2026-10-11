@@ -158,8 +158,10 @@ The launcher supplies argument strings, including argv[0] when present; neither
 the kernel nor startup parses a command line. Zero arguments are valid and still
 provide argv[0] == NULL. Environment names are nonempty, case-sensitive, unique
 and cannot contain '='; values may be empty. The initial environment is a copied,
-read-only snapshot with allocation-free lookup. Process-local mutation and libc
-getenv support remain later work. Environment strings confer no authority.
+read-only snapshot with allocation-free lookup. Libc copies it into mutable
+process-local storage for `getenv`, `setenv` and `unsetenv`
+([process state](../userland/process-state.md)); the snapshot itself never changes.
+Environment strings confer no authority.
 
 [Startup preparation](../../include/kernel/user/startup.h) accepts stable, borrowed
 kernel inputs under exclusive ownership of an inactive process on the BSP.
