@@ -11,6 +11,8 @@ struct presentation {
   struct byte_buffer *output;
   unsigned columns;
   unsigned rows;
+  unsigned host_columns;
+  unsigned host_rows;
   unsigned x;
   unsigned y;
   unsigned tab_width;
@@ -28,6 +30,8 @@ struct presentation {
 };
 
 void presentation_begin(struct presentation *screen);
+/* Applied geometry changes do not restart the streamed text decoder. */
+void presentation_resize(struct presentation *screen, unsigned columns, unsigned rows);
 void presentation_data(struct presentation *screen, const unsigned char *data, size_t length);
 void presentation_fresh_line(struct presentation *screen);
 /* Intercepted OSC controls still interrupt pending text bytes. */

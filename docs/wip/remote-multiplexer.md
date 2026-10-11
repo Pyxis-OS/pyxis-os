@@ -1,11 +1,12 @@
 # Multiplexer over remote terminals
 
 The owner accepted this contract on 2026-10-11 and assigned tasks 1–2 together.
-Tasks 1–2 are implemented and submitted for owner review. Task 3 is unassigned
-and requires a separate owner go. The accepted route is guest VT composition
+Tasks 1–2 are merged (#728 and userland #218). Task 3 was owner-assigned
+on 2026-10-11 and is implemented for review. The accepted route is guest VT composition
 with a private pane broker in the trusted remote daemon. Implementation and
 qualification have separate evidence in the
 [task 1–2 experiment record](../development/experiments/remote-multiplexer-task12.md).
+See also the [task 3 resize qualification](../development/experiments/remote-multiplexer-resize.md).
 Native horse/PXE qualification remains owner work.
 
 ## Startup and authority
@@ -133,17 +134,25 @@ the bounded whole viewport; the encoder budgets do not bound all CPU work to
    transfer, eight slots, existing controls/history/layouts and resumable
    rendering are implemented. Qualification and measured limits are in the
    linked experiment record.
-3. [ ] **Live resize and end-to-end qualification — unassigned.** Add host-window
-   observation, coalesced bounded resize/applied-geometry negotiation and native
-   generation propagation. Preserve clipped/hidden panes on shrink and restore
-   layout on growth; current allocation rollback is per screen/frame, so later
-   failure can follow earlier resize updates and ends mux with cleanup. Qualify
-   tiny/wide geometry, full-screen editors, RGB/UTF-8, busy/stalled panes, two mux
-   plus two plain sessions, reverse mode and pending HOST cleanup. Repeat matched
-   plain/mux latency, bytes, throughput and allocation measurements. The owner
-   runs horse/native-PXE qualification separately from nested QEMU.
+3. [x] **Live resize and end-to-end qualification — assigned 2026-10-11.** Host-window
+   observation, bounded coalesced resize/applied-geometry frames and existing
+   native RESIZED propagation are implemented. Shrink retains hidden panes and
+   growth restores layout. Nested QEMU qualification covers tiny/wide geometry,
+   Kilo/Neovim, RGB/UTF-8, busy/stalled panes, two mux plus two plain sessions,
+   reverse mode and pending HOST cleanup. Matched costs and allocation peaks are
+   in the task 3 record. The owner runs horse/native-PXE qualification separately.
    **After this task the owner can:** resize a remote mux window while keeping
    its panes and jobs, with measured costs and documented failure cleanup.
 
-Live remote resize and reattachment are unsupported. Pane-aware transfer, native
+## Accepted task 3 choices (2026-10-11)
+
+- Live resize is negotiated for `--mux` only. A HELLO option selects resize and
+  request/applied frames carry a request ID and dimensions. One request remains
+  outstanding while newer host sizes coalesce; ordinary/machine sessions stay
+  unchanged.
+- Explicit `--columns`/`--rows` limit subsequent geometry. Otherwise it follows
+  actual host character dimensions within 512×256. Transient zero dimensions are
+  ignored; tiny windows retain hidden panes for later growth.
+
+Live remote resize is implemented for review; reattachment is unsupported. Pane-aware transfer, native
 clipboard and pointer transport require a separate owner assignment.
