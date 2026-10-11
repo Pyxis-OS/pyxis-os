@@ -1,11 +1,11 @@
 # Native command execution
 
-Status: **shared milestone proposal, owner direction 2026-10-11; not implemented.**
+Status: **shared milestone, all owner decisions accepted 2026-10-11; not implemented.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-cli-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. Direct launch is accepted as the first profile (2026-10-11); the two
-remaining defaults below are proposed, not accepted. No implementation is assigned.
+owner go. Direct launch, the capture profile and concurrent pipeline pump with
+all stage results are accepted (2026-10-11). No implementation is assigned.
 
 ## Deliverable and boundary
 
@@ -87,7 +87,7 @@ Preserve ordinary `pyxis.run`/`uv_spawn` behavior and the accepted Claude harnes
 trusted fresh-group/sole-CONTROL backend. Its stronger lifetime is not a
 prerequisite for ordinary direct jobs.
 
-## Remaining owner decisions — proposed defaults
+## Accepted capture and pipeline contract (owner, 2026-10-11)
 
 1. **First capture keeps the accepted Claude storage/authority profile.** Separate
    private RAM stdout/stderr FILEs are created then unlinked under an explicitly
@@ -100,7 +100,7 @@ prerequisite for ordinary direct jobs.
 
    Return capped bytes with truncation and local stop cause alongside actual
    EXITED/FAULTED/TERMINATED results; fault details remain in klog. Default to the
-   previously proposed configurable 1 MiB per-stream polled trigger: consumer
+   accepted configurable 1 MiB per-stream polled trigger: consumer
    policy, not a hard backing quota or universal output cap; it can overshoot.
    No stdout/stderr chronology is promised. Use one absolute job deadline with
    bounded native waits; request stop on deadline/size/cancel, then observe actual
