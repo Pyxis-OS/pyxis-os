@@ -39,6 +39,10 @@ alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
+[Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), docs-only
+proposal for the existing VT renderer with trusted remote pane creation and
+cleanup supervision. Defaults and implementation tasks await owner review/go.
+
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
