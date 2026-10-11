@@ -4,7 +4,7 @@ Owner-assigned planning, 2026-10-11. This is the
 [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting):
 compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
 and running the [ports runner](source-builds.md) come later. No hosted compiler
-has run yet; this update changes documentation only.
+has run yet.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -91,6 +91,23 @@ policy belongs in LLVM Support.
 The old probe's absent Unix headers (`signal.h`, `spawn.h`, `sys/mman.h`,
 `sys/wait.h`, `pthread.h`, and others) are not a kernel API shopping list.
 [Native libc portability](../userland/libc-portability.md) remains authoritative.
+
+## Process boundary
+
+**Inspected in the pinned fork:** `-fintegrated-cc1 -c` with one source and
+integrated assembly runs cc1 in-process. `clang/lib/Driver/Driver.cpp:5562`
+disables integration for multiple jobs or process statistics; source-to-executable
+and multiple-source invocations therefore still launch cc1 externally.
+`clang/lib/Driver/ToolChains/Pyxis.cpp:96` creates an external LLD `Command`;
+`-fuse-ld=lld` does not embed the linker. The first completion keeps compilation
+and native LLD launch separate.
+
+`lldMain` in `lld/include/lld/Common/Driver.h` is the later library-entry route;
+embedding must respect `canRunAgain`, context cleanup and fatal-exit containment.
+Integrated cc1 enables signal-based crash recovery
+(`clang/tools/driver/driver.cpp:384`). The native adaptation must make faults
+terminate the process, without continuing after a fatal compiler/library failure.
+This is not permission to add crash helpers or start embedding work.
 
 ## Parallel delivery tasks
 
