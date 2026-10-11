@@ -1,55 +1,47 @@
 # Shared-address-space user threads
 
-Owner-accepted defaults, 2026-10-10, subject to the native-kernel condition below.
-Task 1, process lifetime, is merged in
-[#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); one user task per
-process was retained through task 4. Task 2, admitted call references and CLOSE, is merged in
-[#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
-[qualification](../development/experiments/threads-task2/README.md) records its
-build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
-merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
-[qualification](../development/experiments/threads-task3/README.md) records the
-matched comparison and 1/4-CPU inspection. Task 4, VM activity and buffer leases,
-is merged in [#700](https://git.internal/PyxisOS/pyxis-os/pulls/700); its
-[qualification](../development/experiments/threads-task4/README.md) separates
-nested-QEMU evidence from the owner-run native A/B. The owner accepts the BSP
-MEMORY latency follow-up; bounded string capture and its native rerun are
-complete. The IPC copy-phase follow-up is merged in
-[#704](https://git.internal/PyxisOS/pyxis-os/pulls/704): descriptor capture/payload prevalidation share one short lease, and
-RECEIVE reuses its publication lease. Inspected CALL lease pairs fall from 15
-to 11 and SEND admission from 4 to 3; no lease spans growth or waits. Its
-[qualification](../development/experiments/ipc-copy-leases/README.md) records
-1/4-CPU inspection and nested/native A/B: SEND64 saves 13 ns/message; CALL cost
-remains recorded in technical debt, with profiling parked until task 8.
-Task 5 implements native sibling entry, FS binding and reclaimed completion;
-its [qualification](../development/experiments/threads-task5/README.md) records
-ordinary builds, 1/4-CPU sibling probes and nested/native A/B. The native SEND4096
-completion regression is under follow-up; its rerun is pending. Existing
-[task 1 qualification](../development/experiments/threads-task1/README.md)
-and [stack qualification](../kernel/program-loading.md) remain separate evidence.
+Owner-accepted defaults, 2026-10-10, subject to the
+[native-kernel condition](#accepted-owner-decisions-2026-10-10). The earlier accepted
+directions (merged #567) stand: parallel siblings, process-wide quiescence with
+BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault, and
+process-private address wait/wake. Tasks 1–5 are merged; tasks 6–9 remain
+proposals, not implemented APIs. Moving kernel services
+[off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
-The owner already accepted parallel siblings, process-wide quiescence with
-BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault,
-and process-private address wait/wake. Those directions and the three defaults
-below are settled; tasks 6–8 remain proposals, not implemented APIs.
-Moving kernel services [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp)
-is independent.
+Merged tasks, with qualification records:
+
+- Task 1, process lifetime: [#612](https://git.internal/PyxisOS/pyxis-os/pulls/612),
+  [qualification](../development/experiments/threads-task1/README.md).
+- Task 2, admitted call references and CLOSE: [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671),
+  [qualification](../development/experiments/threads-task2/README.md).
+- Task 3, shared-table delivery: [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684),
+  [qualification](../development/experiments/threads-task3/README.md).
+- Task 4, VM activity and buffer leases: [#700](https://git.internal/PyxisOS/pyxis-os/pulls/700),
+  [qualification](../development/experiments/threads-task4/README.md); the BSP MEMORY
+  latency and string-capture follow-ups are complete, and the IPC copy-phase
+  follow-up is [#704](https://git.internal/PyxisOS/pyxis-os/pulls/704)
+  ([qualification](../development/experiments/ipc-copy-leases/README.md); the remaining
+  CALL cost is in [technical debt](../technical-debt.md), profiling parked until task 8).
+- Task 5, native sibling lifecycle: [#709](https://git.internal/PyxisOS/pyxis-os/pulls/709),
+  [qualification](../development/experiments/threads-task5/README.md). **Open:** the
+  native SEND4096 completion regression (about +26%) is under follow-up and the
+  owner's native rerun is pending; no improvement is claimed before it.
+
+[Stack qualification](../kernel/program-loading.md) remains separate evidence.
 
 ## Current gaps
 
 | Inspected source | Remaining gate |
 | --- | --- |
-| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns its task set, retiring-storage count and first terminal-result election. Native siblings are implemented; libc join accounting remains task 8. |
-| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown requires drained activity and all task storage reclaimed. |
-| [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
-| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases, BSP mutation transactions and exclusive guarded-context pins are implemented; general sparse reservations remain a separate task. |
-| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Owned inputs/claims and root/borrow drainage replace exclusive table/VM loans. Sibling publication, stop fanout and final process retirement use these contracts. |
-| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Native initial FS binding and sibling FS/entry are implemented; ordinary startup remains FS=0 pending task 7. |
+| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Native siblings are implemented; libc join accounting remains task 8. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c), [endpoint replies](../../kernel/object/endpoint.c) | Owned storage snapshots, reserved atomic delivery and scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
+| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases, BSP mutation transactions and guarded-context pins are implemented; general sparse reservations remain a separate task. |
+| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Sibling FS/entry is implemented; ordinary startup remains FS=0 pending task 7. |
 | [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
 
 ## Native lifecycle
 
-**Task 5 decisions accepted and implemented, 2026-10-11.**
+**Task 5 decisions accepted and implemented ([#709](https://git.internal/PyxisOS/pyxis-os/pulls/709)), 2026-10-11.** Kernel-side behavior is also in [userspace](../kernel/userspace.md), [SMP](../kernel/smp.md) and [BSP requests](../kernel/bsp-service-requests.md).
 
 1. Guarded backing uses MEMORY MANAGE on the calling process: eager RW/NX
    usable pages and one reserved unmapped lower guard. It shares private-memory
@@ -94,14 +86,13 @@ all provisional ownership. Siblings run the trampoline, never process startup or
 constructors again. Per-task FP state remains separate, with the creator's
 floating-point environment inherited, including exception flags.
 
-Thread EXIT records a machine-word result and retires only that task. The
-native trampoline must call EXIT explicitly; runtime destructors belong to the
-later libc/TLS tasks. Native completion is waitable and repeatable: it publishes the result with
-release/acquire ordering only after the task has left its root/stack and kernel
-continuations, registrations and storage have been reclaimed. The observer owns
-completion storage, not a surviving VM or borrowed task pointer. Closing it does
-not kill the thread. Libc adds a single join claim, self-join refusal and runtime
-stack/TLS release after completion; it need not detect arbitrary join cycles.
+The native trampoline must call EXIT explicitly; runtime destructors belong to the
+later libc/TLS tasks. Completion publishes the result with release/acquire
+ordering only after the task has left its root/stack and its continuations,
+registrations and storage have been reclaimed. The observer owns completion
+storage, not a surviving VM or borrowed task pointer. Libc adds a single join
+claim, self-join refusal and runtime stack/TLS release after completion; it need
+not detect arbitrary join cycles.
 
 Process EXIT, returning from main, foreground termination and fatal user faults
 stop every sibling. One fault-safe atomic election/publication preserves the
@@ -143,9 +134,7 @@ retained. Allocation and process owner-list mutation remain BSP-owned.
 
 Storage and grant references drain before `task_syscall_leave`; existing
 uninterruptible request and stop/unwind rules retain process/table lifetime.
-Teardown requires no live claims. Task 4 supplies VM/activity and device-operation
-admission; actual sibling membership, entry and race qualification remain later
-work.
+Teardown requires no live claims.
 
 **Task 3 accepted details, 2026-10-10.** COPY, launch sources and endpoint
 attachments retain prospective grant authority outside the table guard, then
@@ -156,8 +145,7 @@ destination policy before committing completion, then moves already-owned grants
 into reserved slots without another retain. Rejection leaves the receipt for
 correction; successful REPLY cannot fail collection for capacity. This never
 implicitly rolls back provider mutations and preserves timeout/closure
-uncertainty. [Task 3 qualification](../development/experiments/threads-task3/README.md)
-records the baseline and later implementation evidence separately.
+uncertainty.
 
 **Task 4 accepted contract, 2026-10-10.** MEMORY mutations move to BSP with
 DISPLAY mapping mutations under one process transaction. Drain active roots and
@@ -165,7 +153,7 @@ actual mapping borrowers, acknowledge departure after CR3 reload, and keep
 admission closed through the mutator's final reply copy. Pending quiescence never
 blocks the BSP executor. Bounded failure returns BUSY before effects; retirement
 waits for drainage. Task 4 first qualified this with one user task; task 5
-enables siblings under the same admission protocol.
+enabled siblings under the same admission protocol.
 
 Use kernel staging and short validation/copy leases, with no mapping lease across
 indefinite I/O. Revalidate output after waits; late failure is BAD_BUFFER without
@@ -292,28 +280,16 @@ than assume these values; Go or libuv may need different tuning later.
 
 Each gate needs its own owner assignment, baseline where costs change, ordinary
 build and interactive QEMU/debugger qualification. No new test infrastructure.
-The following split refines the former broad task 2; completed gates do not
-authorize the next one.
-Tasks 2–4 are ownership plumbing with no new runnable thread feature. The first
+Completed gates do not authorize the next one. Tasks 2–4 are ownership plumbing with no new runnable thread feature. The first
 owner-runnable siblings arrive at task 5; ordinary threaded C arrives at task 8.
 SDL audio callbacks and libuv workers require their later consumer tasks, not
 merely completion of task 2.
 
-1. [x] **Process lifetime (#612).** Independent process/group ownership and task retirement, still one user task.
-
-   Owner can inspect process completion after task/process reclamation and group completion after deferred cleanup using existing programs.
-2. [x] **Admitted call references and CLOSE.** Atomic handle resolution into owned storage/rights, detached-generation close and audited logical close effects; one user task and no public API change. See [qualification](../development/experiments/threads-task2/README.md).
-
-   Owner can inspect call/close lifetime and run ordinary applications without borrowed-slot storage surviving a call.
-3. [x] **Shared-table delivery.** Growth/atomic installations, reply slot reservations, readiness/COPY and BSP table-loan replacement; still one user task. See [qualification](../development/experiments/threads-task3/README.md).
-
-   Owner can inspect preserved authority, delivery-capacity admission and failure unwind before siblings are enabled.
-4. [x] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task. See [qualification](../development/experiments/threads-task4/README.md).
-
-   Owner can inspect safe copy/mutation/retirement admission and matched ordinary-workload costs.
-5. [x] **Native CREATE/EXIT/completion — assigned 2026-10-11.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only. See [qualification](../development/experiments/threads-task5/README.md).
-
-   Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
+1. [x] **Process lifetime (#612).** Independent process/group ownership and task retirement; one user task.
+2. [x] **Admitted call references and CLOSE (#671).** Owned storage/rights and detached-generation close; one user task.
+3. [x] **Shared-table delivery (#684).** Growth/atomic installations, reply slot reservations and BSP table-loan replacement; one user task.
+4. [x] **VM activity and user-buffer leases (#700).** Dispatch/root departure, BSP quiescent mutation and explicit concurrent-device refusals; one user task.
+5. [x] **Native CREATE/EXIT/completion (#709), assigned 2026-10-11.** Thread set/result election, guarded-context lifetime, initial/sibling FS setup and space placement; joinable only. Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
 6. [ ] **Address WAIT/WAKE.** Mapping-incarnation keys, deadlines and wake/stop/unmap races.
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
@@ -356,9 +332,8 @@ The owner accepted all three defaults with this condition, recorded verbatim:
 The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
-does not assign later implementation; tasks 2 and 3 were separately assigned.
-Task 4 and its IPC follow-up are merged. The owner accepted the task 5 details
-above and assigned implementation on 2026-10-11; later gates remain separate.
+does not assign later implementation: each gate is assigned separately (task 5 on
+2026-10-11) and later gates remain unassigned.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK

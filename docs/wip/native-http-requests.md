@@ -2,7 +2,7 @@
 
 Status: **shared milestone accepted by the owner, 2026-10-11; not implemented.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
-and [Git's HTTP prerequisite](git-cli-on-pyxis.md#smart-http-without-libcurl).
+and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. All three
 defaults below are accepted, including streamed GET/POST without an artificial
 response-size cap. Each implementation task needs its own owner go.
@@ -16,7 +16,7 @@ multi-GB HTTPS download through the shell or Lua. Reading the URI again would
 issue GET, not retrieve the POST response; retain its actual response grant.
 
 Consumers are the [Claude harness](claude-on-pyxis.md),
-[git-remote-https](git-cli-on-pyxis.md), [pinned source fetch and the LAN gateway](source-builds.md#reaching-the-sources),
+[git-remote-https](git-on-pyxis.md#smart-http-without-libcurl), [pinned source fetch and the LAN gateway](source-builds.md#reaching-the-sources),
 and the [ports runner](../development/ports.md#building-and-packaging).
 None must implement a private HTTP client or finish its own milestone to obtain
 this facility. Git negotiation, pin/hash verification, gateway deployment and
@@ -30,16 +30,11 @@ with no HTTP-shaped or POSIX-shaped kernel calls.
 
 Main `34dfce9e`, userland `d560fbb0`: [httpfs/libhttp](../userland/http-fetch.md)
 provide GET-only complete immutable snapshots, with a 16 MiB body allowance
-across redirects and 64 MiB shared body storage. OPEN fetches synchronously;
-existing reads and retirement wait behind it. [Verified TLS](../userland/https.md)
-has explicit trust/network/random/clock authority and one active connection per
-process-local runtime. Whole-response RAM allocation cannot meet the new scope.
-
-Native FILE uses explicit offsets and successful zero-length reads mean EOF.
-Current `pyxis_stdio_response` is copied open metadata, not live final status;
-inherited streams have no such metadata. These must not be silently reinterpreted
-as a growing, seekable FILE or a successful truncated download. This is source
-inspection, not a new build, runtime or throughput measurement.
+across redirects and 64 MiB shared body storage; OPEN fetches synchronously.
+[Verified TLS](../userland/https.md) has one active connection per process-local
+runtime. Native FILE uses explicit offsets and zero-length reads mean EOF;
+`pyxis_stdio_response` is copied open metadata, not live final status. These must
+not be reinterpreted as a growing seekable FILE or a successful truncated download.
 
 ## Carried-forward accepted contract
 
@@ -84,27 +79,20 @@ consumer policy, not limits imposed on Git, GET or downloads.
 ## Capability-valued variables and task 3 review
 
 A prepared request is a capability. Task 5's private shell bindings are the first
-form of capability-valued variables, not an alternative to them. The intended
-direction includes an environment carrying real capabilities, inherited through
-explicit launch grants. This is the cross-cutting
-[capability-valued environment direction](capability-environment.md): configuration
-documents could select capability entries too, such as a user directory authorization, not just HTTP requests. Shell bindings must be
-designed to later become, or sit under, those environment entries, rather than
-form a separate shell-only mechanism. Never encoding a capability as an
-environment string or printed handle does not exclude that direction. The
-separate credential rule forbids secret bytes in argv/environment/history/logs,
-not request capabilities.
-Capability-valued environment implementation is outside this milestone unless
-the owner separately assigns it.
+form of capability-valued variables and must be designed to later become, or sit
+under, entries of the cross-cutting
+[capability-valued environment direction](capability-environment.md), not a
+separate shell-only mechanism. Never encoding a capability as an environment
+string or printed handle does not exclude that direction; the credential rule
+forbids secret bytes in argv/environment/history/logs, not request capabilities.
+Implementing the capability environment is outside this milestone unless
+separately assigned.
 
 **Before implementing task 3, the assigned agent must stop for owner review**
 with an object/rights/lifetime/inheritance proposal: what a prepared-request
 capability carries; how body/control/response/observation rights split; what
 copying, child inheritance or holding it past the shell means; and how it sits
-in a capability-valued variable compatible with the
-[capability-valued environment direction](capability-environment.md). Accepted
-defaults do not waive this checkpoint.
-
+in a capability-valued variable. Accepted defaults do not waive this checkpoint.
 Motivating workflow: log in, extract a token with jq, and prepare another request
 with it, keeping credential bytes on the private preparation path.
 

@@ -1,6 +1,6 @@
 # Native libuv task 4 qualification
 
-Recorded 2026-10-10 for [Neovim task 4](../../../wip/neovim-libuv.md#task-4-preflight).
+Recorded 2026-10-10 for [Neovim task 4](../../../../ports/libuv/README.md).
 These are nested-KVM measurements and manual observations, not owner-hardware
 results. Raw captures and scratch consumers remain in ignored
 `build/libuv-baseline`, `build/libuv-after`, `build/libuv-qualification` and

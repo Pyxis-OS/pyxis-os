@@ -33,7 +33,7 @@ profile are rejected. Descendant opens are anchored to the source directory and
 do not follow symlinks. Hardlinks are ordinary source files and are stored as
 separate byte sequences. The destination must be outside the source tree.
 
-Manifest validation follows the existing [format-1 contract](../wip/program-bundles.md#manifest-and-stack):
+Manifest validation follows the existing [format-1 contract](../userland/program-bundles.md#manifest-and-stack):
 strict UTF-8 JSON, unique decoded keys, unsigned integer numbers, known fields,
 native name/path rules, command/resource/grant budgets and binding collisions.
 The source of truth is `lib/bundle.c` in the userland repository (the `userspace`

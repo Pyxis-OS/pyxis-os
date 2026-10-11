@@ -1,6 +1,6 @@
 # File identity task 2 qualification
 
-Recorded 2026-10-10 for [Neovim task 2](../../../wip/neovim-libuv.md#task-2-contract).
+Recorded 2026-10-10 for [Neovim task 2](../../../interfaces/file-metadata.md).
 These are nested-KVM measurements. Raw captures and manually invoked scratch
 probes remain in ignored `build/identity-{baseline,after,control,qualification}`.
 No benchmark infrastructure, CI job or klog call was added.

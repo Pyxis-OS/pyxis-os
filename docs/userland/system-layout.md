@@ -14,7 +14,7 @@ the pool, without rebuilding boot media.
 | `system://` | The pool's `system` volume, read-write for the default space. | Not bound. |
 | `home://` | The pool's `home` volume, shared by the spaces that name it. | A RAM volume, lost at reboot. |
 | `tmp://` | A RAM directory shared by every space, lost at reboot. | The same. |
-| `app://` | A launched [bundle](../wip/program-bundles.md) receives its own read-only `app/` directory. Plain programs have no implicit binding. | The same. |
+| `app://` | A launched [bundle](program-bundles.md) receives its own read-only `app/` directory. Plain programs have no implicit binding. | The same. |
 
 Spaces receive `boot://`, `tmp://` and `bin://` from boot init, plus the roots
 their configuration names. They start in `home://` unless their configuration's
@@ -54,14 +54,14 @@ a denied, malformed or incomplete candidate reports its error. Direct hits
 read no catalog and enumerate no installation directory. `bin://NAME` first
 tries a literal file, then the same bin candidates and catalog without rescue
 fallback. Explicit `.pxb` paths select the default entry. See
-[development bundle lookup](../wip/program-bundles.md#unpacked-development-lookup).
+[development bundle lookup](program-bundles.md#unpacked-development-lookup).
 
 `nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and
 `bin://lua5.1.pxb` on live and installed systems. Each contains its application
 files, port notes, provenance and application/dependency notices under `app/`;
 metadata lives in `app/metadata/`. Other declared commands still need explicit
 paths or the development catalog. ZIP launch and a generated command index
-remain [future work](../wip/bundles-in-bin.md).
+remain [future work](../wip/program-bundles.md).
 
 One directory per revision is interim, until a final program update scheme
 replaces it.

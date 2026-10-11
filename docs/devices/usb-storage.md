@@ -13,6 +13,11 @@ alone grants applications no raw-disk access. [USB installation](usb-installatio
 summarizes the path end to end. Hotplug and power-loss durability remain
 unqualified.
 
+The proposed [shared FAT32 milestone](../wip/fat32-volumes.md) adds native
+FAT32 FILE/directory mounts over supported block transports. Its read-write
+workflow still requires this backend's writable/flush qualification and draining
+all FAT mount references before removal; it does not add hotplug support.
+
 ## Binding and preparation
 
 `core.c` passes completely validated configuration descriptors to `bot.c` before

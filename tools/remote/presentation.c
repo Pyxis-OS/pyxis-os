@@ -203,6 +203,15 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
 {
   for (size_t i = 0; i < length; ++i) {
     unsigned char byte = data[i];
+    /* Mux has no routed OSC side channels. Discard across records without buffering. */
+    if (screen->state == PRESENT_OSC || screen->state == PRESENT_OSC_ESCAPE) {
+      if (byte == 7 || (screen->state == PRESENT_OSC_ESCAPE && byte == '\\')) {
+        screen->state = PRESENT_TEXT;
+      } else {
+        screen->state = byte == 0x1b ? PRESENT_OSC_ESCAPE : PRESENT_OSC;
+      }
+      continue;
+    }
     if (byte < 0x20 || byte == 0x7f) {
       presentation_text_boundary(screen);
     }
@@ -231,7 +240,11 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
       continue;
     }
     if (screen->state == PRESENT_ESCAPE) {
-      screen->state = byte == '[' ? PRESENT_CSI_ENTRY : PRESENT_TEXT;
+      if (byte == ']' && screen->discard_osc) {
+        screen->state = PRESENT_OSC;
+      } else {
+        screen->state = byte == '[' ? PRESENT_CSI_ENTRY : PRESENT_TEXT;
+      }
       continue;
     }
     if (screen->state == PRESENT_CSI_ENTRY || screen->state == PRESENT_CSI ||

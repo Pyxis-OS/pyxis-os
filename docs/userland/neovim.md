@@ -67,9 +67,19 @@ comparison metadata requires `:w!`; force selects the current native target and
 still needs write authority. Failed force invalidates the comparison baseline.
 A successful save establishes the selected target for later ordinary saves.
 `:saveas` keeps the selected new name even if writing fails, as upstream does.
-The [backing validity table](../wip/neovim-groundwork.md#slice-4-contract-accepted-2026-10-10)
-explains RAM, npfs, host and archive cases. This comparison is not a mutation
-lease: concurrent changes remain possible, and equal times do not prove equal
+Comparison metadata follows the backing, not the scheme spelling:
+
+| Current path/backing | Held identity | Modification time and ordinary `:w` |
+| --- | --- | --- |
+| `home://` on a live image; `tmp://` RAM | Valid | Recorded when wall time is available; files whose sampled time is unavailable need `:w!`. |
+| `home://` on an installed image; other npfs volumes | Valid | Per-inode modified-time validity; records without it need `:w!`, not every npfs file. |
+| `host://` VirtIO-FS | Valid within the live mount/session | Fresh GETATTR supplies mtime; normal same-object comparisons work. Query failures remain errors. |
+| `boot://` archive | Valid | Authored mtime unavailable, but the archive is read-only: `:w!` cannot overwrite it; save to a writable path. |
+
+None of the writable backends always lacks identity or mtime. RAM without a
+valid wall-clock sample and npfs records with unavailable modified time require
+explicit force. A valid zero timestamp still participates in comparison. This
+comparison is not a mutation lease: concurrent changes remain possible, and equal times do not prove equal
 bytes. Saving retains the existing checked write/sync path.
 
 Swap, backup/writebackup and patchmode are unavailable; defaults disable them.
@@ -109,4 +119,4 @@ query's native source.
 and [static-parser qualification](../development/experiments/neovim-static-parsers/README.md)
 record editing, highlighting, safe-save checks, startup time and cleanup,
 including [new-name saves](../development/experiments/neovim-first-slice/README.md#new-name-saves-2026-10-10).
-Native qualification is the milestone's next slice.
+Owner native qualification is the milestone's remaining [task](../wip/neovim-libuv.md#tasks).

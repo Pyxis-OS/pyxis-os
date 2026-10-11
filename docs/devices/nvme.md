@@ -73,7 +73,8 @@ requests and the short physical power-button path remain clean-only.
 ## Qualification and sources
 
 [Task 1's record](../development/experiments/nvme-task1/README.md) distinguishes
-QEMU/GDB checks from the owner's pending read-only ThinkPad boot. Native writes
+QEMU/GDB checks from the owner's read-only ThinkPad boot, which passed on
+2026-10-11. Native writes
 require separate owner authorization. No compiler/container rebuild or userspace
 ABI change is needed.
 

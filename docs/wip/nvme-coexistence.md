@@ -1,7 +1,7 @@
 # Pyxis beside Fedora on the internal NVMe
 
-Status: **task 1 implemented and QEMU-qualified by Codex alpha, 2026-10-11;
-PR review and the owner's read-only native qualification pending.** The owner
+Status: **task 1 (NVMe driver, #710) merged, QEMU-qualified and natively
+qualified read-only on the ThinkPad, 2026-10-11.** The owner
 accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
 decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
 ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
@@ -73,14 +73,15 @@ of 2026-10-02:
    The alternative, a whole-disk claim and an installer that is careful, is
    simpler and leaves one userland bug between Pyxis and the Fedora partition.
 
-FAT32 remains a freestanding engine library first, used by the installer through
-a partition claim (task 2). **Owner decision, 2026-10-11:** a mounted read-write
-FAT32 volume/directory-capability backend is now part of the
-[installer/configuration line](installer-tui.md#dependencies-and-ordered-delivery),
-after that engine. It no longer waits for the generic userspace scheme-provider
-direction. Editable Lua configuration lives on the ESP; its file selection,
-publication/fallback and ownership choices are in that proposal. This does not
-assign or widen engine task 2 itself.
+The accepted FAT32 direction remains a freestanding engine used through a
+partition claim, then a mounted read-write volume/directory backend. The owner
+moved their delivery to [shared FAT32 volumes](fat32-volumes.md) on 2026-10-11 so
+the editor and removable media can use them without completing coexistence.
+Former task 2 is a dependency, not completed work. The earlier additive/raw-engine
+profile and no-dirty-bit-change rule stay intact; the shared proposal separately
+asks about mounted-RW policy. Editable ESP config ownership and publication remain
+in [the configuration editor](installer-tui.md), not the FAT engine. No FAT task
+is assigned by this move.
 
 ## Invariants
 
@@ -171,95 +172,44 @@ firmware menu.
 Each task ends with a PR and, where it can, QEMU qualification; the owner goes
 ahead task by task.
 
-### 1. NVMe driver — assigned 2026-10-11
+### 1. NVMe driver — implemented ([#710](https://git.internal/PyxisOS/pyxis-os/pulls/710))
 
-- [x] Implement and qualify the driver in QEMU.
-- Native qualification remains pending through the orchestrator and Luna,
-  read-only first; no later task is authorized by this delivery.
+- [x] Driver implemented and QEMU-qualified (assigned and delivered 2026-10-11).
+  Behavior, the `nvme.write=1` gate, raw-claim refusals and the clean-shutdown and
+  force-off path are in the [NVMe reference](../devices/nvme.md); measurements and
+  exact native staging steps are in the
+  [qualification record](../development/experiments/nvme-task1/README.md).
+- [x] Native read-only qualification on the ThinkPad passed (2026-10-11): the
+  disk read at its expected capacity, the GPT with three partitions matched
+  Linux's view, SMART was read, and the unsafe-shutdown count did not change
+  across a Pyxis reboot, so the shutdown notification works. No native writes and
+  no later task are authorized by this delivery.
 
-Task-1 decisions accepted by the owner on 2026-10-11:
-
-- Prepare every observed controller independently, supporting exactly one active
-  namespace per controller. Report multi-namespace controllers as unsupported;
-  never silently select namespace 1. Existing GUID selection and boot IDs remain.
-- Enforce `nvme.write=1` in the kernel; absent means read-only. Until task 3,
-  whole-disk raw claims require a fresh full-namespace zero-data verification.
-  Partitioned or uncertain media refuse, as do partition claims on NVMe in this
-  first slice. Filesystem writes still require their existing trusted mount
-  authority and the boot gate. No native writes without the owner's separate go.
-- Flush pools, seal admission, drain, then perform bounded normal shutdown.
-  Refuse clean power-off/restart unless confirmed, retiring the controller until
-  reboot. A returned ACPI power failure does not reactivate NVMe. After reporting
-  failure, Ctrl+Alt+Del's local power overlay offers explicit **Force off / Force
-  reboot** with an unsafe-shutdown warning, bypassing the storage checks. The
-  warning must be presented before force is selectable; userspace POWER rights
-  do not gain a force operation.
-
-Controller initialization on the PCI discovery already in the kernel: map BAR0,
-check CAP (page size, timeout, doorbell stride, command sets), disable and reset
-the controller, build the admin queue pair, enable, identify controller and the
-namespace, create one I/O queue pair, MSI-X completion like the VirtIO queues, a
-bounded request path under the existing block interface, PRP lists for transfers
-beyond two pages (npfs uses 64 KiB), and a normal shutdown notification before
-power-off or restart, so Pyxis does not add to the unsafe-shutdown count. Reads
-first; writes land last in this task, behind the boot option of decision 3, with
-the block interface's flush mapped to the NVMe flush command. The admin Get Log
-Page for SMART (data units, percentage used, temperature, spare) is read-only and
-lets the owner measure wear natively.
-
-QEMU's NVMe emulation (`-device nvme`) is the development target: 512-byte
-blocks, MDTS set to the ThinkPad's 64 pages, one and several queues. It does not
-reproduce the SK hynix controller's timing, power states or counters. Natively
-the first boot reads only: enumerate, identify, read the GPT and sectors, log
-page.
-
-Implemented contracts live in the [NVMe reference](../devices/nvme.md); the
-[qualification record](../development/experiments/nvme-task1/README.md) records
-the baseline, read-before-write checks, blank/foreign raw authority, clean power,
-the explicit force escape and exact native staging steps. No userspace ABI or
-dependency pin changes are needed.
-
-**After this task the owner can:** boot a prepared QEMU NVMe image and mount its
-installed npfs pool. The current installer still refuses its ESP partition claim
-on NVMe; partition-first coexistence remains task 3. On the first read-only
-ThinkPad boot the owner can see the internal disk, its GPT and SMART numbers,
-and compare reads with Linux, writing no user data.
+Owner decisions of 2026-10-11 that still bind later tasks: one active namespace
+per controller (multi-namespace is unsupported, never silently namespace 1);
+whole-disk raw claims on NVMe need a fresh full-namespace zero-data verification
+until task 3, and partition claims on NVMe stay refused until then.
 
 ### 2. FAT32 read and write for the ESP
 
-A FAT32 engine scoped to what the ESP needs, built from the installer's existing
-ESP writer and bounded reader (`esp.c`, `esp_read.c`) but reading any valid
-volume instead of one the installer made:
+**Shared dependency, moved 2026-10-11; not completed.**
+[Shared FAT32 volumes](fat32-volumes.md) owns the read/validation and incremental
+raw-write engine, then native mounted read-write files and sync/release. No
+duplicate FAT implementation task remains in coexistence. Keep partition claims,
+Pyxis-owned additive publication, no whole-ESP rewrite and no inferred adoption
+of externally created files. The editor separately admits confirmed owned spans
+of shared `limine.conf` under its accepted publication/fallback contract.
 
-- **Read:** any cluster size, one or two FATs, directories, long names including
-  the NT lowercase flags, checks for chain loops and bounds, the dirty flag and
-  FSInfo, and refusal rather than repair.
-- **Write, additive only:** create directories and files, extend and replace
-  Pyxis-owned files, allocate by searching the FAT, never touch an entry it did
-  not create. Pyxis chooses 8.3-compatible names where it can, so the long-name
-  writer covers only what is left.
-  The later mounted-backend/delta-editor task separately admits confirmed edits
-  of owned spans in an existing shared `limine.conf`; engine task 2 alone cannot
-  adopt an externally created file or infer ownership from its name.
-- **Crash order:** data clusters first, the chain next, both FATs in a fixed
-  order, FSInfo adjusted or marked unknown, the directory entry last, so a crash
-  leaves unreferenced clusters or a missing file, never one that names garbage.
-  There is no journal; leaked clusters are for Fedora's `fsck.fat` to reclaim,
-  and the engine never sets or clears the volume's dirty flag.
-- **Replacing a file:** write under a temporary name in the same directory,
-  then one 32-byte directory entry changes name, a single-sector update. A set of
-  three files is not atomic; an interrupted update leaves Pyxis unbootable and
-  Fedora unharmed, repaired by booting the live image and choosing Update, the
-  recovery the update already has.
+Data/FAT/directory publication requires durable dependency barriers, not only
+submission order. FAT copies and LFN/name changes can span sectors; no atomic
+rename, untorn-sector or corruption-free crash guarantee is claimed.
+Interrupted updates may need host FAT repair and the existing live-image recovery
+path. Multi-file publication remains non-atomic. The raw engine does not change
+the dirty bit; the shared proposal's mounted policy remains for owner decision.
 
-Validated on disposable FAT images in QEMU and on a USB stick, with host
-`fsck.fat`, `mtools` and Linux mounts reading what Pyxis wrote and Pyxis reading
-what they wrote, and byte comparison of everything outside the expected sectors.
-Reading the real ESP happens natively and read-only. No new test harness.
-
-**After this task the owner can:** list and read files on any FAT32 volume or the
-ThinkPad's real ESP from Pyxis, long names included, and have Pyxis add files to a
-scratch FAT image that Linux checks clean.
+**After that shared milestone the owner can:** inspect a supported FAT32 volume
+or the real ESP, then edit/sync authorized files through native capabilities,
+without first delivering coexistence installation.
 
 ### 3. Installer coexistence mode
 
@@ -371,7 +321,8 @@ needs none of this and stays first.
 - Resizing or moving Fedora's partitions from Pyxis, or any reuse of Fedora's
   space.
 - Mounting Fedora's data filesystems and Windows. Mounted FAT32 for ESP
-  configuration is now assigned to the installer/configuration proposal above.
+  configuration depends on the shared [FAT32 milestone](fat32-volumes.md); its
+  implementation still needs a separate assignment.
 - Secure Boot, a signed Limine or kernel and TPM measurement: it stays off.
 - Hibernate and suspend interaction with the shared disk.
 - Keeping Pyxis's pool partition number stable if Fedora tools renumber the table.

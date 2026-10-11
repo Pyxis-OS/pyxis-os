@@ -13,7 +13,9 @@ Trusted init receives a `terminal` creation service. Its CREATE right returns
 application input, application output, one attachment and a separate event
 handle, or no handles on failure. The normal session launcher does not delegate
 the service. An opted-in local multiplexer receives CREATE separately through trusted
-startup. Creation accepts 1–512 columns and 1–256 rows. Allocation and
+startup. An opted-in remote daemon retains CREATE and brokers terminal creation
+for mux; remote mux and its pane shells receive no creation service. Creation
+accepts 1–512 columns and 1–256 rows. Allocation and
 failure unwinding remain BSP-owned.
 
 The application input handle permits CONSOLE READ and SIZE, plus
@@ -40,7 +42,9 @@ or discarded, so sender closure cannot invalidate a pending transfer.
 Each session has 4 KiB of input and 64 KiB of output storage, including record
 headers. Transfers accept at most 4 KiB of bytes per call. These are per-session
 bounds, not a system-wide quota. The remote server separately limits admission
-to four concurrent sessions.
+to four connections, at most two requesting mux. Each mux connection tracks
+at most eight pane slots: incomplete creation occupies a slot, and every created
+group retains it until cleanup completion. This admission bound is not a physical-memory promise.
 
 Application reads retain the console timeout convention and return available
 short input. Empty live input blocks, subject to that timeout. Application
@@ -169,5 +173,6 @@ worker, which exclusively observes lwIP state. Shared per-task request storage
 bounds each wait at 32 interests without a new global waiter cap.
 
 The [remote server and host client](remote-terminal.md) combine these attachments
-with execution-group supervision. Resize, reconnection and new framebuffer
-routing remain outside that implementation.
+with execution-group supervision. Remote mux composes brokered pane sessions,
+while the daemon retains each group's cleanup ownership. Live remote resize,
+reconnection and new framebuffer routing remain outside that implementation.

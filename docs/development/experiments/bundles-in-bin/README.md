@@ -1,7 +1,7 @@
 # Unpacked bin bundles qualification
 
 Manual nested-KVM qualification on 2026-10-10 for
-[bundles in bin](../../../wip/bundles-in-bin.md). Native hardware has not been
+[bundles in bin](../../../userland/program-bundles.md#placement-in-bin). Native hardware has not been
 qualified. Local fixtures, image variants, JSON captures, screenshots and GDB
 logs remain in ignored `build/bin-*`; no test or benchmark infrastructure,
 fault-injection code or kernel log lines were added.

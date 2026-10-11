@@ -36,13 +36,13 @@ The outside-group executor and sibling-job-group pattern from #724's former
 first decision is removed from that milestone. Nested containment is the required
 later route for ordinary descendant execution, rather than requiring a broker to
 create an unrelated supervision lifetime for every job. The
-[remote-mux daemon pane broker](remote-multiplexer.md#accepted-route) could later
+[remote-mux daemon pane broker](remote-multiplexer.md#private-broker-and-cleanup) could later
 shrink once mux can create contained pane subgroups itself; its accepted current
 implementation plan and terminal/provisioning ownership are unchanged here.
 
 ## Required consumers
 
-- [Git CLI](git-cli-on-pyxis.md): subcommands and remote helpers that themselves
+- [Git CLI](git-on-pyxis.md#git-cli-restricted-profile): subcommands and remote helpers that themselves
   start children, beyond the direct no-descendant profile.
 - [Hosted Clang](hosted-clang.md): the driver launching tools such as LLD or
   external cc1. The accepted single-source compile plus separately invoked LLD

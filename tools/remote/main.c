@@ -44,6 +44,7 @@ static int stdout_flags = -1;
 struct client {
   int socket;
   bool machine;
+  bool multiplexer;
   bool ready;
   bool input_ended;
   bool closing;
@@ -296,7 +297,9 @@ static int frame_header(struct client *client)
     case REMOTE_FRESH_LINE: valid = !length; break;
     case REMOTE_TAB_WIDTH: valid = length == REMOTE_TAB_WIDTH_SIZE; break;
     case REMOTE_FINAL: valid = length == REMOTE_FINAL_SIZE; break;
-    case REMOTE_COMMAND_COMPLETE: valid = length == REMOTE_COMMAND_COMPLETE_SIZE; break;
+    case REMOTE_COMMAND_COMPLETE:
+      valid = !client->multiplexer && length == REMOTE_COMMAND_COMPLETE_SIZE;
+      break;
     }
   }
   if (!valid) {
@@ -319,6 +322,10 @@ static void flush_prompt_escape(struct client *client)
 
 static void interactive_output(struct client *client, unsigned char byte)
 {
+  if (client->multiplexer) {
+    presentation_data(&client->screen, &byte, 1);
+    return;
+  }
   static const unsigned char marker[] = "\x1b]133;B\a";
   if (!client->prompt_escape_length && byte == 27) {
     presentation_text_boundary(&client->screen);
@@ -348,7 +355,7 @@ static int present_frame(struct client *client)
     unsigned budget = 128;
     while (client->presented < length && budget-- &&
            buffer_space(&client->output) >= RENDER_BYTE_RESERVE &&
-           buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE) {
+           (client->multiplexer || buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE)) {
       interactive_output(client, payload[client->presented]);
       ++client->presented;
     }
@@ -373,8 +380,10 @@ static int present_frame(struct client *client)
       if (client->machine) {
         output_text(client, "{\"type\":\"fresh_line\"}\n");
       } else {
-        flush_prompt_escape(client);
-        transfer_fresh_line(client->transfer, &client->screen);
+        if (!client->multiplexer) {
+          flush_prompt_escape(client);
+          transfer_fresh_line(client->transfer, &client->screen);
+        }
         presentation_fresh_line(&client->screen);
       }
       break;
@@ -486,6 +495,9 @@ static int present_frame(struct client *client)
  * completion acknowledges a command, not consumption of queued host input. */
 static void note_input(struct client *client, unsigned char byte)
 {
+  if (client->multiplexer) {
+    return;
+  }
   bool empty_line = client->empty_prompt;
   client->empty_prompt = false;
   client->prompt_allowed = false;
@@ -530,7 +542,7 @@ static void paste_finish(struct client *client)
   char name[PASTE_NAME_CAPACITY];
   char path_quoted[PASTE_PATH_CAPACITY * 2 + 1];
   char name_quoted[PASTE_NAME_CAPACITY * 2 + 1];
-  bool candidate = client->paste_candidate && client->empty_prompt &&
+  bool candidate = !client->multiplexer && client->paste_candidate && client->empty_prompt &&
       transfer_idle(client->transfer) &&
       paste_file_path(client->paste, client->paste_length, client->drop_path, name) &&
       paste_shell_quote(client->drop_path, path_quoted, sizeof(path_quoted)) &&
@@ -586,7 +598,7 @@ static void flush_input_escape(struct client *client)
       queue_frame(client, REMOTE_INPUT, &newline, 1);
       client->empty_prompt = false;
       client->prompt_allowed = true;
-    } else if (transfer_active(client->transfer)) {
+    } else if (!client->multiplexer && transfer_active(client->transfer)) {
       for (size_t i = 0; i < client->input_escape_length; ++i) {
         transfer_input(client->transfer, &client->screen, &client->outgoing,
             client->input_escape[i], monotonic_ms());
@@ -641,7 +653,7 @@ static void input_byte(struct client *client, unsigned char byte)
     }
     return;
   }
-  if (byte != 27 && !client->input_escape_length &&
+  if (!client->multiplexer && byte != 27 && !client->input_escape_length &&
       transfer_input(client->transfer, &client->screen, &client->outgoing, byte, monotonic_ms())) {
     return;
   }
@@ -671,14 +683,16 @@ static void input_byte(struct client *client, unsigned char byte)
   } else if (length >= 3 && byte >= 0x40 && byte <= 0x7e) {
     if (length == 6 && !memcmp(escape, "\x1b[200~", 6)) {
       client->pasting = true;
-      client->paste_candidate = client->empty_prompt && !client->drop_confirmation &&
+      client->paste_candidate = !client->multiplexer && client->empty_prompt &&
+          !client->drop_confirmation &&
           transfer_idle(client->transfer);
-      client->paste_discard = client->drop_confirmation || transfer_active(client->transfer);
+      client->paste_discard = client->drop_confirmation ||
+          (!client->multiplexer && transfer_active(client->transfer));
       client->paste_length = client->paste_end_length = 0;
       client->input_escape_length = 0;
       return;
     }
-    if (client->drop_confirmation || transfer_active(client->transfer)) {
+    if (client->drop_confirmation || (!client->multiplexer && transfer_active(client->transfer))) {
       flush_input_escape(client);
       return;
     }
@@ -767,7 +781,7 @@ static int run_client(struct client *client)
       snprintf(client->diagnostic, sizeof(client->diagnostic), "invalid server payload");
       return 1;
     }
-    if (!client->machine && !client->closing) {
+    if (!client->machine && !client->multiplexer && !client->closing) {
       transfer_pump(client->transfer, &client->screen, &client->outgoing, monotonic_ms());
       if (transfer_failed(client->transfer)) {
         snprintf(client->diagnostic, sizeof(client->diagnostic),
@@ -786,7 +800,8 @@ static int run_client(struct client *client)
     bool can_read_input = client->ready && !client->rejected && !client->final &&
                           !client->input_ended && !client->closing &&
                           (client->machine || buffer_space(&client->output) >= RENDER_BYTE_RESERVE) &&
-                          buffer_space(&client->outgoing) >= (client->machine ? 8192 : TRANSFER_REPLY_RESERVE);
+                          buffer_space(&client->outgoing) >=
+                          (client->machine || client->multiplexer ? 8192 : TRANSFER_REPLY_RESERVE);
     bool can_read_socket = !client->final && client->received < client->frame_size;
     short socket_events = (can_read_socket ? POLLIN : 0) |
                           (!client->final && client->outgoing.length ? POLLOUT : 0);
@@ -798,8 +813,9 @@ static int run_client(struct client *client)
     /* A buffered DATA frame must make progress even with no fresh readiness. */
     int timeout = client->received == client->frame_size &&
                   buffer_space(&client->output) >= RENDER_BYTE_RESERVE &&
-                  (client->machine || buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE) ? 0 : -1;
-    if (!client->machine && !client->closing) {
+                  (client->machine || client->multiplexer ||
+                   buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE) ? 0 : -1;
+    if (!client->machine && !client->multiplexer && !client->closing) {
       int transfer_wait = transfer_timeout(client->transfer, monotonic_ms(),
           buffer_space(&client->output) >= RENDER_BYTE_RESERVE,
           buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE);
@@ -880,6 +896,7 @@ static unsigned dimension(const char *text, unsigned maximum)
 int main(int argc, char **argv)
 {
   bool machine = false;
+  bool multiplexer = false;
   const char *download_directory = NULL;
   const char *listen_name = NULL;
   const char *beacon_address = NULL;
@@ -890,6 +907,9 @@ int main(int argc, char **argv)
   for (; argument < argc && argv[argument][0] == '-'; ++argument) {
     if (!strcmp(argv[argument], "--machine")) {
       machine = true;
+    } else if (!strcmp(argv[argument], "--mux")) {
+      multiplexer = true;
+      options |= REMOTE_OPTION_MULTIPLEXER;
     } else if (!strcmp(argv[argument], "--listen") && argument + 1 < argc) {
       listen_name = argv[++argument];
     } else if (!strcmp(argv[argument], "--beacon-address") && argument + 1 < argc) {
@@ -916,10 +936,11 @@ int main(int argc, char **argv)
     }
   }
   if (argc - argument != 2 || !dimension(argv[argument + 1], 65535) ||
-      (options && !machine) || (download_directory && machine) ||
+      (machine && multiplexer) || ((options & REMOTE_OPTION_NO_SHELL_ECHO) && !machine) ||
+      (download_directory && (machine || multiplexer)) ||
       (listen_name && !remote_beacon_name_length(listen_name)) ||
       (beacon_address && !listen_name)) {
-    fprintf(stderr, "usage: pyxis-remote [--machine [--no-shell-echo]] [--columns N] [--rows N] [--download-dir DIR] "
+    fprintf(stderr, "usage: pyxis-remote [--machine [--no-shell-echo] | --mux] [--columns N] [--rows N] [--download-dir DIR] "
             "[--listen NAME [--beacon-address IPv4]] HOST PORT\n");
     return 1;
   }
@@ -991,23 +1012,27 @@ int main(int argc, char **argv)
   unsigned char outgoing[BUFFER_CAPACITY];
   unsigned char output[BUFFER_CAPACITY];
   struct client client = {
-    .socket = socket_fd, .machine = machine, .frame_size = REMOTE_HEADER_SIZE,
-    .prompt_allowed = true,
+    .socket = socket_fd, .machine = machine, .multiplexer = multiplexer,
+    .frame_size = REMOTE_HEADER_SIZE,
+    .prompt_allowed = !multiplexer,
     .outgoing = {.data = outgoing, .capacity = sizeof(outgoing)},
     .output = {.data = output, .capacity = sizeof(output)}
   };
   client.screen.columns = columns;
   client.screen.rows = rows;
   client.screen.output = &client.output;
+  client.screen.discard_osc = multiplexer;
   if (!machine) {
-    client.transfer = transfer_create(download_directory, &interrupted);
-    if (!client.transfer) {
-      int failure = errno;
-      restore_terminal();
-      disconnect_socket(socket_fd, false);
-      errno = failure;
-      perror("pyxis-remote: file transfer setup");
-      return 1;
+    if (!multiplexer) {
+      client.transfer = transfer_create(download_directory, &interrupted);
+      if (!client.transfer) {
+        int failure = errno;
+        restore_terminal();
+        disconnect_socket(socket_fd, false);
+        errno = failure;
+        perror("pyxis-remote: file transfer setup");
+        return 1;
+      }
     }
     presentation_begin(&client.screen);
     output_text(&client, "\x1b[?2004h");

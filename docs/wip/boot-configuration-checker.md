@@ -1,8 +1,7 @@
 # Boot configuration checker
 
-Status: **owner idea, 2026-10-06, deferred until the
-[system layout](../userland/system-layout.md) milestone was done.** Not yet
-agreed; nothing here authorizes code. In the [Asterism](spaces.md#asterism)
+Status: **owner idea, 2026-10-06.** The [system layout](../userland/system-layout.md)
+milestone it waited for is done. Not yet agreed; nothing here authorizes code. In the [Asterism](spaces.md#asterism)
 direction this checker is the validation half of **Polaris**, which later also
 applies configuration changes to the Continuum supervisor.
 

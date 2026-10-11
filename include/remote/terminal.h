@@ -28,7 +28,8 @@
 #define REMOTE_COMMAND_COMPLETE 22u
 
 #define REMOTE_OPTION_NO_SHELL_ECHO (1u << 0)
-#define REMOTE_OPTIONS REMOTE_OPTION_NO_SHELL_ECHO
+#define REMOTE_OPTION_MULTIPLEXER (1u << 1)
+#define REMOTE_OPTIONS (REMOTE_OPTION_NO_SHELL_ECHO | REMOTE_OPTION_MULTIPLEXER)
 
 #define REMOTE_COMPLETION_EXITED 1u
 #define REMOTE_COMPLETION_FAULTED 2u
@@ -79,6 +80,8 @@ static inline void remote_encode_u64(unsigned char *bytes, uint64_t value)
 
 /* HELLO: columns, rows, options (u32). Unknown option bits are rejected.
  * NO_SHELL_ECHO suppresses only the root shell's line-editor presentation.
+ * MULTIPLEXER requests the configured interactive mux, with no fallback shell.
+ * Mux streams contain composed cells and FINAL, not COMMAND_COMPLETE records.
  * INPUT: 1..4096 bytes. END_INPUT/CLOSE: empty.
  * READY/FRESH_LINE: empty. OUTPUT: 1..4096 bytes. TAB_WIDTH: u64, 1..32.
  * ERROR: code (u32). FINAL: cause, process reason, exit status, drain (u32).

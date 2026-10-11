@@ -15,8 +15,10 @@ struct presentation {
   unsigned y;
   unsigned tab_width;
   bool wrap_pending;
+  bool discard_osc;
   enum { PRESENT_TEXT, PRESENT_ESCAPE, PRESENT_CSI_ENTRY,
-         PRESENT_CSI, PRESENT_CSI_IGNORE } state;
+         PRESENT_CSI, PRESENT_CSI_IGNORE, PRESENT_OSC,
+         PRESENT_OSC_ESCAPE } state;
   uint16_t parameters[TERMINAL_CSI_PARAMETERS];
   uint16_t parameters_present;
   unsigned parameter_index;

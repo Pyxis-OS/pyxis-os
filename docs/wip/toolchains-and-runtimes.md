@@ -3,9 +3,10 @@
 Status: LLVM/Clang is the chosen toolchain direction as of 2026-09-29, including
 Clang as the first large hosted C toolchain. Since the
 [host milestone](../development/llvm-toolchain.md), Pyxis builds with its Clang and LLD on the
-host and GCC/binutils are retired; no hosted LLVM support is implemented. The boundaries
-below guide a pinned investigation, not an implementation assignment or a fixed
-schedule. Other language runtimes remain future candidates.
+host and GCC/binutils are retired. No hosted compiler runs yet; the native Support,
+C++ and libc prerequisites are delivered ([hosted Clang](hosted-clang.md)). Other
+language runtimes below are future candidates, not implementation assignments or a
+fixed schedule.
 
 ## Distinct results
 
@@ -37,23 +38,18 @@ pinned probe:
    fork carries the Pyxis target and driver contract, compiler-rt builtins replace
    libgcc, and the owner-built container supplies the toolchain to CI.
 2. **Native C++ and OS prerequisites.** Clang is a C++ application even when it
-   compiles C. The userspace part completed on 2026-10-08:
+   compiles C. Completed 2026-10-08:
    [C++ in userspace](../development/cxx-userspace.md) puts libc++, libc++abi and
-   libunwind in the SDK, without threads or localization. Still open: the further
-   runtime/library subset Clang requires, and useful native file, process,
-   memory, synchronization and thread contracts, established through bounded
-   consumers. The [shared-process thread investigation](threads.md) records VM,
-   lifetime, TLS and libc/C++ prerequisites and accepted native direction;
-   task 1's process ownership/retirement split is delivered for review, with
-   [matched qualification](../development/experiments/threads-task1/README.md).
-   Public threads and runtime integration remain later tasks. Do not bury missing
-   OS behavior in compiler-specific stubs.
-3. **Clang hosted on Pyxis.** The [hosted-Clang investigation](hosted-clang.md)
-   records cross-build failures, process/runtime gaps, resource proxies and
-   proposed sequencing. Cross-build the selected compiler, linker and tools
-   to run in the guest. First completion: compile, link and run one small C program
-   entirely inside Pyxis. Rebuilding LLVM itself in the guest is a later result,
-   with its own build tools, resource requirements and dependencies.
+   libunwind in the SDK. The reached C-only locale, wide FILE and entropy closure
+   and the libc operations are delivered under [hosted Clang](hosted-clang.md)
+   tasks 2-3. Still open: real synchronization, TLS and threads, tracked by the
+   [shared-process thread investigation](threads.md#delivery-gates). Do not bury
+   missing OS behavior in compiler-specific stubs.
+3. **Clang hosted on Pyxis.** [Hosted Clang](hosted-clang.md) holds the accepted
+   decisions, remaining tasks, resource proxies and process boundary. First
+   completion: compile, link and run one small C program entirely inside Pyxis.
+   Rebuilding LLVM itself in the guest is a later result, with its own build tools,
+   resource requirements and dependencies.
 
 Objects and static archives stay ELF. Since milestone 1, LLD writes
 [P1F executables](../development/llvm-toolchain.md#p1f-output) directly and
@@ -64,10 +60,6 @@ The [Clang toolchain guide](https://clang.llvm.org/docs/Toolchain.html) separate
 compiler, assembler, linker and runtime pieces. Cross-compilation and LLVM hosting
 have different requirements: a host-running compiler targeting Pyxis does not
 prove that LLVM's own OS-facing support library can run there.
-
-The [hosted-Clang probe](hosted-clang.md) records missing native contracts,
-dependency/runtime gaps and measured resource proxies. Select one implementation
-task after owner review; the investigation does not start all prerequisites.
 
 The owner's approximately 1,600-line, self-hosted C-subset compiler is a possible
 later consumer for a guest compiler-to-compiler workflow. Its requirements and
