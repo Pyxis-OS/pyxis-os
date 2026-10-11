@@ -14,13 +14,14 @@ is merged in [#700](https://git.internal/PyxisOS/pyxis-os/pulls/700); its
 [qualification](../development/experiments/threads-task4/README.md) separates
 nested-QEMU evidence from the owner-run native A/B. The owner accepts the BSP
 MEMORY latency follow-up; bounded string capture and its native rerun are
-complete. The owner-assigned IPC copy-phase follow-up is implemented on this
-branch: descriptor capture/payload prevalidation share one short lease, and
+complete. The IPC copy-phase follow-up is merged in
+[#704](https://git.internal/PyxisOS/pyxis-os/pulls/704): descriptor capture/payload prevalidation share one short lease, and
 RECEIVE reuses its publication lease. Inspected CALL lease pairs fall from 15
 to 11 and SEND admission from 4 to 3; no lease spans growth or waits. Its
 [qualification](../development/experiments/ipc-copy-leases/README.md) records
 1/4-CPU inspection and nested/native A/B: SEND64 saves 13 ns/message; CALL cost
-remains recorded in technical debt. Task 5 stays queued for its proposal. The remaining proposal
+remains recorded in technical debt, with profiling parked until task 8.
+Task 5 is owner-assigned (2026-10-11); its accepted details are below. The remaining proposal
 originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
@@ -46,6 +47,30 @@ is independent.
 | [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
 
 ## Native lifecycle
+
+**Task 5 accepted and assigned, 2026-10-11; not yet implemented.**
+
+1. Guarded backing uses MEMORY MANAGE on the calling process: eager RW/NX
+   usable pages and one reserved unmapped lower guard. It shares private-memory
+   ownership records with ordinary allocation, returning a process-owned opaque
+   generational identity plus full reserved base/span. Whole identity release
+   refuses BUSY while registered stack/FS backing is live or retiring, until
+   native completion. Task 5 pins the whole usable extent; stack and FS records
+   are distinct. The [accepted reservation family](go-runtime.md#accepted-private-vm-reservationcommit-contract)
+   is not assigned: RESERVE followed by suffix COMMIT will later subsume this
+   eager convenience operation under the same identity/record/authority model,
+   without a competing reservation owner. Ordinary ALLOCATE/RELEASE stay intact;
+   task 5 does not implement general COMMIT/DECOMMIT or sparse backing.
+2. The current thread may bind its registered FS context once; CREATE supplies
+   sibling FS before entry. Existing programs retain FS=0; rebinding returns
+   BUSY. Libc TLS layout/startup remains task 7, coordinated separately.
+3. Native completion distinguishes ordinary EXIT's machine-word value from
+   forced process stop. It is waitable and repeatable; closing the observer never
+   kills the thread. Publish only after retirement and context-pin release.
+
+Start with process membership/retirement accounting preserving one-task behavior,
+then enable native CREATE/EXIT/completion and sibling entry. No pthread/C11
+kernel API, address parking or ordinary thread-safe libc is part of task 5.
 
 A native thread-management grant applies to the calling process, like MEMORY;
 transferring it confers no control over the sender's process. CREATE supplies an
@@ -270,7 +295,7 @@ merely completion of task 2.
 4. [x] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task. See [qualification](../development/experiments/threads-task4/README.md).
 
    Owner can inspect safe copy/mutation/retirement admission and matched ordinary-workload costs.
-5. [ ] **Native CREATE/EXIT/completion.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only.
+5. [ ] **Native CREATE/EXIT/completion — owner-assigned 2026-10-11.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only.
 
    Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
 6. [ ] **Address WAIT/WAKE.** Mapping-incarnation keys, deadlines and wake/stop/unmap races.
@@ -315,9 +340,8 @@ The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
 does not assign later implementation; tasks 2 and 3 were separately assigned.
-Task 4 and its IPC follow-up are separately owner-assigned. The owner queued task
-5 for after the follow-up PR and native A/B: propose its concrete scope and open
-decisions, then stop for owner review before implementation.
+Task 4 and its IPC follow-up are merged. The owner accepted the task 5 details
+above and assigned implementation on 2026-10-11; later gates remain separate.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK
