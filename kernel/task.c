@@ -723,9 +723,8 @@ static void expire_timed_waits(struct timer_clock *clock)
   unlock_queues();
 }
 
-static void cancel_expired_address_waits(void)
+static void cancel_expired_address_waits(struct scheduler *scheduler)
 {
-  struct scheduler *scheduler = local_scheduler();
   /* Only this CPU edits the list; IF=0 keeps ordinary passes lock-free here. */
   if (!scheduler->expired_address_waits) {
     return;
@@ -1403,7 +1402,7 @@ void kernel_task_yield_if_runnable(void)
   bool idle_reported = false;
   for (;;) {
     task_timer_service();
-    cancel_expired_address_waits();
+    cancel_expired_address_waits(scheduler);
     if (cpu_index == 0) {
       reap_completed();
       object_reap();
