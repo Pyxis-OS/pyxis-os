@@ -1,6 +1,6 @@
 # Pyxis beside Fedora on the internal NVMe
 
-Status: **proposal; nothing is implemented and no task is assigned.** The owner
+Status: **task 1 assigned to Codex alpha, 2026-10-11; implementation in progress.** The owner
 accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
 decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
 ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
@@ -163,7 +163,28 @@ firmware menu.
 Each task ends with a PR and, where it can, QEMU qualification; the owner goes
 ahead task by task.
 
-### 1. NVMe driver
+### 1. NVMe driver — assigned 2026-10-11
+
+- [ ] Implement and qualify the driver in QEMU; native qualification goes through
+  the orchestrator and Luna, read-only first.
+
+Task-1 decisions accepted by the owner on 2026-10-11:
+
+- Prepare every observed controller independently, supporting exactly one active
+  namespace per controller. Report multi-namespace controllers as unsupported;
+  never silently select namespace 1. Existing GUID selection and boot IDs remain.
+- Enforce `nvme.write=1` in the kernel; absent means read-only. Until task 3,
+  whole-disk raw claims require a fresh full-namespace zero-data verification.
+  Partitioned or uncertain media refuse, as do partition claims on NVMe in this
+  first slice. Filesystem writes still require their existing trusted mount
+  authority and the boot gate. No native writes without the owner's separate go.
+- Flush pools, seal admission, drain, then perform bounded normal shutdown.
+  Refuse clean power-off/restart unless confirmed, retiring the controller until
+  reboot. A returned ACPI power failure does not reactivate NVMe. After reporting
+  failure, Ctrl+Alt+Del's local power overlay offers explicit **Force off / Force
+  reboot** with an unsafe-shutdown warning, bypassing the storage checks. The
+  warning must be presented before force is selectable; userspace POWER rights
+  do not gain a force operation.
 
 Controller initialization on the PCI discovery already in the kernel: map BAR0,
 check CAP (page size, timeout, doorbell stride, command sets), disable and reset
