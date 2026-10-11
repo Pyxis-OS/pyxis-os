@@ -2,6 +2,7 @@
 #include <arch/cpu.h>
 #include <arch/ps2.h>
 #include <arch/smp.h>
+#include <kernel/boot/options.h>
 #include <kernel/input.h>
 #include <kernel/input/touchpad.h>
 #include <pointer-synthetic-config.h>
@@ -653,7 +654,9 @@ void input_pointer_drain(void)
     }
   }
   attach_ps2_pointer();
-  touchpad_service(arch_monotonic_ns());
+  if (touchpad_initialized && boot_options_get()->ps2_synaptics_diagnose) {
+    touchpad_service(arch_monotonic_ns());
+  }
 #if POINTER_SYNTHETIC_ENABLED
   drained_physical_buttons = 0;
 #endif
