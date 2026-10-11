@@ -42,7 +42,7 @@ which remains a later optional task.
 | Writable provider | Current HTTPS publishes read-only snapshots. Provider OPEN returns one FILE; FILE has READ/WRITE, no commit control. | Shared HTTP body/control/response grants; its streamed response replacement is accepted, not implemented. |
 | Prepared handoff | Endpoint CALL replies already transfer capabilities, but the shell has no prepared-request variables/controls. | Shared HTTP shell bindings and generic libc/Lua controls, returning real grants. |
 | Lua/TLS boundary | The Lua port supplies file I/O and `pyxis`; TLS is already isolated in the HTTPS provider. | Keep that boundary. No Lua HTTPS binding, application HTTP library dependency or crypto-owner integration task. |
-| Command output | `pyxis.run` inherits current streams and waits; changing Lua `io.output` does not redirect child stdout. No capture/deadline option exists. | Native launch with explicit FILE streams, result/deadline observation, capped tool results and cleanup. No `io.popen` or fake `os.execute`. |
+| Command output | `pyxis.run` inherits current streams and waits; changing Lua `io.output` does not redirect child stdout. No capture/deadline option exists. | [Shared command execution](native-command-execution.md) supplies selected streams, result/deadline observation and cleanup; harness result budgets remain consumer policy. |
 
 Existing [TLS](../userland/https.md) verifies chain, DNS name and dates with
 explicit random/clock/TCP grants and public/custom trust roots. Keep that policy.
@@ -202,28 +202,21 @@ write/command tools can overwrite/delete project data and make connections under
 delegated network authority. This is the exposure the owner chooses, not a new
 destination sandbox. Keep harness code/resources outside the writable project.
 
-First command capture uses separate private RAM-backed stdout/stderr files and
-closed/absent stdin. Also omit named console input/output, keyboard/pointer,
-display and terminal-service grants so the child cannot bypass captured streams.
-Preserve ordinary `pyxis.run` behavior separately. Separate files avoid stream offsets overwriting
-each other; chronology between streams is not promised. Observe the child while
-it runs, inspect output size, stop it at a proposed 1 MiB per-stream trigger or
-deadline, and return capped output with truncation and actual exit/fault/stop
-status. The size trigger is polled, **not a hard backing quota**; fast output can
-overshoot and physical exhaustion can still fail. No descendant launch grant
-means a direct child cannot leave launched descendants holding capture files.
-Launch that child through a fresh [execution group](../interfaces/execution-groups.md)
-and seal its admission. The harness holds the sole CONTROL grant: its closure on
-exit, fault or forced stop terminates the group even when polling has disappeared.
-Closing a process observer alone would not stop a child. Termination requests do
-not fake completion: observe actual process/group cleanup and release captures
-afterward; published HOST work can delay cleanup without a fixed bound.
+The former task 1e's reusable launch/capture delivery moves to
+[native command execution](native-command-execution.md) on 2026-10-11; this is
+not completion. Keep the accepted harness profile: it remains an ungrouped
+trusted coordinator with sole CONTROL of each sealed command group, private
+created-then-unlinked RAM FILE captures, absent stdin, no descendant launcher
+or named console/input/display/terminal bypass grants and no credentials.
+Separate stdout/stderr have no chronology guarantee. Preserve the proposed
+1 MiB per-stream polled trigger (not a hard backing quota), capped results,
+actual exit/fault/stop observation and cleanup before releasing captures;
+published HOST work can delay cleanup without a fixed bound. Closing an observer
+alone never stops a child. Ordinary `pyxis.run` remains separate.
 
-Pipes have bounded buffers but currently lack deadline/try reads and readiness
-integration; draining two blocking streams can deadlock, and silent commands can
-block forever. Pipe/event capture and descendant tooling are later native
-contracts if tools need shell pipelines. Do not sneak them into
-the first Lua harness or simulate POSIX process/signals.
+Native pipes now have try-I/O and readiness; draining two blocking streams can
+still deadlock. The shared milestone owns pipeline/event pumping. It does not
+expand the first harness to pipelines, descendant tooling or shell syntax.
 
 Qualification uses manual local HTTP/HTTPS fixtures first: header/body framing,
 error bodies, rejection/partial transfers, a response beyond 30 s, timeout without
@@ -250,12 +243,16 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
   at the recorded SHA-256, with license/provenance, object/null handling,
   bounded parsing and schema validation.
   **After this task, the owner can:** construct and decode Messages/tool data locally without API spending.
-- **1e: native command capture.** Add explicit stream/grant selection, per-command
-  groups, deadlines, output triggers, result caps and retirement; exercise silent,
-  failing, noisy and denied commands in QEMU/GDB, with no provider calls.
-  **After this task, the owner can:** capture a native command's stdout/stderr and real completion for a tool result.
+- **Shared dependency, former 1e (moved, not completed):** consume
+  [native command execution](native-command-execution.md)'s trusted-coordinator
+  core and private FILE capture/deadline profile. No duplicated launch/capture
+  implementation task is owned by the harness; its narrow grants and budgets
+  remain as above.
+  **After that milestone the owner can:** capture a native command's stdout/stderr
+  and real completion before implementing a Claude tool loop.
 - **1f: Lua harness loop over provider files.** Implement the four tools and
   validated tool-use/result exchange using file I/O and prepared request controls,
+  consuming the shared command milestone under the accepted harness profile,
   private key-file provisioning and trusted native header preparation under
   accepted decision 2, bounded context, explicit per-run settings, end-of-run per-request and total
   token usage, status reporting and deliberate stop behavior. A manual small

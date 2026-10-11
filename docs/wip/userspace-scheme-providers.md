@@ -115,6 +115,11 @@ separate owner assignment. The motivating workflow is to log in, extract a token
 with jq, and prepare another request with it, through private credential
 preparation rather than an ambient header store.
 
+The shared [native command execution](native-command-execution.md) milestone
+supplies selected producer/consumer streams and per-stage results/cleanup. The
+HTTP redirection coordinator still owns the accepted rule to commit only after
+every body producer succeeds; ordinary pipeline last-stage status is insufficient.
+
 ## Future response cache
 
 A later userspace cache may retain complete responses for a limited time and use

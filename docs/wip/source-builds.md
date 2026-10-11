@@ -64,6 +64,15 @@ than throwaway work.
   compares a restricted Git CLI with a native libgit2 fetch command, records
   the investigated SDK/filesystem gaps, and tracks the accepted route and its
   libc prerequisites for owner review.
+- **Running recipes.** [Native command execution](native-command-execution.md)
+  supplies argv launch, selected streams, capture/deadlines, pipelines and actual
+  result/cleanup for Lua and the ports runner, replacing its host
+  `os.execute`/`io.popen` backend. This shared milestone can deliver independently
+  of source builds. Native recipe adaptation, hosted build tools and selected
+  source/build/SDK authority remain runner work; tools such as make that launch
+  children require [nested execution groups](nested-execution-groups.md), a parked
+  required direction. Running real ports recipes on Pyxis depends on that gate.
+  No POSIX shell is implied.
 - **Writing `bin://`.** Today only the installer writes it, and spaces receive it
   read-only. A builder needs a staged directory, verification and a switch, like
   [system updates](../userland/system-updates.md), with new authority to do so.

@@ -114,6 +114,10 @@ nonzero values. There is no descendant supervision: shell Ctrl+C stops Lua,
 and a process Lua launched may outlive it. Remote execution-group lifetime
 still applies to group members.
 
+The proposed [shared command milestone](../wip/native-command-execution.md) adds
+opt-in selected-stream capture, deadlines and supervised pipelines; it does not
+change the implemented ordinary `pyxis.run` contract above.
+
 `pyxis.dir(path)` returns an array of entries with `name` and `kind` (`file` or
 `directory`), in native enumeration order. It does not add metadata, sorting or
 a directory snapshot. `pyxis.sha256(path)` returns a lowercase 64-character
