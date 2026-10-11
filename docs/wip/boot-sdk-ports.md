@@ -33,6 +33,10 @@ only; ZIP defaults accepted in #639, delivery tasks need separate go-aheads.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
+[Go runtime investigation](go-runtime.md): Codex epsilon (2026-10-11), docs-only
+refresh against merged threads tasks 1–4. Go follows hosted Clang; native VM
+reservation and Go runtime implementation need separate owner go-aheads.
+
 [Hosted Clang and LLD](hosted-clang.md): Codex (2026-10-11), accepted first
 single-source compile and separate link; Support/SDK/libc planning proceeds in
 parallel with delta's native threads gates 5–8. Implementation needs an owner go.
@@ -58,13 +62,13 @@ is merged.
 [Shell reverse history search](../userland/shell.md#commands-and-quoting): Codex
 alpha (2026-10-10), owner-assigned Ctrl+R in the shared line editor.
 
-[Threads task 3](threads.md#shared-capability-and-vm-ownership): Codex delta
-(2026-10-10), shared-table delivery, growth, reservations and owned inputs; still
-one user task. Tasks 1 and 2 are merged; later gates need separate assignment.
-
 [ThinkPad pointer input quality](pointer-input-quality.md): Codex (2026-10-10),
 accepted USB report mice and Synaptics absolute mode and palm-rejection plan;
 implementation tasks need a separate go.
+
+[Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
+lifecycle, parking, TLS and libc delivery. Tasks 1–4 are merged; each later task
+retains its separate owner-assignment gate.
 
 ## Open
 
