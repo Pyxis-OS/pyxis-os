@@ -14,11 +14,13 @@
 #define REMOTE_ERROR_SIZE 4u
 #define REMOTE_FINAL_SIZE 16u
 #define REMOTE_COMMAND_COMPLETE_SIZE 16u
+#define REMOTE_GEOMETRY_SIZE 16u
 
 #define REMOTE_HELLO 1u
 #define REMOTE_INPUT 2u
 #define REMOTE_END_INPUT 3u
 #define REMOTE_CLOSE 4u
+#define REMOTE_RESIZE 5u
 #define REMOTE_READY 16u
 #define REMOTE_OUTPUT 17u
 #define REMOTE_FRESH_LINE 18u
@@ -26,10 +28,12 @@
 #define REMOTE_ERROR 20u
 #define REMOTE_FINAL 21u
 #define REMOTE_COMMAND_COMPLETE 22u
+#define REMOTE_GEOMETRY 23u
 
 #define REMOTE_OPTION_NO_SHELL_ECHO (1u << 0)
 #define REMOTE_OPTION_MULTIPLEXER (1u << 1)
-#define REMOTE_OPTIONS (REMOTE_OPTION_NO_SHELL_ECHO | REMOTE_OPTION_MULTIPLEXER)
+#define REMOTE_OPTION_RESIZE (1u << 2)
+#define REMOTE_OPTIONS (REMOTE_OPTION_NO_SHELL_ECHO | REMOTE_OPTION_MULTIPLEXER | REMOTE_OPTION_RESIZE)
 
 #define REMOTE_COMPLETION_EXITED 1u
 #define REMOTE_COMPLETION_FAULTED 2u
@@ -82,6 +86,13 @@ static inline void remote_encode_u64(unsigned char *bytes, uint64_t value)
  * NO_SHELL_ECHO suppresses only the root shell's line-editor presentation.
  * MULTIPLEXER requests the configured interactive mux, with no fallback shell.
  * Mux streams contain composed cells and FINAL, not COMMAND_COMPLETE records.
+ * RESIZE is negotiated only with MULTIPLEXER. READY is followed by GEOMETRY
+ * with id 0 before any terminal records. RESIZE/GEOMETRY: request id (u64),
+ * columns, rows (u32); subsequent ids are nonzero and strictly increasing.
+ * One request may be outstanding; the client coalesces its latest desired size.
+ * GEOMETRY confirms successful outer resize, not pane redraw or host display.
+ * Finish the current frame, apply resize, then send GEOMETRY before draining
+ * further terminal records. Native queued bytes and partial parser state survive.
  * INPUT: 1..4096 bytes. END_INPUT/CLOSE: empty.
  * READY/FRESH_LINE: empty. OUTPUT: 1..4096 bytes. TAB_WIDTH: u64, 1..32.
  * ERROR: code (u32). FINAL: cause, process reason, exit status, drain (u32).
