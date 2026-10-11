@@ -11,7 +11,8 @@ FAT32_ARCHIVE := build/fat32-sdk/libfat32-read.a
 .PHONY: all
 all: $(NPFS_ARCHIVE) $(FAT32_ARCHIVE)
 
-$(FAT32_ARCHIVE): $(wildcard fs/fat32/*.c fs/fat32/*.h) fs/include/pyxis_fs/fat32.h fs/Makefile scripts/npfs-sdk.mk $(SDK)/share/pyxis.mk build/npfs-sdk/.config
+# The shared build owns dependency files, including exported SDK headers.
+$(FAT32_ARCHIVE): FORCE build/npfs-sdk/.config
 	$(MAKE) -C fs SOURCE=$(abspath fs) BUILD=$(abspath build/fat32-sdk) \
 	  HOST_CC="$(CC)" HOST_AR="$(AR)" CPPFLAGS="$(PYXIS_CPPFLAGS)" CFLAGS="$(PYXIS_CFLAGS)" fat32-read
 
