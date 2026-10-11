@@ -92,7 +92,7 @@ struct scheduler {
   /* queues_locked. Load is queued tasks plus one while a task occupies the CPU. */
   size_t queued;
   bool running;
-  struct task_wait *expired_address_waits; /* queues_locked; not yet notified. */
+  struct task_wait *expired_address_waits; /* Local CPU writes; queues_locked, not notified. */
 };
 
 static struct scheduler *schedulers;
@@ -726,6 +726,10 @@ static void expire_timed_waits(struct timer_clock *clock)
 static void cancel_expired_address_waits(void)
 {
   struct scheduler *scheduler = local_scheduler();
+  /* Only this CPU edits the list; IF=0 keeps ordinary passes lock-free here. */
+  if (!scheduler->expired_address_waits) {
+    return;
+  }
   KASSERT(!scheduler->current_task);
   for (;;) {
     lock_queues();
