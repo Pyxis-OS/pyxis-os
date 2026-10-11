@@ -3119,6 +3119,24 @@ static enum usb_result interrupt_result(struct usb_host_interrupt *interrupt)
   return interrupt->result != USB_OK ? interrupt->result : ready ? USB_OK : USB_IO;
 }
 
+enum usb_result usb_host_hid_interrupt_length(struct usb_host_interrupt *interrupt, size_t bytes)
+{
+  if (!interrupt || !interrupt->device) {
+    return USB_INVALID;
+  }
+  assert_device_owner(interrupt->device);
+  if (!interrupt->configured || interrupt->started || interrupt->kind != USB_INTERRUPT_HID ||
+      !bytes || bytes > USB_HID_INTERRUPT_BYTES) {
+    return USB_INVALID;
+  }
+  enum usb_result result = interrupt_result(interrupt);
+  if (result != USB_OK) {
+    return result;
+  }
+  interrupt->receive_bytes = bytes;
+  return USB_OK;
+}
+
 enum usb_result usb_host_interrupt_start(struct usb_host_interrupt *interrupt)
 {
   if (!interrupt || !interrupt->device) {
