@@ -219,11 +219,12 @@ Wheel −128 is outside both descriptors' declared −127..127 range: it remains
 rejected (reason 3, Logitech field 18 / ASUS field 10). Whether native hardware
 actually emits that value is unknown. No fault was injected into the kernel.
 
-The diagnostic follow-up rebases userland #214 onto main `2228716`: published
-head `81033abac6573722fdc001b1a281272aa2f4323d`, ports unchanged at `28b5a3bc`.
-The parent default image rebuild passes with those exact pins. This dependency
-refresh includes merged libc work; the earlier flood results retain their stated
-revisions and are not re-labelled as measurements of the refreshed initrd.
+The diagnostic follow-up retains parent main's userland pin `a84259c0`
+(which contains userland main `2228716` plus its published math follow-up):
+userland #214 head `2628293d02e6734ea14f4164b15f0862a4ee5719`, ports unchanged
+at `28b5a3bc`. This prevents rolling back the merged parent's libc inputs.
+The earlier flood results retain their stated revisions and are not re-labelled
+as measurements of the refreshed initrd.
 
 ### One diagnostic retest through luna
 
