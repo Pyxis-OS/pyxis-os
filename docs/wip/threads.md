@@ -7,7 +7,7 @@ process remains. Task 2, admitted call references and CLOSE, is merged in
 [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
 [qualification](../development/experiments/threads-task2/README.md) records its
 build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
-owner-assigned and implemented on this branch;
+merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
 [qualification](../development/experiments/threads-task3/README.md) records the
 matched comparison and 1/4-CPU inspection. The
 remaining proposal originally inspected Pyxis `4236efc7`

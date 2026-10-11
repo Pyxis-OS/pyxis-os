@@ -51,8 +51,9 @@ the child. See [processes](../interfaces/processes.md) and [script launch](scrip
 
 C startup initializes the named resource snapshot before calling
 `main(argc, argv)`. Arguments are writable; startup metadata and the initial
-environment are read-only. Resource accessors borrow handles. `getenv` reads the
-immutable environment; environment mutation is not implemented. Native startup,
+environment snapshot are read-only. Resource accessors borrow handles. Libc copies the
+snapshot into mutable process-local storage, so `getenv`, `setenv` and `unsetenv`
+act on that copy ([process state](process-state.md)). Native startup,
 image loading and C entry/exit are described in [userspace](../kernel/userspace.md).
 
 ## Libraries and terminal use
@@ -86,7 +87,8 @@ separate interfaces; global space navigation belongs to the session.
 [Pipelines and redirection](shell-streams.md), background commands and
 [Ctrl+C interruption](foreground-interruption.md) are implemented. There is no
 expansion or job control. Foreground terminal handoff relies on cooperating
-applications, without general reader/output ownership arbitration. History and
+applications, without general reader/output ownership arbitration. Saved history,
+Up/Down recall and Ctrl+R search are implemented ([shell](shell.md)); only
 long-line viewports remain deferred. On a single CPU, Caelum logs share the TTY
 and can disrupt editing. Runtime tradeoffs, including non-atomic stdio append,
 are tracked in [technical debt](../technical-debt.md).

@@ -262,13 +262,13 @@ destination directory. Directory moves and cross-filesystem copying are
 unsupported. It continues after a failed source and reports failure without
 deleting the source or destination itself. See [mv](mv.md).
 
-[`cp [--] source-file... destination`](cp.md) copies files within or across roots.
+[`cp [-r] [--] source... destination`](cp.md) copies files, and with `-r` directory trees, within or across roots.
 A directory destination receives each source's basename; several sources require
 an existing directory. Existing files are replaced through a completed sibling
 temporary file, so the destination directory needs create, file-write and remove
-rights. There is no recursive copy or direct-truncation fallback. Read failures
+rights. There is no direct-truncation fallback. Read failures
 preserve the old destination; unconfirmed publication reports possible names
-without retrying or deleting them. See the reference for concurrency and cleanup
+without retrying or deleting them. See the reference for tree-copy, concurrency and cleanup
 limits.
 
 `sync path...` requests synchronization for each explicit file or directory

@@ -49,14 +49,18 @@ x86-64 LP64 model independently of the compiler's predefined type macros, which
 for Clang differ in the fast types: exact/least types
 use 8/16/32/64 bits, fast types use 32 bits through `int_fast32_t` and 64 bits
 for `int_fast64_t`, and pointer/max types use `long`/`unsigned long`. Limits and
-constant suffixes preserve the Pyxis choices first made with GCC. `MB_LEN_MAX` is 1
-for the current single-byte libc; these headers add no character conversion,
-signal or wide-character runtime facilities.
+constant suffixes preserve the Pyxis choices first made with GCC. `MB_LEN_MAX` is 4
+for libc's stateless UTF-8 `mbtowc` and bounded `iconv`; the limits headers
+themselves add no runtime facilities, and signals and wide-character I/O are
+absent. Only the C locale exists
+(`setlocale`, no `localeconv`).
 
 `inttypes.h` includes stdint.h and supplies PRId/PRIi/PRIo/PRIu/PRIx/PRIX
-output macros for the 8/16/32/64-bit, pointer and greatest-width types. Other
-integer-type families, scanning macros and conversion functions are not supplied. `stdio.h` defines
-BUFSIZ as 8192, without enabling stream buffering. Descriptor I/O headers include
+output macros for the 8/16/32/64-bit, pointer and greatest-width types and
+declares `strtoimax`, the only conversion function. Other integer-type families
+and the SCN scanning macros are not supplied. `stdio.h` defines BUFSIZ as 8192,
+the default size `setvbuf` and `setbuf` use when they enable stream buffering;
+output is unbuffered otherwise. Descriptor I/O headers include
 `fcntl.h`, `unistd.h` and the exported `sys/types.h` subdirectory; see
 [the I/O contract](../userland/stdio.md#descriptor-io).
 

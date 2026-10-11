@@ -594,13 +594,15 @@ presentation breadth with a non-development deployment or text consumer; remote 
 The [descriptor portability slice](userland/libc-portability.md) supplies open/read/write/close and `lseek`; public O_RDWR and
 exclusive O_CREAT|O_EXCL use native constructs ([qualification](userland/libc-portability.md#readwrite-and-exclusive-create-qualification)),
 and `fileno` exposes a stream's existing descriptor (agreed 2026-10-08 for the [SDL2 port](development/sdl2.md)). `fdopen` and `dup`
-share one descriptor object and cursor ([stdio](userland/stdio.md#opening-and-ownership)); `dup2`, `fcntl`, `freopen` and `setvbuf` are absent.
+share one descriptor object and cursor ([stdio](userland/stdio.md#opening-and-ownership)); `dup2` exists, `fcntl` and `freopen` are absent.
 Descriptor inheritance and cross-process shared offsets are not supplied by the startup-stream grants.
 
 Signals are absent, so tee rejects -i and broken pipes report EPIPE without SIGPIPE (a successful no-op handler would misrepresent
-support). Public O_APPEND is absent, so tee rejects -a, and atomic append needs a native operation
-([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics, buffered output,
-buffering controls and wide I/O are outside the slice; pushback is one byte per FILE, scanning covers narrow conversions only and
+support). Public O_APPEND exists, but tee still rejects -a because the sbase
+restriction patch (`ports/sbase/patches/0002-restrict-tee-options-and-close-outputs.patch`) predates it; atomic append needs a native operation
+([stdio append](#non-atomic-stdio-append)). Polling and nonblocking descriptor I/O, fork/exec-style semantics
+and wide I/O are outside the slice; output is unbuffered unless `setvbuf` or `setbuf` selects
+[buffering](userland/stdio.md#output-buffering); pushback is one byte per FILE, scanning covers narrow conversions only and
 fixed-width inttypes input (SCN) macros are absent. Revisit only for a concrete consumer, defining the native blocking and lifetime
 behavior it needs; no successful placeholder APIs exist.
 
@@ -617,7 +619,8 @@ requests callers expect to restrict access.
 Append streams and `O_APPEND` descriptors query the file size before each native write, so concurrent appenders can overwrite each
 other, and seeking does not make the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
 Formatted output stages the full result with `snprintf` (heap allocation and a second pass when the stack buffer is too small), so large
-formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. All FILE output is unbuffered.
+formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. FILE output is unbuffered by
+default; `setvbuf` and `setbuf` select [full or line buffering](userland/stdio.md#output-buffering).
 
 ## Console line input
 
@@ -629,8 +632,8 @@ return unread console bytes to their next owner, not with per-port workarounds.
 ## Input read-ahead limits
 
 Buffered file bytes are a private copy: if another descriptor or process writes the same file, a stream can return stale bytes until
-`fseek`, `rewind` or input `fflush` refetches. `setvbuf` and `setbuf` are absent, so programs cannot size or disable the buffer;
-one-byte `ungetc` works. Revisit together with output buffering in a later stdio completeness task
+`fseek`, `rewind` or input `fflush` refetches. `setvbuf(_IONBF)` makes later reads of one FILE exact, but programs cannot size the
+read-ahead buffer; one-byte `ungetc` works. Revisit with a consumer that needs input buffer sizing
 ([input read-ahead](userland/stdio.md#input-read-ahead)).
 
 ## zlib core profile and qualification
@@ -1705,7 +1708,7 @@ imports its musl table or rule explicitly.
 
 The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle without an interactive mode. Its standard libraries omit
 `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
-`popen`/`system`, `clock`, locales, `setvbuf` and dynamic loading. `os.time(table)` returns `nil` for DST gaps and unsettled
+`popen`/`system`, `clock`, locales and dynamic loading; libc now has `setvbuf`, which the port's patch predates. `os.time(table)` returns `nil` for DST gaps and unsettled
 folds ([calendar limits](#calendar-and-encoding-profile)). luv reports TCP, UDP, DNS, watches, signals, work queues,
 callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
 descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim

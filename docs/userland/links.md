@@ -132,13 +132,14 @@ Agreed by the owner on 2026-10-04, after the investigation in
 3. **Event model.** The DOS-style single-process loop, with local and HTTP(S)
    browsing shipped together.
 
-Two parts of decision 2 were not needed, so they were not added:
+Two parts of decision 2 were not needed when Links shipped, so they were not
+added then. Libc has since gained `lstat` and `access` for other consumers;
+`readlink` is still absent, and Links behaviour is unchanged:
 
 - **`lstat`/`readlink`.** Links uses them only when a platform defines
   `FS_UNIX_SOFTLINKS`, which the Pyxis block does not. A symlink entry
   therefore shows an unknown type through `stat`.
-- **`access`.** Links never calls it, so it waits for a consumer, such as a
-  vi follow-up.
+- **`access`.** Links never calls it.
 
 Configuration storage was left to implementation. It now lives in `home://links/`
 (see above).

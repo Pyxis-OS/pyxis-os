@@ -83,8 +83,10 @@ External jobs, `system()`, `:terminal`, PTYs, listeners, signals, numeric PIDs,
 workers, asynchronous filesystem calls, file watches, dynamic Lua modules and
 dynamic tree-sitter grammar loading remain unavailable. Explicit requests return errors;
 the automatic socket listener is omitted. Legacy Vimscript syntax needs no
-parser modules. Arbitrary plugins can encounter these limits. Font rendering
-remains the terminal's ASCII profile.
+parser modules. Arbitrary plugins can encounter these limits. Rendering is
+limited to the terminal's bounded UTF-8 set
+([TTY output controls](terminal.md#tty-output-controls)); non-ASCII input and
+wide or combining layout remain limited.
 
 `vim.uv.os_uname()` reports `Pyxis`, the running kernel's source commit and
 name, and `x86_64`, and `vim.uv.os_gethostname()` the boot's hostname, both from
