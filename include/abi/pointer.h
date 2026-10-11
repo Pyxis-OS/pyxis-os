@@ -62,6 +62,7 @@ struct pointer_event {
   int32_t scroll_x, scroll_y;
   int32_t dx, dy; /* Relative device counts only for INPUT with LOCKED set. */
   uint32_t buttons, type, flags;
+  uint32_t reserved; /* Zero; explicit alignment of the action fields. */
   uint64_t action_id, clipboard_operation, clipboard_layer;
 };
 
