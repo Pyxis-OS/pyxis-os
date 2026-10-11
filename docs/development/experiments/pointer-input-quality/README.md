@@ -110,6 +110,70 @@ reports, all 32 physical buttons and unsupported actual-boot-mouse fallback.
 Stock QEMU supplies no suitable device for those cases. No fault fixtures or
 self-tests were added. The decoder/profile bounds are in [USB input](../../../devices/usb-hid.md).
 
+## Native report refusal and parser correction
+
+Owner, ThinkPad, 2026-10-11 about 17:00, Pyxis `0df08ffe`,
+`USB_HID_DESCRIBE=1`, `usb.hid.describe=1`: Logitech G502 X Plus through
+PowerPlay Lightspeed receiver `046d:c53a` and ASUS dongle `1ea7:0066` both moved
+normally but only left/right click worked; wheel/extra buttons did not. G502
+motion had a high polling rate. The masked log is local at
+`/shared/present/batch2/pointer716/native-describe.log`. Both chose boot fallback
+with wheel disabled; this is a failed report-mode qualification, not a wheel pass.
+
+Captured mouse-interface descriptors are fixtures, with no strings or serials:
+[Logitech interface 1](descriptors/logitech-046d-c53a-interface-1.hex) (123 bytes)
+and [ASUS interface 1](descriptors/asus-1ea7-0066-interface-1.hex) (185 bytes).
+SHA256 of decoded bytes respectively:
+`0302dd523939104d370e95239da756d088c83008c9f0f124d4e6926e866b6cf0`,
+`3efbbb9ad50a93761e82db9f0a567ef3cbde94f87016718ac993ab8a721c240c`.
+
+The unmodified parser reproduces both refusals after retaining their Mouse
+fields: local Usage Maximum expands every range and rejects more than 64 usages.
+Logitech's ignored Consumer range is 1..0x2ff; ASUS Consumer is 1..0x3ff, plus
+vendor page **0xffbc** range 0..0xff. ASUS's preceding vendor application on
+0xffb5 has single usages, not that range. The correction skips expansion in
+ignored collections, retaining only the first local usage needed to identify a
+possible nested Collection. Range pairing, order, same-page checks, report-length
+accounting and Mouse/root usage budgets remain unchanged.
+
+A temporary native-host caller invokes the actual kernel parser on the byte
+fixtures; no new framework, CI or kernel self-test is added. Both now parse:
+
+| Fixture | Input IDs and wire bytes | Output/Feature | Mouse fields | Receive |
+| --- | --- | --- | ---: | ---: |
+| Logitech | 2:9, 3:5, 4:2 | None | 20 | 9 |
+| ASUS | b5:8, 2:7, 1:3, 3:2, 4:2 | b5 Output:8; no Features | 12 | 8 |
+
+Logitech ID2 declares Button 1–16 and signed 16-bit X/Y −32767..32767.
+ASUS ID2 declares Button 1–8 and signed 12-bit X/Y −2047..2047; X/Y start at
+payload bits 8/20. Both have signed 8-bit Wheel and Consumer AC Pan (0x238),
+without Features/multipliers: each axis is enabled at 120/1. ASUS's longest
+Input is the ignored vendor IDb5, so receive stays eight bytes. Logitech's
+ignored 2-bit System Control with flags 0x60 and ASUS's vendor-before-Mouse
+ordering are accepted. No additional rejection was found in either fixture.
+
+Manual report vectors exercise both extrema: Logitech produces X/Y
+−32767/+32767, raw physical wheel/pan −127/−127, mask 0xffff; ASUS produces
+−2047/+2047, wheel/pan +127/+127, mask 0xff. Subsequent ignored Consumer/vendor
+reports produce zero motion/scroll and preserve those button snapshots. These
+are parser/decode checks, not native interrupt reports or control-transfer proof.
+The owner's G502 has 16 buttons, one mapped on-board to a keyboard chord through
+the separate boot-keyboard interface; descriptor Button 1–16 does not imply
+that this remapped control will also send a mouse bit.
+
+Default and `USB_HID_DESCRIBE=1` image builds passed after the correction.
+QEMU 10.2.2 Q35/nested KVM, four CPUs/512 MiB and the same two-hub USB keyboard/
+mouse topology still selects report protocol, receive 4, wheel enabled. Mousetest
+shows buttons 4/5 and natural SY −120; GDB finds two keyboards/two pointers
+(PS/2 plus USB), empty queue and installed policy. An attached absolute tablet
+remains excluded. The task-owned QEMU/debugger are stopped.
+
+Native retest must show `protocol report`, receive 9 (Logitech) / 8 (ASUS),
+`pan 120/1 enabled 1 wheel 120/1 enabled 1`, and the Mouse ID2 lengths above.
+Then repeat wheel/buttons/mux and the on-board keyboard chord. Captured AC Pan
+establishes a supported layout, not that each physical mouse offers an accessible
+horizontal control. Native report-mode wheel/button behavior remains pending.
+
 ## One owner/luna native boot
 
 Luna builds the submitted Pyxis head and published dependency pins with

@@ -81,6 +81,9 @@ keyboard; it does not add independent interface retirement.
 
 Admission is bounded to the prepared 4,096-byte control and 1,024-byte Input
 capacity, 16 layouts, 64 relevant fields and eight collection/global pushes.
+Local usage expansion stays bounded in Mouse/root scopes. Ignored collections
+retain only their first usage for Collection identity, validate ranges without
+expanding them, and still account for all report lengths/global state.
 The largest declared Input report determines the receive length, independently
 of endpoint packet size. HID §8.4 requires shorter reports to terminate with a
 short packet, including a zero-length packet for an exact packet multiple; one

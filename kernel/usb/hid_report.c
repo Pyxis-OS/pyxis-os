@@ -55,9 +55,23 @@ static uint32_t usage_value(const struct usb_hid_report_parser *parser, uint32_t
   return bytes == 4 ? value : (parser->global.page << 16) | value;
 }
 
+static bool local_controls_ignored(const struct usb_hid_report_parser *parser)
+{
+  if (!parser->collection_depth) {
+    return false;
+  }
+  const struct usb_hid_report_collection *collection =
+    &parser->collections[parser->collection_depth - 1];
+  return !collection->mouse || collection->ignored;
+}
+
 static bool local_usage(struct usb_hid_report_parser *parser, uint32_t usage)
 {
   if (parser->delimiter_open && parser->delimiter_branch > 1) {
+    return true;
+  }
+  /* The first usage can name a nested Collection; ignored controls need no table. */
+  if (local_controls_ignored(parser) && parser->usage_count) {
     return true;
   }
   if (parser->usage_count == USB_HID_REPORT_USAGES) {
@@ -83,11 +97,16 @@ static bool local_item(struct usb_hid_report_parser *parser, unsigned tag,
   case 2: {
     uint32_t last = usage_value(parser, value, bytes);
     uint32_t first = parser->usage_minimum;
-    if (!parser->usage_range || first > last || (first >> 16) != (last >> 16) ||
-        (uint64_t)last - first + 1 > USB_HID_REPORT_USAGES) {
+    if (!parser->usage_range || first > last || (first >> 16) != (last >> 16)) {
       return false;
     }
     parser->usage_range = false;
+    if (local_controls_ignored(parser)) {
+      return local_usage(parser, first);
+    }
+    if ((uint64_t)last - first + 1 > USB_HID_REPORT_USAGES) {
+      return false;
+    }
     for (uint32_t usage = first; ; ++usage) {
       if (!local_usage(parser, usage)) {
         return false;
