@@ -126,9 +126,8 @@ other snapshots and proceeding with unknown/all-up state for that report.
 protocol/layout/multiplier dumps at info level, for native qualification.
 It or `usb.xhci.diagnose=1` also gates protocol readback, transport loss and
 malformed-report counts. Malformed-report diagnostics are limited to one
-observation per interface per five seconds, plus the final retirement; successful
-reports are not logged. The first differing Input length is logged once per
-layout. Up to four malformed Input packets per admission on a report-protocol Mouse
+observation per interface per five seconds, plus the final retirement. The
+first differing Input length is logged once per layout. Up to four interrupt Input packets per admission on a report-protocol Mouse
 interface may log their ID/length and at most 16 actual bytes. Keyboard interfaces never have
 payload dumps; a Mouse descriptor declaring Keyboard/Keypad collections or
 keyboard Input usages suppresses raw bytes too. No device strings or serials are

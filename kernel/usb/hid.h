@@ -17,7 +17,7 @@ struct usb_hid_interface {
   uint16_t receive_bytes, descriptor_bytes;
   uint64_t malformed_reports, malformed_diagnostic_ns;
   unsigned malformed_consecutive;
-  unsigned malformed_samples;
+  unsigned mouse_samples;
   bool length_diagnosed[USB_HID_REPORT_LAYOUTS];
   uint8_t number, protocol;
   bool boot, report_protocol;

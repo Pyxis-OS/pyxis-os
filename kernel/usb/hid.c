@@ -44,8 +44,8 @@
 #define USB_QEMU_QUEUE_ENTRIES 16
 #define USB_HID_MALFORMED_LIMIT 16
 #define USB_HID_MALFORMED_DIAGNOSTIC_NS UINT64_C(5000000000)
-#define USB_HID_MALFORMED_SAMPLES 4
-#define USB_HID_MALFORMED_SAMPLE_BYTES 16
+#define USB_HID_MOUSE_SAMPLES 4
+#define USB_HID_MOUSE_SAMPLE_BYTES 16
 
 enum hid_stage {
   HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_ENDPOINTS,
@@ -915,13 +915,13 @@ static void diagnose_mouse_sample(struct usb_hid_binding *binding,
     struct usb_hid_interface *interface, size_t bytes)
 {
   if (!diagnostics_enabled() || interface->protocol != USB_PROTOCOL_MOUSE || !interface->report_protocol ||
-      interface->malformed_samples == USB_HID_MALFORMED_SAMPLES) {
+      interface->mouse_samples == USB_HID_MOUSE_SAMPLES) {
     return;
   }
-  ++interface->malformed_samples;
+  ++interface->mouse_samples;
   size_t captured = binding->mouse.keyboard_data ? 0 :
-    bytes < USB_HID_MALFORMED_SAMPLE_BYTES ? bytes : USB_HID_MALFORMED_SAMPLE_BYTES;
-  char line[USB_HID_MALFORMED_SAMPLE_BYTES * 3 + 1];
+    bytes < USB_HID_MOUSE_SAMPLE_BYTES ? bytes : USB_HID_MOUSE_SAMPLE_BYTES;
+  char line[USB_HID_MOUSE_SAMPLE_BYTES * 3 + 1];
   static const char digits[] = "0123456789abcdef";
   for (size_t i = 0; i < captured; ++i) {
     uint8_t byte = binding->control[i];
@@ -932,7 +932,7 @@ static void diagnose_mouse_sample(struct usb_hid_binding *binding,
   line[captured * 3] = 0;
   klog("usb HID mouse sample: %x:%x interface=%u sample=%u ID=%u bytes=%zu captured=%zu "
       "keyboard-data=%u: %s\n",
-      binding->vendor, binding->product, interface->number, interface->malformed_samples,
+      binding->vendor, binding->product, interface->number, interface->mouse_samples,
       bytes && interface->report_protocol && binding->mouse.ids ? binding->control[0] : 0,
       bytes, captured, binding->mouse.keyboard_data, line);
 }
@@ -947,7 +947,6 @@ static bool malformed_report(struct usb_hid_binding *binding,
   if (retire) {
     usb_hid_lost(binding);
   }
-  diagnose_mouse_sample(binding, interface, bytes);
   uint64_t now = arch_monotonic_ns();
   if (diagnostics_enabled() &&
       (retire || !interface->malformed_diagnostic_ns || now >= interface->malformed_diagnostic_ns)) {
@@ -1008,6 +1007,7 @@ void usb_hid_collect(struct usb_hid_binding *binding)
         cpu_restore_interrupts(flags);
       } else {
         struct usb_hid_mouse_sample sample;
+        diagnose_mouse_sample(binding, interface, completion.bytes);
         bool valid = interface->report_protocol ?
           decode_mouse_report(binding, interface, completion.bytes, &sample) :
           boot_mouse_sample(interface, binding->control, completion.bytes, &sample);

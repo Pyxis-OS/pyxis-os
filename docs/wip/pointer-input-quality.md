@@ -135,7 +135,7 @@ state or guessed universal pressure units.
    payload; never fabricate an absent ID. Keep unknown-ID rejection, field
    ranges, boot keyboard lengths and exact Feature images. Under either
    diagnostic option, record the first length mismatch per layout and the
-   first four malformed report-protocol mouse packets (ID/length plus up to 16 bytes).
+   first four report-protocol mouse interrupt packets (ID/length plus up to 16 bytes).
    No keyboard raw data, including declared keyboard fields on a mixed Mouse
    interface; no boot-format fallback before an owner decision on the evidence.
 

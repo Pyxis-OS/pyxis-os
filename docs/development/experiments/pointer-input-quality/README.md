@@ -358,14 +358,17 @@ unknown, and four-byte ID-1 packets differ from the descriptor's three-byte
 Consumer Input layout. The log records retirement at sixteen consecutive
 malformed packets. It does not contain raw Input bytes to distinguish boot-format
 mouse data from another encoding. Native report motion/wheel once worked on
-`7491e419`; boot-to-boot variation remains unresolved.
+`7491e419`; boot-to-boot variation remains unresolved. The owner additionally
+reports that plain main's boot-protocol path works for ASUS motion/buttons
+without wheel. This supports investigating boot-format packets after report-mode
+readback; it does not establish their encoding without the raw capture.
 
 The owner authorizes known mouse Input length tolerance: ignore trailers,
 zero-fill a short payload, preserve declared ID/field-range checks and exact
 Feature lengths. Missing/unknown IDs remain failures. Padding an ID-1 Consumer
 report does not make it pointer data. Boot keyboard decoding stays eight bytes.
 Under either diagnostic option, the first length mismatch per layout is recorded;
-up to four malformed packets per admission on a report-protocol Mouse interface
+the first four interrupt packets per admission on a report-protocol Mouse interface
 log ID/length and
 at most sixteen actual bytes, with no keyboard payload. Declared Keyboard/Keypad
 collections or keyboard Input usages on a mixed Mouse interface suppress raw
@@ -397,7 +400,11 @@ the G502 pass as a control; try ASUS ordinary motion, left/right buttons and
 wheel. Retain `usb HID mouse sample` and `Input ID` lines alongside readback and
 malformed counts. The samples must establish the wire encoding before any
 separate boot-format fallback decision. Raw packet logs stay outside the repo;
-no device settings, firmware or polling changes are requested.
+no device settings, firmware or polling changes are requested. The bounded
+samples include accepted packets, so padded ID-1 inputs remain visible alongside
+unknown ID-0 inputs. They are the first four interrupt packets, excluding initial
+control snapshots; move immediately after plugging ASUS in, then press/release a
+button. Replug while moving if an idle-only sample consumes the budget.
 
 ### One diagnostic retest through luna
 
