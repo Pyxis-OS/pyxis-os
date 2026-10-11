@@ -105,4 +105,5 @@ No failure hook or probe code is committed. Private captures stay local.
 
 Native horse/ThinkPad results, reverse-mode mux, live remote resize, HOST-delayed
 cleanup, maximum geometry and native pointer/clipboard are not qualified here.
-Live resize remains [task 3](../../wip/remote-multiplexer.md#tasks), unassigned.
+Later resize/reverse/HOST checks and owner native results are recorded in the
+[resize qualification](remote-multiplexer-resize.md).

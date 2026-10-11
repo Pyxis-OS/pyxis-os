@@ -77,6 +77,12 @@ tasks 1 to 3 merged in #612, #671 and #684; see
 
 [Remote debugging without serial](../development/remote-debugging.md), 2026-10-07.
 
+[Remote multiplexer](../userland/remote-terminal.md#remote-multiplexer), 2026-10-11:
+brokered panes, [splits/cwd/focus](../userland/multiplexer.md) and live host resize
+(#728, #735), enabled in packaged live Remote (#736). The owner qualified pane
+Neovim edit/save/quit, TCC hello world and instant live resize on main `a59a4ef3`;
+[qualification and limits](../development/experiments/remote-multiplexer-resize.md).
+
 [Renoir flip presentation](../kernel/renoir-flip.md), 2026-10-10: opt-in two-surface
 GOP page flips (#631, #632, #638, #647), natively qualified with default off; see
 the [remaining qualification](../technical-debt.md#renoir-flip-backend-qualification)

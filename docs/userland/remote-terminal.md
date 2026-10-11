@@ -106,7 +106,10 @@ One-row presentation clears its row without scrolling other host rows.
 
 The daemon loads `bin://mux.pxe` inside its outer remote group and creates each
 pane's independent terminal, group and stock root shell through a private
-SEND-only broker. Mux receives attachment, process WAIT and group CONTROL|WAIT;
+SEND-only broker. Trusted init, shell and session preserve a distinct
+`remote_mux_terminal` CREATE grant for the daemon, which retains terminal CREATE
+and unbound launcher CREATE_GROUP. Mux receives its bound LAUNCH-only launcher,
+attachment, process WAIT and group CONTROL|WAIT;
 the daemon retains supervision through cleanup. It freezes initial environment,
 roots, namespace and remote resource masks per connection. Split cwd snapshots
 preserve actual directory rights, with initial `tmp://` fallback before
@@ -135,17 +138,45 @@ not merged into the client's single command sequence; mux exposes session FINAL.
 Four total connections admit at most two mux connections, including closing
 ones. Incomplete creation occupies one of eight pane slots; every created group
 retains its slot through failed delivery or closure until cleanup completes.
-Broker transactions use nonreused IDs, incremental
-four-grant cwd chunks and a current ten-second deadline; uncertain publication
-cancels tracked work and ends mux without retry. Disconnect/outer exit seals
-admission and terminates every group. FINAL and slot reuse require outer and
-all-pane cleanup, independently of the five-second transport-drain limit.
-See the [implemented contract](../wip/remote-multiplexer.md) and
-[resize qualification](../development/experiments/remote-multiplexer-resize.md).
-Kilo and Neovim resize/save checks were performed in staging QEMU; native
-horse/PXE qualification remains owner work. A saturated host reader can exhaust
-the existing five-second close deadline and disconnect before FINAL even when
-guest groups are reaped.
+A saturated host reader can exhaust the existing five-second close deadline
+and disconnect before FINAL even when
+guest groups are reaped. Already queued host-output bytes cannot be clipped
+retroactively after physical shrink. Ordinary/machine geometry stays fixed;
+plain interactive resize is a [later idea](../wip/later-os-directions.md).
+
+### Pane broker and cleanup
+
+The [broker client](../../userspace/common/pane_broker.c) and
+[daemon](../../userspace/remote-terminal/session.c) use private SEND transactions.
+Each connection has one daemon-owned receiver. Mux creates reply and cwd-bootstrap
+receivers, transferring only SEND callers in BEGIN; CHUNK carries at most four
+directory grants. Successful COMMIT returns attachment, process WAIT and group
+CONTROL|WAIT. ACCEPT is acknowledged before mux publishes the pane. SEND-receipt
+closure releases delivery bookkeeping; it is not a broker reply or execution acknowledgment.
+
+The daemon services at most four broker records per pass without waiting for
+another cwd chunk. Directory/path storage is bounded by `LAUNCH_CAPTURE_MAX_SIZE`.
+The ten-second transaction deadline is absolute. Clock readings refresh per
+record and immediately before launch. Known pre-publication failures can refuse
+a split. Uncertain launch or result/acceptance failure ends mux with
+`CALL_OUTCOME_UNKNOWN`, cancels tracked groups and forbids a split retry; expiry
+or clock failure after successful launch preserves that uncertain outcome.
+CANCEL names the original nonreused transaction ID, so late replies cannot
+attach to a reused pane. Unpublished and response-failed groups retain supervision
+and their pane slot until WAIT_COMPLETE.
+
+Disconnect, outer root exit/fault and daemon shutdown seal broker admission,
+discard incomplete/queued transactions and terminate tracked groups. Root result,
+output EOF and group cleanup are separate observations. Attributed HOST cleanup
+can delay FINAL and connection reuse indefinitely; output EOF alone proves no
+cleanup. Reverse mode admits only one connection. Pane-process observation stays
+in mux; the daemon's maximum wait set is 31 interests, below the native bound of 32.
+
+Qualification and measured costs are in the
+[startup/splits record](../development/experiments/remote-multiplexer-task12.md)
+and [resize record](../development/experiments/remote-multiplexer-resize.md).
+The owner [qualified pane Neovim, TCC and live resize natively](../development/experiments/remote-multiplexer-resize.md#owner-native-qualification)
+on main `a59a4ef3`.
 
 ## Reverse connections
 
@@ -791,7 +822,10 @@ and reopened it with the contents intact. The mux image enabled only the existin
 `remote_multiplexer` setting in staged config. Client Ctrl+] with Neovim running
 returned terminated/drain-complete for both session types. Existing QEMU GDB
 inspected scheduler state; binding to the actual session/pane group and LAUNCH-only
-rights were inspected in source. Native recheck remains owner work.
+rights were inspected in source. The later
+[owner native check](../development/experiments/remote-multiplexer-resize.md#owner-native-qualification)
+covers pane Neovim and live resize; native plain-session and disconnect cleanup
+are not established by that report.
 
 Packaged live Remote's permanent mux setting (owner accepted, 2026-10-11) passed
 an ordinary kernel/userland image build and interactive four-CPU Q35/nested-KVM

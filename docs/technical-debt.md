@@ -585,15 +585,12 @@ selected.
 
 ## Initial remote multiplexer limits
 
-[Remote mux](userland/remote-terminal.md#remote-multiplexer) has live host resize, keyboard input and host selection/ordinary paste;
-no native pointer/clipboard, safe-Paste, file-transfer routing, per-pane machine completion or reattachment. Two mux connections share
-the daemon's four connection slots; closing groups retain admission indefinitely behind attributed HOST work. Rendering is bounded and
-resumable, but synchronous launch/HOST capture and the one-second cwd snapshot can still delay input. Resize allocation rollback is per
-screen/frame, so a later failure can follow earlier pane updates and ends mux with cleanup. Already queued host-output bytes cannot be
-clipped retroactively after physical shrink. A saturated reader can exhaust the five-second close deadline without receiving FINAL even
-when groups are reaped. [Resize qualification](development/experiments/remote-multiplexer-resize.md) covers staging QEMU; owner horse/PXE
-checks remain pending. Revisit these limits with native qualification or observed failures; pane-aware transfer/input transport requires
-a separate owner assignment.
+[Remote mux](userland/remote-terminal.md#remote-multiplexer) is keyboard-only with host paste, xfer refusal and no reattachment or
+per-pane machine completion. Two mux connections share four total slots, including closing groups; attributed HOST cleanup can delay
+reuse indefinitely. Synchronous capture/cwd work can delay input, resize rollback is per screen/frame, and queued host bytes cannot be
+clipped retroactively. A saturated close can miss FINAL despite eventual cleanup. The [native check](development/experiments/remote-multiplexer-resize.md#owner-native-qualification)
+qualifies pane Neovim/TCC/live resize, not native failure recovery. Revisit these limits when encountered in use; pointer/clipboard,
+safe-Paste and pane-aware transfer need separate assignment.
 
 ## Initial independent terminal limits
 
