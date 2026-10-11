@@ -1,6 +1,7 @@
 # Pyxis beside Fedora on the internal NVMe
 
-Status: **proposal; nothing is implemented and no task is assigned.** The owner
+Status: **task 1 implemented and QEMU-qualified by Codex alpha, 2026-10-11;
+PR review and the owner's read-only native qualification pending.** The owner
 accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
 decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
 ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
@@ -163,7 +164,29 @@ firmware menu.
 Each task ends with a PR and, where it can, QEMU qualification; the owner goes
 ahead task by task.
 
-### 1. NVMe driver
+### 1. NVMe driver — assigned 2026-10-11
+
+- [x] Implement and qualify the driver in QEMU.
+- Native qualification remains pending through the orchestrator and Luna,
+  read-only first; no later task is authorized by this delivery.
+
+Task-1 decisions accepted by the owner on 2026-10-11:
+
+- Prepare every observed controller independently, supporting exactly one active
+  namespace per controller. Report multi-namespace controllers as unsupported;
+  never silently select namespace 1. Existing GUID selection and boot IDs remain.
+- Enforce `nvme.write=1` in the kernel; absent means read-only. Until task 3,
+  whole-disk raw claims require a fresh full-namespace zero-data verification.
+  Partitioned or uncertain media refuse, as do partition claims on NVMe in this
+  first slice. Filesystem writes still require their existing trusted mount
+  authority and the boot gate. No native writes without the owner's separate go.
+- Flush pools, seal admission, drain, then perform bounded normal shutdown.
+  Refuse clean power-off/restart unless confirmed, retiring the controller until
+  reboot. A returned ACPI power failure does not reactivate NVMe. After reporting
+  failure, Ctrl+Alt+Del's local power overlay offers explicit **Force off / Force
+  reboot** with an unsafe-shutdown warning, bypassing the storage checks. The
+  warning must be presented before force is selectable; userspace POWER rights
+  do not gain a force operation.
 
 Controller initialization on the PCI discovery already in the kernel: map BAR0,
 check CAP (page size, timeout, doorbell stride, command sets), disable and reset
@@ -183,9 +206,17 @@ reproduce the SK hynix controller's timing, power states or counters. Natively
 the first boot reads only: enumerate, identify, read the GPT and sectors, log
 page.
 
-**After this task the owner can:** boot a QEMU image installed on an NVMe disk,
-and on the ThinkPad see the internal disk, its GPT and its SMART numbers in
-Pyxis, and compare read bytes with Linux, writing nothing.
+Implemented contracts live in the [NVMe reference](../devices/nvme.md); the
+[qualification record](../development/experiments/nvme-task1/README.md) records
+the baseline, read-before-write checks, blank/foreign raw authority, clean power,
+the explicit force escape and exact native staging steps. No userspace ABI or
+dependency pin changes are needed.
+
+**After this task the owner can:** boot a prepared QEMU NVMe image and mount its
+installed npfs pool. The current installer still refuses its ESP partition claim
+on NVMe; partition-first coexistence remains task 3. On the first read-only
+ThinkPad boot the owner can see the internal disk, its GPT and SMART numbers,
+and compare reads with Linux, writing no user data.
 
 ### 2. FAT32 read and write for the ESP
 

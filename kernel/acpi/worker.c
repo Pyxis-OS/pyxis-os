@@ -49,6 +49,7 @@ static size_t unclaimed_scis;
 static bool button_pressed;
 /* A local power operation from acpi_power_local(), pending until it fails. */
 static bool local_pending, local_failed;
+static bool local_force, local_force_allowed;
 static enum acpi_power_action local_action;
 static enum call_status local_status;
 static char worker_identity;
@@ -110,7 +111,7 @@ void acpi_power_forward(struct acpi_power_request *request)
   wake_worker();
 }
 
-enum call_status acpi_power_local(enum acpi_power_action action)
+static enum call_status queue_local_power(enum acpi_power_action action, bool force)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!ready) {
@@ -119,11 +120,26 @@ enum call_status acpi_power_local(enum acpi_power_action action)
   if (power_request || power_running || local_pending) {
     return CALL_BUSY;
   }
+  if (force && !local_force_allowed) {
+    return CALL_DENIED;
+  }
   local_pending = true;
   local_failed = false;
+  local_force = force;
+  local_force_allowed = false;
   local_action = action;
   wake_worker();
   return CALL_OK;
+}
+
+enum call_status acpi_power_local(enum acpi_power_action action)
+{
+  return queue_local_power(action, false);
+}
+
+enum call_status acpi_power_local_force(enum acpi_power_action action)
+{
+  return queue_local_power(action, true);
 }
 
 bool acpi_power_local_failed(enum call_status *status)
@@ -133,6 +149,7 @@ bool acpi_power_local_failed(enum call_status *status)
     return false;
   }
   local_failed = false;
+  local_force_allowed = true;
   *status = local_status;
   return true;
 }
@@ -362,9 +379,9 @@ static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *nod
 
 /* Top level. Returns only when the operation failed. A press during the
  * operation is serviced here and dropped, so it does not start another. */
-static enum call_status run_power(enum acpi_power_action action)
+static enum call_status run_power(enum acpi_power_action action, bool force)
 {
-  enum call_status status = acpi_power_run(action);
+  enum call_status status = acpi_power_run(action, force);
   service_sci();
   button_pressed = false;
   return status;
@@ -382,7 +399,7 @@ static void run_power_request(void)
     return;
   }
 
-  enum call_status status = run_power(request->action);
+  enum call_status status = run_power(request->action, false);
   flags = cpu_save_interrupts();
   power_request = NULL;
   request->status = status;
@@ -397,6 +414,7 @@ static void run_local_request(void)
   uint64_t flags = cpu_save_interrupts();
   bool pending = local_pending;
   enum acpi_power_action action = local_action;
+  bool force = local_force;
   if (pending) {
     power_running = true;
   }
@@ -405,7 +423,7 @@ static void run_local_request(void)
     return;
   }
 
-  enum call_status status = run_power(action);
+  enum call_status status = run_power(action, force);
   flags = cpu_save_interrupts();
   power_running = false;
   local_pending = false;
@@ -434,7 +452,7 @@ static void run_button_press(void)
   uint64_t flags = cpu_save_interrupts();
   power_running = true;
   cpu_restore_interrupts(flags);
-  run_power(ACPI_POWER_OFF);
+  run_power(ACPI_POWER_OFF, false);
   flags = cpu_save_interrupts();
   power_running = false;
   cpu_restore_interrupts(flags);

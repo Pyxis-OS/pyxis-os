@@ -43,10 +43,16 @@ static const char *const choice_labels[CHOICE_COUNT] = {
   [CHOICE_CANCEL] = "Cancel",
 };
 
+static const char *const force_labels[CHOICE_COUNT] = {
+  [CHOICE_SHUT_DOWN] = "Force off",
+  [CHOICE_REBOOT] = "Force reboot",
+  [CHOICE_CANCEL] = "Cancel",
+};
+
 enum overlay_state {
   OVERLAY_CLOSED,
   OVERLAY_CHOOSING,
-  /* The ACPI worker holds programs and flushes; Cancel no longer applies. */
+  /* The ACPI worker owns the operation; Cancel no longer applies. */
   OVERLAY_RUNNING,
 };
 
@@ -60,6 +66,8 @@ static enum overlay_state state;
 static struct space *focus_space;
 static enum choice selected, hovered;
 static enum acpi_power_action running_action;
+static bool force_choices, running_force;
+static bool force_warning_presented;
 static char status_text[STATUS_TEXT_BYTES];
 static uint64_t visual_generation;
 
@@ -123,6 +131,8 @@ void power_overlay_open(struct space *space)
   focus_space = space;
   selected = CHOICE_CANCEL;
   hovered = CHOICE_COUNT;
+  force_choices = false;
+  force_warning_presented = false;
   status_text[0] = '\0';
   volume_ui_cancel();
   keyboard_set_overlay(space->keyboard, true);
@@ -147,13 +157,18 @@ static void activate(void)
     close_overlay();
     return;
   }
+  if (force_choices && !force_warning_presented) {
+    return;
+  }
   enum acpi_power_action action = selected == CHOICE_SHUT_DOWN ?
       ACPI_POWER_OFF : ACPI_POWER_RESTART;
-  enum call_status status = acpi_power_local(action);
+  enum call_status status = force_choices ? acpi_power_local_force(action) :
+      acpi_power_local(action);
   if (status == CALL_OK) {
     state = OVERLAY_RUNNING;
     ++visual_generation;
     running_action = action;
+    running_force = force_choices;
     status_text[0] = '\0';
     return;
   }
@@ -174,6 +189,12 @@ void power_overlay_keyboard_input(const struct key_event *event)
     return;
   }
   bool press = event->action == KEY_PRESS;
+  if (force_choices && !force_warning_presented) {
+    if (press && event->key == KEY_ESCAPE) {
+      close_overlay();
+    }
+    return;
+  }
   enum choice previous_selected = selected;
   switch (event->key) {
     case KEY_LEFT:
@@ -211,7 +232,7 @@ void power_overlay_keyboard_input(const struct key_event *event)
 void power_overlay_pointer_input(int64_t x, int64_t y, uint32_t pressed)
 {
   KASSERT(arch_cpu_index() == 0);
-  if (state != OVERLAY_CHOOSING) {
+  if (state != OVERLAY_CHOOSING || (force_choices && !force_warning_presented)) {
     hovered = CHOICE_COUNT;
     return;
   }
@@ -239,8 +260,19 @@ void power_overlay_update(void)
   state = OVERLAY_CHOOSING;
   ++visual_generation;
   selected = CHOICE_CANCEL;
+  hovered = CHOICE_COUNT;
+  force_choices = true;
+  force_warning_presented = false;
   sprintf(status_text, "%s failed (status %d); the system stays up.",
       running_action == ACPI_POWER_OFF ? "Shutdown" : "Restart", (int)status);
+}
+
+void power_overlay_end_frame(bool presented)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (presented && state == OVERLAY_CHOOSING && force_choices) {
+    force_warning_presented = true;
+  }
 }
 
 /* Fill the part of a screen rectangle that lies inside the band at TOP. */
@@ -297,14 +329,20 @@ void power_overlay_draw_band(struct framebuffer *band, size_t top,
   text_clipped(band, top, layout.x, layout.width, layout.y + TITLE_ROW * row,
       "Shut down or restart", scheme->foreground, background);
   text_clipped(band, top, layout.x, layout.width, layout.y + NOTE_ROW * row,
-      "Programs are stopped and storage pools are flushed first.",
+      force_choices ? "Unsafe: bypasses storage checks; data may be lost." :
+      "Programs stop; pools flush; NVMe shutdown is checked.",
       scheme->foreground, background);
 
   bool running = state == OVERLAY_RUNNING;
   const char *status = status_text;
   if (running) {
-    status = running_action == ACPI_POWER_OFF ? "Shutting down: flushing pools..." :
-        "Restarting: flushing pools...";
+    if (running_force) {
+      status = running_action == ACPI_POWER_OFF ? "Forcing shutdown..." :
+          "Forcing restart...";
+    } else {
+      status = running_action == ACPI_POWER_OFF ? "Shutting down: checking storage..." :
+          "Restarting: checking storage...";
+    }
   }
   text_clipped(band, top, layout.x, layout.width, layout.y + STATUS_ROW * row, status,
       running ? scheme->foreground : scheme->palette[9], background);
@@ -320,7 +358,7 @@ void power_overlay_draw_band(struct framebuffer *band, size_t top,
     outline_clipped(band, top, layout.button_x[i], layout.button_y, layout.button_width,
         layout.button_height, edge);
     text_clipped(band, top, layout.button_x[i], layout.button_width, label_y,
-        choice_labels[i], text, fill);
+        force_choices ? force_labels[i] : choice_labels[i], text, fill);
   }
   text_clipped(band, top, layout.x, layout.width, layout.y + HINT_ROW * row,
       running ? "Please wait." : "Arrows or Tab: choose   Enter: confirm   Esc: cancel",

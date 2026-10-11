@@ -978,6 +978,9 @@ static bool present_power_overlay(const struct pointer_frame *pointer)
     }
   }
   flags = cpu_save_interrupts();
+  handle_space_input();
+  space_pointer_sync_input();
+  power_overlay_end_frame(presented);
   volume_ui_end_frame(false);
   cpu_restore_interrupts(flags);
   screen_capture_finish(presented);

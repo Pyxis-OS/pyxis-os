@@ -43,6 +43,12 @@ void acpi_power_forward(struct acpi_power_request *request);
  * OK, and the worker runs it. Success never returns. */
 enum call_status acpi_power_local(enum acpi_power_action action);
 
+/* Same local authority and queueing, but bypasses pool flush and NVMe shutdown.
+ * Only after collecting a local failure below; otherwise DENIED. The overlay
+ * must display the failure and data-loss warning before an explicit selection.
+ * This path is never used by forwarded userspace POWER requests. */
+enum call_status acpi_power_local_force(enum acpi_power_action action);
+
 /* BSP, IF=0. True once a local operation has failed and the system stayed
  * up, with its status; each failure is reported once. */
 bool acpi_power_local_failed(enum call_status *status);

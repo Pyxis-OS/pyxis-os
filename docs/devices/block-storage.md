@@ -1,6 +1,6 @@
 # Internal block storage
 
-Caelum inventories VirtIO and USB BOT/SCSI disks through the kernel-only
+Caelum inventories VirtIO, [NVMe](nvme.md) and USB BOT/SCSI disks through the kernel-only
 [block interface](../../include/kernel/block.h). It supports bounded asynchronous
 reads, writes and ordered flushes; USB writes require per-device protection and
 cache-synchronization qualification. [GPT discovery](gpt.md) publishes a partition-map
@@ -20,10 +20,10 @@ discovery was exhaustive. Configured native mount authority uses the full
 registry after discovery and GPT scans finish, permitting a unique observed GUID
 match under partial discovery. `block_inventory_complete()` controls initial
 absence and no-match diagnosis rather than disabling prepared disks. The
-installer uses the separate `block_installer_*` view of all retained VirtIO and
+installer uses the separate `block_installer_*` view of all retained VirtIO, NVMe and
 USB candidates. That view waits for sealed discovery and accepts observed USB
 records under partial coverage, while refusing lost registry records or
-incomplete VirtIO bookkeeping. Unseen disks cannot be enumerated. Raw access
+incomplete VirtIO/NVMe bookkeeping. Unseen disks cannot be enumerated. Raw access
 requires an explicitly delegated installer capability; writable claims retain
 the existing per-device qualification, mount exclusion and failure checks.
 
@@ -77,7 +77,7 @@ not a promise that the transport remains operational.
 `block_get_info(id)` reports logical block size and count, maximum transfer bytes,
 request slots, writable/flush support and the latched write-failure state.
 Logical blocks are 512 bytes or 4 KiB. VirtIO translates block addresses to its
-fixed 512-byte sector units; USB uses the device's logical-block addresses. Zero
+fixed 512-byte sector units; NVMe and USB use the device's logical-block addresses. Zero
 capacity, partial logical blocks, unsupported sizes and unusable advertised
 transfer limits are rejected.
 

@@ -5,12 +5,16 @@
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
 #include <kernel/virtio/blk.h>
+#include <kernel/storage/nvme.h>
 #include <kernel-config.h>
 #include "../usb/block.h"
 #include "../usb/core.h"
 #include "block_registry.h"
 
+enum block_backend { BLOCK_BACKEND_VIRTIO, BLOCK_BACKEND_NVME, BLOCK_BACKEND_USB };
+
 struct block_device {
+  enum block_backend backend;
   enum block_preparation preparation;
   struct usb_block_device *usb;
 };
@@ -34,15 +38,20 @@ void block_prepare(void)
 {
   assert_client_context();
   size_t virtio_count = virtio_blk_device_count();
+  size_t nvme_count = nvme_device_count();
   size_t usb_count = 0;
 #ifdef CONFIG_XHCI
   usb_count = usb_storage_capacity();
 #endif
-  if (usb_count > SIZE_MAX - virtio_count || virtio_count + usb_count > UINT32_MAX ||
-      virtio_count + usb_count > SIZE_MAX / sizeof(*devices)) {
+  if (nvme_count > SIZE_MAX - virtio_count) {
     return;
   }
-  device_capacity = virtio_count + usb_count;
+  size_t fixed_count = virtio_count + nvme_count;
+  if (usb_count > SIZE_MAX - fixed_count || fixed_count + usb_count > UINT32_MAX ||
+      fixed_count + usb_count > SIZE_MAX / sizeof(*devices)) {
+    return;
+  }
+  device_capacity = fixed_count + usb_count;
   if (device_capacity) {
     devices = kmalloc(device_capacity * sizeof(*devices));
     if (!devices) {
@@ -54,9 +63,22 @@ void block_prepare(void)
   for (size_t i = 0; i < virtio_count; ++i) {
     block_device_id id = (block_device_id)++device_count;
     devices[i] = (struct block_device){
+      .backend = BLOCK_BACKEND_VIRTIO,
       .preparation = virtio_blk_preparation_result(virtio_blk_device_at(i)),
     };
     virtio_blk_set_id(i, id);
+  }
+  /* Assign all global IDs before querying by ID: temporary NVMe IDs may
+   * overlap earlier controllers when VirtIO occupies the leading IDs. */
+  for (size_t i = 0; i < nvme_count; ++i) {
+    nvme_set_id(i, (block_device_id)(virtio_count + i + 1));
+  }
+  for (size_t i = 0; i < nvme_count; ++i) {
+    block_device_id id = (block_device_id)++device_count;
+    devices[id - 1] = (struct block_device){
+      .backend = BLOCK_BACKEND_NVME,
+      .preparation = nvme_preparation_result(nvme_device_at(i)),
+    };
   }
 }
 
@@ -74,7 +96,7 @@ void block_register_usb(struct usb_block_device *usb)
     return;
   }
   devices[device_count] = (struct block_device){
-    .usb = usb, .preparation = usb_block_preparation(usb),
+    .backend = BLOCK_BACKEND_USB, .usb = usb, .preparation = usb_block_preparation(usb),
   };
   usb_block_set_id(usb, (block_device_id)++device_count);
   enum block_preparation preparation = devices[device_count - 1].preparation;
@@ -110,7 +132,7 @@ bool block_discovery_finished(void)
 bool block_inventory_complete(void)
 {
   assert_client_context();
-  if (!retained || !virtio_blk_inventory_complete()) {
+  if (!retained || !virtio_blk_inventory_complete() || !nvme_inventory_complete()) {
     return false;
   }
 #ifdef CONFIG_XHCI
@@ -138,7 +160,7 @@ block_device_id block_installer_device_at(size_t index)
 bool block_installer_inventory_available(void)
 {
   assert_client_context();
-  return retained && block_discovery_finished() && virtio_blk_inventory_complete();
+  return retained && block_discovery_finished() && virtio_blk_inventory_complete() && nvme_inventory_complete();
 }
 
 bool block_installer_device(block_device_id id)
@@ -154,6 +176,9 @@ enum block_result block_get_info(block_device_id id, struct block_info *info)
   if (!device) {
     return BLOCK_INVALID;
   }
+  if (device->backend == BLOCK_BACKEND_NVME) {
+    return nvme_get_info(id, info);
+  }
   return device->usb ? usb_block_get_info(device->usb, info) : virtio_blk_get_info(id, info);
 }
 
@@ -165,6 +190,9 @@ enum block_result block_submit(block_device_id id, enum block_operation operatio
   struct block_device *device = find_device(id);
   if (!device) {
     return BLOCK_INVALID;
+  }
+  if (device->backend == BLOCK_BACKEND_NVME) {
+    return nvme_submit(id, operation, first_block, block_count, write_bytes, ticket);
   }
   return device->usb ? usb_block_submit(device->usb, operation, first_block, block_count,
       write_bytes, ticket) : virtio_blk_submit(id, operation, first_block, block_count,
@@ -179,6 +207,9 @@ enum block_result block_collect(const struct block_ticket *ticket, void *read_by
   if (!device) {
     return BLOCK_INVALID;
   }
+  if (device->backend == BLOCK_BACKEND_NVME) {
+    return nvme_collect(ticket, read_bytes, read_capacity, completion);
+  }
   return device->usb ? usb_block_collect(device->usb, ticket, read_bytes, read_capacity,
       completion) : virtio_blk_collect(ticket, read_bytes, read_capacity, completion);
 }
@@ -189,6 +220,9 @@ enum block_result block_abandon(const struct block_ticket *ticket)
   struct block_device *device = ticket ? find_device(ticket->device) : NULL;
   if (!device) {
     return BLOCK_INVALID;
+  }
+  if (device->backend == BLOCK_BACKEND_NVME) {
+    return nvme_abandon(ticket);
   }
   return device->usb ? usb_block_abandon(device->usb, ticket) : virtio_blk_abandon(ticket);
 }
@@ -203,6 +237,9 @@ enum block_result block_wait(const struct block_ticket *ticket, uint64_t deadlin
   cpu_restore_interrupts(flags);
   if (!device) {
     return BLOCK_INVALID;
+  }
+  if (device->backend == BLOCK_BACKEND_NVME) {
+    return nvme_wait(ticket, deadline_ns);
   }
   return usb ? usb_block_wait(usb, ticket, deadline_ns) : virtio_blk_wait(ticket, deadline_ns);
 }

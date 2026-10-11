@@ -53,6 +53,9 @@ struct block_info {
   uint64_t block_count;
   uint32_t block_size, max_transfer, request_slots;
   bool writable, flush_supported, write_failed;
+  /* Raw claims require a fresh all-zero scan of the entire device; partition
+   * claims are refused until a partition-confined authority path is supported. */
+  bool raw_claim_requires_blank;
 };
 
 struct block_ticket {

@@ -6,6 +6,10 @@ inspected at `3c3f9cfe`. The sections below describe the implemented
 behaviour; [qualification](../development/experiments/power-overlay/README.md)
 records the QEMU and native checks.
 
+The 2026-10-11 NVMe integration adds a normal-shutdown confirmation gate and
+explicit local force choices after failure. Those additions still need build
+and QEMU validation; the earlier qualification does not cover them.
+
 Ctrl+Alt+Delete opens a full-screen system overlay offering **Shut down**,
 **Reboot** and **Cancel**, chosen by mouse click or keyboard. It works in any
 tab, including over a game that holds keyboard capture and relative pointer
@@ -31,9 +35,11 @@ lock, and no program can intercept or produce it.
   `power` capability goes to shells in `power = true` spaces, and
   `remote_power` to the remote root shell.
 - **Clean power-off.** The ACPI worker holds user tasks, flushes and seals
-  every writable pool, then enters S5 or resets. A failed flush or firmware
-  refusal unseals the pools, releases the tasks and returns the status; the
-  system stays up.
+  every writable pool, then stops NVMe admission, drains its work and confirms
+  bounded normal controller shutdown before S5 or reset. A failed flush,
+  unconfirmed NVMe shutdown or firmware refusal unseals any sealed pools,
+  releases the tasks and returns the status; the system stays up. NVMe
+  controllers remain retired until reboot, including after firmware refusal.
 
 ## Behaviour
 
@@ -101,17 +107,24 @@ The chosen button calls `acpi_power_local()`, which hands the operation to
 the ACPI worker with the power button's authority; the worker runs the same
 [power-off sequence](../kernel/acpi.md#power-off-and-restart). The overlay then
 shows what happens:
-- "Shutting down: flushing pools..." (or "Restarting: ...") while the worker
+- "Shutting down: checking storage..." (or "Restarting: ...") while the worker
   runs, with the buttons disabled; Escape does nothing then, because programs
   are already held;
-- on failure, "Shutdown failed (status N); the system stays up." with Cancel
-  selected, so the user can retry or return;
+- on a completed failure, "Shutdown failed (status N); the system stays up."
+  with Cancel selected. The power buttons become **Force off** and **Force
+  reboot**, beside "Unsafe: bypasses storage checks; data may be lost." A
+  further explicit selection asks the worker to enter S5 or reset without
+  flushing pools or checking NVMe. It logs the forced operation and data-loss
+  risk. The failure and warning frame must complete presentation before a
+  fresh key press or click can select force. Force is never automatic and is
+  never available through userspace
+  `POWER` rights; ordinary requests and short power-button presses stay clean.
+  Cancel returns to the space; reopening offers the ordinary clean choices;
 - "Another power operation is running." for BUSY, and "Power control is
   unavailable on this machine." when there is no ACPI worker (no RSDP or a
   failed namespace).
 
-No new kernel log line: the worker's existing `power:` lines record the
-operation.
+The worker's `power:` lines record the operation and NVMe shutdown stage.
 
 ### Cancel
 
@@ -145,7 +158,9 @@ The overlay is meant to work when something else has stopped working.
   measured this on one CPU.
 - **Covered:** the power operation itself. User tasks are held during the
   flush, but the overlay is kernel work and keeps drawing, so progress and
-  failure stay visible.
+  failure stay visible. NVMe drain and normal-shutdown waits are bounded; a
+  reported failure enables the explicit force choices without taking ordinary
+  output locks or asking userspace to draw the warning.
 - **Not covered: a stuck presenter.** The presenter task reads the keyboard
   between frames. If it never returns to that loop, the chord is not read.
   Examples are a CPU holding the global output lock forever (ordinary TTY
@@ -155,7 +170,8 @@ The overlay is meant to work when something else has stopped working.
 - **Not covered: a display that stops completing frames.** Nothing can be
   drawn; the drivers' existing timeouts mark the display unavailable.
 - **Not covered: a stuck ACPI worker or flush.** The overlay keeps showing
-  "flushing pools" without a time limit.
+  "checking storage" until that operation returns. Force choices follow a
+  completed failure and do not preempt a stuck worker.
 
 In those cases, a short press of the power button asks the ACPI worker
 directly, independently of the presenter and the keyboard, and holding it
@@ -192,6 +208,14 @@ Accepted by the owner on 2026-10-10:
 3. **Cancel and lock:** Cancel returns focus and keeps capture but does not
    restore relative lock; the program needs a fresh click, as after
    Super+Escape.
+
+Accepted by the owner on 2026-10-11:
+
+4. **NVMe and force:** clean power-off and restart require flushed pools and
+   confirmed bounded normal NVMe shutdown. A controller stays retired until
+   reboot. After reporting a failure, the local kernel overlay may offer an
+   explicit unsafe force action with physical-access authority, bypassing
+   storage checks; userspace `POWER` rights are unchanged.
 
 ## Tasks
 

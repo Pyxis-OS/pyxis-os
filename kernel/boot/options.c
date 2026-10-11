@@ -131,6 +131,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
   const char *display_flip = NULL, *display_flip_metrics = NULL;
   const char *display_cursor_probe = NULL;
+  const char *nvme_write = NULL;
 #if POINTER_SYNTHETIC_ENABLED
   const char *pointer_synthetic = NULL;
 #endif
@@ -164,6 +165,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&mount_disk, key, value);
     } else if (same_text(key, "boot.install")) {
       take_option(&install, key, value);
+    } else if (same_text(key, "nvme.write")) {
+      take_option(&nvme_write, key, value);
     } else if (same_text(key, "boot.default_config")) {
       take_option(&default_config, key, value);
     } else if (same_text(key, "remote.beacon")) {
@@ -233,6 +236,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
 
   options.init = init;
   options.install = install && flag_option("boot.install", install);
+  options.nvme_write = nvme_write && flag_option("nvme.write", nvme_write);
   options.default_config = default_config && flag_option("boot.default_config", default_config);
   options.remote_beacon = remote_beacon;
   options.display_size = display_size;

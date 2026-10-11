@@ -35,6 +35,7 @@
 #include <kernel/debug.h>
 #include <kernel-config.h>
 #include "storage/block_registry.h"
+#include <kernel/storage/nvme.h>
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
 {
@@ -75,6 +76,7 @@
   random_prepare(boot);
   audio_prepare(boot);
   virtio_blk_prepare(boot);
+  nvme_prepare(boot);
   block_prepare();
   gpt_prepare();
   acpi_prepare(boot);
@@ -111,6 +113,7 @@
   debug_start();
   audio_start();
   virtio_blk_start();
+  nvme_start();
   gpt_start();
   npfs_start();
   acpi_start();

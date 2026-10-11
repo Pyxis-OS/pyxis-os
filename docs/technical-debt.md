@@ -1074,7 +1074,24 @@ or repair. Revisit fallback and atomic replacement with an agreed in-system upda
 mounts (USB write and cache synchronization is implemented), and the first native [USB installation](devices/usb-installation.md) on 2026-10-05
 wrote an expendable stick from PXE live media: writable mounting, persistence across a synced power-off and one Update round trip passed
 ([owner record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4)). Power loss during writes, uncertain I/O, other
-devices, ports or the dock path, and physical firmware are unqualified, and the internal NVMe is unsupported.
+devices, ports or the dock path, and physical firmware are unqualified. The [NVMe driver](devices/nvme.md) has QEMU
+qualification; native NVMe and coexistence installation remain unqualified.
+
+## NVMe native qualification and temporary raw authority
+
+The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's
+SK hynix controller. Firmware handoff, MSI-X, normal-shutdown timing and SMART
+counter behaviour need the owner's [read-only native boot](development/experiments/nvme-task1/README.md#first-native-boot-read-only).
+Native writes remain disabled without a separate owner go. The first profile
+supports one active namespace per controller, one I/O pair and RTD3E at most five
+seconds; revisit with a concrete unsupported device rather than guessing.
+
+Task 1's raw claims require a full namespace zero scan within the existing
+30-second deadline, using at most 64 KiB scratch reads. This occupies the sole
+filesystem worker and can time out on large blank media. NVMe partition claims
+refuse, so the current installer's ESP step cannot complete there. Revisit both
+with [coexistence task 3](wip/nvme-coexistence.md#3-installer-coexistence-mode);
+no partitioned internal disk is eligible for whole-disk writes meanwhile.
 
 ## Updates from before boot init
 
@@ -1351,7 +1368,7 @@ topology and target backend, and revisit latency policy with those numbers while
 Deferred by the owner on 2026-10-04 from the same [PR #389 review](https://git.internal/PyxisOS/pyxis-os/pulls/389). The accepted observed-uniqueness policy permits
 the sole observed matching GUID under partial discovery, so if the intended internal system disk is not observed (not ready, or no driver) removable media with that
 GUID can supply `system://`, and if both matching disks are observed the duplicate prevents mounting and can block startup; a GUID authenticates neither disk nor
-contents. Revisit selection before supporting installed systems on NVMe or another internal-disk backend. Preferring the boot device's identity is only a review
+contents. Revisit selection when native installed NVMe systems or another internal-disk backend are qualified. Preferring the boot device's identity is only a review
 proposal, with its discovery, authority and lifetime contract undiscussed; current read-only USB boot selection is unchanged.
 
 ## Native mount design limits

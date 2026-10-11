@@ -51,10 +51,12 @@ reopen.
 
 ## Inventory and raw access
 
-Installer disk authority covers retained VirtIO and USB BOT/SCSI candidates.
+Installer disk authority covers retained VirtIO, USB BOT/SCSI and NVMe candidates.
 USB write claims require the same per-device C.1 qualification as writable native
 mounts: known write-protection-clear media and a successful real blocking cache
 synchronization. Configured native mounting uses its separate GUID authority.
+NVMe writes are disabled by default and require the explicit `nvme.write=1` boot
+option. This gate does not itself grant a raw claim.
 
 [`include/abi/disk.h`](../../include/abi/disk.h) defines two native protocols.
 DISKS ENUMERATE requires ENUMERATE and takes a zero-based inventory index; it
@@ -80,6 +82,19 @@ handles. READ_WRITE also waits for the selected device's GPT scan; inventory
 sealing does not require every GPT scan to finish. Successful raw claims block
 all mounts on the device.
 
+During [NVMe coexistence task 1](../wip/nvme-coexistence.md#1-nvme-driver--assigned-2026-10-11), NVMe
+READ_WRITE OPEN and whole-disk CLAIM additionally read every logical block and
+require every byte to be zero. Missing GPT metadata or zeroed headers alone do
+not prove blank media. Nonzero data returns DENIED; invalid geometry, partial
+reads, I/O failure or deadline expiry also refuse the claim. The scan uses a
+heap scratch buffer of at most 64 KiB, bounded by the device transfer limit, and
+the same operation deadline as admission, without extending it between reads.
+Its cost scales with namespace capacity; a large
+blank disk may exceed the current 30-second deadline and remain unavailable for
+raw writes. No throughput or native hardware qualification is implied.
+The serial filesystem worker remains occupied during the scan, so other queued
+filesystem requests can also expire while a claim is being checked.
+
 READ and WRITE use byte offsets and nonzero lengths aligned to the logical block
 size, within device bounds and at most `DISK_IO_MAX_BYTES` (4096). WRITE captures
 input before queueing. READ returns all requested bytes only on success; a failed
@@ -95,6 +110,13 @@ opening's rules. A GPT entry claims only that partition: no other claim may
 exist on the device and that partition must not hold a mounted pool, while
 other partitions' pools stay mounted. WRITE is then confined to the partition,
 and mounts of it are refused.
+
+NVMe partition CLAIM is refused during task 1, including on an object that
+previously held and released a whole-disk claim. Task 3 replaces this temporary
+blank-media-only policy with partition-first coexistence authority. Every later
+NVMe whole-disk claim repeats the entire zero scan: a proof is never cached
+across writes, release or mounts. Existing VirtIO and USB claim rules are
+unchanged.
 
 RELEASE requires RELEASE and flushes. For a whole-disk claim it then rescans GPT;
 a partition claim cannot have changed the table and skips the rescan. It ends
@@ -134,6 +156,6 @@ for Update. Partial USB coverage does not change these selection and consent
 rules; a sole eligible observed disk is not proof that no other disk exists.
 USB raw access follows the same claims, bounded I/O, ordered flushes, explicit
 release and GPT rescan as VirtIO. Normal boots still grant no raw-disk service.
-AHCI, NVMe, hotplug and power-loss validation remain outside this interface.
+AHCI, hotplug and power-loss validation remain outside this interface.
 [USB installation](usb-installation.md) records the native ThinkPad installation.
 See [block storage](block-storage.md) and [GPT discovery](gpt.md).
