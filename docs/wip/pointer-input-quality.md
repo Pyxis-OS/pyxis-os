@@ -98,7 +98,7 @@ state or guessed universal pressure units.
 
 ## Tasks
 
-1. [ ] **USB report-protocol mice and shared scroll integration.** The existing
+1. [x] **USB report-protocol mice and shared scroll integration.** The existing
    BSP USB worker owns descriptor admission, control requests and interrupt
    streams. Admit one standard relative Mouse application collection on a
    supported interface, including boot/non-boot mice and composite keyboard/mouse
@@ -123,7 +123,7 @@ state or guessed universal pressure units.
    reserved-ID evidence rule below switches decoding; no independent interface
    lifetime is added.
 
-   **Owner correction accepted 2026-10-11, implemented pending native retest:**
+   **Owner correction accepted 2026-10-11, implemented and natively qualified:**
    receive TDs cover at least endpoint MaxPacketSize and the admitted report
    size within HID capacity; report IDs and field ranges remain strict. Protocol admission reads
    GET_PROTOCOL after SET_PROTOCOL(report), as diagnostic evidence without a new
@@ -131,7 +131,7 @@ state or guessed universal pressure units.
    path's failed completion metadata before retirement. Malformed input uses
    the drop/count/16-consecutive policy above, replacing one-report retirement.
 
-   **Later owner follow-up accepted 2026-10-11, implemented pending retest:**
+   **Later owner follow-up accepted 2026-10-11, implemented and qualified:**
    for known mouse Input IDs, ignore trailing bytes and zero-extend missing
    payload; never fabricate an absent ID. Keep other unknown-ID rejection, field
    ranges, boot keyboard lengths and exact Feature images. Under either
@@ -140,7 +140,7 @@ state or guessed universal pressure units.
    No keyboard raw data, including declared keyboard fields on a mixed Mouse
    interface.
 
-   **Reserved-ID switch accepted 2026-10-11, implemented pending native retest:**
+   **Reserved-ID switch accepted 2026-10-11, implemented and natively qualified:**
    on a boot-subclass Mouse interface with an admitted ID-bearing descriptor,
    a nonempty Input beginning with reserved ID 0 selects boot decoding permanently
    for the attachment. Never switch on a nonzero byte, a nonboot interface or a
@@ -215,12 +215,19 @@ ports first, then the parent pin PR. The archive fallback was accepted 2026-10-1
 
 - [x] Report decoder, source/scroll policy, SDK and consumer integration.
 - [x] Before-code baseline, interleaved QEMU cost record and interactive checks.
-- [ ] Owner/luna native descriptor and behavior qualification (ASUS/dongle/Keychron).
+- [x] Owner native ASUS and G502 qualification; task 1 closure accepted 2026-10-11.
+      Remaining device/axis coverage stays in [technical debt](../technical-debt.md#usb-hid-native-coverage).
 
 The [qualification record](../development/experiments/pointer-input-quality/README.md)
 records revisions, measured variation, coverage limits and exact native steps.
-Task 1's device checkbox stays open until its native checks; task 2 requires a
-separate owner go. Current firmware-relative PS/2 input remains mouse-class;
+Task 1 is complete: ASUS motion/clicks/wheel and G502 motion/buttons/free-spin/
+Cmd+R/replug pass at `e7a18849`. ASUS back/forward buttons are unsupported and
+accepted without further work. Keychron, horizontal and multiplier coverage are
+unqualified, not claimed by closure.
+
+**Task 2 assigned 2026-10-11:** start only after #716 merges, on fresh main;
+capture the baseline first and bring at most three decisions with defaults to
+the owner before code. Current firmware-relative PS/2 input remains mouse-class;
 this delivery supplies the touchpad policy/typing/reset base, not palm filtering.
 
 ## Qualification and tuning

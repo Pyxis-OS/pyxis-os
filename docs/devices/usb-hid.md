@@ -140,6 +140,12 @@ The decoder stays boot until detach; fresh admission starts again from the
 descriptor. The switch logs once under either diagnostic option, with no new
 default output.
 
+Native ASUS 1ea7:0066 motion, clicks and wheel are qualified with this switch.
+Its back/forward side buttons are unsupported; the owner accepts this limit
+without further work (2026-10-11). G502/Lightspeed 046d:c53a remains in report
+mode and passes motion/buttons/free-spin/Cmd+R/replug. See the
+[native result](../development/experiments/pointer-input-quality/README.md#native-task-1-closure).
+
 After SET_PROTOCOL(report) on a boot mouse, admission reads GET_PROTOCOL.
 The readback (including an unavailable or unexpected result) is diagnostic
 evidence and does not switch decoders or trigger an automatic boot fallback.
@@ -160,7 +166,7 @@ completion code and requested/residual length before endpoint retirement, after
 releasing input state. No keyboard payload or key identity is dumped. Normal
 boots add no dump or packet logging. Device string/serial descriptors are never
 read or printed by this diagnostic.
-The temporary `usb.xhci.diagnose=1` [burst-freeze capture](../development/experiments/pointer-input-quality/README.md#one-diagnostic-retest-through-luna)
+The opt-in `usb.xhci.diagnose=1` [burst-freeze capture](../development/experiments/pointer-input-quality/README.md#one-diagnostic-retest-through-luna)
 adds bounded controller/HID-loss observations at info level; it changes no
 recovery rules and is not a timing qualification.
 Dumping consumes the existing admission/progress budget; use it on a small

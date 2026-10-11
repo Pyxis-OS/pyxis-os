@@ -416,8 +416,8 @@ brief apparent motion when those bytes were interpreted as report IDs. Plain
 main's boot path also works for ASUS motion/buttons without wheel. G502 continues
 using nine-byte ID-2 report packets. Raw packet bytes stay outside the repo.
 
-The owner accepts a generic reserved-ID switch, implemented pending native
-retest: boot-subclass Mouse plus ID-bearing descriptor plus leading 0 selects
+The owner accepts a generic reserved-ID switch, implemented and qualified by
+the native result below: boot-subclass Mouse plus ID-bearing descriptor plus leading 0 selects
 boot decoding for this attachment, including optional byte-3 wheel. No switch on
 nonzero IDs, nonboot mice or no-ID descriptors. Malformed short boot packets keep
 the existing retirement policy. Do not issue SET_PROTOCOL again: preserve the
@@ -434,13 +434,32 @@ Q35/nested KVM, host CPU, four CPUs/512 MiB, read-only VirtIO FAT boot disk,
 USB keyboard/full-speed mouse: motion, wheel and `echo reportalive` work.
 GDB confirms mouse.ids=false, report_protocol=true, reserved_id_boot=false,
 malformed_reports=0; the controller is running, not failed, no pending command.
-Zero-leading no-ID reports never switch. Positive reserved-ID transition still
-requires the ASUS native retest; this QEMU descriptor has no report IDs.
+Zero-leading no-ID reports never switch. This QEMU descriptor has no report
+IDs; positive reserved-ID switching is covered by the native result below.
 All owned jobs stopped; no kernel fault injection or new test framework.
+
+### Native task 1 closure
+
+Owner ThinkPad retest at `e7a18849`, 2026-10-11 about 21:45, same diagnostic
+build/options: ASUS 1ea7:0066 motion, clicks and wheel pass after the reserved-ID
+switch; G502/Lightspeed motion/buttons/wheel/free-spin/Cmd+R/replug still pass.
+Masked 141-line log stays outside the repo at
+`/shared/present/batch2/pointer716/native-asus-switch-e7a18849.log`; it records one
+ASUS `action=reserved-ID-boot`. ASUS back/forward side buttons do not work; the
+owner accepts that limit and closes further ASUS work. No pan qualification:
+G502 tilt is mapped on-board to back/forward. Keychron and high-resolution/
+multiplier hardware remain unqualified in technical debt. Task 1 closure is
+accepted; Synaptics task 2 starts only after #716 merges.
+
+The retained diagnostic boot options are opt-in. Inspection of all added klog
+calls confirms descriptor/layout output requires `usb.hid.describe=1`, controller
+samples/quarantine detail require `usb.xhci.diagnose=1`, and HID readback/loss/
+malformed/switch output requires either. Both options default false. Ordinary
+attachment detail stays ktrace; no new default-boot klog output is introduced.
 
 ### One diagnostic retest through luna
 
-A temporary `usb.xhci.diagnose=1` option adds info-level observations only, with
+The opt-in `usb.xhci.diagnose=1` option adds info-level observations only, with
 no default-boot output, packet dump or USB recovery-policy change. The presenter's
 BSP/IF=0 service samples retained controller mappings once per five seconds,
 even if the USB worker is parked: USBSTS, USBCMD, IMAN, ERDP, software dequeue/
