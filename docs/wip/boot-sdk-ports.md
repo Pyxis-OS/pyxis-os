@@ -52,7 +52,8 @@ Claude (2026-10-10), `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new ker
 statuses.
 
 [NVMe coexistence](nvme-coexistence.md): Codex alpha (2026-10-11), task 1's NVMe
-driver assigned; write authority and shutdown/force decisions accepted.
+driver implemented and QEMU-qualified; review and the owner's read-only native
+boot pending. Write authority and shutdown/force decisions are recorded.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), task 2
 waits for the owner's Fedora evidence; [whole-frame skipping](../kernel/presenter-frame-skipping.md)

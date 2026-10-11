@@ -82,12 +82,14 @@ handles. READ_WRITE also waits for the selected device's GPT scan; inventory
 sealing does not require every GPT scan to finish. Successful raw claims block
 all mounts on the device.
 
-During [NVMe coexistence task 1](../wip/nvme-coexistence.md#1-nvme-driver), NVMe
+During [NVMe coexistence task 1](../wip/nvme-coexistence.md#1-nvme-driver--assigned-2026-10-11), NVMe
 READ_WRITE OPEN and whole-disk CLAIM additionally read every logical block and
 require every byte to be zero. Missing GPT metadata or zeroed headers alone do
 not prove blank media. Nonzero data returns DENIED; invalid geometry, partial
 reads, I/O failure or deadline expiry also refuse the claim. The scan uses a
-heap scratch buffer of at most 64 KiB, bounded by the device transfer limit and the same operation deadline as admission, without extending it between reads. Its cost scales with namespace capacity; a large
+heap scratch buffer of at most 64 KiB, bounded by the device transfer limit, and
+the same operation deadline as admission, without extending it between reads.
+Its cost scales with namespace capacity; a large
 blank disk may exceed the current 30-second deadline and remain unavailable for
 raw writes. No throughput or native hardware qualification is implied.
 The serial filesystem worker remains occupied during the scan, so other queued

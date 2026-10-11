@@ -1,6 +1,7 @@
 # Pyxis beside Fedora on the internal NVMe
 
-Status: **task 1 assigned to Codex alpha, 2026-10-11; implementation in progress.** The owner
+Status: **task 1 implemented and QEMU-qualified by Codex alpha, 2026-10-11;
+PR review and the owner's read-only native qualification pending.** The owner
 accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
 decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
 ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
@@ -165,8 +166,9 @@ ahead task by task.
 
 ### 1. NVMe driver — assigned 2026-10-11
 
-- [ ] Implement and qualify the driver in QEMU; native qualification goes through
-  the orchestrator and Luna, read-only first.
+- [x] Implement and qualify the driver in QEMU.
+- Native qualification remains pending through the orchestrator and Luna,
+  read-only first; no later task is authorized by this delivery.
 
 Task-1 decisions accepted by the owner on 2026-10-11:
 
@@ -204,9 +206,17 @@ reproduce the SK hynix controller's timing, power states or counters. Natively
 the first boot reads only: enumerate, identify, read the GPT and sectors, log
 page.
 
-**After this task the owner can:** boot a QEMU image installed on an NVMe disk,
-and on the ThinkPad see the internal disk, its GPT and its SMART numbers in
-Pyxis, and compare read bytes with Linux, writing nothing.
+Implemented contracts live in the [NVMe reference](../devices/nvme.md); the
+[qualification record](../development/experiments/nvme-task1/README.md) records
+the baseline, read-before-write checks, blank/foreign raw authority, clean power,
+the explicit force escape and exact native staging steps. No userspace ABI or
+dependency pin changes are needed.
+
+**After this task the owner can:** boot a prepared QEMU NVMe image and mount its
+installed npfs pool. The current installer still refuses its ESP partition claim
+on NVMe; partition-first coexistence remains task 3. On the first read-only
+ThinkPad boot the owner can see the internal disk, its GPT and SMART numbers,
+and compare reads with Linux, writing no user data.
 
 ### 2. FAT32 read and write for the ESP
 
