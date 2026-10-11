@@ -266,7 +266,9 @@ Linked registrations/pending expiry lists drain; no mapping lease survives sleep
 native helpers and extends the existing manual threadprobe. Merge it before the
 parent gitlink. Owner-native A/B is recorded; no native speedup is claimed.
 The owner-approved scheduler-pointer follow-up reuses the permanent loop
-context for expiry checks; its native A/B is pending. See the
+context for expiry checks (#733, merged). Native A/B shows at most 25 ns recovered,
+within noise; gate 6's CALL64 cost mostly remains, with no further optimization
+assigned. See the
 [follow-up record](../development/experiments/threads-task6/README.md#scheduler-pointer-follow-up).
 Gates 7/8 remain separate.
 

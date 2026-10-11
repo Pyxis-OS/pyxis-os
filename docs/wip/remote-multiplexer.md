@@ -12,9 +12,10 @@ Native horse/PXE qualification remains owner work.
 ## Startup and authority
 
 Set `remote_multiplexer = true` on the Remote space and connect with
-`pyxis-remote --mux HOST PORT`. Packaged live and installed configurations leave
-this flag false. Ordinary and machine connections retain their shell path;
-unavailable mux requests fail without fallback. `--mux` rejects `--machine`,
+`pyxis-remote --mux HOST PORT`. Packaged live Remote enables the flag (owner
+accepted, 2026-10-11); installed defaults have no Remote space, and owner-authored
+Remote entries can set it. Ordinary and machine connections retain their shell
+path; unavailable mux requests fail without fallback. `--mux` rejects `--machine`,
 `--no-shell-echo` and `--download-dir`. HELLO option bit 1 selects mux; bit 0
 selects the ordinary quiet shell and cannot be combined with it.
 
