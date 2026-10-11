@@ -124,11 +124,20 @@ state or guessed universal pressure units.
 
    **Owner correction accepted 2026-10-11, implemented pending native retest:**
    receive TDs cover at least endpoint MaxPacketSize and the admitted report
-   size within HID capacity; decoding stays strict. Protocol admission reads
+   size within HID capacity; report IDs and field ranges remain strict. Protocol admission reads
    GET_PROTOCOL after SET_PROTOCOL(report), as diagnostic evidence without a new
    boot fallback. Both diagnostic options cover the early unavailable/retiring
    path's failed completion metadata before retirement. Malformed input uses
    the drop/count/16-consecutive policy above, replacing one-report retirement.
+
+   **Later owner follow-up accepted 2026-10-11, implemented pending retest:**
+   for known mouse Input IDs, ignore trailing bytes and zero-extend missing
+   payload; never fabricate an absent ID. Keep unknown-ID rejection, field
+   ranges, boot keyboard lengths and exact Feature images. Under either
+   diagnostic option, record the first length mismatch per layout and the
+   first four malformed Mouse-interface packets (ID/length plus up to 16 bytes).
+   No keyboard raw data, including declared keyboard fields on a mixed Mouse
+   interface; no boot-format fallback before an owner decision on the evidence.
 
    Enable high-resolution wheel Features only for understood wheel-scoped
    Resolution Multipliers: read the complete Feature, preserve unrelated fields,

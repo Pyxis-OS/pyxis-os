@@ -75,7 +75,9 @@ nonboot and composite interfaces. The parser retains complete Input/Output/Featu
 lengths by ID, accounting for padding and ignored fields, and scoped X/Y, Wheel,
 Consumer AC Pan and Button usages 1–32. Signed bit extraction uses the declared
 logical ranges. Each button-bearing ID owns a snapshot; wheel-only IDs preserve
-holds. Unknown IDs, malformed lengths and invalid values are dropped without
+holds. For a known Input ID, trailing bytes are ignored and a short payload is
+zero-extended before field extraction. An absent ID byte is never fabricated;
+unknown IDs and invalid field values are dropped without
 changing input state. Each interface counts malformed reports and its consecutive
 streak; a valid report resets that interface's streak. Sixteen consecutive malformed
 reports retire the whole binding, including a keyboard sibling. Transport errors
@@ -91,8 +93,10 @@ retain only their first usage for Collection identity, validate ranges without
 expanding them, and still account for all report lengths/global state.
 Receive TDs cover at least the endpoint maximum packet size and the largest
 admitted Input report, within the existing capacity; boot keyboards also receive
-at least eight bytes. Decoding still accepts only the defined boot-keyboard
-length or the admitted mouse layout length, not padding/trailer guesses. HID §8.4 requires shorter reports to terminate with a
+at least eight bytes. Boot keyboard decoding retains its defined eight-byte
+length. Known mouse Input layouts use the owner-accepted 2026-10-11 length
+tolerance above, within receive capacity; range checks and exact Feature images
+are unchanged. Padding does not infer a boot-format fallback. HID §8.4 requires shorter reports to terminate with a
 short packet, including a zero-length packet for an exact packet multiple; one
 transfer can span multiple packets. One worker-only adjustment before receives
 start handles confirmed boot fallback; backing remains retained until reboot.
@@ -123,7 +127,12 @@ protocol/layout/multiplier dumps at info level, for native qualification.
 It or `usb.xhci.diagnose=1` also gates protocol readback, transport loss and
 malformed-report counts. Malformed-report diagnostics are limited to one
 observation per interface per five seconds, plus the final retirement; successful
-reports are not logged. The unavailable-device loss path reports retained failed
+reports are not logged. The first differing Input length is logged once per
+layout. Up to four malformed Mouse-interface Input packets per admission may
+log their ID/length and at most 16 actual bytes. Keyboard interfaces never have
+payload dumps; a Mouse descriptor declaring Keyboard/Keypad collections or
+keyboard Input usages suppresses raw bytes too. No device strings or serials are
+logged. The unavailable-device loss path reports retained failed
 completion code and requested/residual length before endpoint retirement, after
 releasing input state. No keyboard payload or key identity is dumped. Normal
 boots add no dump or packet logging. Device string/serial descriptors are never

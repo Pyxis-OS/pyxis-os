@@ -340,6 +340,43 @@ completion/endpoint/requested/residual metadata if a device retires. Do not infe
 controller failure from loss of both receivers. PS/2 and remote-shell checks
 remain the control. No raw key payload or new device-firmware/polling settings.
 
+### Native fa67a519 retest and length-tolerance follow-up
+
+Owner-run ThinkPad, 2026-10-11 about 20:45, same diagnostic options and
+`USB_HID_DESCRIBE=1` build. The full masked 257-line log remains outside the repo:
+`/shared/present/batch2/pointer716/native-retest-fa67a519.log`.
+
+**G502/Lightspeed 046d:c53a passes:** owner confirms motion, buttons, wheel/free-spin,
+Cmd+R mapped button and replug. Pan is not qualified: tilt is mapped on-board to
+back/forward. The log establishes twelve-byte keyboard packets received in boot
+protocol and dropped/counted without fatal transport/binding loss. It does not
+prove every mapped chord used those packets (the owner reports the chord works).
+Mouse TD length is 32, report layout 9, and protocol readback is 1.
+
+**ASUS 1ea7:0066 still fails:** protocol readback is 1; four-byte ID-0 packets are
+unknown, and four-byte ID-1 packets differ from the descriptor's three-byte
+Consumer Input layout. The log records retirement at sixteen consecutive
+malformed packets. It does not contain raw Input bytes to distinguish boot-format
+mouse data from another encoding. Native report motion/wheel once worked on
+`7491e419`; boot-to-boot variation remains unresolved.
+
+The owner authorizes known mouse Input length tolerance: ignore trailers,
+zero-fill a short payload, preserve declared ID/field-range checks and exact
+Feature lengths. Missing/unknown IDs remain failures. Padding an ID-1 Consumer
+report does not make it pointer data. Boot keyboard decoding stays eight bytes.
+Under either diagnostic option, the first length mismatch per layout is recorded;
+up to four malformed Mouse-interface packets per admission log ID/length and
+at most sixteen actual bytes, with no keyboard payload. Declared Keyboard/Keypad
+collections or keyboard Input usages on a mixed Mouse interface suppress raw
+bytes there as well. No boot-format fallback is implemented or inferred.
+
+Luna should rebuild the next submitted head with the same flags/options. Preserve
+the G502 pass as a control; try ASUS ordinary motion, left/right buttons and
+wheel. Retain `usb HID mouse sample` and `Input ID` lines alongside readback and
+malformed counts. The samples must establish the wire encoding before any
+separate boot-format fallback decision. Raw packet logs stay outside the repo;
+no device settings, firmware or polling changes are requested.
+
 ### One diagnostic retest through luna
 
 A temporary `usb.xhci.diagnose=1` option adds info-level observations only, with

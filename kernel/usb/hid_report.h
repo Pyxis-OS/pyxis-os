@@ -60,7 +60,7 @@ struct usb_hid_report_parser {
   struct usb_hid_report_collection collections[USB_HID_REPORT_DEPTH];
   uint32_t usages[USB_HID_REPORT_USAGES], usage_minimum;
   unsigned usage_count, collection_depth, global_depth, delimiter_branch;
-  bool usage_range, delimiter_open;
+  bool usage_range, delimiter_open, keyboard_usage;
 };
 
 struct usb_hid_mouse_reports {
@@ -72,7 +72,7 @@ struct usb_hid_mouse_reports {
   unsigned layout_count, field_count, scope_count, usage_count;
   uint32_t pan_multiplier, wheel_multiplier;
   uint16_t input_bytes;
-  bool ids, wheel_enabled, pan_enabled;
+  bool ids, wheel_enabled, pan_enabled, keyboard_data;
   /* Written only on a failed decode; no successful-report payload is retained. */
   enum usb_hid_decode_failure decode_failure;
   unsigned decode_field;

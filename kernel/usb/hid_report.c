@@ -20,9 +20,12 @@
 #define HID_COLLECTION_APPLICATION 1
 #define HID_COLLECTION_LOGICAL 2
 #define HID_PAGE_DESKTOP 1
+#define HID_PAGE_KEYBOARD 7
 #define HID_PAGE_BUTTON 9
 #define HID_PAGE_CONSUMER 12
 #define HID_USAGE_MOUSE 2
+#define HID_USAGE_KEYBOARD 6
+#define HID_USAGE_KEYPAD 7
 #define HID_USAGE_X 0x30
 #define HID_USAGE_Y 0x31
 #define HID_USAGE_WHEEL 0x38
@@ -67,6 +70,7 @@ static bool local_controls_ignored(const struct usb_hid_report_parser *parser)
 
 static bool local_usage(struct usb_hid_report_parser *parser, uint32_t usage)
 {
+  parser->keyboard_usage |= (usage >> 16) == HID_PAGE_KEYBOARD;
   if (parser->delimiter_open && parser->delimiter_branch > 1) {
     return true;
   }
@@ -238,6 +242,10 @@ static bool collection_item(struct usb_hid_mouse_reports *mouse, uint32_t type,
   }
   uint32_t usage = control_usage(parser, 0);
   if (type == HID_COLLECTION_APPLICATION) {
+    if (usage == ((HID_PAGE_DESKTOP << 16) | HID_USAGE_KEYBOARD) ||
+        usage == ((HID_PAGE_DESKTOP << 16) | HID_USAGE_KEYPAD)) {
+      mouse->keyboard_data = true;
+    }
     /* A second Mouse application is outside the single-pointer profile. */
     collection.mouse = usage == ((HID_PAGE_DESKTOP << 16) | HID_USAGE_MOUSE);
     collection.ignored = !collection.mouse;
@@ -317,6 +325,9 @@ static bool data_item(struct usb_hid_mouse_reports *mouse, enum usb_hid_report_t
   const struct usb_hid_report_global *global = &parser->global;
   if (!parser->collection_depth || !global->size || !global->count) {
     return false;
+  }
+  if (type == HID_INPUT && !(flags & HID_DATA_CONSTANT)) {
+    mouse->keyboard_data |= global->page == HID_PAGE_KEYBOARD || parser->keyboard_usage;
   }
   int layout = report_layout(mouse, global->id);
   if (layout < 0) {
@@ -581,6 +592,7 @@ bool usb_hid_mouse_parse(struct usb_hid_mouse_reports *mouse, const uint8_t *des
         return false;
       }
       parser->usage_count = parser->delimiter_branch = 0;
+      parser->keyboard_usage = false;
     } else {
       return false;
     }
@@ -609,21 +621,23 @@ bool usb_hid_mouse_parse(struct usb_hid_mouse_reports *mouse, const uint8_t *des
   return mouse->input_bytes != 0;
 }
 
-static uint32_t field_bits(const struct usb_hid_report_field *field, const uint8_t *report)
+static uint32_t field_bits(const struct usb_hid_report_field *field, const uint8_t *report,
+                           size_t bytes)
 {
   uint32_t value = 0;
   for (unsigned bit = 0; bit < field->size; ++bit) {
     unsigned offset = field->offset + bit;
-    if (report[offset / 8] & (1u << (offset % 8))) {
+    if (offset / 8 < bytes && (report[offset / 8] & (1u << (offset % 8)))) {
       value |= 1u << bit;
     }
   }
   return value;
 }
 
-static int64_t field_value(const struct usb_hid_report_field *field, const uint8_t *report)
+static int64_t field_value(const struct usb_hid_report_field *field, const uint8_t *report,
+                           size_t bytes)
 {
-  uint32_t value = field_bits(field, report);
+  uint32_t value = field_bits(field, report, bytes);
   return field->minimum < 0 ? signed_value(value, field->size) : value;
 }
 
@@ -653,7 +667,7 @@ static bool decode_failed(struct usb_hid_mouse_reports *mouse,
 bool usb_hid_mouse_decode(struct usb_hid_mouse_reports *mouse, const uint8_t *report,
                           size_t bytes, struct usb_hid_mouse_sample *sample)
 {
-  if (!bytes) {
+  if (!bytes && mouse->ids) {
     return decode_failed(mouse, HID_DECODE_EMPTY, 0, 0);
   }
   unsigned layout = 0;
@@ -664,10 +678,12 @@ bool usb_hid_mouse_decode(struct usb_hid_mouse_reports *mouse, const uint8_t *re
   if (layout == mouse->layout_count) {
     return decode_failed(mouse, HID_DECODE_ID, 0, 0);
   }
-  if (bytes != usb_hid_report_bytes(mouse, layout, HID_INPUT)) {
+  size_t expected = usb_hid_report_bytes(mouse, layout, HID_INPUT);
+  if (!expected || bytes > USB_HID_INTERRUPT_BYTES) {
     return decode_failed(mouse, HID_DECODE_LENGTH, 0, 0);
   }
   const uint8_t *payload = report + (mouse->ids ? 1 : 0);
+  size_t payload_bytes = (bytes < expected ? bytes : expected) - (mouse->ids ? 1 : 0);
   int64_t x = 0, y = 0, wheel = 0, pan = 0;
   uint32_t buttons = 0;
   for (unsigned index = 0; index < mouse->field_count; ++index) {
@@ -675,7 +691,7 @@ bool usb_hid_mouse_decode(struct usb_hid_mouse_reports *mouse, const uint8_t *re
     if (field->layout != layout || field->kind == HID_MULTIPLIER) {
       continue;
     }
-    int64_t value = field_value(field, payload);
+    int64_t value = field_value(field, payload, payload_bytes);
     if (value < field->minimum || value > field->maximum) {
       if (field->null_state) {
         continue;
@@ -814,17 +830,18 @@ bool usb_hid_feature_confirm(struct usb_hid_mouse_reports *mouse, unsigned layou
     return false;
   }
   const uint8_t *payload = report + (mouse->ids ? 1 : 0);
+  size_t payload_bytes = bytes - (mouse->ids ? 1 : 0);
   for (unsigned index = 0; index < mouse->field_count; ++index) {
     const struct usb_hid_report_field *field = &mouse->fields[index];
     if (field->layout == layout && field->kind == HID_MULTIPLIER &&
-        !effective_multiplier(field, field_value(field, payload))) {
+        !effective_multiplier(field, field_value(field, payload, payload_bytes))) {
       return false;
     }
   }
   for (unsigned index = 0; index < mouse->field_count; ++index) {
     struct usb_hid_report_field *field = &mouse->fields[index];
     if (field->layout == layout && field->kind == HID_MULTIPLIER) {
-      field->multiplier = effective_multiplier(field, field_value(field, payload));
+      field->multiplier = effective_multiplier(field, field_value(field, payload, payload_bytes));
     }
   }
   update_multipliers(mouse);
