@@ -9,8 +9,12 @@ static void emit(struct presentation *screen, const char *text)
 
 static void position(struct presentation *screen)
 {
+  unsigned x = screen->host_columns && screen->x >= screen->host_columns ?
+               screen->host_columns - 1 : screen->x;
+  unsigned y = screen->host_rows && screen->y >= screen->host_rows ?
+               screen->host_rows - 1 : screen->y;
   char text[32];
-  int length = snprintf(text, sizeof(text), "\x1b[%u;%uH", screen->y + 1, screen->x + 1);
+  int length = snprintf(text, sizeof(text), "\x1b[%u;%uH", y + 1, x + 1);
   buffer_append(screen->output, text, (size_t)length);
 }
 
@@ -36,6 +40,42 @@ static void style(struct presentation *screen, uint8_t attributes)
   buffer_append(screen->output, text, (size_t)length);
 }
 
+static void margins(struct presentation *screen)
+{
+  unsigned rows = screen->rows;
+  if (screen->host_rows && rows > screen->host_rows) {
+    rows = screen->host_rows;
+  }
+  if (rows == 1) {
+    emit(screen, "\x1b[r");
+  } else {
+    char text[32];
+    int length = snprintf(text, sizeof(text), "\x1b[1;%ur", rows);
+    buffer_append(screen->output, text, (size_t)length);
+  }
+}
+
+static void clear_rows(struct presentation *screen, unsigned columns, unsigned rows)
+{
+  if (screen->host_columns && columns > screen->host_columns) {
+    columns = screen->host_columns;
+  }
+  if (screen->host_rows && rows > screen->host_rows) {
+    rows = screen->host_rows;
+  }
+  if (screen->style.attributes) {
+    style(screen, 0);
+  }
+  for (unsigned y = 0; y < rows; ++y) {
+    char text[48];
+    int length = snprintf(text, sizeof(text), "\x1b[%u;1H\x1b[%uX", y + 1, columns);
+    buffer_append(screen->output, text, (size_t)length);
+  }
+  if (screen->style.attributes) {
+    style(screen, screen->style.attributes);
+  }
+}
+
 void presentation_begin(struct presentation *screen)
 {
   screen->tab_width = 8;
@@ -46,9 +86,28 @@ void presentation_begin(struct presentation *screen)
   emit(screen, "\x1b[?1049h\x1b[?7l\x1b[0m");
   style(screen, 0);
   emit(screen, "\x1b[2J\x1b[4 q\x1b[?25h");
-  char text[32];
-  int length = snprintf(text, sizeof(text), "\x1b[1;%ur", screen->rows);
-  buffer_append(screen->output, text, (size_t)length);
+  margins(screen);
+  position(screen);
+}
+
+void presentation_resize(struct presentation *screen, unsigned columns, unsigned rows)
+{
+  if (screen->columns == columns && screen->rows == rows) {
+    return;
+  }
+  unsigned clear_columns = columns > screen->columns ? columns : screen->columns;
+  unsigned clear_height = rows > screen->rows ? rows : screen->rows;
+  screen->columns = columns;
+  screen->rows = rows;
+  if (screen->x >= columns) {
+    screen->x = columns - 1;
+  }
+  if (screen->y >= rows) {
+    screen->y = rows - 1;
+  }
+  screen->wrap_pending = false;
+  margins(screen);
+  clear_rows(screen, clear_columns, clear_height);
   position(screen);
 }
 
@@ -58,7 +117,9 @@ static void newline(struct presentation *screen)
   screen->x = 0;
   if (screen->y + 1 < screen->rows) {
     ++screen->y;
-  } else {
+  } else if (screen->rows == 1) {
+    clear_rows(screen, screen->columns, 1);
+  } else if (!screen->host_rows || screen->rows <= screen->host_rows) {
     position(screen);
     /* Newly blank native cells keep the colours, with no glyph attributes. */
     if (screen->style.attributes) {
@@ -80,7 +141,10 @@ static void character(struct presentation *screen, uint16_t value)
   position(screen);
   char text[3];
   size_t length = terminal_character_encode(value, text);
-  buffer_append(screen->output, text, length);
+  if ((!screen->host_columns || screen->x < screen->host_columns) &&
+      (!screen->host_rows || screen->y < screen->host_rows)) {
+    buffer_append(screen->output, text, length);
+  }
   if (screen->x == screen->columns - 1) {
     screen->wrap_pending = true;
   } else {
@@ -120,10 +184,17 @@ static void erase(struct presentation *screen, unsigned first, unsigned end)
     if (count > end - first) {
       count = end - first;
     }
-    position(screen);
-    char text[32];
-    int length = snprintf(text, sizeof(text), "\x1b[%uX", count);
-    buffer_append(screen->output, text, (size_t)length);
+    if ((!screen->host_rows || screen->y < screen->host_rows) &&
+        (!screen->host_columns || screen->x < screen->host_columns)) {
+      unsigned visible = count;
+      if (screen->host_columns && visible > screen->host_columns - screen->x) {
+        visible = screen->host_columns - screen->x;
+      }
+      position(screen);
+      char text[32];
+      int length = snprintf(text, sizeof(text), "\x1b[%uX", visible);
+      buffer_append(screen->output, text, (size_t)length);
+    }
     first += count;
   }
   screen->x = saved_x;

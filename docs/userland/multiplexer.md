@@ -23,7 +23,7 @@ and retaining CREATE_GROUP on mux's launcher. Ordinary shells receive neither.
 Remote startup uses a separate `remote_multiplexer = true` opt-in and
 `pyxis-remote --mux`, with pane creation brokered by the trusted daemon. Packaged
 Remote configurations leave it false. See [remote mux](remote-terminal.md#remote-multiplexer)
-and its [remaining milestone](../wip/remote-multiplexer.md).
+and its [implemented contract](../wip/remote-multiplexer.md).
 Direct ordinary command launch lacks the administrative grants local mux requires.
 Missing resources or failed startup produce
 a diagnostic, with no automatic restart or fallback shell.
@@ -78,6 +78,17 @@ Visible panes receive [session resize](terminal-sessions.md#resize), with the
 existing SIZE generation and RESIZED event. Apps that observe resize redraw;
 other apps retain their own existing behavior. The presentation uses at most
 512 columns and 258 rows, reflecting the native session bounds plus headings.
+
+Remote mux observes host character-window changes within 512×256. Explicit
+host-client dimensions are ceilings; tiny windows clip the retained panes and
+growth restores the layout. The daemon acknowledges outer native resize before
+later terminal drains; that metadata does not acknowledge pane redraw or host
+display. Old queued output and partial CSI/UTF-8 suffixes continue in order at
+the current geometry. Allocation failure preserves its current screen or frame;
+resize across panes is not atomic. A later failure can follow earlier updates
+and ends mux with group cleanup.
+See [remote resize qualification](../development/experiments/remote-multiplexer-resize.md)
+for staging QEMU Kilo/Neovim resize/save checks and pending owner native checks.
 
 History retains the last 1,024 rows scrolled off each pane, including colors and
 original widths, without reflow. Page Up/Down moves a screenful; Up/Down moves

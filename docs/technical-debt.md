@@ -581,17 +581,21 @@ Confirmed closure waits for group cleanup and output EOF, so published HOST work
 delegated outside the group can delay EOF; local mux exit or fault requests termination through final controlling-grant closure without
 waiting for cleanup. Remote daemon supervision remains until outer and all tracked pane groups complete. Local keyboard and graphics
 grants are shared space facilities, so graphical launches share the existing
-one-session ownership. Live pane resize depends on the consumer: shell and Kilo observe RESIZED, Links reads geometry once, and vi and
+one-session ownership. Live pane resize depends on the consumer: shell, Kilo and Neovim observe RESIZED, Links reads geometry once, and vi and
 less keep their behavior (revisit with a focused port change). Revisit windows, ratio adjustment, input recovery and quotas when
 selected.
 
 ## Initial remote multiplexer limits
 
-[Remote mux](userland/remote-terminal.md#remote-multiplexer) has fixed initial geometry, keyboard input and host selection/ordinary paste;
+[Remote mux](userland/remote-terminal.md#remote-multiplexer) has live host resize, keyboard input and host selection/ordinary paste;
 no native pointer/clipboard, safe-Paste, file-transfer routing, per-pane machine completion or reattachment. Two mux connections share
 the daemon's four connection slots; closing groups retain admission indefinitely behind attributed HOST work. Rendering is bounded and
-resumable, but synchronous launch/HOST capture and the one-second cwd snapshot can still delay input. Revisit live resize and end-to-end
-horse qualification in [task 3](wip/remote-multiplexer.md#tasks); pane-aware transfer/input transport requires a separate owner assignment.
+resumable, but synchronous launch/HOST capture and the one-second cwd snapshot can still delay input. Resize allocation rollback is per
+screen/frame, so a later failure can follow earlier pane updates and ends mux with cleanup. Already queued host-output bytes cannot be
+clipped retroactively after physical shrink. A saturated reader can exhaust the five-second close deadline without receiving FINAL even
+when groups are reaped. [Resize qualification](development/experiments/remote-multiplexer-resize.md) covers staging QEMU; owner horse/PXE
+checks remain pending. Revisit these limits with native qualification or observed failures; pane-aware transfer/input transport requires
+a separate owner assignment.
 
 ## Initial independent terminal limits
 
@@ -608,7 +612,7 @@ Address changes invalidate the listener without automatic rebinding. The interac
 emits U+FFFD for unsupported scalars or invalid bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
 then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
 ([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and
-presentation breadth with a non-development deployment or text consumer; remote resize negotiation and reconnect are separate work.
+presentation breadth with a non-development deployment or text consumer; ordinary/machine live resize and reconnect are separate work.
 
 ## Libc compatibility gaps
 
