@@ -2,7 +2,7 @@
 
 Plan accepted 2026-10-10. Task 1 is merged (#716, userland #214, ports #99).
 Task 2 is assigned to Codex alpha (2026-10-11); baseline captured from fresh
-main `df7ec8ab`, decisions below pending before code. Scope:
+main `df7ec8ab`, decisions below accepted; opt-in implementation is assigned. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -229,10 +229,10 @@ capture the baseline first and bring at most three decisions with defaults to
 the owner before code. Current firmware-relative PS/2 input remains mouse-class;
 this delivery supplies the touchpad policy/typing/reset base, not palm filtering.
 
-## Task 2 decisions pending (2026-10-11)
+## Task 2 accepted decisions (2026-10-11)
 
 Before-code [baseline](../development/experiments/pointer-input-quality/README.md#task-2-before-code-baseline)
-is captured. No task 2 code is implemented. Natural directions, tap-off, palm
+is captured before implementation. Natural directions, tap-off, palm
 quarantine until lift and the initial 500 ms typing rule remain accepted.
 Pressure/width hysteresis, edge band, motion gain, scroll dead zone and sample
 rate are authored tuning, to be adjusted from native evidence rather than made
@@ -246,7 +246,7 @@ gesture fields; physical switches are decoded independently. [Linux v6.17](https
 is protocol evidence, not code to vendor into the MPL driver. No licence reuse
 is proposed.
 
-1. **Qualification boundary. Recommended:** first implementation/owner boot is
+1. **Qualification boundary. Accepted:** first implementation/owner boot is
    opt-in, using basic six-byte absolute W, qualified finger-count hints and
    separate pass-through/physical-button paths. Query identity/capabilities and
    validate the format before publishing touch input. Extended-W/AGM stays off
@@ -255,29 +255,32 @@ is proposed.
    Ordinary boots retain today's path during qualification. After the owner
    confirms the complete native palm/scroll/button/TrackPoint checks, enable the
    qualified Synaptics profile by default in this same task, before closure.
-2. **Single-switch clickpad. Recommended:** each physical clickpad press is
+2. **Single-switch clickpad. Accepted:** each physical clickpad press is
    primary click, with no click zones or finger-count right-click synthesis.
    Preserve separately decoded physical TrackPoint left/middle/right buttons.
    This follows Linux's capability-qualified primary-switch interpretation;
    it does not treat firmware tap bits as physical switches. If the device is
    not a clickpad, retain its advertised physical button mapping.
-3. **Missing usable geometry. Recommended:** use validated queries or an
-   explicitly calibrated identity profile for bounds/resolution. If neither is
-   available, collect opt-in coordinate/contact diagnostics for calibration and
-   withhold touch motion/scroll publication; retain only independently verified
-   physical buttons/TrackPoint. Do not substitute panel dimensions or unmeasured
-   nominal bounds and claim edge rejection. Author the profile from the owner's
-   native capture before enabling that touch path.
+3. **Missing usable geometry. Changed and accepted:** use validated queries or
+   an explicitly calibrated identity profile when available. Otherwise fall back
+   to today's relative PS/2 mode so touch motion keeps working. This geometry
+   fallback is an explicit exception to withholding the touchpad; it does not
+   qualify absolute palm/edge filtering, two-finger scrolling or independent
+   touch/stick separation. Establish tap-off when the relative firmware supports
+   it; if unavailable, the accepted legacy fallback can retain firmware taps.
+   Other mode/transport failures keep the existing proven-format recovery rule.
+   Do not substitute panel dimensions or claim calibrated edge rejection.
 
-On acceptance, keep PS/2 commands/query/packet decoding in arch; keep contact
+
+Keep PS/2 commands/query/packet decoding in arch; keep contact
 admission, palm/edge/typing rejection and one-/two-finger conversion beside
 kernel input. Reuse the existing per-source scroll/hold/loss coordinator, with
 separate touchpad and guest sources; no public contact or raw-input interface.
 The first native record must establish identity/query bytes, physical switch
 routing and usable geometry, then qualify finger, palm, typing, lift/count
 transitions, physical drag and guest behavior. Luna stages owner-run builds;
-no native hardware was touched in the baseline. These defaults are proposals,
-not accepted decisions.
+no native hardware was touched in the baseline. All three decisions were accepted by the owner on 2026-10-11, with decision 3
+changed as recorded above. Native qualification is still pending.
 
 ## Qualification and tuning
 
