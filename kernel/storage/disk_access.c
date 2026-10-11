@@ -11,6 +11,8 @@
 #include <kernel/task.h>
 #include "../fs/npfs_store.h"
 
+#define DISK_BLANK_SCAN_MAX_BYTES 65536u
+
 static struct disk_object *claims, *retired;
 
 static void destroy_disk(struct kernel_object *object)
@@ -266,18 +268,24 @@ static enum call_status verify_raw_claim(struct npfs_store_context *context,
   if (partition) {
     return CALL_DENIED;
   }
-  uint8_t bytes[DISK_IO_MAX_BYTES];
-  if (!info.block_count || !info.block_size || info.block_size > sizeof(bytes) ||
-      info.max_transfer < info.block_size) {
+  size_t capacity = info.max_transfer;
+  if (capacity > DISK_BLANK_SCAN_MAX_BYTES) {
+    capacity = DISK_BLANK_SCAN_MAX_BYTES;
+  }
+  if (!info.block_count || !info.block_size || info.block_size > capacity) {
     return CALL_UNAVAILABLE;
   }
-  uint32_t transfer_blocks = sizeof(bytes) / info.block_size;
-  uint32_t device_blocks = info.max_transfer / info.block_size;
-  if (transfer_blocks > device_blocks) {
-    transfer_blocks = device_blocks;
+  uint32_t transfer_blocks = capacity / info.block_size;
+  capacity = (size_t)transfer_blocks * info.block_size;
+  flags = cpu_save_interrupts();
+  uint8_t *bytes = kmalloc(capacity);
+  cpu_restore_interrupts(flags);
+  if (!bytes) {
+    return CALL_NO_MEMORY;
   }
   /* The sole filesystem worker excludes mounts and other raw writers until
    * admission. The zero proof is not cached after admission. */
+  enum call_status status = CALL_OK;
   uint64_t first = 0;
   while (first < info.block_count) {
     uint32_t count = transfer_blocks;
@@ -285,19 +293,25 @@ static enum call_status verify_raw_claim(struct npfs_store_context *context,
       count = info.block_count - first;
     }
     size_t length = (size_t)count * info.block_size;
-    enum call_status status = submit_transfer(context, device, BLOCK_READ, first,
-        count, length, bytes);
+    status = submit_transfer(context, device, BLOCK_READ, first, count, length, bytes);
     if (status != CALL_OK) {
-      return status;
+      break;
     }
     for (size_t i = 0; i < length; ++i) {
       if (bytes[i]) {
-        return CALL_DENIED;
+        status = CALL_DENIED;
+        break;
       }
+    }
+    if (status != CALL_OK) {
+      break;
     }
     first += count;
   }
-  return task_deadline_expired(context->deadline) ? CALL_TIMED_OUT : CALL_OK;
+  flags = cpu_save_interrupts();
+  kfree(bytes);
+  cpu_restore_interrupts(flags);
+  return status == CALL_OK && task_deadline_expired(context->deadline) ? CALL_TIMED_OUT : status;
 }
 
 /* Claims a partition of an opened disk whose own claim was released. */
