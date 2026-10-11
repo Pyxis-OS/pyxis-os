@@ -70,6 +70,25 @@ There is no resize, fixed-address request, permission change, reserve-only mode,
 shared memory or per-region capability object. The later userspace allocator can
 subdivide acquired regions without entering the kernel for each small allocation.
 
+## Address-wait mapping identity
+
+VM-owned private backing carries one non-reused incarnation per page; eligible
+words are aligned 32/64-bit values in ordinary user RW RAM, including image data,
+heap and stacks. Read-only and caller-owned/device mappings cannot enrol. This
+identity is independent of a guarded reservation's authority or context pin.
+Writable-to-writable protection preserves it; removing write access withdraws
+waiters, and a later eligibility upgrade gets a fresh identity. Releasing backing
+withdraws affected waiters before frames or virtual addresses are reused.
+
+Token storage/counter exhaustion is preflighted before effects; failed provisional
+backing burns assigned identities rather than reusing them. Current metadata costs
+one 64-bit entry per privately backed page, including zero entries on read-only
+pages (8 bytes/4096 bytes, about 0.2%, plus the allocation header). A derived
+registration count skips bucket scans when no waits exist; it does not pin mappings.
+BSP mutation drains active roots and short borrowers, so registration holds neither
+through sleep. A successful unmap returns BAD_BUFFER to the detached waiters;
+a failed mutation leaves registrations intact. See [address parking](../wip/threads.md#gate-6-contract-owner-accepted-2026-10-11).
+
 ## Execution
 
 All four operations capture their request, then park outside the private root

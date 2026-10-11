@@ -259,15 +259,30 @@ a context switch.
 
 Execution-group membership and process-control objects borrow process links,
 protected by their respective locks. Stop targeting takes the control or group
-lock, then the process lifetime lock, then the scheduler queue lock. The process
+lock, then the process lifetime lock, then a parking bucket (when registered),
+then the scheduler queue lock. The process
 keeps every task stop target live until the BSP detaches it before that task
 is reclaimed. A stop request closes sibling admission, marks all tasks, removes
 timed membership for interruptible waits, and notifies their assigned CPUs.
-It leaves subsystem registration detachment to the resumed continuation.
+Ordinary interruptible waits leave subsystem detachment to the resumed
+continuation. Address parking instead detaches its registration under its bucket
+before notification; it never borrows that ordinary notify-first stop path.
 The scheduler retires marked runnable userspace at its next safe point. Syscall
 continuations stay runnable until their own unwind returns all loans; their final
 syscall boundary prevents user return. Published BSP/HOST requests remain
 uninterruptible. See [execution groups](../interfaces/execution-groups.md).
+
+Native address waits compare/enrol under a process/address/width/incarnation
+bucket while a short mapping lease protects validation. The lease ends before
+sleep; only the scalar key and task-owned record remain. Wake, stop and drained
+VM withdrawal unlink and commit one terminal result before scheduler notification.
+Timer interrupt entry cannot take a bucket: it removes due timer membership and
+queues cancellation on the local permanent scheduler stack, which detaches before
+making the waiter runnable. A simultaneous peer wake preserves its first result;
+that local cancellation list drains before the task can reuse its record.
+Buckets may nest scheduler queues; the reverse order is forbidden. No bucket is
+held across scheduling, allocation or a mapping-guard acquisition. See the
+[native thread ABI](../../include/abi/thread.h) and [qualification](../development/experiments/threads-task6/README.md).
 
 Parking a user task saves user CPU state just like timer preemption. A parked
 syscall resumes on the same CPU, restoring its process root and private entry
