@@ -78,15 +78,17 @@ Do not give multiple init scripts network configuration ownership.
 
 ## Remote multiplexer
 
-Set `remote_multiplexer = true` on the Remote space in live or installed
-configuration, rebuild, then request an interactive mux:
+Packaged live Remote enables `remote_multiplexer = true` (owner accepted,
+2026-10-11). Request an interactive mux:
 
 ```sh
 build/tools/pyxis-remote --mux 127.0.0.1 2323
 ```
 
-Packaged configurations leave this opt-in false. An unavailable request is
-rejected without a fallback shell. `--mux` cannot accompany `--machine`,
+Plain clients still receive the plain shell; enabling the setting admits mux
+requests and does not change that default. Installed defaults have no Remote
+space; owner-authored Remote entries can set the same flag. An unavailable request
+is rejected without a fallback shell. `--mux` cannot accompany `--machine`,
 `--no-shell-echo` or `--download-dir`. Character dimensions follow the host
 window through TIOCGWINSZ and SIGWINCH, within 1–512 columns and 1–256 rows.
 Explicit `--columns`/`--rows` are ceilings, further limited by the actual host
@@ -790,3 +792,10 @@ and reopened it with the contents intact. The mux image enabled only the existin
 returned terminated/drain-complete for both session types. Existing QEMU GDB
 inspected scheduler state; binding to the actual session/pane group and LAUNCH-only
 rights were inspected in source. Native recheck remains owner work.
+
+Packaged live Remote's permanent mux setting (owner accepted, 2026-10-11) passed
+an ordinary kernel/userland image build and interactive four-CPU Q35/nested-KVM
+QEMU on the same image, without staged config changes: plain `pyxis-remote`
+opened the plain shell and exited successfully; `--mux` opened the mux, ran a
+pane command and split into a second pane. Client close returned terminated/
+drain-complete. Installed defaults still contain no Remote space.
