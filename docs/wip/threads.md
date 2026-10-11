@@ -4,8 +4,9 @@ Owner-accepted defaults, 2026-10-10, subject to the
 [native-kernel condition](#accepted-owner-decisions-2026-10-10). The earlier accepted
 directions (merged #567) stand: parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault, and
-process-private address wait/wake. Tasks 1–5 are merged; tasks 6–9 remain
-proposals, not implemented APIs. Moving kernel services
+process-private address wait/wake. Tasks 1–5 are merged. Gate 6 is implemented and QEMU-qualified in the current
+PR; owner-native A/B is recorded, with CALL64 fastest about 100 ns higher.
+Gates 7–9 remain later delivery work. Moving kernel services
 [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
 Merged tasks, with qualification records:
@@ -210,6 +211,61 @@ remove registrations before notification/address reuse. Native deadlines are
 monotonic, with overflow checks. Wake does not transfer ownership; callers
 recheck predicates. No cross-process futex ABI, requeue or priority inheritance.
 
+### Gate 6 contract (owner accepted, 2026-10-11)
+
+Owner assigned gate 6 and accepted all three binding/lifetime defaults on
+2026-10-11; implemented and QEMU-qualified in this PR. Native A/B records
+about 100 ns added to CALL64 fastest; see qualification.
+Scope is native address parking only, over the
+existing caller-scoped `threads` MANAGE service. No pthread/C11 kernel surface,
+libc synchronization/TLS implementation, cross-process keys or new klog lines.
+
+1. **Native binding and outcomes — accepted.** Add address WAIT/WAKE
+   operations to the existing thread service, comparing naturally aligned 32- or
+   64-bit words in the calling process's ordinary VM-owned writable user RAM.
+   No display/device/caller-owned mappings. WAIT captures address, word width,
+   expected value and an absolute monotonic deadline; unused bits/fields reject.
+   Mismatch returns WOULD_BLOCK without enrolling; explicit wake returns OK;
+   expiry returns TIMED_OUT and mapping withdrawal returns BAD_BUFFER. WAKE
+   captures address/width and a nonzero maximum count, returning actual detached
+   waiters (a maximum machine word requests all). It validates the current mapping
+   incarnation; zero matches is ordinary success. Zero deadline polls and the
+   maximum machine word means indefinite wait; finite deadlines do not refresh.
+   Compare/enroll precedes expiry so mismatch never sleeps. Stop resumes native
+   cleanup and never returns to userspace. Wake transfers no user lock ownership;
+   clients use atomics and recheck predicates. Existing late-output rules apply
+   to WAKE's returned count; a failed output does not undo already committed wakes.
+2. **Mapping identity — accepted.** Key by process, exact word address/
+   width and a non-reused VM-owned per-page incarnation. Assign tokens with user
+   RAM backing, covering image data/BSS, heap and stacks, not only MEMORY service
+   allocation records. Read/copy the token under a short mapping lease and retain
+   no range pointer or lease during sleep. Invalidate affected pages before actual
+   unmap/free or eligibility loss, detach their waiters, and assign fresh tokens
+   on reback; unrelated pages keep their identities. Failed mutation preflight
+   changes neither mapping nor registration. Preflight token storage/counter
+   exhaustion before effects. This is compatible with later partial decommit;
+   a physical page, reused range pointer or process-wide epoch is not the key.
+3. **Terminal races — accepted.** Keep the accepted detach-before-notify/
+   address-reuse rule literally for wake, timeout, stop and successful unmap.
+   Resolve one terminal reason under parking-bucket exclusion, remove the link,
+   then notify; retain task/process storage through cancellation and cleanup.
+   Existing generic timed/stop sleeps notify before resource detachment, so they
+   cannot be reused unchanged and described as meeting this rule. Add only the
+   parking-specific cancellation integration needed, with no scheduler-queue to
+   bucket lock inversion against enrollment. Committed wake/timeout/withdrawal
+   is not replayed; permanent process stop still prevents any user return.
+
+The [qualification record](../development/experiments/threads-task6/README.md)
+contains the pre-code baseline at main `d124a053` (NVMe shutdown #710 included),
+interleaved 1/4-CPU IPC/launch captures with one unchanged initrd, ordinary source
+builds and interactive GDB evidence for contended siblings, mismatch/early wake,
+timeout/stop/unmap/remap, process-key isolation and real allocation failure.
+Linked registrations/pending expiry lists drain; no mapping lease survives sleep.
+[Userland #221](https://git.internal/PyxisOS/pyxis-userland/pulls/221) supplies
+native helpers and extends the existing manual threadprobe. Merge it before the
+parent gitlink. Owner-native A/B is recorded; no native speedup is claimed.
+Gates 7/8 remain separate.
+
 | Libc primitive | Required behavior |
 | --- | --- |
 | Mutex | Acquire/release fast path, real contended parking, explicit destruction/busy rules; no lock bootstrap allocation. |
@@ -290,7 +346,7 @@ merely completion of task 2.
 3. [x] **Shared-table delivery (#684).** Growth/atomic installations, reply slot reservations and BSP table-loan replacement; one user task.
 4. [x] **VM activity and user-buffer leases (#700).** Dispatch/root departure, BSP quiescent mutation and explicit concurrent-device refusals; one user task.
 5. [x] **Native CREATE/EXIT/completion (#709), assigned 2026-10-11.** Thread set/result election, guarded-context lifetime, initial/sibling FS setup and space placement; joinable only. Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
-6. [ ] **Address WAIT/WAKE.** Mapping-incarnation keys, deadlines and wake/stop/unmap races.
+6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is recorded (CALL64 fastest about +100 ns). See [qualification](../development/experiments/threads-task6/README.md).
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
 7. [ ] **Static TLS and errno.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.
@@ -333,7 +389,7 @@ The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
 does not assign later implementation: each gate is assigned separately (task 5 on
-2026-10-11) and later gates remain unassigned.
+2026-10-11, then gate 6 with its accepted contract above); gates 7–9 remain separate.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK

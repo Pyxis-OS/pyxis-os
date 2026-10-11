@@ -85,12 +85,29 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result);
 
-/* Narrow exception to BSP-only queries: IF=0 on the CPU exclusively executing
- * this private space, whose mappings must stay stable through access. Checks
+/* Narrow exception to BSP-only queries: IF=0 on a CPU executing this private
+ * space, whose mappings must stay stable through the caller's exclusion. Checks
  * every page for user read/write access without touching VM metadata or
  * scratch mappings. Zero bytes ignores address; the space must still be active. */
 bool vm_user_buffer_accessible(struct vm_space *space, uintptr_t address,
                                size_t bytes, bool write);
+
+/* IF=0 on the executing CPU, under a caller-owned short mapping lease. Returns
+ * a scalar incarnation for an aligned 4/8-byte word in VM-owned user RW RAM.
+ * Caller-owned/display mappings and unbacked guards are ineligible. Failure
+ * clears *token. Retain only the scalar token while sleeping, never a range
+ * pointer or mapping lease.
+ * Owned backing and eligibility upgrades assign non-reused tokens; withdrawal
+ * detaches affected registrations before unmapping or removing write access. */
+bool vm_address_wait_token(struct vm_space *space, uintptr_t address,
+                           size_t word_size, uint64_t *token);
+
+/* Parking bucket exclusion, IF=0, with process/space storage retained. Account
+ * once per linked registration, detach before notification. This derived count
+ * lets drained VM mutation skip withdrawal scans when no registrations exist;
+ * it is neither a mapping lease nor incarnation authority. */
+void vm_wait_enroll(struct vm_space *space);
+void vm_wait_detach(struct vm_space *space);
 
 struct vm_stats vm_get_stats(const struct vm_space *space);
 
