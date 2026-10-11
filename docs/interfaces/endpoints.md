@@ -98,6 +98,21 @@ shuts down its endpoint and wakes affected callers with `CALL_ENDPOINT_CLOSED`.
 Process exit has the same effect on every receiver it owns, even while clients
 still hold callable handles. Final object reclamation is deferred to the BSP.
 
+## Operation admission and user buffers
+
+One RECEIVE operation owns admission per receiving endpoint through capacity
+growth, sleep and collection. A competing RECEIVE returns BUSY before dequeuing;
+SEND/CALL and replies to other receipts remain available. REPLY owns a transaction
+per receipt, stages its bounded payload before completion, and refuses competing
+same-receipt replies before effects. CLOSE retains its logical cancellation rules.
+
+RECEIVE validates output under a short mapping lease, then publishes and copies
+while the endpoint guard keeps its record alive. No mapping lease spans a wait.
+CALL output is revalidated after waiting; late failure returns BAD_BUFFER without
+rolling back provider effects. Exact unreported returned generations are closed,
+while cancellation notifications never revoke their preexisting receipt handles.
+See [user buffers](processes.md#implemented-user-buffer-access).
+
 ## Receiver readiness
 
 `wait_many` accepts an owned receiver with READABLE and/or CLOSED, requiring

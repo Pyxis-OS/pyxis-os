@@ -165,4 +165,10 @@ enum capability_result capability_close(struct capability_table *table,
  * synchronously, as with individual handle closure. */
 void capability_table_destroy(struct capability_table *table);
 
+/* Revoke only newly returned handles owned by a failed output operation. Exact
+ * handle generations prevent touching a reused slot; an already closed handle
+ * is harmless. This does not undo external effects that created the objects. */
+void capability_close_returned(struct capability_table *table,
+    const handle_t *handles, size_t count);
+
 #endif

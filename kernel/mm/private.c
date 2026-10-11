@@ -5,6 +5,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/process_vm.h>
 
 struct private_allocation {
   struct private_allocation *next;
@@ -15,7 +16,8 @@ struct private_allocation {
 enum mm_result private_memory_allocate(struct process *process, size_t size,
                                         uintptr_t *address)
 {
-  KASSERT(process && process == process_current() && address);
+  KASSERT(process && address);
+  process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(size && !(size & (PAGE_SIZE - 1)));
   *address = 0;
@@ -39,7 +41,8 @@ enum mm_result private_memory_allocate(struct process *process, size_t size,
 enum mm_result private_memory_release(struct process *process, uintptr_t address,
                                        size_t size)
 {
-  KASSERT(process && process == process_current());
+  KASSERT(process);
+  process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct private_allocation **link = &process->allocations;
   while (*link) {

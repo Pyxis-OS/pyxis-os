@@ -3,11 +3,14 @@
 
 struct task_wait;
 struct execution_group;
+struct process;
+struct task;
 
 enum bsp_service {
   BSP_SERVICE_PIPE_CREATE,
   BSP_SERVICE_TERMINAL_CREATE,
   BSP_SERVICE_DISPLAY,
+  BSP_SERVICE_MEMORY,
   BSP_SERVICE_POINTER,
   BSP_SERVICE_AUDIO,
   BSP_SERVICE_CAPABILITY_GROW,
@@ -53,6 +56,9 @@ struct bsp_request {
   struct execution_group *cleanup_group;
   enum bsp_service service;
   enum bsp_request_state state;
+  struct process *vm_process; /* Only deferred VM mutation requests. */
+  struct task *vm_mutator;
+  bool vm_reply_owned; /* Consumed before releasing the completed record. */
 };
 
 /* BSP, IF=0. Provision the catalog's largest typed record before publishing a
@@ -69,6 +75,9 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service);
  * by the closed service catalog. Other requests publish before sleeping. */
 void bsp_request_submit_and_wait(struct bsp_request *request);
 void bsp_request_release(struct bsp_request *request);
+/* Unpublished PREPARED unwind only. Caller first releases all subsystem-owned
+ * grants, claims and inputs. Detaches the unused wait; never notifies it. */
+void bsp_request_cancel_prepared(struct bsp_request *request);
 
 /* BSP, IF=0. Executor finishes SERVICING; worker completion paths finish FORWARDED.
  * Detach all subsystem/worker references and publish results first. Notification

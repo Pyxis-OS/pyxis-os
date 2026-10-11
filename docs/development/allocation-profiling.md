@@ -79,17 +79,19 @@ runs expose pool count/bytes acquired during the window; freeing libc blocks doe
 not release those pools. Existing pools and fragmentation are not inspected.
 
 Each private-memory operation that reaches the address space records three
-boundaries, all in the caller's own syscall since SMP task 7a:
+boundaries. After threads task 4, total is caller-scoped and service runs on BSP:
 
 1. Syscall entry, before validation.
 2. Immediately before and after the address-space change: this interval is
    service.
 3. After the reply is copied, before the counters are updated.
 
-Service includes private allocation bookkeeping, pages, zeroing, mappings and
-any kernel heap growth it causes. Total runs from syscall entry through reply
-copying, so total minus service is validation and copying. Requests rejected
-before reaching the address space are not counted. No additional clock reads
+Service includes BSP output revalidation, private allocation bookkeeping, pages,
+zeroing, mappings and any kernel heap growth it causes. Total runs from syscall entry through reply
+copying, so total minus service includes validation/copying, deferred BSP
+handoff, any VM drainage, and caller resumption. It does not split those phases.
+Early validation failures before submission are not counted; admitted precommit
+refusals count as failures. No additional clock reads
 occur for unprofiled memory requests.
 
 Before SMP task 7a, operations ran on the BSP executor and the profile also

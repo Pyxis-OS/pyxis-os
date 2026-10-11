@@ -258,7 +258,11 @@ struct syscall_result pipe_service_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    handle_t handles[] = {reply.reader, reply.writer};
+    capability_close_returned(&process_current()->capabilities, handles, 2);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -406,8 +410,10 @@ static struct syscall_result pipe_read_call(struct pipe_pair *pair,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(request.buffer, data, reply.length));
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request.buffer, data, reply.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -436,7 +442,9 @@ static struct syscall_result pipe_write_call(struct pipe_pair *pair,
     return (struct syscall_result){status, 0};
   }
   struct pipe_write_reply reply = {.length = written};
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 

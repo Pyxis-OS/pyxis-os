@@ -13,6 +13,7 @@ kernel; each service defines its own public operation contract.
 | [Request mechanism](../../kernel/service/request.c) | Storage sizing, reservation, publication, dispatch and completion |
 | Subsystem | Typed inputs/results, authority checks, resource loans, actual operation and rollback |
 | BSP executor | Nonblocking operations under the existing allocation and VM contracts |
+| VM worker | Pending process quiescence; ready mutations can complete directly in the executor |
 | HOST worker | Blocking filesystem transport and final completion of forwarded requests |
 | Native filesystem worker | Policy/view operations, block waits and final completion of forwarded requests |
 | Network worker | TCP/mixed readiness observation and final completion of forwarded waits |
@@ -61,6 +62,7 @@ from waiting. Ordinary requests follow:
 
 ```text
 FREE -> PREPARED -> QUEUED -> SERVICING -> COMPLETE -> consume -> FREE
+        PREPARED -> cancel unpublished ownership -> FREE
 ```
 
 The caller captures validated inputs and prepares its task wait before publishing
@@ -76,13 +78,14 @@ the request afterward; the caller may immediately consume, reuse or retire it.
 COMPLETE is not an asynchronous polling interface. The caller consumes results,
 updates any caller-local profile and explicitly releases the reservation.
 
-Every DISPLAY operation adds DEFERRED before QUEUED. Its catalog entry requires
-the scheduler to leave the task stack, activate the kernel root, clear
-entry/current-task state and establish parking before publication. This lends an
-inactive private address space to BSP. Resumption reloads the process root before
-accessing the saved task stack. The same ordering applies to BSP userspace. See
-[SMP handoffs](smp.md). Private memory used the same deferred path until SMP task
-7a; it now runs in the caller's syscall ([memory](memory.md#execution)).
+MEMORY and every DISPLAY operation use DEFERRED publication after the caller
+leaves its stack/root and establishes parking. MEMORY and DISPLAY mapping
+mutations close process VM admission, drain acknowledged roots/short borrowers,
+and retain exclusive mutator reply access through the final copy. Ready mutation
+runs directly in the executor; pending drainage transfers FORWARDED ownership to
+the VM worker without blocking the executor. SIZE/SUBMIT do not mutate mappings.
+Unsubmitted loading and final reclamation retain their separate exclusive/drained
+ownership. See [private memory](memory.md#execution).
 
 Screen capture retains DEFERRED publication. Its caller claims a destination
 slot before submission; the shared request owns that capacity through FILE
@@ -133,7 +136,8 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Endpoint creation/export | Ordinary; preclaimed result slots, owned receiver snapshot and BSP owner-list mutation |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
 | Group creation / launch preparation and publication | Ordinary; claimed result capacity, owned grant captures, private observers, atomic publication and unpublished-child rollback |
-| Display acquire/present/release | Deferred; inactive process and display loans for every operation |
+| Private memory | Deferred; process VM transaction, precommit output recheck and exclusive mutator reply |
+| Display acquire/present/release | Deferred; mapping mutations use the same VM transaction, other operations preserve display backing ownership |
 | Screen capture | Deferred admission, then forwarded; preclaimed result slot, one pending/in-flight presenter request, owned READ-only FILE publication or unpublished-backing rollback |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
 | Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
@@ -287,7 +291,8 @@ lent tables or VM state; borrowed buffers need stable contents and lifetime or
 independent captures.
 
 Shared-table delivery replaces exclusive table loans with owned inputs and
-claims. Concurrent siblings still need process activity drain, VM quiescence and
-the remaining device-operation audit before thread creation. Kernel clients likewise
+claims. VM admission and short user-copy leases are implemented; unsupported
+competing device operations have native refusals. Sibling creation and the
+remaining process membership/runtime gates still need separate assignment. Kernel clients likewise
 need an explicit nesting/dependency contract before synchronous submission can be
 allowed. See the [thread follow-ups](../wip/scheduling-and-threads.md#multiple-user-threads).

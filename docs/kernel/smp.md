@@ -269,9 +269,9 @@ uninterruptible. See [execution groups](../interfaces/execution-groups.md).
 
 Parking a user task saves user CPU state just like timer preemption. A parked
 syscall resumes on the same CPU, restoring its process root and private entry
-stack, with interrupts still disabled. The process remains alive while blocked. User mappings stay
-stable except during an explicit private-memory loan after the task has left
-its address space.
+stack, with interrupts still disabled. Process lifetime survives blocking, while
+staged I/O holds no mapping borrower. Root admission observes the process VM gate;
+final outputs revalidate under short leases rather than assuming old mappings.
 BSP allocation/growth and admitted user installation share the short table guard;
 no exclusive capability-table loan remains.
 
@@ -282,8 +282,9 @@ publication; growth prepares backing on BSP outside it. CLOSE invokes logical ef
 and releases its detached grant outside that guard. These storage references
 drain during syscall cleanup before `task_syscall_leave` and retirement; they do
 not prolong controller authority or pipe open directions. Grant-producing capture
-additionally retains logical authority and rechecks the source generation/masks. Shared-table delivery is implemented; sibling activity
-and VM admission remain [later thread gates](../wip/threads.md).
+additionally retains logical authority and rechecks the source generation/masks.
+Shared-table delivery and VM admission are implemented; sibling entry remains a
+[later thread gate](../wip/threads.md).
 
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
@@ -481,18 +482,13 @@ caller.
 
 ## Memory and output boundaries
 
-VM metadata and page-table mutation remain BSP-only and require interrupts
-disabled, with one exception: a process's private memory operations change its
-own active address space in its syscall, on any CPU
-([memory](memory.md#execution)). The general kernel VM area asserts BSP
-ownership: its ranges are reused, and changing a mapping another CPU may hold
-requires explicit quiescence and acknowledged TLB invalidation. Ordinary VM
-mutation invalidates only the caller's translations. A kernel task must
-save/disable interrupts around these calls and restore them afterward; being pinned to the BSP alone does
-not prevent same-CPU reentry. Other heap allocation by syscalls, such as
-capability growth, still goes through BSP requests. RAM-file pages and their
-index are allocated on the writing CPU, using only the layers below and its own
-scratch slots ([file contract](../interfaces/processes.md#implemented-file-calls)).
+VM metadata and process page-table mutation are BSP-owned with IF=0. MEMORY and
+DISPLAY mapping changes use [process quiescence](memory.md#execution); the caller
+leaves its root before the transaction begins. The general kernel VM area still
+requires separate quiescence and acknowledged invalidation for reused ranges.
+A BSP kernel task must disable interrupts around mutation; pinning alone does
+not prevent reentry. RAM-file backing and the layers below remain usable on the
+writing CPU under their existing contracts.
 
 Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:
@@ -554,13 +550,16 @@ CPU can inspect its active private root through recursive mappings, with IF=0
 and stable user mappings. They use no scratch slots or VM metadata.
 General `vm_query()` and page-table mutation remain BSP-only.
 
-Private spaces are built before publication and reclaimed only after retirement.
-The [display](../interfaces/graphics.md) service can borrow a parked task's
-inactive space: its scheduler publishes the request only after leaving the task
-stack and reloading the kernel root and clearing entry/current state. The BSP executor
-changes private mappings before waking the owner; normal resumption reloads CR3 before any task access. No other CPU uses
-that private root during the loan, and the borrowing task keeps its CPU because it
-is inside its syscall.
+Private spaces are built before publication. Dispatch reserves root activity
+under the process VM guard before CR3 activation. Scheduler departure reloads the
+kernel root on its permanent stack before acknowledging the reservation. Short
+copy leases cannot cross a wait/departure. MEMORY and DISPLAY mapping mutations
+close admission, permit old syscall continuations to drain, and require zero
+roots/borrowers before effects. Mutator-only reply reentry remains closed to
+ordinary dispatch until its final copy/cleanup. Pending drainage is serviced
+without blocking the BSP executor; retirement reclaims only drained activity.
+Exactly one user task remains. The kernel TLB-flush IPI is a separate contract.
+
 Kernel code, CPU records, scheduler stacks, heap pools and direct boot/Bochs
 framebuffer mappings remain mapped throughout AP execution. Resizable TTY backing follows
 the retirement protocol below. A shared kernel range must not be
@@ -646,7 +645,8 @@ These stay on the BSP:
 - task reaping, object retirement and the general kernel VM;
 - device interrupt routing.
 
-Private memory, the heap, the PMM and the scratch mappings work on any CPU.
+The heap, PMM, scratch mappings and RAM-file backing work on any CPU; private
+mapping mutations now run on BSP under the process transaction.
 Moving a worker off the BSP is a later step; see the
 [follow-ups](../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
 

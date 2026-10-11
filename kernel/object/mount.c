@@ -177,7 +177,9 @@ static struct syscall_result install_root(struct kernel_object *root,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.root, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 

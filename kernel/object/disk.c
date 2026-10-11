@@ -112,7 +112,9 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
   request->job.object = NULL;
   npfs_request_release(request);
   if (status == CALL_OK && operation == DISKS_ENUMERATE) {
-    KASSERT(copy_to_user(reply_address, &info, sizeof(info)));
+    if (!copy_to_user(reply_address, &info, sizeof(info))) {
+      status = CALL_BAD_BUFFER;
+    }
   } else if (status == CALL_OK) {
     uint64_t disk_rights = DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_MOUNT;
     if (access == DISK_ACCESS_READ_WRITE) {
@@ -122,7 +124,9 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     status = task_stop_requested() ? CALL_ENDPOINT_CLOSED :
         install_disk(disk, disk_rights, &reservation, &slot, &reply.disk);
     if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+      if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.disk, 1)) {
+        status = CALL_BAD_BUFFER;
+      }
     }
   }
   capability_reservation_release(&reservation, &slot);
@@ -287,14 +291,20 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
   request->job.offset = offset;
   request->job.count = length;
   if (operation == DISK_WRITE) {
-    KASSERT(copy_from_user(request->job.data, source, length));
+    if (!copy_from_user(request->job.data, source, length)) {
+      request->job.raw = NULL;
+      bsp_request_cancel_prepared(&request->request);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
   }
   npfs_request_submit_and_wait(request);
   enum call_status status = request->job.status;
   if (status == CALL_OK && reply_size) {
     const void *reply = operation == DISK_INFO ? (const void *)&request->job.disk_info :
         (const void *)request->job.data;
-    KASSERT(copy_to_user(reply_address, reply, reply_size));
+    if (!copy_to_user(reply_address, reply, reply_size)) {
+      status = CALL_BAD_BUFFER;
+    }
   }
   npfs_request_release(request);
   return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};

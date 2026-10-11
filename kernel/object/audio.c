@@ -661,13 +661,15 @@ struct syscall_result audio_call(struct audio_object *audio, uint64_t rights,
   request->operation = operation;
   request->generation = generation;
   request->length = write.length;
-  if (write.length) {
-    KASSERT(copy_from_user(request->pcm, write.buffer, write.length));
+  if (write.length && !copy_from_user(request->pcm, write.buffer, write.length)) {
+    bsp_request_cancel_prepared(&request->request);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->result;
-  if (status == CALL_OK && reply_size) {
-    KASSERT(copy_to_user(reply_address, &request->reply, reply_size));
+  if (status == CALL_OK && reply_size &&
+      !copy_to_user(reply_address, &request->reply, reply_size)) {
+    status = CALL_BAD_BUFFER;
   }
   size_t result = status == CALL_OK ? reply_size : 0;
   bsp_request_release(&request->request);

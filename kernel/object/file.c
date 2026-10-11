@@ -102,23 +102,18 @@ static bool fill_holes(struct file_object *file, size_t first, size_t last)
   return true;
 }
 
-/* Copies between the file's pages and a user or kernel buffer, page by page,
- * through this CPU's scratch slot. Holes read as zeros. */
+/* Copies through this CPU's scratch slot; holes read as zeros. The destination
+ * is kernel storage or a fully validated user range held under a mapping lease. */
 static void copy_out_pages(const struct file_object *file, size_t offset, size_t count,
-    uintptr_t user, uint8_t *kernel)
+    uint8_t *destination)
 {
   while (count) {
     size_t page = offset / PAGE_SIZE, within = offset % PAGE_SIZE;
     size_t chunk = PAGE_SIZE - within < count ? PAGE_SIZE - within : count;
     phys_addr_t frame = page < file->page_capacity ? file->pages[page] : 0;
     const uint8_t *source = frame ? arch_frame_map(frame) : zero_page;
-    if (kernel) {
-      memcpy(kernel, source + within, chunk);
-      kernel += chunk;
-    } else {
-      KASSERT(copy_to_user(user, source + within, chunk));
-      user += chunk;
-    }
+    memcpy(destination, source + within, chunk);
+    destination += chunk;
     if (frame) {
       arch_frame_unmap();
     }
@@ -128,20 +123,15 @@ static void copy_out_pages(const struct file_object *file, size_t offset, size_t
 }
 
 static void copy_in_pages(struct file_object *file, size_t offset, size_t count,
-    uintptr_t user, const uint8_t *kernel)
+    const uint8_t *kernel)
 {
   while (count) {
     size_t page = offset / PAGE_SIZE, within = offset % PAGE_SIZE;
     size_t chunk = PAGE_SIZE - within < count ? PAGE_SIZE - within : count;
     KASSERT(page < file->page_capacity && file->pages[page]);
     uint8_t *target = arch_frame_map(file->pages[page]);
-    if (kernel) {
-      memcpy(target + within, kernel, chunk);
-      kernel += chunk;
-    } else {
-      KASSERT(copy_from_user(target + within, user, chunk));
-      user += chunk;
-    }
+    memcpy(target + within, kernel, chunk);
+    kernel += chunk;
     arch_frame_unmap();
     offset += chunk;
     count -= chunk;
@@ -220,7 +210,7 @@ struct file_object *file_create_snapshot(const void *data, size_t size)
   }
   /* Zero the last page first so bytes past the size start out zero. */
   arch_frame_zero(file->pages[count - 1]);
-  copy_in_pages(file, 0, size, 0, data);
+  copy_in_pages(file, 0, size, data);
   file->size = size;
   return file;
 }
@@ -338,7 +328,7 @@ enum call_status file_ram_capture(struct file_object *file, struct image_capture
   if (status != CALL_OK) {
     return status;
   }
-  copy_out_pages(file, 0, capture->size, 0, (void *)capture->address);
+  copy_out_pages(file, 0, capture->size, (void *)capture->address);
   return CALL_OK;
 }
 
@@ -371,8 +361,11 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     }
     KASSERT(pending->job.count <= request->capacity);
     reply.read = pending->job.count;
-    KASSERT(copy_to_user(data_address, pending->job.data, pending->job.count));
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+        data_address, pending->job.data, pending->job.count)) {
+      npfs_request_release(pending);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     npfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
@@ -388,8 +381,11 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
       return (struct syscall_result){status, 0};
     }
     reply.read = pending->count;
-    KASSERT(copy_to_user(data_address, pending->data, pending->count));
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+        data_address, pending->data, pending->count)) {
+      hostfs_request_release(pending);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     hostfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
@@ -404,20 +400,27 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
       count = request->capacity;
     }
   }
-  /* Never form data + offset at EOF. Operation ownership keeps the bytes
-   * stable during this copy; they cannot alias private user mappings. */
-  if (count && file->backing == FILE_RAM) {
-    copy_out_pages(file, request->offset, count, data_address, NULL);
-  } else if (count) {
-    KASSERT(copy_to_user(data_address,
-        (const uint8_t *)file->data + request->offset, count));
+  struct user_buffer_lease lease;
+  if (!user_buffer_lease_acquire(&lease)) {
+    file_end_operation(file);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  file_end_operation(file);
-
+  if (!user_buffer_check_leased(&lease, reply_address, sizeof(reply) + count, USER_BUFFER_WRITE)) {
+    user_buffer_lease_release(&lease);
+    file_end_operation(file);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  /* Ownership keeps file bytes stable; the short lease keeps the complete
+   * output mapped across all page copies. Neither boundary schedules. */
+  if (count && file->backing == FILE_RAM) {
+    copy_out_pages(file, request->offset, count, (uint8_t *)data_address);
+  } else if (count) {
+    memcpy((void *)data_address, (const uint8_t *)file->data + request->offset, count);
+  }
   reply.read = count;
-  /* Private mappings stay stable across waits. The request is already captured,
-   * so its storage may overlap the reply. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  memcpy((void *)reply_address, &reply, sizeof(reply));
+  user_buffer_lease_release(&lease);
+  file_end_operation(file);
   return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
 }
 
@@ -441,7 +444,11 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     pending->job.offset = request->offset;
     pending->job.count = request->size;
     KASSERT(pending->job.count <= sizeof(pending->job.data));
-    KASSERT(copy_from_user(pending->job.data, data_address, pending->job.count));
+    if (!copy_from_user(pending->job.data, data_address, pending->job.count)) {
+      pending->job = (struct npfs_job){0};
+      bsp_request_cancel_prepared(&pending->request);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
     if (status != CALL_OK) {
@@ -450,12 +457,17 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     }
     KASSERT(pending->job.count <= request->size);
     reply.written = pending->job.count;
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
     npfs_request_release(pending);
+    if (!copied) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (!request->size) {
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing == FILE_HOST) {
@@ -463,7 +475,11 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     pending->node = file->host;
     pending->offset = request->offset;
     pending->count = request->size < VIRTIO_FS_WRITE_MAX ? request->size : VIRTIO_FS_WRITE_MAX;
-    KASSERT(copy_from_user(pending->data, data_address, pending->count));
+    if (!copy_from_user(pending->data, data_address, pending->count)) {
+      pending->node = NULL;
+      bsp_request_cancel_prepared(&pending->request);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     hostfs_request_submit_and_wait(pending);
     enum call_status status = pending->status;
     if (status != CALL_OK) {
@@ -471,34 +487,49 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
       return (struct syscall_result){status, 0};
     }
     reply.written = pending->count;
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
     hostfs_request_release(pending);
+    if (!copied) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing != FILE_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
 
+  uint8_t *data = kmalloc(request->size);
+  if (!data) {
+    return (struct syscall_result){CALL_NO_MEMORY, 0};
+  }
+  if (!copy_from_user(data, data_address, request->size)) {
+    kfree(data);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   if (!file_begin_operation(file)) {
+    kfree(data);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   size_t end = request->offset + request->size;
   size_t first = request->offset / PAGE_SIZE, last = (end - 1) / PAGE_SIZE;
   if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
     file_end_operation(file);
+    kfree(data);
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
-  /* All fallible work is complete. Pages past the old size were already
-   * zero, so a gap needs no clearing. The sole user task cannot change its
-   * source or mappings during this syscall. */
-  copy_in_pages(file, request->offset, request->size, data_address, NULL);
+  /* Pages past the old size are zero; the captured input cannot change while
+   * ownership or index/frame allocation waits. */
+  copy_in_pages(file, request->offset, request->size, data);
   if (end > file->size) {
     file->size = end;
   }
   fs_metadata_touch(&file->metadata);
   file_end_operation(file);
+  kfree(data);
 
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -545,8 +576,9 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
-    if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &pending->job.file_info, sizeof(reply)));
+    if (status == CALL_OK &&
+        !copy_to_user(reply_address, &pending->job.file_info, sizeof(reply))) {
+      status = CALL_BAD_BUFFER;
     }
     npfs_request_release(pending);
     return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
@@ -556,8 +588,9 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
     pending->node = file->host;
     hostfs_request_submit_and_wait(pending);
     enum call_status status = pending->status;
-    if (status == CALL_OK) {
-      KASSERT(copy_to_user(reply_address, &pending->info, sizeof(reply)));
+    if (status == CALL_OK &&
+        !copy_to_user(reply_address, &pending->info, sizeof(reply))) {
+      status = CALL_BAD_BUFFER;
     }
     hostfs_request_release(pending);
     return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
@@ -569,7 +602,9 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
   reply.size = file->size;
   fs_metadata_info(&file->metadata, &reply);
   file_end_operation(file);
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -702,8 +737,11 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){status, 0};
     }
     reply.size = pending->job.offset;
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
     npfs_request_release(pending);
+    if (!copied) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing == FILE_HOST) {
@@ -716,8 +754,11 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){status, 0};
     }
     reply.size = pending->offset;
-    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
     hostfs_request_release(pending);
+    if (!copied) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   } else {
     if (!file_begin_operation(file)) {
@@ -726,6 +767,8 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     reply.size = file->size;
     file_end_operation(file);
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }

@@ -20,6 +20,7 @@ struct pointer_object {
   atomic_bool locked;
   struct process *owner; /* Mutated BSP-only, read under lock. */
   struct task_wait *reader;
+  bool read_active, image_active; /* Reservations include staging and collection. */
   struct pointer_event events[POINTER_EVENT_CAPACITY];
   size_t head, count;
   bool focused;
@@ -29,6 +30,7 @@ struct pointer_object {
   struct pointer_image *image; /* BSP-owned immutable image, one reference. */
   bool hidden;
   uint64_t view_identity; /* Terminal only; BSP-owned, advanced before view changes. */
+  uint64_t acquisition; /* Never reused across session release/reacquisition. */
 };
 
 /* Internal image staging never passes a caller's private pointer to BSP. */
@@ -36,6 +38,7 @@ enum pointer_request_stage {
   POINTER_REQUEST_COMMAND,
   POINTER_REQUEST_IMAGE_PREPARE,
   POINTER_REQUEST_IMAGE_COMMIT,
+  POINTER_REQUEST_IMAGE_CANCEL,
 };
 
 struct pointer_request {
@@ -43,6 +46,7 @@ struct pointer_request {
   struct process *process;
   struct pointer_object *pointer;
   uint64_t operation;
+  uint64_t acquisition;
   enum pointer_request_stage stage;
   enum call_status result;
   union {

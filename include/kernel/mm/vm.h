@@ -25,13 +25,13 @@ bool vm_kernel_flush_remote(void);
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
  * and mutation are BSP-only, IF=0, and asserted for the kernel space, whose
  * reused ranges have no remote invalidation; no VM operations from fault
- * handlers. A process's only task may also change its own private space in a
- * syscall, IF=0, on the CPU where that space is active. Otherwise a running
- * task must leave its private root and lend ownership through the scheduler
- * before BSP mutation; resumption reloads CR3. */
+ * handlers. Published process mapping changes require its BSP mutation token
+ * after acknowledged root departure and borrower drainage. Unpublished loading
+ * and drained retirement remain exclusively owned; resumption reloads CR3. */
 enum mm_result vm_space_create(struct vm_space **result);
-/* Each CPU may activate the kernel space or a private space it exclusively
- * owns. Always flushes that CPU's TLB, including shared kernel translations. */
+/* Private activation requires a process root reservation. Always flushes that
+ * CPU's TLB, including shared kernel translations; acknowledge departure only
+ * after activating the kernel root on the permanent scheduler stack. */
 enum mm_result vm_space_activate(struct vm_space *space);
 /* Rejects kernel/active spaces and reservations with caller-owned mappings.
  * Frees VM-owned backing, private page tables and metadata on success.

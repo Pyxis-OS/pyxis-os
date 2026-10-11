@@ -340,7 +340,10 @@ struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  handle_t handles[] = {reply.input, reply.output, reply.attachment, reply.events};
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), handles, 4)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -530,10 +533,12 @@ static struct syscall_result application_read(struct terminal_session *session,
     session->input_count -= reply.read;
     unlock_session(session);
     readiness_notify();
-    KASSERT(copy_to_user(request->address, bytes, reply.read));
     end_read(session);
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request->address, bytes, reply.read)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -639,7 +644,9 @@ static struct syscall_result application_write(struct terminal_session *session,
     }
   }
   struct console_write_reply reply = {.written = written};
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -866,10 +873,10 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
   if (reply.length) {
     readiness_notify();
   }
-  if (!inject) {
-    KASSERT(copy_to_user(request.buffer, bytes, reply.length));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply), request.buffer,
+      bytes, inject ? 0 : reply.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 

@@ -182,6 +182,8 @@ struct syscall_result process_control_call(struct process_control *control,
 
   /* Only the resumed caller touches its user mapping. Completion is not
    * consumed, so subsequent waits and other observers receive the same value. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }

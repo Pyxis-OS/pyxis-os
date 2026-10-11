@@ -127,8 +127,9 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
   }
   handle_t handle;
   capability_install_reserved(&reservation, &slot, &grant, 1, &handle);
-  /* Private mappings stay stable while the sole user task is blocked. */
-  KASSERT(copy_to_user(destination, &handle, sizeof(handle)));
+  if (!copy_returned_handles_to_user(destination, &handle, sizeof(handle), &handle, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(handle)};
 }
 

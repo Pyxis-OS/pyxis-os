@@ -48,6 +48,8 @@ struct syscall_result echo_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){status, 0};
   }
   /* The sole user task kept its mappings and capability alive while blocked. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }

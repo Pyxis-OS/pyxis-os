@@ -64,8 +64,10 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* The sole task's checked mappings remain valid across the network wait. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    capability_close_returned(&process_current()->capabilities, &reply.handle, 1);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -124,8 +126,10 @@ static struct syscall_result receive_datagram(struct kernel_object *object,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(request.buffer, data, reply.length));
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request.buffer, data, reply.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -165,7 +169,9 @@ struct syscall_result udp_call(struct kernel_object *object, uint64_t rights,
     return (struct syscall_result){status, 0};
   }
   if (reply_size) {
-    KASSERT(copy_to_user(reply_address, &reply, reply_size));
+    if (!copy_to_user(reply_address, &reply, reply_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
   }
   return (struct syscall_result){CALL_OK, reply_size};
 }

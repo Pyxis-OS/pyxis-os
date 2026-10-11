@@ -9,8 +9,14 @@ process remains. Task 2, admitted call references and CLOSE, is merged in
 build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
 merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
 [qualification](../development/experiments/threads-task3/README.md) records the
-matched comparison and 1/4-CPU inspection. The
-remaining proposal originally inspected Pyxis `4236efc7`
+matched comparison and 1/4-CPU inspection. Task 4, VM activity and buffer leases,
+is owner-assigned and implemented on this branch; its
+[qualification](../development/experiments/threads-task4/README.md) separates
+nested-QEMU evidence from the owner-run native A/B. The owner accepts the BSP
+MEMORY latency follow-up; bounded string capture and its native rerun are
+complete. IPC fixed cost is accepted for merge with a bounded investigation
+before task 5; optimization needs a separate owner go. The remaining proposal
+originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
@@ -27,10 +33,10 @@ is independent.
 | Inspected source | Remaining gate |
 | --- | --- |
 | [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns group membership and lifetime, but its task/retiring-storage fields and terminal-result writer are still singular. |
-| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown still requires drained activity; sibling process/VM admission remains task 4. |
-| [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Competing endpoint operations remain part of the pre-sibling audit. |
-| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Check then memcpy and local mapping mutation assume the sole task. Stable mappings must cover copies and retained borrowers. |
-| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Table loans are replaced by owned inputs/claims. Inactive-VM loans still require process-wide quiescence before siblings. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown still requires drained activity; sibling membership/entry remains task 5. |
+| [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
+| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases and BSP mutation transactions are implemented; sibling runtime admission remains task 5. |
+| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Owned inputs/claims and root/borrow drainage replace exclusive table/VM loans. Actual sibling execution and process membership remain later gates. |
 | [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | FS is saved per task, but starts at zero; no public FS setup or sibling entry exists. |
 | [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
 
@@ -93,8 +99,9 @@ retained. Allocation and process owner-list mutation remain BSP-owned.
 
 Storage and grant references drain before `task_syscall_leave`; existing
 uninterruptible request and stop/unwind rules retain process/table lifetime.
-Teardown requires no live claims. Shared siblings are still disabled; their
-activity drain and VM/device-operation gates remain later work.
+Teardown requires no live claims. Task 4 supplies VM/activity and device-operation
+admission; actual sibling membership, entry and race qualification remain later
+work.
 
 **Task 3 accepted details, 2026-10-10.** COPY, launch sources and endpoint
 attachments retain prospective grant authority outside the table guard, then
@@ -108,28 +115,44 @@ implicitly rolls back provider mutations and preserves timeout/closure
 uncertainty. [Task 3 qualification](../development/experiments/threads-task3/README.md)
 records the baseline and later implementation evidence separately.
 
-**VM admission.** Track root activation and kernel mapping borrowers per process.
-Short checked copies hold a mapping lease; fixed inputs are captured once and
-remain untrusted. Blocking operations stage data where possible. An operation
-retaining user backing must declare its lease duration, output/commit behavior
-and stop cleanup; a second pointer check cannot prevent unmap during memcpy.
+**Task 4 accepted contract, 2026-10-10.** MEMORY mutations move to BSP with
+DISPLAY mapping mutations under one process transaction. Drain active roots and
+actual mapping borrowers, acknowledge departure after CR3 reload, and keep
+admission closed through the mutator's final reply copy. Pending quiescence never
+blocks the BSP executor. Bounded failure returns BUSY before effects; retirement
+waits for drainage. This is implemented with exactly one user task retained.
 
-For mutation, close new dispatch/root/borrow admission, park the mutating caller
-and drain admitted continuations. Every CPU, including BSP, acknowledges leaving
-the root after CR3 reload. Only then may BSP mutate or reclaim and reopen
-execution. PCID/global pages are currently disabled; root departure removes
-translations, but does not replace the admission protocol. The existing kernel
-TLB-flush IPI is not process quiescence. Never hold a lock while awaiting peers.
-Allow already admitted continuations to finish their final copies, or draining
-can deadlock against its own closed gate. Do not keep a mapping lease over an
-indefinite mutex, join or I/O wait. Failed quiescence never authorizes reuse.
+Use kernel staging and short validation/copy leases, with no mapping lease across
+indefinite I/O. Revalidate output after waits; late failure is BAD_BUFFER without
+rolling back consumed input or committed effects. Publish returned handles under
+the output lease, or release only the operation's exact returned generations.
+Refuse unsupported concurrency with BUSY before effects, per native object or
+session: endpoint RECEIVE/same-receipt REPLY, keyboard/pointer readers and control
+transactions, and clipboard ownership. Preserve existing network guards and
+CLOSE/stop semantics; do not serialize all process syscalls.
 
-Audit every syscall and deferred worker before exposing CREATE: keyboard/pointer
-readers, clipboard/HCI sessions, endpoint ownership, display/capture replies,
-audio, HOST/native files and network operations. Session observations are not
-reservations; capture/recheck generations. Unsupported competing operations
-must refuse before a side effect, not assert sole ownership. Device sessions
-stay process-owned and release at final process teardown, not each thread EXIT.
+**VM admission — task 4 implemented.** Dispatch reserves root activity before
+CR3 activation and acknowledges departure only after kernel-root reload on the
+permanent stack. New syscall continuation admission is atomic with gate closure;
+old continuations may finish bounded copies during DRAINING. No borrower crosses
+an I/O wait or root departure. Already quiescent mutation runs directly in the
+BSP executor; otherwise the VM worker scans pending processes without blocking
+that executor. MUTATING permits no process root; REPLY permits only its exact
+mutator until final output and cleanup finish. The current one-second precommit
+budget is tunable implementation policy; failure detaches pending references and
+returns BUSY without effects. Unsubmitted loading and final drained retirement
+retain separate ownership. PCID/global pages remain off; the kernel flush IPI is
+not this process protocol.
+
+Endpoint RECEIVE and same-receipt REPLY, keyboard/pointer readers and control
+transactions, clipboard receiver ownership and HCI RECEIVE/RELEASE have scoped
+refusals. Existing console/file/pipe queues, network-direction guards and audio
+session generation checks remain. Inputs and worker buffers are kernel-owned;
+late output failure never leaves undisclosed newly returned handle generations.
+Device sessions stay process-owned; CLOSE/stop still revokes logical ownership
+and lets admitted operations unwind. Exactly one user task remains. Source audit
+and ordinary 1/4-CPU inspection do not claim tested sibling races; task 5 must
+qualify them before exposing concurrent entry.
 
 ## TLS and runtime synchronization
 
@@ -239,7 +262,7 @@ merely completion of task 2.
 3. [x] **Shared-table delivery.** Growth/atomic installations, reply slot reservations, readiness/COPY and BSP table-loan replacement; still one user task. See [qualification](../development/experiments/threads-task3/README.md).
 
    Owner can inspect preserved authority, delivery-capacity admission and failure unwind before siblings are enabled.
-4. [ ] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task.
+4. [x] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task. See [qualification](../development/experiments/threads-task4/README.md).
 
    Owner can inspect safe copy/mutation/retirement admission and matched ordinary-workload costs.
 5. [ ] **Native CREATE/EXIT/completion.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only.
@@ -287,7 +310,7 @@ The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
 does not assign later implementation; tasks 2 and 3 were separately assigned.
-Task 4 still requires an owner go.
+Task 4 is separately owner-assigned; task 5 still requires an owner go.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK

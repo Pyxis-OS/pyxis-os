@@ -202,8 +202,9 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
     KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
     return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
   }
-  /* Private mappings stay stable while the sole user task is blocked. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.handle, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -260,7 +261,9 @@ static struct syscall_result write_console(struct console_object *console,
   reply.written = count;
   /* IF=0, private stable mappings: the checked reply cannot become invalid
    * after the console side effect. A failure here is a kernel invariant bug. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
@@ -487,6 +490,7 @@ static struct syscall_result read_console(struct console_object *console,
     size_t reply_capacity)
 {
   struct console_read_reply reply = {0};
+  char bytes[CONSOLE_READ_CHUNK];
   bool timed = request->timeout_ms != CONSOLE_WAIT_FOREVER;
   if (timed && request->timeout_ms > UINT32_MAX) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -549,7 +553,6 @@ static struct syscall_result read_console(struct console_object *console,
       return (struct syscall_result){CALL_BUSY, 0};
     }
     clipboard_ordinary_transfer(&console->object);
-    char bytes[CONSOLE_READ_CHUNK];
     size_t count = console->input_count;
     if (count > request->capacity) {
       count = request->capacity;
@@ -563,14 +566,14 @@ static struct syscall_result read_console(struct console_object *console,
     }
     console->input_count -= count;
     unlock_input(console);
-    KASSERT(copy_to_user(request->address, bytes, count));
     reply.read = count;
     end_read(console);
   }
 
-  /* The captured request and stable private mappings also permit overlapping
-   * data/reply destinations; the reply is written last. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request->address, bytes, reply.read)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 

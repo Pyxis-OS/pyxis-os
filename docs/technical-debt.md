@@ -121,18 +121,23 @@ thread-stack work, retaining the owner's small plain-program default.
 
 ## BSP-only allocation and VM mutation
 
-Private memory runs in the caller's syscall (since SMP task 7a) and the heap, physical allocator and scratch mappings are safe on any
-CPU, but other allocating services still run on the BSP through the [common executor](../kernel/service/request.c) (a closed
-service catalog and one FIFO; see the [request contract](kernel/bsp-service-requests.md)). Serial services, deferred destruction,
-worker relocation and shared kernel mapping reuse stay BSP-owned and need their own handoff and invalidation contracts
-([follow-ups](wip/scheduling-and-threads.md#serial-services-off-the-bsp)). Long non-preemptible service operations delay other
-requests and BSP work, and each user task owns one reusable request allocation plus a caller-only profiling allocation.
+Private memory and DISPLAY mapping mutations run on BSP under process VM
+admission; pending drainage uses a worker without blocking the common executor.
+Other serial services and shared kernel range reuse still need their own handoff
+and invalidation contracts. The owner accepts the remaining BSP MEMORY round
+trip (native A/B averages about 1.6–4.2 microseconds added per mutation);
+see [task 4 qualification](development/experiments/threads-task4/README.md).
+Keep the generic zero-root/borrower fast path; no task-count bypass. Revisit
+handoff/worker placement when native allocation latency is material, preserving
+BSP mutation ownership, acknowledged root departure and guaranteed cleanup storage.
 
-The handoff ordering is correctness: display requests are published only after the requester left its task stack and private
-address space, resumption reloads CR3 before returning to the task stack, and a wake arriving before a task finishes parking records
-a notification without making the running context runnable elsewhere. Preserve these or replace them with an equally defined
-ownership and invalidation contract. Revisit when BSP service latency is material or before concurrent use of one private address
-space.
+The owner also accepts #700's fixed IPC cost for merge: fastest-pass CALL64
+round trips add about 0.53 microseconds, CALL4096 about 0.6 microseconds, and
+SEND64 adds 97 ns/message (222 -> 319 ns); SEND4096 completion is unchanged.
+This disproportionately affects short messages. Investigate copy/activity lease
+accounting as a bounded follow-up before threads task 5, preserving authority,
+short copy lifetimes, root drainage and late-output semantics; implementation
+requires separate owner go.
 
 ## PMM first-fit search under its lock
 

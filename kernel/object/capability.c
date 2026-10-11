@@ -473,3 +473,14 @@ void capability_table_destroy(struct capability_table *table)
   }
   kfree(entries);
 }
+
+void capability_close_returned(struct capability_table *table,
+    const handle_t *handles, size_t count)
+{
+  for (size_t i = 0; i < count; ++i) {
+    if (handles[i] != HANDLE_INVALID) {
+      enum capability_result result = capability_close(table, handles[i]);
+      KASSERT(result == CAP_OK || result == CAP_BAD_HANDLE);
+    }
+  }
+}

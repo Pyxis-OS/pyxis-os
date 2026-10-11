@@ -87,7 +87,7 @@ survive later CLOSE. Ordinary CALL/readiness references remain storage-only.
 
 There is still exactly one user task per process. Growth and installation use
 the shared-table protocols below; teardown requires drained activity and claims.
-This does not enable concurrent siblings or stable shared user mappings.
+This does not enable concurrent siblings.
 See the [thread gates](../wip/threads.md#shared-capability-and-vm-ownership).
 
 Each space would have a capability table describing resources available to its
@@ -340,9 +340,10 @@ preparation and publish together after successful task submission.
 Requests carry owned inputs/claims instead of an exclusive table loan. Their
 admitted caller and uninterruptible completion keep destination storage alive;
 stop unwinds references and claims before retirement. Final table teardown still
-requires all activity drained. VM leases, competing device operations and actual
-siblings remain separate [thread gates](../wip/threads.md). The kernel result
-enum remains separate from public syscall statuses.
+requires all activity drained. VM leases and scoped device admission are
+implemented; actual sibling entry remains a separate
+[thread gate](../wip/threads.md). The kernel result enum remains separate from
+public syscall statuses.
 
 Objects have an atomic reference count and a destruction callback, with no
 global object registry or operation dispatch. The last release links the object
@@ -511,11 +512,11 @@ disabled, with no BSP request:
 under the same 128 MiB per-image ceiling as host and native files. Boot-archive
 executables are read in place. See [image capture](../kernel/program-loading.md#file-capture-and-costs).
 
-The current single-task/private-mapping contract keeps checked user sources and
-replies stable across waits. Only the resumed caller accesses them. Request
-metadata is captured before any data/reply write, including overlapping buffers.
-All fallible work precedes mutation. Shared user memory, task cancellation or
-multiple tasks per process would require revisiting these assumptions.
+Request metadata and write payloads are captured before waiting or committing,
+including overlapping buffers. Read output is validated and copied under a short
+mapping lease after acquiring file ownership; no lease crosses that wait. Late
+output failure is BAD_BUFFER and does not undo committed effects. There is still
+one user task; sibling entry must qualify concurrent file/device operations.
 
 [Libpyxis wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) return native status for all four
 operations and validate reply sizes/counts; failure clears output values.
@@ -539,19 +540,22 @@ at every level. It rejects null-page, higher-half, noncanonical, overflowing,
 unmapped and insufficiently permitted ranges. It never uses scratch slots,
 VM range metadata, allocation, or an address-space switch.
 
-Validation remains valid through the copy because user backing is eager and
-the process has one task with stable, private mappings. Copy helpers never
-schedule. A blocking endpoint operation captures input before sleeping and
-keeps its process alive; it resumes its original task and root before writing
-to the checked user destination. This path does not recover from kernel mapping
-corruption or invalid kernel buffers. Future shared user backing, concurrent
-unmapping or external task cancellation would require revisiting that invariant.
+Validation and copying hold a short process mapping lease. Copy helpers never
+allocate or schedule; a mapping lease must end before any indefinite wait or
+root departure. Inputs are captured into kernel-owned staging before blocking
+and remain untrusted. User contents can change independently of mapping stability.
+A precheck does not pin a range across a wait: revalidate final outputs under a
+new short lease. Late failure returns BAD_BUFFER without rolling back consumed
+input, rendered/transmitted bytes or committed file/device/launch effects.
 
-Object calls must capture request metadata into kernel storage and
-validate all reply/data buffers before producing side effects. A copy helper
-only validates its own range; it does not validate an entire operation. See the
-[user-memory interface](../../include/kernel/user_memory.h). The current character
-syscalls remain unchanged and do not yet use these helpers.
+Paired outputs validate both ranges together, then write data followed by reply.
+An invalid range writes neither. Returned handles publish under the output lease
+where possible; otherwise failed output closes only that operation's exact
+returned generations, preserving reused slots and existing logical CLOSE effects.
+Kernel buffer corruption is not recoverable. See the
+[user-memory interface](../../include/kernel/user_memory.h) and
+[VM transaction](../kernel/memory.md#execution). Character-only syscalls do not
+pass user pointers and retain their existing behavior.
 
 ## Implemented process completion
 

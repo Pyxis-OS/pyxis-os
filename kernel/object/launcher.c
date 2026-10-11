@@ -332,19 +332,14 @@ static const char *capture_string(struct launch_capture *capture, uintptr_t addr
   }
   char *text = (char *)capture->data + capture->used;
   size_t remaining = sizeof(capture->data) - capture->used;
-  for (size_t length = 0; length < remaining; ++length) {
-    if (length > UINTPTR_MAX - address ||
-        !copy_from_user(text + length, address + length, 1)) {
-      capture->error = CALL_BAD_BUFFER;
-      return NULL;
-    }
-    if (!text[length]) {
-      capture->used += length + 1;
-      return text;
-    }
+  size_t copied;
+  enum user_string_result result = copy_string_from_user(text, address, remaining, &copied);
+  if (result != USER_STRING_OK) {
+    capture->error = result == USER_STRING_BAD_BUFFER ? CALL_BAD_BUFFER : CALL_BAD_REQUEST;
+    return NULL;
   }
-  capture->error = CALL_BAD_REQUEST;
-  return NULL;
+  capture->used += copied;
+  return text;
 }
 
 static struct process_binding *capture_bindings(struct launch_capture *capture,
@@ -693,14 +688,19 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &child, sizeof(child)));
+  if (!copy_returned_handles_to_user(reply_address, &child, sizeof(child), &child, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(child)};
 }
 
 static struct syscall_result batch_reply(uintptr_t address,
     const struct launch_batch_reply *reply, enum call_status status)
 {
-  KASSERT(copy_to_user(address, reply, sizeof(*reply)));
+  if (!copy_returned_handles_to_user(address, reply, sizeof(*reply),
+      reply->children, LAUNCH_BATCH_MAX)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){status, sizeof(*reply)};
 }
 
@@ -792,7 +792,10 @@ static struct syscall_result create_group(size_t request_size,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  handle_t handles[] = {reply.supervision, reply.launcher};
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), handles, 2)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 

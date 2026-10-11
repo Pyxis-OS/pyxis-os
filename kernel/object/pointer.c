@@ -52,7 +52,8 @@ uint64_t pointer_ready(struct pointer_object *pointer, struct process *process)
 static void destroy_pointer(struct kernel_object *object)
 {
   struct pointer_object *pointer = (struct pointer_object *)object;
-  KASSERT(!pointer->owner && !pointer->reader && !pointer->image);
+  KASSERT(!pointer->owner && !pointer->reader && !pointer->image &&
+      !pointer->read_active && !pointer->image_active);
   kfree(pointer);
 }
 
@@ -221,10 +222,13 @@ void pointer_end_session(struct pointer_object *pointer)
   }
   KASSERT(arch_cpu_index() == 0);
   lock_pointer(pointer);
-  /* One task per process; the owner cannot release/exit while READ sleeps. */
-  KASSERT(!pointer->reader);
+  struct task_wait *reader = pointer->reader;
+  pointer->reader = NULL;
   pointer->owner = NULL;
   reset_buttons(pointer);
+  if (reader) {
+    task_wait_wake(reader);
+  }
   unlock_pointer(pointer);
   pointer_subscription_ended(pointer);
   pointer_image_release(pointer->image);
@@ -253,34 +257,53 @@ void pointer_request_execute(struct pointer_request *request)
   struct process *process = request->process;
   enum call_status status = CALL_OK;
   bool terminal = pointer_is_terminal(pointer);
-  if (process->space != pointer->space ||
+  if (request->stage == POINTER_REQUEST_IMAGE_CANCEL) {
+    pointer_image_release(request->candidate);
+    request->candidate = NULL;
+  } else if (process->space != pointer->space ||
       (!terminal && pointer->space->display->owner != process)) {
     status = CALL_DENIED;
   } else if (request->operation == POINTER_ACQUIRE) {
     if (!terminal && !space_pointer_input_available()) {
       status = CALL_UNAVAILABLE;
-    } else if (pointer->owner) {
-      status = CALL_BUSY;
-    } else if (terminal && pointer->view_identity == UINT64_MAX) {
-      status = CALL_LIMIT;
     } else {
       lock_pointer(pointer);
-      pointer->owner = process;
-      if (terminal) {
-        ++pointer->view_identity;
+      if (pointer->owner || pointer->read_active || pointer->image_active) {
+        status = CALL_BUSY;
+      } else if (pointer->acquisition == UINT64_MAX ||
+          (terminal && pointer->view_identity == UINT64_MAX)) {
+        status = CALL_LIMIT;
+      } else {
+        pointer->owner = process;
+        ++pointer->acquisition;
+        if (terminal) {
+          ++pointer->view_identity;
+        }
+        pointer->focused = pointer_surface_focused(pointer);
+        reset_buttons(pointer);
+        queue_event(pointer, pointer_position_event(pointer,
+            pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
       }
-      pointer->focused = pointer_surface_focused(pointer);
-      reset_buttons(pointer);
-      queue_event(pointer, pointer_position_event(pointer,
-          pointer->focused ? POINTER_FOCUS_GAINED : POINTER_FOCUS_LOST));
       unlock_pointer(pointer);
-      readiness_notify();
-      pointer_subscription_started(pointer);
+      if (status == CALL_OK) {
+        readiness_notify();
+        pointer_subscription_started(pointer);
+      }
     }
-  } else if (pointer->owner != process) {
+  } else if (pointer->owner != process || pointer->acquisition != request->acquisition) {
     status = CALL_DENIED;
   } else if (request->operation == POINTER_RELEASE) {
-    pointer_end_session(pointer);
+    lock_pointer(pointer);
+    if (pointer->read_active || pointer->image_active) {
+      status = CALL_BUSY;
+    } else {
+      /* Withdraw admission before cleanup can race a newly admitted READ. */
+      pointer->owner = NULL;
+    }
+    unlock_pointer(pointer);
+    if (status == CALL_OK) {
+      pointer_end_session(pointer);
+    }
   } else if (request->operation == TERMINAL_POINTER_CANCEL_CLIPBOARD) {
     clipboard_space_cancel(pointer->space);
   } else if (request->operation == POINTER_GEOMETRY) {
@@ -361,6 +384,7 @@ static enum call_status command_pointer(struct pointer_request *command)
   request->process = process_current();
   request->pointer = command->pointer;
   request->operation = command->operation;
+  request->acquisition = command->acquisition;
   request->stage = command->stage;
   request->data = command->data;
   request->candidate = command->candidate;
@@ -394,17 +418,24 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
     unlock_pointer(pointer);
     return (struct syscall_result){CALL_DENIED, 0};
   }
+  if (pointer->read_active) {
+    unlock_pointer(pointer);
+    return (struct syscall_result){CALL_BUSY, 0};
+  }
+  pointer->read_active = true;
+  uint64_t acquisition = pointer->acquisition;
   while (!pointer->count) {
     if (task_stop_requested()) {
+      pointer->read_active = false;
       unlock_pointer(pointer);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
     if (flags & POINTER_READ_POLL) {
+      pointer->read_active = false;
       unlock_pointer(pointer);
       return (struct syscall_result){CALL_TIMED_OUT, 0};
     }
     struct task_wait *wait = task_wait_prepare();
-    KASSERT(!pointer->reader);
     pointer->reader = wait;
     unlock_pointer(pointer);
     bool resumed = task_wait_sleep_interruptible(wait);
@@ -412,8 +443,9 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
     if (pointer->reader == wait) {
       pointer->reader = NULL;
     }
-    KASSERT(!pointer->reader && pointer->owner == process);
-    if (!resumed || task_stop_requested()) {
+    if (!resumed || task_stop_requested() || pointer->owner != process ||
+        pointer->acquisition != acquisition) {
+      pointer->read_active = false;
       unlock_pointer(pointer);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
@@ -423,8 +455,12 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
   --pointer->count;
   unlock_pointer(pointer);
   readiness_notify();
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+  lock_pointer(pointer);
+  pointer->read_active = false;
+  unlock_pointer(pointer);
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER,
+    copied ? sizeof(reply) : 0};
 }
 
 struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t rights,
@@ -479,6 +515,15 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
   if (operation == POINTER_VISIBILITY && command.data.visible > 1) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
+  if (operation != POINTER_ACQUIRE) {
+    lock_pointer(pointer);
+    bool owned = pointer->owner == process_current();
+    command.acquisition = pointer->acquisition;
+    unlock_pointer(pointer);
+    if (!owned) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+  }
   if (operation == POINTER_SET_IMAGE) {
     struct pointer_image_request image = command.data.image;
     if (!image.width || !image.height || image.width > POINTER_IMAGE_MAX ||
@@ -490,25 +535,55 @@ struct syscall_result pointer_call(struct pointer_object *pointer, uint64_t righ
     if (!user_buffer_check(image.address, bytes, USER_BUFFER_READ)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
+    lock_pointer(pointer);
+    if (pointer->owner != process_current() || pointer->acquisition != command.acquisition) {
+      unlock_pointer(pointer);
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    if (pointer->image_active) {
+      unlock_pointer(pointer);
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
+    pointer->image_active = true;
+    unlock_pointer(pointer);
     command.stage = POINTER_REQUEST_IMAGE_PREPARE;
     enum call_status status = command_pointer(&command);
     if (status != CALL_OK) {
+      lock_pointer(pointer);
+      pointer->image_active = false;
+      unlock_pointer(pointer);
       return (struct syscall_result){status, 0};
     }
     KASSERT(command.candidate);
-    KASSERT(copy_from_user(command.candidate->pixels, image.address, bytes));
+    if (!copy_from_user(command.candidate->pixels, image.address, bytes)) {
+      command.stage = POINTER_REQUEST_IMAGE_CANCEL;
+      command_pointer(&command);
+      lock_pointer(pointer);
+      pointer->image_active = false;
+      unlock_pointer(pointer);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     command.stage = POINTER_REQUEST_IMAGE_COMMIT;
   }
   enum call_status status = command_pointer(&command);
+  if (operation == POINTER_SET_IMAGE) {
+    lock_pointer(pointer);
+    pointer->image_active = false;
+    unlock_pointer(pointer);
+  }
   if (status == CALL_OK && (operation == POINTER_GEOMETRY ||
       operation == TERMINAL_POINTER_VIEW_CHANGED)) {
     const void *geometry = terminal ? (const void *)&command.data.terminal_geometry :
         (const void *)&command.data.geometry;
-    KASSERT(copy_to_user(reply_address, geometry, reply_size));
+    if (!copy_to_user(reply_address, geometry, reply_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, reply_size};
   }
   if (status == CALL_OK && operation == POINTER_STATE) {
-    KASSERT(copy_to_user(reply_address, &command.data.flags, sizeof(command.data.flags)));
+    if (!copy_to_user(reply_address, &command.data.flags, sizeof(command.data.flags))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
     return (struct syscall_result){CALL_OK, sizeof(command.data.flags)};
   }
   return (struct syscall_result){status, 0};
