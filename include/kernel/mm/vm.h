@@ -52,7 +52,9 @@ enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment
                           uintptr_t *result);
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes);
 enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes);
-/* Backing is eager, zeroed and owned by VM. Failure leaves a bare reservation.
+/* Backs a whole bare reservation or a contained suffix, leaving its lower
+ * prefix unmapped. One reservation owns that suffix; release/free remain whole.
+ * Backing is eager, zeroed and owned by VM. Failure leaves a bare reservation.
  * PAGE_USER is required for user backing and forbidden for kernel backing. */
 enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
                        unsigned permissions);
