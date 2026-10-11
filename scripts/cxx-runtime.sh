@@ -49,6 +49,18 @@ if [ "$(cat "$build/.pyxis-configuration" 2>/dev/null)" != "$stamp" ]; then
   printf '%s\n' "$stamp" > "$build/.pyxis-configuration"
 fi
 
+# The installed compiler still determines the source pin. Enable the richer
+# profile only when that exact source contains the native locale backend;
+# an older installed container must not select the POSIX locale fallback.
+localization=OFF
+wide_characters=OFF
+random_device=OFF
+if [ -f "$source/libcxx/include/__locale_dir/support/pyxis.h" ]; then
+  localization=ON
+  wide_characters=ON
+  random_device=ON
+fi
+
 # libunwind's bare-metal mode finds exception tables through the SDK linker
 # script's bounds instead of dl_iterate_phdr. libc++abi stays hosted: on x86-64
 # its bare-metal mode only silences the uncaught-exception message.
@@ -91,10 +103,10 @@ cmake -G 'Unix Makefiles' -S "$source/runtimes" -B "$build" \
   -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=OFF \
   -DLIBCXX_USE_COMPILER_RT=ON \
   -DLIBCXX_ENABLE_THREADS=OFF \
-  -DLIBCXX_ENABLE_LOCALIZATION=OFF \
-  -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF \
+  -DLIBCXX_ENABLE_LOCALIZATION="$localization" \
+  -DLIBCXX_ENABLE_WIDE_CHARACTERS="$wide_characters" \
   -DLIBCXX_ENABLE_FILESYSTEM=OFF \
-  -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF \
+  -DLIBCXX_ENABLE_RANDOM_DEVICE="$random_device" \
   -DLIBCXX_ENABLE_TIME_ZONE_DATABASE=OFF \
   -DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=OFF \
   -DLIBCXX_INSTALL_MODULES=OFF \

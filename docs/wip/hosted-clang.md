@@ -89,10 +89,12 @@ policy belongs in LLVM Support.
 | `strerror_r` / `llvm/lib/Support/Errno.cpp` | Configure absence correctly: `Errno.cpp:59` already falls back to real `strerror`, whose current messages are immutable. Not a first-slice blocker. If later needed, implement bounded libc copying with one explicit return contract. |
 | `ECHILD/ENOEXEC/EXDEV` | Still absent; `EINTR` exists as vocabulary without signal interruption. They are not proved first-path requirements: `ECHILD` appears in a Unix wait comment, `EXDEV` in Apple clone-copy fallback, no execution use of `ENOEXEC` found. Native failure translations remain distinct; add vocabulary only when reached. |
 
-Task 1's real target build additionally reaches `tolower` in
-`Support/CachePruning.cpp:112` and `FP_ILOGB0`/`FP_ILOGBNAN` in
+Task 1's real target build additionally reaches an undeclared `tolower` in
+`Support/CachePruning.cpp:112` and missing `FP_ILOGB0`/`FP_ILOGBNAN` in
 `libc/src/__support/FPUtil/ManipulationFunctions.h:86–87` through `APFloat.cpp`.
-These remain task 3 libc closure work; no shared libc/runtime edit was made.
+The task 2 audit confirms that libc already implements `tolower`; refresh
+its C++ include/closure before adding a duplicate. The math constants remain
+task 3 work. No shared libc/runtime edit was made by task 1.
 The native backend removes Unix header consumers rather than supplying fakes.
 
 The old probe's absent Unix headers (`signal.h`, `spawn.h`, `sys/mman.h`,
@@ -126,8 +128,10 @@ This is not permission to add crash helpers or start embedding work.
 Task 1 is delivered in the [native Support fork PR](https://git.internal/PyxisOS/pyxis-llvm/pulls/4),
 with its [contracts](../development/llvm-support.md) and
 [qualification record](../development/experiments/hosted-clang-support.md).
-The installed fork pin remains unchanged. Later tasks need separate owner
-go-aheads; this line proceeds alongside delta's threads gates 5–8.
+The installed fork pin remains unchanged. Tasks 2 and 3 are owner-assigned
+2026-10-11, in sequence (task 2 first, with reached libc prerequisites as needed).
+Tasks 4 and 5 need separate go-aheads. This line proceeds alongside delta's
+threads gates 5–8.
 
 1. [x] **LLVM Support platform and header fixes — delivered 2026-10-11.** Implement Pyxis Path/FILE,
    Process/Program, private Memory and fault-policy equivalents in the fork,
@@ -136,14 +140,14 @@ go-aheads; this line proceeds alongside delta's threads gates 5–8.
    changing those paths. **Owner check:** inspect platform contracts and ordinary
    Support builds; QEMU copied read/write, path/identity and error checks, without
    claiming a runnable compiler before the thread gates.
-2. [ ] **SDK C++ source closure.** Audit and build the stream/C-locale/time-format
+2. [x] **SDK C++ source closure — delivered 2026-10-11.** Audit and build the stream/C-locale/time-format
    subset above, including real libc dependencies and the reached wide/random
    facilities. Keep filesystem/time-zone expansion out unless reached. Coordinate
    configuration and shared libc edits with delta. **Owner check:** ordinary SDK
    build and QEMU stream/string/time-format behavior, including `locale("C")`
    refusal of unavailable locales. Real mutex/future/TLS integration and threaded
    validation wait on gates 5–8; these are not serial emulations.
-3. [ ] **Remaining reached libc operations.** Use the table to implement standard
+3. [ ] **Remaining reached libc operations — assigned 2026-10-11, after task 2.** Use the table to implement standard
    functions on native objects, or adapt/refuse unsupported LLVM features.
    Publish userland PRs before parent pins, keeping dependencies fast-forward.
    **Owner check:** the refreshed compile/link inventory names no unexplained
@@ -160,6 +164,74 @@ go-aheads; this line proceeds alongside delta's threads gates 5–8.
    budgets. **Owner check:** compile the same small C source, separately launch
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
+
+### Task 2 source audit and accepted contract — 2026-10-11
+
+Inspected current Pyxis `466d2ed5`, userland `df210f1a` and merged Support fork
+`6951d3c9`. The ordinary, unchanged SDK builds with installed compiler/runtime
+pin `49e2c1a`; its libc++/ABI/unwind archives are 605,368/587,078/76,198 bytes.
+The unchanged SDK initially failed the five reached raw-stream, Mustache,
+UTF-wrapper, lock-manager and preprocessor units at disabled stream/wide/random
+facilities. With the real task 2 runtime and libc closure they all compile.
+[Userland #216](https://git.internal/PyxisOS/pyxis-userland/pulls/216) and
+[fork #5](https://git.internal/PyxisOS/pyxis-llvm/pulls/5) supply the closure;
+[qualification and costs](../development/experiments/hosted-clang-cxx.md) record
+the builds and QEMU checks. No compiler link or threaded runtime is claimed.
+
+The retained consumers need stream write/tell (`raw_os_ostream.cpp`), floating
+insertion into `ostringstream` (`Mustache.cpp`), C-locale `stringstream` and
+`put_time` (`PPMacroExpansion.cpp`), and `wstring/wstring_view`
+(`ConvertUTFWrapper.cpp`). `ExponentialBackoff.h` declares `random_device`
+unconditionally; LLD ELF `Writer.cpp` uses it for unseeded section shuffling.
+These are source requirements, independent of LLVM worker selection.
+
+The narrow locale prerequisites are real libc `struct lconv`/`localeconv` and
+`strxfrm`; existing ctype, collation, floating parsing, `asprintf` and time
+functions suffice otherwise. The fork needs an explicit private Pyxis locale
+backend and the built-in classic ctype table, not POSIX locale objects or the
+unsupported-platform abort. Stock wide runtime also builds wide facets, standard
+streams and numeric conversions, beyond LLVM's own UTF conversion:
+
+| Reached source | Additional libc closure |
+| --- | --- |
+| Wide char_traits/string | `wmemcmp`, `wmemchr`; existing `wcslen` |
+| Wide locale/codecvt/time | `wcscoll`, `wcsxfrm`, `btowc`, `wctob`, `mbrtowc`, `mbrlen`, `mbsrtowcs`, `wcrtomb`, bounded `mbsnrtowcs`/`wcsnrtombs` |
+| Wide numeric string conversions | `wcstol/wcstoul/wcstoll/wcstoull`, `wcstof/wcstod/wcstold`, `swprintf` |
+| Wide standard streams | `getwc`, `ungetwc`, `fputwc`, with real FILE orientation/pushback state |
+
+Filesystem and time-zone database stay off. Filesystem-off excludes filebuf
+instantiations even when localization selects `fstream.cpp`; no new filesystem
+facility is needed. Wide scanning/full wide stdio and locale databases are not
+promised by this audit. Standard missing functions belong in libc.
+
+The C-only adapter preserves existing names `"C"`/`""`, UTF-8 conversion and
+ASCII classification. Use private immutable libc++ locale tokens and real C
+`lconv` data; unavailable names fail through normal C++ errors. No public
+`locale_t/newlocale/uselocale` or mutable locale machinery is needed. This does
+not change the existing libc locale contract.
+
+**Both defaults accepted by the owner, 2026-10-11:**
+
+1. **Wide facilities: implement the actual stock wide runtime closure
+   above, including real restartable UTF-8 and the reached wide FILE operations.**
+   Preserve read-ahead/position/error behavior; no repeated-byte-pushback shortcut
+   for `ungetwc`.
+2. **Randomness: real libc `getentropy` over startup `random`/`clock`
+   grants, 0–256 bytes, using the existing five-second maximum wait.** Checked
+   absolute deadline, all-or-nothing output, honest authority/queue/timeout/source
+   failures, no fallback. Select libc++'s getentropy backend: its default
+   `"/dev/urandom"` token is an API selector, never a path lookup; other tokens
+   refuse. `entropy()` returns zero because no estimate is provided.
+
+Coordinate `libc/include/{locale,wchar,stdio}.h`, FILE internals/pushback,
+new wide/entropy sources and the libc source list, plus `scripts/cxx-runtime.sh`,
+with delta through the owner. Its #709 owns `lib/thread.c`, `lib/memory.c`,
+`include/thread.h`, `include/memory.h` and boot/session/shell/mux launch grants;
+this task does not edit those. New libc sources use the existing source wildcard,
+without a runtime.mk/startup edit. Do not alter errno/TLS storage,
+allocator locking, timezone/static-result locking or startup ownership here.
+The actual fork runtime can be built locally with the existing compiler and SDK;
+ordinary SDK adoption waits for the matching owner-built container, as below.
 
 ### Compiler-container boundary
 

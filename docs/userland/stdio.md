@@ -582,3 +582,21 @@ descriptor; it never opens an existing name. Paths follow the same roots/cwd
 policy as `fopen`. The caller closes the descriptor and removes the reserved
 name. There is no ISO C `tmpnam`: Lua's `os.tmpname` deliberately reserves a file
 instead of returning an unreserved name.
+
+## Wide FILE I/O
+
+A FILE starts unoriented; `fwide` or its first actual byte/wide operation selects
+orientation. Empty string/formatted byte operations select byte orientation too;
+zero-element fread/fwrite do not. Mixing byte and wide operations refuses with
+EINVAL and the stream error indicator. Successful seeks preserve orientation but
+reset decoder/pushback state; failed seeks preserve it. Descriptor I/O remains a
+byte interface and shares the original cursor/read-ahead independently of FILE
+orientation.
+
+`fgetwc/getwc`, `fputwc/putwc` and `ungetwc` use UTF-8 and the existing native
+read-ahead/output buffering. One whole scalar may be pushed back, with its encoded
+byte width reflected in ftell; this is independent of byte pushback. Malformed or
+truncated input sets EILSEQ/ferror. Incomplete input survives a native I/O error;
+EOF in an incomplete scalar resets it and reports an error. Wide writes reject
+invalid scalars before output and return WEOF for native or forced-buffer-flush
+failure. Wide scanning, full wide stdio and freopen remain unavailable.
