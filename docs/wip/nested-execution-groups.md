@@ -30,6 +30,12 @@ grant attenuation are separate protections. Tree cleanup must preserve honest
 safe-stop/deferred-cleanup boundaries, without promising bounded retirement or
 rollback of committed effects.
 
+Owner accepted, 2026-10-11: packaged live Remote explicitly delegates same-group
+LAUNCH to foreground children, enabling Neovim helpers while retaining session/
+pane cleanup. This is consistent with the direction above; it implements neither
+subgroups nor automatic launcher inheritance. Installed Remote entries can opt in
+with the same `launch = true` setting.
+
 ## What this replaces
 
 The outside-group executor and sibling-job-group pattern from #724's former

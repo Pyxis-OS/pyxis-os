@@ -253,8 +253,8 @@ read-write, starting in `home://`, and network ownership. `home` is optional:
 if the volume cannot be mounted, `pyxis` still starts, in `tmp://`, in both
 the normal and the rescue entry. `system` is required. That init starts the
 ordinary local session and configures networking. `tmp://` remains RAM-backed.
-The packaged live Development and installed `pyxis` entries set `launch = true`;
-the live Read-only and Remote entries leave it disabled.
+The packaged live Development and Remote, and installed `pyxis` entries set
+`launch = true`; the live Read-only entry leaves it disabled.
 Live boots give the Development and Read-only spaces the RAM `home://`,
 read-write and read-only, and the Remote space read-write, starting in
 `tmp://`. Installed disks omit the installer
@@ -591,7 +591,10 @@ use its bound launcher while remaining outside that group. The trusted shell
 `session` handoff preserves the actual launcher LAUNCH/CREATE_GROUP rights and
 terminal CREATE grant; the remote supervisor then delegates only a group-bound
 LAUNCH grant to each shell.
-If Remote explicitly opts into `launch = true`, the supervisor also supplies
+With Remote `launch = true`, the supervisor also supplies
 `child_launcher` from that same group-bound launcher. Foreground commands and
 their launched descendants then remain in the remote execution group. The
-packaged Remote entry leaves this opt-in disabled.
+packaged live Remote entry enables this (owner accepted, 2026-10-11), allowing
+bundles such as Neovim to launch helpers. Installed defaults contain no Remote
+space; owner-added Remote entries use the same setting. Only LAUNCH is delegated,
+not CREATE_GROUP or group supervision.
