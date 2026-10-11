@@ -15,6 +15,7 @@
 #include <kernel/user.h>
 #include <kernel/task.h>
 #include <kernel/virtio/blk.h>
+#include <kernel/storage/nvme.h>
 #include <kernel/display.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
@@ -129,6 +130,11 @@ static void finish_interrupt(const struct exception_frame *frame)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == APIC_NVME_VECTOR) {
+    nvme_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
   if (frame->vector == APIC_HDA_VECTOR) {
     audio_interrupt();
     finish_interrupt(frame);
