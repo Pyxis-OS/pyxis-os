@@ -39,12 +39,6 @@ alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
-[Program bundles and ZIP archives](program-bundles.md): Codex epsilon (2026-10-11),
-on the accepted ZIP plan. The host packer and checker (task 2a, #706) are merged;
-epsilon has tasks 2b (stored-only native launch) and 2c (small-resource deflate).
-Bundles in bin:// task 1 is merged (#691); its future command index awaits its own
-go ([bundles in bin](bundles-in-bin.md)).
-
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
@@ -149,6 +143,13 @@ display, pointer and keyboard interfaces as the kernel.
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, clock
 source, power, storage.
+
+[Program bundles and ZIP archives](program-bundles.md): ZIP 2b/2c parked by the
+owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and
+qualified on draft #717/#213/#98, with authority and admission fixes required
+before any merge. Revisit for package distribution or the Clang build loop.
+The merged host packer/checker (2a, #706) stays; [bin placement](bundles-in-bin.md)
+is merged and its future command index awaits a separate go.
 
 [Selecting existing build artifacts](build-artifact-reuse.md) and the postponed
 [host development overlay](host-development-overlay.md).
