@@ -229,7 +229,9 @@ void process_task_detach(struct process *process, struct process_task_member *me
   bool last = !process->task_count;
   if (last) {
     process->stopping = true;
-    process_set_result(process, (struct process_result){.kind = PROCESS_EXITED});
+    if (!process_result_committed(process)) {
+      process_set_result(process, (struct process_result){.kind = PROCESS_EXITED});
+    }
   }
   spin_unlock(&process->lifetime_lock);
   if (last) {
