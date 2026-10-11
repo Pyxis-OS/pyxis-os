@@ -108,6 +108,9 @@ first, then remote input after the system pointer.
 
 [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 
+[Steam Deck second hardware target](steam-deck.md): Claude (2026-10-11), proposal
+only: stick boot, controls, rotation and the touch track; no task is assigned.
+
 System layout follow-ups: network configuration on the pool instead of the archive
 ([technical debt](../technical-debt.md#archive-only-network-configuration)) and the
 [boot configuration checker](boot-configuration-checker.md).
