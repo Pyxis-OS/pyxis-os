@@ -174,6 +174,37 @@ state or guessed universal pressure units.
    and use the TrackPoint while a palm rests on the touchpad. Native qualification
    must establish these together; a successful mode command is insufficient.
 
+## Task 1 preparation (2026-10-11)
+
+Branch `pointer/usb-report-scroll` from main `56bd4da8`; assignment recorded in
+`18aa7d3d`. No implementation code yet. One clarification is pending: when an
+authored archive selects traditional, should a missing/invalid installed key
+use that archive value or literal natural? Recommended: archive fallback,
+matching the hostname convention; both shipped archives stay natural. This is
+proposed, not accepted.
+
+Before-code build passed with unchanged userland `df210f1a`, ports `df3210b0`,
+fs `b427df29` and lwIP `a1aadb91`, using the existing LLVM 23.1.3 builder and
+verified dependency bundles. QEMU 10.2.2, Q35/nested KVM, host CPU, four CPUs,
+512 MiB, 1280x800 boot framebuffer, PS/2 plus USB keyboard/mouse through two
+USB 2 hubs; `POINTER_SYNTHETIC=1 DISPLAY_CURSOR_PROBE=1 LOG_LEVEL=info`.
+Existing 30-second synthetic windows on Caelum measured:
+
+| Window | Presented/compose/copy frames | Compose total, ms | Copy total, ms |
+| --- | ---: | ---: | ---: |
+| Idle 1 | 16 | 5.52 | 5.34 |
+| Motion 1 | 1,789 | 828.27 | 681.55 |
+| Idle 2 | 16 | 5.14 | 5.24 |
+| Motion 2 | 1,798 | 826.05 | 665.42 |
+
+Three complete five-second idle-after windows sampled BSP vCPU host-thread time
+at 11.4–12.8% of one CPU; one complete motion window was 18.0%. A boundary-crossing
+sample is excluded. These include other guest work, KVM and emulation, not isolated
+USB-worker or native costs. Matched/interleaved after-code runs remain required.
+GDB after the schedule found two live keyboards and two live pointers (USB/PS/2),
+no queued pointer report or held button. Raw logs, sealed image hashes and host
+samples remain local in `build/pointer-baseline/`; QEMU/debugger are stopped.
+
 ## Qualification and tuning
 
 Before either implementation, capture revisions/configuration and matched
