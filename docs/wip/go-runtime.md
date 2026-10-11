@@ -2,8 +2,9 @@
 
 Status: docs-only source refresh, 2026-10-11. No Pyxis Go target/runtime is
 implemented, and no Go program has run in the guest. The 2026-09-30 Linux
-compile/conversion probes below were not repeated. Proposed contracts and tasks
-are not implementation approval.
+compile/conversion probes below were not repeated. The owner accepted the three
+decisions below on 2026-10-11. No Go or VM task is assigned; implementation awaits
+a separate owner go after hosted Clang.
 
 **Owner ordering, 2026-10-11:** Go follows hosted Clang. Clang's decisions are
 accepted; beta is planning its threads-independent line, while delta owns
@@ -222,9 +223,10 @@ Files, sockets/netpoll, os/exec, module fetching, hosted Go, race detection,
 profiling and cgo remain later concrete consumers. Unsupported operations must
 fail honestly; no successful stubs or disabled GC/scheduler to obtain hello.
 
-## Proposed private-VM reservation/commit contract
+## Accepted private-VM reservation/commit contract
 
-**Proposal, not accepted or implemented; no existing threads gate owns it.**
+**Owner-accepted, 2026-10-11; not implemented or assigned. No existing threads
+gate owns this contract.**
 Task 5's guarded-context work does not imply general sparse runtime backing.
 Coordinate ownership with it, without creating competing reservation authorities.
 This extension should serve native allocators/runtimes generally, not expose a
@@ -249,10 +251,10 @@ and exact whole-region RELEASE. Internal
 vm_back currently backs a whole bare reservation. Sparse subranges, their owned
 frames/metadata and atomic rollback need deliberate implementation.
 
-The proposed default leaves existing ALLOCATE/RELEASE intact and adds an explicit
-reservation family; names below describe behavior, not assigned opcodes:
+The accepted contract leaves existing ALLOCATE/RELEASE intact and adds an
+explicit reservation family; names below describe behavior, not assigned opcodes:
 
-| Operation / boundary | Proposed contract |
+| Operation / boundary | Accepted contract (not implemented) |
 | --- | --- |
 | Authority and identity | MEMORY MANAGE applies only to the calling process, even after handle transfer. RESERVE returns a process-owned opaque generational identity plus base/rounded size. The identity is not transferable mapping authority; stale/released identities reject even after address reuse. Closing a MEMORY handle releases nothing; final drained process teardown reclaims all reservations/backing. |
 | RESERVE | Nonzero bytes rounded to 4 KiB; power-of-two alignment at least 4 KiB, including 64 MiB. BSP chooses a disjoint lower-half user range, excluding image, startup, stacks/guards and other reservations. No fixed-address replacement or placement hint in the first slice. It owns metadata/address space only: no data frames or proportional page tables; access faults until COMMIT. Virtual/metadata exhaustion is a real failure, not a promise of future physical capacity. |
@@ -301,37 +303,36 @@ precommit BUSY needs a bounded retry/failure policy outside forbidden contexts.
 
 ## Proposed bounded progression
 
-Go work starts after hosted Clang and a separate owner go. Gate delivery below
-remains delta's work; every new native-VM or Go task needs its own assignment.
+No Go or VM task is assigned. Implementation starts only after hosted Clang and
+a separate owner go. Gate delivery below remains delta's work; every new
+native-VM or Go task needs its own assignment.
 
 | Task | Scope and boundary | What the owner can do after it |
 | --- | --- | --- |
-| 1: private-VM foundation | Small first implementation after accepting the reservation proposal, still one user task: aligned reservation, commit/decommit and whole release under task 4, with no Go target or new thread API. Qualify sparse metadata-sized ranges, 64 MiB arena alignment, recommit zeroing, rollback/retirement and backing/pause costs with a native consumer. | Inspect a large sparse reservation and real backing reclamation without installing Go. |
+| 1: private-VM foundation | Small first implementation once separately assigned, still one user task: aligned reservation, commit/decommit and whole release under task 4, with no Go target or new thread API. Qualify sparse metadata-sized ranges, 64 MiB arena alignment, recommit zeroing, rollback/retirement and backing/pause costs with a native consumer. | Inspect a large sparse reservation and real backing reclamation without installing Go. |
 | 2: target/output closure | Owner-pinned Go fork, amd64/v1 static target registration, native entry/assembly boundary and a bounded comparison of P1F writer versus restored converter. Select the output route only from that review; no Linux-converted image is a guest-runtime result. | Inspect native artifact layout and approve one maintained output route. |
 | 3: minimum normal runtime | After gates 5/6 and native FS setup: M/g0/completion collection, Go-owned FS, parking, VM/time/entropy, diagnostics and process exit. Preserve GC and normal scheduler; implement the agreed fault/preemption limits and actual startup grants. | Run builtin println with an observable exit and full reclamation. |
 | 4: progress qualification | Allocation/GC and moved stacks, channels, timers, M creation/retirement, blocking output while another goroutine progresses, real capacity/OOM and whole-process fault/stop cleanup. Measure launch/peak backing and parking/VM pause costs; distinguish nested QEMU from native results. | Judge the declared runtime profile beyond a printed literal. |
 | 5: supplied streams and fmt | Native os.File stream adoption with partial writes, errors and closure; fmt.Println unchanged at the application level. File/network/hosted-toolchain consumers remain separately scoped. | Run a small formatting program through delegated streams. |
 
-## Open owner decisions — proposed defaults, not accepted
+## Accepted owner decisions (2026-10-11)
 
-1. **First runtime profile.** Default normal multi-M scheduler/GC, no cgo,
+1. **First runtime profile — accepted.** Normal multi-M scheduler/GC, no cgo,
    cooperative Go preemption initially, and process-fatal hardware faults.
    Explicit Go panics retain normal runtime behavior, but fault-derived recover
    and call-free-loop/stop-the-world progress are not promised. General resumable
-   faults and safe asynchronous runtime preemption follow separately; requiring
-   normal fault recovery or that progress guarantee first enlarges the native
-   prerequisite scope.
-2. **Repository/toolchain ownership.** Default an owner-maintained pinned Go
+   faults and safe asynchronous runtime preemption follow separately.
+2. **Repository/toolchain ownership — accepted.** An owner-maintained pinned Go
    fork and host cross-toolchain, separate from the LLVM fork/container. The owner
    creates its repository and mirror/cache before build work. **P1F writer versus
    restored host converter remains open, with no preferred route here**; task 2
    presents the comparison before implementation selection. A restored converter
    would be a Pyxis host tool, not a hidden Go/CI dependency in this refresh.
-3. **Private-VM contract.** Default the process-owned aligned reservation family
+3. **Private-VM contract — accepted.** The process-owned aligned reservation family
    above: generational identities, eager zeroed RW/NX commit preserving existing
    pages, explicit decommit, whole release, and BSP/activity-lease atomicity.
    No demand paging, fixed-address replacement, partial release or Go-shaped mmap.
 
 No code, dependency pins, new compiler container, Go build/CI dependency, tests
-or probe execution are part of this refresh. Owner acceptance and later task
-assignment are separate.
+or probe execution are part of this refresh. These accepted decisions authorize
+no implementation: Go and VM tasks await a separate owner go after hosted Clang.
