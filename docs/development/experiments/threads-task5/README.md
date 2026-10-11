@@ -197,11 +197,13 @@ initrd `583d31b7ec38536263a8f52a58c718eed7050aa84114d49e5dfe12c84c8f6d52`.
 No native speedup is established. Captures remain in ignored
 `build/task5-review-{qualification,final}`; task-owned VM/debugger/client jobs
 are stopped. Exact submitted-head CI is reported in the PR.
-Owner native rerun: A `a617bcd74fcb875b3ddae8ad1ceaaeabae698f9e`, B the submitted
-follow-up head, same A initrd/config and commands above. Original B `a0c02469`
-can be retained for an isolated before/after follow-up comparison. New sibling
-qualification requires B's new SDK/initrd with userland #212. No improvement
-is claimed before that rerun.
+Owner native rerun: A `266baadaf2c4c940d63b3f5109a88438f4315a68`, B the submitted
+head rebased onto that main, same A initrd/config and commands above. Both now
+include #710's NVMe driver and internal-SSD shutdown notification. The owner
+observed unsafe-shutdown counts increasing during the earlier A/B reboots;
+those old kernel heads remain historical measurements. The task-5 code patch
+is identical after rebase. New sibling qualification requires B's new SDK/initrd
+with userland #212. No improvement is claimed before the new native rerun.
 
 This gate supplies native lifecycle only: no parking, language TLS/errno,
 thread-safe libc, pthread/C11 runtime or consumer adapter. The probes cover
