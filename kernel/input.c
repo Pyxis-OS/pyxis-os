@@ -3,6 +3,7 @@
 #include <arch/ps2.h>
 #include <arch/smp.h>
 #include <kernel/input.h>
+#include <kernel/input/touchpad.h>
 #include <pointer-synthetic-config.h>
 #if POINTER_SYNTHETIC_ENABLED
 #include <kernel/input/synthetic_pointer.h>
@@ -21,7 +22,8 @@
 #define PS2_BUTTONS (POINTER_BUTTON_LEFT | POINTER_BUTTON_RIGHT | POINTER_BUTTON_MIDDLE)
 
 static struct input_source *sources;
-static struct input_source ps2_keyboard, ps2_pointer;
+static struct input_source ps2_keyboard, ps2_pointer, ps2_touchpad, ps2_guest;
+static bool touchpad_initialized;
 static atomic_size_t keyboard_sources, pointer_sources;
 static size_t held[KEY_COUNT];
 static struct input_source *repeat_owner[KEY_COUNT];
@@ -40,6 +42,7 @@ struct pending_pointer {
 static struct pending_pointer pointer_events[INPUT_POINTER_EVENTS];
 static size_t pointer_read, pointer_count;
 static bool pointer_reset_pending;
+static void attach_ps2_pointer(void);
 #if POINTER_SYNTHETIC_ENABLED
 static uint32_t drained_physical_buttons;
 #endif
@@ -74,8 +77,8 @@ void input_source_attach(struct input_source *source, bool keyboard, bool pointe
   if (source != &ps2_keyboard && ps2_keyboard_available() && !ps2_keyboard.keyboard_live) {
     input_source_attach(&ps2_keyboard, true, false);
   }
-  if (source != &ps2_pointer && mouse_available() && !ps2_pointer.pointer_live) {
-    input_source_attach(&ps2_pointer, false, true);
+  if (source != &ps2_pointer && source != &ps2_touchpad && source != &ps2_guest) {
+    attach_ps2_pointer();
   }
 }
 
@@ -379,6 +382,9 @@ static void queue_pointer(struct pending_pointer event)
   if (pointer_count == INPUT_POINTER_EVENTS) {
     pointer_read = pointer_count = 0;
     pointer_reset_pending = true;
+    if (touchpad_initialized) {
+      touchpad_reset();
+    }
     for (struct input_source *source = sources; source; source = source->next) {
       source->buttons = source->pending_buttons;
       source->suppressed_buttons |= source->buttons;
@@ -553,6 +559,63 @@ static void drain_pointer_events(void)
   }
 }
 
+static void attach_ps2_pointer(void)
+{
+  if (!mouse_available()) {
+    return;
+  }
+  const struct mouse_profile *profile = mouse_profile();
+  if (!profile->absolute) {
+    if (!ps2_pointer.pointer_live) {
+      input_source_attach(&ps2_pointer, false, true);
+    }
+    return;
+  }
+  bool initial = !touchpad_initialized;
+  if (initial) {
+    touchpad_init(profile);
+    touchpad_initialized = true;
+  }
+  if (!ps2_touchpad.pointer_live) {
+    input_source_pointer_configure(&ps2_touchpad, INPUT_POINTER_TOUCHPAD,
+        POINTER_SCROLL_UNITS_PER_DETENT,
+        profile->x_resolution * TOUCHPAD_SCROLL_MM_PER_DETENT,
+        POINTER_SCROLL_UNITS_PER_DETENT,
+        profile->y_resolution * TOUCHPAD_SCROLL_MM_PER_DETENT);
+    input_source_attach(&ps2_touchpad, false, true);
+    if (initial) {
+      input_source_initial_pointer(&ps2_touchpad, profile->initial_touch_buttons);
+    }
+  }
+}
+
+static void report_ps2_guest(const struct mouse_event *event)
+{
+  if (!event->guest_buttons_valid) {
+    return;
+  }
+  if (!ps2_guest.pointer_live) {
+    input_source_attach(&ps2_guest, false, true);
+    /* The first observed guest snapshot can contain an already held switch.
+     * Quarantine it until release, like initial holds from USB admission. */
+    input_source_initial_pointer(&ps2_guest, event->guest_buttons);
+  }
+  input_pointer_report(&ps2_guest, event->dx, event->dy, 0, event->wheel,
+      event->guest_buttons);
+}
+
+static void lose_ps2_pointer(void)
+{
+  struct input_source *ps2_sources[] = {&ps2_pointer, &ps2_touchpad, &ps2_guest};
+  for (size_t i = 0; i < sizeof(ps2_sources) / sizeof(ps2_sources[0]); ++i) {
+    input_source_lost(ps2_sources[i]);
+    ps2_sources[i]->suppressed_buttons = PS2_BUTTONS;
+  }
+  if (touchpad_initialized) {
+    touchpad_reset();
+  }
+}
+
 void input_pointer_drain(void)
 {
   _Static_assert(MOUSE_BUTTON_LEFT == POINTER_BUTTON_LEFT &&
@@ -560,21 +623,37 @@ void input_pointer_drain(void)
       MOUSE_BUTTON_MIDDLE == POINTER_BUTTON_MIDDLE, "normalized pointer button bits");
   uint64_t flags = cpu_save_interrupts();
   assert_input_owner();
+  attach_ps2_pointer();
   struct mouse_event event;
   while (mouse_read_event(&event)) {
-    if (!ps2_pointer.pointer_live) {
-      input_source_attach(&ps2_pointer, false, true);
+    if (event.kind == MOUSE_EVENT_RESET) {
+      lose_ps2_pointer();
+      continue;
     }
-    if (event.reset) {
-      input_source_lost(&ps2_pointer);
-      ps2_pointer.suppressed_buttons = PS2_BUTTONS;
-    } else {
+    attach_ps2_pointer();
+    if (event.kind == MOUSE_EVENT_RELATIVE) {
       input_pointer_report(&ps2_pointer, event.dx, event.dy, 0, event.wheel, event.buttons);
+    } else if (event.kind == MOUSE_EVENT_TOUCHPAD) {
+      struct touchpad_motion motion;
+      touchpad_report(&event.touch, input_last_typing_ns(), arch_monotonic_ns(), &motion);
+      if (motion.reset) {
+        input_source_scroll_reset(&ps2_touchpad);
+      }
+      input_pointer_report(&ps2_touchpad, motion.dx, motion.dy,
+          motion.scroll_x, motion.scroll_y, event.touch_buttons_valid ?
+          event.touch_buttons : ps2_touchpad.pending_buttons);
+      /* Basic-W switch snapshots carry no guest motion. */
+      event.dx = event.dy = event.wheel = 0;
+      report_ps2_guest(&event);
+    } else if (event.kind == MOUSE_EVENT_GUEST) {
+      report_ps2_guest(&event);
+      if (event.touch_buttons_valid) {
+        input_pointer_report(&ps2_touchpad, 0, 0, 0, 0, event.touch_buttons);
+      }
     }
   }
-  if (mouse_available() && !ps2_pointer.pointer_live) {
-    input_source_attach(&ps2_pointer, false, true);
-  }
+  attach_ps2_pointer();
+  touchpad_service(arch_monotonic_ns());
 #if POINTER_SYNTHETIC_ENABLED
   drained_physical_buttons = 0;
 #endif

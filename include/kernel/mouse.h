@@ -7,20 +7,44 @@
 #define MOUSE_BUTTON_RIGHT (1u << 1)
 #define MOUSE_BUTTON_MIDDLE (1u << 2)
 
-/* Relative motion in device counts, without acceleration. Signs follow the
- * display: +dx is right, +dy is down and +wheel scrolls toward the user. */
+enum mouse_event_kind {
+  MOUSE_EVENT_RELATIVE,
+  MOUSE_EVENT_TOUCHPAD,
+  MOUSE_EVENT_GUEST,
+  MOUSE_EVENT_RESET,
+};
+
+struct touchpad_sample {
+  int32_t x, y;
+  uint8_t pressure, width, fingers;
+  bool valid, width_valid;
+};
+
+struct mouse_profile {
+  bool absolute, has_guest;
+  unsigned initial_touch_buttons;
+  int32_t x_min, x_max, y_min, y_max;
+  uint32_t x_resolution, y_resolution; /* Device counts per mm. */
+};
+
+/* Relative +dx/+dy follow display right/down; wheel pull is positive.
+ * Absolute touch coordinates/pressure are device data, not screen positions.
+ * Physical button snapshots are independent of contact validity and policy. */
 struct mouse_event {
+  enum mouse_event_kind kind;
   int32_t dx, dy, wheel;
-  unsigned buttons; /* Buttons held after this event. */
-  bool reset;       /* Input was lost; other fields are zero and no button is held. */
+  unsigned buttons; /* Relative device snapshot. */
+  struct touchpad_sample touch;
+  unsigned touch_buttons, guest_buttons;
+  bool touch_buttons_valid, guest_buttons_valid;
 };
 
 bool mouse_available(void);
+const struct mouse_profile *mouse_profile(void);
 
-/* One consumer on the BSP, outside interrupt entry. Nonblocking; false means
- * no complete packet is available and leaves *event unchanged. Preserves IF.
- * Decoding happens here, not in the IRQ. Call regularly to drain the queue.
- * After a reset event the consumer must release any buttons it considers held. */
+/* One BSP consumer outside interrupt entry. Nonblocking and preserves IF.
+ * RESET loses both logical sources on the shared transport. Contact rejection
+ * never implies transport loss or releases physical switches. */
 bool mouse_read_event(struct mouse_event *event);
 
 #endif
