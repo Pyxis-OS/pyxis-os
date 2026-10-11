@@ -80,7 +80,8 @@ the cost of the recommended route.
 Use an explicit Remote-space opt-in, proposed `remote_multiplexer = true`, and
 an interactive client request, proposed `pyxis-remote --mux`. Keep ordinary and
 machine connections on their current shell path; reject an unavailable mux
-request without silently falling back. Do not reuse local `multiplexer = true`
+request without silently falling back; reject `--machine --mux` together.
+Do not reuse local `multiplexer = true`
 unchanged: it also enables terminal pointer control and defaults clipboard
 stores on. The remote flag permits broker service without those local grants.
 
@@ -148,6 +149,9 @@ Queued bytes are interpreted at current geometry, as in native sessions. Shrink
 retains clipped/hidden panes; growth restores layout. Existing allocation rollback
 is per screen/frame, not whole-layout atomicity: later resize failure can follow
 earlier updates and ends mux with diagnostics and group cleanup.
+The interactive client owns full-screen host presentation and restores its
+modes/cursor on handled exit or failure; qualify that handoff separately from
+pane alternate screens, which remain inside the guest emulator.
 
 Keep `TERM=pyxis` and the single [sequence/repertoire table](../userland/terminal.md#tty-output-controls):
 Aardvark first 16 indices, xterm cube/greys, semicolon true colour, bold/italic/
