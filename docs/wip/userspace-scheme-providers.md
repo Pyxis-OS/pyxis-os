@@ -105,8 +105,9 @@ rules are preserved.
 A prepared request is a capability. Private shell bindings are the first form
 of capability-valued variables; future environment variables may carry real
 capabilities inherited through explicit launch grants, never text-encoded
-handles. These bindings must fit the cross-cutting capability-valued environment
-direction rather than become a separate shell-only mechanism. Credential bytes
+handles. These bindings must fit the cross-cutting
+[capability-valued environment direction](capability-environment.md) rather than
+become a separate shell-only mechanism. Credential bytes
 remain excluded from argv/environment/history/logs.
 The [task 3 object/rights/lifetime/inheritance review](native-http-requests.md#capability-valued-variables-and-task-3-review)
 is required before code; capability-valued environment implementation needs a

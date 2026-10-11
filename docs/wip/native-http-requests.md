@@ -86,9 +86,9 @@ consumer policy, not limits imposed on Git, GET or downloads.
 A prepared request is a capability. Task 5's private shell bindings are the first
 form of capability-valued variables, not an alternative to them. The intended
 direction includes an environment carrying real capabilities, inherited through
-explicit launch grants. This is the cross-cutting capability-valued environment
-direction: configuration documents could select capability entries too, such as
-a user directory authorization, not just HTTP requests. Shell bindings must be
+explicit launch grants. This is the cross-cutting
+[capability-valued environment direction](capability-environment.md): configuration
+documents could select capability entries too, such as a user directory authorization, not just HTTP requests. Shell bindings must be
 designed to later become, or sit under, those environment entries, rather than
 form a separate shell-only mechanism. Never encoding a capability as an
 environment string or printed handle does not exclude that direction. The
@@ -101,8 +101,9 @@ the owner separately assigns it.
 with an object/rights/lifetime/inheritance proposal: what a prepared-request
 capability carries; how body/control/response/observation rights split; what
 copying, child inheritance or holding it past the shell means; and how it sits
-in a capability-valued variable compatible with the capability-valued environment
-direction. Accepted defaults do not waive this checkpoint.
+in a capability-valued variable compatible with the
+[capability-valued environment direction](capability-environment.md). Accepted
+defaults do not waive this checkpoint.
 
 Motivating workflow: log in, extract a token with jq, and prepare another request
 with it, keeping credential bytes on the private preparation path.
@@ -192,7 +193,8 @@ All three defaults accepted 2026-10-11; not implemented.
   running shell, delegate body stdout and response stdin with observation,
   coordinate all producers, and expose commit/status/abort and retained response
   capability-valued bindings designed to become, or sit under, entries in the
-  capability-valued environment direction. Exact syntax is a userspace choice,
+  [capability-valued environment direction](capability-environment.md).
+  Exact syntax is a userspace choice,
   not an ABI; environment implementation needs a separate assignment. Demonstrate
   `printf '{}' > json+https://…`, then `cat` on that response grant, never a fresh
   URI GET. A failed response must make its reader/command report failure.
