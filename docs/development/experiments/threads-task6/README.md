@@ -125,14 +125,11 @@ record is at its cold tail. Timer expiry adds a parking-kind check only when a
 wait is actually due; `task_preempt` tests pending parking expiry if its existing
 ready-queue test is false. Neither executes once per successful CALL reply.
 
-A cheap follow-up could pass the already-owned local scheduler to the expiry
-helper, retaining its empty-list check, IF=0 ordering and detach-before-notify
-semantics. That removes the redundant lookup; it does not establish that all
-100 ns disappears. Scheduler cache-line sharing and compiler code/layout changes
-remain unmeasured candidates. No profiling or functional optimization was made
-in response to this review; source/disassembly establish added work, not its
-individual share of the native delta. Owner review decides whether to qualify
-that small change before merge or retain the recorded cost.
+The owner approved reusing the already-owned local scheduler pointer. The
+[qualified follow-up](#scheduler-pointer-follow-up) removes the redundant lookup,
+retaining the empty-list check, IF=0 ordering and detach-before-notify semantics.
+Scheduler sharing and compiler/layout effects remain unmeasured candidates;
+source/disassembly do not establish their share of the native delta.
 
 ## Manual qualification
 
@@ -187,6 +184,44 @@ No kernel state was injected, no new klog lines, test framework or POSIX surface
 Native hardware/performance remains owner-run evidence; gates 7/8 need separate go.
 
 Task-owned QEMU/GDB/client jobs are stopped. Exact submitted-head CI is reported
-in the PR; userland has no Actions tasks. Native A/B is ready for the owner:
-A = main `94d0320d` (includes #710), B = submitted PR head, same A initrd/config,
-four commands above plus 1024 launches. No native speedup is claimed.
+in the PR; userland has no Actions tasks. Owner-native gate-6 results are recorded
+above; the scheduler-pointer follow-up uses the new pair below.
+
+## Scheduler-pointer follow-up
+
+Owner-approved 2026-10-11. A = main `a0906f2f`, captured before editing;
+B functional source = `48b1578e`. Only the expiry helper's scheduler argument
+and call change. Ordinary kernel/image builds pass with the existing LLVM
+23.1.3 builder and verified unchanged SDK/userland/ports outputs. Both use
+identical initrd SHA-256 `38e2dc0d0454964066434b987f21cc7f9d53fa9b5e9130c435765dac99fba512`.
+Disassembly replaces the repeated scheduler reload/CPU lookup/address calculation
+with a compare/branch through the already-held pointer. Timer register saves,
+scheduler stride and locking remain unchanged.
+
+One matched four-CPU A/B pair, QEMU/config/commands as above: 100 samples per
+workload, all 800 numbered passes independently verified with status 0 and
+FINAL complete. Values are median (min–max) ms per 256 messages. Both boots
+also complete the recorded 1024-launch Lua command with FINAL 0/complete;
+launch latency was not measured in this follow-up.
+
+| Workload | A | B |
+| --- | --- | --- |
+| CALL64 completion | 100.957 (75.576–303.944) | 103.362 (75.647–112.681) |
+| CALL4096 completion | 104.812 (79.845–322.017) | 107.522 (81.057–127.758) |
+| SEND64 completion | 15.545 (11.639–35.892) | 15.437 (11.661–20.948) |
+| SEND64 admission | 1.242 (1.194–2.317) | 1.244 (1.197–1.902) |
+| SEND4096 completion | 18.238 (13.033–52.268) | 15.917 (11.968–25.127) |
+| SEND4096 admission | 1.350 (1.268–3.978) | 1.330 (1.242–1.945) |
+
+These noisy nested measurements establish completion, not a native speedup.
+Owner-native A/B of this follow-up remains pending. Raw captures/ELFs stay in
+ignored `build/scheduler-pointer`; no profiler overlapped timings.
+
+Interactive 1/4-CPU QEMU rechecks pass `park32`, `park64`, `park-refusal`,
+`park-stop` and `close`, including 64-round contention and same-address process
+isolation. QEMU GDB catches deferred expiry on the permanent scheduler stack
+with current_task NULL, IF=0 and process roots/borrowers zero. After cleanup,
+all parking bucket heads/tails and every configured CPU's pending-expiry list
+are empty. The scheduler storage stays CPU-owned for the loop's lifetime;
+passing its pointer changes no admission, authority, cancellation or lease rule.
+All task-owned VMs/debuggers/clients are stopped. No ABI, runtime or klog change.
