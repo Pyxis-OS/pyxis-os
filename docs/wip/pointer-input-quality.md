@@ -1,9 +1,8 @@
 # ThinkPad pointer input quality
 
-Plan accepted 2026-10-10. Task 1 is assigned to Codex alpha by the owner,
-2026-10-11 (draft [#716](https://git.internal/PyxisOS/pyxis-os/pulls/716));
-task 2 follows a separate owner go. The two device tracks can proceed in
-parallel once authorized. The source/scroll/policy base is part of task 1. Scope:
+Plan accepted 2026-10-10. Task 1 is merged (#716, userland #214, ports #99).
+Task 2 is assigned to Codex alpha (2026-10-11); baseline captured from fresh
+main `df7ec8ab`, decisions below pending before code. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -229,6 +228,56 @@ unqualified, not claimed by closure.
 capture the baseline first and bring at most three decisions with defaults to
 the owner before code. Current firmware-relative PS/2 input remains mouse-class;
 this delivery supplies the touchpad policy/typing/reset base, not palm filtering.
+
+## Task 2 decisions pending (2026-10-11)
+
+Before-code [baseline](../development/experiments/pointer-input-quality/README.md#task-2-before-code-baseline)
+is captured. No task 2 code is implemented. Natural directions, tap-off, palm
+quarantine until lift and the initial 500 ms typing rule remain accepted.
+Pressure/width hysteresis, edge band, motion gain, scroll dead zone and sample
+rate are authored tuning, to be adjusted from native evidence rather than made
+new architectural constants.
+
+The checked-in ThinkPad inventory names Synaptics and Elan devices but does not
+establish firmware, query capabilities, clickpad/stick-button routing, bounds or
+resolution. [Rev. B §4.3](https://studylib.net/doc/18112502/synaptics-ps-2-touchpad-interfacing-guide)
+says mode bit 2 is DisGest with Wmode=0 and EWmode with Wmode=1. Basic W replaces
+gesture fields; physical switches are decoded independently. [Linux v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
+is protocol evidence, not code to vendor into the MPL driver. No licence reuse
+is proposed.
+
+1. **Qualification boundary. Recommended:** first implementation/owner boot is
+   opt-in, using basic six-byte absolute W, qualified finger-count hints and
+   separate pass-through/physical-button paths. Query identity/capabilities and
+   validate the format before publishing touch input. Extended-W/AGM stays off
+   unless the actual device needs it and its advertised layout/native evidence
+   is established; report that prerequisite rather than guessing contacts.
+   Ordinary boots retain today's path during qualification. After the owner
+   confirms the complete native palm/scroll/button/TrackPoint checks, enable the
+   qualified Synaptics profile by default in this same task, before closure.
+2. **Single-switch clickpad. Recommended:** each physical clickpad press is
+   primary click, with no click zones or finger-count right-click synthesis.
+   Preserve separately decoded physical TrackPoint left/middle/right buttons.
+   This follows Linux's capability-qualified primary-switch interpretation;
+   it does not treat firmware tap bits as physical switches. If the device is
+   not a clickpad, retain its advertised physical button mapping.
+3. **Missing usable geometry. Recommended:** use validated queries or an
+   explicitly calibrated identity profile for bounds/resolution. If neither is
+   available, collect opt-in coordinate/contact diagnostics for calibration and
+   withhold touch motion/scroll publication; retain only independently verified
+   physical buttons/TrackPoint. Do not substitute panel dimensions or unmeasured
+   nominal bounds and claim edge rejection. Author the profile from the owner's
+   native capture before enabling that touch path.
+
+On acceptance, keep PS/2 commands/query/packet decoding in arch; keep contact
+admission, palm/edge/typing rejection and one-/two-finger conversion beside
+kernel input. Reuse the existing per-source scroll/hold/loss coordinator, with
+separate touchpad and guest sources; no public contact or raw-input interface.
+The first native record must establish identity/query bytes, physical switch
+routing and usable geometry, then qualify finger, palm, typing, lift/count
+transitions, physical drag and guest behavior. Luna stages owner-run builds;
+no native hardware was touched in the baseline. These defaults are proposals,
+not accepted decisions.
 
 ## Qualification and tuning
 

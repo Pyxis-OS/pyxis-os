@@ -1,8 +1,9 @@
-# Pointer input quality task 1 qualification
+# Pointer input quality qualification
 
-2026-10-11, USB report mice and shared scroll integration. Implementation is
-in Pyxis #716, userland #214 and ports #99; dependencies merge first. Native
-ASUS/dongle/Keychron qualification is pending through the owner and luna.
+2026-10-11: USB report/shared-scroll task 1 is merged (#716, userland #214,
+ports #99), with the owner's ASUS/G502 pass below. Task 2 starts from fresh main;
+its before-code baseline and pending decisions are recorded below. Keychron and
+unexercised axes remain native coverage debt.
 
 ## Revisions and configuration
 
@@ -528,3 +529,57 @@ Missing/invalid installed direction keys use the authored archive value; valid
 qualify installed overrides; this one boot does not claim it. Current merged
 PS/2 firmware-relative motion remains mouse-class; task 2 introduces distinct
 Synaptics touch/TrackPoint sources and rejection. No palm/tap-off claim here.
+
+## Task 2 before-code baseline
+
+Pyxis `df7ec8ab4cecbeb5b466b9c0e91b4324e8476c60`, userland `95888f0b`, ports
+`28b5a3bc`, fs `b427df29`, lwIP `a1aadb91`; branch `pointer/synaptics-absolute`.
+No task 2 implementation changes. Existing LLVM 23.1.3 builder:
+`make -j16 image PREBUILT="sdk userspace ports" POINTER_SYNTHETIC=1 DISPLAY_CURSOR_PROBE=1 USB_HID_DESCRIBE=0 LOG_LEVEL=info`.
+SDK/apps/ports are verified task-1 bundles with these exact dependency pins;
+SDK metadata records `5d8a1a60` plus then-uncommitted documentation. There is no
+code/header/dependency difference to this baseline; matching ABI/content checks
+pass. The kernel is freshly source-built at `df7ec8ab`.
+
+Kernel SHA256 `a321c504ddaf793de6035e47b74134283bc904d69cb06b174a3fe6ea57b6ca96`;
+initrd `4fd03498dc30815cd9550e004edfe29f67927af8e54422adf3fddcf4bc2f42f3`.
+QEMU 10.2.2 Q35/nested KVM, host CPU, four CPUs/512 MiB, UTC RTC, virtio RNG,
+1280x800 boot software framebuffer; read-only 192 MiB FAT VirtIO boot disk,
+PS/2 plus USB keyboard/full-speed mouse through two boot-present USB2 hubs.
+Both boots use identical kernel/initrd/config and fresh OVMF variables.
+`display.cursor.probe=1 pointer.synthetic=schedule`, no HID/xHCI dump options.
+Existing schedule: settle 10 s, idle/motion/idle/motion 30 s each; Caelum shown,
+no physical input during costs. These are interval deltas from named boundaries:
+
+| Run | Window | Frames | Compose total, ms | Copy total, ms |
+| --- | --- | ---: | ---: | ---: |
+| 1 | Idle 1 | 16 | 6.96 | 6.30 |
+| 1 | Motion 1 | 1777 | 751.50 | 637.39 |
+| 1 | Idle 2 | 16 | 5.32 | 12.53 |
+| 1 | Motion 2 | 1800 | 751.08 | 670.27 |
+| 2 | Idle 1 | 15 | 7.95 | 5.01 |
+| 2 | Motion 1 | 1789 | 839.48 | 613.62 |
+| 2 | Idle 2 | 16 | 4.80 | 4.97 |
+| 2 | Motion 2 | 1800 | 670.53 | 576.30 |
+
+The existing host `/proc` CPU method uses five-second BSP vCPU thread samples,
+as fractions of one host CPU. Run 1 complete interior motion samples: 22.2–22.8%
+(three); idle: 17.8–18.4% (two). Run 2 retained complete samples: motion 22.0%,
+idle 17.8% (one each); boundary-crossing samples are excluded. Small sample counts
+and nested-host scheduling limit interpretation; this is aggregate BSP/KVM work,
+not isolated driver/filter time. Presenter elapsed totals include preemption.
+
+After the schedule, GDB confirms PS/2 four-byte wheel packets, empty raw queue,
+no input-loss/overflow/resynchronization counts, mouse-class source;
+typing timestamp initially zero. Run 2 explicitly selects QEMU's PS/2 input
+handler for relative motion/wheel. Both probe options are true, both USB dump
+options false. Raw evidence stays local in `build/synaptics-baseline/`; owned
+QEMU/debugger/build processes are stopped. No new measurement infrastructure or
+kernel fault injection. Repeat matched, interleaved A/B after implementation.
+
+This measures the shared source/presenter path. Synthetic motion bypasses
+Synaptics decoding and contact policy; QEMU supplies no Synaptics pressure,
+width, contact or TrackPoint/clickpad evidence. Native identity/capabilities,
+coordinate geometry and contact distributions remain unknown. Owner/luna
+qualification must measure those and repeat the native baseline with matched
+images/configuration; this QEMU record is not palm-rejection qualification.
