@@ -23,8 +23,8 @@ to 11 and SEND admission from 4 to 3; no lease spans growth or waits. Its
 remains recorded in technical debt, with profiling parked until task 8.
 Task 5 implements native sibling entry, FS binding and reclaimed completion;
 its [qualification](../development/experiments/threads-task5/README.md) records
-ordinary builds, 1/4-CPU sibling probes and the interleaved baseline. Native A/B
-is pending. Existing
+ordinary builds, 1/4-CPU sibling probes and nested/native A/B. The native SEND4096
+completion regression is under follow-up; its rerun is pending. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
 

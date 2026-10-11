@@ -131,15 +131,79 @@ without task/VM pointers, and BSP pin release before completion. The guarded
 operation shares the future reservation family's registry/authority/identity
 model; general sparse RESERVE/COMMIT/DECOMMIT remains unassigned.
 
-## Native follow-up and limits
+## Owner-run native A/B and follow-up
 
-Owner ThinkPad A/B is pending: A `a617bcd74fcb875b3ddae8ad1ceaaeabae698f9e`,
-B the submitted task-5 head, using the same A initrd/config for both kernels.
-Use the four IPC commands, pages and launches above, fresh A/B/A/B boots; retain
-per-pass output and variation. Native sibling checks instead require B's new
-SDK/initrd with userland #212. No native benefit is claimed.
+2026-10-11, ThinkPad T14 Gen 1, 12 CPUs, AC, hands-free PXE A1/B1/A2/B2;
+A `a617bcd7` (ELF `750cf669…`), B `a0c02469` (ELF `4a4a8564…`). All boots
+use A's initrd and byte-identical kernel config. Raw captures:
+`/shared/present/batch2/ab709/`. Values below are owner-supplied measurements;
+fastest passes and completion medians are different statistics.
+
+| Workload | A1 / A2 | B1 / B2 |
+| --- | --- | --- |
+| CALL64 fastest pass, ns/round trip | 3824 / 3802 | 3828 / 3732 |
+| CALL4096 fastest pass, ns/round trip | 4573 / 4585 | 4574 / 4495 |
+| SEND64 fastest pass, ns/message | 304 / 304 | 303 / 304 |
+| SEND4096 sender batch-mean median, ns/message | 1020 / 1006 | 1048 / 1030 |
+| SEND4096 completion min/p25/median, ms/256 messages | 0.526/0.826/1.005, 0.472/0.833/1.016 | 0.580/0.971/1.264, 0.611/0.966/1.278 |
+| Pages, ns/operation, bimodal ranges | 25777–26683, 23762–26620 | 23745–26301, 25088–26553 |
+| 1024 launches, wall seconds | 1.225–1.251, 1.216–1.281 | 1.269–1.459, 1.379–1.620 |
+
+Fast paths/pages are unchanged within observed variation. SEND4096 sender
+admission rises 2–3%, but completion rises about 26% in both B boots, approximately
+1 µs/message. Launches may rise 5–15%, with noisy B2 variation. These results
+establish a regression to investigate, not its cause.
+
+**Inspected source:** SEND completion times 32 DRAIN control round trips, 256
+RECEIVE/FINISH pairs and payload retention. STOP, verification and process
+reclamation occur after its end clock. Endpoint receive/wake, scheduler
+placement/enqueue and VM root/copy accounting algorithms are unchanged. No
+membership scan, terminal-result election or new lock was added to normal IPC.
+The new common-path work is one thread-exit pending load/branch at syscall return.
+Task metadata grows 784→944 bytes, process 224→232, VM range 40→48; maximum
+per-task BSP request storage remains 5,064 bytes. The `threads` service is created
+once in boot init. A's userland supplies no new thread grant to benchmark or Lua
+children, so an extra grant per launch cannot explain these matched results.
+
+**Corrections:** the reaper previously stopped the already-retired member before
+detaching it, adding queue/VM guards, result-election work and an AP reschedule
+IPI to each ordinary child exit. Detach now precedes stop fanout, which still
+reaches remaining siblings and preserves lifetime/pin/completion ordering. Final detachment also skips the failing default-result CAS when an immutable
+process result already exists; the zero-result path still elects EXITED/0. These
+are real accidental launch costs; they occur outside SEND's timed completion and
+cannot directly explain that 26%.
+
+New cold lifecycle fields also interrupted the original task layout, moving FP
+and scheduler/copy/wait state. They now follow the old tail; the pending flag
+uses old padding beside the existing hot flags. Offline DWARF checks verify
+restored old hot-field offsets. This removes an avoidable layout disturbance,
+but its cache/timing effect is unmeasured; it is a candidate, not a demonstrated
+cause or speedup. Global queue/worker cache-line offsets remain unchanged in the
+frozen A/B ELFs. No speculative allocator/scheduler redesign is included.
+
+Follow-up sources `a00d1672` (stop targeting/layout) and `59230ac2` (redundant
+election). Ordinary image builds passed. The first reran all seven sibling modes,
+four 256-message/100-round IPC workloads and 1,024 launches on 1/4 CPUs: all
+800 IPC passes verified, every invocation FINAL 0/complete. Interactive GDB on
+both counts confirms the faulting retiree is detached (linked/storage 2/3), while
+two still-live peers receive stop; 1,024 launches hit no task_request_stop entry
+breakpoint. After the election correction, all seven modes and 1,024 launches
+passed again on both counts. Final read-only GDB observes linked/storage 0/1
+and an already committed EXITED/0 at the last detach; a 16-launch session hits
+no final-member process_set_result entry breakpoint. Independent source review
+finds no lifetime/pin/publication change. Final ELF SHA-256
+`c8e43a7e243216e98b60bf6d5f16404fa5229cebe220f5ab0d3211d91089f2e6`,
+initrd `583d31b7ec38536263a8f52a58c718eed7050aa84114d49e5dfe12c84c8f6d52`.
+No native speedup is established. Captures remain in ignored
+`build/task5-review-{qualification,final}`; task-owned VM/debugger/client jobs
+are stopped. Exact submitted-head CI is reported in the PR.
+Owner native rerun: A `a617bcd74fcb875b3ddae8ad1ceaaeabae698f9e`, B the submitted
+follow-up head, same A initrd/config and commands above. Original B `a0c02469`
+can be retained for an isolated before/after follow-up comparison. New sibling
+qualification requires B's new SDK/initrd with userland #212. No improvement
+is claimed before that rerun.
 
 This gate supplies native lifecycle only: no parking, language TLS/errno,
 thread-safe libc, pthread/C11 runtime or consumer adapter. The probes cover
-bounded interleavings, not every device/endpoint/VM race or the native hardware.
-All task-owned QEMU, GDB and remote-client jobs were stopped after collection.
+bounded interleavings, not every device/endpoint/VM race or native hardware.
+All completed qualification QEMU/GDB/client jobs were stopped after collection.
