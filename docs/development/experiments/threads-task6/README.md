@@ -83,8 +83,15 @@ ISO `13e107a406f9f93a280e96b2279c7415675cf34e70428f8c10a10754e47a31a2`.
 Ordinary full image rebuild at source `baff3226`, with then-published userland
 `0fd8ba55`, passed. ELF `e77cf71714fdad3a836bb54c3845cfa34dc57adb1f8f1e1afa4caa5067b7815b`.
 The later userland main rebase drops the already-restored rint replay; source trees
-match. Final process-isolation/polling probe updates and final-pin rebuild remain
-pending; no claim is made for those changes yet.
+match. Final full image rebuild at source `24b4ee5a`, pin
+`ee9ccae7be0f33b4c82f4ac00f285a0571ce37d7` after rebase onto userland main
+`dca986b9` (#218/#220), passed; current-main ancestry was checked before pinning.
+ELF `37af384d3bc348028c12a5e3cb35b7af7897a972cccb06560df3390aafd3a203`,
+initrd `38e2dc0d0454964066434b987f21cc7f9d53fa9b5e9130c435765dac99fba512`,
+ISO `fe96fbc13114ef925c28e2e9e5039e1b7cd8c1f2fe8f62f31d1d40f1d82a3b83`.
+Its kernel `.text` matches the timing ELF byte-for-byte. Updated contention,
+refusal, process-isolation/stop, lifecycle and CLOSE modes passed again on 1/4
+CPUs. Userland's focused diff has no libc/runtime/startup changes.
 
 On both CPU counts, manual `park32`, `park64`, `park-refusal`, `park-stop`,
 `park-inspect`, `park-unmap`, existing `lifecycle`/`close` and real `exhaust`
@@ -114,6 +121,16 @@ Interactive QEMU GDB observes:
 A selective-CPU debugger experiment for early notification hit the probe's existing
 five-second progress bound (EXIT 1) while required CPUs were held. It was abandoned;
 ordinary runs passed and final inspection found empty buckets/pending lists.
-Early-notification and explicit process/key-isolation checks remain to finish.
+Final four-CPU GDB caught an actual pre-park wake: WOKEN/unlinked with
+`parked=false`, `notified=false`, zero per-task borrower, then `notified=true`
+and scheduler association cleared. The resumed 64-round probe completed
+FINAL 0/complete. The updated parent supervisor also verifies same-VA WAKE
+returns OK/count zero while another process's child waiters remain isolated;
+process termination/join then passed on both CPU counts.
 No kernel state was injected, no new klog lines, test framework or POSIX surface.
 Native hardware/performance remains owner-run evidence; gates 7/8 need separate go.
+
+Task-owned QEMU/GDB/client jobs are stopped. Exact submitted-head CI is reported
+in the PR; userland has no Actions tasks. Native A/B is ready for the owner:
+A = main `94d0320d` (includes #710), B = submitted PR head, same A initrd/config,
+four commands above plus 1024 launches. No native speedup is claimed.
