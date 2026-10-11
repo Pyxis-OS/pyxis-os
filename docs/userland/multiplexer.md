@@ -21,7 +21,7 @@ shell/session handoff preserves it; after any configured service setup the
 session launcher selects mux instead of the shell, forwarding it as `terminal`
 and retaining CREATE_GROUP on mux's launcher. Ordinary shells receive neither.
 Remote startup does not select mux; a
-[remote-multiplexer route](../wip/remote-multiplexer.md) is proposed.
+[remote-multiplexer plan](../wip/remote-multiplexer.md) is accepted but not implemented.
 Direct ordinary command launch lacks the
 administrative grants mux requires. Missing resources or failed startup produce
 a diagnostic, with no automatic restart or fallback shell.

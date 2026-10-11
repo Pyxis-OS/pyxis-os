@@ -1,10 +1,11 @@
 # Multiplexer over remote terminals
 
-Status: owner-assigned investigation/proposal, 2026-10-11. No implementation is
-authorized. Inspection uses Pyxis main `34dfce9e` and pinned userland `d560fbb`.
+Status: contract accepted by the owner, 2026-10-11; not implemented. Tasks 1–2
+are owner-assigned together (2026-10-11), to start only after this plan PR (#721)
+is merged. Task 3 requires a separate owner go. Inspection uses Pyxis main
+`34dfce9e` and pinned userland `d560fbb`.
 The owner wants the existing splits, cwd inheritance and digit focus inside one
 remote session on horse, including a large display such as 3440×1440.
-Decisions below are proposed defaults, not accepted contracts.
 
 ## Inspected starting point
 
@@ -51,34 +52,23 @@ Other inspected constraints:
 These are source findings. No remote-mux latency, bandwidth or runtime result
 has been measured for this proposal.
 
-## Route comparison and recommendation
+## Accepted route
 
-| Route | What changes | Tradeoff |
-| --- | --- | --- |
-| Guest mux composes VT into one remote terminal | Reuse current emulator, layout, renderer and host presentation; add trusted pane launch/supervision and bounded output scheduling | Smallest reuse path; focus needs a network round trip and redraws can expand short application output into many cells |
-| Mux-aware daemon/client transmits pane records | New pane identifiers, geometry, input routing, lifecycle and control framing; host composes panes | Can avoid guest cell-to-VT expansion and give immediate local focus feedback; considerably more wire/client state, with hidden-output retention and control ownership to settle |
-| Client-side splits using separate existing sessions | Host splitter/UI and one connection per pane | Independent queues and transfer/completion owners, but does not deliver the existing guest mux, cwd inheritance or its shared lifetime; four total sessions and one reverse session limit it |
-
-Recommend **guest VT composition with a private pane broker in the trusted
-remote daemon**. Keep mux itself in the existing remote root group. The daemon,
+Use **guest VT composition with a private pane broker in the trusted remote
+daemon**. Keep mux itself in the existing remote root group. The daemon,
 which already holds CREATE and CREATE_GROUP, creates each pane terminal/group
 and launches its stock root shell. Return attachment, process observer and
 CONTROL|WAIT supervision to mux; retain daemon supervision before publication.
 No foreign-group launcher enters mux, and pane shells receive only their own
 bound launchers. This changes userland launch ownership, not kernel containment.
-
-A trusted ungrouped mux could instead keep its current launch code, but every
-pane group would need daemon registration and acknowledgment before any member
-launch. Root-process completion alone would not establish pane/HOST cleanup.
-That still needs a crash-safe protocol, broadens mux to administrative launch
-creation, and replaces the current root-group completion boundary. The broker
-preserves that boundary and centralizes admission; its cwd/grant plumbing is
-the cost of the recommended route.
+The renderer/profile are reused; focus needs a network round trip, and redraws
+can expand short application output into many cells. The broker preserves the
+root-group completion boundary and centralizes admission.
 
 ## Authority and lifetime
 
-Use an explicit Remote-space opt-in, proposed `remote_multiplexer = true`, and
-an interactive client request, proposed `pyxis-remote --mux`. Keep ordinary and
+Use an explicit Remote-space opt-in, `remote_multiplexer = true`, and
+an interactive client request, `pyxis-remote --mux`. Keep ordinary and
 machine connections on their current shell path; reject an unavailable mux
 request without silently falling back; reject `--machine --mux` together.
 Do not reuse local `multiplexer = true`
@@ -203,12 +193,15 @@ the existing cwd timeout remain separate latency sources.
 
 ## Ordered tasks
 
-Each requires a separate owner go after this proposal is accepted.
+Tasks 1–2 are assigned together by the owner (2026-10-11), conditional on #721
+being merged. Capture both pre-task baselines before implementation. Task 3
+requires a separate owner go.
 Before task 1 code, capture exact-main plain remote costs/backing and initial
 host geometry. Before task 2, capture matched pane/render/backpressure workloads;
 repeat them afterward. Task 3 repeats those comparisons at resize geometries.
 
-1. **Trusted startup and one brokered pane.** Add opt-in/request selection and
+1. [ ] **Trusted startup and one brokered pane (assigned 2026-10-11).**
+   Add opt-in/request selection and
    a minimal private SEND broker, keep mux in its outer group, create one pane
    from the connection's initial cwd and return the three owned handles. Reuse
    the existing renderer/profile and disable unsupported side channels. Qualify
@@ -218,14 +211,16 @@ repeat them afterward. Task 3 repeats those comparisons at resize geometries.
    split commands/admission. No resize, split cwd-transfer or kernel mechanism.
    **After this task the owner can:** open one remote mux pane on horse at its
    initial terminal dimensions and close it with honest cleanup/results.
-2. **Splits, cwd and bounded presentation.** Complete incremental directory-chain
+2. [ ] **Splits, cwd and bounded presentation (assigned 2026-10-11).**
+   Complete incremental directory-chain
    transfer and reuse BSP/equal layouts, eight slots, digit/arrow focus, history
    and close confirmation. Add resumable try-write rendering/fair waits before
    claiming responsiveness under output backpressure. Preserve cwd rights,
    busy-pane fallback, input ordering and slot limits through repeated close/split.
    **After this task the owner can:** use splits, inherited cwd and digit focus
    in one wide remote session for the JVM work, with a bounded slow-host path.
-3. **Live resize and end-to-end qualification.** Add host-window observation,
+3. [ ] **Live resize and end-to-end qualification (unassigned).**
+   Add host-window observation,
    negotiated bounded resize/applied geometry and native session propagation.
    Check shrink/grow, tiny windows, full-screen editors, RGB/UTF-8, busy/stalled
    panes, two mux plus two plain sessions, reverse mode and disconnect/fault with
@@ -235,18 +230,17 @@ repeat them afterward. Task 3 repeats those comparisons at resize geometries.
    **After this task the owner can:** resize the remote window while keeping
    panes and running jobs, with measured costs and documented limits.
 
-## Three owner decisions
+## Accepted owner decisions (2026-10-11; not implemented)
 
-1. **Composition and lifetime — default: guest VT composition with the trusted
+1. **Composition and lifetime — accepted: guest VT composition with the trusted
    daemon pane broker.** Keep the current renderer and root containment, separate
-   pane groups and cleanup-complete FINAL/admission semantics. A pane-aware host
-   protocol or client-side splitting is a larger/different route.
-2. **Entry, geometry and admission — default: explicit `--mux`, separate Remote
+   pane groups and cleanup-complete FINAL/admission semantics.
+2. **Entry, geometry and admission — accepted: explicit `--mux`, separate Remote
    opt-in, initial HELLO geometry first, live resize in task 3; two mux connections
    within four total.** Packaged opt-in stays false until explicitly configured;
    ordinary/machine sessions keep their current path. The count fits the native
    32-interest budget, including unreclaimed groups.
-3. **First interaction profile — default: existing Pyxis colours/UTF-8 and
+3. **First interaction profile — accepted: existing Pyxis colours/UTF-8 and
    keyboard controls, host selection/ordinary paste only.** No native mouse or
    clipboard, cross-pane xfer/drop automation or machine command sequencing;
    stock `xfer` refuses explicitly with the propagated profile; other unsupported
