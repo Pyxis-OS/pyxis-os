@@ -53,10 +53,12 @@ failures, or unsupported partition extents, fail closed rather than becoming
 permission to rebuild. The bounded reader follows installed configuration paths
 and traversed FAT copies/chains; it is not a general FAT service.
 
-Type the exact word `update` to confirm. Cancellation makes no writes. The
+Review the [plan and Programs report](installer.md#plans-and-programs-report),
+then type the exact word `update` to confirm. Cancellation/dry-run makes no writes. The
 installer acquires exclusive raw access, repeats GPT, pool and ESP eligibility
 checks, and compares both partitions' bounds and all three GPT GUIDs with the
-selected layout before the first write. It also plans the new boot tree and
+selected layout and consumed source/admission/manifest/ESP state before the first
+write, refusing stale plans without automatic replanning. It also plans the new boot tree and
 checks that the sources fit before mutation.
 
 ## Program stage
@@ -71,7 +73,12 @@ none, without opening it, and stops there if that fails. It creates the `bin`
 volume when it is missing, copies every selected program into `bin/REVISION`,
 syncs the pool, then verifies names, kinds, structure, sizes and bytes against
 the immutable boot source. Bundle copy preserves empty directories; verification
-detects missing and extra entries at every level. These ordinary npfs reads may
+detects missing and extra entries at every level. Destination bytes also match
+the new revision's SHA-256 inventory. Only after this check does the installer
+write, sync and byte-verify its reserved revision manifest before switching the
+ESP. A valid old manifest supplies the recorded Programs report without a full
+old-payload audit; missing/invalid manifests need explicit read/hash inventory
+consent. These ordinary npfs reads may
 use retained copied pages after sync: program verification checks the filesystem
 view, without guaranteeing fresh device read-back. Its counters are compared
 bytes/files, rather than device-read counts; see [progress](installer.md#progress).

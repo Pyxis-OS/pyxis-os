@@ -42,9 +42,11 @@ completion on the Caelum tab. It delegates no launcher, `tmp`, mount, host or
 network authority. The packaged [native installer](../userland/installer.md)
 implements consent, formatting, installation and
 [system updates](../userland/system-updates.md). Update candidate inspection uses
-raw reads without mounting a pool. After typed `update`, it acquires the same
-exclusive write claim as install and rechecks eligibility and the selected
-layout. It then releases that claim, writes the new programs into the pool's
+raw reads without mounting a pool. Printed plans convey no authority; planning/cancel/dry-run use only raw
+read-only inspection and no retained target mounts or persistent replay. After
+explicit `wipe`/`update` confirmation, the shared executor acquires the same
+exclusive write claim as install and rechecks eligibility, the selected
+layout and consumed source/target state, refusing stale plans before any writes. It then releases that claim, writes the new programs into the pool's
 `bin` volume through the disk handle, claims only the ESP partition and writes
 it. Flush, release and read-back verification precede the read-only system-root
 reopen.
