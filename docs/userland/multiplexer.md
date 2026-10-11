@@ -24,8 +24,7 @@ Remote startup uses a separate `remote_multiplexer = true` opt-in and
 `pyxis-remote --mux`, with pane creation brokered by the trusted daemon. Packaged
 live Remote enables it (owner accepted, 2026-10-11); plain remote clients still
 select the shell. Installed defaults have no Remote space; owner-authored Remote
-entries can set the same flag. See [remote mux](remote-terminal.md#remote-multiplexer)
-and its [implemented contract](../wip/remote-multiplexer.md).
+entries can set the same flag. See the [remote mux contract](remote-terminal.md#remote-multiplexer).
 Direct ordinary command launch lacks the administrative grants local mux requires.
 Missing resources or failed startup produce
 a diagnostic, with no automatic restart or fallback shell.
@@ -90,7 +89,7 @@ the current geometry. Allocation failure preserves its current screen or frame;
 resize across panes is not atomic. A later failure can follow earlier updates
 and ends mux with group cleanup.
 See [remote resize qualification](../development/experiments/remote-multiplexer-resize.md)
-for staging QEMU Kilo/Neovim resize/save checks and pending owner native checks.
+for QEMU checks and the owner-reported native pane Neovim, TCC and live resize results.
 
 History retains the last 1,024 rows scrolled off each pane, including colors and
 original widths, without reflow. Page Up/Down moves a screenful; Up/Down moves
@@ -151,7 +150,9 @@ buffer, an 8 KiB output budget and a 2,048-cell scan budget per turn. Partial
 CSI/UTF-8 suffixes and cell snapshots survive short writes; previous-frame cells
 advance only when complete glyphs enter the outer queue. New presentation
 coalesces behind an active frame while input and pane drains continue. This
-records queue acceptance, not host-display acknowledgment. Pane escape sequences
+records queue acceptance, not host-display acknowledgment. Whole-viewport frame
+composition and reset still visit all cells; the scan budget does not bound that
+CPU work. Pane escape sequences
 are interpreted inside the emulator; unsupported OSC bodies are discarded.
 Up to nineteen readiness interests cover outer input/output, the optional
 terminal spatial queue and eight output/lifecycle pairs, without an idle
