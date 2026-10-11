@@ -65,7 +65,11 @@ Only the root shell receives the separate `terminal_events` EMIT capability;
 ordinary children, scripts and session successors do not inherit it.
 The service namespace permits LOOKUP only. Shells receive no listener, mount,
 network configuration, physical keyboard, framebuffer, terminal attachment or
-group supervision authority. Nested launches remain in their execution group.
+group supervision authority. Packaged live Remote sets `launch = true` (owner
+accepted, 2026-10-11), supplying a separate `child_launcher` with LAUNCH alone.
+Foreground children and their descendants stay in the session or mux pane group
+and its cleanup. Installed defaults contain no Remote space; custom installed
+Remote entries can enable the same setting.
 
 For a single-CPU manual boot, select a trusted init which mounts HOST if wanted,
 creates its namespace, and calls
@@ -514,11 +518,14 @@ terminal contract as local framebuffer use. See the [shell guide](shell.md),
 Machine output remains typed and incremental; graphical work still uses the
 framebuffer.
 
-Ordinary remote commands receive no launcher or pipe-creation service.
-`ipcbench` and `iobench pipe` require the `session` handoff to obtain those grants.
+Foreground remote commands receive the configured group-bound child launcher;
+Neovim bundles can therefore launch their helpers. Plain commands still receive
+no pipe-creation service; foreground bundles can request it explicitly.
+Plain `ipcbench` and `iobench pipe` require the `session` handoff to obtain pipe
+creation.
 The parked shell lets these successors finish and report their results.
 Ordinary `allocbench` and non-pipe `iobench` modes use the configured remote grants.
-Ordinary children still receive no supervision or launch authority.
+Ordinary children receive no group supervision or CREATE_GROUP authority.
 
 On the LAN host, this captures all four IPC workloads hands-free, one reverse
 connection per command. stdin EOF ends input while the client receives output;
@@ -723,10 +730,23 @@ failure.
 
 `terminated` completions, fatal wait/cleanup/emission paths and the outcome of
 allocation failures during launch preparation were reviewed in source, not
-exercised. Remote commands receive no launcher, so a child shell could not be
-started to observe non-inheritance at runtime. The option is carried only as
+exercised. At that qualification revision Remote commands received no launcher,
+so a child shell could not be started to observe non-inheritance at runtime. The option is carried only as
 the root shell's own argument. The shell passes each command's own argument
 list, and the successor's in the `session` case, so non-inheritance is
 confirmed by source review. The FIFO clients, a small host script that compared
 decoded captures, QEMU and GDB were stopped afterwards. No tests, exercise
 programs or boot/output automation were committed.
+
+### Packaged Remote child launch
+
+Owner accepted `launch = true` for live/PXE Remote on 2026-10-11. Ordinary
+kernel/userland image build passed with the existing LLVM 23.1.3 builder and
+unchanged SDK/ports outputs. Interactive QEMU 10.2.2 (Q35, nested KVM, four CPUs,
+2 GiB, VirtIO-net, reverse `t14` through UDP loopback forwarding) opened Neovim
+in plain Remote and a `--mux` pane, edited/saved `home://test/test.c`, exited
+and reopened it with the contents intact. The mux image enabled only the existing
+`remote_multiplexer` setting in staged config. Client Ctrl+] with Neovim running
+returned terminated/drain-complete for both session types. Existing QEMU GDB
+inspected scheduler state; binding to the actual session/pane group and LAUNCH-only
+rights were inspected in source. Native recheck remains owner work.
