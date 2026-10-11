@@ -225,40 +225,101 @@ request/response callbacks and child pipes. See versioned
 [`http.c`](https://github.com/git/git/blob/v2.53.0/http.c) and the
 [Git HTTP specification](https://git-scm.com/docs/gitprotocol-http/2.53.0).
 
-| Requirement | Current https:// provider / native libraries | Needed contract |
-| --- | --- | --- |
-| TLS and trust | Verified TLS 1.2/1.3, DNS identity, explicit CA/random/clock/TCP authority, HTTP/1.1; libtls read/write streams exist | Reuse verified libtls without verification bypass or plaintext fallback; preserve resource cleanup and explicit grants. One active TLS runtime/connection per process today. |
-| Methods and headers | OPEN_READ snapshot sends fixed GET/Host/Connection/Accept-Encoding; provider_open_request has URI/rights/budgets, no method/body/custom headers | Bounded GET/POST request interface, Content-Type/Accept/Git-Protocol and selected auth headers; destination and operation authority. Upload-pack POST is repository-read, not FILE WRITE. |
-| Streaming bodies | Response chunk decoder exists, but complete body is buffered before the FILE opens; 16 MiB across an HTTP open/redirect chain, 64 MiB aggregate storage | Request producers and response sinks/streams with backpressure, length/chunked request framing and incremental response decoding; bounded packs and disk staging. Larger snapshots alone do not supply streaming. |
-| Status / headers | Final 200/204 accepted; selected redirects handled separately; Content-Type/Location exposed | Final status plus needed challenge/content headers and bounded error bodies; informational/early-final responses and rejection must reach caller without becoming empty success. |
-| Redirects | Bounded GET chains and HTTPS downgrade refusal already delivered | Discovery base-URL updates, cross-origin credentials/trust policy, method/body replay rules. Never auto-replay a partly accepted receive-pack after ambiguous failure. |
-| Authentication | No arbitrary header/challenge interface or credential-helper integration | Explicit credentials/secrets source, 401/407 handling and forwarding rules; do not inherit ambient credentials or log them. Anonymous owner-gateway fetch can be a restricted initial profile. |
-| Protocol v2 | Cannot send Git-Protocol or POST repeated RPC exchanges | Stateless-connect advertisement and response-end framing, v2 upload-pack exchanges with explicit fallback behavior. Git 2.53 falls back to v0 for receive-pack (:494–501); a v2-only helper cannot implement complete push. |
-| Proxies | No client proxy/CONNECT request support | Separately support or explicitly refuse proxy config. A server-side LAN reverse gateway is not a client proxy implementation. |
-| Cancellation / deadlines | httpfs blocks in whole-response fetch; CANCEL handled later by receive loop | One owned bounded lifetime across upload, response, child pipes and staging, with abort/close/error propagation. Avoid pipe deadlocks and unsupported mutation retries. |
+**Accepted, 2026-10-09; not implemented:** Claude-on-Pyxis already specifies the
+[prepared-request contract](claude-on-pyxis.md#accepted-prepared-request-contract-for-tasks-1b1c)
+and [tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval).
+Native git-remote-https is a consumer of that provider design, sharing those
+prerequisites with the Claude harness. It does not introduce a separate HTTP
+transaction interface or an application-side HTTP/TLS client. The HTTP
+prerequisite in proposed task 4 below means delivery of those shared tasks;
+its snapshot wording describes the accepted contract pending decision 3.
 
-Current sources: [`httpfs`](../../userspace/httpfs/main.c) rejects WRITE and
-retains completed snapshots; [`libhttp`](../../userspace/libhttp/fetch.c)
-hardcodes GET and owns response bodies;
-[`provider ABI`](../../include/abi/provider.h) has no request/stream exchange;
-[`redirect client`](../../userspace/lib/provider_http.c) now follows bounded GET
-redirects. [HTTP fetch](../userland/http-fetch.md) and [HTTPS](../userland/https.md)
-document the bounds/trust rules. Libhttp/libtls are application libraries outside
-the base SDK libraries; the provider ABI and libpyxis redirect client are exported.
+PREPARE fixes URI, POST, request-scoped headers, admitted byte caps and an absolute
+deadline, without sending. It returns a body FILE with WRITE and separate
+commit/status/abort control; response access is a distinct READ grant. The first
+commit freezes the staged body and submits at most once; copied/repeated controls
+observe the same state. A lost reply leaves the remote outcome unknown, never
+an automatic retry. Complete 4xx/5xx responses retain their HTTP status/body as
+completed transactions, distinct from transport failure. The provider owns
+framing, TLS, deadlines and abort cleanup. Request credentials are private to
+that request and unreadable through the returned grants. Credential-bearing
+requests stay bound to their prepared endpoint, without redirects or downgrade.
 
-**Inference: three routes.** A native remote helper is the clearest curl-free
-seam: retain Git negotiation/pack engines, advertise only implemented helper
-capabilities, and reuse native URI/DNS/TCP/TLS/parser code beneath an explicit
-HTTP transaction interface. This fits URI resources via providers if operation,
-stream lifetime and destination authority are explicit. It must preserve existing
-immutable OPEN_READ snapshots; adding POST by treating a URL as a writable FILE
-would lose the operation/replay distinction. Whether the new transaction lives
-in a delegated provider service or a caller-side library is a policy choice.
+The [scheme write mapping](userspace-scheme-providers.md#future-writes-and-shell-operations)
+and [prepared handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
+already distinguish GET (`cat`/`"r"`), staged POST (`"w"`) and staged POST then
+response reading (`"w+"`). Commit is explicit; flush/close never submit, and body
+write authority alone cannot commit. The Git helper retains control and routes
+directional child pipes into each prepared body and back from its response;
+children receive no request controls or credentials.
+
+| Git exchange | Mapping onto the accepted scheme/prepared-request design |
+| --- | --- |
+| Discovery | GET `info/refs?service=git-upload-pack` or `git-receive-pack` through the read path. Discovery remains GET, not PREPARE's POST. Request-scoped Git-Protocol must also be carried on discovery GET when selecting v2. |
+| Each upload-pack RPC | A fresh PREPARE for `/git-upload-pack`, Git request headers and one deadline; stage the current RPC body, commit once, and read/validate the response through its separate READ grant and status. Each subsequent v2 RPC prepares a new transaction; repeated commit never sends the next RPC. |
+| Each receive-pack RPC | The same lifecycle for `/git-receive-pack`, with explicit submission/remote-write authority and the pack/request body. Push needs large body handling below; failed/unknown submission cannot be automatically replayed. |
+
+Finishing a body means finishing **that RPC's staging**, not waiting for a Git
+child to exit. Fetch-pack/send-pack can remain alive awaiting the response and
+then generate another RPC. The helper uses Git's framing to delimit each request,
+commits it, forwards its response and retains the child across exchanges
+(`remote-curl.c:1122–1128`, :1514–1528); waiting for child exit would deadlock.
+
+Git-specific extensions to that shared design are limited to:
+
+| Extension | Fit and scope |
+| --- | --- |
+| Git request headers | Git-Protocol, including discovery GET, and Git Content-Type values such as application/x-git-upload-pack-request and application/x-git-receive-pack-request fit validated request-scoped headers. Git's Accept values use the same arrangement; framing headers remain provider-owned. |
+| Response media type | Expose response Content-Type among selected response headers, so the helper validates advertisements and upload-pack/receive-pack results. It is response metadata, not readable request headers. |
+| Helper credential path | Use the accepted interim request-scoped arrangement: trusted native preparation receives only the selected credential FILE, privately reads it and attaches the appropriate header to that request. No argv/env/log/header readback or ambient credential store. The owner accepts this approach for now; anonymous read-only gateway fetch comes first. |
+| Large push bodies | Support pack-sized body production through streaming with backpressure or disk-backed staging, subject to actual resources. Disk staging can preserve the existing finish-producer/freeze-before-submit boundary; concurrent production after submission would require an explicit phase change. |
+
+The eventual credential path is the parked
+[credential store as a capability service](credentials-and-biometrics.md#credential-store-as-a-capability-service):
+capabilities scope access to items, and secrets are used through operations rather
+than exported; raw export is a separate explicit right. It already names SSH keys
+and Git commit signing as first consumers. This is a later dependency, not an
+implementation milestone or an added task here; HTTPS uses the interim
+request-scoped arrangement until that service is assigned and delivered.
+
+**Owner direction, 2026-10-11:** no artificial response-size cap. Complete RAM
+snapshots cannot support that direction. Responses and large push bodies need
+streaming/backpressure or disk-backed staging, limited by real memory, storage,
+quota and other resources rather than a fixed total-byte ceiling. Resource
+exhaustion remains an explicit failure, not permission to allocate indefinitely.
+
+**Proposed change requiring owner confirmation:** default to a streamed response
+FILE plus explicit final status, as decision 3 below. Response access becomes
+available before completion, so a reader may observe a prefix; it may claim
+success only after the final state explicitly reports complete. Failure or
+interruption must report failed/unknown as appropriate, never an ordinary
+successful EOF. HTTP response status is separate: a completely received 4xx/5xx
+is still a completed HTTP response. Git must not publish successful refs from
+an incomplete pack. Disk-backed complete staging is an alternative where real
+storage resources and latency permit it, without a fixed response-size cap.
+
+This changes the accepted Claude contract's **complete immutable response FILE,
+response grant only after completion, partial responses not published** rule,
+as well as its whole-body RAM budgeting. It is not yet an accepted replacement
+and this PR does not amend that contract silently. The same completion/storage
+question applies to plain GET: today's implementation has a 16 MiB allowance
+across an HTTP open/redirect chain and buffers a complete snapshot. GET readers
+also need explicit completion/failure when response prefixes become readable.
+
+**Implemented boundary at the inspected revisions:**
+[`httpfs`](../../userspace/httpfs/main.c) still rejects WRITE;
+[`libhttp`](../../userspace/libhttp/fetch.c) sends GET and owns whole responses;
+the current [provider ABI](../../include/abi/provider.h) has no prepared exchange.
+[Bounded GET redirects](../../userspace/lib/provider_http.c) are implemented,
+along with verified TLS and explicit trust/network authority documented in
+[HTTP fetch](../userland/http-fetch.md) and [HTTPS](../userland/https.md).
+Prepared POST, its controls and generic adapters remain shared prerequisites,
+not implemented capabilities. The helper uses the provider; TLS stays there.
 
 Replacing only http.c is insufficient: http.h exposes curl types and remote-curl.c
 sets curl options/callbacks directly. Replacing both layers could preserve more
-upstream negotiation behavior, but requires a real native HTTP interface rather
-than a fake curl ABI. A libcurl port preserves its existing HTTP/auth/proxy feature
+upstream negotiation behavior, but would still consume the shared provider
+contract rather than supply a fake curl ABI. A libcurl port preserves its HTTP/auth/proxy feature
 set at the cost of a separate platform/TLS port: Git http.c:1656–1700 uses
 curl_multi_fdset/select, and native libc has no general socket/poll bridge.
 Mbed TLS 4.1.1 integration is unprobed for curl; an existing libtls port does not
@@ -268,7 +329,11 @@ The accepted [LAN gateway](source-builds.md#reaching-the-sources) exposes discov
 and upload-pack only. Clone/fetch can use that read-only destination profile;
 push needs separate receive-pack authorization, credentials and uncertain-write
 policy. Full transport eventually needs v0 compatibility, authenticated fetch,
-push and explicit proxy behavior; none is implicitly assigned here.
+push and explicit proxy behavior; none is implicitly assigned here. These are
+Git helper/protocol policy and coverage, not additional provider interfaces.
+Git 2.53 falls back to v0 for receive-pack (`remote-curl.c:494–501`); a v2-only
+helper cannot implement complete push. Native launcher/pipes and non-fork
+sideband remain prerequisites irrespective of the HTTP consumer route.
 
 ## Threads and gates 5–8
 
@@ -359,8 +424,11 @@ is implied by these docs or ordinary libc/port work.
    symlink/gitlink refusal, and honest native sync/publication errors. No synthetic
    ownership/cache fields, unsupported index shortcuts or private-mode privacy
    promises.
-3. **HTTP direction:** default to a native remote helper over a reusable bounded
-   HTTP transaction interface, reusing provider/TLS code and explicit grants;
-   settle service versus caller-library authority/lifetime before implementation.
-   Start with read-only gateway fetch; push/auth/proxies and external execution
-   need later assigned contracts. Porting libcurl remains the comparison option.
+3. **Response delivery, confirmation needed:** default to a streamed response FILE
+   with backpressure and explicit final complete/failed status, without an
+   artificial response-size cap; account and fail against real resources.
+   This also applies to plain GET and large push-body handling. Git consumes the
+   accepted prepared-request provider design; its interim credentials remain
+   request-scoped. Confirm changing Claude-on-Pyxis's accepted complete immutable
+   response/no-partial-publication contract and response-grant timing before
+   implementing streaming. This proposal does not mark that change accepted.
