@@ -131,10 +131,10 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
   const char *display_flip = NULL, *display_flip_metrics = NULL;
   const char *display_cursor_probe = NULL;
+  const char *usb_hid_describe = NULL;
   const char *nvme_write = NULL;
 #if POINTER_SYNTHETIC_ENABLED
   const char *pointer_synthetic = NULL;
-  const char *usb_hid_describe = NULL;
 #endif
 
   char *cursor = command_line_storage;

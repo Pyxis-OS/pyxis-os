@@ -227,7 +227,9 @@ Each retained source has its own rational scroll scale and signed axis residues.
 Adapters supply physical right/down directions (USB Wheel is negated); the
 coordinator applies the source's mouse/touchpad policy once. Loss, reconfiguration
 or an explicit gesture boundary clears residues. Task 2 can distinguish touchpad
-and TrackPoint sources without changing transport ownership. A coordinator typing
+and TrackPoint sources without changing transport ownership. The current merged
+PS/2 relative adapter is mouse-class; touchpad-specific direction takes effect
+when task 2 supplies the distinct touch source. A coordinator typing
 timestamp recognizes non-modifier physical presses/repeats from either keyboard;
 initial/unknown holds, releases and diagnostic sources do not refresh it. It is
 an internal input for later touch rejection, not a public contact stream.
