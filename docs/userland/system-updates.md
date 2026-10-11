@@ -71,7 +71,11 @@ none, without opening it, and stops there if that fails. It creates the `bin`
 volume when it is missing, copies every selected program into `bin/REVISION`,
 syncs the pool, then verifies names, kinds, structure, sizes and bytes against
 the immutable boot source. Bundle copy preserves empty directories; verification
-detects missing and extra entries at every level. A rerun recursively clears and
+detects missing and extra entries at every level. These ordinary npfs reads may
+use retained copied pages after sync: program verification checks the filesystem
+view, without guaranteeing fresh device read-back. Its counters are compared
+bytes/files, rather than device-read counts; see [progress](installer.md#progress).
+A rerun recursively clears and
 rewrites an earlier partial `bin/REVISION`. Builds without a revision use
 `bin/unknown`.
 
