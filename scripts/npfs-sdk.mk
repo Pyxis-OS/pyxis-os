@@ -5,7 +5,15 @@ export SDK CC PYXIS_COMPILER_ID PYXIS_CPPFLAGS PYXIS_CFLAGS
 
 NPFS_OBJECTS := $(addprefix build/npfs-sdk/,$(addsuffix .o,base header record journal))
 NPFS_ARCHIVE := build/npfs-sdk/libnpfs-format.a
-.DEFAULT_GOAL := $(NPFS_ARCHIVE)
+FAT32_ARCHIVE := build/fat32-sdk/libfat32-read.a
+.DEFAULT_GOAL := all
+
+.PHONY: all
+all: $(NPFS_ARCHIVE) $(FAT32_ARCHIVE)
+
+$(FAT32_ARCHIVE): $(wildcard fs/fat32/*.c fs/fat32/*.h) fs/include/pyxis_fs/fat32.h fs/Makefile scripts/npfs-sdk.mk $(SDK)/share/pyxis.mk build/npfs-sdk/.config
+	$(MAKE) -C fs SOURCE=$(abspath fs) BUILD=$(abspath build/fat32-sdk) \
+	  HOST_CC="$(CC)" HOST_AR="$(AR)" CPPFLAGS="$(PYXIS_CPPFLAGS)" CFLAGS="$(PYXIS_CFLAGS)" fat32-read
 
 $(NPFS_ARCHIVE): $(NPFS_OBJECTS)
 	rm -f $@

@@ -1,10 +1,10 @@
 # FAT32 volumes
 
 Status: **shared milestone, decisions 1–3 accepted by the owner on 2026-10-11;
-not implemented.** Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
+task 1 assigned.** Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery) into one
-end-to-end deliverable. No implementation is assigned; every FAT32 task needs
-its own later owner go. Moving work does not complete it.
+end-to-end deliverable. The owner assigned the shared read-only engine/inspector
+on 2026-10-11; later tasks still need their own owner go.
 
 ## Deliverable and boundaries
 
@@ -143,6 +143,21 @@ wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
    Expose [metadata](../interfaces/file-metadata.md) only with genuine validity;
    no fabricated inode/time, Unix permissions, npfs journal fields or FAT volume IDs.
 
+## Accepted task 1 details — 2026-10-11
+
+- The general inspector strictly refuses corrupt metadata. The installer's
+  separate lenient recovery reader keeps its existing foreign-binding safeguards;
+  a strict-open failure must never become permission to rebuild an ESP.
+- A trusted inspection bootstrap opens an explicitly selected disk read-only,
+  delegates INFO|READ only, and confines engine reads to the selected GPT extent.
+  It delegates neither the DISKS service nor MOUNT, writes or child launch.
+  Selected media must be quiescent: current read-only disk access supplies no
+  snapshot or exclusion. Shared mount/claim exclusion remains task 3.
+- Each list/read validates all metadata and chains it uses. An explicit whole-volume
+  check supplies broader validation; a successful individual read does not prove
+  unrelated metadata sound. Workspace is caller-owned and bounded, data is streamed,
+  and LIMIT/NO_MEMORY never weaken validation.
+
 ## Parked cross-cutting directions
 
 [Nested execution groups](nested-execution-groups.md) are not a prerequisite for
@@ -166,7 +181,7 @@ and mounted file I/O do not require its implementation.
 
 ## Ordered delivery tasks
 
-- [ ] **1. Small first task: shared read-only engine/inspector.** Extract/generalize
+- [ ] **1. Small first task: shared read-only engine/inspector — assigned 2026-10-11.** Extract/generalize
   the bounded reader, admit geometry and validate chains/FAT/LFN/FSInfo with explicit
   memory bounds. List/read arbitrary supported files through confined raw reads,
   refusing unsupported/corrupt metadata; no writes or mount API yet.

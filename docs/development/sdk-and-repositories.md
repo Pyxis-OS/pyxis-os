@@ -25,7 +25,10 @@ the exported SDK manifest records dirty userland and filesystem inputs.
 
 Kernel source builds require the pinned native filesystem format library.
 `make -j16 fs-tools` builds `build/fs-tools/libnpfs-format.a`,
-`mkfs.npfs`, `fsck.npfs` and `npfs-inspect`.
+`mkfs.npfs`, `fsck.npfs`, `npfs-inspect`, `libfat32-read.a` and `fat32-inspect`.
+The [FAT32 inspector](../../fs/docs/fat32-inspect.md) reads explicitly selected
+GPT media without mounting or changing it; the shared engine has no allocator or
+kernel dependencies.
 When libfuse3 development files are installed, it also builds the optional Linux
 `npfs-fuse` mount tool; that tool and its RAM journal replay are host-only.
 Caelum owns the native cache and writer; the shared library owns codecs only.
@@ -70,11 +73,12 @@ the checked-out revision or dependency pins.
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
-| pyxis-fs | Native filesystem format codecs and Linux formatter, checker, inspector/extractor and read-only FUSE mount |
+| pyxis-fs | Native filesystem format codecs, shared FAT32 engine and Linux formatter, checker, inspector/extractor and read-only FUSE mount |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
-linker support, the pinned target `libnpfs-format.a`, and its public header and license
+linker support, the pinned target `libnpfs-format.a` and `libfat32-read.a`,
+and their public headers and licenses
 into `build/sdk`. `make userspace` builds applications against that
 SDK and the Lua, HTTP-parser and TLS libraries exported by `make ports`. Ports consumes only the SDK,
 so building it before userland introduces no cycle. `make image`
