@@ -1,8 +1,8 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Task 1 is delivered. Task 2 is assigned, pending its three
-implementation choices below; later tasks still need separate owner go-aheads.
+2026-10-11.** Task 1 is delivered. Task 2 is assigned, with its three
+implementation choices accepted; later tasks still need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -135,11 +135,14 @@ validation/fallback and a reported recovery path are mandatory.
 ## Revision manifest
 
 Task 2 delivers the accepted per-revision inventory and Programs report. Its
-format, legacy comparison and replay rules remain proposed below. Copy
+format, legacy comparison and replay rules were accepted by the owner on
+2026-10-11, as defaulted below. Copy
 verification remains a filesystem-view check; unsigned inventory hashes neither
 authenticate a revision nor prove that installed payloads were not later edited.
 
-## Task 2 choices — proposed 2026-10-11
+## Task 2 choices — accepted 2026-10-11
+
+All three defaults accepted by the owner; implementation is authorized.
 
 Inspection: current installer selects whole `.pxe`/`.pxb` roots, with 32 directory
 levels, 65,536 entries and 255-byte component names. It has no revision inventory
@@ -260,7 +263,7 @@ kernel configuration model is proposed.
    **After this task the owner can:** see the active phase throughout an
    ordinary install/update, including verification.
 2. [ ] **Shared planner/executor and revision inventory — assigned 2026-10-11.**
-   Settle the [task-specific choices](#task-2-choices--proposed-2026-10-11), then
+   Apply the [accepted choices](#task-2-choices--accepted-2026-10-11) and
    extract current install/update behavior behind read-only plan construction, print/replay and
    one confirmation boundary; write/verify revision manifests and the Programs
    report. Retain all existing authority and interruption limits.
