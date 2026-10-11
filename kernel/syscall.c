@@ -25,6 +25,7 @@
 #include <kernel/object/process.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/thread.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/console.h>
@@ -366,6 +367,18 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return memory_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_THREAD_SERVICE:
+    if (header.protocol != PROTOCOL_THREAD_SERVICE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return thread_service_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_THREAD_COMPLETION:
+    if (header.protocol != PROTOCOL_THREAD_COMPLETION) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return thread_control_call((struct thread_control *)object, rights, header.operation,
+        request_size, reply_address, reply_capacity);
   case OBJECT_PROCESS_CONTROL:
     if (header.protocol != PROTOCOL_PROCESS) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

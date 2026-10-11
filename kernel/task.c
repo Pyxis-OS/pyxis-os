@@ -21,6 +21,8 @@
 #include <kernel/spinlock.h>
 #include <kernel/wait.h>
 #include <stdatomic.h>
+#include <kernel/mm/private.h>
+#include <kernel/object/thread.h>
 #include <arch/cpu_local.h>
 
 #define TASK_STACK_SIZE (16 * 1024)
@@ -55,6 +57,7 @@ struct task {
   size_t cpu_index;
   bool exited, in_syscall;
   atomic_bool vm_continuation;
+  bool thread_exit_pending;
   size_t vm_borrowers; /* Process VM guard; owned by this task's active accesses. */
   struct process_vm_held vm_held;
   bool vm_parked; /* queues_locked; separate from resource waits. */
@@ -67,6 +70,13 @@ struct task {
   struct task_wait wait_record;
   struct task_wait *wait;
   bool parked; /* queues_locked: stack saved and no CPU is executing this task. */
+  /* Cold lifecycle storage stays after the scheduler/copy state. */
+  struct process_task_member process_member;
+  uintptr_t user_argument;
+  struct private_context stack_context, fs_context;
+  struct thread_control *thread_control;
+  struct thread_result thread_result;
+  bool fs_bound, faulted;
 };
 
 struct scheduler {
@@ -236,6 +246,8 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
     process_vm_syscall_leave(task->process, task);
   }
   process_set_result(task->process, result);
+  task->faulted = result.kind == PROCESS_FAULTED;
+  task->thread_result = (struct thread_result){0};
   task->exited = true;
   arch_context_switch(&task->saved_stack, scheduler->stack);
   panic("resumed an exited user task");
@@ -270,6 +282,14 @@ void task_syscall_leave(void)
   }
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
+  if (task->thread_exit_pending) {
+    KASSERT(!task->bsp_request && !task->deferred_request && !task->wait &&
+        !task->vm_borrowers);
+    process_vm_syscall_leave(task->process, task);
+    task->exited = true;
+    arch_context_switch(&task->saved_stack, scheduler->stack);
+    panic("resumed an exited user task");
+  }
   process_vm_syscall_leave(task->process, task);
   task->in_syscall = false;
   if (task->relocate || atomic_load_explicit(&user_hold, memory_order_acquire) ||
@@ -773,7 +793,7 @@ void task_user_release(void)
 {
   struct task *task = local_scheduler()->current_task;
   if (task->kind == TASK_USER) {
-    arch_enter_user(task->entry, task->user_stack, task->process->startup_address);
+    arch_enter_user(task->entry, task->user_stack, task->user_argument);
   }
 
   cpu_enable_interrupts();
@@ -920,10 +940,11 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   task->process = process;
   task->entry = entry;
   task->user_stack = stack_top;
+  task->user_argument = process->startup_address;
   /* Holds only the placement preference until publication places the task. */
   task->cpu_index = preferred_cpu;
   arch_user_state_init(&task->cpu);
-  process_task_attach(process, task);
+  process_task_attach(process, &task->process_member, task);
   *result = task;
   return MM_OK;
 }
@@ -931,8 +952,144 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
-  process_task_discard(task->process, task);
+  process_task_discard(task->process, &task->process_member);
   free_task(task);
+}
+
+static bool fs_context_valid(const struct private_context *context, uintptr_t base)
+{
+  return arch_user_fs_valid(base) && base >= context->usable_address &&
+      base - context->usable_address <= context->usable_size;
+}
+
+enum call_status task_thread_prepare(struct task *creator, const struct thread_create *input,
+    struct thread_control *control, struct task **result)
+{
+  KASSERT(arch_cpu_index() == 0 && creator && creator->kind == TASK_USER && control);
+  struct process *process = creator->process;
+  process_vm_require_mutation(process);
+  *result = NULL;
+  if (!input->stack_identity || input->stack_identity == input->context_identity ||
+      (!input->context_identity && input->fs_base) ||
+      (input->context_identity && !arch_user_fs_valid(input->fs_base))) {
+    return CALL_BAD_REQUEST;
+  }
+  struct page_translation code;
+  if (vm_query(process->address_space, input->entry, &code) != MM_OK ||
+      (code.permissions & (PAGE_USER | PAGE_EXEC)) != (PAGE_USER | PAGE_EXEC)) {
+    return CALL_BAD_REQUEST;
+  }
+  struct task *task;
+  if (allocate_task(&task) != MM_OK) {
+    return CALL_NO_MEMORY;
+  }
+  enum call_status status = private_context_pin(process, input->stack_identity,
+      &task->stack_context);
+  if (status == CALL_OK && input->context_identity) {
+    status = private_context_pin(process, input->context_identity, &task->fs_context);
+    if (status == CALL_OK && !fs_context_valid(&task->fs_context, input->fs_base)) {
+      status = CALL_BAD_REQUEST;
+    }
+  }
+  uintptr_t stack_top = task->stack_context.usable_address + task->stack_context.usable_size;
+  if (status == CALL_OK && !arch_user_entry_valid(input->entry, stack_top)) {
+    status = CALL_BAD_REQUEST;
+  }
+  if (status == CALL_OK) {
+    task->request_storage = bsp_request_storage_create();
+    task->profile = profile_storage_create();
+    if (!task->request_storage || !task->profile) {
+      status = CALL_NO_MEMORY;
+    }
+  }
+  if (status != CALL_OK) {
+    private_context_unpin(&task->stack_context);
+    private_context_unpin(&task->fs_context);
+    free_task(task);
+    return status;
+  }
+  task->kind = TASK_USER;
+  task->process = process;
+  task->entry = input->entry;
+  task->user_stack = stack_top;
+  task->user_argument = input->argument;
+  task->cpu_index = creator->cpu_index;
+  task->thread_control = control;
+  task->fs_bound = input->context_identity != 0;
+  arch_user_state_init(&task->cpu);
+  task->cpu.fs_base = input->fs_base;
+  /* The creator's state was saved before the deferred BSP handoff. */
+  memcpy(&task->cpu.fp, &creator->cpu.fp, sizeof(task->cpu.fp));
+  *result = task;
+  return CALL_OK;
+}
+
+void task_thread_discard(struct task *task)
+{
+  KASSERT(arch_cpu_index() == 0 && task && !task->process_member.task);
+  private_context_unpin(&task->stack_context);
+  private_context_unpin(&task->fs_context);
+  object_release(&task->thread_control->object);
+  free_task(task);
+}
+
+enum call_status task_thread_attach_locked(struct task *task)
+{
+  return process_thread_attach_locked(task->process, &task->process_member, task);
+}
+
+void task_thread_enqueue(struct task *task)
+{
+  KASSERT(arch_cpu_index() == 0 && task->process_member.task == task);
+  struct space *space = task->process->space;
+  lock_queues();
+  size_t cpu_index = place_locked(space, task->cpu_index);
+  KASSERT(cpu_index != SIZE_MAX);
+  task->cpu_index = cpu_index;
+  space->setup_open = false;
+  enqueue_locked(&schedulers[cpu_index], task);
+  unlock_queues();
+  /* Publication transferred task storage; use only the saved CPU index. */
+  notify_remote_cpu(cpu_index);
+}
+
+enum call_status task_thread_bind_fs(struct task *task, uint64_t identity, uintptr_t base)
+{
+  KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  process_vm_require_mutation(task->process);
+  if (task->fs_bound) {
+    return CALL_BUSY;
+  }
+  struct private_context context = {0};
+  enum call_status status = private_context_pin(task->process, identity, &context);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (!fs_context_valid(&context, base)) {
+    private_context_unpin(&context);
+    return CALL_BAD_REQUEST;
+  }
+  spin_lock(&task->process->lifetime_lock);
+  if (task->process->stopping || process_result_committed(task->process)) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else {
+    task->fs_context = context;
+    task->fs_bound = true;
+    task->cpu.fs_base = base;
+  }
+  spin_unlock(&task->process->lifetime_lock);
+  if (status != CALL_OK) {
+    private_context_unpin(&context);
+  }
+  return status;
+}
+
+void task_thread_exit_request(uint64_t value)
+{
+  struct task *task = task_current_user();
+  KASSERT(task && task->in_syscall && !task->thread_exit_pending);
+  task->thread_result = (struct thread_result){THREAD_EXITED, value};
+  task->thread_exit_pending = true;
 }
 
 struct process *user_task_process(struct task *task)
@@ -1005,18 +1162,41 @@ static void reap_completed(void)
     struct task *next = task->next;
     struct process *process = task->process;
     if (task->kind == TASK_USER) {
-      process_task_detach(process, task);
-      struct process_result result = process->result;
+      struct process_result result;
+      process_task_detach(process, &task->process_member);
+      if (process_result_get(process, &result)) {
+        /* Fault entry elects the result without taking lifetime ownership.
+         * Stop only remaining members, after removing this retired target. */
+        process_request_stop(process);
+      }
       size_t cpu_index = task->cpu_index;
+      struct private_context stack_context = task->stack_context;
+      struct private_context fs_context = task->fs_context;
+      struct thread_control *control = task->thread_control;
+      struct thread_result thread_result = task->thread_result;
+      bool faulted = task->faulted;
+      task->stack_context = (struct private_context){0};
+      task->fs_context = (struct private_context){0};
       free_task(task);
-      process_task_reclaimed(process);
-      if (result.kind == PROCESS_TERMINATED) {
-        klog("userspace: CPU %zu terminated task released\n", cpu_index);
-      } else if (result.kind == PROCESS_FAULTED) {
+      private_context_unpin(&stack_context);
+      private_context_unpin(&fs_context);
+      if (control) {
+        if (!thread_result.kind) {
+          thread_result = (struct thread_result){.kind = THREAD_STOPPED};
+        }
+        thread_control_complete(control, thread_result);
+        object_release(&control->object);
+      }
+      bool finalized = process_task_reclaimed(process);
+      if (faulted) {
         klog("userspace: CPU %zu faulted task released\n", cpu_index);
-      } else {
-        ktrace("userspace: CPU %zu exited with status %d; address space released\n",
-             cpu_index, (int)result.exit_status);
+      } else if (finalized) {
+        if (result.kind == PROCESS_TERMINATED) {
+          klog("userspace: CPU %zu terminated task released\n", cpu_index);
+        } else if (result.kind == PROCESS_EXITED) {
+          ktrace("userspace: CPU %zu exited with status %d; address space released\n",
+               cpu_index, (int)result.exit_status);
+        }
       }
     } else {
       free_task(task);

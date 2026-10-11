@@ -53,6 +53,8 @@ enum object_type {
   OBJECT_BLUETOOTH_HCI = 46,
   OBJECT_AUDIO = 47,
   OBJECT_CLIPBOARD = 48,
+  OBJECT_THREAD_SERVICE = 49,
+  OBJECT_THREAD_COMPLETION = 50,
 };
 
 struct execution_group;

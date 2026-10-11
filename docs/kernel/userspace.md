@@ -134,6 +134,18 @@ while tasks can run on their assigned AP. See the
 [task interface](../../include/kernel/user.h) for the ownership contract and
 [smp.md](smp.md) for CPU selection and cross-CPU handoff rules.
 
+The optional `threads` MANAGE resource supports native sibling CREATE/EXIT and
+once-only initial FS binding through [the ABI](../../include/abi/thread.h).
+Explicit session delegation carries it to native consumers; ordinary application
+launches omit it. Siblings share the process VM/table but have independent kernel
+entry stacks, saved registers/FP state and guarded caller-owned stack/FS pins.
+They enter a caller trampoline, without rerunning startup or constructors.
+Completion WAIT/readiness is repeatable only after task retirement and pin
+release; closing an observer never kills its thread. Existing process EXIT,
+termination and user faults stop the whole task set. Ordinary libc startup still
+uses FS=0; language TLS and thread-safe libc remain later gates.
+
+
 ## cat
 
 `cat path...` copies one or more named files through libc stdio with a fixed
@@ -189,7 +201,8 @@ destination even when truncated. Their header lists supported formats, including
 floating point. Wide characters are limited to `wcslen`. `setlocale` knows
 only the "C" locale: queries, `""` and `"C"` return `"C"`, and other names
 return NULL. There is no `localeconv` or other locale state.
-`errno` is process-local today because there is only one thread per process.
+`errno` is process-global today; ordinary libc is not thread-safe. Native siblings
+must avoid shared libc state until the later TLS/runtime gates.
 Native libpyxis calls continue to return native statuses without setting it.
 
 `strtol`, `strtoul`, `strtoll` and `strtoull` accept ASCII whitespace/signs and
@@ -329,8 +342,9 @@ them on kernel entry, so syscall execution is not preempted on its own CPU and
 a long syscall delays scheduling there. Endpoint CALL and RECEIVE explicitly
 park the task while waiting; the scheduler resumes its private kernel stack and
 address space before the handler accesses user memory again. Memory and display
-calls lend the inactive private address space to the BSP for mapping changes; their
-requests are published only after the caller has left its private root. Separate BSP
+calls capture inputs and leave their private root before BSP mapping changes.
+The process transaction drains sibling roots and short copy leases, keeping
+admission closed through the mutator's final reply. Separate BSP
 kernel tasks run with interrupts enabled and can be preempted. Other CPUs
 continue running. SYSCALL needs an explicit kernel-stack switch; unlike an interrupt from userspace, it
 does not load the stack from the TSS. Kernel GS identifies the current CPU,
@@ -343,8 +357,10 @@ stay within that supported feature set. Kernel code must not use FP/SIMD.
 Exit and ordinary fatal user exceptions abandon the task's entry stack and
 resume its scheduler. Only after switching to the permanent stack and kernel
 root can the CPU return ownership to the BSP for cleanup. This prevents freeing
-an executing stack or active page tables. The BSP then destroys the process
-and its private address space, followed by the task's kernel stack and metadata.
+an executing stack or active page tables. The BSP detaches the retired task,
+frees its kernel stack and metadata, releases its stack/FS pins and publishes
+native completion. Only after every task storage record and VM activity drains
+does it destroy the process and private address space.
 The owning space and its TTY survive; original boot-module frames remain
 reserved. Fatal kernel exceptions still panic. Normal libc exit flushes and
 closes registered streams before invoking the kernel; _Exit and fatal faults
@@ -358,9 +374,10 @@ double` uses the 80-bit x87 format in 16-byte ABI storage. The compiler and SDK
 enable this by default, with no red zone. Kernel code, including libraries built
 into the kernel, must retain `-mgeneral-regs-only`.
 
-Each task owns an aligned FXSAVE64 area. New tasks start with empty x87 registers,
-zero XMM registers, x87 control word `0x037f` and MXCSR `0x1f80`: round to nearest,
-masked FP exceptions, and no flush-to-zero/denormals-are-zero mode. Preemption
+Each task owns an aligned FXSAVE64 area. Initial process tasks start with empty
+x87 registers, zero XMM registers, x87 control word `0x037f` and MXCSR `0x1f80`: round to nearest,
+masked FP exceptions, and no flush-to-zero/denormals-are-zero mode. Native
+siblings inherit the creator's saved FP state, including exception flags. Preemption
 and blocking save this state; dispatch restores it before returning to the task.
 Syscalls preserve it even when they park. AVX/XSAVE state is not supported;
 do not compile for a newer CPU baseline or enable AVX.

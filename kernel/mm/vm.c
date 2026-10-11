@@ -15,6 +15,7 @@ enum range_state {
 struct vm_range {
   uintptr_t base;
   size_t pages;
+  size_t backed_pages; /* Owned backing is one suffix of the full reservation. */
   enum range_state state;
   struct vm_range *prev, *next;
 };
@@ -109,6 +110,8 @@ static struct vm_range *find_range(struct vm_space *space, uintptr_t base,
   return NULL;
 }
 
+static struct vm_range *range_containing(struct vm_space *space, uintptr_t base);
+
 static void merge_next(struct vm_space *space, struct vm_range *range)
 {
   struct vm_range *next = range->next;
@@ -127,6 +130,7 @@ static void merge_next(struct vm_space *space, struct vm_range *range)
 static void release_range(struct vm_space *space, struct vm_range *range)
 {
   range->state = RANGE_FREE;
+  range->backed_pages = 0;
   if (range->next && range->next->state == RANGE_FREE) {
     merge_next(space, range);
   }
@@ -311,12 +315,12 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
   return MM_OK;
 }
 
-static void free_backing(struct vm_space *space, const struct vm_range *range,
+static void free_backing(struct vm_space *space, uintptr_t base,
                          size_t pages)
 {
   for (size_t i = 0; i < pages; ++i) {
     phys_addr_t physical;
-    KASSERT(arch_page_unmap(page_space(space), range->base + i * PAGE_SIZE,
+    KASSERT(arch_page_unmap(page_space(space), base + i * PAGE_SIZE,
                              &physical) == MM_OK);
     pmm_free(physical, 1);
   }
@@ -326,8 +330,11 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
                        unsigned permissions)
 {
   require_kernel_owner(space);
-  struct vm_range *range = find_range(space, base, bytes);
+  size_t pages;
+  struct vm_range *range = range_containing(space, base);
   if (!range || range->state != RANGE_RESERVED ||
+      !page_count(bytes, &pages) ||
+      pages != range->pages - (base - range->base) / PAGE_SIZE ||
       !permissions_valid(space, permissions)) {
     return MM_INVALID;
   }
@@ -338,7 +345,7 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
   }
 
   size_t mapped_pages = 0;
-  for (; mapped_pages < range->pages; ++mapped_pages) {
+  for (; mapped_pages < pages; ++mapped_pages) {
     phys_addr_t physical = pmm_alloc(1);
     if (!physical) {
       status = MM_NO_MEMORY;
@@ -347,7 +354,7 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
 
     arch_frame_zero(physical);
     status = arch_page_map(page_space(space),
-                           range->base + mapped_pages * PAGE_SIZE, physical,
+                           base + mapped_pages * PAGE_SIZE, physical,
                            permissions);
     if (status != MM_OK) {
       pmm_free(physical, 1);
@@ -355,13 +362,14 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
     }
   }
 
-  if (mapped_pages != range->pages) {
+  if (mapped_pages != pages) {
     /* Only this prefix owns frames; the remainder is still just reserved. */
-    free_backing(space, range, mapped_pages);
+    free_backing(space, base, mapped_pages);
     return status;
   }
 
   range->state = RANGE_BACKED;
+  range->backed_pages = pages;
   return MM_OK;
 }
 
@@ -404,7 +412,8 @@ enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes)
     return MM_INVALID;
   }
 
-  free_backing(space, range, range->pages);
+  free_backing(space, range->base + (range->pages - range->backed_pages) * PAGE_SIZE,
+      range->backed_pages);
   release_range(space, range);
   return MM_OK;
 }
@@ -424,7 +433,7 @@ struct vm_stats vm_get_stats(const struct vm_space *space)
       stats.reserved_pages += range->pages;
     }
     if (range->state == RANGE_BACKED) {
-      stats.backed_pages += range->pages;
+      stats.backed_pages += range->backed_pages;
     }
   }
   return stats;
@@ -509,7 +518,8 @@ enum mm_result vm_space_destroy(struct vm_space *space)
   for (struct vm_range *range = space->head; range;) {
     struct vm_range *next = range->next;
     if (range->state == RANGE_BACKED) {
-      free_backing(space, range, range->pages);
+      free_backing(space, range->base + (range->pages - range->backed_pages) * PAGE_SIZE,
+          range->backed_pages);
     }
     drop_record(space, range);
     range = next;

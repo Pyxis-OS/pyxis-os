@@ -14,6 +14,7 @@ struct memory_request {
   struct process *process;
   uint64_t operation;
   struct memory_region region;
+  struct memory_reservation reservation;
   uintptr_t reply_address;
   enum mm_result result;
   enum call_status status;

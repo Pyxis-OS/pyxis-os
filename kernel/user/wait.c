@@ -6,6 +6,7 @@
 #include <abi/tcp.h>
 #include <abi/execution_group.h>
 #include <abi/process.h>
+#include <abi/thread.h>
 #include <abi/terminal.h>
 #include <kernel/object/object.h>
 #include <kernel/object/console.h>
@@ -138,6 +139,11 @@ static enum call_status interest_authority(const struct kernel_object *object,
       return CALL_BAD_REQUEST;
     }
     required = PROCESS_RIGHT_WAIT;
+  } else if (object->type == OBJECT_THREAD_COMPLETION) {
+    if (events != WAIT_COMPLETE) {
+      return CALL_BAD_REQUEST;
+    }
+    required = THREAD_COMPLETION_RIGHT_WAIT;
   } else if (object->type == OBJECT_EXECUTION_GROUP) {
     if (events != WAIT_COMPLETE) {
       return CALL_BAD_REQUEST;

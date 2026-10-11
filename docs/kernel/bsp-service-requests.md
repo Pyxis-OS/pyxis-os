@@ -136,6 +136,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Endpoint creation/export | Ordinary; preclaimed result slots, owned receiver snapshot and BSP owner-list mutation |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
 | Group creation / launch preparation and publication | Ordinary; claimed result capacity, owned grant captures, private observers, atomic publication and unpublished-child rollback |
+| Native thread CREATE / initial FS binding | Deferred; drained process VM transaction, exclusive context pins, claimed observer slot and stop-serialized membership/runnable publication; final creator copy precedes sibling root admission |
 | Private memory | Deferred; process VM transaction, precommit output recheck and exclusive mutator reply |
 | Display acquire/present/release | Deferred; mapping mutations use the same VM transaction, other operations preserve display backing ownership |
 | Screen capture | Deferred admission, then forwarded; preclaimed result slot, one pending/in-flight presenter request, owned READ-only FILE publication or unpublished-backing rollback |
@@ -282,17 +283,16 @@ HOST or enables profiling. Lazy provisioning must preserve guaranteed cleanup
 capacity and define BSP handoff and allocation-failure ownership. These costs and
 revisit points are recorded in [technical debt](../technical-debt.md).
 
-Public asynchronous I/O, completion queues, cancellation, multiple outstanding
-requests, quotas, priorities, task migration and process threads are not provided.
-Asynchronous submission would need independently owned storage, completion
-observation and resource retention. Waitable completion receipts and process-exit
-draining remain undecided. Continued caller execution cannot access exclusively
-lent tables or VM state; borrowed buffers need stable contents and lifetime or
-independent captures.
+Public asynchronous I/O, cancellation and multiple outstanding service requests
+per task are not provided. Asynchronous submission would need independently
+owned storage, completion observation and resource retention. Continued caller
+execution needs stable independently captured input, rather than borrowed user
+buffers or inactive VM ownership.
 
 Shared-table delivery replaces exclusive table loans with owned inputs and
-claims. VM admission and short user-copy leases are implemented; unsupported
-competing device operations have native refusals. Sibling creation and the
-remaining process membership/runtime gates still need separate assignment. Kernel clients likewise
-need an explicit nesting/dependency contract before synchronous submission can be
-allowed. See the [thread follow-ups](../wip/scheduling-and-threads.md#multiple-user-threads).
+claims. VM admission, short user-copy leases and native sibling lifecycle are
+implemented; unsupported competing device operations have scoped native refusals.
+Parking, language TLS and ordinary thread-safe runtime remain separately assigned
+gates. Kernel clients likewise need an explicit nesting/dependency contract
+before synchronous submission can be allowed. See the
+[thread follow-ups](../wip/threads.md).

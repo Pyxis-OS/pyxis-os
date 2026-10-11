@@ -27,6 +27,7 @@
 #include <abi/bluetooth_hci.h>
 #include <abi/file.h>
 #include <abi/process.h>
+#include <abi/thread.h>
 #include <abi/launcher.h>
 #include <abi/memory.h>
 #include <abi/directory.h>
@@ -71,6 +72,10 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_MEMORY;
   case OBJECT_PROCESS_CONTROL:
     return PROTOCOL_PROCESS;
+  case OBJECT_THREAD_SERVICE:
+    return PROTOCOL_THREAD_SERVICE;
+  case OBJECT_THREAD_COMPLETION:
+    return PROTOCOL_THREAD_COMPLETION;
   case OBJECT_LAUNCHER:
     return PROTOCOL_LAUNCHER;
   case OBJECT_DISPLAY:
@@ -232,6 +237,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~MEMORY_RIGHT_MANAGE);
   case OBJECT_PROCESS_CONTROL:
     return !(rights & ~PROCESS_RIGHTS);
+  case OBJECT_THREAD_SERVICE:
+    return !(rights & ~THREAD_RIGHT_MANAGE);
+  case OBJECT_THREAD_COMPLETION:
+    return !(rights & ~THREAD_COMPLETION_RIGHT_WAIT);
   case OBJECT_KEYBOARD:
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
   case OBJECT_POINTER:

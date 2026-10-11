@@ -7,7 +7,7 @@ explicitly grants a `memory` resource to each program. Discover it through
 
 ## Authority and lifetime
 
-The service's MANAGE right permits ALLOCATE and RELEASE in the calling process.
+The service's MANAGE right permits allocation and release in the calling process.
 The object holds no process pointer, address space or allocation list. A copied
 or transferred grant lets its receiver manage that receiver's own private
 regions; it never authorizes changes to the sender's mappings. Unknown rights
@@ -15,7 +15,7 @@ are rejected by the ordinary capability machinery.
 
 Regions belong to the process. Closing a service handle, even the last handle
 to the object, does not unmap anything. Releasing a region requires another
-MANAGE grant. Normal exit or a fatal user fault reclaims all remaining private
+MANAGE grant. Final drained process teardown reclaims all remaining private
 backing and allocation records through process destruction.
 
 ## Operations
@@ -40,13 +40,39 @@ whole request before changing mappings, so the request may itself reside in
 the region being released. It performs no user access afterward. The caller
 must still keep its returning code and stack mapped.
 
+ALLOCATE_GUARDED takes nonzero usable backing bytes, rounds them up to pages and
+adds one reserved unmapped lower guard page. It returns a `memory_reservation`:
+an opaque identity and the base/size of the full range, including the guard.
+The remaining suffix has eager zeroed RW/NX backing. Overflow, including the
+added guard, is BAD_REQUEST. Failure publishes nothing. A guard does not prevent
+a large stack jump from skipping its page.
+
+RELEASE_RESERVATION takes only the identity and returns status without reply
+bytes. Identity lookup applies to the calling process; a copied value grants no
+authority over another process. Identities are never reused, including after
+address reuse; stale or released identities are BAD_REQUEST. Identity exhaustion
+is NO_MEMORY. Ordinary RELEASE cannot release guarded reservations, and guarded
+identities cannot release ordinary allocations. Both live in the same
+process-owned private-allocation registry. This registry and identity authority
+are the foundation for the accepted future reservation family; general
+reserve/commit/decommit operations remain unimplemented.
+
+Native thread stack and FS contexts use guarded identities. A context pin
+exclusively retains the whole usable suffix until native retirement; a pinned
+reservation cannot be released and returns BUSY. Stack and FS identities must
+be distinct. These pins hold no short mapping/activity lease and do not block
+unrelated VM mutation. BSP acquires pins under the drained mutation token and
+releases them after the task has left its root/stack and its continuations have
+been reclaimed, before publishing native completion. Final process teardown
+requires every context pin to have been released.
+
 There is no resize, fixed-address request, permission change, reserve-only mode,
-shared memory or per-region object/handle. The later userspace allocator can
+shared memory or per-region capability object. The later userspace allocator can
 subdivide acquired regions without entering the kernel for each small allocation.
 
 ## Execution
 
-ALLOCATE and RELEASE capture their request, then park outside the private root
+All four operations capture their request, then park outside the private root
 and kernel entry stack. BSP executes them under the process VM mutation
 transaction shared with DISPLAY mapping changes. Dispatch reserves root activity
 before CR3 activation; departure acknowledges it after loading the kernel root.
@@ -61,15 +87,18 @@ operation deadline. Failure returns BUSY before effects and preserves mappings
 and backing. Competing mutation also returns BUSY. Final retirement requires
 closed admission and zero root/borrow/request activity before reclamation.
 
-BSP revalidates ALLOCATE's output before effects, then admits only the mutator's
-root until its final reply copy and cleanup finish. ALLOCATE adds a disjoint
-region; RELEASE touches no user memory after unmapping its captured request.
+BSP revalidates allocation output before effects, then admits only the mutator's
+root until its final reply copy and cleanup finish. Allocation adds a disjoint
+region; release touches no user memory after unmapping its captured request.
 Stop/group termination still takes effect after the synchronous call unwinds.
-Exactly one user task remains; this transaction does not enable siblings.
+Context pins protect registered backing independently of root/copy drainage.
 
 The heap, physical allocator and per-CPU scratch mappings retain their
 [SMP contracts](smp.md#memory-and-output-boundaries). BSP zeroes frames using its
 scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
+The VM owns one full guarded reservation and one eager backed suffix. Whole
+release and destruction free only that suffix; failure unmaps/frees only the
+provisional backed prefix, leaving the full reservation bare for unwind.
 
 ## Native use
 
