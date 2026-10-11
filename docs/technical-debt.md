@@ -399,7 +399,7 @@ natively in the boot log, raw terminals and mux on 2026-10-09; that correction n
 [Terminal clipboard](interfaces/clipboard.md) exports completed visible-cell selections as bounded UTF-8;
 original tabs, soft wraps and intentional trailing spaces have the [initial delivery limits](#initial-clipboard-delivery-limits).
 Mux drag autoscroll and selection across off-view history are absent, and kernel terminals keep visible cells without scrollback. [USB boot mice](devices/usb-hid.md) and PS/2 now share the accepted multi-source
-button and loss rules. Bluetooth input, acceleration, absolute-mode scrolling,
+button and loss rules. Bluetooth input, acceleration,
 remote pointer transport and multiple-display composition remain separate work.
 Revisit each when a concrete consumer or native device needs it.
 
@@ -1662,8 +1662,13 @@ hardware is available, keeping trust claims separate from the health and RFC che
 The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
 packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
 would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
-the [pointer quality proposal](wip/pointer-input-quality.md) assigns absolute-mode palm rejection and scrolling after #716 merges, with a
-baseline and owner decisions before code. [USB mice](devices/usb-hid.md) are independent sources; report-wheel and the
+the [pointer quality task 2](wip/pointer-input-quality.md) adds opt-in queried
+absolute-W palm/typing rejection and two-finger scrolling. Native query geometry,
+physical-button/TrackPoint routing and authored contact tuning remain unqualified;
+default boots retain relative mode until the owner's full pass. Missing usable
+geometry preserves relative touch motion, without claiming palm/scroll support.
+Revisit with the owner's native contact batch before enabling default-on.
+[USB mice](devices/usb-hid.md) are independent sources; report-wheel and the
 reserved-ID boot-wheel paths are implemented, while other unknown extensions
 remain undecoded. Doom has no mouse support.
 

@@ -2,7 +2,7 @@
 
 2026-10-11: USB report/shared-scroll task 1 is merged (#716, userland #214,
 ports #99), with the owner's ASUS/G502 pass below. Task 2 starts from fresh main;
-its before-code baseline and pending decisions are recorded below. Keychron and
+its before-code baseline and accepted decisions are recorded below. Keychron and
 unexercised axes remain native coverage debt.
 
 ## Revisions and configuration
@@ -583,3 +583,172 @@ width, contact or TrackPoint/clickpad evidence. Native identity/capabilities,
 coordinate geometry and contact distributions remain unknown. Owner/luna
 qualification must measure those and repeat the native baseline with matched
 images/configuration; this QEMU record is not palm-rejection qualification.
+
+## Task 2 matched QEMU implementation checks
+
+Final code B is `3709cc39d007fe26ef70fb5f18b1ff6ab6b1c03c`, kernel SHA256
+`d773727c21594e80fc01d7039197d8a013931b2e923095a2a2ea4f979814d2d7`.
+Control A uses the sealed baseline above. Both use exactly the same initrd
+`4fd03498dc30815cd9550e004edfe29f67927af8e54422adf3fddcf4bc2f42f3`,
+dependency pins, probe/synthetic flags, QEMU devices/CPU/accelerator and fresh
+OVMF variables. No physical input or local build overlaps retained cost windows.
+Both Synaptics options are off during costs, so these measure relative/shared
+pipeline coexistence, not absolute packet decoding or palm filtering. The final
+code avoids contact-diagnostic timing reads entirely on the relative path.
+
+Retained interleaved A3/B3/A4/B4 samples below follow the two before-code boots.
+Earlier exploratory candidate boots are superseded by the diagnostic-clock
+gating correction; their raw records remain local. Named boundary deltas:
+
+| Run | Window | Frames | Compose total, ms | Copy total, ms |
+| --- | --- | ---: | ---: | ---: |
+| A3 | Idle 1 | 16 | 5.62 | 5.31 |
+| A3 | Motion 1 | 1799 | 749.56 | 628.63 |
+| A3 | Idle 2 | 16 | 6.10 | 5.53 |
+| A3 | Motion 2 | 1774 | 1164.46 | 1059.65 |
+| B3 | Idle 1 | 16 | 7.24 | 5.62 |
+| B3 | Motion 1 | 1798 | 926.04 | 755.81 |
+| B3 | Idle 2 | 16 | 10.78 | 9.21 |
+| B3 | Motion 2 | 1685 | 1023.51 | 891.52 |
+| A4 | Idle 1 | 15 | 5.69 | 5.29 |
+| A4 | Motion 1 | 1775 | 1080.79 | 990.16 |
+| A4 | Idle 2 | 17 | 5.38 | 5.82 |
+| A4 | Motion 2 | 1800 | 659.45 | 587.33 |
+| B4 | Idle 1 | 15 | 4.75 | 5.15 |
+| B4 | Motion 1 | 1779 | 606.10 | 524.86 |
+| B4 | Idle 2 | 16 | 4.49 | 5.00 |
+| B4 | Motion 2 | 1800 | 624.19 | 539.51 |
+
+Existing `/proc` five-second BSP vCPU host-thread samples, as fractions of one
+host CPU; each cell has ten complete interior samples, crossing boundaries and
+post-schedule samples excluded:
+
+| Run | Idle median (range), % | Motion median (range), % |
+| --- | ---: | ---: |
+| A3 | 18.3 (17.8–19.2) | 24.3 (22.0–43.6) |
+| B3 | 25.3 (17.8–32.4) | 25.6 (22.4–32.4) |
+| A4 | 16.7 (14.6–17.4) | 20.5 (19.2–33.0) |
+| B4 | 14.5 (13.8–15.4) | 18.9 (18.0–19.8) |
+
+Idle skipping remains 15–17 frames per 30 seconds; motion is usually near full
+rate. B3's second motion window is slower (1685 frames), while B4 is faster than
+both controls in elapsed compose/copy cost. Controls also vary substantially.
+No isolated driver/filter cost or causal regression/improvement is established:
+host scheduling/load is not controlled, elapsed totals include preemption and
+BSP CPU includes KVM and all guest BSP work. The reason for individual slow
+windows is unproven. This is nested-VM evidence, not a native performance claim.
+GDB after each retained run reports the ordinary four-byte PS/2 path, empty raw
+queue and zero loss/resynchronization/overflow counts.
+
+The probe and ordinary flag-off images build using verified unchanged
+SDK/apps/ports bundles; the public ABI and dependencies do not change. On an
+explicit opt-in boot, QEMU query 00 returns `00 00 64`, lacks the Synaptics
+signature, then reset restores device ID 3/four-byte wheel input. GDB confirms
+both options true, relative mouse-class source, no phantom touchpad/guest source,
+two physical pointer sources and zero queue loss. A hardware breakpoint catches
+raw vertical wheel `+1`, natural policy, scale 120/1 at the coordinator. Physical
+PS/2 motion changes position by exactly the injected right/down delta; left
+holds/release work. USB motion works alongside it, and releasing USB left leaves
+an independently held PS/2 left active. USB keyboard runs `echo ok`; after USB
+keyboard removal the shell reports its existing input-loss diagnostic, then
+PS/2 typing completes `echo ps2` with a fresh Enter. Typing timestamps advance;
+keyboard and mouse setup remain healthy.
+
+The ordinary image uses kernel SHA256
+`3358493e1e9e0af3c5bdf7845f4d3ff2e45bfc234b7ca87ef458fb601ed37a27`
+and the same initrd. GDB confirms both Synaptics options/probe disabled, PS/2
+available with four-byte packets; a held key resides in the live USB source while
+the PS/2 key remains up, proving USB delivery. Its boot has no
+`synaptics:`/`synaptics-contact:` output. No default is enabled by this PR.
+
+An attempted targeted-keyboard QMP command aborted host QEMU after all B4 cost
+windows had finished (`qemu-fixed-text-console.device` property missing).
+The opt-in functional boot above repeats the checks through the monitor, with
+the keyboard removal proving PS/2 delivery; no pass is claimed for that targeted
+command. QEMU cannot exercise recognized Synaptics geometry-failure recovery,
+absolute-W count/pressure/width, palms, physical clickpad or guest routing.
+Those branches are inspected and await the native pass below. Raw records stay
+in local `build/synaptics-baseline/`, `build/synaptics-after/` and
+`build/synaptics-functional/`; no raw captures or new test framework are committed.
+
+## Task 2 opt-in implementation and native run sheet
+
+Owner decisions 1/2 accepted and 3 changed/accepted 2026-10-11 on #739. The
+geometry exception preserves relative touch motion; it does not qualify palms
+or two-finger scrolling. Code uses queried bounds/resolution only, with no
+invented calibrated profile. No native hardware has been run for this task.
+QEMU cannot provide positive absolute-W/contact/TrackPoint evidence.
+
+The independent arch implementation follows the
+[manufacturer Rev. B guide](https://studylib.net/doc/18112502/synaptics-ps-2-touchpad-interfacing-guide)
+§§3.2/4.2–4.4/5.1.5. Mode bit 2 means DisGest in relative W=0 and EW in W=1;
+absolute mode `0xc1` does not enable EW or four-byte guest packets. Reporting
+stays disabled for mode readback and the §4.1 `EB` master-packet proof. The
+firmware extension/query/button facts are checked against
+[Linux v6.17 synaptics.c](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
+and [its capability definitions](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.h),
+without incorporating GPL implementation. Advertised firmware 8.1 minimum
+query and 8.1/8.2 omitted extended-button snapshots are narrow protocol facts,
+not a guessed ThinkPad identity. Unhandled button layouts recover to relative
+instead of silently losing switches.
+
+Luna stages the owner-run image; do not stage or boot the laptop from this task.
+Build #739's published head with the existing compiler container:
+
+```sh
+make -j16 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
+  DISPLAY_FLIP_METRICS=1 DISPLAY_TIMING=off DISPLAY_CURSOR_PROBE=1 \
+  POINTER_SYNTHETIC=0 USB_HID_DESCRIBE=0
+```
+
+Duplicate the known flip-on PXE entry as **Synaptics absolute qualification**;
+keep its existing boot/initrd paths and options, then append
+`ps2.synaptics=1 ps2.synaptics.diagnose=1`. There is no new Make flag for these
+boot-only options. Keep a relative control entry with `ps2.synaptics=0` and no
+Synaptics diagnosis. Do not run `pointer.synthetic=schedule` during contact
+testing. On AC, built-in panel and normal Development terminal, the owner boots
+the opt-in entry and follows the named windows from the first
+`synaptics-contact: window=settle` line. If no qualified basic-W summary appears,
+record the query/fallback result; relative recovery is not a palm/scroll pass.
+
+| Elapsed, s | Window | Owner actions |
+| --- | --- | --- |
+| 0–10 | settle | Lift contacts and leave controls idle. |
+| 10–30 | normal-finger | Move centrally on both axes/diagonally; lift/reapply; confirm taps do not click. |
+| 30–50 | edge-entry | Start at each edge, move parallel, then deliberately inward; check exclusion and entry without a jump. |
+| 50–70 | resting-palms | Rest/move a palm, then reduce width/pressure without lifting; check rejection persists until full lift. |
+| 70–90 | typing | Type/repeat with an existing contact; add a contact while typing; check quiet-interval rebaseline versus required lift. |
+| 90–110 | finger-transitions-physical-drag | Add/remove second/third fingers, then hold/release a physical press during a drag; check fresh baselines and primary click. |
+| 110–130 | TrackPoint-with-palm | Rest a palm while moving the stick and using each physical L/M/R button; check touch rejection does not affect them. |
+| 130–150 | two-finger-scroll | Stable vertical/horizontal/diagonal strokes, small strokes, reversals and lifts; check natural direction and no residual scroll. |
+
+After `done`, check modifier-only input, physical clicks during palm/typing
+rejection, independent held switches, local selection and mux scrolling, and
+fresh-click lock/unlock/relock in Quake. Repeat mouse/touchpad direction checks
+under separately authored natural/traditional machine settings (next boot),
+then repeat core finger/palm/typing/drag/stick/scroll checks with diagnosis off.
+The owner's full native pass precedes the accepted default-on change in this
+same task. Preserve a relative-mode control boot if geometry is unavailable.
+
+Initial authored tuning is documented in [mouse input](../../../devices/mouse.md#synaptics-opt-in-absolute-input).
+Five-second summaries contain valid Z/W distributions, observed usable X/Y,
+finger/rejection counts and packet gaps, with seven named twenty-second windows
+after ten seconds settle. `transport-resets` includes coordinator queue overflow;
+baseline-only samples count neither accepted nor rejected. Gaps are delivery
+spacing, **not filter CPU time**. Existing presenter/probe counters measure
+aggregate elapsed compose/copy cost including preemption. No typed text,
+key identities or serial-number queries/logs are used; raw contact packets
+are not dumped. The diagnostic schedule stops at 150 seconds.
+
+Keep the masked UDP log and short owner observations at
+`/shared/present/batch2/pointer739/`. Useful extraction:
+
+```sh
+grep -E 'synaptics:|synaptics-contact:|mouse:|display-cursor-probe:|display-flip-metrics:' masked.log
+```
+
+Record image hashes, head/pins, command line, actual window actions and any
+fallback. For a later hands-free pipeline A/B, use the baseline `df7ec8ab` and
+#739 kernels with the same matching initrd, `POINTER_SYNTHETIC=1
+DISPLAY_CURSOR_PROBE=1` and `pointer.synthetic=schedule`; repeat interleaved
+boots. This bypasses contact filtering and cannot replace the hands-on pass.
