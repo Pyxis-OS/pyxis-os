@@ -214,7 +214,7 @@ launch latency was not measured in this follow-up.
 | SEND4096 admission | 1.350 (1.268–3.978) | 1.330 (1.242–1.945) |
 
 These noisy nested measurements establish completion, not a native speedup.
-Owner-native A/B of this follow-up remains pending. Raw captures/ELFs stay in
+Owner-native follow-up results are recorded below. Raw captures/ELFs stay in
 ignored `build/scheduler-pointer`; no profiler overlapped timings.
 
 Interactive 1/4-CPU QEMU rechecks pass `park32`, `park64`, `park-refusal`,
@@ -225,3 +225,18 @@ all parking bucket heads/tails and every configured CPU's pending-expiry list
 are empty. The scheduler storage stays CPU-owned for the loop's lifetime;
 passing its pointer changes no admission, authority, cancellation or lease rule.
 All task-owned VMs/debuggers/clients are stopped. No ABI, runtime or klog change.
+
+Owner-native post-merge A/B, 2026-10-11 around 21:00: ThinkPad, same setup,
+A = `a0906f2f`, B = `4a0d8d89`, identical A initrd, A1/B1/A2/B2 boots.
+Raw data: `/shared/present/batch2/ab733/`; supplied in the
+[#733 comment](https://git.internal/PyxisOS/pyxis-os/pulls/733).
+
+| Workload | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 fastest, ns/round trip | 3924 | 3883 | 3881 | 3872 |
+
+The average of the two boot minima falls 25 ns, within run-to-run noise; no
+measurable speedup is established. The owner reports gate 6's roughly 100 ns
+CALL64 cost mostly remains; CALL4096, SEND64/4096, pages and launches are unchanged.
+The redundant lookup is removed, but the residual cost is not attributed. It
+stays in the threads cost notes; no further optimization/profiling is assigned.
