@@ -22,7 +22,9 @@ session launcher selects mux instead of the shell, forwarding it as `terminal`
 and retaining CREATE_GROUP on mux's launcher. Ordinary shells receive neither.
 Remote startup uses a separate `remote_multiplexer = true` opt-in and
 `pyxis-remote --mux`, with pane creation brokered by the trusted daemon. Packaged
-Remote configurations leave it false. See [remote mux](remote-terminal.md#remote-multiplexer)
+live Remote enables it (owner accepted, 2026-10-11); plain remote clients still
+select the shell. Installed defaults have no Remote space; owner-authored Remote
+entries can set the same flag. See [remote mux](remote-terminal.md#remote-multiplexer)
 and its [implemented contract](../wip/remote-multiplexer.md).
 Direct ordinary command launch lacks the administrative grants local mux requires.
 Missing resources or failed startup produce
@@ -258,7 +260,7 @@ after Ctrl+C, and exited-pane fallback. The submitted dependency adds only an
 ownership comment after that code revision:
 [d560fbb](https://git.internal/PyxisOS/pyxis-userland/commit/d560fbb),
 [userland PR #215](https://git.internal/PyxisOS/pyxis-userland/pulls/215).
-Packaged profiles remain opted out.
+Packaged profiles leave the local `multiplexer` setting disabled.
 
 GDB observed `CALL_OK` with six owned directories and a complete description;
 the busy case returned `CALL_TIMED_OUT` with an empty snapshot. It inspected
@@ -276,7 +278,7 @@ upstream source was needed. Userland dependency is
 [312fe7a](https://git.internal/PyxisOS/pyxis-userland/commit/312fe7a3c41c76817d237cab21ca93e9da11efca),
 [PR #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160). Manual images
 used only a temporary `multiplexer = true` addition to Development; packaged
-profiles keep the default opt-out. The final dependency
+profiles keep the local `multiplexer` setting disabled. The final dependency
 `fe07036` also passed live startup through the `bin://` alias; installed
 program placement was inspected in the installer/rescue selection, rather
 than claimed as a new installed-machine boot qualification.

@@ -144,7 +144,10 @@ remains after batching leases. Reply staging allocation/free, the extra payload
 copy and syscall root accounting are untested candidates, not established
 causes. The owner parks profiling until threads task 8, when IPC and allocation
 paths are touched anyway; preserve authority, bounded lifetimes, root drainage
-and late-output semantics.
+and late-output semantics. Gate 6 adds roughly 100 ns to CALL64 fastest; the
+[#733 native follow-up](development/experiments/threads-task6/README.md#scheduler-pointer-follow-up)
+recovers at most 25 ns, within noise. Its residual cause is unmeasured; revisit
+with the same task-8 IPC/allocation work, without further profiling now.
 
 ## PMM first-fit search under its lock
 
