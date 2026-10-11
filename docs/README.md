@@ -22,7 +22,8 @@ notes, remain authoritative in their separately versioned repositories.
 [File metadata](interfaces/file-metadata.md) defines live identity, sampled
 modification time and independent validity across native and provider backing.
 
-The [system pointer](interfaces/pointer.md) covers surface ownership, geometry,
+The [system pointer](interfaces/pointer.md) and [boot input policy](interfaces/input-policy.md)
+cover surface ownership, geometry,
 lock, cursor images and selection boundaries. [volume controls](userland/audio-volume.md), [Mousetest](userland/mousetest.md)
 exercises its native sessions; [pointer qualification](development/system-pointer-qualification.md)
 records runtime evidence and limits.

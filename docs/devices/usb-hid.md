@@ -1,10 +1,10 @@
-# USB boot keyboard and mouse input
+# USB keyboard and report-mouse input
 
-The BSP USB worker binds HID boot-subclass keyboard and mouse interfaces to
+The BSP USB worker binds boot keyboards and standard relative report mice to
 [the shared keyboard path](keyboard.md) and
 [system pointer](../interfaces/pointer.md#input-source-coordination). Existing
 input grants, focus and process ownership apply; there is no raw USB grant or
-new public input ABI. PS/2 stays available alongside USB. On a USB-only boot,
+device-bypass interface. PS/2 stays available alongside USB. On a USB-only boot,
 initial userspace waits on the BSP for the first keyboard or the end of boot
 USB discovery, checking every 10 ms. A present PS/2 keyboard keeps direct startup.
 Discovery waits hold no input lock; console unavailable errors are unchanged,
@@ -15,17 +15,21 @@ the deferred startup worker creates it after scheduling begins.
 ## Binding and ownership
 
 Select the first supported configuration, with at most one boot keyboard and
-one boot mouse interface per device, including composite dongles. Existing
+one relative Mouse application interface per device, including composite dongles. Existing
 storage and Bluetooth class owners take priority; a configuration mixing those
 classes with HID is not partly claimed. Each interface needs one interrupt IN
-endpoint and successful SET_PROTOCOL(boot). Initial GET_REPORT supplies a
-snapshot when supported; a STALL starts that interface with no held keys or
+endpoint. Boot keyboards require SET_PROTOCOL(boot); admitted boot mice select
+report protocol, and nonboot mice already use it. Configuration precedes bounded
+report admission and selected endpoint setup; receives start only after protocol,
+Feature negotiation and initial snapshots. Initial GET_REPORT queries every
+button-bearing report ID when supported; a STALL starts that interface with no held keys or
 buttons, without rejecting its composite sibling. Before continuing, xHCI
 resets halted EP0, clears the owning transaction translator when applicable,
 and advances the dequeue pointer past the failed transfer. Failed recovery or
 other GET_REPORT errors still fail closed.
-Keyboard SET_IDLE(0) is required; a mouse may stall it. General report-protocol
-HID, tablets, gamepads, media keys and keyboard LED updates are unsupported.
+Keyboard SET_IDLE(0) is required; a mouse may stall it. Report-protocol
+keyboards, tablets, gamepads, vendor protocols, media keys and keyboard LED updates
+are unsupported.
 
 Boot admission covers low/full/high-speed leaves on roots or through at most
 five external USB 2 hubs. Existing transaction-translator routing selects the
@@ -64,11 +68,38 @@ Unchanged reports and repeats supply no new activation. Rollover resets accepted
 input; recovered unknown holds are quarantined until release. Source loss resets
 accepted keyboard input across destinations and quarantines surviving holds.
 
-Mice decode the three-byte boot prefix: left/right/middle buttons and signed
-relative X/Y, without acceleration. Unknown trailing bytes are ignored. Wheel is
-supported only for the established QEMU four-byte layout, checked against its
-identity, endpoint and exact report descriptor. An unrecognized native wheel
-extension requires descriptor evidence before it is decoded.
+Mice admit one standard relative Mouse application collection, including boot,
+nonboot and composite interfaces. The parser retains complete Input/Output/Feature
+lengths by ID, accounting for padding and ignored fields, and scoped X/Y, Wheel,
+Consumer AC Pan and Button usages 1–32. Signed bit extraction uses the declared
+logical ranges. Each button-bearing ID owns a snapshot; wheel-only IDs preserve
+holds. Unknown IDs, malformed lengths or invalid values retire the whole binding,
+including a keyboard sibling. Unsupported admission preserves a supported boot
+keyboard; it does not add independent interface retirement.
+
+Admission is bounded to the prepared 4,096-byte control and 1,024-byte Input
+capacity, 16 layouts, 64 relevant fields and eight collection/global pushes.
+The largest declared Input report determines the receive length, independently
+of endpoint packet size. One worker-only adjustment before receives start handles
+confirmed boot fallback; backing remains retained until reboot.
+
+Understood wheel-scoped Resolution Multiplier Features use a complete read,
+scalar-only modification and readback. Unrelated bits survive. Only confirmed
+positive integral effective multipliers qualify, including logical-to-physical
+mapping and Unit Exponent. Unknown wheel scale disables the affected axis;
+a scope covering other controls refuses report admission. The coordinator keeps
+per-source/axis conversion fractions and applies mouse direction once. No
+output-report driver or guessed native wheel extension is added.
+
+Unsupported report admission may fall back on an actual boot mouse only after
+confirmed SET_PROTOCOL(boot), decoding the defined three-byte prefix. The exact
+qualified QEMU four-byte extension remains available; unknown trailers convey no
+scroll or extra buttons. Runtime failure never switches protocol silently.
+
+`usb.hid.describe=1` opts into bounded candidate report descriptors and admitted
+protocol/layout/multiplier dumps at info level, for native qualification. Normal
+boots add no dump or packet logging. Device string/serial descriptors are never
+read or printed by this diagnostic.
 
 Holds observed in a successful initial snapshot supply no new presses; release
 those keys/buttons before that source can activate input. A device that stalls
@@ -83,7 +114,7 @@ consumes invisible extended-key prefixes before deciding that a keyboard is all-
 These adapters implement the accepted per-source button aggregation and
 conditional loss rule in the pointer reference. Bluetooth HID remains a separate
 producer. Steam Deck lizard mode would be eligible only if its actual USB
-interfaces expose these boot protocols; no Deck compatibility is established.
+interfaces fit these admitted protocols; no Deck compatibility is established.
 
 References: [USB HID 1.11](https://www.usb.org/sites/default/files/hid1_11.pdf),
 §§7.2.4–7.2.6 and appendices B/C/F; QEMU 10.2.2

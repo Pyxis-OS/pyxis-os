@@ -185,7 +185,8 @@ loss suspends input and cancels an active drag; unchanged completed selection
 may remain.
 
 Wheel over content moves that pane's history three rows per detent without
-changing keyboard focus. Away moves older, toward moves toward live, with
+changing keyboard focus. Negative viewport-up scroll moves older, positive
+viewport-down scroll moves toward live, with
 bounded endpoints. Reaching the newest endpoint returns to ordinary pane input.
 The existing prefix/keyboard history controls still work. Drag autoscroll and
 selection across off-view history remain deferred. Controller release/exit
@@ -310,3 +311,7 @@ difference. Mux drains and presentation add concurrent work; these collections
 do not isolate its cost from nested-VM variation. They are RAM FILE-read
 qualification, not disk/physical-host performance or terminal-throughput results.
 No new benchmark infrastructure or scope expansion was introduced.
+
+History wheel browsing retains signed vertical fractions until a complete
+120-unit detent, moving three rows. Horizontal input is ignored. Focus, reset,
+geometry, layout or explicit history-view changes clear the remainder.

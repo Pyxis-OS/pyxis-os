@@ -61,3 +61,13 @@ First-party tools use the native query.
 The validating writer, installer naming, prompt/Fastfetch, remote beacon, UDP
 log and DHCP are separate [milestone tasks](../wip/machine-settings.md#tasks).
 `remote.beacon` and its current build option retain their existing behavior.
+
+## Input direction schema
+
+[Boot input policy](../interfaces/input-policy.md) uses `input/mouse/scroll-direction`
+and `input/touchpad/scroll-direction` under the same machine tree. Exact values
+are `natural` or `traditional`, with one optional final LF; the shared schema
+validator is exported with the SDK. Missing/invalid keys preserve each archive
+authored default. Installation is once before spaces, changes apply next boot,
+and diagnostics require archive `input.diagnostics = true`. No settings writer
+or live input-policy authority is added.

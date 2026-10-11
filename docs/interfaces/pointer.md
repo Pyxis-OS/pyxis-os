@@ -1,7 +1,7 @@
 # System pointer
 
 One kernel-owned pointer serves the local display. The BSP presenter drains
-[PS/2 input](../devices/mouse.md), maintains its physical hotspot and routes it
+[PS/2](../devices/mouse.md) and [USB input](../devices/usb-hid.md), maintains its physical hotspot and routes it
 to the shown surface. Navigation belongs to the kernel; graphics and outer
 terminal ownership are independent. [Display presentation](../kernel/display.md#software-pointer)
 covers cursor composition, hardware ownership and capture.
@@ -19,7 +19,7 @@ not transfer or end process ownership.
 Acquisition is exclusive (`CALL_BUSY` for another or repeated acquisition), and
 returns `CALL_UNAVAILABLE` without a working mouse. RELEASE, display RELEASE and
 owner exit end the subscription and remove its image and visibility preference.
-Keyboard ownership remains independent. READ blocks for one 56-byte event, or
+Keyboard ownership remains independent. READ blocks for one 88-byte event, or
 returns `CALL_TIMED_OUT` for an empty `POINTER_READ_POLL` read. Libpyxis exposes
 acquire/read/release, geometry, image, visibility, warp and lock/state helpers in
 `<pointer.h>`. An acquired subscription supports `wait_many` READABLE with INPUT
@@ -33,11 +33,12 @@ remains deferred.
 
 ## Position, focus and dragging
 
-The physical hotspot starts at screen center, moves one pixel per PS/2 count
+The physical hotspot starts at screen center, moves one pixel per relative device count
 without acceleration and stays inside the physical screen. `POINTER_INPUT`
-carries signed surface-local `x` and `y` below navigation, held `buttons`, wheel
-counts, destination `generation` and `mapping_identity`. Positive wheel counts
-are toward the user. GEOMETRY returns destination and fixed mapping extents with
+carries signed surface-local `x` and `y` below navigation, held `buttons`, signed `scroll_x`/`scroll_y`, destination `generation` and
+`mapping_identity`. Scroll uses 120 units per detent, positive viewport right/down.
+The kernel applies mouse/touchpad direction policy once; natural wheel pull or
+finger down gives negative `scroll_y`. Button usages 1–32 occupy bits 0–31. GEOMETRY returns destination and fixed mapping extents with
 both identities. A committed physical resize changes generation; even a
 same-size graphics REPLACE changes mapping identity. Clients re-query on either
 change rather than stretching old coordinates.
@@ -70,7 +71,7 @@ A packet with no relevant change produces no ordinary event.
 
 The queue holds 64 events. At capacity, an ordinary event can coalesce with the
 newest ordinary event only when buttons and both identities match: it retains
-the latest position and saturates wheel and locked relative counts at the signed
+the latest position and independently saturates both scroll axes and locked relative counts at the signed
 32-bit limits. Otherwise the queue and accepted buttons are cleared and
 `POINTER_STATE_RESET` is queued. Notifications wake blocked readers while
 graphics is hidden or its space is inactive; a read may otherwise continue
@@ -180,7 +181,7 @@ operations retain the graphics image bounds and copy/lifetime guarantees.
 Terminal DEFAULT_IMAGE restores the I-beam; graphics DEFAULT_IMAGE restores
 the arrow.
 
-READ returns one shared 56-byte spatial record, blocking or with POLL. The
+READ returns one shared 88-byte spatial record, blocking or with POLL. The
 separate bounded 64-record queue has the same coalescing/reset rules and native
 READABLE readiness as graphics. Terminal GEOMETRY also supplies grid columns,
 rows and pixel cell dimensions. Its mapping identity names the outer view,
@@ -207,7 +208,7 @@ remain separate from pointer INPUT and terminal CONTROL authority.
 
 ## Input-source coordination
 
-PS/2 and [USB boot mice](../devices/usb-hid.md) submit relative motion and
+PS/2 and [USB report mice](../devices/usb-hid.md) submit relative motion and
 complete physical button snapshots to the BSP input coordinator. Source records
 and queued reports remain source-owned; delivery performs no USB operation or
 allocation. The coordinator ORs physical buttons and continuity suppression
@@ -221,6 +222,20 @@ position, clears accepted input/drag/activation and revokes lock. The coordinato
 calls it when the lost source held buttons or no live source remains. A buttonless
 loss with a surviving source preserves input and lock. Motion reports from live
 sources are serialized, with raw counts and no per-source acceleration.
+
+Each retained source has its own rational scroll scale and signed axis residues.
+Adapters supply physical right/down directions (USB Wheel is negated); the
+coordinator applies the source's mouse/touchpad policy once. Loss, reconfiguration
+or an explicit gesture boundary clears residues. Task 2 can distinguish touchpad
+and TrackPoint sources without changing transport ownership. A coordinator typing
+timestamp recognizes non-modifier physical presses/repeats from either keyboard;
+initial/unknown holds, releases and diagnostic sources do not refresh it. It is
+an internal input for later touch rejection, not a public contact stream.
+
+[Boot input policy](input-policy.md) installs mouse/touchpad directions once.
+Discrete consumers retain signed fractions per destination/view; reset, focus,
+geometry or view changes clear them. Mux ignores horizontal movement; SDL delivers
+both precise axes with its own positive-up API conversion.
 
 Bluetooth producer authority, epochs, sequencing and reconnect remain in its
 [separate milestone](../wip/bluetooth-mouse.md). These source adapters do not add
