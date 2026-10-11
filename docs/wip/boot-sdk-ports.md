@@ -38,8 +38,9 @@ refresh against merged threads tasks 1–4. Go follows hosted Clang; native VM
 reservation and Go runtime implementation need separate owner go-aheads.
 
 [Hosted Clang and LLD](hosted-clang.md): Codex (2026-10-11), accepted first
-single-source compile and separate link; Support/SDK/libc planning proceeds in
-parallel with delta's native threads gates 5–8. Implementation needs an owner go.
+single-source compile and separate link. Support task 1 is delivered in the fork,
+without adopting its pin; SDK/libc tasks need separate assignments and proceed
+alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 
 [MX Master 3S milestone proposal](bluetooth-mouse.md): Codex (2026-10-08). Tasks 1
 to 3 are complete (#545, #552, #564); the [task 1 decision rounds](bluetooth-task1-contracts.md)
