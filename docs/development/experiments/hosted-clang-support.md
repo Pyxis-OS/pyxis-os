@@ -1,6 +1,6 @@
 # Hosted LLVM Support task 1 (2026-10-11)
 
-[Fork PR #4](https://git.internal/PyxisOS/pyxis-llvm/pulls/4), head
+[Fork PR #4](https://git.internal/PyxisOS/pyxis-llvm/pulls/4), initial delivery head
 `f02d210f656e3f2d71fde9d004982662793682f5`, started from pinned `49e2c1a1518b`.
 Compiled/QEMU source `d68801c4` has an identical tree to the submitted head;
 rebasing onto official branch `46a4376c` (itself tree-identical to the pin)
@@ -94,7 +94,7 @@ launch failure. Timeout and missing-authority requests refuse before publication
 Debugger inspection confirms retained identity references, unknown archive mtime
 and native completion kind/status.
 
-Further checks pass at the final fork head: adopted descriptor reads the held
+Further checks pass at the initial delivery head: adopted descriptor reads the held
 original after name replacement and its status retains identity after descriptor
 close; zero-length output; denied staging into boot; encoded staged output;
 unknown stdout flags; async child EXITED/7 with an explicit environment replacement
@@ -106,3 +106,26 @@ source-inspected, without injected failures, power-loss tests or hardware runs.
 Real npfs/HOST output qualification, full compiler peaks/stack/handle budgets,
 runtime thread gates and compiler/linker execution remain later tasks. Raw logs,
 screenshots and the manual helper stay local or in PR discussion.
+
+## Metadata review follow-up
+
+Fork head `6951d3c955e769a566c238fb858fcf12b46ba46c` deletes unconditional native
+metadata accessors and adapts the already reached callers to checked optionals.
+The measurements above remain from the initial delivery; they are not timings
+of this follow-up. No kernel, SDK or container input changed.
+
+Host Support builds pass. All 145 previously successful native Support objects
+remain buildable; the full target build has its existing prerequisite errors,
+with no deleted-access diagnostics in Support. Native FileManager/FileEntry
+and host FileManager/lexer units compile. Native lexer attempts retain their
+existing wide-string, localization and threading errors, with no metadata errors.
+A local compile-only probe rejects all 17 unchecked filesystem, VFS and
+FileEntry/ref calls. Task 4's complete Clang/LLD build will expose the remaining
+consumers the same way.
+
+The rebuilt manual helper passes in the same QEMU configuration: archive time,
+access time, link count and ownership remain absent; default filesystem/VFS
+status supplies no identity or time, and unknown equivalence has no value.
+Copied reads, held replacement identity, private memory, staged output,
+changed-parent refusal and explicit child launch still pass. No Clang executable,
+npfs sync measurement or native hardware result is claimed.

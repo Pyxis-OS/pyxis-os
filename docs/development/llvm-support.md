@@ -18,10 +18,24 @@ needs selected native roots; `getMainExecutable` supplies no guessed name.
 
 Status retains a FILE or directory reference, with independent domain/object and
 mtime validity. Regular-file size must be available. Permission bits are unknown;
-ownership, access time and link-count queries refuse. Clang retains references
-through its identity caches, including real-backed virtual entries. Unknown
+ownership, access time and link-count metadata are unavailable. Clang retains
+references through its identity caches, including real-backed virtual entries. Unknown
 mtime stays unknown for `__TIMESTAMP__`; dependency-time comparisons and
 PCH/module/preamble caches requiring unimplemented validation refuse.
+
+Owner decision, 2026-10-11: under `LLVM_ON_PYXIS`, unconditional metadata
+accessors are deleted, so unaudited consumers fail compilation instead of
+aborting when an input lacks metadata. Use `tryGetLastModificationTime`,
+`tryGetUniqueID`, `tryGetLastAccessedTime` and `tryGetLinkCount`, returning
+`std::optional`; identity-domain/ownership accessors and status comparisons use
+the same rule (`tryEquivalent` distinguishes unknown from false). VFS status
+preserves validity, and Clang's FileEntry/ref wrappers expose optional time and
+identity too. FileManager checks identities before caching; `__TIMESTAMP__`
+retains its unknown-time spelling. Metadata-dependent Support operations report
+unsupported through their error channels. A checked virtual-ancestor operation
+with no error-returning API explicitly refuses unavailable identity; it does not
+fabricate a directory. Task 4's full build must adapt each remaining consumer
+without replacing unknown values with zero or unchecked optional dereferences.
 
 Inputs use copied `MemoryBuffer` reads. Descriptor opens adopt the original held
 native FILE, preserving identity across name replacement. Default creation uses
@@ -43,6 +57,13 @@ re-resolves and compares the destination parent, syncs the FILE, replaces within
 the held parent, then syncs the directory. LLD preserves the old output until
 replacement. Executable output intent grants no extra authority or Unix mode.
 
+Each output currently costs two directory syncs (admission in `TempFile::create`
+and post-rename in `keep`) plus one FILE sync. The ABI has no backend durability
+capability query; rights and metadata do not prove sync support. Keep the
+admission probe. Task 5 must measure its cost separately on the installed npfs
+pool, including per-object-file latency; the recorded RAM costs do not establish
+npfs or HOST costs.
+
 Before publication, failure discards the owned temp and preserves the old name.
 An untrustworthy rename acknowledgement retires owners without unlink/retry;
 successful rename followed by failed sync reports published-but-uncertain output,
@@ -56,6 +77,10 @@ does not require huge pages. Shared/write-through file mappings, protection
 changes, executable memory and proximity requests refuse. An attempted release
 retires its descriptor even on an uncertain reply, avoiding address-based retry;
 backing left by a refusal remains owned by the process until exit.
+
+Each live mapped block also owns one copied MEMORY handle; zero-byte requests
+own none. Task 5's handle budget must include these alongside retained input and
+directory references, rather than counting only bytes of mapped backing.
 
 ## Launch and faults
 
