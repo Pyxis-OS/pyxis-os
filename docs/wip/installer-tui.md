@@ -1,8 +1,7 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Task 1 is delivered. Task 2 is assigned, with its three
-implementation choices accepted; later tasks still need separate owner go-aheads.
+2026-10-11.** Tasks 1–2 are delivered; later tasks still need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -206,11 +205,12 @@ kernel configuration model is proposed.
    needs a separate owner decision. No TUI or verification behavior change.
    **After this task the owner can:** see the active phase throughout an
    ordinary install/update, including verification.
-2. [ ] **Shared planner/executor and revision inventory — assigned 2026-10-11.**
-   Apply the [accepted choices](#task-2-choices--accepted-2026-10-11) and
-   extract current install/update behavior behind read-only plan construction, print/replay and
-   one confirmation boundary; write/verify revision manifests and the Programs
-   report. Retain all existing authority and interruption limits.
+2. [x] **Shared planner/executor and revision inventory — delivered 2026-10-11.**
+   Read-only plan construction, print/replay and one confirmed executor implement
+   the [accepted choices](#task-2-choices--accepted-2026-10-11). Revision manifests
+   and whole-program sizes are published/verified before the ESP switch; existing
+   authority and interruption limits remain. [Reference](../userland/installer.md#plans-and-programs-report)
+   and [QEMU qualification/costs](../development/experiments/installer-plan/README.md).
    **After this task the owner can:** review and replay an explicit install/update
    plan and see new/updated/removed/unchanged program sizes before any writes.
 3. **Shared dependency, former mounted FAT32 task (moved, not completed).**
