@@ -1,8 +1,7 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Task 1 is held by the owner; it needs a new go before starting.
-All later tasks also need separate go-aheads.
+2026-10-11.** Task 1 is delivered; later tasks still need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -187,11 +186,14 @@ prove that installed bytes were not modified after installation.
 Progress coverage can land independently before curses or coexistence. No new
 kernel configuration model is proposed.
 
-1. [ ] **Complete progress coverage — held 2026-10-11.**
-   Audit every installer I/O phase, including
-   source/target inspection and copy verification; share reporting with plain
-   output and later TUI. Capture current install/update costs, then matched runs.
-   **After this task the owner can:** see which phase is active throughout an
+1. [x] **Complete progress coverage — delivered 2026-10-11.**
+   Shared observational phase/counter records cover source/target inspection,
+   copying, filesystem-view verification, raw EFI read-back, sync and cleanup.
+   [Reference](../userland/installer.md#progress) and
+   [matched QEMU costs](../development/experiments/installer-progress/README.md).
+   Program verification may use cached npfs pages; stronger device read-back
+   needs a separate owner decision. No TUI or verification behavior change.
+   **After this task the owner can:** see the active phase throughout an
    ordinary install/update, including verification.
 2. [ ] **Shared planner/executor and revision inventory.** Extract current
    install/update behavior behind read-only plan construction, print/replay and

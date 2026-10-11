@@ -4,8 +4,9 @@ Owner-accepted defaults, 2026-10-10, subject to the
 [native-kernel condition](#accepted-owner-decisions-2026-10-10). The earlier accepted
 directions (merged #567) stand: parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault, and
-process-private address wait/wake. Tasks 1–5 are merged. Gate 6 is implemented and QEMU-qualified in the current
-PR; owner-native A/B is recorded, with CALL64 fastest about 100 ns higher.
+process-private address wait/wake. Tasks 1–5 are merged. Gate 6 is merged (#731)
+and QEMU-qualified; owner-native A/B is recorded, with CALL64 fastest about 100 ns
+higher.
 Gates 7–9 remain later delivery work. Moving kernel services
 [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
@@ -214,7 +215,7 @@ recheck predicates. No cross-process futex ABI, requeue or priority inheritance.
 ### Gate 6 contract (owner accepted, 2026-10-11)
 
 Owner assigned gate 6 and accepted all three binding/lifetime defaults on
-2026-10-11; implemented and QEMU-qualified in this PR. Native A/B records
+2026-10-11; implemented in merged #731 and QEMU-qualified. Native A/B records
 about 100 ns added to CALL64 fastest; see qualification.
 Scope is native address parking only, over the
 existing caller-scoped `threads` MANAGE service. No pthread/C11 kernel surface,
@@ -264,6 +265,9 @@ Linked registrations/pending expiry lists drain; no mapping lease survives sleep
 [Userland #221](https://git.internal/PyxisOS/pyxis-userland/pulls/221) supplies
 native helpers and extends the existing manual threadprobe. Merge it before the
 parent gitlink. Owner-native A/B is recorded; no native speedup is claimed.
+The owner-approved scheduler-pointer follow-up reuses the permanent loop
+context for expiry checks; its native A/B is pending. See the
+[follow-up record](../development/experiments/threads-task6/README.md#scheduler-pointer-follow-up).
 Gates 7/8 remain separate.
 
 | Libc primitive | Required behavior |

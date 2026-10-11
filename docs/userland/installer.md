@@ -79,25 +79,35 @@ installed system. No wipe marker is needed. See
 
 ## Progress
 
-Install and Update report program-copy progress, including files inside bundles:
+Install and Update identify each I/O phase before it starts: source and target
+inspection, existing metadata/checksum checks, pool/GPT preparation, revision
+removal, copying, sync, verification, EFI publication/read-back, cleanup and
+handle release. Blocking claims, flushes and rescans show an activity line;
+they have no invented percentage.
 
-```text
-bin://: 812/2347 files, 41 MiB
-```
+Copy and program verification report completed regular files and payload bytes,
+including bundle descendants. Verification bytes count successful comparisons
+once; directories are checked separately. File/byte totals come from the
+existing archive pass when known, without another scan. Removal counts deleted
+files and directories; raw stages count successful disk-command bytes, including
+sector/cluster padding, with totals where the existing layout establishes them.
+Counters describe work observed, not durability or whole-operation success.
 
-The numerator counts fully copied regular files; MiB counts successfully written
-file data, including the current file. Directories are excluded. The denominator
-comes from the existing source-archive filtering pass, without another tree scan.
-On a console, carriage return redraws a single row at most four times per second.
-Other output gets plain newline records at most once per second. Both include a
-final record; errors end an active row before their diagnostic.
+Program verification explicitly says **filesystem view; may be cached**. Pool
+sync precedes it, but ordinary npfs reads can return retained copied pages. It
+is not guaranteed device read-back. ESP verification separately issues raw disk
+reads after flush/release; that bypasses npfs caches, without proving physical
+media behavior or power-loss safety.
 
-Phase lines announce revision-directory preparation, pool flush, copy
-verification, EFI geometry invalidation, replacement-tree writes and flush,
-boot-sector publication, final flush and old-revision cleanup. These messages
-show which operation is in progress; they do not establish durability or success.
-Clock or progress-output failure disables counters and leaves installation's
-existing checks, failure handling and publication order unchanged.
+The shared installer phase/counter records feed the plain renderer and the later
+TUI. Console rows redraw at most four times per second; other output uses newline
+updates at most once per second. Clock checks are coalesced after 64 KiB or 32
+items, so small phases show transition/final records. A blocked syscall cannot
+animate. Transitions and final counts are unconditional; diagnostics first close
+the current row. Clock failure stops timed redraws, and output failure disables
+the renderer, without changing consent, I/O, checks or publication order.
+[QEMU measurements](../development/experiments/installer-progress/README.md)
+record the matched costs and qualification limits.
 
 ## Restart
 
