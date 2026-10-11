@@ -7,6 +7,11 @@ Everyday use for simple tasks guides the order; website hosting is one future
 application, not the completion target. Fixes for major problems found on the
 ThinkPad remain allowed in any track.
 
+**Planning freeze (2026-10-11, until the owner lifts it):** no new milestones,
+proposals or investigations, and no new tasks in existing milestones. Ideas go in
+[later OS directions](later-os-directions.md) as short entries. Bugs and hardware
+problems found in use are still fixed.
+
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
 and are listed in [completed milestones](completed.md).
