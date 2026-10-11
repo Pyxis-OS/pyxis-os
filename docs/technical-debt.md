@@ -7,6 +7,11 @@ when the underlying tradeoff changes.
 
 ## USB HID native coverage
 
+The report-mouse/shared-scroll update needs new native descriptor and behavior
+checks for the ASUS dongle, USB mice and Keychron pointer interface. Horizontal,
+high-resolution/Feature and multi-ID behavior await real device evidence; stage
+with `USB_HID_DESCRIBE=1 LOG_LEVEL=info` and review before claiming support.
+
 The [USB boot input](devices/usb-hid.md) is natively qualified for a full-speed root
 keyboard and a composite dongle ([record](development/experiments/usb-hid/README.md#native-owner-thinkpad)).
 Not exercised natively: the real dock or switch hub chain with low and full-speed leaves
