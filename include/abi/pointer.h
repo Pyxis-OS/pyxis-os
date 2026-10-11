@@ -22,6 +22,7 @@
 #define POINTER_BUTTON_RIGHT (UINT32_C(1) << 1)
 #define POINTER_BUTTON_MIDDLE (UINT32_C(1) << 2)
 #define POINTER_IMAGE_MAX 64
+#define POINTER_SCROLL_UNITS_PER_DETENT 120
 
 enum pointer_event_type {
   POINTER_INPUT,
@@ -47,16 +48,18 @@ struct pointer_read_request {
 };
 
 /* Signed surface-local pixels, below navigation. During an anchored drag they
- * may be outside the surface. Wheel is positive toward the user. State events
+ * may be outside the surface. Scroll is signed viewport movement, positive
+ * right/down, 120 units per detent; kernel source policy is already applied.
+ * Button usages 1..32 occupy bits 0..31. State events
  * clear held buttons except locked geometry changes, which retain them. Ordinary
  * geometry changes discard queued spatial events. INPUT
  * coalesces only within identical geometry/button state, keeping the latest
- * position and saturating wheel/relative counts. Lost transitions cause RESET.
+ * position and independently saturating scroll/relative counts. Lost transitions cause RESET.
  * A held device button is accepted only after release and a fresh press. */
 struct pointer_event {
   int64_t x, y;
   uint64_t generation, mapping_identity;
-  int32_t wheel;
+  int32_t scroll_x, scroll_y;
   int32_t dx, dy; /* Relative device counts only for INPUT with LOCKED set. */
   uint32_t buttons, type, flags;
   uint64_t action_id, clipboard_operation, clipboard_layer;
@@ -102,7 +105,7 @@ struct pointer_warp_request {
 };
 
 _Static_assert(sizeof(struct pointer_read_request) == 24, "pointer read layout");
-_Static_assert(sizeof(struct pointer_event) == 80, "pointer event layout");
+_Static_assert(sizeof(struct pointer_event) == 88, "pointer event layout");
 _Static_assert(sizeof(struct pointer_geometry) == 48, "pointer geometry layout");
 _Static_assert(sizeof(struct pointer_image_request) == 40, "pointer image layout");
 _Static_assert(sizeof(struct pointer_visibility_request) == 24, "pointer visibility layout");

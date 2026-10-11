@@ -83,8 +83,10 @@ horizontal movement as vertical. Volume controls keep their discrete steps.
 Unsupported horizontal actions remain explicit consumer limits.
 
 Planned machine keys: `system://config/machine/input/mouse/scroll-direction` and
-`input/touchpad/scroll-direction`, enums `natural` / `traditional`. Missing or
-invalid values use the accepted natural defaults, with an opt-in diagnostic.
+`input/touchpad/scroll-direction`, enums `natural` / `traditional`. Accepted
+2026-10-11: missing or invalid installed values use the archive's authored value,
+matching the hostname convention, with an opt-in diagnostic. Both shipped
+archives author natural.
 Use the [plain store convention](../userland/machine-settings.md), shared schema
 validation and archive defaults; installed values survive updates, live images
 use archive configuration. Changes apply next boot. The validating writer is
@@ -177,11 +179,9 @@ state or guessed universal pressure units.
 ## Task 1 preparation (2026-10-11)
 
 Branch `pointer/usb-report-scroll` from main `56bd4da8`; assignment recorded in
-`18aa7d3d`. No implementation code yet. One clarification is pending: when an
-authored archive selects traditional, should a missing/invalid installed key
-use that archive value or literal natural? Recommended: archive fallback,
-matching the hostname convention; both shipped archives stay natural. This is
-proposed, not accepted.
+`18aa7d3d`; refreshed onto main after the native sibling lifecycle integration.
+The archive fallback clarification was accepted 2026-10-11; implementation is
+authorized.
 
 Before-code build passed with unchanged userland `df210f1a`, ports `df3210b0`,
 fs `b427df29` and lwIP `a1aadb91`, using the existing LLVM 23.1.3 builder and
