@@ -1075,6 +1075,14 @@ rebuilding missing or damaged ESP contents, while readable foreign or invalid di
 revision record cannot override binding checks, and a selected committed journal is refused without loading or replaying it. Revisit these bounds with a
 new installed layout or a general FAT service; whole-pool checking is fsck's role.
 
+Copied-program verification after pool sync uses ordinary npfs FILE reads and
+can reuse retained data pages; it proves the filesystem view matches the source,
+not fresh device read-back. The owner's 2026-10-11 instant stick-verification
+observation is consistent with that cache path; its actual hit rate was not
+measured. ESP verification separately uses raw disk reads. Revisit a stronger
+program read-back guarantee only after an owner decision; progress coverage
+keeps the verification behavior unchanged.
+
 Installation writes fresh metadata and boot files without securely erasing free space. Update replaces the whole ESP (discarding unrelated ESP files)
 with no fallback entry; an interrupted replacement is rebuilt by booting live media and choosing Update while the GPT and pool stay eligible
 ([recovery record](development/experiments/system-updates-task2/README.md)), and an interrupted installation can leave a partial disk without rollback
