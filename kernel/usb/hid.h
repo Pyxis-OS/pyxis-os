@@ -20,7 +20,7 @@ struct usb_hid_interface {
   unsigned mouse_samples;
   bool length_diagnosed[USB_HID_REPORT_LAYOUTS];
   uint8_t number, protocol;
-  bool boot, report_protocol;
+  bool boot, report_protocol, reserved_id_boot;
   bool qemu_wheel_candidate, qemu_wheel, qemu_keyboard_candidate, qemu_keyboard;
 };
 

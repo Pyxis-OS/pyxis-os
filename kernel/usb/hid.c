@@ -37,6 +37,7 @@
 #define USB_KEY_ERROR_LAST 3
 #define USB_QEMU_VENDOR 0x0627
 #define USB_QEMU_PRODUCT 0x0001
+#define USB_BOOT_MOUSE_WHEEL_BYTES 4
 #define USB_QEMU_MOUSE_PACKET 4
 #define USB_QEMU_MOUSE_DESCRIPTOR_BYTES 52
 #define USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES 63
@@ -322,12 +323,37 @@ static bool boot_mouse_sample(const struct usb_hid_interface *interface,
       (interface->qemu_wheel && bytes != USB_QEMU_MOUSE_PACKET)) {
     return false;
   }
+  bool wheel = bytes >= USB_BOOT_MOUSE_WHEEL_BYTES &&
+      (interface->qemu_wheel || interface->reserved_id_boot);
   *sample = (struct usb_hid_mouse_sample){
     .x = (int8_t)report[1], .y = (int8_t)report[2],
-    .wheel = interface->qemu_wheel ? -(int8_t)report[3] : 0,
+    .wheel = wheel ? -(int8_t)report[3] : 0,
     .buttons = report[0] & (interface->qemu_wheel ? 31u : 7u),
   };
   return true;
+}
+
+static void mouse_wire_protocol(struct usb_hid_binding *binding,
+                                  struct usb_hid_interface *interface, size_t bytes)
+{
+  if (!interface->boot || interface->protocol != USB_PROTOCOL_MOUSE ||
+      !interface->report_protocol || !binding->mouse.ids || !bytes || binding->control[0]) {
+    return;
+  }
+  /* ID 0 is reserved in an ID-bearing descriptor. Keep the observed format;
+   * another SET_PROTOCOL would alter a live stream that already speaks boot. */
+  interface->report_protocol = false;
+  interface->reserved_id_boot = true;
+  if (binding->active) {
+    uint64_t flags = cpu_save_interrupts();
+    input_source_pointer_configure(&binding->source, INPUT_POINTER_MOUSE,
+        POINTER_SCROLL_UNITS_PER_DETENT, 1, POINTER_SCROLL_UNITS_PER_DETENT, 1);
+    cpu_restore_interrupts(flags);
+  }
+  if (diagnostics_enabled()) {
+    klog("usb HID diag: %x:%x interface=%u action=reserved-ID-boot bytes=%zu\n",
+        binding->vendor, binding->product, interface->number, bytes);
+  }
 }
 
 static struct usb_setup bind_request(const struct usb_hid_binding *binding)
@@ -450,7 +476,8 @@ static void describe_binding(const struct usb_hid_binding *binding)
        mouse->receive_bytes, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
        mouse->protocol && mouse->report_protocol && binding->mouse.pan_enabled,
        mouse->report_protocol ? binding->mouse.wheel_multiplier : 1,
-       mouse->protocol && (mouse->report_protocol ? binding->mouse.wheel_enabled : mouse->qemu_wheel));
+       mouse->protocol && (mouse->report_protocol ? binding->mouse.wheel_enabled :
+         (mouse->qemu_wheel || mouse->reserved_id_boot)));
   if (!mouse->protocol || !mouse->report_protocol) {
     return;
   }
@@ -558,6 +585,7 @@ static enum usb_result initial_snapshot(struct usb_hid_binding *binding,
     }
   } else {
     struct usb_hid_mouse_sample sample;
+    mouse_wire_protocol(binding, interface, completion->bytes);
     if (interface->report_protocol && binding->mouse.ids &&
         (!completion->bytes || binding->control[0] != binding->mouse.layouts[binding->layout].id)) {
       binding->mouse.decode_failure = HID_DECODE_ID;
@@ -1008,6 +1036,7 @@ void usb_hid_collect(struct usb_hid_binding *binding)
       } else {
         struct usb_hid_mouse_sample sample;
         diagnose_mouse_sample(binding, interface, completion.bytes);
+        mouse_wire_protocol(binding, interface, completion.bytes);
         bool valid = interface->report_protocol ?
           decode_mouse_report(binding, interface, completion.bytes, &sample) :
           boot_mouse_sample(interface, binding->control, completion.bytes, &sample);

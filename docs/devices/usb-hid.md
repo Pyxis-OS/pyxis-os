@@ -77,7 +77,7 @@ Consumer AC Pan and Button usages 1–32. Signed bit extraction uses the declare
 logical ranges. Each button-bearing ID owns a snapshot; wheel-only IDs preserve
 holds. For a known Input ID, trailing bytes are ignored and a short payload is
 zero-extended before field extraction. An absent ID byte is never fabricated;
-unknown IDs and invalid field values are dropped without
+unknown IDs (except the reserved-ID rule below) and invalid field values are dropped without
 changing input state. Each interface counts malformed reports and its consecutive
 streak; a valid report resets that interface's streak. Sixteen consecutive malformed
 reports retire the whole binding, including a keyboard sibling. Transport errors
@@ -107,14 +107,38 @@ positive integral effective multipliers qualify, including logical-to-physical
 mapping and Unit Exponent. Unknown wheel scale disables the affected axis;
 a scope covering other controls refuses report admission. The coordinator keeps
 per-source/axis conversion fractions and applies mouse direction once. No
-output-report driver or guessed native wheel extension is added. Report-wide or
+output-report driver is added; boot-wheel decoding requires the reserved-ID rule
+below or the qualified QEMU extension. Report-wide or
 otherwise unknown multiplier scopes refuse this first profile; alternate
 configurations are not retried after report admission refuses the selected one.
 
 Unsupported report admission may fall back on an actual boot mouse only after
 confirmed SET_PROTOCOL(boot), decoding the defined three-byte prefix. The exact
 qualified QEMU four-byte extension remains available; unknown trailers convey no
-scroll or extra buttons. Runtime failure never switches protocol silently.
+scroll or extra buttons. Other malformed input does not select a new decoder.
+
+**Reserved-ID switch (owner accepted 2026-10-11).** If a boot-subclass Mouse
+interface with an admitted ID-bearing descriptor receives a nonempty Input
+packet beginning with 0, permanently select boot decoding for this attachment.
+HID reserves report ID 0, so it cannot be an admitted report ID here. Apply the
+rule to initial GET_REPORT snapshots and interrupt reports, before extracting
+fields. Never switch on a nonzero first byte, a nonboot interface, or a descriptor
+without IDs. There is no device-ID quirk table.
+
+The triggering packet and later packets use the defined boot prefix: the low
+three button bits in byte 0, signed X/Y in bytes 1/2, and signed wheel in byte 3
+when at least four bytes arrived; longer trailers are ignored. Three-byte packets
+have no wheel. Pan is unavailable; wheel conversion becomes 120/1 and old
+fractional residues are cleared. Shorter packets remain malformed under the
+same drop/count/sixteen-consecutive retirement policy. Prior nonzero packets may
+have been decoded as report IDs before the first reserved-ID observation.
+
+No second SET_PROTOCOL is sent: the observed stream already speaks boot, and a
+control write could alter its proven format while input is active. Endpoint
+receive capacity, attachment lifetime and the keyboard sibling are unchanged.
+The decoder stays boot until detach; fresh admission starts again from the
+descriptor. The switch logs once under either diagnostic option, with no new
+default output.
 
 After SET_PROTOCOL(report) on a boot mouse, admission reads GET_PROTOCOL.
 The readback (including an unavailable or unexpected result) is diagnostic

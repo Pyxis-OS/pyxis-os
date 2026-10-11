@@ -119,8 +119,9 @@ state or guessed universal pressure units.
    malformed reports are dropped without changing held state; per-interface
    counts and consecutive streaks are retained, and a valid report resets that
    interface's streak. Sixteen consecutive malformed reports or transport failure
-   retire/reset the whole binding (including a composite sibling). No silent
-   protocol switch or independent interface lifetime is added.
+   retire/reset the whole binding (including a composite sibling). Only the
+   reserved-ID evidence rule below switches decoding; no independent interface
+   lifetime is added.
 
    **Owner correction accepted 2026-10-11, implemented pending native retest:**
    receive TDs cover at least endpoint MaxPacketSize and the admitted report
@@ -132,12 +133,23 @@ state or guessed universal pressure units.
 
    **Later owner follow-up accepted 2026-10-11, implemented pending retest:**
    for known mouse Input IDs, ignore trailing bytes and zero-extend missing
-   payload; never fabricate an absent ID. Keep unknown-ID rejection, field
+   payload; never fabricate an absent ID. Keep other unknown-ID rejection, field
    ranges, boot keyboard lengths and exact Feature images. Under either
    diagnostic option, record the first length mismatch per layout and the
    first four report-protocol mouse interrupt packets (ID/length plus up to 16 bytes).
    No keyboard raw data, including declared keyboard fields on a mixed Mouse
-   interface; no boot-format fallback before an owner decision on the evidence.
+   interface.
+
+   **Reserved-ID switch accepted 2026-10-11, implemented pending native retest:**
+   on a boot-subclass Mouse interface with an admitted ID-bearing descriptor,
+   a nonempty Input beginning with reserved ID 0 selects boot decoding permanently
+   for the attachment. Never switch on a nonzero byte, a nonboot interface or a
+   descriptor without IDs. Decode the three-byte boot prefix and byte-3 wheel
+   when length is at least four; wheel scale becomes 120/1, pan is absent and
+   scroll fractions reset. Short packets keep the malformed-retirement policy.
+   No device quirk table or new endpoint lifetime. Do not send SET_PROTOCOL again:
+   preserve the observed boot stream rather than changing a live device format.
+   Log the switch once under either diagnostic option. Reattachment starts fresh.
 
    Enable high-resolution wheel Features only for understood wheel-scoped
    Resolution Multipliers: read the complete Feature, preserve unrelated fields,

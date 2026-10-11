@@ -406,6 +406,29 @@ unknown ID-0 inputs. They are the first four interrupt packets, excluding initia
 control snapshots; move immediately after plugging ASUS in, then press/release a
 button. Replug while moving if an idle-only sample consumes the budget.
 
+### Native ASUS wire evidence and reserved-ID switch
+
+Owner ThinkPad capture at `52e7f310`, 2026-10-11: masked 126-line log retained at
+`/shared/present/batch2/pointer716/native-asus-52e7f310.log`. GET_PROTOCOL reads 1,
+but four interrupt samples have reserved ID 0 and four-byte boot-mouse motion;
+the owner reports button presses change the first byte to 1/2, explaining the
+brief apparent motion when those bytes were interpreted as report IDs. Plain
+main's boot path also works for ASUS motion/buttons without wheel. G502 continues
+using nine-byte ID-2 report packets. Raw packet bytes stay outside the repo.
+
+The owner accepts a generic reserved-ID switch, implemented pending native
+retest: boot-subclass Mouse plus ID-bearing descriptor plus leading 0 selects
+boot decoding for this attachment, including optional byte-3 wheel. No switch on
+nonzero IDs, nonboot mice or no-ID descriptors. Malformed short boot packets keep
+the existing retirement policy. Do not issue SET_PROTOCOL again: preserve the
+observed wire format and the command-free input path; another control write could
+change live reports. No quirk table, endpoint resizing or sibling retirement.
+
+Retest ASUS motion, wheel and left/right clicks, plus G502 motion/free-spin,
+buttons/chord and replug as the regression control. Use the same build and boot
+options below; retain the single `action=reserved-ID-boot` diagnostic and protocol
+readback. The compliant QEMU report mouse must remain in report mode.
+
 ### One diagnostic retest through luna
 
 A temporary `usb.xhci.diagnose=1` option adds info-level observations only, with
