@@ -49,10 +49,13 @@ of 2026-10-02:
    kernel, initramfs and command line, and boots Pyxis as another entry. The
    owner dislikes GRUB and multiboot2 and does the swap from Linux, with the old
    GRUB entry kept as a tested fallback until Limine is proven
-   ([the swap](#limine-as-fedoras-boot-manager)). The installer's part is unchanged:
-   **it never edits `limine.conf` or firmware variables.** It writes the Pyxis
-   files and prints the entry text, including the pool's disk GUID, for the owner
-   to paste.
+   ([the swap](#limine-as-fedoras-boot-manager)). **Owner reversal, 2026-10-11:**
+   the [configuration delta editor](installer-tui.md#accepted-direction--2026-10-11)
+   may edit explicitly owned Pyxis `limine.conf` entries after plan confirmation,
+   preserving all foreign/unowned bytes. Its publication and ownership choices
+   remain open. Until delivered, the installer prints the entry, including the
+   pool's disk GUID, for the owner to paste; that fallback stays. Firmware-variable
+   edits remain excluded.
 3. **Write authority and the internal disk (accepted).** **The kernel, not the
    installer, enforces the boundary.** NVMe writes are off until an explicit boot
    option enables them for qualification. When enabled:
@@ -70,11 +73,14 @@ of 2026-10-02:
    The alternative, a whole-disk claim and an installer that is careful, is
    simpler and leaves one userland bug between Pyxis and the Fedora partition.
 
-Accepted assumption: FAT32 is a freestanding engine library first, used by the
-installer through a partition claim (task 2). A mounted FAT32 volume, a
-directory-capability backend for the shell, waits for the
-[userspace scheme-provider direction](userspace-scheme-providers.md) and is not
-in this milestone.
+FAT32 remains a freestanding engine library first, used by the installer through
+a partition claim (task 2). **Owner decision, 2026-10-11:** a mounted read-write
+FAT32 volume/directory-capability backend is now part of the
+[installer/configuration line](installer-tui.md#dependencies-and-ordered-delivery),
+after that engine. It no longer waits for the generic userspace scheme-provider
+direction. Editable Lua configuration lives on the ESP; its file selection,
+publication/fallback and ownership choices are in that proposal. This does not
+assign or widen engine task 2 itself.
 
 ## Invariants
 
@@ -86,8 +92,9 @@ in this milestone.
   flag set, a damaged chain, FSInfo that disagrees with the table, too little
   room, or `EFI/pyxis` holding files the manifest does not name. The installer
   cannot see Secure Boot; it stays off by the owner's choice (see below).
-- Pyxis names live under one ESP directory, `EFI/pyxis`, which is also the only
-  place an update may write or remove.
+- Pyxis payload names live under one ESP directory, `EFI/pyxis`. The only planned
+  exception to that write boundary is the owned-entry `limine.conf` reconciliation
+  above; it never authorizes changes to Fedora entries or other ESP payloads.
 - No fault injection, no fake success, no resize, no format of the ESP.
 
 ## Limine as Fedora's boot manager
@@ -231,6 +238,9 @@ volume instead of one the installer made:
   Pyxis-owned files, allocate by searching the FAT, never touch an entry it did
   not create. Pyxis chooses 8.3-compatible names where it can, so the long-name
   writer covers only what is left.
+  The later mounted-backend/delta-editor task separately admits confirmed edits
+  of owned spans in an existing shared `limine.conf`; engine task 2 alone cannot
+  adopt an externally created file or infer ownership from its name.
 - **Crash order:** data clusters first, the chain next, both FATs in a fixed
   order, FSInfo adjusted or marked unknown, the directory entry last, so a crash
   leaves unreferenced clusters or a missing file, never one that names garbage.
@@ -270,12 +280,14 @@ layout check stays for the existing modes.
   installer rewrites that number in the in-memory archive it already filters. A
   renumbered table fails closed because the mount does not find a pool.
 - **Limine entry:** the installer prints and saves the entry (`boot():/EFI/pyxis/caelum.elf`
-  and the archive, with the pool disk's GUID on the command line) and does not
-  edit `limine.conf`, whose Fedora block belongs to the step-0 plugin. The owner
-  pastes the Pyxis block outside the plugin's markers. A kernel update and a
-  Pyxis update never share a file.
+  and the archive, with the pool disk's GUID on the command line). The owner
+  pastes the Pyxis block outside the plugin's markers until the
+  [delta-editor task](installer-tui.md#dependencies-and-ordered-delivery) provides
+  confirmed owned-entry publication. The step-0 plugin owns the Fedora block;
+  Pyxis reconciliation preserves it byte for byte.
 - **Update:** the program stage writes the pool as now, the ESP stage touches only
-  `EFI/pyxis`, and nothing is formatted or removed elsewhere. The coexistence
+  `EFI/pyxis` until owned-entry reconciliation is delivered, and nothing is
+  formatted or removed elsewhere. The coexistence
   update reports when the shipped Limine differs from the one on the ESP but
   does not change it; the owner updates Limine and re-proves Fedora's entries.
 
@@ -358,7 +370,8 @@ needs none of this and stays first.
 
 - Resizing or moving Fedora's partitions from Pyxis, or any reuse of Fedora's
   space.
-- Mounting Fedora's filesystems, a mountable FAT32 backend, and Windows.
+- Mounting Fedora's data filesystems and Windows. Mounted FAT32 for ESP
+  configuration is now assigned to the installer/configuration proposal above.
 - Secure Boot, a signed Limine or kernel and TPM measurement: it stays off.
 - Hibernate and suspend interaction with the shared disk.
 - Keeping Pyxis's pool partition number stable if Fedora tools renumber the table.
