@@ -111,10 +111,10 @@ This is not permission to add crash helpers or start embedding work.
 
 ## Parallel delivery tasks
 
-Only this planning update is assigned now. Each implementation task needs an
-owner go; source work below can advance while delta finishes gates 5–8.
+Task 1 is owner-assigned on 2026-10-11. Later tasks need separate owner
+go-aheads; this line proceeds alongside delta's threads gates 5–8.
 
-1. [ ] **LLVM Support platform and header fixes.** Implement Pyxis Path/FILE,
+1. [ ] **LLVM Support platform and header fixes — assigned 2026-10-11.** Implement Pyxis Path/FILE,
    Process/Program, private Memory and fault-policy equivalents in the fork,
    with precise refusals and owned references. Configure selects Pyxis explicitly;
    native host TableGen remains native. Capture baseline I/O/launch costs before
@@ -158,34 +158,32 @@ together. Ordinary SDK configuration or libc edits alone need no container
 rebuild. Coordinate the chosen fork head with delta's gate 7 TLS change to avoid
 publishing incompatible compiler/runtime pins. Do not change the container now.
 
-## Task 1 decisions awaiting the owner
+## Accepted task 1 decisions (2026-10-11)
 
-These refine the accepted milestone; none is accepted by this planning PR.
+The owner accepted all three defaults and assigned task 1. These refine the
+accepted milestone without changing its thread or container boundaries.
 
-1. **Path/metadata lifetime — default:** native directory-backed scheme paths;
+1. **Path/metadata lifetime — accepted:** native directory-backed scheme paths;
    retain opened file/directory references through compiler identity caches and
    require valid domain/object IDs for identity-sensitive input. Refuse providers
    without identity. Keep missing mtime explicitly unknown (including the existing
    unknown `__TIMESTAMP__` spelling), not epoch zero; disable caches requiring it.
-   Alternative: initially restrict all inputs to a qualified pool-volume tree.
-   Default permits RAM and installed headers without inventing metadata; retained
+   RAM and installed headers remain usable without inventing metadata; retained
    references increase handle/memory cost, to measure before setting budgets.
-2. **Output publication — default:** owned buffer, exclusive random sibling temp,
+2. **Output publication — accepted:** owned buffer, exclusive random sibling temp,
    checked writes, FILE sync, same-parent replacement and directory sync; all
    grants/references released once. Before publication failure keeps the old name;
    after rename a sync failure reports uncertainty rather than claiming rollback.
    Cleanup on ordinary errors is explicit; a fatal fault may leave a temp. Refuse
-   backends lacking required rename/sync authority. Alternative: direct final-name
-   writes with possible partial output. Default protects existing artifacts and
+   backends lacking required rename/sync authority. This protects existing artifacts and
    needs parent LOOKUP/CREATE/REMOVE plus output WRITE, not global authority.
-3. **Program/fault boundary — default:** resolve selected tools through explicit
+3. **Program/fault boundary — accepted:** resolve selected tools through explicit
    delegated roots (no colon-split PATH or `/proc` discovery), snapshot cwd/env,
    preserve ordinary grant attenuation, and own native completion handles until
    observed/closed. Inherited diagnostics only; reject unsupported redirection,
    timeout/resource-limit/statistics/recovery requests before launch. Fatal faults
-   terminate; successful cleanup hooks cover orderly errors only. Alternative:
-   defer Program execution entirely and use the native shell for separate LLD.
-   Default makes Program usable without general spawn authority or crash helpers;
+   terminate; successful cleanup hooks cover orderly errors only. Program uses
+   explicit launch authority and owned handles, without crash helpers;
    new child resource delegation still needs an explicit caller selection.
 
 ## Resources and native limits
