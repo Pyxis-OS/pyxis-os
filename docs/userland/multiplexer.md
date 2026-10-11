@@ -27,9 +27,14 @@ a diagnostic, with no automatic restart or fallback shell.
 The configured terminal tab width reaches mux through `--tab-width 1..32` and
 is applied to every newly created pane. Mux loads from the running `bin://`
 revision on installed systems; live images bind `bin://` to the archive. It
-stays outside the minimal rescue set. Rescue startup keeps the ordinary shell. Each shell inherits the initial selected
-roots, working-directory chain, descriptive path and environment; changing one
-shell's directory does not change the starting directory of future panes.
+stays outside the minimal rescue set. Rescue startup keeps the ordinary shell.
+The first shell inherits the space's starting directory. On split, the focused
+root shell exports an owned snapshot of its real shared-libc directory chain
+and optional description through a private userland endpoint. The new shell
+receives that chain with its rights preserved; no printed text is parsed or path
+description reopened. Later `cd` operations remain independent. Busy, non-shell,
+unavailable or timed-out panes quietly fall back to the space start directory.
+Every pane keeps the space's initial selected roots, namespace and environment.
 Filesystem grants are shared explicitly, so panes are not filesystem sandboxes.
 `launch = true` independently controls ordinary child-launch delegation.
 
@@ -41,6 +46,7 @@ Press Ctrl+B, release it, then enter a command:
 | --- | --- |
 | `%` / `"` | Split left/right or top/bottom; focus the new shell |
 | Arrow | Focus a pane in that direction |
+| `1`–`8` | Focus the numbered pane shown in its title; unused/out-of-range digits do nothing |
 | `b` | Restore the recursive BSP layout |
 | `e` | Arrange equal strips along the most recent split axis |
 | `[` | Browse focused pane scrollback |
@@ -85,6 +91,16 @@ keyboard, pointer and power grants as ordinary local session shells. Graphical
 programs launched from a pane draw on the shared space's
 [graphics layer](space-layers.md), above mux; they never draw inside the pane.
 Pane shells receive no session creation or group-supervision grant.
+
+The cwd channel belongs only to mux and each root shell; ordinary children do
+not inherit it. Each endpoint receiver stays with its creating process, with
+SEND-only clients delegated privately. The shell serves snapshots only while
+editing its prompt. One absolute one-second budget covers the complete chunked
+transfer, including chains longer than the four-grant message bound. Partial
+transfers release their grants and use the fallback; no old cwd snapshot is
+cached. The complete owned snapshot remains alive through synchronous launch
+capture and is then released. This contract was approved by the owner on
+2026-10-11; it adds no kernel interface or directory authority.
 
 Ordinary input remains byte-exact. Mux holds passthrough on its outer input so
 Ctrl+C reaches the focused session, whose ordinary shell interruption rules
@@ -198,6 +214,29 @@ line; a fresh Enter is required after consumed completion. See the
 
 The [pointer qualification](../development/system-pointer-qualification.md#task-3-qualification)
 records spatial-input validation separately from the original mux results below.
+
+## Cwd and digit-focus qualification (2026-10-11)
+
+Ordinary `make -j16 image` passed with the existing LLVM23 builder, rebuilding
+the SDK/runtime and consumers. Manual nested-KVM QEMU used four CPUs, 2 GiB and
+VGA at 1280x800, with a temporary Development-only opt-in. Parent `a7b16fe2`
+and userland `76d0508` reproduced the old split-at-`home://` and unknown-digit
+behavior. Userland `79fda8e` checked both split orientations, independent cwd
+changes, a six-directory chain, relative `..` and directory creation, digit
+focus, ignored 0/9 and an unused number, busy foreground Lua timeout, recovery
+after Ctrl+C, and exited-pane fallback. The submitted dependency adds only an
+ownership comment after that code revision:
+[d560fbb](https://git.internal/PyxisOS/pyxis-userland/commit/d560fbb),
+[userland PR #215](https://git.internal/PyxisOS/pyxis-userland/pulls/215).
+Packaged profiles remain opted out.
+
+GDB observed `CALL_OK` with six owned directories and a complete description;
+the busy case returned `CALL_TIMED_OUT` with an empty snapshot. It inspected
+SEND-only client authority, preserved directory rights and released snapshot
+handles, with capability reservations and VM borrowers at zero. Allocation
+failure and absent descriptions were inspected, not injected; this is QEMU
+qualification, not a native-machine result. No kernel change, compiler-container
+rebuild or external source was needed.
 
 ## Qualification (2026-10-08)
 

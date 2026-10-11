@@ -15,6 +15,8 @@ text tools may be ports.
 
 The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
 `cp`, sorted/colorized `ls`, `tree`, `mv` and foreground shell-script launch authority.
+The [multiplexer](../userland/multiplexer.md) now supports splitting in the
+focused root shell's cwd and Ctrl+B digit focus (owner requests, 2026-10-11).
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
