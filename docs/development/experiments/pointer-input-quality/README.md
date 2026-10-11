@@ -284,9 +284,9 @@ to five seconds plus retirement; held state survives a dropped report. Initial
 malformed GET_REPORT snapshots are skipped without altering other snapshots.
 No new default klog output or automatic fallback from protocol mismatch/ID 0.
 
-Userland #214 is published at `f18f07b83d5d04b1ba7335a217b85e98b2a64748`,
-rebased directly onto main `dca986b`; its only ahead commit is the scroll
-integration. The stacked rint/FP_ILOGB commits are dropped; ports #99 remains
+Userland #214 is published at `c075ae0d55487456736a95dbece80c5f854e39ec`,
+rebased directly onto main `ee9ccae`; its only ahead commit is the scroll
+integration. The earlier correction checks below used `f18f07b` on `dca986b`. The stacked rint/FP_ILOGB commits are dropped; ports #99 remains
 `28b5a3bc`. Dependencies merge before the parent. No compiler rebuild.
 
 Qualification of the correction at parent `7049e9a2` / userland `f18f07b`:
@@ -318,6 +318,17 @@ no injected malformed-stream runtime result is claimed. Stock QEMU has no
 composite Logitech/ASUS model, native 1 kHz mouse cadence or Pan coverage.
 These checks do not establish that native babble was the trigger or that either
 receiver's intermittent protocol behavior is fixed.
+
+After main's address-parking merge, parent `130336f5` / userland `c075ae0`
+retain the identical USB correction. Both default/probe image rebuilds pass;
+a short fresh VirtIO-disk boot with both diagnostic options confirms USB Super+R,
+`echo currentalive`, mouse readback=1, and low/full-speed root attachment/replug
+(`usb-mouse,usb_version=1`). GDB finds healthy controller, no command pending,
+empty keyboard/mouse queues, 169 events. The attempted default QEMU USB2
+high-speed root replug is refused under the existing post-boot low/full-speed
+scope; PORTSC and generation advance, so it is not a controller event stall.
+All owned processes are stopped. Native checks must record actual link speed:
+high-speed reattachment remains outside the accepted post-boot profile.
 
 Native qualification remains pending. Luna should rebuild the submitted parent
 head with the same `USB_HID_DESCRIBE=1 LOG_LEVEL=info` and boot options
