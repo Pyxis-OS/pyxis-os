@@ -6,8 +6,8 @@ bundles in [#625](https://git.internal/PyxisOS/pyxis-os/pulls/625), shared captu
 in [#629](https://git.internal/PyxisOS/pyxis-os/pulls/629), and bin placement/tree
 installation in [#691](https://git.internal/PyxisOS/pyxis-os/pulls/691). The owner
 accepted all three ZIP defaults on 2026-10-09. Task 2a, the host packer/checker,
-is owner-assigned 2026-10-11; it is not implemented. Tasks 2b and 2c still need
-separate owner go-aheads. Signing, consent UI and Clang remain outside this slice.
+was owner-assigned 2026-10-11 and is implemented as a standalone host tool.
+Tasks 2b and 2c still need separate owner go-aheads. Signing, consent UI and Clang remain outside this slice.
 
 ## Unpacked development lookup
 
@@ -257,7 +257,11 @@ directory through bin candidates, explicit paths or the development catalog;
 it can consume a ZIP adapter's equivalent view. No `.pxa` runtime or
 performance has been measured; #629 qualifies selected-image capture only.
 
-### Three owner decisions, accepted 2026-10-09, not implemented
+### Three owner decisions, accepted 2026-10-09
+
+The native view and decoding decisions remain unimplemented. Task 2a implements
+the third decision's stored-only host tool; native writing and compression remain
+deferred.
 
 1. **Private native DIRECTORY/FILE views over a copied, immutable revision.** A narrow native
    preparation interface accepts a READ-authorized native source FILE, copies
@@ -430,10 +434,13 @@ implemented cache or a fourth owner decision for tasks 2a/2b/2c.
 
 ### ZIP tasks and owner assignment
 
-- **2a: compliant host packaging — owner-assigned 2026-10-11.** Add the stored-only
-  packer/checker for the accepted manifest plus `app/` layout. Manually compare
-  local/central records and CRCs with an independent ZIP reader, including UTF-8
-  names and rejected source/path cases. No native adapter or launch change yet.
+- **2a: compliant host packaging — implemented; owner-assigned 2026-10-11.**
+  The standalone [host packer/checker](../development/pxa-packing.md) handles the
+  stored-only manifest plus `app/` layout. Independent Python ZIP and UnZip
+  readers qualified records/CRCs, UTF-8 names and rejected source/path cases.
+  Its host metadata accounting does not establish the native retained-index
+  budget; task 2b must enforce and qualify that representation.
+  No native adapter, installation or launch change yet.
   **After this task, the owner can:** package a `.pxb` as a checked stored `.pxa`
   for the following native-launch slice.
 - **2b: stored-only native launch and lifetime — separate owner go required.**
@@ -488,7 +495,7 @@ processes coexist; batches also retain earlier prepared children. The
 reports matched plain-launch and session-backing measurements, near-ceiling
 native images on all three backends, and real allocation-exhaustion rollback.
 Outer archive size and compression do not define either serialized-image or
-mapped-span admission. ZIP and Clang remain unimplemented.
+mapped-span admission. Native ZIP launch and Clang remain unimplemented.
 
 A future Clang-shaped bundle would keep Clang, LLD, resource headers and a SDK
 sysroot in one revision, request an 8 MiB stack and receive group-bound linker
@@ -503,8 +510,8 @@ runtime or metadata blockers.
 - [x] Task 1 implementation: unpacked development manifests/catalog, command
   selection, per-program app/resource views, stack requests and actual grant
   preparation. Qualified in QEMU and merged in #625.
-- [ ] Task 2a: compliant stored-only host packer/checker; owner-assigned
-  2026-10-11, with independent-reader and rejected-input qualification.
+- [x] Task 2a: compliant stored-only host packer/checker; owner-assigned
+  2026-10-11, with [independent-reader and rejected-input qualification](../development/pxa-packing.md#qualification-2026-10-11).
 - [ ] Task 2b: stored-only native ZIP views/launch/install and lifetime; separate
   owner go required.
 - [ ] Task 2c: bounded small-resource deflate; separate owner go required.
