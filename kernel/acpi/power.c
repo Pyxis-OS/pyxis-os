@@ -3,6 +3,7 @@
 #include <arch/reset.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/log.h>
+#include <kernel/storage/nvme.h>
 #include <kernel/task.h>
 #include <uacpi/sleep.h>
 #include <uacpi/status.h>
@@ -11,10 +12,10 @@
 /* A reset register write that has not reset the machine by then has failed. */
 #define RESET_WAIT_NS UINT64_C(1000000000)
 
-/* Returns only if the firmware did not power off. The pools are already
- * flushed, so a failing _PTS does not stop power-off, as on Linux; entry
- * itself refuses when _S5 gave no valid sleep type. Entry has disabled the
- * runtime GPEs, so a failure runs the wake path to enable them again. */
+/* Returns only if the firmware did not power off. A failing _PTS does not
+ * stop power-off; entry itself refuses when _S5 gave no valid sleep type.
+ * Entry has disabled the runtime GPEs, so a failure runs the wake path to
+ * enable them again. */
 static enum call_status power_off(void)
 {
   uacpi_status status = uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
@@ -52,22 +53,38 @@ static enum call_status power_off(void)
   arch_reset_fallback();
 }
 
-enum call_status acpi_power_run(enum acpi_power_action action)
+enum call_status acpi_power_run(enum acpi_power_action action, bool force)
 {
   acpi_require_worker();
   bool off = action == ACPI_POWER_OFF;
-  klog("power: flushing pools; %s\n", off ? "powering off" : "restarting");
+  if (force) {
+    klog("power: forced %s; bypassing storage checks; data may be lost\n",
+         off ? "power-off" : "restart");
+  } else {
+    klog("power: flushing pools; %s\n", off ? "powering off" : "restarting");
+  }
 
   uint64_t flags = cpu_save_interrupts();
   task_user_hold();
   cpu_restore_interrupts(flags);
 
-  enum call_status status = npfs_shutdown_flush();
+  enum call_status status = CALL_OK;
+  bool pools_sealed = false;
+  if (!force) {
+    status = npfs_shutdown_flush();
+    pools_sealed = status == CALL_OK;
+    if (status == CALL_OK) {
+      klog("power: stopping NVMe controllers\n");
+      status = nvme_shutdown();
+    }
+  }
   if (status == CALL_OK) {
     if (!off) {
       restart();
     }
     status = power_off();
+  }
+  if (pools_sealed) {
     flags = cpu_save_interrupts();
     npfs_shutdown_cancel();
     cpu_restore_interrupts(flags);

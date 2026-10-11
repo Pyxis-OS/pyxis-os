@@ -30,9 +30,11 @@ void acpi_unmap(void *address, size_t bytes);
 size_t acpi_map_pages(void);
 
 /* ACPI worker, IF=1, top level. Holds user tasks, flushes the native pools,
- * then enters S5 or resets. Returns only on failure, with user tasks released
- * and pools unsealed, so the system keeps running. */
-enum call_status acpi_power_run(enum acpi_power_action action);
+ * confirms NVMe shutdown, then enters S5 or resets. FORCE bypasses both storage
+ * steps and is only for an explicit local overlay choice after a failed clean
+ * operation. Returns only on failure, with user tasks released and any sealed
+ * pools unsealed. NVMe controllers stay retired until reboot. */
+enum call_status acpi_power_run(enum acpi_power_action action, bool force);
 
 /* Embedded controller. Load_ecdt runs after the namespace is loaded and
  * before it is initialized, so _INI and _STA can reach an ECDT controller;

@@ -204,7 +204,11 @@ physical-access authority. `acpi_power_local()` hands its power-off or restart
 to the worker, which runs it like a press and records a failure's status for
 the overlay to collect; it returns BUSY while another operation is pending or
 running, and UNAVAILABLE without a worker. A request or press arriving during
-it is answered as during a press's power-off. It adds no log line of its own.
+it is answered as during a press's power-off. After collecting a failed local
+operation, the overlay may explicitly choose `acpi_power_local_force()` with
+an unsafe-shutdown and data-loss warning. That worker operation bypasses both
+pool flush and NVMe shutdown, and logs the force choice. Forwarded userspace
+requests and short power-button presses always use the clean sequence.
 
 A call travels as the `BSP_SERVICE_POWER` request: the executor forwards it to
 the ACPI worker, which runs one power operation at a time. A second request
@@ -223,7 +227,10 @@ UNAVAILABLE. The worker runs the operation at its top level, like deferred work:
    take no writes and are skipped. On success the pools are sealed: requests
    that could change a pool or a device fail with UNAVAILABLE, and background
    writeback stops.
-4. Power-off evaluates the S5 preparation methods and enters S5 through uACPI.
+4. It asks NVMe to stop admitting work, drain and confirm bounded normal
+   controller shutdown. Any unconfirmed shutdown refuses clean S5 or reset.
+   Controllers remain retired until reboot, even if firmware entry then fails.
+5. Power-off evaluates the S5 preparation methods and enters S5 through uACPI.
    A failing `_PTS` is logged but does not stop power-off, since the pools are
    already flushed; entry itself needs a valid `_S5` sleep type.
    Restart writes the FADT reset register. If that register is absent, unusable
@@ -235,10 +242,10 @@ When S5 entry returns, uACPI has already disabled the runtime GPEs and armed
 only wake GPEs, so the worker runs uACPI's S5 wake path, which enables the
 runtime GPEs again and runs `_WAK`.
 
-If the flush fails, or the firmware does not power off, the pools are unsealed,
-held tasks are released, `power: power-off failed (status N); the system stays
-up` is logged and the call returns that status. A successful operation never
-returns.
+If the flush or NVMe shutdown fails, or the firmware does not power off, any
+sealed pools are unsealed, held tasks are released, `power: power-off failed
+(status N); the system stays up` is logged and the call returns that status.
+NVMe retirement is not undone. A successful operation never returns.
 
 Host file systems (`host://`) and RAM volumes need no flush. Raw disk handles
 used by the installer are not flushed; the installer flushes them itself.

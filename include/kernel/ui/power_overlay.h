@@ -11,9 +11,11 @@ struct space;
 
 /* The Ctrl+Alt+Delete emergency screen: Shut down, Reboot and Cancel over
  * the whole display. The kernel draws it and asks the ACPI worker for power
- * with the power button's physical-access authority. While it is shown, the
- * focused space's keyboard is in overlay focus and its pointer surfaces are
- * unfocused; capture is kept and relative lock is revoked.
+ * with the power button's physical-access authority. A completed failure is
+ * displayed with Cancel selected, unsafe-shutdown warning and explicit Force
+ * off / Force reboot choices; those bypass pool flush and NVMe checks. While
+ * shown, the focused space's keyboard is in overlay focus and its pointer
+ * surfaces are unfocused; capture is kept and relative lock is revoked.
  *
  * Everything here is BSP, IF=0, from the presenter task. */
 
@@ -38,5 +40,9 @@ void power_overlay_update(void);
  * screen into BAND. TOP is a multiple of the font height. */
 void power_overlay_draw_band(struct framebuffer *band, size_t top,
     size_t width, size_t height);
+
+/* After the overlay frame completes. Force choices accept input only after
+ * a frame showing the failure and unsafe-shutdown warning was presented. */
+void power_overlay_end_frame(bool presented);
 
 #endif
