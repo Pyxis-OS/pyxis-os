@@ -31,8 +31,9 @@ Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
 [FAT32 volumes](fat32-volumes.md): Codex (2026-10-11), a shared engine and
-native mounted read-write proposal extracted from NVMe coexistence and the ESP
-editor, also serving removable media. Decisions and tasks need separate owner go.
+native mounted read-write milestone extracted from NVMe coexistence and the ESP
+editor, also serving removable media. Decisions are accepted; task 1 is submitted
+for review. Later tasks need separate owner go.
 
 [Git on Pyxis](git-on-pyxis.md): the libc prerequisites of the libgit2 source-fetch
 route are merged. The native Git CLI and HTTP transport investigation (#711) is

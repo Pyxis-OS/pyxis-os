@@ -1,7 +1,7 @@
 # FAT32 volumes
 
 Status: **shared milestone, decisions 1–3 accepted by the owner on 2026-10-11;
-task 1 assigned.** Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
+task 1 implemented and qualified, submitted for review.** Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery) into one
 end-to-end deliverable. The owner assigned the shared read-only engine/inspector
 on 2026-10-11; later tasks still need their own owner go.
@@ -24,10 +24,10 @@ Those belong to the installer/editor; a general FAT backend cannot infer ownersh
 from filenames or parse Lua/Limine policy. Installed ESP config loading stays
 blocked until ordinary Update preserves editable and foreign files.
 
-## Inspected foundation
+## Proposal foundation (before task 1)
 
-Main `d124a053`, pinned userland `a84259c0`; source inspection only, no new
-FAT probe or runtime result. No partial FAT implementation branch was supplied.
+Proposal inspection used main `d124a053`, pinned userland `a84259c0`; no FAT
+runtime probe was run for that proposal. No partial FAT implementation branch was supplied.
 The [ESP writer](../../userspace/installer/esp.c) creates one fixed tree with
 4 KiB clusters, two FATs and contiguous allocation; it invalidates boot geometry,
 flushes, replaces the tree, flushes and republishes the boot sectors. It does not
@@ -158,6 +158,22 @@ wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
   unrelated metadata sound. Workspace is caller-owned and bounded, data is streamed,
   and LIMIT/NO_MEMORY never weaken validation.
 
+## Task 1 implementation and qualification
+
+The [shared engine](../../fs/docs/fat32-read.md) exports `libfat32-read.a` and
+`pyxis_fs/fat32.h`; the SDK exports the target archive and MPL notices. The
+[host inspector](../../fs/docs/fat32-inspect.md) and
+[native inspection profile](../devices/fat32-inspection.md) support info/check/list/read.
+The live menu selects a trusted bootstrap, explicit disk/GPT selection and an
+INFO|READ-only child. No mount or write API was added, and the separate installer
+reader is byte-identical to the baseline.
+
+[Qualification](../development/experiments/fat32-read-only.md) records exact
+baseline/dependency revisions, disposable-media preparation, ordinary builds,
+host corruption/budget checks and interactive QEMU/GDB authority and retirement.
+This is nested-VM evidence, not native ESP/hardware qualification. Read-only
+inspection still requires quiescent media; writer exclusion remains task 3.
+
 ## Parked cross-cutting directions
 
 [Nested execution groups](nested-execution-groups.md) are not a prerequisite for
@@ -181,7 +197,7 @@ and mounted file I/O do not require its implementation.
 
 ## Ordered delivery tasks
 
-- [ ] **1. Small first task: shared read-only engine/inspector — assigned 2026-10-11.** Extract/generalize
+- [x] **1. Small first task: shared read-only engine/inspector — assigned 2026-10-11.** Extract/generalize
   the bounded reader, admit geometry and validate chains/FAT/LFN/FSInfo with explicit
   memory bounds. List/read arbitrary supported files through confined raw reads,
   refusing unsupported/corrupt metadata; no writes or mount API yet.
