@@ -19,7 +19,8 @@ branch: descriptor capture/payload prevalidation share one short lease, and
 RECEIVE reuses its publication lease. Inspected CALL lease pairs fall from 15
 to 11 and SEND admission from 4 to 3; no lease spans growth or waits. Its
 [qualification](../development/experiments/ipc-copy-leases/README.md) records
-1/4-CPU inspection and nested A/B; native performance is pending. The remaining proposal
+1/4-CPU inspection and nested/native A/B: SEND64 saves 13 ns/message; CALL cost
+remains recorded in technical debt. Task 5 stays queued for its proposal. The remaining proposal
 originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)

@@ -131,16 +131,15 @@ Keep the generic zero-root/borrower fast path; no task-count bypass. Revisit
 handoff/worker placement when native allocation latency is material, preserving
 BSP mutation ownership, acknowledged root departure and guaranteed cleanup storage.
 
-The owner also accepts #700's fixed IPC cost for merge: fastest-pass CALL64
-round trips add about 0.53 microseconds, CALL4096 about 0.6 microseconds, and
-SEND64 adds 97 ns/message (222 -> 319 ns); SEND4096 completion is unchanged.
-This disproportionately affects short messages. The owner-assigned
-[copy-phase follow-up](development/experiments/ipc-copy-leases/README.md) batches
-descriptor/payload checks and RECEIVE publication (inspected CALL 15 -> 11 lease
-pairs, SEND admission 4 -> 3); its native benefit is pending. Syscall entry/exit,
-root drainage and separate staging/collection leases remain. Reassess the
-remaining per-message cost after matched native A/B, before threads task 5,
-preserving authority, bounded lifetimes and late-output semantics.
+The accepted IPC cost disproportionately affects short messages. Native
+[#704 qualification](development/experiments/ipc-copy-leases/README.md#owner-native-ab)
+shows SEND64 recovering 13 ns/message (319 -> 306 ns); CALL64/4096 and SEND4096
+have no measurable change. CALL's roughly +0.45 microseconds versus pre-#700
+remains after batching leases. Reply staging allocation/free, the extra payload
+copy and syscall root accounting are untested candidates, not established
+causes. The owner parks profiling until threads task 8, when IPC and allocation
+paths are touched anyway; preserve authority, bounded lifetimes, root drainage
+and late-output semantics.
 
 ## PMM first-fit search under its lock
 

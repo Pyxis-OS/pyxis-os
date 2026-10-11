@@ -58,7 +58,7 @@ calibration 32,630–41,891 ns/read, not subtracted. Values below are median
 
 One-CPU B medians are lower than the preceding A, but overlap across boots.
 Four-CPU variation is broad and inconsistent between sequences. Neither
-comparison establishes native benefit; the owner-run native A/B is pending.
+comparison establishes native benefit; native results are recorded below.
 Raw captures/decoded values remain in ignored `build/ipc-lease-{baseline,after}`.
 
 ## Inspection and runtime checks
@@ -88,10 +88,33 @@ target calls, new tests or new klog lines. Task-owned QEMU/GDB jobs stopped.
 
 ## Owner native A/B
 
-Use A `2fca30fd1d5ee6a7eabc0b285bacf0a6b9b8f5c7` and the submitted PR head as
-B; same A initrd and kernel configuration in both, A1/B1/A2/B2 fresh PXE boots.
-On horse, after each boot (existing reverse remote client; localhost beacon
-option above is only for QEMU NAT):
+Owner-run results, 2026-10-11, [posted on #704](https://git.internal/PyxisOS/pyxis-os/pulls/704):
+ThinkPad T14 Gen 1, 12 CPUs, AC power, hands-free A1/B1/A2/B2 fresh PXE boots.
+A `2fca30fd1d5ee6a7eabc0b285bacf0a6b9b8f5c7`,
+B `ce23362d3144611d946232f2a38c6adf441e60c5`; same A initrd and byte-identical
+kernel configuration. Owner-built ELF SHA-256 prefixes: A `750cf669`, B
+`33cb4a65`. Raw data: `/shared/present/batch2/ab704/`.
+
+The four IPC workloads used 256 messages/100 rounds; values below are fastest
+passes, not medians. Pages ×3 and 3 × 1024 launches were also run as in the #700 rerun.
+
+| Workload | A1 / A2 | B1 / B2 | Change |
+| --- | --- | --- | --- |
+| SEND64, ns/message | 319 / 319 | 307 / 305 | −13 ns (−4%), consistent |
+| CALL64, ns/round trip | 3730 / 3873 | 3763 / 3794 | None measurable; A spread 143 ns |
+| CALL4096, ns/round trip | 5271 / 4648 | 4555 / 4540 | At most about −0.1 µs; A1 outlier |
+| SEND4096, ns/message | 743 / 591 | 617 / 577 | None measurable |
+
+Medians overlap between A/B; pages span 23.7–26.4k ns/op and launches 1.20–1.34 s.
+SEND64 recovers 13 of #700's added 97 ns (319 -> 306 ns/message). CALL64/4096
+and SEND4096 show no measurable change. The roughly +0.45 µs CALL cost versus
+pre-#700 remains after #704; removing four leases did not identify its main
+cause. Reply staging allocation/free, the extra payload copy and syscall root
+accounting are untested candidates, not attributed causes. The owner parks
+profiling until threads task 8 (2026-10-11); task 5 is next for its scope/decision proposal.
+
+Commands on horse after each boot (localhost beacon option above is only for
+QEMU NAT):
 
 ```sh
 mkdir -p "$run_dir"
@@ -106,6 +129,4 @@ done
 Set `run_dir` to a distinct directory per boot. Session handoff keeps the shell
 parked; no sleeps or trailing `exit` needed. Decode OUTPUT and verify all 100
 passes plus FINAL status/drain, as in [task 4](../threads-task4/README.md).
-The historical #700 IPC debt remains until matched native evidence establishes
-what this follow-up removes. Task 5 begins with a separate owner review of its
-scope/decisions after this PR and native A/B.
+The remaining CALL cost is recorded in [technical debt](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation).
