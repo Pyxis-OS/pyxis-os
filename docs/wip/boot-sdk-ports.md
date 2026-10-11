@@ -71,7 +71,8 @@ with the Steam Controller timed out). No task is assigned.
 
 [ThinkPad pointer input quality](pointer-input-quality.md): Codex alpha
 (2026-10-11), accepted USB report mice and Synaptics absolute mode and
-palm-rejection plan. Task 1 is assigned (draft #716), with task 2 to follow.
+palm-rejection plan. Task 1 is implemented (#716). Task 2 is assigned and starts
+after #716 merges, with a baseline and owner decisions before code.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
 lifecycle, parking, TLS and libc delivery. Tasks 1–5 are merged (#612, #671, #684,

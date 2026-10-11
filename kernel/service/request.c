@@ -23,6 +23,7 @@
 #include <kernel/object/screen_capture.h>
 #include <kernel/display_capture.h>
 #include <kernel/object/system_info.h>
+#include <kernel/object/input_policy.h>
 #include <kernel/panic.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -54,6 +55,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct system_info_memory_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_POWER] = {sizeof(struct system_info_power_request), alignof(struct system_info_power_request),
       offsetof(struct system_info_power_request, request)},
+  [BSP_SERVICE_INPUT_POLICY] = {sizeof(struct input_policy_install_request), alignof(struct input_policy_install_request),
+      offsetof(struct input_policy_install_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_HOSTNAME] = {sizeof(struct system_info_hostname_request), alignof(struct system_info_hostname_request),
       offsetof(struct system_info_hostname_request, request)},
   [BSP_SERVICE_TERMINAL_CREATE] = {sizeof(struct terminal_create_service_request), alignof(struct terminal_create_service_request),
@@ -163,6 +166,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_SYSTEM_INFO_HOSTNAME:
+  case BSP_SERVICE_INPUT_POLICY:
   case BSP_SERVICE_POWER:
   case BSP_SERVICE_AUDIO:
   case BSP_SERVICE_CLIPBOARD:
@@ -342,6 +346,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_SYSTEM_INFO_POWER:
     system_info_power_execute((struct system_info_power_request *)request);
+    break;
+  case BSP_SERVICE_INPUT_POLICY:
+    input_policy_execute((struct input_policy_install_request *)request);
     break;
   case BSP_SERVICE_SYSTEM_INFO_HOSTNAME:
     system_info_hostname_execute((struct system_info_hostname_request *)request);

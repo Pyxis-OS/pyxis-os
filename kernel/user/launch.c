@@ -22,6 +22,7 @@
 #include <kernel/object/echo.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
+#include <kernel/object/input_policy.h>
 #include <kernel/object/log.h>
 #include <abi/log.h>
 #include <abi/launcher.h>
@@ -103,6 +104,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *threads = NULL;
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
   struct kernel_object *system_info = NULL;
+  struct kernel_object *input_policy = NULL;
   struct kernel_object *log = NULL;
   struct kernel_object *disks = NULL;
   struct kernel_object *power = NULL;
@@ -165,6 +167,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
   handle_t bluetooth_hci_handle;
+  handle_t input_policy_handle = HANDLE_INVALID;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
@@ -172,6 +175,13 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   if (!install && strlen(image_uri) == sizeof(stock_boot_init_uri) - 1 &&
       !memcmp(image_uri, stock_boot_init_uri, sizeof(stock_boot_init_uri))) {
     system_info_rights |= SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE;
+    input_policy = input_policy_create();
+    if (!input_policy || capability_install(&process->capabilities, input_policy,
+        INPUT_POLICY_RIGHT_INSTALL_ONCE, 0, &input_policy_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(input_policy);
+    input_policy = NULL;
   }
   if (capability_install(&process->capabilities, terminal_service, TERMINAL_SERVICE_RIGHT_CREATE, 0, &terminal_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
@@ -308,7 +318,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[27] = {
+  struct process_binding resources[28] = {
     {"memory", memory_handle},
     {"threads", threads_handle},
     {"launcher", launcher_handle},
@@ -330,6 +340,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"bluetooth_hci", bluetooth_hci_handle},
   };
   size_t resource_count = 19;
+  if (input_policy_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"input_policy", input_policy_handle};
+  }
   resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
   resources[resource_count++] = (struct process_binding){"ram", ram};
   if (script_handle != HANDLE_INVALID) {
@@ -390,6 +403,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   return;
 
 fail:
+  if (input_policy) {
+    object_release(input_policy);
+  }
   if (screen_capture) {
     object_release(screen_capture);
   }

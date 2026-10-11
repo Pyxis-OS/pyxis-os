@@ -55,6 +55,7 @@ enum object_type {
   OBJECT_CLIPBOARD = 48,
   OBJECT_THREAD_SERVICE = 49,
   OBJECT_THREAD_COMPLETION = 50,
+  OBJECT_INPUT_POLICY = 51,
 };
 
 struct execution_group;

@@ -7,13 +7,21 @@ when the underlying tradeoff changes.
 
 ## USB HID native coverage
 
+[Report-mouse/shared-scroll task 1](development/experiments/pointer-input-quality/README.md#native-task-1-closure)
+is qualified for ASUS motion/clicks/wheel and G502/Lightspeed motion/buttons/
+free-spin/Cmd+R/replug. Keychron pointer, horizontal, high-resolution/Feature and
+independent multi-ID behavior still lack native evidence. Revisit those paths
+when the owner supplies a matching device/run, using the opt-in diagnostics;
+task closure does not claim them. ASUS back/forward buttons are an accepted limit,
+with no further work assigned.
+
 The [USB boot input](devices/usb-hid.md) is natively qualified for a full-speed root
 keyboard and a composite dongle ([record](development/experiments/usb-hid/README.md#native-owner-thinkpad)).
 Not exercised natively: the real dock or switch hub chain with low and full-speed leaves
 (letters, locks, repeat and fresh chords; unplugging and replugging a leaf without its hub,
 with held-key removal, held-button lock revocation and buttonless-survivor lock
 preservation); input during USB storage or Bluetooth work with ktrace for admission or
-loss; keyboard LED output; and the ASUS wheel. Low-speed scheduling and high-speed hub
+loss; and keyboard LED output. Low-speed scheduling and high-speed hub
 and transaction-translator routing are source-reviewed only, and QEMU has no composite or
 low-speed fixture. Steam Deck lizard mode would need its actual boot interfaces, and
 Bluetooth HID is separate. Revisit when a native batch includes the dock or when a device
@@ -1654,8 +1662,10 @@ hardware is available, keeping trust claims separate from the health and RFC che
 The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
 packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
 would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
-the [pointer quality proposal](wip/pointer-input-quality.md) considers absolute-mode palm rejection and scrolling; no code is authorized yet. [USB boot mice](devices/usb-hid.md) are independent sources; unknown native wheel extensions remain undecoded
-until their report layout is established. Doom has no mouse support.
+the [pointer quality proposal](wip/pointer-input-quality.md) assigns absolute-mode palm rejection and scrolling after #716 merges, with a
+baseline and owner decisions before code. [USB mice](devices/usb-hid.md) are independent sources; report-wheel and the
+reserved-ID boot-wheel paths are implemented, while other unknown extensions
+remain undecoded. Doom has no mouse support.
 
 ## Lua build runtime limits
 

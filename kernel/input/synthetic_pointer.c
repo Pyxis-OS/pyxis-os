@@ -157,7 +157,7 @@ static void begin_schedule(uint64_t now)
   int32_t dx = previous_x - frame.x;
   int32_t dy = previous_y - frame.y;
   pointer_frame_release(&frame);
-  input_pointer_report(&synthetic_source, dx, dy, 0, 0);
+  input_pointer_report(&synthetic_source, dx, dy, 0, 0, 0);
   ++reports;
 }
 
@@ -183,7 +183,7 @@ static bool report_motion(uint64_t motion_elapsed)
       moved_y >= (int64_t)target_height - SYNTHETIC_INSET) {
     return false;
   }
-  input_pointer_report(&synthetic_source, dx, dy, 0, 0);
+  input_pointer_report(&synthetic_source, dx, dy, 0, 0, 0);
   previous_x = x;
   previous_y = y;
   last_emitted_phase = phase;

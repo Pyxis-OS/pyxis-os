@@ -162,8 +162,8 @@ keyboard session and ends the pointer subscription and its cursor preference.
 
 The [pointer protocol](pointer.md#userspace-pointer-sessions) requires
 both pointer INPUT authority and ownership of this space's graphics session.
-Its 56-byte events report signed surface-local positions below navigation,
-buttons, wheel counts, destination generation and mapping identity. Hit-testing
+Its 88-byte events report signed surface-local positions below navigation,
+Button usages 1–32, signed 120-unit scroll axes, destination generation and mapping identity. Hit-testing
 uses the shown mapping/destination intersection; exposed margins use the kernel
 default cursor and receive no application input. A fresh press anchors motion
 and releases to that surface until its accepted buttons are released. Wheel

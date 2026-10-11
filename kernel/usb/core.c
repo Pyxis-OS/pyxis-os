@@ -1874,6 +1874,11 @@ bool usb_hid_input_complete(void)
   return true;
 }
 
+void usb_hid_diagnose_tick(void)
+{
+  usb_host_diagnose_tick();
+}
+
 static bool retire_record(struct usb_device_record *device)
 {
   if (!device || device->retired || !device->host) {

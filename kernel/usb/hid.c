@@ -1,7 +1,10 @@
 #include <arch/cpu.h>
+#include <arch/clock.h>
+#include <abi/pointer.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/task.h>
+#include <kernel/boot/options.h>
 #include "hid.h"
 
 #define USB_CONFIGURATION_BYTES 9
@@ -21,26 +24,46 @@
 #define USB_REQUEST_SET_CONFIGURATION 9
 #define USB_REQUEST_GET_DESCRIPTOR 6
 #define USB_REQUEST_GET_REPORT 1
+#define USB_REQUEST_SET_REPORT 9
 #define USB_REQUEST_SET_IDLE 10
 #define USB_REQUEST_SET_PROTOCOL 11
+#define USB_REQUEST_GET_PROTOCOL 3
 #define USB_REQUEST_INTERFACE_IN 0x81
 #define USB_REQUEST_CLASS_INTERFACE_IN 0xa1
 #define USB_REQUEST_CLASS_INTERFACE_OUT 0x21
 #define USB_REPORT_INPUT 1
+#define USB_REPORT_FEATURE 3
 #define USB_MODIFIER_FIRST 0xe0
 #define USB_KEY_ERROR_LAST 3
 #define USB_QEMU_VENDOR 0x0627
 #define USB_QEMU_PRODUCT 0x0001
+#define USB_BOOT_MOUSE_WHEEL_BYTES 4
 #define USB_QEMU_MOUSE_PACKET 4
 #define USB_QEMU_MOUSE_DESCRIPTOR_BYTES 52
 #define USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES 63
 #define USB_QEMU_KEYBOARD_PACKET 8
 #define USB_QEMU_QUEUE_ENTRIES 16
+#define USB_HID_MALFORMED_LIMIT 16
+#define USB_HID_MALFORMED_DIAGNOSTIC_NS UINT64_C(5000000000)
+#define USB_HID_MOUSE_SAMPLES 4
+#define USB_HID_MOUSE_SAMPLE_BYTES 16
 
 enum hid_stage {
-  HID_ENDPOINTS, HID_CONFIGURATION, HID_PROFILE_DESCRIPTOR, HID_PROTOCOL,
+  HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_ENDPOINTS,
+  HID_PROTOCOL, HID_PROTOCOL_READBACK, HID_FEATURE_READ, HID_FEATURE_WRITE, HID_FEATURE_CONFIRM,
   HID_IDLE, HID_INITIAL, HID_START, HID_FINISHED,
 };
+
+static bool malformed_report(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes, bool decoded);
+static bool decode_mouse_report(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes, struct usb_hid_mouse_sample *sample);
+
+static bool diagnostics_enabled(void)
+{
+  const struct boot_options *options = boot_options_get();
+  return options->usb_xhci_diagnose || options->usb_hid_describe;
+}
 
 static const enum key_code usage_keys[256] = {
   [0x04] = KEY_A, [0x05] = KEY_B, [0x06] = KEY_C, [0x07] = KEY_D,
@@ -113,9 +136,12 @@ static void select_interface(struct usb_hid_binding *candidate,
   if (!interface->protocol || inputs != 1 || !interface->descriptor_bytes) {
     return;
   }
-  unsigned index = interface->protocol == USB_PROTOCOL_KEYBOARD ? 0 : 1;
-  if (!candidate->interfaces[index].protocol) {
-    candidate->interfaces[index] = *interface;
+  if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
+    if (!candidate->interfaces[0].protocol) {
+      candidate->interfaces[0] = *interface;
+    }
+  } else if (candidate->candidate_count < USB_HID_MOUSE_CANDIDATES) {
+    candidate->candidates[candidate->candidate_count++] = *interface;
   }
 }
 
@@ -126,19 +152,24 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
       speed != USB_SPEED_HIGH)) {
     return;
   }
-  struct usb_hid_binding candidate = {.configuration = configuration[5]};
+  binding->configuration = configuration[5];
+  binding->vendor = vendor;
+  binding->product = product;
   struct usb_hid_interface interface = {0};
   unsigned inputs = 0;
   for (size_t offset = USB_CONFIGURATION_BYTES; offset < bytes; offset += configuration[offset]) {
     const uint8_t *part = configuration + offset;
     if (part[1] == USB_DESCRIPTOR_INTERFACE) {
-      select_interface(&candidate, &interface, inputs);
+      select_interface(binding, &interface, inputs);
       interface = (struct usb_hid_interface){0};
       inputs = 0;
-      if (!part[3] && part[5] == USB_CLASS_HID && part[6] == USB_SUBCLASS_BOOT &&
-          (part[7] == USB_PROTOCOL_KEYBOARD || part[7] == USB_PROTOCOL_MOUSE)) {
+      bool boot = part[6] == USB_SUBCLASS_BOOT;
+      if (!part[3] && part[5] == USB_CLASS_HID &&
+          ((boot && (part[7] == USB_PROTOCOL_KEYBOARD || part[7] == USB_PROTOCOL_MOUSE)) ||
+           (!part[6] && !part[7]))) {
         interface.number = part[2];
-        interface.protocol = part[7];
+        interface.boot = boot;
+        interface.protocol = boot ? part[7] : USB_PROTOCOL_MOUSE;
       }
     } else if (interface.protocol && part[1] == USB_DESCRIPTOR_HID && part[0] >= 9 &&
                part[5] && part[0] == 6 + 3 * part[5]) {
@@ -156,30 +187,29 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
         .address = part[2], .packet = wire_packet & USB_PACKET_MASK, .interval = part[6],
         .transactions = (wire_packet >> USB_PACKET_TRANSACTIONS_SHIFT) & 3,
       };
-      interface.receive_bytes = interface.endpoint.packet;
       unsigned minimum = interface.protocol == USB_PROTOCOL_KEYBOARD ?
         USB_HID_KEYBOARD_BYTES : USB_HID_MOUSE_BYTES;
-      if (interface.receive_bytes < minimum) {
-        interface.receive_bytes = minimum;
-      }
+      interface.receive_bytes = interface.endpoint.packet > minimum ? interface.endpoint.packet : minimum;
     }
   }
-  select_interface(&candidate, &interface, inputs);
-  if (!candidate.interfaces[0].protocol && !candidate.interfaces[1].protocol) {
+  select_interface(binding, &interface, inputs);
+  if (!binding->interfaces[0].protocol && !binding->candidate_count) {
+    binding->configuration = 0;
     return;
   }
-  struct usb_hid_interface *keyboard = &candidate.interfaces[0];
+  struct usb_hid_interface *keyboard = &binding->interfaces[0];
   keyboard->qemu_keyboard_candidate = keyboard->protocol && vendor == USB_QEMU_VENDOR &&
-    product == USB_QEMU_PRODUCT && candidate.configuration == 1 && !keyboard->number &&
+    product == USB_QEMU_PRODUCT && binding->configuration == 1 && !keyboard->number &&
     keyboard->endpoint.address == 0x81 && keyboard->endpoint.packet == USB_QEMU_KEYBOARD_PACKET &&
     !keyboard->endpoint.transactions &&
     keyboard->descriptor_bytes == USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES;
-  struct usb_hid_interface *mouse = &candidate.interfaces[1];
-  mouse->qemu_wheel_candidate = mouse->protocol && vendor == USB_QEMU_VENDOR &&
-    product == USB_QEMU_PRODUCT && candidate.configuration == 1 && !mouse->number &&
-    mouse->endpoint.address == 0x81 && mouse->endpoint.packet == USB_QEMU_MOUSE_PACKET &&
-    !mouse->endpoint.transactions && mouse->descriptor_bytes == USB_QEMU_MOUSE_DESCRIPTOR_BYTES;
-  *binding = candidate;
+  for (unsigned index = 0; index < binding->candidate_count; ++index) {
+    struct usb_hid_interface *mouse = &binding->candidates[index];
+    mouse->qemu_wheel_candidate = mouse->boot && vendor == USB_QEMU_VENDOR &&
+      product == USB_QEMU_PRODUCT && binding->configuration == 1 && !mouse->number &&
+      mouse->endpoint.address == 0x81 && mouse->endpoint.packet == USB_QEMU_MOUSE_PACKET &&
+      !mouse->endpoint.transactions && mouse->descriptor_bytes == USB_QEMU_MOUSE_DESCRIPTOR_BYTES;
+  }
 }
 
 static bool keyboard_snapshot(const uint8_t *report, size_t bytes, bool keys[KEY_COUNT],
@@ -224,6 +254,12 @@ void usb_hid_lost(struct usb_hid_binding *binding)
     }
   }
   cpu_restore_interrupts(flags);
+  for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
+    struct usb_hid_interface *interface = &binding->interfaces[index];
+    if (interface->stream) {
+      usb_host_interrupt_diagnose_loss(interface->stream, interface->number);
+    }
+  }
   ktrace("usb HID: source detached\n");
 }
 
@@ -264,7 +300,60 @@ enum usb_result usb_hid_begin(struct usb_hid_binding *binding,
 static void next_stage(struct usb_hid_binding *binding)
 {
   ++binding->stage;
-  binding->interface = 0;
+  binding->interface = binding->layout = 0;
+}
+
+static void mouse_fallback(struct usb_hid_binding *binding,
+                            const struct usb_hid_interface *candidate)
+{
+  if (!binding->interfaces[1].protocol && candidate->boot) {
+    binding->interfaces[1] = *candidate;
+    binding->interfaces[1].receive_bytes = candidate->endpoint.packet;
+    if (binding->interfaces[1].receive_bytes < USB_HID_MOUSE_BYTES) {
+      binding->interfaces[1].receive_bytes = USB_HID_MOUSE_BYTES;
+    }
+  }
+}
+
+static bool boot_mouse_sample(const struct usb_hid_interface *interface,
+                               const uint8_t *report, size_t bytes,
+                               struct usb_hid_mouse_sample *sample)
+{
+  if (bytes < USB_HID_MOUSE_BYTES ||
+      (interface->qemu_wheel && bytes != USB_QEMU_MOUSE_PACKET)) {
+    return false;
+  }
+  bool wheel = bytes >= USB_BOOT_MOUSE_WHEEL_BYTES &&
+      (interface->qemu_wheel || interface->reserved_id_boot);
+  *sample = (struct usb_hid_mouse_sample){
+    .x = (int8_t)report[1], .y = (int8_t)report[2],
+    .wheel = wheel ? -(int8_t)report[3] : 0,
+    .buttons = report[0] & (interface->qemu_wheel ? 31u : 7u),
+  };
+  return true;
+}
+
+static void mouse_wire_protocol(struct usb_hid_binding *binding,
+                                  struct usb_hid_interface *interface, size_t bytes)
+{
+  if (!interface->boot || interface->protocol != USB_PROTOCOL_MOUSE ||
+      !interface->report_protocol || !binding->mouse.ids || !bytes || binding->control[0]) {
+    return;
+  }
+  /* ID 0 is reserved in an ID-bearing descriptor. Keep the observed format;
+   * another SET_PROTOCOL would alter a live stream that already speaks boot. */
+  interface->report_protocol = false;
+  interface->reserved_id_boot = true;
+  if (binding->active) {
+    uint64_t flags = cpu_save_interrupts();
+    input_source_pointer_configure(&binding->source, INPUT_POINTER_MOUSE,
+        POINTER_SCROLL_UNITS_PER_DETENT, 1, POINTER_SCROLL_UNITS_PER_DETENT, 1);
+    cpu_restore_interrupts(flags);
+  }
+  if (diagnostics_enabled()) {
+    klog("usb HID diag: %x:%x interface=%u action=reserved-ID-boot bytes=%zu\n",
+        binding->vendor, binding->product, interface->number, bytes);
+  }
 }
 
 static struct usb_setup bind_request(const struct usb_hid_binding *binding)
@@ -275,12 +364,19 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
     .index = interface->number,
   };
   switch (binding->stage) {
-  case HID_PROFILE_DESCRIPTOR:
+  case HID_KEYBOARD_DESCRIPTOR:
     setup.request_type = USB_REQUEST_INTERFACE_IN;
     setup.request = USB_REQUEST_GET_DESCRIPTOR;
     setup.value = USB_DESCRIPTOR_REPORT << 8;
-    setup.length = interface->qemu_keyboard_candidate ?
-      USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES : USB_QEMU_MOUSE_DESCRIPTOR_BYTES;
+    setup.length = interface->descriptor_bytes;
+    break;
+  case HID_MOUSE_DESCRIPTOR:
+    interface = &binding->candidates[binding->candidate];
+    setup.index = interface->number;
+    setup.request_type = USB_REQUEST_INTERFACE_IN;
+    setup.request = USB_REQUEST_GET_DESCRIPTOR;
+    setup.value = USB_DESCRIPTOR_REPORT << 8;
+    setup.length = interface->descriptor_bytes;
     break;
   case HID_CONFIGURATION:
     setup = (struct usb_setup){.request = USB_REQUEST_SET_CONFIGURATION,
@@ -288,6 +384,12 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
     break;
   case HID_PROTOCOL:
     setup.request = USB_REQUEST_SET_PROTOCOL;
+    setup.value = interface->report_protocol ? 1 : 0;
+    break;
+  case HID_PROTOCOL_READBACK:
+    setup.request_type = USB_REQUEST_CLASS_INTERFACE_IN;
+    setup.request = USB_REQUEST_GET_PROTOCOL;
+    setup.length = 1;
     break;
   case HID_IDLE:
     setup.request = USB_REQUEST_SET_IDLE;
@@ -297,11 +399,236 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
     setup.request = USB_REQUEST_GET_REPORT;
     setup.value = USB_REPORT_INPUT << 8;
     setup.length = interface->receive_bytes;
+    if (interface->report_protocol) {
+      setup.value |= binding->mouse.layouts[binding->layout].id;
+      setup.length = usb_hid_report_bytes(&binding->mouse, binding->layout, HID_INPUT);
+    }
+    break;
+  case HID_FEATURE_READ: case HID_FEATURE_WRITE: case HID_FEATURE_CONFIRM:
+    setup.index = binding->interfaces[1].number;
+    setup.request_type = binding->stage == HID_FEATURE_WRITE ?
+      USB_REQUEST_CLASS_INTERFACE_OUT : USB_REQUEST_CLASS_INTERFACE_IN;
+    setup.request = binding->stage == HID_FEATURE_WRITE ? USB_REQUEST_SET_REPORT : USB_REQUEST_GET_REPORT;
+    setup.value = (USB_REPORT_FEATURE << 8) | binding->mouse.layouts[binding->layout].id;
+    setup.length = usb_hid_report_bytes(&binding->mouse, binding->layout, HID_FEATURE);
     break;
   default:
     break;
   }
   return setup;
+}
+
+static bool feature_stage(unsigned stage)
+{
+  return stage >= HID_FEATURE_READ && stage <= HID_FEATURE_CONFIRM;
+}
+
+static void next_feature(struct usb_hid_binding *binding)
+{
+  binding->stage = HID_FEATURE_READ;
+  ++binding->layout;
+}
+
+static void disable_feature(struct usb_hid_binding *binding)
+{
+  usb_hid_feature_disable(&binding->mouse, binding->layout);
+  ktrace("usb HID: uncertain wheel multiplier on interface %u report %u; affected scroll disabled\n",
+         binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id);
+  next_feature(binding);
+}
+
+static void describe_descriptor(const struct usb_hid_binding *binding,
+                                 const struct usb_hid_interface *interface,
+                                 const struct usb_completion *completion)
+{
+  if (!boot_options_get()->usb_hid_describe) {
+    return;
+  }
+  klog("usb HID describe: %x:%x configuration %u interface %u endpoint %x boot %u descriptor %zu/%u result %u\n",
+       binding->vendor, binding->product, binding->configuration, interface->number,
+       interface->endpoint.address, interface->boot, completion->bytes,
+       interface->descriptor_bytes, (unsigned)completion->result);
+  static const char digits[] = "0123456789abcdef";
+  for (size_t offset = 0; offset < completion->bytes; offset += 16) {
+    char line[16 * 3 + 1];
+    unsigned length = 0;
+    for (size_t index = offset; index < completion->bytes && index < offset + 16; ++index) {
+      uint8_t byte = binding->control[index];
+      line[length++] = digits[byte >> 4];
+      line[length++] = digits[byte & 15];
+      line[length++] = ' ';
+    }
+    line[length] = 0;
+    klog("usb HID descriptor %x:%x interface %u +%zx: %s\n",
+         binding->vendor, binding->product, interface->number, offset, line);
+  }
+}
+
+static void describe_binding(const struct usb_hid_binding *binding)
+{
+  if (!boot_options_get()->usb_hid_describe) {
+    return;
+  }
+  const struct usb_hid_interface *mouse = &binding->interfaces[1];
+  klog("usb HID describe: %x:%x keyboard %u mouse %u interface %u protocol %s receive %u pan 120/%u enabled %u wheel 120/%u enabled %u\n",
+       binding->vendor, binding->product, binding->interfaces[0].protocol != 0,
+       mouse->protocol != 0, mouse->number, mouse->report_protocol ? "report" : "boot",
+       mouse->receive_bytes, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
+       mouse->protocol && mouse->report_protocol && binding->mouse.pan_enabled,
+       mouse->report_protocol ? binding->mouse.wheel_multiplier : 1,
+       mouse->protocol && (mouse->report_protocol ? binding->mouse.wheel_enabled :
+         (mouse->qemu_wheel || mouse->reserved_id_boot)));
+  if (!mouse->protocol || !mouse->report_protocol) {
+    return;
+  }
+  for (unsigned index = 0; index < binding->mouse.layout_count; ++index) {
+    const struct usb_hid_report_layout *layout = &binding->mouse.layouts[index];
+    klog("usb HID layout: interface %u ID %u input %zu output %zu feature %zu pointer %u buttons %u\n",
+         mouse->number, layout->id, usb_hid_report_bytes(&binding->mouse, index, HID_INPUT),
+         usb_hid_report_bytes(&binding->mouse, index, HID_OUTPUT),
+         usb_hid_report_bytes(&binding->mouse, index, HID_FEATURE), layout->pointer, layout->button_fields);
+  }
+  static const char *const names[] = {"x", "y", "wheel", "pan", "button", "button-array", "multiplier"};
+  for (unsigned index = 0; index < binding->mouse.field_count; ++index) {
+    const struct usb_hid_report_field *field = &binding->mouse.fields[index];
+    klog("usb HID field: ID %u %s offset %u bits %u range %lld..%lld scope %u button %u multiplier %u\n",
+         binding->mouse.layouts[field->layout].id, names[field->kind], field->offset,
+         field->size, (long long)field->minimum, (long long)field->maximum,
+         field->scope, field->button, field->multiplier);
+  }
+}
+
+static enum usb_result start_binding(struct usb_hid_binding *binding)
+{
+  if (!binding->interfaces[0].protocol && !binding->interfaces[1].protocol) {
+    return bind_failed(binding, USB_UNSUPPORTED);
+  }
+  for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
+    struct usb_hid_interface *interface = &binding->interfaces[index];
+    if (interface->protocol) {
+      enum usb_result result = usb_host_hid_interrupt_length(interface->stream, interface->receive_bytes);
+      if (result != USB_OK) {
+        return bind_failed(binding, result);
+      }
+    }
+  }
+  uint64_t flags = cpu_save_interrupts();
+  const struct usb_hid_interface *mouse = &binding->interfaces[1];
+  if (mouse->protocol) {
+    input_source_pointer_configure(&binding->source, INPUT_POINTER_MOUSE,
+        POINTER_SCROLL_UNITS_PER_DETENT, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
+        POINTER_SCROLL_UNITS_PER_DETENT, mouse->report_protocol ? binding->mouse.wheel_multiplier : 1);
+  }
+  input_source_attach(&binding->source, binding->interfaces[0].protocol != 0, mouse->protocol != 0);
+  if (binding->interfaces[0].protocol) {
+    input_source_initial_keyboard(&binding->source, binding->initial_keys);
+  }
+  if (mouse->protocol) {
+    input_source_initial_pointer(&binding->source, binding->initial_buttons);
+  }
+  binding->active = true;
+  cpu_restore_interrupts(flags);
+  for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
+    struct usb_hid_interface *interface = &binding->interfaces[index];
+    if (interface->protocol) {
+      enum usb_result result = usb_host_interrupt_start(interface->stream);
+      if (result != USB_OK) {
+        return bind_failed(binding, result);
+      }
+    }
+  }
+  binding->result = USB_OK;
+  binding->stage = HID_FINISHED;
+  describe_binding(binding);
+  ktrace("usb HID: %s%s%s source attached\n",
+         binding->interfaces[0].protocol ? "boot keyboard" : "",
+         mouse->protocol ? (mouse->report_protocol ? "/report mouse" : "/boot mouse") : "",
+         mouse->qemu_wheel ? " (QEMU wheel)" : "");
+  return USB_OK;
+}
+
+static enum usb_result initial_snapshot(struct usb_hid_binding *binding,
+                                         const struct usb_completion *completion)
+{
+  struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
+  if (completion->result == USB_STALL) {
+    /* EP0 has been fenced before collection. Unknown attachment holds begin
+     * empty; only this report's state is affected when IDs are present. */
+    if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
+      memset(binding->initial_keys, 0, sizeof(binding->initial_keys));
+    } else if (interface->report_protocol) {
+      binding->mouse.layouts[binding->layout].buttons = 0;
+      binding->initial_buttons = usb_hid_mouse_buttons(&binding->mouse);
+    } else {
+      binding->initial_buttons = 0;
+    }
+  } else if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
+    bool unresolved;
+    if (!keyboard_snapshot(binding->control, completion->bytes, binding->initial_keys, &unresolved)) {
+      if (malformed_report(binding, interface, completion->bytes, false)) {
+        return bind_failed(binding, USB_IO);
+      }
+      if (interface->qemu_keyboard) {
+        return USB_BUSY;
+      }
+      ++binding->interface;
+      return USB_BUSY;
+    }
+    interface->malformed_consecutive = 0;
+    /* QEMU consumes scan bytes, including invisible prefixes, one GET at a
+     * time. Preserve its established sixteen-snapshot attachment drain. */
+    if (interface->qemu_keyboard && ++binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
+      return USB_BUSY;
+    }
+    if (unresolved) {
+      return bind_failed(binding, USB_IO);
+    }
+  } else {
+    struct usb_hid_mouse_sample sample;
+    mouse_wire_protocol(binding, interface, completion->bytes);
+    if (interface->report_protocol && binding->mouse.ids &&
+        (!completion->bytes || binding->control[0] != binding->mouse.layouts[binding->layout].id)) {
+      binding->mouse.decode_failure = HID_DECODE_ID;
+    }
+    bool valid = interface->report_protocol ?
+      ((!binding->mouse.ids || (completion->bytes &&
+        binding->control[0] == binding->mouse.layouts[binding->layout].id)) &&
+       decode_mouse_report(binding, interface, completion->bytes, &sample)) :
+      boot_mouse_sample(interface, binding->control, completion->bytes, &sample);
+    if (!valid) {
+      if (malformed_report(binding, interface, completion->bytes, true)) {
+        return bind_failed(binding, USB_IO);
+      }
+      if (interface->qemu_wheel) {
+        return USB_BUSY;
+      }
+      if (interface->report_protocol) {
+        ++binding->layout;
+      } else {
+        ++binding->interface;
+      }
+      return USB_BUSY;
+    }
+    interface->malformed_consecutive = 0;
+    binding->initial_buttons = sample.buttons;
+    /* Nonzero QEMU deltas can retain its FIFO head. Drain sixteen zero-motion
+     * observations before publishing the final button snapshot. */
+    if (interface->qemu_wheel) {
+      if (!sample.x && !sample.y && !sample.wheel && !sample.pan) {
+        ++binding->initial_observations;
+      }
+      if (binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
+        return USB_BUSY;
+      }
+    }
+  }
+  binding->initial_observations = 0;
+  if (interface->report_protocol) {
+    ++binding->layout;
+  } else {
+    ++binding->interface;
+  }
+  return USB_BUSY;
 }
 
 enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
@@ -314,6 +641,23 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   }
   if (task_deadline_expired(binding->deadline)) {
     return bind_failed(binding, USB_TIMEOUT);
+  }
+  if (binding->stage == HID_KEYBOARD_DESCRIPTOR &&
+      !binding->interfaces[0].qemu_keyboard_candidate) {
+    next_stage(binding);
+    return USB_BUSY;
+  }
+  if (binding->stage == HID_MOUSE_DESCRIPTOR) {
+    if (binding->candidate == binding->candidate_count) {
+      next_stage(binding);
+      return USB_BUSY;
+    }
+    struct usb_hid_interface *candidate = &binding->candidates[binding->candidate];
+    if (candidate->descriptor_bytes > usb_host_control_capacity()) {
+      mouse_fallback(binding, candidate);
+      ++binding->candidate;
+      return USB_BUSY;
+    }
   }
   if (binding->stage == HID_ENDPOINTS) {
     if (binding->interface == USB_HID_ENDPOINTS_PER_DEVICE) {
@@ -331,45 +675,51 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     }
     return USB_BUSY;
   }
-  if (binding->stage == HID_START) {
-    uint64_t flags = cpu_save_interrupts();
-    input_source_attach(&binding->source, binding->interfaces[0].protocol != 0,
-                        binding->interfaces[1].protocol != 0);
-    if (binding->interfaces[0].protocol) {
-      input_source_initial_keyboard(&binding->source, binding->initial_keys);
+  if (feature_stage(binding->stage)) {
+    if (!binding->interfaces[1].protocol || !binding->interfaces[1].report_protocol) {
+      binding->stage = HID_IDLE;
+      binding->interface = binding->layout = 0;
+      return USB_BUSY;
     }
-    if (binding->interfaces[1].protocol) {
-      input_source_initial_pointer(&binding->source, binding->initial_buttons);
-    }
-    binding->active = true;
-    cpu_restore_interrupts(flags);
-    for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
-      if (binding->interfaces[index].stream) {
-        enum usb_result result = usb_host_interrupt_start(binding->interfaces[index].stream);
-        if (result != USB_OK) {
-          return bind_failed(binding, result);
-        }
+    if (binding->stage == HID_FEATURE_READ) {
+      while (binding->layout < binding->mouse.layout_count &&
+             !usb_hid_feature_layout(&binding->mouse, binding->layout)) {
+        ++binding->layout;
+      }
+      if (binding->layout == binding->mouse.layout_count) {
+        binding->stage = HID_IDLE;
+        binding->interface = binding->layout = 0;
+        return USB_BUSY;
       }
     }
-    binding->result = USB_OK;
-    binding->stage = HID_FINISHED;
-    ktrace("usb HID: boot %s%s source attached\n",
-           binding->interfaces[0].protocol ? "keyboard" : "",
-           binding->interfaces[1].protocol ? "/mouse" : "");
-    return USB_OK;
-  }
-  if (binding->stage != HID_CONFIGURATION) {
+  } else if (binding->stage == HID_PROTOCOL || binding->stage == HID_PROTOCOL_READBACK || binding->stage == HID_IDLE ||
+             binding->stage == HID_INITIAL) {
     while (binding->interface < USB_HID_ENDPOINTS_PER_DEVICE &&
            (!binding->interfaces[binding->interface].protocol ||
-            (binding->stage == HID_PROFILE_DESCRIPTOR &&
-             !binding->interfaces[binding->interface].qemu_wheel_candidate &&
-             !binding->interfaces[binding->interface].qemu_keyboard_candidate))) {
+            (binding->stage == HID_PROTOCOL && !binding->interfaces[binding->interface].boot) ||
+            (binding->stage == HID_PROTOCOL_READBACK &&
+             (!binding->interfaces[binding->interface].boot ||
+              !binding->interfaces[binding->interface].report_protocol)))) {
       ++binding->interface;
     }
     if (binding->interface == USB_HID_ENDPOINTS_PER_DEVICE) {
       next_stage(binding);
       return USB_BUSY;
     }
+    if (binding->stage == HID_INITIAL && binding->interfaces[binding->interface].report_protocol) {
+      while (binding->layout < binding->mouse.layout_count &&
+             !binding->mouse.layouts[binding->layout].button_fields &&
+             !binding->interfaces[binding->interface].qemu_wheel) {
+        ++binding->layout;
+      }
+      if (binding->layout == binding->mouse.layout_count) {
+        ++binding->interface;
+        return USB_BUSY;
+      }
+    }
+  }
+  if (binding->stage == HID_START) {
+    return start_binding(binding);
   }
   struct usb_setup setup = bind_request(binding);
   if (!binding->ticket_active) {
@@ -377,7 +727,8 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     if (deadline > binding->deadline) {
       deadline = binding->deadline;
     }
-    enum usb_result result = usb_host_control_submit(binding->host, &setup, NULL,
+    const void *outbound = binding->stage == HID_FEATURE_WRITE ? binding->control : NULL;
+    enum usb_result result = usb_host_control_submit(binding->host, &setup, outbound,
                                                     deadline, &binding->ticket);
     if (result != USB_OK) {
       return bind_failed(binding, result);
@@ -392,9 +743,9 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   if (result != USB_OK) {
     return bind_failed(binding, result);
   }
-  uint8_t report[USB_HID_INTERRUPT_BYTES];
   struct usb_completion completion;
-  result = usb_host_control_take(binding->host, binding->ticket, report, sizeof(report), &completion);
+  result = usb_host_control_take(binding->host, binding->ticket, binding->control,
+                                 sizeof(binding->control), &completion);
   if (result != USB_OK) {
     return bind_failed(binding, result);
   }
@@ -402,63 +753,116 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
   bool optional_stall = completion.result == USB_STALL &&
       ((binding->stage == HID_IDLE && interface->protocol == USB_PROTOCOL_MOUSE) ||
-       binding->stage == HID_PROFILE_DESCRIPTOR || binding->stage == HID_INITIAL);
-  if ((completion.result != USB_OK && !optional_stall) ||
-      (!setup.length && completion.bytes)) {
+       binding->stage == HID_KEYBOARD_DESCRIPTOR || binding->stage == HID_MOUSE_DESCRIPTOR ||
+       binding->stage == HID_INITIAL || binding->stage == HID_PROTOCOL_READBACK || feature_stage(binding->stage) ||
+       (binding->stage == HID_PROTOCOL && interface->protocol == USB_PROTOCOL_MOUSE));
+  if ((completion.result != USB_OK && !optional_stall) || (!setup.length && completion.bytes)) {
     return bind_failed(binding, completion.result == USB_OK ? USB_IO : completion.result);
   }
-  if (binding->stage == HID_PROFILE_DESCRIPTOR) {
-    interface->qemu_wheel = completion.result == USB_OK && interface->qemu_wheel_candidate &&
-      completion.bytes == sizeof(qemu_mouse_descriptor) &&
-      !memcmp(report, qemu_mouse_descriptor, sizeof(qemu_mouse_descriptor));
-    interface->qemu_keyboard = completion.result == USB_OK && interface->qemu_keyboard_candidate &&
+  switch (binding->stage) {
+  case HID_CONFIGURATION:
+    next_stage(binding);
+    break;
+  case HID_KEYBOARD_DESCRIPTOR:
+    interface->qemu_keyboard = completion.result == USB_OK &&
       completion.bytes == sizeof(qemu_keyboard_descriptor) &&
-      !memcmp(report, qemu_keyboard_descriptor, sizeof(qemu_keyboard_descriptor));
-  } else if (binding->stage == HID_INITIAL) {
+      !memcmp(binding->control, qemu_keyboard_descriptor, sizeof(qemu_keyboard_descriptor));
+    next_stage(binding);
+    break;
+  case HID_MOUSE_DESCRIPTOR: {
+    struct usb_hid_interface *candidate = &binding->candidates[binding->candidate];
+    describe_descriptor(binding, candidate, &completion);
+    candidate->qemu_wheel = completion.result == USB_OK && candidate->qemu_wheel_candidate &&
+      completion.bytes == sizeof(qemu_mouse_descriptor) &&
+      !memcmp(binding->control, qemu_mouse_descriptor, sizeof(qemu_mouse_descriptor));
+    if (completion.result == USB_OK && completion.bytes == candidate->descriptor_bytes &&
+        usb_hid_mouse_parse(&binding->mouse, binding->control, completion.bytes)) {
+      binding->interfaces[1] = *candidate;
+      binding->interfaces[1].report_protocol = true;
+      binding->interfaces[1].receive_bytes = candidate->endpoint.packet > binding->mouse.input_bytes ?
+        candidate->endpoint.packet : binding->mouse.input_bytes;
+      binding->candidate = binding->candidate_count;
+    } else {
+      mouse_fallback(binding, candidate);
+      ktrace("usb HID: unsupported mouse descriptor on interface %u%s\n", candidate->number,
+             candidate->boot ? "; boot fallback requires protocol confirmation" : "");
+      ++binding->candidate;
+    }
+    break;
+  }
+  case HID_PROTOCOL:
     if (completion.result == USB_STALL) {
-      /* Control polling has fenced the stalled EP0 transfer before take.
-       * A device without GET_REPORT starts from an empty input snapshot. */
-      if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
-        memset(binding->initial_keys, 0, sizeof(binding->initial_keys));
-      } else {
-        binding->initial_buttons = 0;
-      }
-    } else if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
-      bool unresolved;
-      if (!keyboard_snapshot(report, completion.bytes, binding->initial_keys, &unresolved)) {
-        return bind_failed(binding, USB_IO);
-      }
-      /* QEMU consumes one scan byte per GET_REPORT, even an invisible prefix.
-       * Its 16-entry FIFO must be consumed before publishing a current snapshot. */
-      if (interface->qemu_keyboard && ++binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
+      if (interface->report_protocol) {
+        interface->report_protocol = false;
+        interface->receive_bytes = interface->endpoint.packet;
+        if (interface->receive_bytes < USB_HID_MOUSE_BYTES) {
+          interface->receive_bytes = USB_HID_MOUSE_BYTES;
+        }
+        ktrace("usb HID: report protocol refused on interface %u; confirming boot fallback\n", interface->number);
         return USB_BUSY;
       }
-      if (unresolved) {
-        return bind_failed(binding, USB_IO);
-      }
+      ktrace("usb HID: boot protocol refused on mouse interface %u; mouse unavailable\n", interface->number);
+      interface->protocol = 0;
+    }
+    ++binding->interface;
+    break;
+  case HID_PROTOCOL_READBACK:
+    if (diagnostics_enabled()) {
+      klog("usb HID diag: %x:%x interface=%u GET_PROTOCOL result=%u bytes=%zu selected=%d expected=1\n",
+          binding->vendor, binding->product, interface->number, completion.result,
+          completion.bytes, completion.result == USB_OK && completion.bytes == 1 ? binding->control[0] : -1);
+    }
+    /* Readback is evidence, not permission to reinterpret queued Input data. */
+    ++binding->interface;
+    break;
+  case HID_FEATURE_READ: {
+    uint32_t pan, wheel;
+    if (completion.result == USB_STALL) {
+      disable_feature(binding);
     } else {
-      if (completion.bytes < USB_HID_MOUSE_BYTES ||
-          (interface->qemu_wheel && completion.bytes != USB_QEMU_MOUSE_PACKET)) {
-        return bind_failed(binding, USB_IO);
-      }
-      binding->initial_buttons = report[0] & 7;
-      /* A nonzero QEMU motion report can leave its FIFO head partially consumed.
-       * Sixteen zero-motion observations drain every pre-existing queue entry. */
-      if (interface->qemu_wheel) {
-        if (!report[1] && !report[2] && !report[3]) {
-          ++binding->initial_observations;
-        }
-        if (binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
-          return USB_BUSY;
-        }
+      bool confirmed = usb_hid_feature_confirm(&binding->mouse, binding->layout, binding->control,
+                                               completion.bytes, &pan, &wheel);
+      if (usb_hid_feature_prepare(&binding->mouse, binding->layout, binding->control, completion.bytes)) {
+        binding->stage = HID_FEATURE_WRITE;
+      } else if (confirmed) {
+        ktrace("usb HID: multiplier encoding not enabled on interface %u report %u; confirmed scale retained\n",
+               binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id);
+        next_feature(binding);
+      } else {
+        disable_feature(binding);
       }
     }
-    binding->initial_observations = 0;
+    break;
   }
-  if (binding->stage == HID_CONFIGURATION) {
-    next_stage(binding);
-  } else {
+  case HID_FEATURE_WRITE:
+    if (completion.result == USB_OK && completion.bytes != setup.length) {
+      disable_feature(binding);
+    } else {
+      /* Even a refused write is followed by readback. The previous value is
+       * not a safe assumption after a device may have seen the request. */
+      binding->stage = HID_FEATURE_CONFIRM;
+    }
+    break;
+  case HID_FEATURE_CONFIRM: {
+    uint32_t pan, wheel;
+    if (completion.result == USB_STALL ||
+        !usb_hid_feature_confirm(&binding->mouse, binding->layout, binding->control,
+                                 completion.bytes, &pan, &wheel)) {
+      disable_feature(binding);
+    } else {
+      ktrace("usb HID: wheel multiplier readback interface %u report %u, pan %u wheel %u\n",
+             binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id, pan, wheel);
+      next_feature(binding);
+    }
+    break;
+  }
+  case HID_IDLE:
     ++binding->interface;
+    break;
+  case HID_INITIAL:
+    return initial_snapshot(binding, &completion);
+  default:
+    return bind_failed(binding, USB_INVALID);
   }
   return USB_BUSY;
 }
@@ -481,6 +885,106 @@ enum usb_result usb_hid_bind_boot(struct usb_hid_binding *binding,
   return result;
 }
 
+static void diagnose_report(struct usb_hid_binding *binding, struct usb_hid_interface *interface,
+    const char *action, enum usb_result result, size_t bytes, bool decoded)
+{
+  if (!diagnostics_enabled()) {
+    return;
+  }
+  klog("usb HID diag: %x:%x interface=%u protocol=%s action=%s result=%u bytes=%zu "
+      "malformed=%llu consecutive=%u\n",
+      binding->vendor, binding->product, interface->number,
+      interface->report_protocol ? "report" : "boot", action, result, bytes,
+      (unsigned long long)interface->malformed_reports, interface->malformed_consecutive);
+  if (!decoded || !interface->report_protocol) {
+    return;
+  }
+  const struct usb_hid_mouse_reports *mouse = &binding->mouse;
+  unsigned id = bytes && mouse->ids ? binding->control[0] : 0;
+  size_t expected = 0;
+  for (unsigned i = 0; i < mouse->layout_count; ++i) {
+    if (mouse->layouts[i].id == id) {
+      expected = usb_hid_report_bytes(mouse, i, HID_INPUT);
+      break;
+    }
+  }
+  klog("usb HID diag: decode-failure=%u ID=%u expected=%zu\n",
+      mouse->decode_failure, id, expected);
+  if (mouse->decode_failure == HID_DECODE_RANGE || mouse->decode_failure == HID_DECODE_ARRAY) {
+    const struct usb_hid_report_field *field = &mouse->fields[mouse->decode_field];
+    klog("usb HID diag: field=%u kind=%u offset=%u bits=%u value=%lld range=%lld..%lld\n",
+        mouse->decode_field, field->kind, field->offset, field->size,
+        (long long)mouse->decode_value, (long long)field->minimum, (long long)field->maximum);
+  }
+}
+
+static bool decode_mouse_report(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes, struct usb_hid_mouse_sample *sample)
+{
+  const struct usb_hid_mouse_reports *mouse = &binding->mouse;
+  if (diagnostics_enabled() && (bytes || !mouse->ids)) {
+    unsigned id = mouse->ids ? binding->control[0] : 0;
+    for (unsigned i = 0; i < mouse->layout_count; ++i) {
+      size_t expected = usb_hid_report_bytes(mouse, i, HID_INPUT);
+      if (mouse->layouts[i].id == id && expected && bytes != expected &&
+          !interface->length_diagnosed[i]) {
+        interface->length_diagnosed[i] = true;
+        klog("usb HID diag: %x:%x interface=%u Input ID=%u bytes=%zu expected=%zu action=%s\n",
+            binding->vendor, binding->product, interface->number, id, bytes, expected,
+            bytes > expected ? "ignore-trailer" : "zero-extend");
+        break;
+      }
+    }
+  }
+  return usb_hid_mouse_decode(&binding->mouse, binding->control, bytes, sample);
+}
+
+static void diagnose_mouse_sample(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes)
+{
+  if (!diagnostics_enabled() || interface->protocol != USB_PROTOCOL_MOUSE || !interface->report_protocol ||
+      interface->mouse_samples == USB_HID_MOUSE_SAMPLES) {
+    return;
+  }
+  ++interface->mouse_samples;
+  size_t captured = binding->mouse.keyboard_data ? 0 :
+    bytes < USB_HID_MOUSE_SAMPLE_BYTES ? bytes : USB_HID_MOUSE_SAMPLE_BYTES;
+  char line[USB_HID_MOUSE_SAMPLE_BYTES * 3 + 1];
+  static const char digits[] = "0123456789abcdef";
+  for (size_t i = 0; i < captured; ++i) {
+    uint8_t byte = binding->control[i];
+    line[i * 3] = digits[byte >> 4];
+    line[i * 3 + 1] = digits[byte & 15];
+    line[i * 3 + 2] = ' ';
+  }
+  line[captured * 3] = 0;
+  klog("usb HID mouse sample: %x:%x interface=%u sample=%u ID=%u bytes=%zu captured=%zu "
+      "keyboard-data=%u: %s\n",
+      binding->vendor, binding->product, interface->number, interface->mouse_samples,
+      bytes && interface->report_protocol && binding->mouse.ids ? binding->control[0] : 0,
+      bytes, captured, binding->mouse.keyboard_data, line);
+}
+
+static bool malformed_report(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes, bool decoded)
+{
+  if (interface->malformed_reports != UINT64_MAX) {
+    ++interface->malformed_reports;
+  }
+  bool retire = ++interface->malformed_consecutive == USB_HID_MALFORMED_LIMIT;
+  if (retire) {
+    usb_hid_lost(binding);
+  }
+  uint64_t now = arch_monotonic_ns();
+  if (diagnostics_enabled() &&
+      (retire || !interface->malformed_diagnostic_ns || now >= interface->malformed_diagnostic_ns)) {
+    interface->malformed_diagnostic_ns = now + USB_HID_MALFORMED_DIAGNOSTIC_NS;
+    diagnose_report(binding, interface, retire ? "malformed-retirement" : "dropped",
+        USB_INVALID, bytes, decoded);
+  }
+  return retire;
+}
+
 void usb_hid_collect(struct usb_hid_binding *binding)
 {
   if (!binding->active) {
@@ -488,31 +992,40 @@ void usb_hid_collect(struct usb_hid_binding *binding)
   }
   if (!usb_host_device_present(binding->host)) {
     usb_hid_lost(binding);
+    for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
+      struct usb_hid_interface *interface = &binding->interfaces[index];
+      if (interface->protocol && interface->stream) {
+        diagnose_report(binding, interface, "unavailable", USB_IO, 0, false);
+      }
+    }
     return;
   }
   for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
     struct usb_hid_interface *interface = &binding->interfaces[index];
-    if (!interface->stream) {
+    if (!interface->protocol || !interface->stream) {
       continue;
     }
     for (unsigned packet = 0; packet < USB_INTERRUPT_COMPLETIONS; ++packet) {
-      uint8_t report[USB_HID_INTERRUPT_BYTES];
       struct usb_interrupt_completion completion;
-      enum usb_result result = usb_host_interrupt_take(interface->stream, report,
-                                                      sizeof(report), &completion);
+      enum usb_result result = usb_host_interrupt_take(interface->stream, binding->control,
+                                                      sizeof(binding->control), &completion);
       if (result == USB_BUSY) {
         break;
       }
       if (result != USB_OK) {
         usb_hid_lost(binding);
+        diagnose_report(binding, interface, "transport-loss", result, 0, false);
         return;
       }
       bool keys[KEY_COUNT], unresolved;
       if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
-        if (!keyboard_snapshot(report, completion.bytes, keys, &unresolved)) {
-          usb_hid_lost(binding);
-          return;
+        if (!keyboard_snapshot(binding->control, completion.bytes, keys, &unresolved)) {
+          if (malformed_report(binding, interface, completion.bytes, false)) {
+            return;
+          }
+          continue;
         }
+        interface->malformed_consecutive = 0;
         uint64_t flags = cpu_save_interrupts();
         if (unresolved) {
           input_keyboard_unresolved(&binding->source);
@@ -521,15 +1034,22 @@ void usb_hid_collect(struct usb_hid_binding *binding)
         }
         cpu_restore_interrupts(flags);
       } else {
-        if (completion.bytes < USB_HID_MOUSE_BYTES ||
-            (interface->qemu_wheel && completion.bytes != USB_QEMU_MOUSE_PACKET)) {
-          usb_hid_lost(binding);
-          return;
+        struct usb_hid_mouse_sample sample;
+        diagnose_mouse_sample(binding, interface, completion.bytes);
+        mouse_wire_protocol(binding, interface, completion.bytes);
+        bool valid = interface->report_protocol ?
+          decode_mouse_report(binding, interface, completion.bytes, &sample) :
+          boot_mouse_sample(interface, binding->control, completion.bytes, &sample);
+        if (!valid) {
+          if (malformed_report(binding, interface, completion.bytes, true)) {
+            return;
+          }
+          continue;
         }
-        int32_t wheel = interface->qemu_wheel ? -(int8_t)report[3] : 0;
+        interface->malformed_consecutive = 0;
         uint64_t flags = cpu_save_interrupts();
-        input_pointer_report(&binding->source, (int8_t)report[1], (int8_t)report[2],
-                             wheel, report[0] & 7);
+        input_pointer_report(&binding->source, sample.x, sample.y,
+                             sample.pan, sample.wheel, sample.buttons);
         cpu_restore_interrupts(flags);
       }
     }

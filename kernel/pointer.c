@@ -447,7 +447,8 @@ void pointer_handle_input(const struct pointer_input_report *event)
     struct pointer_event input = pointer_position_event(locked_pointer, POINTER_INPUT);
     input.dx = event->dx;
     input.dy = event->dy;
-    input.wheel = event->wheel;
+    input.scroll_x = event->scroll_x;
+    input.scroll_y = event->scroll_y;
     input.buttons = device_buttons & ~consumed_buttons;
     pointer_queue_input(locked_pointer, input, pressed & ~consumed_buttons, true);
     return;
@@ -462,7 +463,7 @@ void pointer_handle_input(const struct pointer_input_report *event)
   device_buttons = event->buttons;
   consumed_buttons &= device_buttons;
   pressed &= ~consumed_buttons;
-  if (volume_ui_pointer_input(position_x, position_y, event->wheel,
+  if (volume_ui_pointer_input(position_x, position_y, event->scroll_y,
       device_buttons, pressed, drag.space != NULL)) {
     consumed_buttons |= pressed;
     update_hover((struct pointer_destination){0});
@@ -517,10 +518,11 @@ void pointer_handle_input(const struct pointer_input_report *event)
     drag_buttons = (drag_buttons & buttons) | (pressed & buttons);
   }
   struct pointer_object *wheel_pointer = destination_pointer(target);
-  if (event->wheel && wheel_pointer && wheel_pointer->owner) {
+  if ((event->scroll_x || event->scroll_y) && wheel_pointer && wheel_pointer->owner) {
     struct pointer_object *pointer = wheel_pointer;
     struct pointer_event input = pointer_position_event(pointer, POINTER_INPUT);
-    input.wheel = event->wheel;
+    input.scroll_x = event->scroll_x;
+    input.scroll_y = event->scroll_y;
     pointer_queue_input(pointer, input, 0, false);
   }
   if (drag.space && !drag_buttons) {

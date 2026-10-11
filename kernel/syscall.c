@@ -18,6 +18,7 @@
 #include <kernel/object/pipe.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
+#include <kernel/object/input_policy.h>
 #include <kernel/object/log.h>
 #include <abi/message.h>
 #include <kernel/object/display.h>
@@ -343,6 +344,11 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return log_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_INPUT_POLICY:
+    if (header.protocol != PROTOCOL_INPUT_POLICY) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return input_policy_call(rights, header.operation, request_address, request_size);
   case OBJECT_SYSTEM_INFO:
     if (header.protocol != PROTOCOL_SYSTEM_INFO) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
