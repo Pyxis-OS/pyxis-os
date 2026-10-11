@@ -494,7 +494,7 @@ capacity, including pending handshakes and TIME_WAIT, can prevent admission even
 below that session count.
 
 SSH/Telnet compatibility, authentication/TLS, resize, reattachment, remote graphics,
-a multiplexer/navigator, task migration and process
+the [remote-multiplexer plan](../wip/remote-multiplexer.md), a navigator, task migration and process
 threads remain separate work. Current costs and revisit points are recorded in
 [technical debt](../technical-debt.md#initial-independent-terminal-limits) and
 [execution-group shutdown](../technical-debt.md#execution-group-shutdown).
