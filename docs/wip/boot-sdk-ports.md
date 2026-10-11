@@ -22,60 +22,41 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
-[Bundles in bin://](bundles-in-bin.md): Codex epsilon (2026-10-10), accepted
-same-name lookup and relocation of the editor/interpreter bundles; task 1 starts
-after the owner merges #686.
-
-[Claude on Pyxis proposal](claude-on-pyxis.md): Codex epsilon (2026-10-09),
-prepared HTTPS files and shell API testing, then the Lua harness; Hax after. Docs
-only; ZIP defaults accepted in #639, delivery tasks need separate go-aheads.
-
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
-[Go runtime investigation](go-runtime.md): Codex epsilon (2026-10-11), docs-only
-refresh against merged threads tasks 1–4. Go follows hosted Clang; native VM
-reservation and Go runtime implementation need separate owner go-aheads.
+[Git on Pyxis](git-on-pyxis.md): the libc prerequisites of the libgit2 source-fetch
+route are merged. A docs-only investigation of a native Git CLI and HTTP transport
+is in review (#711); no Git port task is assigned.
 
 [Hosted Clang and LLD](hosted-clang.md): Codex (2026-10-11), accepted first
-single-source compile and separate link. Support task 1 is delivered in the fork,
-without adopting its pin; SDK/libc tasks need separate assignments and proceed
+single-source compile and separate link. Support task 1 is delivered in the fork
+(#708), without adopting its pin; SDK/libc tasks need separate assignments and proceed
 alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 
 [Installer TUI and configuration delta editor](installer-tui.md): Codex
-(2026-10-11), docs-only proposal for PDCurses pages over a shared plan/apply
-executor, revision inventories, mounted read-write FAT32 and owned ESP
-configuration reconciliation; the contract is accepted and implementation
-tasks need separate assignments.
+(2026-10-11), PDCurses pages over a shared plan/apply executor, revision
+inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
+The contract is accepted; task 1 is held and later tasks need separate assignments.
 
-[MX Master 3S milestone proposal](bluetooth-mouse.md): Codex (2026-10-08). Tasks 1
-to 3 are complete (#545, #552, #564); the [task 1 decision rounds](bluetooth-task1-contracts.md)
-are accepted and the [warm qualification](../development/experiments/bluetooth-runtime-hci/README.md)
-is recorded. Service and connection traffic is task 4's qualification gate; later
-tasks need explicit assignment.
+[Program bundles and ZIP archives](program-bundles.md): Codex epsilon (2026-10-11),
+on the accepted ZIP plan. The host packer and checker (task 2a, #706) are merged;
+epsilon has tasks 2b (stored-only native launch) and 2c (small-resource deflate).
+Bundles in bin:// task 1 is merged (#691); its future command index awaits its own
+go ([bundles in bin](bundles-in-bin.md)).
 
-[Name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links):
-Claude (2026-10-10), `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel
-statuses.
+[Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
+Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
+blocked on hardware semantics, not on evidence;
+[whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
-[NVMe coexistence](nvme-coexistence.md): Codex alpha (2026-10-11), task 1's NVMe
-driver implemented and QEMU-qualified; review and the owner's read-only native
-boot pending. Write authority and shutdown/force decisions are recorded.
-
-[Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), task 2
-waits for the owner's Fedora evidence; [whole-frame skipping](../kernel/presenter-frame-skipping.md)
-is merged.
-
-[Shell reverse history search](../userland/shell.md#commands-and-quoting): Codex
-alpha (2026-10-10), owner-assigned Ctrl+R in the shared line editor.
-
-[ThinkPad pointer input quality](pointer-input-quality.md): Codex (2026-10-10),
-accepted USB report mice and Synaptics absolute mode and palm-rejection plan;
-implementation tasks need a separate go.
+[Steam Deck second hardware target](steam-deck.md): the owner (2026-10-11), plan
+accepted with a PXE development loop; the first step is the owner's check of
+firmware PXE through the dock, and no task is assigned.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
-lifecycle, parking, TLS and libc delivery. Tasks 1–4 are merged; each later task
-retains its separate owner-assignment gate.
+lifecycle, parking, TLS and libc delivery. Tasks 1–4 are merged and task 5 is in
+review; each later task retains its separate owner-assignment gate.
 
 ## Open
 
@@ -94,12 +75,20 @@ Other candidates; current assignments are listed above.
 [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after the
 completed analog playback milestone.
 
+[Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09 (prepared HTTPS
+files and shell API testing, then the Lua harness; Hax after). Each delivery task
+needs a separate go-ahead.
+
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector
 and `top`.
 
 [Network kernel debugger](network-debugger.md): checkpoint and guarded inspection
-implemented; task 3 assigned for both NICs, bridge and native read-only LAN attach
-during PXE bring-up.
+implemented and natively qualified for read-only LAN attach on the RTL8111
+(tasks 1–3); task 4 is unassigned.
+
+[NVMe coexistence](nvme-coexistence.md): task 1's NVMe driver is merged (#710) and
+was qualified natively read-only on 2026-10-11; the FAT32 and installer coexistence
+tasks need assignment.
 
 [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm with one
 terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
@@ -115,15 +104,16 @@ first, then remote input after the system pointer.
 
 [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 
-[Steam Deck second hardware target](steam-deck.md): Claude (2026-10-11), proposal
-only: stick boot, controls, rotation and the touch track; no task is assigned.
-
 System layout follow-ups: network configuration on the pool instead of the archive
 ([technical debt](../technical-debt.md#archive-only-network-configuration)) and the
 [boot configuration checker](boot-configuration-checker.md).
 
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
+
+[ThinkPad pointer input quality](pointer-input-quality.md): Codex (2026-10-10),
+accepted USB report mice and Synaptics absolute mode and palm-rejection plan;
+implementation tasks need a separate go.
 
 ## Directions
 
@@ -135,7 +125,7 @@ Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 
 [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI and userspace stack
 direction with explicit Secure Connections enrollment and cold/native closure;
-tasks 1 and 2 are complete.
+tasks 1 to 3 are complete (#545, #552, #564).
 
 [Building software on Pyxis](source-builds.md): after hosted Clang, ports and
 non-rescue userland build from source on the installed system until a package
