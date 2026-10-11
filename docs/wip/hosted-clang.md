@@ -76,25 +76,28 @@ following names are still absent from current libc; re-audit the selected native
 closure as it builds. Standard functions actually needed belong in libc; platform
 policy belongs in LLVM Support.
 
-| Name / consumer | Proposed native direction |
+| Name / consumer | Current native disposition (task 3 audit) |
 | --- | --- |
-| `posix_memalign` | LLVM Support `MemAlloc.cpp` uses aligned C++ `new`; the name occurs in installed intrinsic headers/optional allocator code. Add correct libc allocation semantics only if a retained consumer needs it; not a demonstrated first-compiler blocker. |
-| `fcntl` / Unix `Path.inc:1106,1337–1374`, `Jobserver.inc:27–58` | Use existing descriptor ownership/duplication and native stream properties. Unsupported advisory locks and close-on-exec assumptions must refuse or be removed from the selected backend; no fake flags. |
-| `readlink`, `link/symlink` / Unix `Path.inc:244,1241,1469` | Native lookup follows no symlinks. Use explicit executable/resource roots, not `/proc/self/exe`; refuse requested symbolic/hard-link features. No need to invent Unix filesystem objects. |
-| `pipe` / `raw_socket_stream.cpp:200`, `clang/lib/Interpreter/IncrementalExecutor.cpp:155` | Native pipes exist, but file-to-object compilation and inherited diagnostics need no internal pipe. Keep socket/interpreter capture out; add a real libc adapter only if a retained consumer needs it. |
-| `getpid` / Unix `Process.inc:66,422`, temp/lock naming | No libc PID query exists. Program owns completion handles, not Unix PIDs; exclusive temporary creation uses randomness, not a fabricated PID. Audit remaining ID-only consumers before choosing an exposed native identity. |
-| `sysconf` / Unix `Process.inc:77`, `Program.inc:550` | Page size comes from the native memory contract; argv limits need actual startup payload accounting (`clang/lib/Driver/Driver.cpp:2331`). CPU information needs query authority. Refuse unsupported statistics; worker selection remains off. |
-| `chmod/fchmod`, `futimens` / Unix `Path.inc:817–859` | Pyxis has capability authority, not execute/owner mode bits or a timestamp setter. Adapt native tool output and temp creation; requested mode/time mutations refuse. libc still rejects non-0666 file creation modes. |
-| `posix_fallocate` / `llvm/lib/CAS/OnDiskCommon.cpp:156` | Optional persistent CAS allocation, not ordinary Support output. Leave CAS disabled; file resize is not a promise of reserved physical storage. |
-| `strerror_r` / `llvm/lib/Support/Errno.cpp` | Configure absence correctly: `Errno.cpp:59` already falls back to real `strerror`, whose current messages are immutable. Not a first-slice blocker. If later needed, implement bounded libc copying with one explicit return contract. |
-| `ECHILD/ENOEXEC/EXDEV` | Still absent; `EINTR` exists as vocabulary without signal interruption. They are not proved first-path requirements: `ECHILD` appears in a Unix wait comment, `EXDEV` in Apple clone-copy fallback, no execution use of `ENOEXEC` found. Native failure translations remain distinct; add vocabulary only when reached. |
+| `posix_memalign` | Not reached by selected Support; aligned C++ `new` uses the existing real allocator. Recheck optional allocator/intrinsic consumers in task 4. |
+| `fcntl` / Unix Path and Jobserver | Unix consumers are excluded. Native ownership/duplication is real; advisory locks refuse. No synthesized descriptor flags. |
+| `readlink`, `link/symlink` | Native Support returns not-supported; resource/executable roots are explicit. No Unix symlinks or `/proc/self/exe`. |
+| `pipe` / raw_socket_stream, interpreter capture | Unix pipe consumers are excluded; capture/interpreter features are outside file-to-object compilation. Native launch/stream grants do not supply a fake descriptor adapter. |
+| `getpid` | No process-ID adapter: native Program uses owned completion handles, random exclusive temp names; retained PID-only features must be excluded or explicitly adapted before use. Process-ID queries terminate with a specific refusal. |
+| `sysconf` | Page size uses the native memory contract and launch limits the real payload calculation. No invented CPU/usage statistics. |
+| `chmod/fchmod`, `futimens` | Native Support mode, ownership and timestamp setters refuse. Creation uses native authority/policy, not fabricated mode bits. |
+| `posix_fallocate` | Optional persistent CAS remains off; file resize promises no reservation. |
+| `strerror_r` | Configured absent. Support Errno copies real immutable native `strerror` messages. |
+| `ECHILD/ENOEXEC/EXDEV` | No selected native consumer; Unix wait/clone-copy vocabulary stays absent. |
+| `FP_ILOGB0/FP_ILOGBNAN`, `rint` | Added in libc for APFloat FPUtil and BranchProbability; real rounding obeys the native floating environment. |
 
 Task 1's real target build additionally reaches an undeclared `tolower` in
 `Support/CachePruning.cpp:112` and missing `FP_ILOGB0`/`FP_ILOGBNAN` in
 `libc/src/__support/FPUtil/ManipulationFunctions.h:86–87` through `APFloat.cpp`.
 The task 2 audit confirms that libc already implements `tolower`; refresh
-its C++ include/closure before adding a duplicate. The math constants remain
-task 3 work. No shared libc/runtime edit was made by task 1.
+its C++ include/closure before adding a duplicate. Task 3 supplies the exceptional exponent constants and `rint` reached by
+`BranchProbability.cpp:29`. The current native Support compile/symbol audit and
+remaining thread-gated failures are [recorded separately](../development/experiments/hosted-clang-libc.md).
+No shared libc/runtime edit was made by task 1.
 The native backend removes Unix header consumers rather than supplying fakes.
 
 The old probe's absent Unix headers (`signal.h`, `spawn.h`, `sys/mman.h`,
@@ -142,7 +145,7 @@ threads gates 5–8.
    build and QEMU stream/string/time-format behavior, including `locale("C")`
    refusal of unavailable locales. Real mutex/future/TLS integration and threaded
    validation wait on gates 5–8; these are not serial emulations.
-3. [ ] **Remaining reached libc operations — assigned 2026-10-11, after task 2.** Use the table to implement standard
+3. [x] **Remaining reached libc operations — delivered 2026-10-11.** Use the table to implement standard
    functions on native objects, or adapt/refuse unsupported LLVM features.
    Publish userland PRs before parent pins, keeping dependencies fast-forward.
    **Owner check:** the refreshed compile/link inventory names no unexplained
