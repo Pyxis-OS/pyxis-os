@@ -123,8 +123,9 @@ using host import analysis and a compile probe against the Pyxis SDK.
 
 The owner agreed on 2026-10-04 to use BusyBox, keep upstream's
 write-then-truncate save via a libc `ftruncate`, and add the string functions to
-libc. The save was replaced by atomic replacement on 2026-10-09. `stat`, `fstat` and `access` stay out of libc until truthful file metadata
-exists.
+libc. The save was replaced by atomic replacement on 2026-10-09. The same decision kept `stat`, `fstat` and `access` out of libc
+until truthful file metadata existed; they were added later
+([libc portability](libc-portability.md)).
 
 ## Regex validation (2026-10-07)
 

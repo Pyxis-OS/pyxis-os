@@ -89,10 +89,13 @@ On the ThinkPad, 2026-10-10, the owner booted a PXE build of this branch from
 the default entry, at the panel's native mode:
 - **Tab:** `vi`, `kilo`, `ls boot:// | less` and `links` each returned the
   shell's screen intact on quitting.
-- **Multiplexer pane: pending.** The live image has no multiplexer space; the
-  owner checks it on the installed stick after the next update.
+- **Multiplexer pane: passed with Neovim (2026-10-10).** The live image has no
+  multiplexer space, so the owner ran Neovim in multiplexer panes on the
+  installed stick. The shell screens were intact after exit, and colours and
+  status lines were correct in four panes at once. The vi, kilo, less and links
+  programs were not separately repeated in a pane.
 
-The pending pane check, with the same programs as in a tab:
+The pane check not yet repeated for those programs:
 
 1. Run `ls boot://`, then `vi home://t.txt`; type `ihello`, Escape, `:wq`. The
    `ls` output should still be on screen, with the prompt below it.
@@ -104,7 +107,7 @@ The pending pane check, with the same programs as in a tab:
 
 ## Limits
 
-- Native: tab behaviour checked, pane behaviour pending; no native timing.
+- Native: tab behaviour checked for all four programs, pane behaviour only with Neovim; no native timing.
 - Pane timings measure queueing; mux's drawing shows only in the CPU window,
   which also includes QEMU's own work.
 - The resize check used growth only; shrinking follows the same cropping as

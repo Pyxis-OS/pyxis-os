@@ -69,8 +69,9 @@ then exits with main's return value. Use
 to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
-`getenv` borrows these same immutable values; environment mutation is not
-implemented. The shell receives its space's roots, including read-only `boot://`
+The startup values are immutable; libc copies them into mutable process-local
+storage, which `getenv`, `setenv` and `unsetenv` use
+([process state](../userland/process-state.md)). The shell receives its space's roots, including read-only `boot://`
 and `bin://`, shared RAM-backed `tmp://` and normally `home://`, plus terminal
 input/output, launcher and caller-scoped [private-memory service](memory.md). It
 starts at `home://`, or `tmp://` in a space without a home root, and explicitly
@@ -182,7 +183,7 @@ and terminal contents remain visible. No shell restart is performed.
 Headers under [userspace/libc/include](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/libc/include) define the
 implemented subset: allocation, byte memory operations, string length/comparison/
 search/copy/duplication, numeric conversion/formatting, environment lookup and
-[unbuffered file/terminal stdio](../userland/stdio.md).
+[file/terminal stdio](../userland/stdio.md), unbuffered unless `setvbuf` or `setbuf` selects buffering.
 `snprintf`/`vsnprintf` report the full required length and terminate a nonempty
 destination even when truncated. Their header lists supported formats, including
 floating point. Wide characters are limited to `wcslen`. `setlocale` knows
