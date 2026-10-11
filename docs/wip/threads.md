@@ -73,7 +73,9 @@ The [native ABI](../../include/abi/thread.h) exposes a `threads` MANAGE service
 and WAIT-only completion observers. Explicit `session` delegation carries this
 optional service; ordinary foreground/background applications do not receive it.
 No pthread/C11 kernel API, address parking or ordinary thread-safe libc is part
-of task 5.
+of task 5. Bundle resource tables (`lib/bundle.c` in userland and `tools/pxa.py`)
+do not yet admit `threads`; update both together when the first bundle consumer
+needs it, such as libuv workers or SDL. This is deferred, not part of task 5.
 
 | Operation | Implemented contract |
 | --- | --- |
@@ -104,10 +106,12 @@ stack/TLS release after completion; it need not detect arbitrary join cycles.
 Process EXIT, returning from main, foreground termination and fatal user faults
 stop every sibling. One fault-safe atomic election/publication preserves the
 first process-wide terminal reason, without taking the lifetime lock in fault
-entry. Later events preserve it. Last ordinary thread exit supplies process
-status zero only if no process-wide result exists. Process completion follows
-all thread/process reclamation and admitted process activity. Deferred device
-cleanup may remain worker-owned afterward; it delays group completion through
+entry. Later events preserve it. **Owner-accepted rule, 2026-10-11:** when the
+last member leaves via THREAD_EXIT without a prior process result, the process
+completes as PROCESS_EXITED with status 0 (pthread-like), regardless of that
+thread's return word. Process completion follows all thread/process reclamation
+and admitted process activity. Deferred device cleanup may remain worker-owned
+afterward; it delays group completion through
 attributed cleanup tokens, not process completion.
 Group membership stays per process; SEAL prevents new processes but not internal
 threads of an existing member. Stopping closes CREATE admission before sampling

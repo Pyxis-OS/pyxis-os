@@ -33,8 +33,10 @@ struct thread_fs_context {
  * nonzero FS may point within or one past its usable context (negative offsets).
  * SET_FS binds only the current thread, once, to such a context; rebinding is
  * BUSY. Existing initial threads start with FS=0. No libc TCB layout is imposed.
- * EXIT records its machine-word value and never returns on success. Existing
- * process EXIT/fault/termination still stops every sibling. */
+ * EXIT records its machine-word value and never returns on success. If the last
+ * member leaves via THREAD_EXIT without a prior process result, the process
+ * completes as PROCESS_EXITED with status zero, regardless of the thread value.
+ * Existing process EXIT/fault/termination still stops every sibling. */
 struct thread_message {
   struct message_header header;
   union {
