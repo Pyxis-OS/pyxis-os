@@ -7,6 +7,10 @@ decoration with a more modern treatment, a global application menu bar, a dock
 and desktop widgets. GrafX2 is a future port candidate: creating graphical
 assets inside Pyxis would complement the existing edit/build/run workflow.
 
+The Steam Deck is the intended development device for a touch interface, with
+touch as its own contact input rather than pointer emulation; see the
+[Steam Deck proposal](steam-deck.md#touch-and-the-desktop).
+
 A desktop/compositor belongs within a space. Multiple desktop instances can
 coexist; the persistent space-navigation interface remains independent of them.
 The desktop's application menu bar is distinct from global space navigation.
