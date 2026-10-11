@@ -3,8 +3,10 @@
 Status: **shared milestone proposal, owner direction 2026-10-11; not implemented.**
 Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp) and
 [installer task 3](installer-tui.md#dependencies-and-ordered-delivery) into one
-end-to-end deliverable. Each task needs a separate owner go; the three defaults
-below are proposed, not accepted. Moving work does not complete it.
+end-to-end deliverable. The owner accepted kernel placement and GPT-only
+first-profile discovery on 2026-10-11. The remaining choices in decisions 1–3
+stay proposed; every implementation task needs a separate go. Moving work does
+not complete it.
 
 ## Deliverable and boundaries
 
@@ -63,17 +65,15 @@ wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
    The raw installer supplies confined I/O; a native kernel adapter serves FILE/
    directory calls on the BSP filesystem worker using the same engine.
 
-   **Placement tradeoff:** USB/SD metadata is attacker-controlled kernel input
-   under this default; bounded validation mitigates parser bugs but provides no
-   fault isolation. Kernel placement reuses the existing filesystem worker,
-   native directory/object lifetime and claim enforcement without provider IPC.
-   A userspace FAT provider would isolate parsing faults from the kernel and
-   export native FILE/directory objects, at the cost of IPC per operation and
-   additional directory-export/path/lifetime integration: today's
-   [provider OPEN](../../userspace/lib/provider.c) accepts FILE responses, and
-   [provider enumeration](userspace-scheme-providers.md#sqlite-views-and-query-results)
-   still needs a directory contract. This is a placement alternative for the
-   owner; kernel ownership remains the proposed default, not an accepted choice.
+   **Kernel placement accepted by the owner, 2026-10-11.** User-supplied media
+   becomes kernel parser input; malformed or malicious volumes may hang or crash
+   the kernel despite bounded validation ([accepted debt](../technical-debt.md#fat32-parser-in-the-kernel)).
+   Kernel placement reuses native lifetime/claim enforcement and avoids provider
+   IPC. A userspace provider offers parsing-fault isolation at an IPC cost and
+   needs additional directory-export/path integration: current
+   [provider OPEN](../../userspace/lib/provider.c) accepts FILE responses and
+   [enumeration](userspace-scheme-providers.md#sqlite-views-and-query-results)
+   still needs a directory contract.
 
    Trusted authority selects an exact device/extent, read-only or read-write;
    applications get only explicitly attenuated roots/files. The bootstrap ESP
@@ -122,10 +122,11 @@ wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
    earlier raw-engine profile's no-dirty-bit-change rule until separately extended.
    Dirty, damaged, cross-linked, inconsistent or unsupported volumes refuse writes;
    a clean flag alone is not proof of integrity or successful publication.
-3. **Bounded compatible names and real held-object lifetime.** First geometry:
-   validated GPT FAT32 partitions, 512-byte FAT/device sectors, valid cluster
-   sizes, one FAT or two mirrored FATs. Bare-volume/MBR discovery and unsupported
-   geometry/features are outside this first mount profile and refuse explicitly. Validate long-name sequences,
+3. **Bounded compatible names and real held-object lifetime.** GPT-only discovery
+   is accepted by the owner (2026-10-11); MBR/bare sticks stay outside this milestone.
+   Remaining proposed geometry: validated FAT32 partitions, 512-byte FAT/device
+   sectors, valid cluster sizes, one FAT or two mirrored FATs. Unsupported
+   geometry/features refuse explicitly. Validate long-name sequences,
    UTF-16→UTF-8 decoding, NT lowercase flags and aliases; list valid Unicode names.
    Default first lookup to ASCII long names/short aliases, case-insensitive with
    preserved spelling; valid Unicode objects may be read via an unambiguous ASCII
@@ -198,8 +199,8 @@ and mounted file I/O do not require its implementation.
   **After this task the owner can:** mount a GPT-partitioned stick matching the
   first profile or a selected ESP view, read/edit/sync files through native
   programs and release it with reported errors. Typical retail sticks using MBR
-  or a bare FAT volume are not covered; MBR/bare-volume discovery is an early
-  follow-up after this profile is qualified.
+  or a bare FAT volume are not covered; MBR/bare-volume discovery is later work,
+  outside this milestone.
 
 Future assigned tasks use ordinary builds and interactive QEMU/GDB, existing
 `mtools`, `fsck.fat` and Linux mounts: cross-read, compare untouched files/sectors,
