@@ -8,6 +8,7 @@
 #include <kernel/process_vm.h>
 #include <kernel/task.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/address_wait.h>
 #include <kernel/user_memory.h>
 #include <kernel/panic.h>
 
@@ -201,7 +202,8 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != THREAD_CREATE && operation != THREAD_EXIT && operation != THREAD_SET_FS) {
+  if (operation != THREAD_CREATE && operation != THREAD_EXIT && operation != THREAD_SET_FS &&
+      operation != THREAD_ADDRESS_WAIT && operation != THREAD_ADDRESS_WAKE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & THREAD_RIGHT_MANAGE)) {
@@ -216,11 +218,32 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   }
   uint64_t words[sizeof(input.body) / sizeof(uint64_t)];
   memcpy(words, &input.body, sizeof(words));
-  size_t used = operation == THREAD_EXIT ? 1 : operation == THREAD_SET_FS ? 2 : 5;
+  size_t used = operation == THREAD_EXIT ? 1 : operation == THREAD_SET_FS ? 2 :
+      operation == THREAD_ADDRESS_WAIT ? 4 : operation == THREAD_ADDRESS_WAKE ? 3 : 5;
   for (size_t i = used; i < sizeof(words) / sizeof(words[0]); ++i) {
     if (words[i]) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
+  }
+  if (operation == THREAD_ADDRESS_WAIT) {
+    return (struct syscall_result){address_wait(&input.body.address_wait), 0};
+  }
+  if (operation == THREAD_ADDRESS_WAKE) {
+    if (reply_capacity < sizeof(struct thread_address_wake_reply)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!user_buffer_check(reply_address, sizeof(struct thread_address_wake_reply), USER_BUFFER_WRITE)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    struct thread_address_wake_reply reply;
+    enum call_status status = address_wake(&input.body.address_wake, &reply.woken);
+    if (status != CALL_OK) {
+      return (struct syscall_result){status, 0};
+    }
+    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (operation == THREAD_EXIT) {
     /* Dispatch releases its admitted object references before syscall leave. */

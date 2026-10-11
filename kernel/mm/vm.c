@@ -1,9 +1,12 @@
+#include <arch/cpu.h>
 #include <arch/paging.h>
 #include <arch/smp.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/user/address_wait.h>
+#include <stdatomic.h>
 
 enum range_state {
   RANGE_UNUSED,
@@ -16,6 +19,7 @@ struct vm_range {
   uintptr_t base;
   size_t pages;
   size_t backed_pages; /* Owned backing is one suffix of the full reservation. */
+  uint64_t *wait_tokens; /* Private owned suffix; zero entries are ineligible. */
   enum range_state state;
   struct vm_range *prev, *next;
 };
@@ -24,9 +28,12 @@ struct vm_space {
   struct arch_address_space arch;
   struct vm_range *head;
   size_t total_pages;
+  atomic_size_t waiters;
 };
 
 static struct vm_space kernel_space;
+/* BSP-owned, never reused, including after failed provisional backing. */
+static uint64_t next_wait_token = 1;
 
 /* The general kernel area stays with the BSP. Its ranges are reused, and
  * changing a reused mapping that another CPU may hold would need a remote TLB
@@ -63,6 +70,29 @@ static bool page_count(size_t bytes, size_t *pages)
 
   *pages = (bytes + PAGE_SIZE - 1) / PAGE_SIZE;
   return true;
+}
+
+static enum mm_result reserve_wait_tokens(size_t count, uint64_t *first)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(count && first);
+  if (!next_wait_token || count - 1 > UINT64_MAX - next_wait_token) {
+    return MM_NO_MEMORY;
+  }
+  *first = next_wait_token;
+  uint64_t last = next_wait_token + (count - 1);
+  next_wait_token = last == UINT64_MAX ? 0 : last + 1;
+  return MM_OK;
+}
+
+static void withdraw_wait_pages(struct vm_space *space, uintptr_t base, size_t bytes)
+{
+  KASSERT(space && space != &kernel_space);
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  /* Root/borrower drainage prevents enrollment while this hint is sampled. */
+  if (atomic_load_explicit(&space->waiters, memory_order_relaxed)) {
+    address_wait_withdraw(space, base, bytes);
+  }
 }
 
 static struct vm_range *take_record(struct vm_space *space)
@@ -131,6 +161,7 @@ static void release_range(struct vm_space *space, struct vm_range *range)
 {
   range->state = RANGE_FREE;
   range->backed_pages = 0;
+  KASSERT(!range->wait_tokens);
   if (range->next && range->next->state == RANGE_FREE) {
     merge_next(space, range);
   }
@@ -149,6 +180,7 @@ void vm_init(void)
   KASSERT(bytes <= UINTPTR_MAX - base);
 
   kernel_space.total_pages = bytes / PAGE_SIZE;
+  atomic_init(&kernel_space.waiters, 0);
   kernel_space.head = &kernel_ranges[0];
   *kernel_space.head = (struct vm_range){
     .base = base, .pages = kernel_space.total_pages, .state = RANGE_FREE,
@@ -326,6 +358,17 @@ static void free_backing(struct vm_space *space, uintptr_t base,
   }
 }
 
+static void retire_backing(struct vm_space *space, struct vm_range *range)
+{
+  uintptr_t base = range->base + (range->pages - range->backed_pages) * PAGE_SIZE;
+  if (range->wait_tokens) {
+    withdraw_wait_pages(space, base, range->backed_pages * PAGE_SIZE);
+    kfree(range->wait_tokens);
+    range->wait_tokens = NULL;
+  }
+  free_backing(space, base, range->backed_pages);
+}
+
 enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
                        unsigned permissions)
 {
@@ -342,6 +385,25 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
   enum mm_result status = require_unmapped(space, range);
   if (status != MM_OK) {
     return status;
+  }
+
+  uint64_t *tokens = NULL;
+  uint64_t first_token = 0;
+  if (space != &kernel_space) {
+    if (pages > SIZE_MAX / sizeof(*tokens)) {
+      return MM_NO_MEMORY;
+    }
+    tokens = kmalloc(pages * sizeof(*tokens));
+    if (!tokens) {
+      return MM_NO_MEMORY;
+    }
+    if (permissions & PAGE_WRITE) {
+      status = reserve_wait_tokens(pages, &first_token);
+      if (status != MM_OK) {
+        kfree(tokens);
+        return status;
+      }
+    }
   }
 
   size_t mapped_pages = 0;
@@ -365,11 +427,18 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
   if (mapped_pages != pages) {
     /* Only this prefix owns frames; the remainder is still just reserved. */
     free_backing(space, base, mapped_pages);
+    kfree(tokens);
     return status;
   }
 
-  range->state = RANGE_BACKED;
+  if (tokens) {
+    for (size_t i = 0; i < pages; ++i) {
+      tokens[i] = first_token ? first_token + i : 0;
+    }
+  }
+  range->wait_tokens = tokens;
   range->backed_pages = pages;
+  range->state = RANGE_BACKED;
   return MM_OK;
 }
 
@@ -412,8 +481,7 @@ enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes)
     return MM_INVALID;
   }
 
-  free_backing(space, range->base + (range->pages - range->backed_pages) * PAGE_SIZE,
-      range->backed_pages);
+  retire_backing(space, range);
   release_range(space, range);
   return MM_OK;
 }
@@ -465,6 +533,7 @@ enum mm_result vm_space_create(struct vm_space **result)
     return MM_NO_MEMORY;
   }
   *space = (struct vm_space){0};
+  atomic_init(&space->waiters, 0);
 
   struct vm_range *range = take_record(space);
   if (!range) {
@@ -518,13 +587,13 @@ enum mm_result vm_space_destroy(struct vm_space *space)
   for (struct vm_range *range = space->head; range;) {
     struct vm_range *next = range->next;
     if (range->state == RANGE_BACKED) {
-      free_backing(space, range->base + (range->pages - range->backed_pages) * PAGE_SIZE,
-          range->backed_pages);
+      retire_backing(space, range);
     }
     drop_record(space, range);
     range = next;
   }
 
+  KASSERT(!atomic_load_explicit(&space->waiters, memory_order_relaxed));
   KASSERT(arch_space_destroy(&space->arch) == MM_OK);
   kfree(space);
   return MM_OK;
@@ -617,7 +686,34 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
       !permissions_valid(space, permissions)) {
     return MM_INVALID;
   }
-  return arch_page_protect(page_space(space), base, permissions);
+  if (!range->wait_tokens) {
+    return arch_page_protect(page_space(space), base, permissions);
+  }
+
+  size_t page = (base - range->base) / PAGE_SIZE;
+  size_t prefix = range->pages - range->backed_pages;
+  if (page < prefix) {
+    return MM_NOT_MAPPED;
+  }
+  uint64_t *token = &range->wait_tokens[page - prefix];
+  uint64_t fresh = 0;
+  if ((permissions & PAGE_WRITE) && !*token) {
+    enum mm_result status = reserve_wait_tokens(1, &fresh);
+    if (status != MM_OK) {
+      return status;
+    }
+  }
+  if (*token && !(permissions & PAGE_WRITE)) {
+    withdraw_wait_pages(space, base, PAGE_SIZE);
+    *token = 0;
+  }
+  /* The whole owned suffix is mapped, with permissive ancestors and no device
+   * cache flags. Exclusive VM ownership makes this commit nonfailing. */
+  KASSERT(arch_page_protect(page_space(space), base, permissions) == MM_OK);
+  if (fresh) {
+    *token = fresh;
+  }
+  return MM_OK;
 }
 
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
@@ -637,4 +733,52 @@ bool vm_user_buffer_accessible(struct vm_space *space, uintptr_t address,
     return false;
   }
   return arch_user_buffer_accessible(page_space(space), address, bytes, write);
+}
+
+bool vm_address_wait_token(struct vm_space *space, uintptr_t address,
+    size_t word_size, uint64_t *token)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!token) {
+    return false;
+  }
+  *token = 0;
+  if ((word_size != 4 && word_size != 8) || (address & (word_size - 1)) ||
+      !vm_user_buffer_accessible(space, address, word_size, true)) {
+    return false;
+  }
+  uintptr_t page = address & ~(uintptr_t)(PAGE_SIZE - 1);
+  struct vm_range *range = range_containing(space, page);
+  if (!range || range->state != RANGE_BACKED || !range->wait_tokens) {
+    return false;
+  }
+  size_t index = (page - range->base) / PAGE_SIZE;
+  size_t prefix = range->pages - range->backed_pages;
+  if (index < prefix || !range->wait_tokens[index - prefix]) {
+    return false;
+  }
+  *token = range->wait_tokens[index - prefix];
+  return true;
+}
+
+void vm_wait_enroll(struct vm_space *space)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(space && space != &kernel_space && space->head);
+  size_t count = atomic_load_explicit(&space->waiters, memory_order_relaxed);
+  do {
+    KASSERT(count != SIZE_MAX);
+  } while (!atomic_compare_exchange_weak_explicit(&space->waiters, &count, count + 1,
+      memory_order_relaxed, memory_order_relaxed));
+}
+
+void vm_wait_detach(struct vm_space *space)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(space && space != &kernel_space && space->head);
+  size_t count = atomic_load_explicit(&space->waiters, memory_order_relaxed);
+  do {
+    KASSERT(count);
+  } while (!atomic_compare_exchange_weak_explicit(&space->waiters, &count, count - 1,
+      memory_order_relaxed, memory_order_relaxed));
 }

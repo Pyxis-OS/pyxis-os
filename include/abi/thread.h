@@ -10,6 +10,11 @@
 #define THREAD_CREATE UINT64_C(1)
 #define THREAD_EXIT UINT64_C(2)
 #define THREAD_SET_FS UINT64_C(3)
+#define THREAD_ADDRESS_WAIT UINT64_C(4)
+#define THREAD_ADDRESS_WAKE UINT64_C(5)
+#define THREAD_ADDRESS_WORD32_BYTES UINT64_C(4)
+#define THREAD_ADDRESS_WORD64_BYTES UINT64_C(8)
+#define THREAD_ADDRESS_NO_DEADLINE UINT64_MAX
 
 struct thread_create {
   uint64_t entry;
@@ -22,6 +27,19 @@ struct thread_create {
 struct thread_fs_context {
   uint64_t identity;
   uint64_t fs_base;
+};
+
+struct thread_address_wait {
+  uint64_t address;
+  uint64_t expected;
+  uint64_t deadline;
+  uint64_t word_size;
+};
+
+struct thread_address_wake {
+  uint64_t address;
+  uint64_t word_size;
+  uint64_t maximum;
 };
 
 /* Send the complete zero-initialized message. Unused fields must be zero.
@@ -42,6 +60,8 @@ struct thread_message {
   union {
     struct thread_create create;
     struct thread_fs_context set_fs;
+    struct thread_address_wait address_wait;
+    struct thread_address_wake address_wake;
     uint64_t exit_value;
   } body;
 };
@@ -49,6 +69,23 @@ struct thread_message {
 struct thread_reply {
   handle_t completion;
 };
+
+struct thread_address_wake_reply {
+  uint64_t woken;
+};
+
+/* Address parking requires MANAGE and applies only to the calling process's
+ * ordinary VM-owned writable user RAM. word_size is 4 or 8, address is naturally
+ * aligned, and a 32-bit expected value has no high bits. Unused fields are zero.
+ * WAIT compares/enrolls atomically: mismatch returns WOULD_BLOCK without sleep,
+ * wake returns OK, expiry TIMED_OUT and mapping withdrawal BAD_BUFFER. Deadline
+ * is absolute monotonic nanoseconds; zero polls, UINT64_MAX waits indefinitely.
+ * WAKE requires nonzero maximum (UINT64_MAX means all) and returns the count of
+ * detached registrations, not ownership of a user lock. Clients use atomics and
+ * recheck predicates. Mapping incarnations prevent wake of a reused address.
+ * No mapping lease survives sleep. Every terminal path detaches before notifying;
+ * process stop resumes kernel cleanup and never returns to userspace. A failed
+ * WAKE reply does not undo wakes already committed. */
 
 #define THREAD_COMPLETION_RIGHT_WAIT (UINT64_C(1) << 0)
 #define THREAD_WAIT UINT64_C(1)
