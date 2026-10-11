@@ -1,6 +1,6 @@
 # Terminal SGR costs and qualification
 
-For the [SGR follow-up](../../../wip/neovim-groundwork.md#terminal-sgr-follow-up)
+For the SGR follow-up (#681)
 and [terminal sequence table](../../../userland/terminal.md#tty-output-controls).
 
 ## Revisions and method

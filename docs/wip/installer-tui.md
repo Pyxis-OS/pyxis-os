@@ -1,11 +1,11 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Task 1 is owner-assigned, starting after #712 merges. All later
-tasks need separate go-aheads.
+2026-10-11.** Task 1 is held by the owner; it needs a new go before starting.
+All later tasks also need separate go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
-and [program bundles](program-bundles.md).
+and [program bundles](../userland/program-bundles.md).
 
 ## Accepted direction — 2026-10-11
 
@@ -18,9 +18,10 @@ and [program bundles](program-bundles.md).
 - **Progress everywhere:** every I/O phase reports counters or a phase line,
   including inventory, reads, hashing, copy verification, sync and cleanup.
   Existing copy counters/phase lines are a starting point, not full coverage.
-- **Mounted read-write FAT32 is part of this line**, after NVMe FAT32 engine
-  task 2: a real volume/directory-capability backend, not only an installer
-  library and not deferred to a future scheme provider.
+- **Mounted read-write FAT32 remains required**, delivered independently by
+  [shared FAT32 volumes](fat32-volumes.md) after its engine. The accepted native
+  volume/directory backend is not deferred to a future scheme provider or owned
+  by this consumer; the move completes no task.
 - **Editable configuration lives on the ESP.** Selected Lua configs move out of
   the cpio archive into readable/editable FAT32 files beside the Limine editing
   workflow; archive defaults remain available for recovery. This does not depend on keeping `system://` as the configuration store.
@@ -183,11 +184,10 @@ prove that installed bytes were not modified after installation.
 
 ## Dependencies and ordered delivery
 
-Task 1 was assigned by the owner on 2026-10-11, starting after #712 merges.
-Later tasks need separate go-aheads. Progress can land independently before
-curses or coexistence. No new kernel configuration model is proposed.
+Progress coverage can land independently before curses or coexistence. No new
+kernel configuration model is proposed.
 
-1. [ ] **Complete progress coverage — assigned 2026-10-11, after #712 merges.**
+1. [ ] **Complete progress coverage — held 2026-10-11.**
    Audit every installer I/O phase, including
    source/target inspection and copy verification; share reporting with plain
    output and later TUI. Capture current install/update costs, then matched runs.
@@ -199,15 +199,13 @@ curses or coexistence. No new kernel configuration model is proposed.
    report. Retain all existing authority and interruption limits.
    **After this task the owner can:** review and replay an explicit install/update
    plan and see new/updated/removed/unchanged program sizes before any writes.
-3. [ ] **Mounted read-write FAT32.** After [NVMe FAT32 engine task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp),
-   provide a native volume/directory-capability backend, explicit bootstrap ESP
-   binding, normal FILE/directory reads/writes/sync, scoped rights and exclusion
-   against raw partition writers. Settle backend/boot-handoff integration before
-   implementation; the deferred generic scheme-provider idea is not a mounted
-   FAT32 implementation. Share the engine, without whole-ESP rewriting. Qualify
-   on scratch volumes first, preserving non-Pyxis files.
-   **After this task the owner can:** read and edit FAT32 files through native
-   paths in Pyxis, including a delegated ESP configuration directory.
+3. **Shared dependency, former mounted FAT32 task (moved, not completed).**
+   Consume [FAT32 volumes](fat32-volumes.md) (native read-write files, trusted
+   bootstrap ESP binding, scoped rights, sync/release, raw-writer exclusion); no
+   duplicate engine/backend task here. The editor keeps its accepted config
+   ownership/confirmation and ordinary-Update preservation obligations.
+   **After that shared milestone the owner can:** read/edit/sync authorized FAT32
+   files independently of the TUI/configuration editor.
 4. [ ] **Shared configuration validation and delta editor.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
@@ -216,12 +214,13 @@ curses or coexistence. No new kernel configuration model is proposed.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
 5. [ ] **Owned ESP configuration publication.** Depends on
-   [FAT32 task 2 and coexistence task 3](nvme-coexistence.md#tasks), the mounted FAT32
-   backend, exclusive ESP write admission and the shared checker/editor. Integrate
+   the [shared FAT32 engine/backend](fat32-volumes.md) and
+   [coexistence task 3](nvme-coexistence.md#tasks), exclusive ESP write admission
+   and the shared checker/editor. Integrate
    the accepted coexistence plan, conf swap/recovery and printed-entry fallback without
    firmware-variable edits or changes to Fedora's block. Replace ordinary Update's
-   ESP reformat/regeneration too, preserving editor state and recovery copies;
-   enable installed ESP config loading only with this path.
+   ESP reformat as described under plan and apply; enable installed ESP config
+   loading only with this path.
    **After this task the owner can:** plan an ordinary or coexistence update and
    apply only approved configuration changes without losing existing edits.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then

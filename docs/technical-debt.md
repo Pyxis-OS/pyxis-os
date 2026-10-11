@@ -114,7 +114,7 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 ## Fixed userspace stacks
 
 Plain programs eagerly back [1 MiB stacks](kernel/program-loading.md); validated
-[bundles](wip/program-bundles.md) may request up to 8 MiB. The reserved guard
+[bundles](userland/program-bundles.md) may request up to 8 MiB. The reserved guard
 catches ordinary overruns, but a large adjustment can skip it; compiler stack
 probing and automatic growth remain absent. Revisit with compiler/runtime and
 thread-stack work, retaining the owner's small plain-program default.
@@ -220,7 +220,7 @@ flushed). Accepted limits:
 
 ## Power overlay limits
 
-The [Ctrl+Alt+Delete power overlay](wip/system-power-overlay.md#emergency-coverage) is an emergency screen with accepted limits:
+The [Ctrl+Alt+Delete power overlay](kernel/power-overlay.md#emergency-coverage) is an emergency screen with accepted limits:
 
 - The presenter task reads the chord. A presenter that never returns to its input loop (a CPU holding the output lock forever, the
   BSP stuck with interrupts off, a kernel fault) cannot open it; neither can panic or a stopped debugger. Use the power button.
@@ -560,7 +560,7 @@ character insert/delete/erase, horizontal margins and colon colours remain
 absent; the kernel/mux sequence parsers must stay in step. Scheme configuration
 and the Neovim Unicode profile follow-up are separate work. Revisit with a
 consumer needing broader text or missing controls. The owner's
-[far-future scalable-font direction](wip/neovim-groundwork.md#terminal-utf-8-first-slice)
+[far-future scalable-font direction](wip/neovim-libuv.md#later-tasks)
 is unassigned.
 
 ## Initial terminal multiplexer limits
@@ -573,11 +573,20 @@ briefly double one pane's), with no per-group CPU or memory quota.
 
 A full pane input queue can hold a prefix behind already staged input, since bounded lossless storage cannot bypass a pending paste.
 Confirmed closure waits for group cleanup and output EOF, so published HOST work can delay cleanup indefinitely and output grants
-delegated outside the group can delay EOF; mux exit or fault requests termination through final controlling-grant closure without
-waiting for cleanup. Local keyboard and graphics grants are shared space facilities, so graphical launches share the existing
+delegated outside the group can delay EOF; local mux exit or fault requests termination through final controlling-grant closure without
+waiting for cleanup. Remote daemon supervision remains until outer and all tracked pane groups complete. Local keyboard and graphics
+grants are shared space facilities, so graphical launches share the existing
 one-session ownership. Live pane resize depends on the consumer: shell and Kilo observe RESIZED, Links reads geometry once, and vi and
 less keep their behavior (revisit with a focused port change). Revisit windows, ratio adjustment, input recovery and quotas when
 selected.
+
+## Initial remote multiplexer limits
+
+[Remote mux](userland/remote-terminal.md#remote-multiplexer) has fixed initial geometry, keyboard input and host selection/ordinary paste;
+no native pointer/clipboard, safe-Paste, file-transfer routing, per-pane machine completion or reattachment. Two mux connections share
+the daemon's four connection slots; closing groups retain admission indefinitely behind attributed HOST work. Rendering is bounded and
+resumable, but synchronous launch/HOST capture and the one-second cwd snapshot can still delay input. Revisit live resize and end-to-end
+horse qualification in [task 3](wip/remote-multiplexer.md#tasks); pane-aware transfer/input transport requires a separate owner assignment.
 
 ## Initial independent terminal limits
 
@@ -849,7 +858,7 @@ proposal without silently changing capacity, queues or safety thresholds.
 
 ## Initial clipboard delivery limits
 
-Accepted 2026-10-09 in the [clipboard proposal](wip/clipboard.md#first-delivery-limits),
+Accepted 2026-10-09 in the [clipboard interface](interfaces/clipboard.md#bounds-and-qualification),
 implemented for local terminal and mux into opted-in stock libterm readers.
 See the [interface](interfaces/clipboard.md) and [qualification record](development/clipboard-first-delivery-qualification.md)
 for behavior, measured/manual evidence and validation limits.
@@ -1075,6 +1084,15 @@ wrote an expendable stick from PXE live media: writable mounting, persistence ac
 ([owner record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4)). Power loss during writes, uncertain I/O, other
 devices, ports or the dock path, and physical firmware are unqualified. The [NVMe driver](devices/nvme.md) has QEMU
 qualification; native NVMe and coexistence installation remain unqualified.
+
+## FAT32 parser in the kernel
+
+The owner accepted kernel placement for the planned [FAT32 mounts](wip/fat32-volumes.md)
+(2026-10-11), parsing user-supplied media in the kernel. Despite bounded validation,
+a malformed or malicious volume may hang or crash the kernel. Revisit before
+automatic mounting of arbitrary removable media, the server/public profile or
+multi-user work; a userspace provider is the alternative. FAT32 implementation
+is not assigned yet.
 
 ## NVMe native qualification and temporary raw authority
 
@@ -1698,7 +1716,7 @@ no locale collation; revisit with locale support.
 
 ## Temporary bundle grant policy
 
-The [bundle design](wip/program-bundles.md) accepted on 2026-10-09 temporarily
+The [bundle design](userland/program-bundles.md) accepted on 2026-10-09 temporarily
 delivers every available ordinary grant, including optional grants at launch,
 without consent in the unpacked development path. This is not a permanent security
 contract; metadata never creates rights or obtains system-only authority, and programs inspect actual
@@ -1707,7 +1725,7 @@ in-context optional-grant, trusted-picker, stable-identity and revocation model.
 
 ## Published development bundle revisions
 
-Unpacked [bundles](wip/program-bundles.md#app-views-grants-and-lifetime) rely on the
+Unpacked [bundles](userland/program-bundles.md#app-views-grants-and-lifetime) rely on the
 publisher leaving a selected revision unchanged and retained. Read-only app/root
 grants and held native handles do not freeze writable aliases or protect unopened
 assets from deletion. Revisit with installation/update lifetime and revision GC;

@@ -1,10 +1,8 @@
 # Terminal application follow-ups
 
-Status: separate milestones chosen by the owner. Display drivers and
-[space layers](../userland/space-layers.md) are implemented. The owner accepted
-and authorized the first [terminal multiplexer](../userland/multiplexer.md)
-slice on 2026-10-08: one window, up to eight equal/BSP panes and retained
-scrollback. Its behavior and limits live in that reference. Later work below
+Status: separate milestones chosen by the owner. The first
+[terminal multiplexer](../userland/multiplexer.md) slice is implemented (authorized
+2026-10-08); its behavior and limits live in that reference. Later work below
 remains unassigned and needs a proposal before implementation.
 
 ## Single-panel navigator

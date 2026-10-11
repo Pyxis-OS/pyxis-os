@@ -114,7 +114,7 @@ stays parked because its setup is fragile; the
 [ThinkPad findings](../targets/t14-gen1-amd/notes.md#dash-management-controller-parked)
 remain available if it is revisited.
 
-The opt-in [network kernel debugger](../wip/network-debugger.md) adds a separate
+The opt-in [network kernel debugger](../kernel/network-debugger.md) adds a separate
 read-only all-stop GDB bridge on UDP 2326/localhost TCP 1235. Healthy boots keep
 terminal/log services. An enabled debugger first attempts local direct
 framebuffer panic text, without log/NIC takeover. Successful terminal debugger

@@ -1,9 +1,8 @@
 # Renoir hardware cursor
 
-**Design accepted 2026-10-10. Task 1 complete; native software baseline recorded.**
-The owner merged #665 and assigned the read-only inventory/software baseline.
-Hardware cursor support remains unimplemented; tasks 2–3 need separate go-aheads.
-Scaled game planes remain a separate later decision. This proposal builds on the [Renoir flip backend](../kernel/renoir-flip.md),
+**Design accepted 2026-10-10 (#665). Task 1 complete; hardware cursor support is
+unimplemented and tasks 2-3 need separate go-aheads.** Scaled game planes remain
+a separate later decision. This proposal builds on the [Renoir flip backend](../kernel/renoir-flip.md),
 the [pointer contract](../interfaces/pointer.md) and the existing
 [VirtIO cursor path](../kernel/display.md#hardware-pointer).
 
@@ -16,15 +15,14 @@ keep their current paths. No program gets register or surface-address authority;
 input focus, lock, Super+Esc, custom cursor ownership and geometry stay unchanged.
 
 Today Renoir frames include the software pointer through cursor row composition
-and `pointer_present_copy`. Task 1 measured periodic full-frame recomposition.
-The owner then assigned [whole-frame skipping](../kernel/presenter-frame-skipping.md):
-unchanged frames avoid pixel work, while visible software pointer changes still
-require a complete frame. Hardware support should
-remove pointer pixels from ordinary base-frame composition and service changed
-cursor state independently, including between pending-flip input drains. It
-must add no base compose, copy or flip for cursor-only movement. This does not
-replace the separately assigned content-driven frame scheduling. The task-1 native record measures the existing software baseline; no hardware
-cursor improvement is claimed.
+and `pointer_present_copy`; [whole-frame skipping](../kernel/presenter-frame-skipping.md)
+is merged, so unchanged frames avoid pixel work, but visible software pointer
+changes still need a complete frame. Hardware support should remove pointer
+pixels from ordinary base-frame composition and service changed cursor state
+independently, including between pending-flip input drains. It must add no base
+compose, copy or flip for cursor-only movement. The software control is the
+[native task 1 record](../development/experiments/renoir-cursor-inventory/README.md#native-result--2026-10-10);
+no hardware cursor improvement is claimed.
 
 ## Linux sequence and accepted write set
 
@@ -169,41 +167,32 @@ or publish its capture. Fresh software composition is required. Resize/mode chan
 reuses old geometry/addresses; first slice supports only the inherited fixed
 mode, and boot/refusal keeps current software behavior.
 
-## Accepted owner decisions — 2026-10-10
+## Accepted owner decisions, 2026-10-10
 
-1. **Register authority and gate. Accepted:** opt-in cursor support
-   only with the qualified mono flip backend; extend its write allowlist by the
-   exact HUBP/HUBPREQ, DPP and MPC cursor fields above. Full validation and the
+1. **Register authority and gate:** opt-in cursor support only with the
+   qualified mono flip backend; extend its write allowlist by the exact
+   HUBP/HUBPREQ, DPP and MPC cursor fields above. Full validation and the
    writer/panic claim guard every transaction. No power/clock/firmware changes.
-2. **Image contract and memory. Accepted:** retain 1–64 straight BGRA8
-   publicly; convert to premultiplied ARGB8888 internally at fixed 64-pixel pitch.
-   Reserve one revalidated 64 KiB UMA region with two immutable-in-use slots;
-   hardware support waits for proven image retirement and clock/latch evidence.
-3. **Independence, capture and failure. Accepted:** cursor updates may
-   run during write-free pending flips with their own full validation; capture
-   freezes its visual snapshot until base and cursor confirmation. Permit one
-   guarded disable-only exception on timeout before software fallback; FAILED or
-   lost ownership performs no GPU writes and pins backing. Default boot stays
-   unchanged until native qualification and a separate default-enablement decision.
-
-All three defaults are accepted. Following #665 merge, the owner assigned task 1
-on 2026-10-10. Tasks 2–3 still require separate assignments.
+2. **Image contract and memory:** retain 1-64 straight BGRA8 publicly; convert
+   to premultiplied ARGB8888 internally at fixed 64-pixel pitch. Reserve one
+   revalidated 64 KiB UMA region with two immutable-in-use slots; hardware
+   support waits for proven image retirement and clock/latch evidence.
+3. **Independence, capture and failure:** cursor updates may run during
+   write-free pending flips with their own full validation; capture freezes its
+   visual snapshot until base and cursor confirmation. One guarded disable-only
+   exception on timeout before software fallback is permitted; FAILED or lost
+   ownership performs no GPU writes and pins backing. Default boot stays
+   unchanged until native qualification and a separate default-enablement
+   decision.
 
 ## Tasks and owner outcomes
 
-- [x] **1. Read-only cursor prerequisites and baseline.** Authorized and completed
-  2026-10-10. `DISPLAY_CURSOR_PROBE=1` implements the bounded register/clock
-  inventory and software counters, without cursor allocation or new GPU writes.
-  The [native record](../development/experiments/renoir-cursor-inventory/README.md#native-result--2026-10-10)
-  contains the owner-run ThinkPad evidence at `d81c731a`: stable disabled cursors,
-  checked UMA candidate, and two interior motion/idle pairs at 59.52 frames/s.
-  Idle still composes/copies every frame at 1.188–1.228/0.940–0.953 ms per frame.
-  Linux's setters and idle native bits do not prove transaction-correlated cursor
+- [x] **1. Read-only cursor prerequisites and baseline** (2026-10-10,
+  `DISPLAY_CURSOR_PROBE=1`, no cursor allocation or new GPU writes). Native
+  record: [renoir-cursor-inventory](../development/experiments/renoir-cursor-inventory/README.md#native-result--2026-10-10).
+  Idle frames still compose and copy every frame in that baseline. Linux's
+  setters and idle native bits do not prove transaction-correlated cursor
   latch/disable/old-fetch retirement; that gap blocks task 2's writes.
-  **What the owner can do after this task:** compare future work against the
-  measured software control and review the remaining cursor prerequisites.
-  The owner queued whole-frame skipping before cursor task 2; it is a separate
-  presenter task, with decisions required before implementation.
 - [ ] **2. Bounded cursor backend and presenter integration.** Separately assigned:
   implement the accepted allowlist, owned images, independent updates,
   lock/hidden behavior, capture and proven fallback transitions; vendor only the

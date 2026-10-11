@@ -1,6 +1,6 @@
 # NVMe driver task 1 qualification
 
-[Accepted scope](../../../wip/nvme-coexistence.md#1-nvme-driver--assigned-2026-10-11).
+[Accepted scope](../../../wip/nvme-coexistence.md).
 No native run or native write is authorized by this record. The first native
 boot is read-only and is staged by the orchestrator through Luna.
 
@@ -149,5 +149,10 @@ AC; the UDP log on horse captures output. No native write run is authorized.
    actual sector bytes separately before claiming native payload equivalence;
    matching GPT CRCs/layout is metadata-read evidence, not a full-disk comparison.
    Keep serial/MAC fields out of committed records. Attach a masked log and owner
-   observations to this record; hardware timing, wear and unsafe-shutdown
-   behaviour remain pending until those results arrive.
+   observations to this record; hardware timing and wear are not recorded.
+
+**Native result (2026-10-11, owner, ThinkPad, read-only).** The disk read at its
+expected capacity, the three-partition GPT matched Linux's view and SMART was
+read. The unsafe-shutdown count did not change across a Pyxis reboot, so the
+shutdown notification works. Sector-byte equivalence was not compared. The raw
+log stays outside the repository.

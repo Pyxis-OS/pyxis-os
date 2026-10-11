@@ -74,23 +74,20 @@ before requiring acceleration. Start with opaque windows, bitmap text and
 changed-region redraw. The first VirtIO GPU work presents the software-rendered
 screen ([display drivers](../kernel/display.md)); accelerated drawing remains separate.
 
+SDL2 with a native backend is [implemented](../development/sdl2.md) as the reusable
+library target, using upstream SDL2 rather than a substitute subset.
 [GrafX2](https://gitlab.com/GrafX2/grafX2) would exercise pointer input, image
 editing and file access. Its [compilation instructions](https://sources.debian.org/src/grafx2/2.9%2Bds-2/doc/COMPILING.txt)
 describe SDL/SDL_image and image libraries, with optional font/Lua support.
-SDL2 is the intended reusable library target: investigate a native Pyxis backend
-with software rendering, presentation, keyboard/mouse input and timing first.
 Choose the supported subsystems through a pinned GrafX2/dependency probe; audio,
-GPU support and a full desktop are not prerequisites for that initial scope.
-Keep upstream SDL2 with a platform backend rather than implementing a substitute
-subset of its API. The [port candidates](application-ports.md) also connect this
-work to DevilutionX and the future C AbyssEngine investigation. No port schedule
-or complete SDL subsystem contract is selected yet.
+GPU support and a full desktop are not prerequisites. The
+[port candidates](application-ports.md) also connect this work to the future C
+AbyssEngine investigation. No port schedule is selected yet.
 
 ## Display drivers and resizing
 
 VirtIO GPU 2D presentation and live display resizing are implemented in
-[display drivers](../kernel/display.md), together with Bochs and a small
-driver interface. Accelerated rendering remains separate.
+[display drivers](../kernel/display.md); accelerated rendering remains separate.
 
 The next physical-driver investigation can use an Intel integrated GPU passed
 through from horse, or native ThinkPad PXE bring-up with

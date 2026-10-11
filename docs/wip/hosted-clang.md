@@ -4,7 +4,8 @@ Owner-assigned planning, 2026-10-11. This is the
 [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting):
 compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
 and running the [ports runner](source-builds.md) come later. No hosted compiler
-has run yet.
+has run yet: tasks 1-3 deliver Support, C++ and libc prerequisites, and the
+target Clang/LLD link waits on the thread gates.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -20,99 +21,15 @@ has run yet.
    volume; set image, stack, staging and working-memory budgets from native
    artifacts and qualification, preserving failure on exhaustion.
 
-## Earlier measured boundary (2026-10-09)
-
-Fresh SDK build: Pyxis `32dcff8a`, userland `22785544`, ports `772f8ff1`,
-filesystem `b427df29`; clean inputs. LLVM fork
-`49e2c1a1518b3e4687b52ceb6001069c1b6d261e`, matching
-[the installed toolchain](../development/llvm-toolchain.md#the-fork), fetched
-only through `git.internal`. Existing Clang/LLD 23.1.3 builder; no new compiler
-container. `make -j16 sdk` passed, including the SDK C++ runtime.
-
-The [unmerged probe](https://git.internal/PyxisOS/pyxis-os/src/commit/c3d91cfb/probe/hosted-clang)
-records commands and compact results; raw logs and artifacts stay local.
-Both builds used Release, X86 only, `clang;lld`, threads/EH/RTTI/backtraces and
-optional compression/editing libraries off; no tests, examples or benchmarks.
-Only clang/lld targets and required native TableGen generators were built.
-The normal LLD dispatcher still includes its other object-format drivers.
-
-| Probe | Result |
-| --- | --- |
-| Cross-configure with Generic/Pyxis and real SDK | Initially rejected unnecessary shared libLTO/libclang/remarks; configured after excluding them. Compile-only library checks falsely found pthread/dl/rt, which were explicitly disabled. SDK unwind exports really exist. |
-| `cmake --build … --target clang lld -- -k -j16` | Failed, no target link: `llvm/ADT/bit.h:53` assumes `machine/endian.h`; bundled regex assumes size_t from sys/types.h. |
-| 17 selected Support/Clang/LLD translation units, with compiler-provided endian defines and stddef.h, without failed PCH | 16 failed: C++ mutex/future/streams/wide-string facilities, rejected LLD thread_local, absent signal.h, pid_t, st_blksize, and incomplete Generic filesystem/process types. Memory.cpp parsed but supplies no Generic OS backend. No substitute declarations or successful stubs. |
-| Independent real-header and symbol links | Confirmed then-current open/read/write/pread/pwrite/access/rmdir/stat/lstat/fstat/mkstemp/getenv/fileno/fseeko/ftello; `<cmath>` with std::sqrt parsed. This is availability, not LLVM-compatible semantics. |
-| Matching Linux host build | Passed. Used the same fork/options, Linux target and host libstdc++; target build used SDK libc++. |
-
-Concrete absent headers: `machine/endian.h`, `sys/time.h`, `sys/wait.h`,
-`sys/resource.h`, `signal.h`, `spawn.h`, `sys/mman.h`, `sys/ioctl.h`,
-`sys/statvfs.h`, `dlfcn.h`, `pwd.h`, `poll.h`, `pthread.h`.
-These describe the existing Unix backend, not a requirement to supply Unix APIs.
-
-## Planning source audit (2026-10-11)
-
-Checked Pyxis `2fca30fd`, pinned/current userland `df210f1a`, ports `df3210b0`,
-and the unchanged LLVM fork `49e2c1a1518b`. This is source/header inspection,
-before task 1. Its later target build and resolved platform gaps are recorded
-[separately](../development/experiments/hosted-clang-support.md). References
-below are relative to that [LLVM source](https://git.internal/PyxisOS/pyxis-llvm/src/commit/49e2c1a1518b3e4687b52ceb6001069c1b6d261e).
-
-| Area | Current boundary and work |
-| --- | --- |
-| Closed libc gaps | `getcwd/chdir`, proved `realpath`, copied `setenv/unsetenv`, `fdopen`, `dup/dup2`, `setvbuf`, `isatty`, `mktime`, `iconv`, `O_APPEND`, `gethostname` and stat identity/mtime exist. See [process state](../userland/process-state.md), [paths](../userland/paths.md#proved-realpath), [stdio](../userland/stdio.md) and [metadata](../interfaces/file-metadata.md). Their native limits still apply; descriptive cwd is not proof and there is no writable `environ`. |
-| Support selection | `Path.cpp`, `Process.cpp`, `Program.cpp`, `Memory.cpp` and `Signals.cpp` select Unix/Windows implementations, not Pyxis. Generic leaves status/process types incomplete. Add a distinct Pyxis backend and scheme-aware path operations; do not compile Unix `.inc` files against fabricated headers. `llvm/ADT/bit.h:53` needs Pyxis endian selection; bundled regex needs an explicit `stddef.h` include. |
-| Metadata | `st_dev`, `st_ino`, `st_mtim` now have independent validity. Clang `FileManager.cpp:100,263` caches directories/files by unconditional UniqueID; Unix status conversion ignores native validity and releases references too early for live-ID comparison. Preserve validity and retain native objects for the compiler's identity-cache lifetime. No invented uid/gid/link counts, access times or permission bits. Archive mtime and provider object identity may be unknown. |
-| C++ streams/localization | `raw_os_ostream.cpp:25,29` needs stream write/tell; `Mustache.cpp:678` needs `ostringstream`; `clang/lib/Lex/PPMacroExpansion.cpp:1739–1757` needs `stringstream`, `locale("C")`, `put_time`, `gmtime/localtime` for `__TIMESTAMP__`. libc already has time formatting and C-only `setlocale`, but not `localeconv` or locale objects. libc++ `__locale_dir/locale_base_api.h:109–177` has no Pyxis backend; its generic classic ctype table can abort (`locale.cpp:923–928`). Implement a real C-only locale adapter and its stream/facet closure, not just flip CMake flags. |
-| Wide facilities | `ConvertUTFWrapper.cpp:259–271` unconditionally uses `wstring/wstring_view`; libc++ wide `char_traits` is disabled, and current libc supplies only bounded pieces such as `wcslen`. Audit real wide conversion/classification dependencies before enabling the needed subset; no promise of full wide localization. |
-| C++ synchronization/TLS | `ThreadPool.h:97–117` instantiates `shared_future`/deferred `async` outside its threads guard; `Parallel.h:61–85` declares mutex/condition-variable state; `lld/Common/Memory.h:68` uses `thread_local`. These wait for delta's gates 5–8 and the C++ adapter audit at gate 8, even with `LLVM_ENABLE_THREADS=OFF`. LLD `Filesystem.cpp:78–109` also uses detached `std::thread` for unlink: give that helper an honest synchronous or joined lifetime, not unsupported detach or a serial-only compiler substitute. |
-| Randomness/sleep | `ExponentialBackoff.h:60` contains `random_device`; `LockFileManager.cpp:298` uses backoff. Qualify a real random-grant/sleep adapter if retained in the closure; disable unsupported lock/module-cache features explicitly. No deterministic entropy or successful file-lock placeholder. |
-| Copied I/O and memory | `MemoryBuffer.cpp` has a copied-input route. `FileOutputBuffer.cpp:120` allocates its in-memory fallback through mapped-memory API, then writes the final name directly. Implement owned private RW backing and native FILE transfers with short-write/error handling and deliberate publication. Clang already stages through `CompilerInstance.cpp:881`/`VirtualOutputBackends.cpp:291`; preserve that contract as well as fixing LLD's fallback. Actual private memory is eager RW/NX; executable/protection/shared-map requests refuse. |
-| Launch/faults | Unix Program assumes spawn/wait/signals and POSIX descriptors. Native argv/cwd/environment snapshots, explicit grants and owned completion handles replace that backend. `clang/tools/driver/driver.cpp:59,384` still assumes signals/crash recovery. Native faults terminate the process; no signal recovery, helper or continuing after a fatal compiler/library fault. |
-
-### Remaining libc names: classify actual consumers
-
-Absence alone does not make a function a required first-compiler addition. The
-following names are still absent from current libc; re-audit the selected native
-closure as it builds. Standard functions actually needed belong in libc; platform
-policy belongs in LLVM Support.
-
-| Name / consumer | Current native disposition (task 3 audit) |
-| --- | --- |
-| `posix_memalign` | Not reached by selected Support; aligned C++ `new` uses the existing real allocator. Recheck optional allocator/intrinsic consumers in task 4. |
-| `fcntl` / Unix Path and Jobserver | Unix consumers are excluded. Native ownership/duplication is real; advisory locks refuse. No synthesized descriptor flags. |
-| `readlink`, `link/symlink` | Native Support returns not-supported; resource/executable roots are explicit. No Unix symlinks or `/proc/self/exe`. |
-| `pipe` / raw_socket_stream, interpreter capture | Unix pipe consumers are excluded; capture/interpreter features are outside file-to-object compilation. Native launch/stream grants do not supply a fake descriptor adapter. |
-| `getpid` | No process-ID adapter: native Program uses owned completion handles, random exclusive temp names; retained PID-only features must be excluded or explicitly adapted before use. Process-ID queries terminate with a specific refusal. |
-| `sysconf` | Page size uses the native memory contract and launch limits the real payload calculation. No invented CPU/usage statistics. |
-| `chmod/fchmod`, `futimens` | Native Support mode, ownership and timestamp setters refuse. Creation uses native authority/policy, not fabricated mode bits. |
-| `posix_fallocate` | Optional persistent CAS remains off; file resize promises no reservation. |
-| `strerror_r` | Configured absent. Support Errno copies real immutable native `strerror` messages. |
-| `ECHILD/ENOEXEC/EXDEV` | No selected native consumer; Unix wait/clone-copy vocabulary stays absent. |
-| `FP_ILOGB0/FP_ILOGBNAN`, `rint` | Added in libc for APFloat FPUtil and BranchProbability; real rounding obeys the native floating environment. |
-
-Task 1's real target build additionally reaches an undeclared `tolower` in
-`Support/CachePruning.cpp:112` and missing `FP_ILOGB0`/`FP_ILOGBNAN` in
-`libc/src/__support/FPUtil/ManipulationFunctions.h:86–87` through `APFloat.cpp`.
-The task 2 audit confirms that libc already implements `tolower`; refresh
-its C++ include/closure before adding a duplicate. Task 3 supplies the exceptional exponent constants and `rint` reached by
-`BranchProbability.cpp:29`. The current native Support compile/symbol audit and
-remaining thread-gated failures are [recorded separately](../development/experiments/hosted-clang-libc.md).
-No shared libc/runtime edit was made by task 1.
-The native backend removes Unix header consumers rather than supplying fakes.
-
-The old probe's absent Unix headers (`signal.h`, `spawn.h`, `sys/mman.h`,
-`sys/wait.h`, `pthread.h`, and others) are not a kernel API shopping list.
-[Native libc portability](../userland/libc-portability.md) remains authoritative.
-
 ## Process boundary
 
-**Inspected in the pinned fork:** `-fintegrated-cc1 -c` with one source and
-integrated assembly runs cc1 in-process. `clang/lib/Driver/Driver.cpp:5562`
-disables integration for multiple jobs or process statistics; source-to-executable
-and multiple-source invocations therefore still launch cc1 externally.
-`clang/lib/Driver/ToolChains/Pyxis.cpp:96` creates an external LLD `Command`;
-`-fuse-ld=lld` does not embed the linker. The first completion keeps compilation
-and native LLD launch separate.
+**Inspected in the pinned fork** (LLVM `49e2c1a1518b`): `-fintegrated-cc1 -c`
+with one source and integrated assembly runs cc1 in-process.
+`clang/lib/Driver/Driver.cpp:5562` disables integration for multiple jobs or
+process statistics, so source-to-executable and multiple-source invocations
+still launch cc1 externally. `clang/lib/Driver/ToolChains/Pyxis.cpp:96` creates
+an external LLD `Command`; `-fuse-ld=lld` does not embed the linker. The first
+completion keeps compilation and native LLD launch separate.
 
 The driver launching LLD or external cc1 requires
 [nested execution groups](nested-execution-groups.md), a parked required direction
@@ -128,34 +45,24 @@ This is not permission to add crash helpers or start embedding work.
 
 ## Parallel delivery tasks
 
-Task 1 is delivered in the [native Support fork PR](https://git.internal/PyxisOS/pyxis-llvm/pulls/4),
-with its [contracts](../development/llvm-support.md) and
-[qualification record](../development/experiments/hosted-clang-support.md).
-The installed fork pin remains unchanged. Tasks 2 and 3 are owner-assigned
-2026-10-11, in sequence (task 2 first, with reached libc prerequisites as needed).
-Tasks 4 and 5 need separate go-aheads. This line proceeds alongside delta's
-threads gates 5–8.
+This line proceeds alongside delta's threads gates 5–8. Tasks 4 and 5 need
+separate go-aheads. The installed fork pin (`49e2c1a`) is unchanged by tasks 1-3.
 
-1. [x] **LLVM Support platform and header fixes — delivered 2026-10-11.** Implement Pyxis Path/FILE,
-   Process/Program, private Memory and fault-policy equivalents in the fork,
-   with precise refusals and owned references. Configure selects Pyxis explicitly;
-   native host TableGen remains native. Capture baseline I/O/launch costs before
-   changing those paths. **Owner check:** inspect platform contracts and ordinary
-   Support builds; QEMU copied read/write, path/identity and error checks, without
-   claiming a runnable compiler before the thread gates.
-2. [x] **SDK C++ source closure — delivered 2026-10-11.** Audit and build the stream/C-locale/time-format
-   subset above, including real libc dependencies and the reached wide/random
-   facilities. Keep filesystem/time-zone expansion out unless reached. Coordinate
-   configuration and shared libc edits with delta. **Owner check:** ordinary SDK
-   build and QEMU stream/string/time-format behavior, including `locale("C")`
-   refusal of unavailable locales. Real mutex/future/TLS integration and threaded
-   validation wait on gates 5–8; these are not serial emulations.
-3. [x] **Remaining reached libc operations — delivered 2026-10-11.** Use the table to implement standard
-   functions on native objects, or adapt/refuse unsupported LLVM features.
-   Publish userland PRs before parent pins, keeping dependencies fast-forward.
-   **Owner check:** the refreshed compile/link inventory names no unexplained
-   missing function or successful fake operation; native ownership/error checks
-   pass. Shared runtime synchronization waits on delta's gate 8.
+1. [x] **LLVM Support platform and header fixes** (2026-10-11): fork
+   [PR 4](https://git.internal/PyxisOS/pyxis-llvm/pulls/4), Pyxis #708.
+   Contracts in [LLVM Support](../development/llvm-support.md); record in
+   [hosted-clang-support](../development/experiments/hosted-clang-support.md).
+2. [x] **SDK C++ source closure** (2026-10-11): userland
+   [#216](https://git.internal/PyxisOS/pyxis-userland/pulls/216), fork
+   [PR 5](https://git.internal/PyxisOS/pyxis-llvm/pulls/5), Pyxis #714. C-only
+   locale, wide FILE/UTF-8 closure and `getentropy`-backed `random_device`;
+   see [C++ in userspace](../development/cxx-userspace.md) and
+   [hosted-clang-cxx](../development/experiments/hosted-clang-cxx.md).
+   Ordinary SDK adoption waits for the owner-built container (below).
+3. [x] **Remaining reached libc operations** (2026-10-11): userland
+   [#217](https://git.internal/PyxisOS/pyxis-userland/pulls/217), Pyxis #718.
+   Disposition of absent names and the 155/170 Support compile inventory are in
+   [hosted-clang-libc](../development/experiments/hosted-clang-libc.md).
 4. [ ] **Thread-gated compiler/linker integration.** After delta's tasks 5–8 and
    its audited C++ adapter land, build the real Clang/LLD closure with LLVM workers
    off, static TLS and real runtime primitives. **Owner check:** both target links
@@ -168,113 +75,28 @@ threads gates 5–8.
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
 
-### Task 2 source audit and accepted contract — 2026-10-11
+### Open gaps for task 4
 
-Inspected current Pyxis `466d2ed5`, userland `df210f1a` and merged Support fork
-`6951d3c9`. The ordinary, unchanged SDK builds with installed compiler/runtime
-pin `49e2c1a`; its libc++/ABI/unwind archives are 605,368/587,078/76,198 bytes.
-The unchanged SDK initially failed the five reached raw-stream, Mustache,
-UTF-wrapper, lock-manager and preprocessor units at disabled stream/wide/random
-facilities. With the real task 2 runtime and libc closure they all compile.
-[Userland #216](https://git.internal/PyxisOS/pyxis-userland/pulls/216) and
-[fork #5](https://git.internal/PyxisOS/pyxis-llvm/pulls/5) supply the closure;
-[qualification and costs](../development/experiments/hosted-clang-cxx.md) record
-the builds and QEMU checks. No compiler link or threaded runtime is claimed.
+Source inspection of the pinned fork, relative to the
+[LLVM source](https://git.internal/PyxisOS/pyxis-llvm/src/commit/49e2c1a1518b3e4687b52ceb6001069c1b6d261e).
 
-The retained consumers need stream write/tell (`raw_os_ostream.cpp`), floating
-insertion into `ostringstream` (`Mustache.cpp`), C-locale `stringstream` and
-`put_time` (`PPMacroExpansion.cpp`), and `wstring/wstring_view`
-(`ConvertUTFWrapper.cpp`). `ExponentialBackoff.h` declares `random_device`
-unconditionally; LLD ELF `Writer.cpp` uses it for unseeded section shuffling.
-These are source requirements, independent of LLVM worker selection.
-
-The narrow locale prerequisites are real libc `struct lconv`/`localeconv` and
-`strxfrm`; existing ctype, collation, floating parsing, `asprintf` and time
-functions suffice otherwise. The fork needs an explicit private Pyxis locale
-backend and the built-in classic ctype table, not POSIX locale objects or the
-unsupported-platform abort. Stock wide runtime also builds wide facets, standard
-streams and numeric conversions, beyond LLVM's own UTF conversion:
-
-| Reached source | Additional libc closure |
+| Area | Boundary and work |
 | --- | --- |
-| Wide char_traits/string | `wmemcmp`, `wmemchr`; existing `wcslen` |
-| Wide locale/codecvt/time | `wcscoll`, `wcsxfrm`, `btowc`, `wctob`, `mbrtowc`, `mbrlen`, `mbsrtowcs`, `wcrtomb`, bounded `mbsnrtowcs`/`wcsnrtombs` |
-| Wide numeric string conversions | `wcstol/wcstoul/wcstoll/wcstoull`, `wcstof/wcstod/wcstold`, `swprintf` |
-| Wide standard streams | `getwc`, `ungetwc`, `fputwc`, with real FILE orientation/pushback state |
-
-Filesystem and time-zone database stay off. Filesystem-off excludes filebuf
-instantiations even when localization selects `fstream.cpp`; no new filesystem
-facility is needed. Wide scanning/full wide stdio and locale databases are not
-promised by this audit. Standard missing functions belong in libc.
-
-The C-only adapter preserves existing names `"C"`/`""`, UTF-8 conversion and
-ASCII classification. Use private immutable libc++ locale tokens and real C
-`lconv` data; unavailable names fail through normal C++ errors. No public
-`locale_t/newlocale/uselocale` or mutable locale machinery is needed. This does
-not change the existing libc locale contract.
-
-**Both defaults accepted by the owner, 2026-10-11:**
-
-1. **Wide facilities: implement the actual stock wide runtime closure
-   above, including real restartable UTF-8 and the reached wide FILE operations.**
-   Preserve read-ahead/position/error behavior; no repeated-byte-pushback shortcut
-   for `ungetwc`.
-2. **Randomness: real libc `getentropy` over startup `random`/`clock`
-   grants, 0–256 bytes, using the existing five-second maximum wait.** Checked
-   absolute deadline, all-or-nothing output, honest authority/queue/timeout/source
-   failures, no fallback. Select libc++'s getentropy backend: its default
-   `"/dev/urandom"` token is an API selector, never a path lookup; other tokens
-   refuse. `entropy()` returns zero because no estimate is provided.
-
-Coordinate `libc/include/{locale,wchar,stdio}.h`, FILE internals/pushback,
-new wide/entropy sources and the libc source list, plus `scripts/cxx-runtime.sh`,
-with delta through the owner. Its #709 owns `lib/thread.c`, `lib/memory.c`,
-`include/thread.h`, `include/memory.h` and boot/session/shell/mux launch grants;
-this task does not edit those. New libc sources use the existing source wildcard,
-without a runtime.mk/startup edit. Do not alter errno/TLS storage,
-allocator locking, timezone/static-result locking or startup ownership here.
-The actual fork runtime can be built locally with the existing compiler and SDK;
-ordinary SDK adoption waits for the matching owner-built container, as below.
+| C++ synchronization/TLS | `ThreadPool.h:97–117` instantiates `shared_future`/deferred `async` outside its threads guard; `Parallel.h:61–85` declares mutex/condition-variable state; `lld/Common/Memory.h:68` uses `thread_local`. These wait for delta's gates 5–8 and the C++ adapter audit at gate 8, even with `LLVM_ENABLE_THREADS=OFF`. The 15 Support units that still fail are listed in [hosted-clang-libc](../development/experiments/hosted-clang-libc.md#compile-and-symbol-inventory). LLD `Filesystem.cpp:78–109` also uses detached `std::thread` for unlink: give that helper an honest synchronous or joined lifetime, not unsupported detach or a serial-only compiler substitute. |
+| Metadata consumers | Task 4's full build must adapt each remaining consumer of unknown metadata without replacing unknown values with zero or unchecked optional dereferences ([LLVM Support](../development/llvm-support.md#paths-and-inputs)). |
+| Randomness/sleep | `LockFileManager.cpp:298` uses backoff; disable unsupported lock/module-cache features explicitly. No deterministic entropy or successful file-lock placeholder. |
+| Retained-handle, memory, stack budgets | Need actual native compiler artifacts (task 5); see Resources below. |
 
 ### Compiler-container boundary
 
-Task 1 leaves the installed pin unchanged. Its Support/header changes and any task 2 libc++
-fork changes are fork PRs, not ports-only patches. A local investigation can build
-that fork with the existing host compiler. **Before a parent PR adopts the new
+Tasks 1-3 leave the installed pin unchanged. Their Support/header and libc++
+changes are fork PRs, not ports-only patches. **Before a parent PR adopts the new
 fork pin**, the owner must build/publish the matching compiler container and the
 PR must update `toolchain/build.sh`, `ci/Containerfile`, workflow image tag and
 [toolchain documentation](../development/llvm-toolchain.md#changing-the-pin)
 together. Ordinary SDK configuration or libc edits alone need no container
 rebuild. Coordinate the chosen fork head with delta's gate 7 TLS change to avoid
 publishing incompatible compiler/runtime pins. Do not change the container now.
-
-## Accepted task 1 decisions (2026-10-11)
-
-The owner accepted all three defaults and assigned task 1. These refine the
-accepted milestone without changing its thread or container boundaries.
-
-1. **Path/metadata lifetime — accepted:** native directory-backed scheme paths;
-   retain opened file/directory references through compiler identity caches and
-   require valid domain/object IDs for identity-sensitive input. Refuse providers
-   without identity. Keep missing mtime explicitly unknown (including the existing
-   unknown `__TIMESTAMP__` spelling), not epoch zero; disable caches requiring it.
-   RAM and installed headers remain usable without inventing metadata; retained
-   references increase handle/memory cost, to measure before setting budgets.
-2. **Output publication — accepted:** owned buffer, exclusive random sibling temp,
-   checked writes, FILE sync, same-parent replacement and directory sync; all
-   grants/references released once. Before publication failure keeps the old name;
-   after rename a sync failure reports uncertainty rather than claiming rollback.
-   Cleanup on ordinary errors is explicit; a fatal fault may leave a temp. Refuse
-   backends lacking required rename/sync authority. This protects existing artifacts and
-   needs parent LOOKUP/CREATE/REMOVE plus output WRITE, not global authority.
-3. **Program/fault boundary — accepted:** resolve selected tools through explicit
-   delegated roots (no colon-split PATH or `/proc` discovery), snapshot cwd/env,
-   preserve ordinary grant attenuation, and own native completion handles until
-   observed/closed. Inherited diagnostics only; reject unsupported redirection,
-   timeout/resource-limit/statistics/recovery requests before launch. Fatal faults
-   terminate; successful cleanup hooks cover orderly errors only. Program uses
-   explicit launch authority and owned handles, without crash helpers;
-   new child resource delegation still needs an explicit caller selection.
 
 ## Resources and native limits
 
@@ -300,7 +122,7 @@ native Clang or LLD will fit or load under available physical memory.
 Clang requests an 8 MiB stack and its near-exhaustion diagnostic assumes that
 scale. Plain native executables retain fixed eager 1 MiB stacks after the owner
 reviewed the 8 MiB default's costs. An unpacked
-[application bundle](program-bundles.md#manifest-and-stack) can now supply a
+[application bundle](../userland/program-bundles.md#manifest-and-stack) can now supply a
 bounded initial-stack parameter to the common loader, without a P1F field or
 compiler-container rebuild. Clang's actual stack use remains unqualified. Threads-off
 RunSafelyOnNewStack runs inline. A trivial host compile does not establish stack

@@ -1,6 +1,6 @@
 # Unpacked development bundles: task 1
 
-Recorded on 2026-10-09 for [program bundles](../../../wip/program-bundles.md).
+Recorded on 2026-10-09 for [program bundles](../../../userland/program-bundles.md).
 These are nested-KVM observations. Temporary native fixtures, image variants,
 JSONL, serial and debugger captures stay in ignored `build/bundles-task1-*`;
 no benchmark, test or boot automation was added.

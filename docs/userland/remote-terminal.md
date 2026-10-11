@@ -72,6 +72,53 @@ creates its namespace, and calls
 `session boot://session.pxe --configure-network --start-remote-services`.
 Do not give multiple init scripts network configuration ownership.
 
+## Remote multiplexer
+
+Set `remote_multiplexer = true` on the Remote space in live or installed
+configuration, rebuild, then request an interactive mux:
+
+```sh
+build/tools/pyxis-remote --mux 127.0.0.1 2323
+```
+
+Packaged configurations leave this opt-in false. An unavailable request is
+rejected without a fallback shell. `--mux` cannot accompany `--machine`,
+`--no-shell-echo` or `--download-dir`; initial character dimensions come from
+TIOCGWINSZ or explicit `--columns`/`--rows`. Live remote resize is unsupported.
+
+The daemon loads `bin://mux.pxe` inside its outer remote group and creates each
+pane's independent terminal, group and stock root shell through a private
+SEND-only broker. Mux receives attachment, process WAIT and group CONTROL|WAIT;
+the daemon retains supervision through cleanup. It freezes initial environment,
+roots, namespace and remote resource masks per connection. Split cwd snapshots
+preserve actual directory rights, with initial `tmp://` fallback before
+publication. Mux receives no CREATE_GROUP, terminal creation, physical input,
+DRAW or clipboard-store grant. Pane shells receive neither broker nor group
+supervision. The live-only remote power and optional screen-capture policies
+remain unchanged.
+
+The [existing mux controls](multiplexer.md#controls-and-layout) provide BSP/equal
+splits, eight stable digits, arrow focus, history and close confirmation.
+Presentation uses the existing Pyxis colours and supported one-cell UTF-8;
+resumable try-write rendering keeps pending output bounded while servicing panes.
+Remote mux is keyboard-only: native pointer/clipboard and safe-Paste transactions
+are unavailable. Host selection and ordinary paste remain host operations;
+pasted newlines can submit commands and control bytes reach the prefix parser.
+Prompt-based drop/upload and transfer interception are disabled. The propagated
+informational `PYXIS_REMOTE_MUX=1` profile makes stock `xfer` refuse before
+protocol emission; unsupported OSC bodies are discarded. Pane completions are
+not merged into the client's single command sequence; mux exposes session FINAL.
+
+Four total connections admit at most two mux connections, including closing
+ones. Incomplete creation occupies one of eight pane slots; every created group
+retains its slot through failed delivery or closure until cleanup completes.
+Broker transactions use nonreused IDs, incremental
+four-grant cwd chunks and a current ten-second deadline; uncertain publication
+cancels tracked work and ends mux without retry. Disconnect/outer exit seals
+admission and terminates every group. FINAL and slot reuse require outer and
+all-pane cleanup, independently of the five-second transport-drain limit.
+See the [implemented contract and remaining task](../wip/remote-multiplexer.md).
+
 ## Reverse connections
 
 Add `remote.beacon=NAME` to the PXE entry's kernel command line to make the
@@ -123,10 +170,10 @@ retain UDP OPEN alone and receive neither the beacon grant nor its bootstrap
 environment variable. Discovery does not grant network configuration authority
 or replace DHCP ownership.
 
-After connecting, HELLO, framing, machine mode, shell completion, file transfer
-and terminal behavior use the existing session path. One reverse session runs
-at a time. After disconnect, the daemon terminates the old execution group and
-waits for its attributed cleanup before reopening discovery. Failed TCP
+After connecting, HELLO selects the ordinary shell path or explicitly requested
+mux path. One reverse session runs at a time. After disconnect, the daemon
+terminates the outer group and any tracked pane groups, waiting for their
+attributed cleanup before reopening discovery. Failed TCP
 attempts wait one second before reopening; successful-session cleanup has no
 added delay. The host tool exits when its session ends. Starting it again
 advertises a fresh session, whose command numbering begins at 1. Waiting on the
@@ -196,14 +243,14 @@ Host publication uses Linux `renameat2(RENAME_NOREPLACE)` or macOS
 `renameatx_np(RENAME_EXCL)`; other host platforms fail publication explicitly.
 Linux behavior is validated; the macOS path requires owner validation.
 
-See the [transfer contract and remaining drag/drop task](../wip/remote-file-transfer.md)
+See the [accepted transfer decisions and remaining drag/drop check](../wip/remote-file-transfer.md)
 and the [native program notes](../../userspace/xfer/README.md) for authority,
 filename limits and the OSC 5113 SHA-256 extension. Stock kitty does not implement
 this required extension and is unsupported.
 
 ## Dropping a host file
 
-Interactive `pyxis-remote` enables bracketed paste on the host terminal and
+Ordinary interactive `pyxis-remote` enables bracketed paste on the host terminal and
 restores it on exit. At a known empty remote prompt, one pasted absolute or `~/`
 path to an existing regular host file offers an upload into the current guest
 directory. Single/double quotes and shell backslash escaping are removed without
@@ -233,14 +280,16 @@ an idle shell while later queued input launches an application. Within a running
 program, a dropped path is ordinary pasted text, never an injected upload command.
 See [the tracking limit](../technical-debt.md#remote-drop-prompt-tracking).
 
-Machine mode neither enables bracketed paste nor recognizes paths/markers.
+Mux mode consumes bracketed-paste delimiters and forwards the body as ordinary
+input, without prompt/drop tracking or upload injection. Machine mode neither
+enables bracketed paste nor recognizes paths/markers.
 Default machine sessions preserve the root shell's OSC marker bytes in OUTPUT;
 `--no-shell-echo` uses the quiet editor and emits no prompt markers. No kernel,
 terminal wire frame or filesystem grant is added.
 
 Linux client/guest protocol checks pass; actual macOS terminal drag/drop and
 macOS publication still require owner validation. See the
-[task and acceptance record](../wip/remote-file-transfer.md#task-2-validation-2026-10-07).
+[drop validation record](../development/experiments/xfer-streaming/README.md#drop-2026-10-07).
 
 ## Client modes
 
@@ -383,11 +432,11 @@ coalesced frames and short writes are ordinary TCP behavior.
 
 | Direction / type | Payload |
 | --- | --- |
-| Client HELLO (1) | Three u32: columns 1–512, rows 1–256, options (bit 0 NO_SHELL_ECHO) |
+| Client HELLO (1) | Three u32: columns 1–512, rows 1–256, options (bit 0 NO_SHELL_ECHO, bit 1 MULTIPLEXER) |
 | Client INPUT (2) | 1–4096 input bytes |
 | Client END_INPUT (3) | Empty; preserve queued input, then EOF |
-| Client CLOSE (4) | Empty; terminate the session group |
-| Server READY (16) | Empty; shell successfully launched |
+| Client CLOSE (4) | Empty; terminate outer and tracked pane groups |
+| Server READY (16) | Empty; root shell or mux successfully launched |
 | Server OUTPUT (17) | 1–4096 native terminal bytes |
 | Server FRESH_LINE (18) | Empty |
 | Server TAB_WIDTH (19) | One u64, 1–32 |
@@ -396,8 +445,12 @@ coalesced frames and short writes are ordinary TCP behavior.
 | Server COMMAND_COMPLETE (22) | u64 command number, u32 kind, u32 status; exactly 16 bytes |
 
 HELLO must arrive within ten seconds, precede other client frames and appear
-once. Unknown option bits or any other HELLO size are rejected as a bad frame. INPUT after END_INPUT, malformed lengths and unknown types are rejected.
-COMMAND_COMPLETE follows READY and precedes FINAL in terminal output order.
+once. Unknown option bits or any other HELLO size are rejected as a bad frame.
+MULTIPLEXER combined with NO_SHELL_ECHO, an absent mux opt-in or exhausted mux
+admission is rejected as resource failure. INPUT after END_INPUT, malformed
+lengths and unknown types are rejected. COMMAND_COMPLETE follows READY and
+precedes FINAL in ordinary shell terminal output order; mux emits no per-pane
+command-completion frames.
 Kinds are exited (1), faulted (2), terminated (3), launch failed (4), builtin
 (5), rejected (6) and launched (7). Status carries signed exit-code bits for
 exited, 0 or 1 for builtin and must be zero otherwise. The client rejects
@@ -417,8 +470,12 @@ addition to the kernel's bounded terminal and TCP queues. A rotating loop gives
 each client at most four service rounds before returning to the wait set. It
 watches socket writability only with pending output and terminal input capacity
 only with a pending INPUT frame. Stale readiness returning WOULD_BLOCK is normal.
-The wait set contains at most thirteen entries: listener plus each client's TCP,
-terminal attachment and process-or-group completion observer.
+Ordinary connections use at most thirteen wait entries: listener plus each
+client's TCP, terminal attachment and process-or-group completion observer.
+Two mux connections add eight pane-group observers and one private broker
+receiver each, for at most 31 entries within the native bound of 32. The daemon
+services broker records incrementally; synchronous launch/HOST capture can
+still delay its shared service loop.
 
 Natural root-shell exit seals and terminates remaining descendants. Explicit
 CLOSE, transport failure or TCP peer FIN also terminates the group. TCP FIN is
@@ -434,8 +491,9 @@ reports the accepted handoff after this wait; FINAL carries the propagated shell
 outcome. Remaining descendants and disconnected sessions still use the same
 group termination and cleanup path.
 
-During orderly closure the server drains accepted terminal output, awaits group
-cleanup, emits FINAL, shuts down TCP writes and waits for the peer to close.
+During orderly closure the server drains accepted terminal output, awaits outer
+and any tracked pane-group cleanup, emits FINAL, shuts down TCP writes and waits
+for the peer to close. Mux broker admission is sealed before termination.
 A five-second deadline covers closing output and transport shutdown. Expiry
 abandons the connection/output; the admission slot remains occupied until group
 cleanup finishes. A published HOST operation can delay cleanup indefinitely.
@@ -654,9 +712,10 @@ matching the limit derived from the 9-byte prompt. EOF after an unfinished line
 emitted nothing. `exit` and a `session boot://shell.pxe` handoff each reported
 builtin success before FINAL.
 
-HELLO with option bit 1, option bit 31 or the former 8-byte payload each
-received ERROR bad frame. The interactive client still rendered prompts,
-editing and diagnostics, and Ctrl+] closed it with acknowledged termination.
+In this historical command-completion baseline, HELLO with then-unknown option
+bit 1, option bit 31 or the former 8-byte payload each received ERROR bad frame.
+Bit 1 now selects the explicitly enabled remote mux path. The interactive client
+still rendered prompts, editing and diagnostics, and Ctrl+] closed it with acknowledged termination.
 The local Development shell still showed its prompt, echo and `ls` output.
 A GDB breakpoint on `terminal_events_call` showed 16-byte requests with
 kind/status 1/2147483647 for a pipeline's last stage and 4/0 for a launch

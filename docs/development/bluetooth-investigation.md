@@ -150,7 +150,7 @@ ignore EncKey for LE SC; those flags are not evidence of a legacy LTK exchange.
 IRK distribution establishes the resolution requirement,
 without measuring address rotation or Pyxis resolution.
 
-[Milestone task 1](../wip/bluetooth-task1-contracts.md) carries this evidence into
+The [mouse milestone](../wip/bluetooth-mouse.md#measurement-and-implementation-gates) carries this evidence into
 its dependency gates. Tasks 4/5 still verify the actual Pyxis feature exchange
 and encryption before accepting input. No addresses, identity values, keys or
 raw packets enter this report.

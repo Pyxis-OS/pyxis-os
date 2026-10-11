@@ -1,74 +1,48 @@
 # Userspace URI scheme providers
 
 Status: future extensions to the [implemented userspace services](../interfaces/userspace-services.md).
-Read-only HTTP/HTTPS, byte snapshots, scoped binding, capability transfer and export
-lifetime are implemented; their contracts live in the subsystem docs. Writes,
-media-type aliases and streamed HTTP are the separate
+Read-only HTTP/HTTPS ([verified with Mbed TLS](../userland/https.md)), byte
+snapshots, scoped binding, capability transfer and export lifetime are
+implemented; their contracts live in the subsystem docs. Writes, media-type
+aliases and streamed HTTP are the separate
 [native HTTP requests](native-http-requests.md) milestone. Richer representations,
-caching, SQLite and Git remain later work. [Verified HTTPS with Mbed TLS](../userland/https.md) is implemented with
-packaged public roots and optional per-instance augmentation. The URI
-examples below are proposals unless identified as existing behavior.
+caching, SQLite and Git remain later work. The URI examples below are proposals.
 
-## Implemented foundation and extension boundary
+## Extension boundary
 
-Ordinary `fopen("http://example.com/hello.txt", "r")` and
-`cat http://example.com/hello.txt` use the [file-provider bridge](../interfaces/file-providers.md).
-The [HTTP/HTTPS providers](../userland/http-fetch.md) stage a complete bounded body and return
-an immutable snapshot. Copies retain its bytes; independent opens fetch again.
-Reads use retained bytes at explicit offsets without new range requests.
-Retirement governs storage release, and provider death invalidates its exports.
-
-[Namespaces](../interfaces/namespaces.md) supply exact-name publication, atomic replacement
-and explicit startup delegation. Libpyxis selects the URI scheme; the provider
-interprets the full URI. Directory roots retain their existing traversal, and
-ambiguous directory/provider bindings fail. Removal or replacement changes future
-discovery without retargeting held grants. There is no automatic restart or
-rebinding.
-
-HTTP parsing, redirects, TLS, certificate verification and cache policy belong
-in userspace. The kernel supplies network primitives, bounded IPC, capability
-enforcement and namespace bindings. Existing per-space HTTP publication is not a
-network-destination sandbox. A future shared provider needs an explicit caller
-policy before adding redirects, credential handling or cross-caller cache reuse;
-its own network grants alone do not enforce those restrictions.
+Read-only `fopen("http://…", "r")` and `cat` use the
+[file-provider bridge](../interfaces/file-providers.md) and the
+[HTTP/HTTPS providers](../userland/http-fetch.md): complete bounded immutable
+snapshots, with exact-name [namespace](../interfaces/namespaces.md) publication,
+no automatic restart or rebinding, and the contracts in
+[userspace services](../interfaces/userspace-services.md). Extensions build on
+those contracts. HTTP parsing, redirects, TLS and cache policy stay in userspace.
+Existing per-space HTTP publication is not a network-destination sandbox: a future
+shared provider needs an explicit caller policy before adding redirects,
+credential handling or cross-caller cache reuse; its own network grants alone do
+not enforce those restrictions.
 
 ## Discoverable resource representations
 
-The working conceptual model separates the resource from the caller's grant:
-
-- A resource has identity, lifetime, supported operations and, where useful,
-  available representations.
-- A capability holds a resource reference and granted rights. Handles name
-  those grants in a process's table; names resolve within a namespace.
-
-Representations describe how content or results can be consumed; they are not
-required for every resource. A process-control resource may chiefly expose
-operations. This is a design guide, not a universal kernel class or framework;
-the current [object/capability contract](../interfaces/processes.md#objects-capabilities-and-handles)
+The working conceptual model separates the resource (identity, lifetime,
+supported operations and, where useful, available representations) from the
+caller's grant (a capability holding a resource reference and rights). This is a
+design guide, not a universal kernel class; the current
+[object/capability contract](../interfaces/processes.md#objects-capabilities-and-handles)
 already defines references and rights, while representation discovery is future
-work.
-
-The existing OPEN reply declares a byte representation and optional media type.
-A later interface could let consumers discover alternatives and select one.
+work. The existing OPEN reply declares a byte representation and optional media
+type; a later interface could let consumers discover and select alternatives.
 Negotiation, structured-data contracts and their authority checks remain open.
 
-For example, `json+sqlite://catalog/apps` explicitly requests serialized JSON.
-An explorer opening `sqlite://catalog/` could discover the `apps` view, then ask
-for rows with column names and types when the user opens it. Ordinary readers
-could use a text representation, while jq consumes JSON. Directory discovery and
-result representation are distinct: listing a view does not describe its columns.
-
-These are representations of the same authorized resource. Selecting a format
-must not broaden access, execute a mutation or require the consumer to guess from
-a filename. A prefix is a convenient explicit selection; discoverable metadata
-lets a consumer choose without knowing the prefix convention. Complete aliases
-remain scoped bindings, not a kernel parser for composable URI prefixes.
-
-This could allow a generic explorer/table viewer to display database results
-without SQLite-specific UI. Keep provider serialization and interpretation in
-userspace, and define unsupported-format errors when designing the contract.
-These consumer examples motivate a later contract; they do not add a general
-negotiation framework to the existing OPEN interface.
+For example, `json+sqlite://catalog/apps` explicitly requests serialized JSON,
+while an explorer opening `sqlite://catalog/` could discover the `apps` view and
+ask for rows with column names and types. Directory discovery and result
+representation are distinct: listing a view does not describe its columns.
+Selecting a format must not broaden access, execute a mutation or require the
+consumer to guess from a filename. Complete aliases remain scoped bindings, not
+a kernel parser for composable URI prefixes. Keep provider serialization in
+userspace and define unsupported-format errors with the contract; these examples
+add no negotiation framework to OPEN.
 
 ## Media-type scheme aliases
 
@@ -79,73 +53,49 @@ other representation/SQLite aliases remain later ideas.
 
 ## Future writes and shell operations
 
-The owner's 2026-09-24 direction was GET for `cat`/`"r"`, staged POST for `"w"`,
-and staged POST followed by response reading for `"w+"`. Accepted Claude
-preparation/commit rules subsequently settled one-shot submission and explicit
-body/control/response authority. On 2026-10-11 the owner moved this shared work to
-[native HTTP requests](native-http-requests.md), adding no artificial response-size
-cap, streamed GET/POST completion and large request staging. All three HTTP
-defaults are accepted; nothing here marks them implemented.
-
-That milestone owns `printf '{}' > json+https://…`, explicit shell-coordinated
-commit and response access. Ordinary writes, flush/close and editor autosave do
-not submit; PUT/PATCH/delete and editor-specific execution remain later scope.
-Reads through a newly opened URI are GET, never the previous POST response.
+The owner's 2026-09-24 direction: GET for `cat`/`"r"`, staged POST for `"w"`,
+staged POST followed by response reading for `"w+"`. On 2026-10-11 the owner
+moved this shared work, with one-shot submission, no artificial response-size cap,
+streamed completion and large request staging, to
+[native HTTP requests](native-http-requests.md); its defaults are accepted and
+none is implemented. Ordinary writes, flush/close and editor autosave do not
+submit; PUT/PATCH/delete and editor-specific execution remain later scope. Reads
+through a newly opened URI are GET, never the previous POST response.
 
 ## Prepared requests and shell handoff
 
 [Native HTTP requests](native-http-requests.md#carried-forward-accepted-contract)
 owns the accepted real-grant handoff into private shell bindings and the
-libc/Lua staging/response adapters. Printed numeric handles or byte replies cannot
-transfer authority. Producers receive body WRITE, consumers response READ plus
-read-only completion observation under the accepted streamed contract; only the
-coordinator commits/aborts. Request-private credentials and unknown-outcome/no-replay
-rules are preserved.
-
-A prepared request is a capability. Private shell bindings are the first form
-of capability-valued variables; future environment variables may carry real
-capabilities inherited through explicit launch grants, never text-encoded
-handles. These bindings must fit the cross-cutting
-[capability-valued environment direction](capability-environment.md) rather than
-become a separate shell-only mechanism. Credential bytes
-remain excluded from argv/environment/history/logs.
-The [task 3 object/rights/lifetime/inheritance review](native-http-requests.md#capability-valued-variables-and-task-3-review)
+libc/Lua staging/response adapters; printed numeric handles or byte replies
+cannot transfer authority. Private shell bindings are the first form of
+capability-valued variables and must fit the cross-cutting
+[capability-valued environment direction](capability-environment.md). Credential
+bytes remain excluded from argv/environment/history/logs. The
+[task 3 object/rights/lifetime/inheritance review](native-http-requests.md#capability-valued-variables-and-task-3-review)
 is required before code; capability-valued environment implementation needs a
-separate owner assignment. The motivating workflow is to log in, extract a token
-with jq, and prepare another request with it, through private credential
-preparation rather than an ambient header store.
+separate owner assignment.
 
 The shared [native command execution](native-command-execution.md) milestone
 supplies selected producer/consumer streams and per-stage results/cleanup. The
-HTTP redirection coordinator still owns the accepted rule to commit only after
-every body producer succeeds; ordinary pipeline last-stage status is insufficient.
+HTTP redirection coordinator still owns the rule to commit only after every body
+producer succeeds; last-stage pipeline status is insufficient.
 
 ## Future response cache
 
-A later userspace cache may retain complete responses for a limited time and use
-LRU to evict entries under a byte budget. LRU selects what to discard; freshness
-policy determines whether retained data may satisfy a new open. Retain only
-completed, validated bodies. Cache capacity, maximum object size, lifetime caps
-and accounting remain explicit policy choices, not kernel HTTP behavior.
-
-Reuse must respect HTTP caching rules, including `Cache-Control`, validators,
-`Vary`, and restrictions on authenticated/shared responses. A local time limit
-must not authorize reuse forbidden by the response. Consult
-[HTTP caching](https://www.rfc-editor.org/rfc/rfc9111.html#section-4) when defining
-this milestone. Namespace/authority and credentials belong in the cache's
-isolation policy; a URL alone is not a sufficient sharing boundary.
-
-Eviction removes reuse eligibility; it must not invalidate storage still owned
-by open handles. Account for that retained storage too. A response whose length
-was initially unknown can become a cache candidate after bounded completion;
-partial or still-arriving bodies cannot satisfy another open.
-
-## Compiler experiment
-
-Implemented: TCC resolves `#include "https://…"` through the caller's namespace;
-see [includes by URI](../userland/tcc.md#includes-by-uri). Repeatable builds pin
-immutable URIs; a time-limited response cache would not make a moving URL
-reproducible.
+A later userspace cache may retain complete, validated responses for a limited
+time and use LRU to evict entries under a byte budget. LRU selects what to
+discard; freshness policy determines whether retained data may satisfy a new
+open. Capacity, maximum object size, lifetime caps and accounting are explicit
+policy, not kernel HTTP behavior. Reuse must respect HTTP caching rules
+(`Cache-Control`, validators, `Vary`, authenticated/shared responses; see
+[RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html#section-4)); a local time
+limit must not authorize forbidden reuse. Namespace/authority and credentials
+belong in the isolation policy; a URL alone is not a sharing boundary. Eviction
+removes reuse eligibility but must not invalidate storage still owned by open
+handles, which stays accounted. Partial or still-arriving bodies cannot satisfy
+another open. TCC already resolves `#include "https://…"` through the caller's
+namespace ([includes by URI](../userland/tcc.md#includes-by-uri)); repeatable
+builds pin immutable URIs, which a time-limited cache would not replace.
 
 ## SQLite views and query results
 
@@ -251,29 +201,22 @@ a command language or editor feature to implement alongside the first provider.
 
 ## Decisions for later extensions
 
-The [implemented service contracts](../interfaces/userspace-services.md) provide discovery,
-request/reply capability transfer, deadlines, immutable files and acknowledged
-retirement. Future work builds on those contracts rather than reopening them:
-
 - Namespace overlays, enumeration, search paths and automatic provider activation
   remain deferred; the implemented map uses exact lookup and explicit publication.
-- Capability attachments currently copy grants. Ownership-moving transfers need
-  a separate failure and lifetime contract.
+- Capability attachments copy grants. Ownership-moving transfers need a separate
+  failure and lifetime contract.
 - Shared provider policy must define caller isolation, credentials, redirects
-  and cache reuse. A URL alone does not identify an authority boundary.
-- TLS needs a userspace library and trust configuration. It stays out of the
-  kernel regardless of library choice.
+  and cache reuse.
 - HTTP writes, prepared handoff and stream completion are owned by
-  [native HTTP requests](native-http-requests.md); other provider mutations still
-  need their own commit/cancel, ownership and uncertain-outcome contracts.
-- Representation discovery and selection need bounded metadata and resource
-  protocols. Shared-memory transport needs its own mapping and lifetime rules;
-  private pointers cannot cross process boundaries.
+  [native HTTP requests](native-http-requests.md); other provider mutations need
+  their own commit/cancel, ownership and uncertain-outcome contracts.
+- Representation discovery needs bounded metadata and resource protocols.
+  Shared-memory transport needs its own mapping and lifetime rules.
 - Asynchronous provider work needs scheduling and cancellation contracts; see
   [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness).
 - A later SQLite consumer needs the [SQLite port](application-ports.md), view
   grants and binding policy, consistent result generation, serialization and
   query budgets. Session mutations and editor worksheets follow independently.
 
-These extensions need their own bounded implementation decisions. They do not
+These extensions need their own bounded implementation decisions; they do not
 require placeholder syscalls, registries or protocol adapters in current work.
