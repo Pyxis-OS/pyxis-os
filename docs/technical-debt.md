@@ -1355,6 +1355,15 @@ behind it and retired bodies can keep occupying the storage budget. A fetch has 
 unlimited IPC waits, queued work can compound the delay, and cancellation cannot interrupt a blocking network operation instantly. Revisit with asynchronous
 service work and wait sets; no worker-process or thread framework is included.
 
+## HTTP shared-instance admission
+
+The planned [native HTTP first slice](wip/native-http-requests.md#ordered-delivery-tasks)
+admits one active exchange per provider process, shared by aliases/binding clients.
+A long download therefore denies Claude/Git/URI exchange admission on that instance.
+Per-consumer provisioning/concurrency is deferred; revisit isolation or admission
+before Git/Claude integrations run alongside downloads, without widening task 3.
+This limit is not implemented yet.
+
 ## Configured mount discovery latency
 
 Deferred by the owner on 2026-10-04 from the review of [PR #389](https://git.internal/PyxisOS/pyxis-os/pulls/389) (`0d82e57`). With `CONFIG_XHCI=y`, configured

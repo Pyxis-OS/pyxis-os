@@ -53,8 +53,13 @@ than throwaway work.
   sbase may cover some), and either CMake or Ninja. fmt, mbedtls, fastfetch and
   DevilutionX use CMake, itself a large C++ port. Converting some recipes to plain
   Make is an alternative.
-- **Fetching.** HTTPS already works natively. Archives with checksums are easier
-  than Git on Pyxis, but archives a mirror generates from Git commits may not be
+- **Fetching.** HTTPS GET snapshots already work natively;
+  [native HTTP requests](native-http-requests.md) independently supplies streamed
+  downloads without the current 16 MiB response cap, explicit complete/failed
+  status and staged smart-HTTP POSTs. Source fetch and ports consume that shared
+  milestone, rather than owning HTTP engine/provider tasks. Verify the exact
+  commit or SHA-256 and publish a source only after complete transfer.
+  Archives with checksums are easier than Git on Pyxis, but archives a mirror generates from Git commits may not be
   byte-stable, which a SHA-256 pin needs. The [Git investigation](git-on-pyxis.md)
   compares a restricted Git CLI with a native libgit2 fetch command, records
   the investigated SDK/filesystem gaps, and tracks the accepted route and its
@@ -86,7 +91,9 @@ explicit CA policy; verification is never disabled. It holds no Pyxis
 credentials, and Pyxis gains no write path to the servers. Integrity does not
 depend on the gateway: Git fetches verify the exact pinned commit and archives
 their pinned SHA-256. Recipe URLs need a configurable mirror base rather than
-the hard-coded upstream URLs they have today.
+the hard-coded upstream URLs they have today. The gateway is a separate deployment
+prerequisite: [native HTTP requests](native-http-requests.md) supplies the Pyxis
+GET/POST transport and completion contract, not a tailnet client or gateway setup.
 
 Until a builder fetches on its own, the host can push pinned sources to Pyxis
 with `xfer` over the remote terminal. Joining the tailnet directly depends on

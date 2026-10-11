@@ -3,8 +3,9 @@
 Status: future extensions to the [implemented userspace services](../interfaces/userspace-services.md).
 Read-only HTTP/HTTPS, byte snapshots, scoped binding, capability transfer and export
 lifetime are implemented; their contracts live in the subsystem docs. Writes,
-media-type aliases, richer representations, caching, SQLite and Git remain
-later work. [Verified HTTPS with Mbed TLS](../userland/https.md) is implemented with
+media-type aliases and streamed HTTP are the separate
+[native HTTP requests](native-http-requests.md) milestone. Richer representations,
+caching, SQLite and Git remain later work. [Verified HTTPS with Mbed TLS](../userland/https.md) is implemented with
 packaged public roots and optional per-instance augmentation. The URI
 examples below are proposals unless identified as existing behavior.
 
@@ -71,109 +72,48 @@ negotiation framework to the existing OPEN interface.
 
 ## Media-type scheme aliases
 
-Use `json+http://` and `json+https://` as explicit userspace provider conventions.
-A read requests `Accept: application/json`; a write declares its supplied body
-with `Content-Type: application/json`. The prefix selects a media type, not a
-request method. It does not serialize data, infer types from leading bytes or
-promise that the supplied body is valid JSON.
-
-Accept expresses a response preference, not a guarantee of JSON. Decide whether
-the provider rejects a mismatched response type when implementing this alias.
-See [Accept](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1) and
-[Content-Type](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.3).
-
-Register each complete scheme name through the same scoped binding mechanism.
-The kernel treats `json+https` as a binding name; it does not split the name into
-protocol layers or interpret JSON, HTTP or TLS. The userspace provider translates
-the alias to the underlying HTTP(S) URI. More aliases and request options can be
-designed when needed; this is not a generic composition framework.
+For HTTP, `json+http`/`json+https` select JSON Accept/Content-Type, not a method,
+JSON serialization or validation. Exact-name scoped bindings remain the kernel
+boundary. Alias delivery belongs to [native HTTP requests](native-http-requests.md);
+other representation/SQLite aliases remain later ideas.
 
 ## Future writes and shell operations
 
-Writable resources follow the initial read-only provider. For HTTP endpoints,
-writing means submitting a body for processing. Use this mapping consistently
-in the shell and libc:
+The owner's 2026-09-24 direction was GET for `cat`/`"r"`, staged POST for `"w"`,
+and staged POST followed by response reading for `"w+"`. Accepted Claude
+preparation/commit rules subsequently settled one-shot submission and explicit
+body/control/response authority. On 2026-10-11 the owner moved this shared work to
+[native HTTP requests](native-http-requests.md), adding no artificial response-size
+cap, streamed GET/POST completion and large request staging. All three HTTP
+defaults are accepted; nothing here marks them implemented.
 
-| Consumer operation | Proposed HTTP behavior |
-| --- | --- |
-| Read with `cat` or `fopen(..., "r")` | GET, returning a retained snapshot |
-| Write with `>` or `fopen(..., "w")` | POST the complete staged body |
-| Write/read with `fopen(..., "w+")` | POST the staged body, then read its response |
-| Explicit replacement | PUT; API and shell spelling remain undecided |
-| Remove with `rm` | DELETE |
-| Append with `>>` or `fopen(..., "a")` | Unsupported without a defined provider append contract |
-
-This is an intentional endpoint convention: `"w"` submits data rather than
-replacing a remote file. Ordinary local-file modes and redirections retain their
-existing meanings. PUT expresses creation/replacement, not append; neither PUT
-nor POST supplies a universal append operation.
-See [HTTP methods](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3).
-
-Illustrative future syntax for posting a JSON body:
-
-```sh
-printf '%s' '{}' > json+https://example.com/jobs
-```
-
-The userspace provider performs the POST. The JSON alias declares the body's
-media type; it does not select the method. An editor writing through the same
-write mode would also submit with POST; choosing replacement requires the
-explicit PUT operation rather than inferring it from an editor save.
-
-For `"w+"`, writes build the request body and reads consume the POST response,
-not a separate GET or a readback of the staged request. This is an endpoint
-transaction, not an ordinary seekable update stream. Define the submission
-boundary before implementing the libc adapter; an internal buffer flush must
-not accidentally submit a request. Exact commit, response-status and stream
-positioning interfaces remain open.
-
-A proposed write contract stages bytes under a budget and requires an explicit
-commit. Individual writes do not issue requests. Destroying an uncommitted resource
-discards its staged body; closing one copied grant does not destroy a resource
-still retained by another process. Shell redirection could
-commit after the producing command succeeds; an editor needs a save hook that
-commits and reports the result. Ordinary file writes alone do not provide these
-transaction boundaries, and editor temporary-file/rename saves need an explicit
-adaptation rather than an assumed HTTP rename operation.
-
-Commit submits one complete request and reports its outcome, including access to
-response status and body. A lost reply can leave the remote outcome unknown;
-there is no exactly-once guarantee, and POST must not be blindly retried. Settle
-commit ownership across copied handles, cancellation, conflict detection and
-failure reporting before implementation. Write, submit and delete authority must
-be explicit; a readable URI does not grant any of these operations.
+That milestone owns `printf '{}' > json+https://…`, explicit shell-coordinated
+commit and response access. Ordinary writes, flush/close and editor autosave do
+not submit; PUT/PATCH/delete and editor-specific execution remain later scope.
+Reads through a newly opened URI are GET, never the previous POST response.
 
 ## Prepared requests and shell handoff
 
-A prepared request might later live in an environment variable; see the parked
-[capability-valued environment](capability-environment.md) direction.
+[Native HTTP requests](native-http-requests.md#carried-forward-accepted-contract)
+owns the accepted real-grant handoff into private shell bindings and the
+libc/Lua staging/response adapters. Printed numeric handles or byte replies cannot
+transfer authority. Producers receive body WRITE, consumers response READ plus
+read-only completion observation under the accepted streamed contract; only the
+coordinator commits/aborts. Request-private credentials and unknown-outcome/no-replay
+rules are preserved.
 
-A future `http` helper could prepare a request with URL, method and request-scoped
-headers, then return a capability to the shell. It uses the userspace provider;
-it does not contain another HTTP implementation. The shell can grant a body
-writer to `echo` or another producer, and later a response reader to `cat` or jq.
-This uses the same [capability-based stdio bindings](../userland/shell-streams.md) as pipes
-and ordinary file redirection. The commands only read/write their given streams.
-
-The helper must hand back a real grant through an authorized capability-transfer
-path, not print its numeric handle. The shell receives a local grant that keeps
-the resource alive after the helper exits. Initial copied grants are sufficient;
-there is no requirement to move ownership. Define the running helper-to-shell
-handoff separately from existing launch-time delegation and current request-side
-endpoint copies; printing a handle or embedding one in reply bytes cannot do it.
-
-The intended POST lifecycle is prepare, write the staged body, explicitly submit,
-then read the response. The shell could retain submission authority while granting
-the producer only body-write access, submit after successful producer completion,
-and discard an unsubmitted request on failure. Completion/flush of an individual
-write is not submission. Exact rights, response access and cancellation remain
-open; header policy, including credential handling across redirects, belongs to
-the provider and the specific request rather than a global default.
-
-A motivating workflow is to submit a login body, extract a bearer token with jq,
-and prepare another request with that Authorization header. Shell syntax for
-holding and reusing capabilities remains open; HTTP helpers and capability-valued
-variables are later ideas, not prerequisites for the first shell pipelines.
+A prepared request is a capability. Private shell bindings are the first form
+of capability-valued variables; future environment variables may carry real
+capabilities inherited through explicit launch grants, never text-encoded
+handles. These bindings must fit the cross-cutting
+[capability-valued environment direction](capability-environment.md) rather than
+become a separate shell-only mechanism. Credential bytes
+remain excluded from argv/environment/history/logs.
+The [task 3 object/rights/lifetime/inheritance review](native-http-requests.md#capability-valued-variables-and-task-3-review)
+is required before code; capability-valued environment implementation needs a
+separate owner assignment. The motivating workflow is to log in, extract a token
+with jq, and prepare another request with it, through private credential
+preparation rather than an ambient header store.
 
 ## Future response cache
 
@@ -318,8 +258,9 @@ retirement. Future work builds on those contracts rather than reopening them:
   and cache reuse. A URL alone does not identify an authority boundary.
 - TLS needs a userspace library and trust configuration. It stays out of the
   kernel regardless of library choice.
-- Writes and prepared requests need explicit commit/cancel behavior, body
-  ownership, deadlines and uncertain-outcome reporting.
+- HTTP writes, prepared handoff and stream completion are owned by
+  [native HTTP requests](native-http-requests.md); other provider mutations still
+  need their own commit/cancel, ownership and uncertain-outcome contracts.
 - Representation discovery and selection need bounded metadata and resource
   protocols. Shared-memory transport needs its own mapping and lifetime rules;
   private pointers cannot cross process boundaries.
