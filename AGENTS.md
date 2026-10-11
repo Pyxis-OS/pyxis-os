@@ -26,6 +26,12 @@
 - Keep one bounded milestone moving through focused tasks to completion. Do not
   start unrelated tracks, chase the port backlog or add features just because a
   dependency or future design might eventually need them.
+- Planning freeze, since 2026-10-11 until the owner lifts it: create no new
+  milestone documents, proposals or investigations, and add no tasks to existing
+  milestones. Record an idea only as a short entry in
+  [later OS directions](docs/wip/later-os-directions.md), with no task list or
+  decisions. Bugs and hardware problems found in use are still fixed. Work comes
+  from in-flight tasks and the next tasks of accepted milestones.
 - Brainstorming, proposals and code-review requests do not authorize implementation.
   For discussion, explain the proposed contract and tradeoffs without editing or
   creating branches unless asked. For review, report concrete findings first;
