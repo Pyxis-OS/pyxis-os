@@ -45,7 +45,7 @@ alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 [Installer TUI and configuration delta editor](installer-tui.md): Codex
 (2026-10-11), docs-only proposal for PDCurses pages over a shared plan/apply
 executor, revision inventories, mounted read-write FAT32 and owned ESP
-configuration reconciliation; three choices remain open and implementation
+configuration reconciliation; the contract is accepted and implementation
 tasks need separate assignments.
 
 [MX Master 3S milestone proposal](bluetooth-mouse.md): Codex (2026-10-08). Tasks 1

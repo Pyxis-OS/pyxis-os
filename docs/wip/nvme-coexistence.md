@@ -52,9 +52,9 @@ of 2026-10-02:
    ([the swap](#limine-as-fedoras-boot-manager)). **Owner reversal, 2026-10-11:**
    the [configuration delta editor](installer-tui.md#accepted-direction--2026-10-11)
    may edit explicitly owned Pyxis `limine.conf` entries after plan confirmation,
-   preserving all foreign/unowned bytes. Its publication and ownership choices
-   remain open. Until delivered, the installer prints the entry, including the
-   pool's disk GUID, for the owner to paste; that fallback stays. Firmware-variable
+   preserving all foreign/unowned bytes. Its publication and ownership contract
+   was accepted on 2026-10-11; implementation is not assigned. Until delivered,
+   the installer prints the entry, including the pool's disk GUID, for the owner to paste; that fallback stays. Firmware-variable
    edits remain excluded.
 3. **Write authority and the internal disk (accepted).** **The kernel, not the
    installer, enforces the boundary.** NVMe writes are off until an explicit boot

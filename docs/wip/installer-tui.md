@@ -1,8 +1,8 @@
 # TUI installer/updater and configuration delta editor
 
-Status: **owner-requested proposal, 2026-10-11; docs only.** The direction below
-is accepted; the three open choices need answers and delivery tasks need separate
-assignments. Builds on the [installer](../userland/installer.md),
+Status: **direction and all three configuration choices accepted by the owner,
+2026-10-11; docs only.** No delivery task is assigned; each needs a separate go.
+Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](program-bundles.md).
 
@@ -148,18 +148,17 @@ and check structure against the manifest; do not replace read-back verification
 with trust in the manifest. Unsigned hashes do not authenticate a revision or
 prove that installed bytes were not modified after installation.
 
-## Three owner choices
+## Accepted configuration contract — 2026-10-11
 
-1. **Which Lua files and where. Default: installed boot/space, session and network
+1. **Lua files and location. Installed boot/space, session and network
    configuration under `EFI/pyxis/config/` on the ESP**, exposed through a
    proposed `esp://` root. Use `boot.lua`, `session.lua` and `network.lua`; keep
    shipped live/install bootstrap and recovery defaults in `boot://config/`.
    Keep executables, init scripts, trust/zoneinfo assets and user application
    configs in their existing locations. Retain the owner's Limine config path;
    do not relocate Fedora's files. Normal consumers receive selected read-only
-   views, the trusted editor receives scoped writable config rights. Alternative:
-   move only session/network first, leaving boot/space selection in the archive.
-2. **FAT32 publication and boot fallback. Default: write new, sync and read-verify,
+   views; the trusted editor receives scoped writable config rights.
+2. **FAT32 publication and boot fallback. Write new, sync and read-verify,
    then swap while retaining the previous file as recovery fallback.** Recheck
    the old bytes under exclusive ownership and flush each publication boundary.
    FAT has no atomic-rename guarantee: interruption can leave the canonical name
@@ -169,11 +168,10 @@ prove that installed bytes were not modified after installation.
    config uses the complete archive-default set with a reason, and rescue always
    selects that set. Detection of interrupted multi-file publication belongs in
    the FAT/editor task; valid Lua syntax alone cannot prove a complete set.
-   Limine loads before boot init: its previous file is manual recovery input
-   unless actual loader fallback behavior is proved. Keep the owner's tested
-   firmware/GRUB fallback. Alternative: require manual rescue for invalid ESP
-   Lua, and keep Limine at printed-entry-only until stronger publication is proved.
-3. **Ownership. Default: stable entry IDs declared by the revision, with
+   Limine loads before boot init: recovery from its previous file is manual.
+   Keep the owner's tested GRUB/firmware fallback; boot init cannot repair a
+   Limine configuration that prevented it from starting.
+3. **Ownership. Stable entry IDs declared by the revision, with
    explicit begin/end comment markers for managed spans in Limine and Lua.**
    Adopt existing unmarked Pyxis entries only after a displayed owner decision;
    names alone confer no ownership. Preserve every byte outside selected spans;
@@ -181,8 +179,6 @@ prove that installed bytes were not modified after installation.
    parser. Required/optional/migration declarations refer to IDs, not line numbers.
    Missing, duplicate, overlapping or ambiguous markers refuse automatic editing
    and offer printed changes; unsupported handwritten Lua stays untouched.
-   Alternative: whole generated files plus separate owner files, easier to parse
-   but requiring a new composition boundary, especially for Limine.
 
 ## Dependencies and ordered delivery
 
@@ -209,8 +205,8 @@ coexistence. No new kernel configuration model is proposed.
    on scratch volumes first, preserving non-Pyxis files.
    **After this task the owner can:** read and edit FAT32 files through native
    paths in Pyxis, including a delegated ESP configuration directory.
-4. [ ] **Shared configuration validation and delta editor.** With the choices
-   above settled, deliver ESP configuration loading, declaration/ownership parsing,
+4. [ ] **Shared configuration validation and delta editor.** Under the accepted
+   contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
    validation and coordinate its writer; no live Continuum application. Qualify
    the new loading/editor on scratch ESPs until task 5 replaces destructive Update.
