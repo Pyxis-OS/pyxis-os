@@ -180,6 +180,7 @@ void thread_request_execute(struct thread_request *request)
       if (request->status == CALL_OK) {
         capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
             &request->reply.completion);
+        grant = (struct capability_grant){0};
         /* VM admission keeps the new task out until the creator's final reply. */
         task_thread_enqueue(task);
       }
@@ -249,6 +250,8 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   pending->fs = input.body.set_fs;
   pending->reservation = reservation;
   pending->slot = slot;
+  reservation = (struct capability_reservation){0};
+  slot = (struct capability_reserved_slot){0};
   pending->reply_address = reply_address;
   pending->request.vm_process = process;
   pending->request.vm_mutator = pending->caller;
@@ -257,6 +260,8 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   struct thread_reply reply = pending->reply;
   reservation = pending->reservation;
   slot = pending->slot;
+  pending->reservation = (struct capability_reservation){0};
+  pending->slot = (struct capability_reserved_slot){0};
   bool reply_owned = pending->request.vm_reply_owned;
   bsp_request_release(&pending->request);
   if (result.status == CALL_OK && operation == THREAD_CREATE) {
