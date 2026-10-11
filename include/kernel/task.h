@@ -52,9 +52,9 @@ bool task_wait_sleep_interruptible(struct task_wait *wait);
 bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline);
 
 /* IF=0. The caller keeps the task live through its process lifetime lock.
- * Marks and wakes an
- * interruptible wait, then notifies the assigned CPU. Does not inspect remote
- * process state. */
+ * Marks and wakes an interruptible wait. Address parking detaches under its
+ * bucket after dropping scheduler exclusion, before notification. Does not
+ * inspect remote process state. */
 void task_request_stop(struct task *task);
 
 /* Explicit borrowed cleanup context, scoped by object retirement/reaping.
@@ -111,12 +111,15 @@ void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
  * must remove any remaining link after resumption. See kernel/wait.h. */
 struct task_wait_link *task_wait_link_prepare(void);
 
-/* Current user, IF=0. Cold embedded storage; no allocation. Publish under the
- * parking bucket after initializing the key. It checks permanent stop under
- * scheduler exclusion before making the association visible. */
+/* Current user syscall, IF=0. Cold embedded storage; no allocation. Publish
+ * under the parking bucket after initializing the key. Check permanent stop under
+ * scheduler exclusion before making the association visible. False means no
+ * association was published; detach any provisional bucket link before return. */
 struct address_wait_record *task_address_wait_prepare(void);
 bool task_address_wait_publish(struct address_wait_record *record);
-/* No held guard or mapping borrower. Deadline UINT64_MAX is untimed. */
+/* No held guard or mapping borrower. Deadline UINT64_MAX is untimed. Finite
+ * immediate expiry detaches before return; timer expiry defers bucket work to
+ * the local permanent scheduler stack. A terminal peer result is preserved. */
 void task_address_wait_sleep(struct address_wait_record *record, uint64_t deadline);
 /* Bucket held; record detached and result committed. Clear scheduler/timer
  * association before notification; never access record after this returns. */

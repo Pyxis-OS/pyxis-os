@@ -23,6 +23,7 @@
 #include <stdatomic.h>
 #include <kernel/mm/private.h>
 #include <kernel/object/thread.h>
+#include <kernel/user/address_wait.h>
 #include <arch/cpu_local.h>
 
 #define TASK_STACK_SIZE (16 * 1024)
@@ -77,6 +78,9 @@ struct task {
   struct thread_control *thread_control;
   struct thread_result thread_result;
   bool fs_bound, faulted;
+  struct address_wait_record address_wait_record;
+  struct address_wait_record *address_wait; /* queues_locked; published before sleep. */
+  bool address_wait_expired; /* queues_locked; queued for scheduler cancellation. */
 };
 
 struct scheduler {
@@ -88,6 +92,7 @@ struct scheduler {
   /* queues_locked. Load is queued tasks plus one while a task occupies the CPU. */
   size_t queued;
   bool running;
+  struct task_wait *expired_address_waits; /* queues_locked; not yet notified. */
 };
 
 static struct scheduler *schedulers;
@@ -489,6 +494,35 @@ struct task_wait_link *task_wait_link_prepare(void)
   return record;
 }
 
+struct address_wait_record *task_address_wait_prepare(void)
+{
+  struct task *task = task_current_user();
+  KASSERT(task && task->in_syscall && !task->address_wait &&
+      !task->address_wait_expired);
+  struct task_wait *wait = task_wait_prepare();
+  struct address_wait_record *record = &task->address_wait_record;
+  KASSERT(!record->linked);
+  *record = (struct address_wait_record){.wait = wait, .process = task->process};
+  return record;
+}
+
+bool task_address_wait_publish(struct address_wait_record *record)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct task *task = local_scheduler()->current_task;
+  KASSERT(task && task->kind == TASK_USER && task->in_syscall &&
+      record == &task->address_wait_record && record->wait == &task->wait_record);
+  lock_queues();
+  KASSERT(!task->address_wait && !task->address_wait_expired);
+  if (task_stop_requested()) {
+    unlock_queues();
+    return false;
+  }
+  task->address_wait = record;
+  unlock_queues();
+  return true;
+}
+
 uint64_t task_deadline_after_ms(uint32_t milliseconds)
 {
   uint64_t now = arch_monotonic_ns();
@@ -563,6 +597,18 @@ bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadli
   return !task_stop_requested();
 }
 
+void task_address_wait_sleep(struct address_wait_record *record, uint64_t deadline)
+{
+  size_t bucket = record->bucket;
+  bool timed = deadline != UINT64_MAX;
+  sleep_wait(record->wait, timed, deadline, false);
+  if (timed) {
+    /* Immediate expiry can return without ever entering the timer list. A
+     * committed peer result makes this cancellation an ordinary no-op. */
+    address_wait_cancel(record, bucket, ADDRESS_WAIT_TIMED_OUT);
+  }
+}
+
 static void wake_wait_locked(struct task_wait *wait)
 {
   wait->notified = true;
@@ -597,13 +643,20 @@ void task_request_stop(struct task *task)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   lock_queues();
   atomic_store_explicit(&task->stop_requested, true, memory_order_release);
-  if (task->wait && task->wait->interruptible) {
+  struct address_wait_record *address_wait = task->address_wait;
+  size_t bucket = address_wait ? address_wait->bucket : 0;
+  if (!address_wait && task->wait && task->wait->interruptible) {
     struct task_wait *wait = task->wait;
     remove_timeout_locked(wait);
     wake_wait_locked(wait);
   }
   size_t cpu_index = task->cpu_index;
   unlock_queues();
+  if (address_wait) {
+    /* Process lifetime exclusion keeps storage alive; permanent stop rejects
+     * any later publication if a peer already resolved this registration. */
+    address_wait_cancel(address_wait, bucket, ADDRESS_WAIT_STOPPED);
+  }
   process_vm_unhold(task->process, task);
   notify_remote_cpu(cpu_index);
 }
@@ -624,6 +677,24 @@ void task_wait_wake(struct task_wait *wait)
   }
 }
 
+void task_address_wait_wake(struct address_wait_record *record)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!record->linked && record->result != ADDRESS_WAIT_PENDING);
+  struct task_wait *wait = record->wait;
+  lock_queues();
+  KASSERT(wait->task->address_wait == record);
+  wait->task->address_wait = NULL;
+  remove_timeout_locked(wait);
+  bool parked = wait->task->parked;
+  size_t cpu_index = wait->task->cpu_index;
+  wake_wait_locked(wait);
+  unlock_queues();
+  if (parked) {
+    notify_remote_cpu(cpu_index);
+  }
+}
+
 static void expire_timed_waits(struct timer_clock *clock)
 {
   lock_queues();
@@ -638,9 +709,43 @@ static void expire_timed_waits(struct timer_clock *clock)
     *link = wait->timeout_next;
     wait->timeout_next = NULL;
     wait->timed = false;
-    wake_wait_locked(wait);
+    if (wait->task->address_wait) {
+      /* Interrupt entry cannot take a parking bucket. Keep the local task
+       * asleep until the permanent scheduler stack detaches its registration. */
+      KASSERT(!wait->task->address_wait_expired);
+      wait->task->address_wait_expired = true;
+      wait->timeout_next = local_scheduler()->expired_address_waits;
+      local_scheduler()->expired_address_waits = wait;
+    } else {
+      wake_wait_locked(wait);
+    }
   }
   unlock_queues();
+}
+
+static void cancel_expired_address_waits(void)
+{
+  struct scheduler *scheduler = local_scheduler();
+  KASSERT(!scheduler->current_task);
+  for (;;) {
+    lock_queues();
+    struct task_wait *wait = scheduler->expired_address_waits;
+    if (!wait) {
+      unlock_queues();
+      return;
+    }
+    scheduler->expired_address_waits = wait->timeout_next;
+    wait->timeout_next = NULL;
+    KASSERT(wait->task->address_wait_expired && wait->task->in_syscall &&
+        wait->task->cpu_index == arch_cpu_index());
+    wait->task->address_wait_expired = false;
+    struct address_wait_record *record = &wait->task->address_wait_record;
+    size_t bucket = record->bucket;
+    unlock_queues();
+    /* A peer may already have detached and queued the task. Its syscall cannot
+     * migrate or run on this CPU before this drain finishes, so storage is live. */
+    address_wait_cancel(record, bucket, ADDRESS_WAIT_TIMED_OUT);
+  }
 }
 
 static struct task *current_user_task(void)
@@ -832,6 +937,8 @@ static void free_task(struct task *task)
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!task->bsp_request && !task->deferred_request);
   KASSERT(!task->wait && !task->wait_record.timed && !task->resource_wait.next);
+  KASSERT(!task->address_wait && !task->address_wait_expired &&
+      !task->address_wait_record.linked);
   bsp_request_storage_destroy(task->request_storage);
   profile_storage_destroy(task->profile);
   KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
@@ -1292,6 +1399,7 @@ void kernel_task_yield_if_runnable(void)
   bool idle_reported = false;
   for (;;) {
     task_timer_service();
+    cancel_expired_address_waits();
     if (cpu_index == 0) {
       reap_completed();
       object_reap();
@@ -1403,6 +1511,7 @@ void task_preempt(bool user_mode)
   }
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
+    scheduler->expired_address_waits != NULL ||
     (arch_cpu_index() == 0 &&
      completed_head != NULL);
   unlock_queues();
