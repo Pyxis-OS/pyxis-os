@@ -63,6 +63,18 @@ wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
    The raw installer supplies confined I/O; a native kernel adapter serves FILE/
    directory calls on the BSP filesystem worker using the same engine.
 
+   **Placement tradeoff:** USB/SD metadata is attacker-controlled kernel input
+   under this default; bounded validation mitigates parser bugs but provides no
+   fault isolation. Kernel placement reuses the existing filesystem worker,
+   native directory/object lifetime and claim enforcement without provider IPC.
+   A userspace FAT provider would isolate parsing faults from the kernel and
+   export native FILE/directory objects, at the cost of IPC per operation and
+   additional directory-export/path/lifetime integration: today's
+   [provider OPEN](../../userspace/lib/provider.c) accepts FILE responses, and
+   [provider enumeration](userspace-scheme-providers.md#sqlite-views-and-query-results)
+   still needs a directory contract. This is a placement alternative for the
+   owner; kernel ownership remains the proposed default, not an accepted choice.
+
    Trusted authority selects an exact device/extent, read-only or read-write;
    applications get only explicitly attenuated roots/files. The bootstrap ESP
    binding comes from trusted boot handoff, never editable Lua or a guessed disk.
@@ -183,8 +195,11 @@ and mounted file I/O do not require its implementation.
   and explicit writable editor grants. Qualify scratch VirtIO first, then supported
   USB and owner-approved native ESP steps; SD depends on its block driver. Revalidate
   consumer handoff/release and preserving unrelated files, not installer completion.
-  **After this task the owner can:** mount a supported stick or selected ESP view,
-  read/edit/sync files through native programs and release it with reported errors.
+  **After this task the owner can:** mount a GPT-partitioned stick matching the
+  first profile or a selected ESP view, read/edit/sync files through native
+  programs and release it with reported errors. Typical retail sticks using MBR
+  or a bare FAT volume are not covered; MBR/bare-volume discovery is an early
+  follow-up after this profile is qualified.
 
 Future assigned tasks use ordinary builds and interactive QEMU/GDB, existing
 `mtools`, `fsck.fat` and Linux mounts: cross-read, compare untouched files/sectors,
