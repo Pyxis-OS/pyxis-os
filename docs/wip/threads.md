@@ -269,7 +269,8 @@ Capture the pre-code baseline at current main
 `d124a053` (includes NVMe shutdown #710 and hosted-libc #714/#718), then repeat
 matched 1/4-CPU IPC (64/4096 CALL/SEND, 256 messages/100 rounds) and 1024 launches
 interleaved against the implementation with one unchanged initrd. Native A/B
-runs through the owner. No baseline samples or gate-6 runtime evidence exist yet.
+runs through the owner. The [pre-code baseline](../development/experiments/threads-task6/README.md) is
+captured; gate-6 implementation/runtime qualification is pending.
 Qualify native contended siblings, mismatch/early wake, timeout/stop/unmap/remap,
 process/key isolation and resource failure with ordinary build/QEMU/GDB; inspect
 zero remaining registrations/borrowers before completion. Gates 7/8 remain separate.
