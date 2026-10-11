@@ -250,6 +250,56 @@ static void add_claim(struct disk_object *disk, uint32_t partition, uint64_t fir
   claims = disk;
 }
 
+static enum call_status verify_raw_claim(struct npfs_store_context *context,
+    block_device_id device, uint32_t partition)
+{
+  struct block_info info;
+  uint64_t flags = cpu_save_interrupts();
+  enum block_result result = block_get_info(device, &info);
+  cpu_restore_interrupts(flags);
+  if (result != BLOCK_OK) {
+    return block_status(result);
+  }
+  if (!info.raw_claim_requires_blank) {
+    return CALL_OK;
+  }
+  if (partition) {
+    return CALL_DENIED;
+  }
+  uint8_t bytes[DISK_IO_MAX_BYTES];
+  if (!info.block_count || !info.block_size || info.block_size > sizeof(bytes) ||
+      info.max_transfer < info.block_size) {
+    return CALL_UNAVAILABLE;
+  }
+  uint32_t transfer_blocks = sizeof(bytes) / info.block_size;
+  uint32_t device_blocks = info.max_transfer / info.block_size;
+  if (transfer_blocks > device_blocks) {
+    transfer_blocks = device_blocks;
+  }
+  /* The sole filesystem worker excludes mounts and other raw writers until
+   * admission. The zero proof is not cached after admission. */
+  uint64_t first = 0;
+  while (first < info.block_count) {
+    uint32_t count = transfer_blocks;
+    if (count > info.block_count - first) {
+      count = info.block_count - first;
+    }
+    size_t length = (size_t)count * info.block_size;
+    enum call_status status = submit_transfer(context, device, BLOCK_READ, first,
+        count, length, bytes);
+    if (status != CALL_OK) {
+      return status;
+    }
+    for (size_t i = 0; i < length; ++i) {
+      if (bytes[i]) {
+        return CALL_DENIED;
+      }
+    }
+    first += count;
+  }
+  return task_deadline_expired(context->deadline) ? CALL_TIMED_OUT : CALL_OK;
+}
+
 /* Claims a partition of an opened disk whose own claim was released. */
 static enum call_status claim_partition(struct npfs_store_context *context,
     struct disk_object *disk, uint32_t partition)
@@ -272,13 +322,21 @@ static enum call_status claim_partition(struct npfs_store_context *context,
     if (info.flags & (DISK_FLAG_MOUNTED | DISK_FLAG_CLAIMED)) {
       return CALL_BUSY;
     }
+    enum call_status status = verify_raw_claim(context, disk->device, 0);
+    if (status != CALL_OK) {
+      return status;
+    }
     add_claim(disk, 0, 0, info.block_count);
     return CALL_OK;
+  }
+  enum call_status status = verify_raw_claim(context, disk->device, partition);
+  if (status != CALL_OK) {
+    return status;
   }
   if ((info.flags & DISK_FLAG_CLAIMED) || npfs_partition_mounted(disk->device, partition)) {
     return CALL_BUSY;
   }
-  enum call_status status = await_gpt(context, disk->device);
+  status = await_gpt(context, disk->device);
   if (status != CALL_OK) {
     return status;
   }
@@ -384,6 +442,10 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
     }
     if (writable) {
       enum call_status status = await_gpt(context, job->device);
+      if (status != CALL_OK) {
+        return status;
+      }
+      status = verify_raw_claim(context, job->device, 0);
       if (status != CALL_OK) {
         return status;
       }
