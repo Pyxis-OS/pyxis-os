@@ -6,7 +6,10 @@ the three decisions and assigned the public-open, positioned-I/O and
 path/byte-order libc tasks; later work remains unassigned.
 Their [status](#task-status-and-accepted-decisions)
 supersedes the historical O_RDWR/O_EXCL/pread/pwrite/lstat/access/rmdir/endian
-and ENOTDIR gap entries. The original Git/libgit2 probes have not been rerun.
+and ENOTDIR gap entries. The libgit2 probes remain the original snapshot.
+The separately assigned [Git CLI investigation](git-cli-on-pyxis.md), refreshed
+2026-10-11, records a new Git cross-compile and the current libc, index, launcher
+and HTTP boundaries. Its proposed tasks do not replace this accepted route.
 This supports [source builds](source-builds.md) after hosted Clang. The question
 is obtaining pinned source, separately from providing a developer's Git CLI.
 
@@ -173,7 +176,7 @@ This is a smaller route, not an unmodified libgit2 build:
 | Mapping | No public `mmap`; libgit2's `NO_MMAP` fallback reads into owned memory and explicitly rejects writable mappings. The non-Windows pack indexer uses `pwrite`, supplied by task 2 with native explicit offsets. Shared-file mapping is unnecessary for the proposed slice; bounded allocation and the remaining source/path closure still need work. |
 | Metadata even without checkout | ODB alternate deduplication reads `st_ino`; pack/config/file-buffer caches read mtime/inode; discovery reads device identity. Bare fetch alone does not eliminate these compile/runtime assumptions. A single fresh store with no alternates/discovery and explicit cache reloads can be adapted without fabricated stat fields; that adaptation remains unbuilt. |
 | Worktree features | Building all sources still compiles `index.c` and iterators, which read stat ctime/mtime/ino/uid/gid. Runtime avoidance is not a compile fix. Restrict or adapt that source closure explicitly; reject unsupported APIs. `checkout` with suppressed index writes still has stat/filter/mode assumptions. |
-| Unix support | Shared headers still include networking headers with HTTPS off. Missing `gettimeofday`, `struct timeval`, `ino_t`, `readlink/link/symlink/chmod`, `getcwd`, `utimes` and `EINTR` remain from selected-source diagnostics. Task 3 supplies lstat and ENOTDIR, and arpa/inet.h with only four byte-order conversions. Avoid omitted feature code or implement standard behavior where native objects support it. |
+| Unix support | Historical diagnostics included `gettimeofday`, `struct timeval`, `ino_t`, `readlink/link/symlink/chmod`, `getcwd`, `utimes` and `EINTR`. Current libc supplies `ino_t`, `getcwd` and EINTR vocabulary, alongside lstat/ENOTDIR and four byte-order conversions in arpa/inet.h. This closes names, not the remaining consumer assumptions. Avoid omitted feature code or implement standard behavior where native objects support it. |
 | Stock networking | Socket/connect/send/recv, getaddrinfo/freeaddrinfo/gai_strerror, inet_pton and poll/select are absent from SDK probes. Native TCP/DNS exists, but is not a BSD socket API. Use the library's stream/subtransport extension for platform integration; ordinary missing libc calls remain shared libc work. |
 | TLS | Stock `FindmbedTLS.cmake` requires `libmbedcrypto`; Pyxis exports `libtfpsacrypto`. Source includes `mbedtls/entropy.h` and `mbedtls/ctr_drbg.h`, absent in this 4.1.1 export, and seeds its own global entropy/DRBG. Renaming a library cannot repair the backend or provide Pyxis clock/random/trust authority. Prefer an adapter to existing native `libtls`, outside the base SDK. |
 
@@ -193,7 +196,7 @@ are the authorities.
 
 | Requirement | Current Pyxis contract and consequence |
 | --- | --- |
-| stat ino/dev/ctime/mtime/mode | `userspace/libc/include/sys/stat.h` has only type-only `st_mode` and `st_size`. NPFS stores creation/modification timestamps, but FILE ABI does not export identity/time. Creation time is not POSIX ctime, and timestamps can repeat/backtrack. Do not synthesize cache-validating fields. |
+| stat ino/dev/ctime/mtime/mode | Current `struct stat` supplies type/size and independently valid `st_dev`, `st_ino`, `st_mtim`, with `st_valid`. Identity comparison requires retained references; pathname stat releases its reference. No ctime, owners or permission bits are invented. Mtime can repeat/backtrack. The [CLI metadata audit](git-cli-on-pyxis.md#worktree-index-and-publication) explains why these fields alone cannot validate a persisted index cache. |
 | Exclusive lock files | Native `path_create_file` and `mkstemp` perform exclusive creation. Task 1 exposes that route through public `O_CREAT\|O_EXCL`, with real EEXIST after authority checks and existing failure unwinding. Grants, not mode bits, establish authority. |
 | Atomic file publication | Native same-volume file rename can replace a file atomically, including across directories; public `rename` uses that operation. Directory rename is unsupported. Cross-volume failure maps to ENOTSUP, not EXDEV. Held victim handles survive replacement. |
 | Symlinks and executable bits | NPFS has regular files/directories only. Host enumeration may report symlinks but lookup refuses them. No chmod/symlink interface or stored execute bit exists. Executable loading requires READ authority; Git tree mode and native launch authority are different concepts. |
@@ -219,8 +222,9 @@ Pyxis reaches `git.internal` through the planned
 only smart HTTP discovery and `git-upload-pack`.
 
 The [FILE snapshot provider](../userland/http-fetch.md) sends GET only, without
-custom request headers or body; it buffers at most 16 MiB and does not follow
-redirects. It can read `info/refs?service=git-upload-pack`, but **cannot perform
+custom request headers or body; it allows at most 16 MiB across an HTTP open chain
+and now supports bounded GET redirect chains. It has no POST/body replay contract.
+It can read `info/refs?service=git-upload-pack`, but **cannot perform
 smart fetch**. Smart HTTP needs service discovery GET and `git-upload-pack` POST,
 the Git content types, pkt-line framing, negotiation/sideband and a potentially
 large streamed pack. HTTP/1.1 suffices; HTTP/2 is not required. A stream or native
@@ -251,7 +255,7 @@ libgit2 transaction nor an on-Pyxis TLS/network result, nor a promise for all mi
   manually qualified; userland #172 and Pyxis #576 merged.
 - [x] Task 3: **`lstat`, `access`, `rmdir` and byte-order helpers in userland
   libc**, implemented and manually qualified; userland #174 merged,
-  Pyxis #585 approved and awaiting integration.
+  Pyxis #585 merged.
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171) publishes
 `ff278aec50adfaf6af8d8c15062084a8594642e3`, integrated by merged
@@ -288,8 +292,8 @@ publishes `7add29afabcba078a7e344dfd627fb451ef3a575`. After merging Pyxis main
 (including #582), this integration pins published userland main
 `b32da949ae1a0d12bc8b1e3ae2c58c4f1684c11b`, containing both #174 and #175.
 `git merge-base --is-ancestor origin/main <pin>` passed after fetching and before
-pinning. Userland is merged; this Pyxis gitlink/docs PR follows. No later task
-starts as part of this delivery.
+pinning. Pyxis #585 merged as `cca62bc3`; no later source-fetch task was delivered
+by that integration.
 
 The owner accepted access profile 1 on 2026-10-09: F_OK requests no child rights;
 files R_OK/W_OK request READ/WRITE; directories R_OK checks ENUMERATE and W_OK
@@ -347,10 +351,10 @@ shell. This proposal adds no successful fake operations.
 Delivery follows [repository ownership](../development/sdk-and-repositories.md):
 libc changes in userland, libgit2 recipes/patches in ports, a native command and
 TLS adapter in userland, parent integration only after published dependencies.
-The base SDK stays independent of TLS/libgit2. This task changes only the userland
-pin and related docs in Pyxis. No new upstream source or compiler container is
-needed. The original investigation probe branch stays unmerged; task-owned
-qualification processes are stopped. Stop for owner review of task 3.
+The base SDK stays independent of TLS/libgit2. Task 3 changed the userland pin and
+related docs in Pyxis, without a new upstream source or compiler container. The
+original investigation probe branch stays unmerged; task-owned qualification
+processes were stopped. Later source-fetch work still needs owner assignment.
 
 Shared [working path and environment](../userland/process-state.md) now provide
 `chdir`/`getcwd` and `setenv`/`unsetenv`, superseding those gaps in the earlier
