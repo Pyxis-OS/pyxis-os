@@ -1,7 +1,8 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Task 1 is delivered; later tasks still need separate owner go-aheads.
+2026-10-11.** Task 1 is delivered. Task 2 is assigned, pending its three
+implementation choices below; later tasks still need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -133,21 +134,84 @@ validation/fallback and a reported recovery path are mandatory.
 
 ## Revision manifest
 
-Proposed representation: one reserved manifest file in `bin/REVISION`, sorted
-relative paths, byte sizes and SHA-256 hashes, with bundle descendants included.
-It does not list itself; directory structure/empty directories need separate
-records for complete-tree verification. Publish it only after the revision's
-copies have passed verification and sync it before the ESP switch. Bounds and
-parsing must reuse the installed-tree admission limits, with no implicit budget
-increase. It is a copy inventory, distinct from a bundle's launch manifest.
+Task 2 delivers the accepted per-revision inventory and Programs report. Its
+format, legacy comparison and replay rules remain proposed below. Copy
+verification remains a filesystem-view check; unsigned inventory hashes neither
+authenticate a revision nor prove that installed payloads were not later edited.
 
-Compare the immutable new-source inventory to the prior revision manifest without
-rereading every installed payload for the report. A missing/invalid old manifest
-means unknown, not unchanged: offer an explicit one-time read/verify inventory
-with progress, or refuse that comparison. Hash newly copied destination bytes
-and check structure against the manifest; do not replace read-back verification
-with trust in the manifest. Unsigned hashes do not authenticate a revision or
-prove that installed bytes were not modified after installation.
+## Task 2 choices — proposed 2026-10-11
+
+Inspection: current installer selects whole `.pxe`/`.pxb` roots, with 32 directory
+levels, 65,536 entries and 255-byte component names. It has no revision inventory
+or serialized plan. Update inspection uses raw read-only codecs and requires an
+empty journal. Opening even a read-only npfs volume retains the pool until reboot
+and prevents subsequent write admission; planning must extend the raw decoder,
+not open a target volume. Disk IDs identify devices only for the current boot;
+the [disk ABI](../../include/abi/disk.h) supplies no persistent hardware identity.
+
+1. **Manifest and legacy comparison. Default: reserved
+   `.pyxis-revision-manifest` in `bin/REVISION`, canonical bounded text.** A format
+   tag precedes bytewise-sorted relative-path records: directories, including empty
+   ones, and regular files with decimal byte size and SHA-256. Hex-encode path
+   bytes so whitespace/control bytes cannot become delimiters; refuse duplicate
+   paths, invalid components, unsupported kinds or inconsistent ancestors. The
+   manifest excludes itself and includes the source revision; its installed file
+   counts toward the tree's entry limit. Cap each manifest and serialized plan at 16 MiB, in addition to existing traversal limits;
+   unusually large inventories that fit the old tree bounds may now refuse.
+   Publish the manifest after copied-tree verification, sync and verify its bytes
+   before the ESP switch. Destination payload/structure checks remain mandatory
+   filesystem-view checks that may use cached pages, not fresh device read-back.
+   Programs are compared as whole roots, including bundle contents/empty
+   directories, with old/new payload sizes; Install lists all selected roots as
+   new. A valid old manifest describes the installed revision, not a live audit
+   of later payload edits. Missing/invalid manifests on a known previous revision
+   require explicit consent to a one-time raw read/hash inventory with progress;
+   declining refuses that comparison. Unknown previous revisions report unknown,
+   never unchanged, and retain the existing rebuild/cleanup limits.
+   **Alternative:** a length-prefixed binary format and refusal of legacy
+   comparison until an inventory exists. Text is inspectable; explicit legacy
+   scanning keeps current installations updateable without silently trusting them.
+2. **Replay and target identity. Default: strict data-only text over standard
+   input/output, using the same in-memory plan as interactive Review.** `--plan`
+   constructs/reports/prints without applying; `--apply` reads a plan, displays its
+   Review and requires `wipe` or `update`. Non-interactive apply supplies that
+   explicit consent separately; `--dry-run` never acquires write access. No plan
+   command executes embedded instructions, creates a saved file or obtains new
+   authority; a caller can retain the printed bytes with its own grants.
+   Serialized apply requires one uniquely observed validated existing GPT disk
+   GUID, geometry and expected inspection state. Never resolve by inventory
+   number alone; duplicate GUIDs refuse. This binds a logical disk, not an
+   unforgeable physical identity. Blank/damaged targets without usable
+   identity support printed/dry-run plans but apply only through the held target
+   in the same interactive invocation. New Install GUIDs/journal choices are
+   recorded once, not regenerated on replay. **Alternative:** add a persistent
+   hardware-identity contract first, or require an explicit target rebinding and
+   a new Review. The default permits portable replay where identity is available
+   without expanding the disk ABI or guessing which blank stick was reviewed.
+3. **Staleness and execution. Default: refuse changed inputs before the first
+   write, with one executor and no automatic replanning.** Record hashes of all
+   source payloads/assets, the resulting inventory/boot configuration, selected
+   layout and existing admission/consent state, prior manifest and inspected ESP
+   state. Reconstruct and compare the relevant inspection under exclusive raw
+   ownership; include npfs header/control/catalog and metadata used for the
+   report. A synthesized legacy inventory also requires rereading its payload
+   hashes there. Read-only planning has no snapshot guarantee, so inconsistent
+   scans refuse. A valid old manifest does not trigger a full old-payload audit;
+   its hash cannot detect subsequent edits to uninspected file contents. Check
+   available space conservatively before mutation; limits/allocation failure
+   refuse rather than make a fit promise. Preserve existing claim/release,
+   programs-before-ESP, sync/verification, partial-failure and retention contracts;
+   dry-run/cancel never mount, persist replay, format or clean up.
+   **Alternative:** always rehash all old installed payloads at planning and
+   apply. The default avoids that recurring I/O while stating exactly what the
+   Programs report proves; legacy comparison pays the scan cost explicitly.
+
+Before implementation, capture current Install/Update costs on fresh matching
+targets. Repeat matched runs after implementation, separating planning/hashing,
+copying, verification and sync. Interactive QEMU checks cover install/update,
+legacy inventory, manifest reports, print/replay, stale-plan refusal and
+cancel/dry-run with unchanged target bytes. No new harness, FAT32/config editor
+or stronger device-read-back contract is part of task 2.
 
 ## Accepted configuration contract — 2026-10-11
 
@@ -195,8 +259,9 @@ kernel configuration model is proposed.
    needs a separate owner decision. No TUI or verification behavior change.
    **After this task the owner can:** see the active phase throughout an
    ordinary install/update, including verification.
-2. [ ] **Shared planner/executor and revision inventory.** Extract current
-   install/update behavior behind read-only plan construction, print/replay and
+2. [ ] **Shared planner/executor and revision inventory — assigned 2026-10-11.**
+   Settle the [task-specific choices](#task-2-choices--proposed-2026-10-11), then
+   extract current install/update behavior behind read-only plan construction, print/replay and
    one confirmation boundary; write/verify revision manifests and the Programs
    report. Retain all existing authority and interruption limits.
    **After this task the owner can:** review and replay an explicit install/update

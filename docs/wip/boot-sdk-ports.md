@@ -46,7 +46,8 @@ runnable hosted compiler yet.
 [Installer TUI and configuration delta editor](installer-tui.md): Codex
 (2026-10-11), PDCurses pages over a shared plan/apply executor, revision
 inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
-The contract is accepted; task 1 is held and later tasks need separate assignments.
+The contract is accepted; task 1 is delivered (#734). Task 2 is assigned, pending
+its manifest/replay choices; later tasks need separate assignments.
 
 [Native command execution](native-command-execution.md): Codex delta (2026-10-11),
 an accepted shared plan for direct native launch without descendants, selected
