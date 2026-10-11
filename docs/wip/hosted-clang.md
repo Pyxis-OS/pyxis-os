@@ -196,20 +196,21 @@ instantiations even when localization selects `fstream.cpp`; no new filesystem
 facility is needed. Wide scanning/full wide stdio and locale databases are not
 promised by this audit. Standard missing functions belong in libc.
 
-**Three pending owner choices, before implementation:**
+The C-only adapter preserves existing names `"C"`/`""`, UTF-8 conversion and
+ASCII classification. Use private immutable libc++ locale tokens and real C
+`lconv` data; unavailable names fail through normal C++ errors. No public
+`locale_t/newlocale/uselocale` or mutable locale machinery is needed. This does
+not change the existing libc locale contract.
 
-1. **Locale. Default: preserve C-only names `"C"`/`""`, UTF-8 multibyte conversion
-   and ASCII classification.** Use immutable private libc++ locale tokens and
-   real C `lconv` data; unavailable locale names fail through normal C++ errors.
-   No public `locale_t/newlocale/uselocale` or mutable locale machinery. Alternative:
-   make classic conversion ASCII-only, which changes current native UTF-8 behavior.
-2. **Wide facilities. Default: implement the actual stock wide runtime closure
+**Two pending owner choices, before implementation:**
+
+1. **Wide facilities. Default: implement the actual stock wide runtime closure
    above, including real restartable UTF-8 and the reached wide FILE operations.**
    Preserve read-ahead/position/error behavior; no repeated-byte-pushback shortcut
    for `ungetwc`. Alternative: add an explicitly smaller libc++ wide facility
    boundary for strings/conversion while excluding wide standard streams; this
    needs new fork guards rather than enabling an existing option.
-3. **Randomness. Default: real libc `getentropy` over startup `random`/`clock`
+2. **Randomness. Default: real libc `getentropy` over startup `random`/`clock`
    grants, 0–256 bytes, using the existing five-second maximum wait.** Checked
    absolute deadline, all-or-nothing output, honest authority/queue/timeout/source
    failures, no fallback. Select libc++'s getentropy backend: its default
