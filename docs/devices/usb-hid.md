@@ -77,8 +77,8 @@ Consumer AC Pan and Button usages 1–32. Signed bit extraction uses the declare
 logical ranges. Each button-bearing ID owns a snapshot; wheel-only IDs preserve
 holds. For a known Input ID, trailing bytes are ignored and a short payload is
 zero-extended before field extraction. An absent ID byte is never fabricated;
-unknown IDs (except the reserved-ID rule below) and invalid field values are dropped without
-changing input state. Each interface counts malformed reports and its consecutive
+unknown IDs (except the reserved-ID rule below) and invalid field values are
+dropped without changing input state. Each interface counts malformed reports and its consecutive
 streak; a valid report resets that interface's streak. Sixteen consecutive malformed
 reports retire the whole binding, including a keyboard sibling. Transport errors
 and lost transport continuity still retire it; interrupt STALL recovery is not

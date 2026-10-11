@@ -429,6 +429,15 @@ buttons/chord and replug as the regression control. Use the same build and boot
 options below; retain the single `action=reserved-ID-boot` diagnostic and protocol
 readback. The compliant QEMU report mouse must remain in report mode.
 
+Checks at decoder `d395ad0d`: diagnostic image build passes. QEMU 10.2.2,
+Q35/nested KVM, host CPU, four CPUs/512 MiB, read-only VirtIO FAT boot disk,
+USB keyboard/full-speed mouse: motion, wheel and `echo reportalive` work.
+GDB confirms mouse.ids=false, report_protocol=true, reserved_id_boot=false,
+malformed_reports=0; the controller is running, not failed, no pending command.
+Zero-leading no-ID reports never switch. Positive reserved-ID transition still
+requires the ASUS native retest; this QEMU descriptor has no report IDs.
+All owned jobs stopped; no kernel fault injection or new test framework.
+
 ### One diagnostic retest through luna
 
 A temporary `usb.xhci.diagnose=1` option adds info-level observations only, with
