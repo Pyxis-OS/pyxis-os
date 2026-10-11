@@ -145,6 +145,9 @@ be explicit; a readable URI does not grant any of these operations.
 
 ## Prepared requests and shell handoff
 
+A prepared request might later live in an environment variable; see the parked
+[capability-valued environment](capability-environment.md) direction.
+
 A future `http` helper could prepare a request with URL, method and request-scoped
 headers, then return a capability to the shell. It uses the userspace provider;
 it does not contain another HTTP implementation. The shell can grant a body

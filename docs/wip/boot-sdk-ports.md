@@ -132,6 +132,10 @@ tasks 1 to 3 are complete (#545, #552, #564).
 non-rescue userland build from source on the installed system until a package
 manager exists.
 
+[Capability-valued environment variables](capability-environment.md): parked
+(2026-10-11); revisit before prepared HTTP requests, session configuration or
+users and authority store a capability in a variable.
+
 [Control, events and faults](control-events-faults.md): Pyxis's answer to signals,
 tied to Continuum.
 

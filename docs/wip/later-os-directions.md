@@ -4,6 +4,8 @@ Status: parked ideas, not an implementation milestone or worklist. Promote one
 to a focused milestone when its prerequisites and intended result are clear.
 See the [planning index](boot-sdk-ports.md) for the current sequence.
 
+Parked elsewhere: [capability-valued environment variables](capability-environment.md).
+
 ## Execution lifecycle
 
 The implemented [init handoff](../userland/init.md) launches a successor and exits. Real
