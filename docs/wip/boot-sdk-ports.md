@@ -25,6 +25,10 @@ Chosen by the owner, each starting with a proposal.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
+[FAT32 volumes](fat32-volumes.md): Codex (2026-10-11), a shared engine and
+native mounted read-write proposal extracted from NVMe coexistence and the ESP
+editor, also serving removable media. Decisions and tasks need separate owner go.
+
 [Git on Pyxis](git-on-pyxis.md): the libc prerequisites of the libgit2 source-fetch
 route are merged. A docs-only investigation of a native Git CLI and HTTP transport
 is in review (#711); no Git port task is assigned.
@@ -40,9 +44,9 @@ inventories, mounted read-write FAT32 and owned ESP configuration reconciliation
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
 [Native command execution](native-command-execution.md): Codex delta (2026-10-11),
-a shared proposal for selected native streams, capture/deadlines and shell/Lua
-pipelines, extracted from Claude/Git/ports/libuv. Direct launch without descendants
-is accepted; remaining decisions and every implementation task need a separate go; FAT32 proposal follows after review.
+an accepted shared plan for direct native launch without descendants, selected
+streams, capture/deadlines and shell/Lua pipelines, extracted from Claude/Git/ports/
+libuv. No implementation task is assigned.
 
 [Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
@@ -103,8 +107,8 @@ implemented and natively qualified for read-only LAN attach on the RTL8111
 (tasks 1–3); task 4 is unassigned.
 
 [NVMe coexistence](nvme-coexistence.md): task 1's NVMe driver is merged (#710) and
-was qualified natively read-only on 2026-10-11; the FAT32 and installer coexistence
-tasks need assignment.
+was qualified natively read-only on 2026-10-11; FAT32 depends on the separate
+[FAT32 volumes milestone](fat32-volumes.md), and coexistence tasks need assignment.
 
 [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm with one
 terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
