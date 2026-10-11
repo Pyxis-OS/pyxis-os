@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <abi/pointer.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -26,6 +27,7 @@
 #define USB_REQUEST_SET_REPORT 9
 #define USB_REQUEST_SET_IDLE 10
 #define USB_REQUEST_SET_PROTOCOL 11
+#define USB_REQUEST_GET_PROTOCOL 3
 #define USB_REQUEST_INTERFACE_IN 0x81
 #define USB_REQUEST_CLASS_INTERFACE_IN 0xa1
 #define USB_REQUEST_CLASS_INTERFACE_OUT 0x21
@@ -40,12 +42,23 @@
 #define USB_QEMU_KEYBOARD_DESCRIPTOR_BYTES 63
 #define USB_QEMU_KEYBOARD_PACKET 8
 #define USB_QEMU_QUEUE_ENTRIES 16
+#define USB_HID_MALFORMED_LIMIT 16
+#define USB_HID_MALFORMED_DIAGNOSTIC_NS UINT64_C(5000000000)
 
 enum hid_stage {
   HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_ENDPOINTS,
-  HID_PROTOCOL, HID_FEATURE_READ, HID_FEATURE_WRITE, HID_FEATURE_CONFIRM,
+  HID_PROTOCOL, HID_PROTOCOL_READBACK, HID_FEATURE_READ, HID_FEATURE_WRITE, HID_FEATURE_CONFIRM,
   HID_IDLE, HID_INITIAL, HID_START, HID_FINISHED,
 };
+
+static bool malformed_report(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes, bool decoded);
+
+static bool diagnostics_enabled(void)
+{
+  const struct boot_options *options = boot_options_get();
+  return options->usb_xhci_diagnose || options->usb_hid_describe;
+}
 
 static const enum key_code usage_keys[256] = {
   [0x04] = KEY_A, [0x05] = KEY_B, [0x06] = KEY_C, [0x07] = KEY_D,
@@ -169,8 +182,9 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
         .address = part[2], .packet = wire_packet & USB_PACKET_MASK, .interval = part[6],
         .transactions = (wire_packet >> USB_PACKET_TRANSACTIONS_SHIFT) & 3,
       };
-      interface.receive_bytes = interface.protocol == USB_PROTOCOL_KEYBOARD ?
+      unsigned minimum = interface.protocol == USB_PROTOCOL_KEYBOARD ?
         USB_HID_KEYBOARD_BYTES : USB_HID_MOUSE_BYTES;
+      interface.receive_bytes = interface.endpoint.packet > minimum ? interface.endpoint.packet : minimum;
     }
   }
   select_interface(binding, &interface, inputs);
@@ -235,6 +249,12 @@ void usb_hid_lost(struct usb_hid_binding *binding)
     }
   }
   cpu_restore_interrupts(flags);
+  for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
+    struct usb_hid_interface *interface = &binding->interfaces[index];
+    if (interface->stream) {
+      usb_host_interrupt_diagnose_loss(interface->stream, interface->number);
+    }
+  }
   ktrace("usb HID: source detached\n");
 }
 
@@ -335,6 +355,11 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
   case HID_PROTOCOL:
     setup.request = USB_REQUEST_SET_PROTOCOL;
     setup.value = interface->report_protocol ? 1 : 0;
+    break;
+  case HID_PROTOCOL_READBACK:
+    setup.request_type = USB_REQUEST_CLASS_INTERFACE_IN;
+    setup.request = USB_REQUEST_GET_PROTOCOL;
+    setup.length = 1;
     break;
   case HID_IDLE:
     setup.request = USB_REQUEST_SET_IDLE;
@@ -509,8 +534,16 @@ static enum usb_result initial_snapshot(struct usb_hid_binding *binding,
   } else if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
     bool unresolved;
     if (!keyboard_snapshot(binding->control, completion->bytes, binding->initial_keys, &unresolved)) {
-      return bind_failed(binding, USB_IO);
+      if (malformed_report(binding, interface, completion->bytes, false)) {
+        return bind_failed(binding, USB_IO);
+      }
+      if (interface->qemu_keyboard) {
+        return USB_BUSY;
+      }
+      ++binding->interface;
+      return USB_BUSY;
     }
+    interface->malformed_consecutive = 0;
     /* QEMU consumes scan bytes, including invisible prefixes, one GET at a
      * time. Preserve its established sixteen-snapshot attachment drain. */
     if (interface->qemu_keyboard && ++binding->initial_observations < USB_QEMU_QUEUE_ENTRIES) {
@@ -521,14 +554,30 @@ static enum usb_result initial_snapshot(struct usb_hid_binding *binding,
     }
   } else {
     struct usb_hid_mouse_sample sample;
+    if (interface->report_protocol && binding->mouse.ids &&
+        (!completion->bytes || binding->control[0] != binding->mouse.layouts[binding->layout].id)) {
+      binding->mouse.decode_failure = HID_DECODE_ID;
+    }
     bool valid = interface->report_protocol ?
       ((!binding->mouse.ids || (completion->bytes &&
         binding->control[0] == binding->mouse.layouts[binding->layout].id)) &&
        usb_hid_mouse_decode(&binding->mouse, binding->control, completion->bytes, &sample)) :
       boot_mouse_sample(interface, binding->control, completion->bytes, &sample);
     if (!valid) {
-      return bind_failed(binding, USB_IO);
+      if (malformed_report(binding, interface, completion->bytes, true)) {
+        return bind_failed(binding, USB_IO);
+      }
+      if (interface->qemu_wheel) {
+        return USB_BUSY;
+      }
+      if (interface->report_protocol) {
+        ++binding->layout;
+      } else {
+        ++binding->interface;
+      }
+      return USB_BUSY;
     }
+    interface->malformed_consecutive = 0;
     binding->initial_buttons = sample.buttons;
     /* Nonzero QEMU deltas can retain its FIFO head. Drain sixteen zero-motion
      * observations before publishing the final button snapshot. */
@@ -611,11 +660,14 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
         return USB_BUSY;
       }
     }
-  } else if (binding->stage == HID_PROTOCOL || binding->stage == HID_IDLE ||
+  } else if (binding->stage == HID_PROTOCOL || binding->stage == HID_PROTOCOL_READBACK || binding->stage == HID_IDLE ||
              binding->stage == HID_INITIAL) {
     while (binding->interface < USB_HID_ENDPOINTS_PER_DEVICE &&
            (!binding->interfaces[binding->interface].protocol ||
-            (binding->stage == HID_PROTOCOL && !binding->interfaces[binding->interface].boot))) {
+            (binding->stage == HID_PROTOCOL && !binding->interfaces[binding->interface].boot) ||
+            (binding->stage == HID_PROTOCOL_READBACK &&
+             (!binding->interfaces[binding->interface].boot ||
+              !binding->interfaces[binding->interface].report_protocol)))) {
       ++binding->interface;
     }
     if (binding->interface == USB_HID_ENDPOINTS_PER_DEVICE) {
@@ -670,7 +722,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   bool optional_stall = completion.result == USB_STALL &&
       ((binding->stage == HID_IDLE && interface->protocol == USB_PROTOCOL_MOUSE) ||
        binding->stage == HID_KEYBOARD_DESCRIPTOR || binding->stage == HID_MOUSE_DESCRIPTOR ||
-       binding->stage == HID_INITIAL || feature_stage(binding->stage) ||
+       binding->stage == HID_INITIAL || binding->stage == HID_PROTOCOL_READBACK || feature_stage(binding->stage) ||
        (binding->stage == HID_PROTOCOL && interface->protocol == USB_PROTOCOL_MOUSE));
   if ((completion.result != USB_OK && !optional_stall) || (!setup.length && completion.bytes)) {
     return bind_failed(binding, completion.result == USB_OK ? USB_IO : completion.result);
@@ -695,7 +747,8 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
         usb_hid_mouse_parse(&binding->mouse, binding->control, completion.bytes)) {
       binding->interfaces[1] = *candidate;
       binding->interfaces[1].report_protocol = true;
-      binding->interfaces[1].receive_bytes = binding->mouse.input_bytes;
+      binding->interfaces[1].receive_bytes = candidate->endpoint.packet > binding->mouse.input_bytes ?
+        candidate->endpoint.packet : binding->mouse.input_bytes;
       binding->candidate = binding->candidate_count;
     } else {
       mouse_fallback(binding, candidate);
@@ -719,6 +772,15 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       ktrace("usb HID: boot protocol refused on mouse interface %u; mouse unavailable\n", interface->number);
       interface->protocol = 0;
     }
+    ++binding->interface;
+    break;
+  case HID_PROTOCOL_READBACK:
+    if (diagnostics_enabled()) {
+      klog("usb HID diag: %x:%x interface=%u GET_PROTOCOL result=%u bytes=%zu selected=%d expected=1\n",
+          binding->vendor, binding->product, interface->number, completion.result,
+          completion.bytes, completion.result == USB_OK && completion.bytes == 1 ? binding->control[0] : -1);
+    }
+    /* Readback is evidence, not permission to reinterpret queued Input data. */
     ++binding->interface;
     break;
   case HID_FEATURE_READ: {
@@ -791,16 +853,17 @@ enum usb_result usb_hid_bind_boot(struct usb_hid_binding *binding,
   return result;
 }
 
-static void diagnose_loss(struct usb_hid_binding *binding, struct usb_hid_interface *interface,
-    enum usb_result result, size_t bytes, bool decoded)
+static void diagnose_report(struct usb_hid_binding *binding, struct usb_hid_interface *interface,
+    const char *action, enum usb_result result, size_t bytes, bool decoded)
 {
-  if (!boot_options_get()->usb_xhci_diagnose) {
+  if (!diagnostics_enabled()) {
     return;
   }
-  klog("usb HID diag: %x:%x interface=%u protocol=%s loss-result=%u bytes=%zu\n",
+  klog("usb HID diag: %x:%x interface=%u protocol=%s action=%s result=%u bytes=%zu "
+      "malformed=%llu consecutive=%u\n",
       binding->vendor, binding->product, interface->number,
-      interface->report_protocol ? "report" : "boot", result, bytes);
-  usb_host_interrupt_diagnose_loss(interface->stream);
+      interface->report_protocol ? "report" : "boot", action, result, bytes,
+      (unsigned long long)interface->malformed_reports, interface->malformed_consecutive);
   if (!decoded || !interface->report_protocol) {
     return;
   }
@@ -823,6 +886,26 @@ static void diagnose_loss(struct usb_hid_binding *binding, struct usb_hid_interf
   }
 }
 
+static bool malformed_report(struct usb_hid_binding *binding,
+    struct usb_hid_interface *interface, size_t bytes, bool decoded)
+{
+  if (interface->malformed_reports != UINT64_MAX) {
+    ++interface->malformed_reports;
+  }
+  bool retire = ++interface->malformed_consecutive == USB_HID_MALFORMED_LIMIT;
+  if (retire) {
+    usb_hid_lost(binding);
+  }
+  uint64_t now = arch_monotonic_ns();
+  if (diagnostics_enabled() &&
+      (retire || !interface->malformed_diagnostic_ns || now >= interface->malformed_diagnostic_ns)) {
+    interface->malformed_diagnostic_ns = now + USB_HID_MALFORMED_DIAGNOSTIC_NS;
+    diagnose_report(binding, interface, retire ? "malformed-retirement" : "dropped",
+        USB_INVALID, bytes, decoded);
+  }
+  return retire;
+}
+
 void usb_hid_collect(struct usb_hid_binding *binding)
 {
   if (!binding->active) {
@@ -830,6 +913,12 @@ void usb_hid_collect(struct usb_hid_binding *binding)
   }
   if (!usb_host_device_present(binding->host)) {
     usb_hid_lost(binding);
+    for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
+      struct usb_hid_interface *interface = &binding->interfaces[index];
+      if (interface->protocol && interface->stream) {
+        diagnose_report(binding, interface, "unavailable", USB_IO, 0, false);
+      }
+    }
     return;
   }
   for (unsigned index = 0; index < USB_HID_ENDPOINTS_PER_DEVICE; ++index) {
@@ -846,16 +935,18 @@ void usb_hid_collect(struct usb_hid_binding *binding)
       }
       if (result != USB_OK) {
         usb_hid_lost(binding);
-        diagnose_loss(binding, interface, result, 0, false);
+        diagnose_report(binding, interface, "transport-loss", result, 0, false);
         return;
       }
       bool keys[KEY_COUNT], unresolved;
       if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
         if (!keyboard_snapshot(binding->control, completion.bytes, keys, &unresolved)) {
-          usb_hid_lost(binding);
-          diagnose_loss(binding, interface, USB_INVALID, completion.bytes, false);
-          return;
+          if (malformed_report(binding, interface, completion.bytes, false)) {
+            return;
+          }
+          continue;
         }
+        interface->malformed_consecutive = 0;
         uint64_t flags = cpu_save_interrupts();
         if (unresolved) {
           input_keyboard_unresolved(&binding->source);
@@ -869,10 +960,12 @@ void usb_hid_collect(struct usb_hid_binding *binding)
           usb_hid_mouse_decode(&binding->mouse, binding->control, completion.bytes, &sample) :
           boot_mouse_sample(interface, binding->control, completion.bytes, &sample);
         if (!valid) {
-          usb_hid_lost(binding);
-          diagnose_loss(binding, interface, USB_INVALID, completion.bytes, true);
-          return;
+          if (malformed_report(binding, interface, completion.bytes, true)) {
+            return;
+          }
+          continue;
         }
+        interface->malformed_consecutive = 0;
         uint64_t flags = cpu_save_interrupts();
         input_pointer_report(&binding->source, sample.x, sample.y,
                              sample.pan, sample.wheel, sample.buttons);

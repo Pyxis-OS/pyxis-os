@@ -226,6 +226,79 @@ at `28b5a3bc`. This prevents rolling back the merged parent's libc inputs.
 The earlier flood results retain their stated revisions and are not re-labelled
 as measurements of the refreshed initrd.
 
+### Native diagnostic at 59947277: receiver retirement evidence
+
+Owner-run ThinkPad boot, 2026-10-11 evening, `USB_HID_DESCRIBE=1`,
+`usb.hid.describe=1 usb.xhci.diagnose=1`. Masked evidence is outside the repo at
+`/shared/present/batch2/pointer716/native-freeze-diag-59947277.log` (117 lines).
+The corrected trigger is the G502 button mapped on-board to Super+R on its
+keyboard interface; the earlier free-spin attribution is superseded.
+
+Measured: ASUS immediately loses its composite binding on a four-byte Input
+whose first byte is zero, rejected as an unknown Report ID. That resembles a
+boot-format packet but is not a protocol readback or proof of its origin.
+The admitted report descriptor has no ID 0. G502 input later stops; controller
+7:0.3 advances from 3,412 events to 3,616, then remains static. Its worker age
+continues at 5–12 ms, pending-command=0, running=1, failed=0, USBSTS=0, USBCMD=d,
+IMAN=2; ERDP matches software index 32/cycle 1, with an old cycle-0 mouse Transfer
+Event at the head. The last command changes from type 16 to type 10 (Disable
+Slot). This establishes software device retirement on that controller; it does
+not establish a halted controller, parked worker or full event ring. Samples
+are five seconds apart and do not independently date the owner's replug.
+
+Inspected: a HID STALL/transaction error/babble marks the whole device retiring.
+`usb_hid_collect` then takes the early not-present path before its diagnostic
+loss branches, so this capture can omit the failed stream completion even though
+it was retained. The device subsequently reaches Disable Slot. Root/hub change
+retirement also exists, so the exact G502 trigger remains unproven. With ASUS
+already retired, loss of G502 can account for both mice stopping without a
+controller failure. Task 1 also changed keyboard receive length from endpoint
+packet capacity to exactly eight bytes; overlength keyboard input is a candidate,
+not a measured completion or identified packet format.
+
+The accepted runtime policy explicitly retires the whole composite binding on
+malformed input/transport loss; dropping reports or switching protocol at runtime
+would change that policy. No such change is implemented. SET_PROTOCOL currently
+has completion confirmation but no GET_PROTOCOL readback. HID 1.11 §§7.2.5–6
+and Appendix G define mode readback for boot interfaces; readback cannot by itself
+prove that old packets are absent from a device FIFO.
+[USB-IF HID 1.11](https://www.usb.org/sites/default/files/documents/hid1_11.pdf).
+
+That analysis preceded the owner's correction below. No hardware trigger was
+claimed proven from the incomplete completion diagnostic; if another capture is
+needed, it must include the not-present loss path's retained stream completion,
+controller/slot/port identities and root-port state. The userland #214 refresh below retains only its scroll commit above current
+main, dropping the stacked math commits.
+
+### Owner correction accepted 2026-10-11
+
+Daybreak's independent inspection agrees with software receiver retirement,
+with exact-eight-byte keyboard TDs a likely babble trigger. The owner's four
+accepted corrections are implemented: endpoint-packet-sized receives (also large
+enough for admitted layouts); retained completion diagnostics on the early
+unavailable path; observational GET_PROTOCOL after mouse SET_PROTOCOL(report);
+and malformed-report dropping/counting, with whole-binding retirement at 16
+consecutive malformed reports on one interface or transport failure. Valid
+input resets only its own interface's streak. Drop diagnostics are rate-limited
+to five seconds plus retirement; held state survives a dropped report. Initial
+malformed GET_REPORT snapshots are skipped without altering other snapshots.
+No new default klog output or automatic fallback from protocol mismatch/ID 0.
+
+Userland #214 is published at `f18f07b83d5d04b1ba7335a217b85e98b2a64748`,
+rebased directly onto main `dca986b`; its only ahead commit is the scroll
+integration. The stacked rint/FP_ILOGB commits are dropped; ports #99 remains
+`28b5a3bc`. Dependencies merge before the parent. No compiler rebuild.
+
+Native qualification remains pending. Luna should rebuild the submitted parent
+head with the same `USB_HID_DESCRIBE=1 LOG_LEVEL=info` and boot options
+`usb.hid.describe=1 usb.xhci.diagnose=1 log.udp=1`. Confirm ASUS works from its
+first input, capture its GET_PROTOCOL result and any drop count, and try the
+G502's Super+R mapped button, ordinary motion, wheel/free-spin and other buttons.
+Then verify both devices still respond and replug a receiver. Retain failed
+completion/endpoint/requested/residual metadata if a device retires. Do not infer
+controller failure from loss of both receivers. PS/2 and remote-shell checks
+remain the control. No raw key payload or new device-firmware/polling settings.
+
 ### One diagnostic retest through luna
 
 A temporary `usb.xhci.diagnose=1` option adds info-level observations only, with

@@ -15,6 +15,8 @@ struct usb_hid_interface {
   struct usb_interrupt_endpoint endpoint;
   struct usb_host_interrupt *stream;
   uint16_t receive_bytes, descriptor_bytes;
+  uint64_t malformed_reports, malformed_diagnostic_ns;
+  unsigned malformed_consecutive;
   uint8_t number, protocol;
   bool boot, report_protocol;
   bool qemu_wheel_candidate, qemu_wheel, qemu_keyboard_candidate, qemu_keyboard;

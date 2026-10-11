@@ -1349,7 +1349,7 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
   }
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
-  if (boot_options_get()->usb_xhci_diagnose && interrupt->result == USB_OK &&
+  if ((boot_options_get()->usb_xhci_diagnose || boot_options_get()->usb_hid_describe) && interrupt->result == USB_OK &&
       ((completion != XHCI_EVENT_SUCCESS && completion != XHCI_EVENT_SHORT_PACKET) ||
        residue > interrupt->receive_bytes)) {
     interrupt->diagnostic_event = *event;
@@ -1381,7 +1381,7 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
       return true;
     }
     if (interrupt->queue_count == USB_INTERRUPT_COMPLETIONS || interrupt->sequence == UINT64_MAX) {
-      if (boot_options_get()->usb_xhci_diagnose) {
+      if (boot_options_get()->usb_xhci_diagnose || boot_options_get()->usb_hid_describe) {
         interrupt->diagnostic_event = *event;
       }
       interrupt->result = USB_DISCONTINUITY;
@@ -3358,14 +3358,19 @@ enum usb_result usb_host_interrupt_take(struct usb_host_interrupt *interrupt, vo
   return USB_OK;
 }
 
-void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream)
+void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream, unsigned interface)
 {
-  if (!boot_options_get()->usb_xhci_diagnose || !stream->diagnostic_event.control) {
+  if ((!boot_options_get()->usb_xhci_diagnose && !boot_options_get()->usb_hid_describe) ||
+      !stream->diagnostic_event.control) {
     return;
   }
   const struct xhci_trb *event = &stream->diagnostic_event;
-  klog("usb xhci diag: lost stream slot=%u dci=%u cc=%u pointer=%llx status=%x control=%x\n",
-      stream->device->slot, stream->dci, event->status >> XHCI_EVENT_COMPLETION_SHIFT,
+  const struct pci_address *address = &stream->device->controller->address;
+  klog("usb xhci diag %x:%x.%u: lost stream port=%u slot=%u interface=%u dci=%u cc=%u "
+      "requested=%zu residual=%u pointer=%llx status=%x control=%x\n",
+      address->bus, address->device, address->function, stream->device->port + 1,
+      stream->device->slot, interface, stream->dci, event->status >> XHCI_EVENT_COMPLETION_SHIFT,
+      stream->receive_bytes, event->status & XHCI_EVENT_RESIDUE_MASK,
       (unsigned long long)event->parameter, event->status, event->control);
 }
 

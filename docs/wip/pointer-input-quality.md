@@ -115,9 +115,19 @@ state or guessed universal pressure units.
    an actual boot mouse after confirmed SET_PROTOCOL(boot), using its defined
    prefix and the existing qualified QEMU extension. No trailing-byte guesses.
    Unsupported mouse admission preserves a supported keyboard sibling. Runtime
-   malformed reports or transport failure retain existing whole-binding
-   retirement/reset (including a composite sibling), not a silent protocol
-   switch; independent interface lifetime is not added.
+   malformed reports are dropped without changing held state; per-interface
+   counts and consecutive streaks are retained, and a valid report resets that
+   interface's streak. Sixteen consecutive malformed reports or transport failure
+   retire/reset the whole binding (including a composite sibling). No silent
+   protocol switch or independent interface lifetime is added.
+
+   **Owner correction accepted 2026-10-11, implemented pending native retest:**
+   receive TDs cover at least endpoint MaxPacketSize and the admitted report
+   size within HID capacity; decoding stays strict. Protocol admission reads
+   GET_PROTOCOL after SET_PROTOCOL(report), as diagnostic evidence without a new
+   boot fallback. Both diagnostic options cover the early unavailable/retiring
+   path's failed completion metadata before retirement. Malformed input uses
+   the drop/count/16-consecutive policy above, replacing one-report retirement.
 
    Enable high-resolution wheel Features only for understood wheel-scoped
    Resolution Multipliers: read the complete Feature, preserve unrelated fields,
