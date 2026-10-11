@@ -151,8 +151,11 @@ Installation defaults are insufficient: repo configuration must not reenable a
 feature or silently omit configured hooks/filters. Existing hooks/filters needing
 execution should cause an explicit refusal of the affected operation.
 
-**Inference: native run-command backend.** Resolve internal Git children from one
-retained bundle revision, launching the same native Git executable with a
+**Inference: native run-command backend.** Consume the shared
+[native command execution](native-command-execution.md) foundation for streams,
+cwd/env snapshots, result/stop and cleanup. Git owns bundle resolution, enforced
+external-feature policy and fork-callback/sideband adaptation. Resolve internal
+Git children from one retained bundle revision, launching the same native Git executable with a
 subcommand argv. Resolve separately packaged helpers through explicit roots and
 READ/LAUNCH authority. Keep [bundle](program-bundles.md) command/resource views,
 stack/capture limits and grant attenuation; unpacked bundles already work, native
@@ -360,10 +363,12 @@ is implied by these docs or ordinary libc/port work.
    clean status, collisions/denials and publication uncertainty.
    **After this task the owner can:** init, add, commit -m/-F, status, no-pager log,
    internal diff and serial checkout for supported ordinary local repositories.
-3. **Implement native executable run-command and sideband ownership.** Snapshot
-   cwd/env, directional pipes, grant attenuation, process completion/termination
-   and explicit helper/event-pump flow; remove shell/fork fallback. No kernel
-   POSIX process model. Qualify short transfers, EOF, failures and deadlock bounds.
+3. **Consume shared command execution; adapt Git run-command/sideband.**
+   The generic stream/cwd/env/result/stop/cleanup work moves, not completes, to
+   [native command execution](native-command-execution.md). Git retains its
+   executable bundle/grant policy, helper flow and non-fork callback/sideband
+   adaptation; remove shell/fork fallback without a kernel POSIX process model.
+   Qualify Git-specific short transfers, EOF, failures and deadlock bounds.
    **After this task the owner can:** use supported internal Git child commands
    and pack ingestion with native lifecycle/error reporting, before network use.
 4. **Shared dependency: native HTTP requests (moved, not completed).**

@@ -61,6 +61,11 @@ GNU coreutils, CMake 3.21 or newer, curl, tar, bzip2 and the Pyxis target toolch
 internal mirrors (`git.internal/mirrors` and `repo.internal`) to fetch source on a port rebuild. See [SDK/repository setup](sdk-and-repositories.md).
 The build container includes Lua; the owner publishes container updates.
 
+The proposed [native command milestone](../wip/native-command-execution.md)
+owns guest argv run/capture and pipelines in place of the runner's host
+`os.execute`/`io.popen`; hosted tools and recipe adaptation remain source-build
+work. This is not an implemented guest runner.
+
 `make ports` exports the SDK before checking recipe and SDK dependencies.
 Unchanged inputs reuse each port's `build/ports/<name>/stage`. Recipe or SDK
 changes rebuild the affected port in a fresh work directory, replacing its

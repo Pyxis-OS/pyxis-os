@@ -39,12 +39,16 @@ alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
+[Native command execution](native-command-execution.md): Codex delta (2026-10-11),
+a shared proposal for selected native streams, capture/deadlines and shell/Lua
+pipelines, extracted from Claude/Git/ports/libuv. Owner decisions and every
+implementation task need a separate go; FAT32 proposal follows after review.
+
 [Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
 prepared POST, streamed GET/POST without an artificial response-size cap, and
 shell/Lua delivery.
-No implementation task is assigned; command execution and FAT32 proposals follow
-separately after review.
+No implementation task is assigned; the command-execution proposal is separate.
 
 [Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
 guest VT composition with trusted remote pane creation and cleanup supervision.
