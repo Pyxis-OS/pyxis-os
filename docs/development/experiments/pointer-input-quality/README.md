@@ -11,7 +11,7 @@ After the native-thread integration, repeat controls use A `a7b16fe2`, userland
 `76d0508`, ports `df3210b0`; B `0e5e94cd`, userland `de944e7`, ports `28b5a3bc`.
 Each pair has matching source-built SDK/apps for its ABI (80 versus 88 bytes),
 so these runs cannot share an initrd. Both retain fs `b427df29` and lwIP `a1aadb91`.
-The final functional/default build is Pyxis `bdbe892f`, userland `303d913e`, ports
+The pre-descriptor-correction functional/default build is Pyxis `bdbe892f`, userland `303d913e`, ports
 `28b5a3bc`: rebased onto the later mux CWD/numbered-focus work. Cost samples are
 from the stated A/B pair, not a performance measurement of that later rebase.
 
@@ -218,6 +218,12 @@ five-second observations and survived another 14,392 wheel commands/12 s with
 Wheel −128 is outside both descriptors' declared −127..127 range: it remains
 rejected (reason 3, Logitech field 18 / ASUS field 10). Whether native hardware
 actually emits that value is unknown. No fault was injected into the kernel.
+
+The diagnostic follow-up rebases userland #214 onto main `2228716`: published
+head `81033abac6573722fdc001b1a281272aa2f4323d`, ports unchanged at `28b5a3bc`.
+The parent default image rebuild passes with those exact pins. This dependency
+refresh includes merged libc work; the earlier flood results retain their stated
+revisions and are not re-labelled as measurements of the refreshed initrd.
 
 ### One diagnostic retest through luna
 
