@@ -48,11 +48,18 @@ bool copy_from_user(void *destination, uintptr_t source, size_t bytes)
   if (!user_buffer_lease_acquire(&lease)) {
     return false;
   }
-  bool valid = user_buffer_check_leased(&lease, source, bytes, USER_BUFFER_READ);
+  bool valid = copy_from_user_leased(&lease, destination, source, bytes);
+  user_buffer_lease_release(&lease);
+  return valid;
+}
+
+bool copy_from_user_leased(const struct user_buffer_lease *lease,
+    void *destination, uintptr_t source, size_t bytes)
+{
+  bool valid = user_buffer_check_leased(lease, source, bytes, USER_BUFFER_READ);
   if (valid && bytes) {
     memcpy(destination, (const void *)source, bytes);
   }
-  user_buffer_lease_release(&lease);
   return valid;
 }
 
@@ -110,8 +117,18 @@ bool copy_reply_to_user(uintptr_t reply_address, const void *reply, size_t reply
   if (!user_buffer_lease_acquire(&lease)) {
     return false;
   }
-  bool valid = user_buffer_check_leased(&lease, reply_address, reply_size, USER_BUFFER_WRITE) &&
-      user_buffer_check_leased(&lease, data_address, data_size, USER_BUFFER_WRITE);
+  bool valid = copy_reply_to_user_leased(&lease, reply_address, reply, reply_size,
+      data_address, data, data_size);
+  user_buffer_lease_release(&lease);
+  return valid;
+}
+
+bool copy_reply_to_user_leased(const struct user_buffer_lease *lease,
+    uintptr_t reply_address, const void *reply, size_t reply_size,
+    uintptr_t data_address, const void *data, size_t data_size)
+{
+  bool valid = user_buffer_check_leased(lease, reply_address, reply_size, USER_BUFFER_WRITE) &&
+      user_buffer_check_leased(lease, data_address, data_size, USER_BUFFER_WRITE);
   if (valid) {
     if (data_size) {
       memcpy((void *)data_address, data, data_size);
@@ -120,7 +137,6 @@ bool copy_reply_to_user(uintptr_t reply_address, const void *reply, size_t reply
       memcpy((void *)reply_address, reply, reply_size);
     }
   }
-  user_buffer_lease_release(&lease);
   return valid;
 }
 

@@ -768,21 +768,28 @@ static enum call_status read_message(uintptr_t address, size_t size,
   if (size != sizeof(*message) - sizeof(message->header)) {
     return CALL_BAD_REQUEST;
   }
-  if (!copy_from_user(&message->buffer, address, size)) {
+  struct user_buffer_lease lease;
+  if (!user_buffer_lease_acquire(&lease)) {
     return CALL_BAD_BUFFER;
   }
+  enum call_status status = CALL_BAD_REQUEST;
+  if (!copy_from_user_leased(&lease, &message->buffer, address, size)) {
+    status = CALL_BAD_BUFFER;
+    goto done;
+  }
   if (message->size > ENDPOINT_DATA_MAX || message->grant_count > ENDPOINT_GRANTS_MAX) {
-    return CALL_BAD_REQUEST;
+    goto done;
   }
   for (size_t i = message->grant_count; i < ENDPOINT_GRANTS_MAX; ++i) {
     if (message->grants[i].handle || message->grants[i].rights || message->grants[i].transport) {
-      return CALL_BAD_REQUEST;
+      goto done;
     }
   }
-  if (!user_buffer_check(message->buffer, message->size, USER_BUFFER_READ)) {
-    return CALL_BAD_BUFFER;
-  }
-  return CALL_OK;
+  status = user_buffer_check_leased(&lease, message->buffer, message->size,
+      USER_BUFFER_READ) ? CALL_OK : CALL_BAD_BUFFER;
+done:
+  user_buffer_lease_release(&lease);
+  return status;
 }
 
 static struct syscall_result write_packet(uintptr_t address,
@@ -1162,7 +1169,8 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
       capability_reservation_release(&reservation, slots);
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (!user_buffer_check(reply_address, sizeof(output) + output.size, USER_BUFFER_WRITE)) {
+    if (!user_buffer_check_leased(&lease, reply_address, sizeof(output) + output.size,
+        USER_BUFFER_WRITE)) {
       end_endpoint_update(state, ready_before);
       user_buffer_lease_release(&lease);
       capability_reservation_release(&reservation, slots);
@@ -1187,7 +1195,7 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     record->receipt_handle = output.receipt = handles[0];
     /* The guard keeps the published receipt from retiring/reusing this record
      * until its bounded copy finishes; the lease keeps both outputs mapped. */
-    bool copied = copy_reply_to_user(reply_address, &output, sizeof(output),
+    bool copied = copy_reply_to_user_leased(&lease, reply_address, &output, sizeof(output),
         reply_address + sizeof(output), record->request, output.size);
     end_endpoint_update(state, ready_before);
     user_buffer_lease_release(&lease);

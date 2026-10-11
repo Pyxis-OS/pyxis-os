@@ -10,12 +10,17 @@ build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
 merged in [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684);
 [qualification](../development/experiments/threads-task3/README.md) records the
 matched comparison and 1/4-CPU inspection. Task 4, VM activity and buffer leases,
-is owner-assigned and implemented on this branch; its
+is merged in [#700](https://git.internal/PyxisOS/pyxis-os/pulls/700); its
 [qualification](../development/experiments/threads-task4/README.md) separates
 nested-QEMU evidence from the owner-run native A/B. The owner accepts the BSP
 MEMORY latency follow-up; bounded string capture and its native rerun are
-complete. IPC fixed cost is accepted for merge with a bounded investigation
-before task 5; optimization needs a separate owner go. The remaining proposal
+complete. The owner-assigned IPC copy-phase follow-up is implemented on this
+branch: descriptor capture/payload prevalidation share one short lease, and
+RECEIVE reuses its publication lease. Inspected CALL lease pairs fall from 15
+to 11 and SEND admission from 4 to 3; no lease spans growth or waits. Its
+[qualification](../development/experiments/ipc-copy-leases/README.md) records
+1/4-CPU inspection and nested/native A/B: SEND64 saves 13 ns/message; CALL cost
+remains recorded in technical debt. Task 5 stays queued for its proposal. The remaining proposal
 originally inspected Pyxis `4236efc7`
 and userland `51bcb56b`. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
@@ -310,7 +315,9 @@ The kernel exposes native thread, parking and TLS primitives only. Pthreads and
 C11 threads are userland libc layers over them, like the rest of libc. No
 POSIX-shaped kernel calls, futex clone or signals-based cancellation. Acceptance
 does not assign later implementation; tasks 2 and 3 were separately assigned.
-Task 4 is separately owner-assigned; task 5 still requires an owner go.
+Task 4 and its IPC follow-up are separately owner-assigned. The owner queued task
+5 for after the follow-up PR and native A/B: propose its concrete scope and open
+decisions, then stop for owner review before implementation.
 
 1. **Stack/admission policy — accepted:** eager guarded 1 MiB libc stacks, explicit
    1–8 MiB sizes, and both tunable 64-entry bounds above, outside the ABI/SDK

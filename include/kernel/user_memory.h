@@ -43,6 +43,11 @@ bool user_buffer_check_leased(const struct user_buffer_lease *lease,
 bool copy_from_user(void *destination, uintptr_t source, size_t bytes);
 bool copy_to_user(uintptr_t destination, const void *source, size_t bytes);
 
+/* Same copy guarantees, using the caller's live bounded lease. The caller must
+ * release it before allocation, scheduling, waiting or authority cleanup. */
+bool copy_from_user_leased(const struct user_buffer_lease *lease,
+    void *destination, uintptr_t source, size_t bytes);
+
 enum user_string_result {
   USER_STRING_OK,
   USER_STRING_BAD_BUFFER,
@@ -61,6 +66,9 @@ enum user_string_result copy_string_from_user(char *destination, uintptr_t sourc
  * Overlapping user destinations retain that order; kernel sources must not alias
  * either. A validation failure writes neither range. */
 bool copy_reply_to_user(uintptr_t reply_address, const void *reply, size_t reply_size,
+    uintptr_t data_address, const void *data, size_t data_size);
+bool copy_reply_to_user_leased(const struct user_buffer_lease *lease,
+    uintptr_t reply_address, const void *reply, size_t reply_size,
     uintptr_t data_address, const void *data, size_t data_size);
 
 /* A failed reply releases only the operation's unreported handle generations.
