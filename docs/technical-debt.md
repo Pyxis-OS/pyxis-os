@@ -573,11 +573,20 @@ briefly double one pane's), with no per-group CPU or memory quota.
 
 A full pane input queue can hold a prefix behind already staged input, since bounded lossless storage cannot bypass a pending paste.
 Confirmed closure waits for group cleanup and output EOF, so published HOST work can delay cleanup indefinitely and output grants
-delegated outside the group can delay EOF; mux exit or fault requests termination through final controlling-grant closure without
-waiting for cleanup. Local keyboard and graphics grants are shared space facilities, so graphical launches share the existing
+delegated outside the group can delay EOF; local mux exit or fault requests termination through final controlling-grant closure without
+waiting for cleanup. Remote daemon supervision remains until outer and all tracked pane groups complete. Local keyboard and graphics
+grants are shared space facilities, so graphical launches share the existing
 one-session ownership. Live pane resize depends on the consumer: shell and Kilo observe RESIZED, Links reads geometry once, and vi and
 less keep their behavior (revisit with a focused port change). Revisit windows, ratio adjustment, input recovery and quotas when
 selected.
+
+## Initial remote multiplexer limits
+
+[Remote mux](userland/remote-terminal.md#remote-multiplexer) has fixed initial geometry, keyboard input and host selection/ordinary paste;
+no native pointer/clipboard, safe-Paste, file-transfer routing, per-pane machine completion or reattachment. Two mux connections share
+the daemon's four connection slots; closing groups retain admission indefinitely behind attributed HOST work. Rendering is bounded and
+resumable, but synchronous launch/HOST capture and the one-second cwd snapshot can still delay input. Revisit live resize and end-to-end
+horse qualification in [task 3](wip/remote-multiplexer.md#tasks); pane-aware transfer/input transport requires a separate owner assignment.
 
 ## Initial independent terminal limits
 

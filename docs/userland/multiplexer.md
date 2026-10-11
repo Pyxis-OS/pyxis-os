@@ -20,10 +20,12 @@ Trusted init receives a distinct `mux_terminal` creation grant. The trusted
 shell/session handoff preserves it; after any configured service setup the
 session launcher selects mux instead of the shell, forwarding it as `terminal`
 and retaining CREATE_GROUP on mux's launcher. Ordinary shells receive neither.
-Remote startup does not select mux; a
-[remote-multiplexer plan](../wip/remote-multiplexer.md) is accepted but not implemented.
-Direct ordinary command launch lacks the
-administrative grants mux requires. Missing resources or failed startup produce
+Remote startup uses a separate `remote_multiplexer = true` opt-in and
+`pyxis-remote --mux`, with pane creation brokered by the trusted daemon. Packaged
+Remote configurations leave it false. See [remote mux](remote-terminal.md#remote-multiplexer)
+and its [remaining milestone](../wip/remote-multiplexer.md).
+Direct ordinary command launch lacks the administrative grants local mux requires.
+Missing resources or failed startup produce
 a diagnostic, with no automatic restart or fallback shell.
 
 The configured terminal tab width reaches mux through `--tab-width 1..32` and
@@ -85,12 +87,14 @@ eviction of old rows. Screen erasure and resize cropping do not create history.
 
 ## Authority, input and exit
 
-Mux alone owns attachments, RESIZE, HANGUP and group supervision. Each root
-shell receives application streams, interrupt arming, its separate completion
+Local mux owns attachments, RESIZE, HANGUP and group supervision. Remote mux
+receives those handles from a daemon which retains independent group supervision
+through cleanup. Each root shell receives application streams, interrupt arming, its separate completion
 event grant and a group-bound launcher. Commands receive existing explicitly
-delegated resources. Pane shells receive the same explicitly held local display,
-keyboard, pointer and power grants as ordinary local session shells. Graphical
-programs launched from a pane draw on the shared space's
+delegated resources. Local pane shells receive the same explicitly held display,
+keyboard, pointer and power grants as ordinary local session shells. Remote panes
+receive the existing remote grants, with no local display/keyboard/pointer or
+clipboard-store authority. Local graphical programs launched from a pane draw on the shared space's
 [graphics layer](space-layers.md), above mux; they never draw inside the pane.
 Pane shells receive no session creation or group-supervision grant.
 
@@ -101,8 +105,11 @@ editing its prompt. One absolute one-second budget covers the complete chunked
 transfer, including chains longer than the four-grant message bound. Partial
 transfers release their grants and use the fallback; no old cwd snapshot is
 cached. The complete owned snapshot remains alive through synchronous launch
-capture and is then released. This contract was approved by the owner on
-2026-10-11; it adds no kernel interface or directory authority.
+capture and is then released. Remote mux forwards the complete chain through
+its private daemon broker, which retains the connection's initial policy. An
+uncertain broker publication ends mux and cleans tracked groups; it never
+falls back or retries as another split. No kernel interface or directory
+authority is added.
 
 Ordinary input remains byte-exact. Mux holds passthrough on its outer input so
 Ctrl+C reaches the focused session, whose ordinary shell interruption rules
@@ -119,14 +126,23 @@ until dismissed. A shell `session` successor therefore cannot survive the
 original pane root's exit. Confirmed closure removes the pane after output EOF and group
 cleanup; siblings reclaim its layout region. Closing the last pane ends mux.
 Output grants intentionally delegated outside a pane group can delay output
-EOF independently of group completion. Mux exit/fault also drops the final controlling grants and requests termination
-of every remaining group. Group cleanup has no fixed deadline: published HOST
+EOF independently of group completion. Local mux exit/fault drops the final
+controlling grants and requests termination of every remaining group. The remote daemon seals its broker and explicitly
+terminates every tracked pane group before outer/all-pane completion permits
+FINAL or connection reuse. Group cleanup has no fixed deadline: published HOST
 work can delay it. See [execution groups](../interfaces/execution-groups.md).
 
-Every turn drains a bounded number of records from each pane. Rendering sends
-changed colored cells through the outer CONSOLE; it does not pass pane escape
-sequences through to the outer terminal. Eighteen readiness interests cover
-outer input, the terminal spatial queue and eight output/lifecycle pairs, without an idle polling loop.
+Every turn drains a bounded number of records from each pane. Rendering resumes
+changed colored-cell output through CONSOLE try-write, with a fixed 8 KiB pending
+buffer, an 8 KiB output budget and a 2,048-cell scan budget per turn. Partial
+CSI/UTF-8 suffixes and cell snapshots survive short writes; previous-frame cells
+advance only when complete glyphs enter the outer queue. New presentation
+coalesces behind an active frame while input and pane drains continue. This
+records queue acceptance, not host-display acknowledgment. Pane escape sequences
+are interpreted inside the emulator; unsupported OSC bodies are discarded.
+Up to nineteen readiness interests cover outer input/output, the optional
+terminal spatial queue and eight output/lifecycle pairs, without an idle
+polling loop.
 The native wait bound is independently 32 interests; a compile-time check
 ensures the eight-pane budget fits it. Per-interest copies use about 40 bytes
 of kernel stack. The readiness request fits the existing 4,928-byte reserved
