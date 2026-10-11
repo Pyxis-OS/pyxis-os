@@ -40,8 +40,9 @@ inventories, mounted read-write FAT32 and owned ESP configuration reconciliation
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
 [Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
-shared docs proposal extracted from Claude/Git prerequisites: prepared POST,
-streamed GET/POST without an artificial response-size cap, and shell/Lua delivery.
+shared plan accepted by the owner, extracted from Claude/Git prerequisites:
+prepared POST, streamed GET/POST without an artificial response-size cap, and
+shell/Lua delivery.
 No implementation task is assigned; command execution and FAT32 proposals follow
 separately after review.
 

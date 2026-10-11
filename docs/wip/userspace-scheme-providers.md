@@ -84,8 +84,8 @@ and staged POST followed by response reading for `"w+"`. Accepted Claude
 preparation/commit rules subsequently settled one-shot submission and explicit
 body/control/response authority. On 2026-10-11 the owner moved this shared work to
 [native HTTP requests](native-http-requests.md), adding no artificial response-size
-cap, streamed GET/POST completion and large request staging. The streamed-response
-replacement remains a proposed decision there; nothing here marks it implemented.
+cap, streamed GET/POST completion and large request staging. All three HTTP
+defaults are accepted; nothing here marks them implemented.
 
 That milestone owns `printf '{}' > json+https://…`, explicit shell-coordinated
 commit and response access. Ordinary writes, flush/close and editor autosave do
@@ -98,10 +98,21 @@ Reads through a newly opened URI are GET, never the previous POST response.
 owns the accepted real-grant handoff into private shell bindings and the
 libc/Lua staging/response adapters. Printed numeric handles or byte replies cannot
 transfer authority. Producers receive body WRITE, consumers response READ plus
-read-only completion observation under the proposed streamed contract; only the
+read-only completion observation under the accepted streamed contract; only the
 coordinator commits/aborts. Request-private credentials and unknown-outcome/no-replay
-rules are preserved. A login/token workflow is a consumer of that shared facility,
-not a second helper implementation or an ambient header store.
+rules are preserved.
+
+A prepared request is a capability. Private shell bindings are the first form
+of capability-valued variables; future environment variables may carry real
+capabilities inherited through explicit launch grants, never text-encoded
+handles. These bindings must fit the cross-cutting capability-valued environment
+direction rather than become a separate shell-only mechanism. Credential bytes
+remain excluded from argv/environment/history/logs.
+The [task 3 object/rights/lifetime/inheritance review](native-http-requests.md#capability-valued-variables-and-task-3-review)
+is required before code; capability-valued environment implementation needs a
+separate owner assignment. The motivating workflow is to log in, extract a token
+with jq, and prepare another request with it, through private credential
+preparation rather than an ambient header store.
 
 ## Future response cache
 

@@ -39,7 +39,7 @@ which remains a later optional task.
 | Files and directories | Lua has real `io` reads/writes, seek, rename/remove and `pyxis.dir`. Directory enumeration accumulates the whole table and reports changed-generation errors. | Project-relative text tools; bounded enumeration/results, explicit errors and same-parent replacement for writes. Flush/close are not durability; explicit sync needs a binding if durable writes are promised. |
 | HTTP POST | [libhttp](../userland/http-fetch.md) sends GET with fixed headers, no request body; successful bodies are limited to 200/204. Other statuses retain no error body; generic response headers are not exposed. | [Shared HTTP milestone](native-http-requests.md): POST, request headers, response status/error bodies and streamed completion. |
 | Longer deadline | Libhttp clamps even a supplied deadline to 30 s. Native TCP calls independently reject deadlines more than 30 s ahead; TLS passes that deadline through and treats timeout as terminal. | Shared HTTP overall deadline and bounded waits; no replay or enlarged kernel limits. |
-| Writable provider | Current HTTPS publishes read-only snapshots. Provider OPEN returns one FILE; FILE has READ/WRITE, no commit control. | Shared HTTP body/control/response grants; the streamed response replacement is pending there. |
+| Writable provider | Current HTTPS publishes read-only snapshots. Provider OPEN returns one FILE; FILE has READ/WRITE, no commit control. | Shared HTTP body/control/response grants; its streamed response replacement is accepted, not implemented. |
 | Prepared handoff | Endpoint CALL replies already transfer capabilities, but the shell has no prepared-request variables/controls. | Shared HTTP shell bindings and generic libc/Lua controls, returning real grants. |
 | Lua/TLS boundary | The Lua port supplies file I/O and `pyxis`; TLS is already isolated in the HTTPS provider. | Keep that boundary. No Lua HTTPS binding, application HTTP library dependency or crypto-owner integration task. |
 | Command output | `pyxis.run` inherits current streams and waits; changing Lua `io.output` does not redirect child stdout. No capture/deadline option exists. | Native launch with explicit FILE streams, result/deadline observation, capped tool results and cleanup. No `io.popen` or fake `os.execute`. |
@@ -165,13 +165,12 @@ commit, request-private credential handling, real capability handoff, retirement
 and explicit `"w"`/`"w+"` controls are carried forward there. This move is not
 implementation and does not mark any former task complete.
 
-The old response rule was a complete immutable FILE, granted only after
-completion, with no partial publication and whole-body RAM accounting. The
-owner's no-artificial-response-cap direction requires changing that mechanism;
-[HTTP decision 1](native-http-requests.md#proposed-defaults-requiring-owner-decisions)
-proposes the replacement and still needs acceptance. The three harness decisions
-above remain accepted. Its narrower request/response/tool-result budgets and
-complete-JSON validation remain consumer policy; transport streaming must not
+[HTTP decision 1](native-http-requests.md#accepted-owner-decisions), accepted by
+the owner on 2026-10-11, replaces the complete-only immutable response FILE with
+a forward-only stream and explicit final status, including GET. This is not yet
+implemented. The three harness decisions above remain accepted. Its narrower
+request/response/tool-result budgets and complete-JSON validation remain consumer
+policy; transport streaming must not
 execute partial tool arguments. Private key-file provisioning and trusted native
 header preparation are harness integration, not provider-wide credential policy.
 

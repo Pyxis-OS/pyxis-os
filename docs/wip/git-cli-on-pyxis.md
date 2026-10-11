@@ -262,7 +262,7 @@ Git-specific extensions to that shared design are limited to:
 | Git request headers | Git-Protocol, including discovery GET, and Git Content-Type values such as application/x-git-upload-pack-request and application/x-git-receive-pack-request fit validated request-scoped headers. Git's Accept values use the same arrangement; framing headers remain provider-owned. |
 | Response media type | Expose response Content-Type among selected response headers, so the helper validates advertisements and upload-pack/receive-pack results. It is response metadata, not readable request headers. |
 | Helper credential path | Use the accepted interim request-scoped arrangement: trusted native preparation receives only the selected credential FILE, privately reads it and attaches the appropriate header to that request. No argv/env/log/header readback or ambient credential store. The owner accepts this approach for now; anonymous read-only gateway fetch comes first. |
-| Large push bodies | Consume the [shared HTTP staging contract](native-http-requests.md#proposed-defaults-requiring-owner-decisions) for pack-sized bodies under actual resources. Freeze each RPC before submission; production after submission is outside the first shared profile. |
+| Large push bodies | Consume the [shared HTTP staging contract](native-http-requests.md#accepted-owner-decisions) for pack-sized bodies under actual resources. Freeze each RPC before submission; production after submission is outside the first shared profile. |
 
 The eventual credential path is the parked
 [credential store as a capability service](credentials-and-biometrics.md#credential-store-as-a-capability-service):
@@ -273,11 +273,12 @@ implementation milestone or an added task here; HTTPS uses the interim
 request-scoped arrangement until that service is assigned and delivered.
 
 **Owner direction, 2026-10-11:** no artificial response-size cap. The
-[shared milestone's response/storage decisions](native-http-requests.md#proposed-defaults-requiring-owner-decisions)
+[shared milestone's accepted response/storage decisions](native-http-requests.md#accepted-owner-decisions)
 now own streamed GET/POST, explicit final completion and large staged bodies.
-The proposed change to Claude's complete-only snapshot and response-grant timing
-is pending there, not implicitly accepted here. Git must not publish successful
-refs from an incomplete pack, and must finish each RPC's body independently of
+The owner accepted replacing Claude's complete-only snapshot and response-grant
+timing with a forward-only stream and explicit final status; it is not implemented.
+Git must not publish successful refs from an incomplete pack, and must finish
+each RPC's body independently of
 child exit. Preserve the helper's existing anonymous-first and interim
 request-scoped credential direction.
 
@@ -401,7 +402,7 @@ is implied by these docs or ordinary libc/port work.
    ownership/cache fields, unsupported index shortcuts or private-mode privacy
    promises.
 
-Response delivery was proposed decision 3 here; it is now
-[HTTP decision 1](native-http-requests.md#proposed-defaults-requiring-owner-decisions),
-still pending. The shared provider delivers it independently of this CLI. This
-move changes no previously accepted Git direction or implementation status.
+Response delivery is now [HTTP decision 1](native-http-requests.md#accepted-owner-decisions),
+accepted by the owner on 2026-10-11, not implemented. The shared provider delivers
+it independently of this CLI; other Git direction and implementation status stay
+unchanged.

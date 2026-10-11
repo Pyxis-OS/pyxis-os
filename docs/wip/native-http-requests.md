@@ -1,11 +1,11 @@
 # Native HTTP requests
 
-Status: **shared milestone proposal, owner direction 2026-10-11; not implemented.**
+Status: **shared milestone accepted by the owner, 2026-10-11; not implemented.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-cli-on-pyxis.md#smart-http-without-libcurl).
-Their accepted one-shot transaction and credential rules carry forward. The owner
-requires no artificial response-size cap; the response interface below still
-needs decision 1. Each implementation task needs its own owner go.
+Their accepted one-shot transaction and credential rules carry forward. All three
+defaults below are accepted, including streamed GET/POST without an artificial
+response-size cap. Each implementation task needs its own owner go.
 
 ## Deliverable and consumers
 
@@ -81,7 +81,35 @@ in-flight receipts. Metadata/admission bounds and real memory/storage exhaustion
 remain explicit failures. Claude's 64 KiB request/1 MiB response budgets are
 consumer policy, not limits imposed on Git, GET or downloads.
 
-## Proposed defaults requiring owner decisions
+## Capability-valued variables and task 3 review
+
+A prepared request is a capability. Task 5's private shell bindings are the first
+form of capability-valued variables, not an alternative to them. The intended
+direction includes an environment carrying real capabilities, inherited through
+explicit launch grants. This is the cross-cutting capability-valued environment
+direction: configuration documents could select capability entries too, such as
+a user directory authorization, not just HTTP requests. Shell bindings must be
+designed to later become, or sit under, those environment entries, rather than
+form a separate shell-only mechanism. Never encoding a capability as an
+environment string or printed handle does not exclude that direction. The
+separate credential rule forbids secret bytes in argv/environment/history/logs,
+not request capabilities.
+Capability-valued environment implementation is outside this milestone unless
+the owner separately assigns it.
+
+**Before implementing task 3, the assigned agent must stop for owner review**
+with an object/rights/lifetime/inheritance proposal: what a prepared-request
+capability carries; how body/control/response/observation rights split; what
+copying, child inheritance or holding it past the shell means; and how it sits
+in a capability-valued variable compatible with the capability-valued environment
+direction. Accepted defaults do not waive this checkpoint.
+
+Motivating workflow: log in, extract a token with jq, and prepare another request
+with it, keeping credential bytes on the private preparation path.
+
+## Accepted owner decisions
+
+All three defaults accepted 2026-10-11; not implemented.
 
 1. **Forward-only response stream plus read-only final observation.** Make the
    reader available after response headers, before completion, with bounded RAM
@@ -97,7 +125,7 @@ consumer policy, not limits imposed on Git, GET or downloads.
    Consumers needing a seekable snapshot materialize into their own native file
    and publish it only after complete status. This explicitly replaces the old
    complete-only response FILE, no-prefix-publication and response-grant timing
-   in Claude 1b/1c. It covers plain GET too; it is proposed, not yet accepted.
+   in Claude 1b/1c. It covers plain GET too.
 2. **Freeze a provider-private staged file before transmitting large bodies.**
    Use explicitly delegated private writable storage for large POST bodies;
    `tmp://` is RAM and cannot be the multi-GB default. Producers get only the
@@ -135,11 +163,17 @@ consumer policy, not limits imposed on Git, GET or downloads.
   **After this task the owner can:** exercise local POST/error/slow-response
   fixtures with a body larger than the resident buffer, without an HTTP port.
 - [ ] **3. Prepared provider transactions and responsive stream service.**
+  Start with the mandatory object/rights/lifetime/inheritance review above.
   Deliver body/control/response/observation grants, freeze, status, abort,
   private storage, credential cleanup and retirement. Start with one active
-  exchange per provider and explicit admission failure. A cooperative service
-  loop must progress network work while servicing reads/status/abort/retirement;
-  do not fetch synchronously inside OPEN/commit or assume future user threads.
+  exchange per provider instance and explicit admission failure. An instance is
+  one provider process with its service exports, TLS/network state and storage;
+  aliases such as `https`/`json+https` and all binding clients share its limit.
+  Separate processes are independent; per-consumer provisioning/concurrency is
+  deferred in [shared-instance admission debt](../technical-debt.md#http-shared-instance-admission).
+  A cooperative service loop must progress network work while servicing reads/
+  status/abort/retirement; do not fetch synchronously inside OPEN/commit or assume
+  future user threads.
   Bound resident queues/scratch and export counts; cumulative transfer bytes
   are not a RAM reservation. Publish streamed GET and request-scoped GET headers
   as well as POST. Retain read-only GET authority and register JSON aliases.
@@ -157,7 +191,9 @@ consumer policy, not limits imposed on Git, GET or downloads.
 - [ ] **5. Shell bindings and end-to-end completion.** Prepare directly in the
   running shell, delegate body stdout and response stdin with observation,
   coordinate all producers, and expose commit/status/abort and retained response
-  bindings. Exact binding syntax is a userspace choice, not an ABI. Demonstrate
+  capability-valued bindings designed to become, or sit under, entries in the
+  capability-valued environment direction. Exact syntax is a userspace choice,
+  not an ABI; environment implementation needs a separate assignment. Demonstrate
   `printf '{}' > json+https://…`, then `cat` on that response grant, never a fresh
   URI GET. A failed response must make its reader/command report failure.
   **After this task the owner can:** script web requests with ordinary writers
