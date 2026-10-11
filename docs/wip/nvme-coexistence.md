@@ -1,7 +1,7 @@
 # Pyxis beside Fedora on the internal NVMe
 
-Status: **task 1 (NVMe driver, #710) merged and QEMU-qualified 2026-10-11; the
-owner's read-only native qualification is pending.** The owner
+Status: **task 1 (NVMe driver, #710) merged, QEMU-qualified and natively
+qualified read-only on the ThinkPad, 2026-10-11.** The owner
 accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
 decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
 ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
@@ -179,9 +179,11 @@ ahead task by task.
   force-off path are in the [NVMe reference](../devices/nvme.md); measurements and
   exact native staging steps are in the
   [qualification record](../development/experiments/nvme-task1/README.md).
-- [ ] Native read-only qualification on the ThinkPad remains pending through the
-  orchestrator and Luna; no native writes and no later task are authorized by this
-  delivery.
+- [x] Native read-only qualification on the ThinkPad passed (2026-10-11): the
+  disk read at its expected capacity, the GPT with three partitions matched
+  Linux's view, SMART was read, and the unsafe-shutdown count did not change
+  across a Pyxis reboot, so the shutdown notification works. No native writes and
+  no later task are authorized by this delivery.
 
 Owner decisions of 2026-10-11 that still bind later tasks: one active namespace
 per controller (multi-namespace is unsupported, never silently namespace 1);
