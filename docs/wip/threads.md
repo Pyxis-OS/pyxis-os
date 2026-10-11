@@ -2,8 +2,8 @@
 
 Owner-accepted defaults, 2026-10-10, subject to the native-kernel condition below.
 Task 1, process lifetime, is merged in
-[#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); exactly one user task per
-process remains. Task 2, admitted call references and CLOSE, is merged in
+[#612](https://git.internal/PyxisOS/pyxis-os/pulls/612); one user task per
+process was retained through task 4. Task 2, admitted call references and CLOSE, is merged in
 [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671);
 [qualification](../development/experiments/threads-task2/README.md) records its
 build, debugger and matched-workload evidence. Task 3, shared-table delivery, is
@@ -21,16 +21,17 @@ to 11 and SEND admission from 4 to 3; no lease spans growth or waits. Its
 [qualification](../development/experiments/ipc-copy-leases/README.md) records
 1/4-CPU inspection and nested/native A/B: SEND64 saves 13 ns/message; CALL cost
 remains recorded in technical debt, with profiling parked until task 8.
-Task 5 is owner-assigned (2026-10-11); its accepted details are below. The remaining proposal
-originally inspected Pyxis `4236efc7`
-and userland `51bcb56b`. Existing
+Task 5 implements native sibling entry, FS binding and reclaimed completion;
+its [qualification](../development/experiments/threads-task5/README.md) records
+ordinary builds, 1/4-CPU sibling probes and the interleaved baseline. Native A/B
+is pending. Existing
 [task 1 qualification](../development/experiments/threads-task1/README.md)
 and [stack qualification](../kernel/program-loading.md) remain separate evidence.
 
 The owner already accepted parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault,
 and process-private address wait/wake. Those directions and the three defaults
-below are settled; detailed interfaces remain proposals, not implemented APIs.
+below are settled; tasks 6–8 remain proposals, not implemented APIs.
 Moving kernel services [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp)
 is independent.
 
@@ -38,17 +39,17 @@ is independent.
 
 | Inspected source | Remaining gate |
 | --- | --- |
-| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns group membership and lifetime, but its task/retiring-storage fields and terminal-result writer are still singular. |
-| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown still requires drained activity; sibling membership/entry remains task 5. |
+| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Process owns its task set, retiring-storage count and first terminal-result election. Native siblings are implemented; libc join accounting remains task 8. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c) | Owned storage snapshots, rechecked grant captures and reserved atomic delivery are implemented. Final teardown requires drained activity and all task storage reclaimed. |
 | [Endpoint replies](../../kernel/object/endpoint.c) | Exact slots are reserved before admission; successful replies move owned grants after precommit destination validation. Scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
-| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases and BSP mutation transactions are implemented; sibling runtime admission remains task 5. |
-| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Owned inputs/claims and root/borrow drainage replace exclusive table/VM loans. Actual sibling execution and process membership remain later gates. |
-| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | FS is saved per task, but starts at zero; no public FS setup or sibling entry exists. |
+| [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases, BSP mutation transactions and exclusive guarded-context pins are implemented; general sparse reservations remain a separate task. |
+| [BSP requests](../kernel/bsp-service-requests.md), [SMP ownership](../kernel/smp.md#scheduling-and-ownership) | Owned inputs/claims and root/borrow drainage replace exclusive table/VM loans. Sibling publication, stop fanout and final process retirement use these contracts. |
+| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Native initial FS binding and sibling FS/entry are implemented; ordinary startup remains FS=0 pending task 7. |
 | [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
 
 ## Native lifecycle
 
-**Task 5 accepted and assigned, 2026-10-11; not yet implemented.**
+**Task 5 decisions accepted and implemented, 2026-10-11.**
 
 1. Guarded backing uses MEMORY MANAGE on the calling process: eager RW/NX
    usable pages and one reserved unmapped lower guard. It shares private-memory
@@ -68,9 +69,18 @@ is independent.
    forced process stop. It is waitable and repeatable; closing the observer never
    kills the thread. Publish only after retirement and context-pin release.
 
-Start with process membership/retirement accounting preserving one-task behavior,
-then enable native CREATE/EXIT/completion and sibling entry. No pthread/C11
-kernel API, address parking or ordinary thread-safe libc is part of task 5.
+The [native ABI](../../include/abi/thread.h) exposes a `threads` MANAGE service
+and WAIT-only completion observers. Explicit `session` delegation carries this
+optional service; ordinary foreground/background applications do not receive it.
+No pthread/C11 kernel API, address parking or ordinary thread-safe libc is part
+of task 5.
+
+| Operation | Implemented contract |
+| --- | --- |
+| MEMORY ALLOCATE_GUARDED / RELEASE_RESERVATION | Usable byte count becomes eager RW/NX backing plus one lower guard; full reserved base/span and identity returned. Whole identity release, no sparse commit/decommit. |
+| THREAD CREATE | Complete zeroed message with entry, argument, guarded stack identity, optional distinct FS identity/base. RDI=argument, RSP=16-byte-aligned usable stack end, no return address. Returns one completion handle. FS=0 requires no context. |
+| THREAD SET_FS | Bind current thread once; nonzero base within or one past its usable guarded context, allowing negative TLS offsets. Identity/base must be nonzero. Rebinding returns BUSY. |
+| THREAD EXIT / completion WAIT | EXIT word retires only the caller and does not return on success. Repeated WAIT returns EXITED/value or STOPPED/zero; observers also support WAIT_COMPLETE readiness. |
 
 A native thread-management grant applies to the calling process, like MEMORY;
 transferring it confers no control over the sender's process. CREATE supplies an
@@ -82,9 +92,9 @@ all provisional ownership. Siblings run the trampoline, never process startup or
 constructors again. Per-task FP state remains separate, with the creator's
 floating-point environment inherited, including exception flags.
 
-Thread EXIT records a machine-word result and retires only that task. Returning
-from its runtime trampoline runs ordinary thread destructors, then EXIT. Native
-completion is waitable and repeatable: it publishes the result with
+Thread EXIT records a machine-word result and retires only that task. The
+native trampoline must call EXIT explicitly; runtime destructors belong to the
+later libc/TLS tasks. Native completion is waitable and repeatable: it publishes the result with
 release/acquire ordering only after the task has left its root/stack and kernel
 continuations, registrations and storage have been reclaimed. The observer owns
 completion storage, not a surviving VM or borrowed task pointer. Closing it does
@@ -92,7 +102,7 @@ not kill the thread. Libc adds a single join claim, self-join refusal and runtim
 stack/TLS release after completion; it need not detect arbitrary join cycles.
 
 Process EXIT, returning from main, foreground termination and fatal user faults
-stop every sibling. Propose one fault-safe atomic election/publication of the
+stop every sibling. One fault-safe atomic election/publication preserves the
 first process-wide terminal reason, without taking the lifetime lock in fault
 entry. Later events preserve it. Last ordinary thread exit supplies process
 status zero only if no process-wide result exists. Process completion follows
@@ -150,7 +160,8 @@ DISPLAY mapping mutations under one process transaction. Drain active roots and
 actual mapping borrowers, acknowledge departure after CR3 reload, and keep
 admission closed through the mutator's final reply copy. Pending quiescence never
 blocks the BSP executor. Bounded failure returns BUSY before effects; retirement
-waits for drainage. This is implemented with exactly one user task retained.
+waits for drainage. Task 4 first qualified this with one user task; task 5
+enables siblings under the same admission protocol.
 
 Use kernel staging and short validation/copy leases, with no mapping lease across
 indefinite I/O. Revalidate output after waits; late failure is BAD_BUFFER without
@@ -180,9 +191,9 @@ refusals. Existing console/file/pipe queues, network-direction guards and audio
 session generation checks remain. Inputs and worker buffers are kernel-owned;
 late output failure never leaves undisclosed newly returned handle generations.
 Device sessions stay process-owned; CLOSE/stop still revokes logical ownership
-and lets admitted operations unwind. Exactly one user task remains. Source audit
-and ordinary 1/4-CPU inspection do not claim tested sibling races; task 5 must
-qualify them before exposing concurrent entry.
+and lets admitted operations unwind. Task 5 qualifies bounded sibling CALL/CLOSE
+and live-context RELEASE interleavings on 1/4 CPUs; broader device/VM race
+coverage remains with later delivery tasks.
 
 ## TLS and runtime synchronization
 
@@ -251,13 +262,12 @@ launch costs, so that is not the default. Initially accept explicit libc sizes
 using the existing page-aligned 1–8 MiB policy. Native caller-owned regions remain
 available for other runtimes and are not restricted to libc's convenience range.
 
-MEMORY currently cannot reserve an unmapped guard; guarded-region admission
-must be supplied deliberately before these stacks are advertised. CREATE pins
+MEMORY supplies the guarded eager subset described above. CREATE pins
 registered stack/TLS context backing until native completion; overlapping RELEASE
 returns BUSY. These lifetime reservations are distinct from short VM access
 leases: unrelated mutation drains root/copy activity, not the thread's lifetime.
 Join then releases libc-owned regions. Never free an exiting thread's own stack
-from its trampoline. An unjoined record counts against capacity; final process
+from its trampoline. An unjoined libc record will count against its runtime capacity; final process
 teardown reclaims remaining backing. Guards do not prevent a large stack jump
 from skipping their page.
 
@@ -265,7 +275,9 @@ Accepted initial resource policy: **64 live/retiring native threads and 64
 unreclaimed libc context records per process**, both including the initial
 thread. Reserve before publication and release each count only at its respective
 completion/reclamation boundary. Exhaustion returns a real limit/allocation
-error. These tunable bounds allow roughly 64 MiB of default user stacks and
+error. The native live/retiring storage bound is implemented; the separate libc record
+budget belongs to task 8. Retaining a native completion observer consumes heap
+and capability storage, not a live-task slot. These tunable bounds allow roughly 64 MiB of default user stacks and
 1 MiB of 16 KiB kernel stacks, plus TLS/metadata; they guarantee no physical
 capacity. Large native contexts remain subject to VM/allocation admission.
 The 1 MiB default and 64/64 bounds are tunable implementation policy, not ABI
@@ -295,7 +307,7 @@ merely completion of task 2.
 4. [x] **VM activity and user-buffer leases.** Dispatch/root departure, BSP quiescent mutation, blocking/committing operation audit and explicit concurrent-device refusals; still one user task. See [qualification](../development/experiments/threads-task4/README.md).
 
    Owner can inspect safe copy/mutation/retirement admission and matched ordinary-workload costs.
-5. [ ] **Native CREATE/EXIT/completion — owner-assigned 2026-10-11.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only.
+5. [x] **Native CREATE/EXIT/completion — assigned 2026-10-11.** Thread set/result election, guarded-context allocation/lifetime, initial/sibling FS setup and space placement; joinable only. See [qualification](../development/experiments/threads-task5/README.md).
 
    Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
 6. [ ] **Address WAIT/WAKE.** Mapping-incarnation keys, deadlines and wake/stop/unmap races.
@@ -327,7 +339,8 @@ after task 7. Measure creation/join, uncontended/contended primitives, VM pause
 and consumer workloads, distinguishing
 nested-VM evidence from owner-native results. Kernel/ABI/SDK changes belong in
 Pyxis, libc/libpyxis/startup in userland, adapters in ports; publish dependency
-PRs before gitlinks. This docs PR changes no pin or compiler container.
+PRs before gitlinks. Task 5 adds the native SDK ABI and libpyxis helpers; no
+compiler-container rebuild or libc runtime/startup change is required.
 
 ## Accepted owner decisions (2026-10-10)
 

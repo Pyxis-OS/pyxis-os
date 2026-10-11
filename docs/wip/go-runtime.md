@@ -166,8 +166,8 @@ uses `&m.tls + 8` with current g at FS-8; the
 [Go linker](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/cmd/link/internal/ld/sym.go)
 selects the corresponding offset. This describes the inspected Linux backend,
 not a prescribed Pyxis layout. Go needs a native initial-thread FS setup operation
-and CREATE's initial FS; neither is public today. Do not adopt libc's TCB or
-silently enable user FSGSBASE. Kernel GS remains CPU-local.
+and CREATE's initial FS; both are supplied by threads task 5. Do not adopt
+libc's TCB or silently enable user FSGSBASE. Kernel GS remains CPU-local.
 
 **Stacks and joinable-only lifetime.** Go owns M/g0 system stacks separately
 from growing/copying [goroutine stacks](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/stack.go).
@@ -245,11 +245,14 @@ footprint. Qualify that additional metadata before claiming an eager native
 backend fits. Eagerly allocating every reservation would already fail a normal
 small guest before useful execution.
 
-Current [MEMORY](../../include/abi/memory.h) only has eager zeroed RW/NX ALLOCATE
-and exact whole-region RELEASE. Internal
+Current [MEMORY](../../include/abi/memory.h) supplies eager zeroed RW/NX ALLOCATE
+and exact whole-region RELEASE, plus task 5's guarded eager allocation and
+whole identity release in the same private-memory registry. The accepted family
+below will subsume that eager convenience operation under the same authority,
+identity and context-pin model; it is not assigned. Internal
 [vm_reserve/vm_back](../../include/kernel/mm/vm.h) are not public contracts;
-vm_back currently backs a whole bare reservation. Sparse subranges, their owned
-frames/metadata and atomic rollback need deliberate implementation.
+vm_back can back one suffix of a bare whole reservation, including the eager
+guarded subset. Sparse subranges, their owned frames/metadata and atomic rollback need deliberate implementation.
 
 The accepted contract leaves existing ALLOCATE/RELEASE intact and adds an
 explicit reservation family; names below describe behavior, not assigned opcodes:

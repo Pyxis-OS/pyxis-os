@@ -96,9 +96,11 @@ Submission may occur before or after scheduling starts, but only on the BSP
 with IF=0 and outside interrupt/fault entry. Success transfers the prepared
 process lifetime and task storage to finalization; failure leaves the process
 with the caller. Do not inspect or mutate the process or its address space after
-transfer. There is one task per process. The task borrows its process; the process
-owns its lifetime, terminal result and execution-group member record independently
-of task storage.
+transfer. Initially there is one task; native CREATE adds siblings in the same
+address space and capability table. Each task borrows its process; the process
+owns its lifetime, task set, terminal result and execution-group member record
+independently of task storage. Native stack/FS reservations remain pinned through
+retirement. See [threads](../wip/threads.md#native-lifecycle).
 
 ### Placement and migration
 
@@ -221,9 +223,9 @@ entry/name allocation and discard publish to that same FIFO before the caller
 sleeps. Their typed records use the caller's reusable
 shared request allocation.
 Capability operations use synchronized table access and exact destination claims
-until completion; endpoint owner-list mutation remains BSP-owned while the sole
-caller waits. FILE replacement lends operation ownership while `busy` remains set; RAMFS
-discard transfers the detached entry. The caller stops accessing the loan and
+until completion; endpoint owner-list mutation remains BSP-owned while the
+requesting task waits. FILE replacement lends operation ownership while `busy`
+remains set; RAMFS discard transfers the detached entry. The caller stops accessing the loan and
 request at publication and waits through its saved wait pointer. Completion may
 arrive before parking, but only records notification and cannot enqueue a
 still-running caller. These operations change no private mappings and require no
@@ -258,10 +260,10 @@ a context switch.
 Execution-group membership and process-control objects borrow process links,
 protected by their respective locks. Stop targeting takes the control or group
 lock, then the process lifetime lock, then the scheduler queue lock. The process
-keeps its sole task stop target live until the BSP detaches it before task
-reclamation. A stop request marks task metadata, removes timed membership for
-an interruptible wait, and notifies the assigned CPU. It leaves subsystem
-registration detachment to the resumed continuation.
+keeps every task stop target live until the BSP detaches it before that task
+is reclaimed. A stop request closes sibling admission, marks all tasks, removes
+timed membership for interruptible waits, and notifies their assigned CPUs.
+It leaves subsystem registration detachment to the resumed continuation.
 The scheduler retires marked runnable userspace at its next safe point. Syscall
 continuations stay runnable until their own unwind returns all loans; their final
 syscall boundary prevents user return. Published BSP/HOST requests remain
@@ -283,33 +285,37 @@ and releases its detached grant outside that guard. These storage references
 drain during syscall cleanup before `task_syscall_leave` and retirement; they do
 not prolong controller authority or pipe open directions. Grant-producing capture
 additionally retains logical authority and rechecks the source generation/masks.
-Shared-table delivery and VM admission are implemented; sibling entry remains a
-[later thread gate](../wip/threads.md).
+Shared-table delivery, VM admission and native sibling entry are implemented;
+ordinary thread-safe libc remains a [later thread gate](../wip/threads.md).
 
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
 
-Exit, termination and ordinary user faults commit the process's terminal result
-and return to the local scheduler. The sole task writes that result once and
-release-publishes `result_set`; this boundary takes no process lifetime lock,
-including on user fault entry. Stop targeting acquire-reads the marker and
-preserves a committed result. After switching to its permanent stack and
-reloading the kernel root, the CPU clears its task entry-stack pointer and
-publishes the completed task. It must not touch the task afterward.
+Process exit, termination and ordinary user faults atomically elect the first
+process-wide terminal result, taking no lifetime lock in fault entry. Later
+events preserve it. Fault entry does no peer stop fanout; the BSP reaper closes
+admission and requests sibling stop from its safe permanent stack. Native thread
+EXIT records only that thread's word and leaves siblings running. Last ordinary
+thread retirement supplies process EXITED/zero only if no earlier terminal
+event exists.
 
-The BSP takes completed tasks from the queue under its lock. Outside that lock,
-it detaches the process's task stop target, then frees the task's kernel stack,
-request/profile allocations and metadata. `process_task_reclaimed()` ends the
-process's task-storage lifetime, detaches the control and group process links,
-and destroys the process's private address space and remaining owned resources
-under group cleanup attribution. It then publishes and releases process control
-completion and completes the group member. The group member count remains
-positive throughout task and process reclamation; deferred cleanup can keep
-group completion pending afterward. Every loan must already have returned before
-task retirement. Kernel tasks have no process or user request/profile allocations.
-If the BSP itself runs userspace,
-a pending completion makes its next user timer interrupt return to the scheduler
-even when there is no second runnable BSP task.
+After switching to its permanent stack and reloading the kernel root, the CPU
+clears its task entry-stack pointer and publishes the completed task. It must
+not touch the task afterward. The BSP takes completed tasks under the queue lock,
+then detaches each process member outside it. Only the last linked member closes
+VM admission. It moves out the owned context pins and observer, frees kernel
+stack/request/profile/metadata, releases the pins, then publishes the immutable
+thread result. Completion retains neither process nor task pointers.
+
+`process_task_reclaimed()` decrements retiring-storage accounting only after
+that sequence. Final process teardown requires no linked tasks, retained task
+storage or VM activity. It detaches control/group links and destroys the private
+address space and remaining resources under group cleanup attribution, then
+publishes process control completion and completes the group member. Deferred
+cleanup can still delay group completion. Every admitted reference and operation
+must unwind before task retirement. Kernel tasks have no process or user
+request/profile allocations. A pending completion makes the BSP's next user
+timer interrupt return to the scheduler even with no second runnable BSP task.
 
 [Audio exit](../interfaces/audio.md#handoff-and-output-limits) clears the session
 owner and invalidates its generation without allocation or sleeping. Queue
