@@ -61,7 +61,7 @@ No implementation task is assigned; the command-execution proposal is separate.
 
 [Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
 guest VT composition with trusted remote pane creation and cleanup supervision.
-The plan is merged (#721); tasks 1–2 are assigned together and live resize (task 3)
+The plan is merged (#721); tasks 1–2 are delivered (#728) and live resize (task 3)
 needs a separate go.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
