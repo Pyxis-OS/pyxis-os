@@ -15,6 +15,7 @@ struct process_vm_held;
 struct process;
 struct thread_create;
 struct thread_control;
+struct address_wait_record;
 
 /* BSP, drained process mutation, creator parked. Preparation owns provisional
  * task/control/context storage; failure leaves control with its caller. */
@@ -109,6 +110,17 @@ void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
  * storage. Detach under the resource lock before wake or reuse; timed callers
  * must remove any remaining link after resumption. See kernel/wait.h. */
 struct task_wait_link *task_wait_link_prepare(void);
+
+/* Current user, IF=0. Cold embedded storage; no allocation. Publish under the
+ * parking bucket after initializing the key. It checks permanent stop under
+ * scheduler exclusion before making the association visible. */
+struct address_wait_record *task_address_wait_prepare(void);
+bool task_address_wait_publish(struct address_wait_record *record);
+/* No held guard or mapping borrower. Deadline UINT64_MAX is untimed. */
+void task_address_wait_sleep(struct address_wait_record *record, uint64_t deadline);
+/* Bucket held; record detached and result committed. Clear scheduler/timer
+ * association before notification; never access record after this returns. */
+void task_address_wait_wake(struct address_wait_record *record);
 
 /* Current user task, IF=0. Reserve its preallocated area across all service
  * types until release after result consumption. No submission-time allocation. */
