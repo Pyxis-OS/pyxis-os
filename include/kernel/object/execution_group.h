@@ -40,6 +40,12 @@ struct execution_group *execution_group_create(struct space *space);
  * sealed admission is ENDPOINT_CLOSED. Publication rechecks under the lock. */
 enum call_status execution_group_check(struct execution_group *group, struct space *space);
 
+/* Internal sibling publication, BSP/IF=0, retained process group. Success owns
+ * the group guard until end; stopping refuses, SEAL still permits siblings.
+ * Lock order: group -> process lifetime -> table/ready queues. NULL is allowed. */
+bool execution_group_thread_begin(struct execution_group *group);
+void execution_group_thread_end(struct execution_group *group);
+
 /* BSP, IF=0. All prepared processes already own group storage references. Serialize final
  * admission and enrollment with sealing, then transfer every task together.
  * Failure leaves all tasks unpublished and owned by the preparer. */

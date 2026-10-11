@@ -48,6 +48,7 @@
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/thread.h>
 #include <kernel/object/console.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -99,6 +100,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct space *space = space_caelum();
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
+  struct kernel_object *threads = NULL;
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
   struct kernel_object *system_info = NULL;
   struct kernel_object *log = NULL;
@@ -135,6 +137,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     goto fail;
   }
   memory = memory_create();
+  threads = thread_service_create();
   launcher = launcher_create();
   clock = clock_create();
   system_info = system_info_create();
@@ -152,11 +155,12 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   service = endpoint_service_create();
   namespace_service = namespace_service_create();
   terminal_service = terminal_service_create();
-  if (!memory || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !namespace_service || !terminal_service) {
+  if (!memory || !threads || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !namespace_service || !terminal_service) {
     goto fail;
   }
 
   handle_t memory_handle, launcher_handle, boot, tmp, ram;
+  handle_t threads_handle;
   handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
@@ -177,6 +181,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_output) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_error) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
+      capability_install(&process->capabilities, threads, THREAD_RIGHT_MANAGE, 0, &threads_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
       capability_install(&process->capabilities, power, POWER_RIGHTS, 0, &power_handle) != CAP_OK ||
@@ -297,12 +302,15 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   object_release(clock);
   clock = NULL;
   object_release(memory);
+  object_release(threads);
+  threads = NULL;
   object_release(launcher);
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[26] = {
+  struct process_binding resources[27] = {
     {"memory", memory_handle},
+    {"threads", threads_handle},
     {"launcher", launcher_handle},
     {"clock", clock_handle},
     {"system_info", system_info_handle},
@@ -321,7 +329,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"screen_capture", screen_capture_handle},
     {"bluetooth_hci", bluetooth_hci_handle},
   };
-  size_t resource_count = 18;
+  size_t resource_count = 19;
   resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
   resources[resource_count++] = (struct process_binding){"ram", ram};
   if (script_handle != HANDLE_INVALID) {
@@ -453,6 +461,9 @@ fail:
   }
   if (memory) {
     object_release(memory);
+  }
+  if (threads) {
+    object_release(threads);
   }
   if (process) {
     KASSERT(process_destroy(process) == MM_OK);

@@ -14,6 +14,7 @@
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/thread.h>
 #include <kernel/process_vm.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
@@ -37,6 +38,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_THREAD] = {sizeof(struct thread_request), alignof(struct thread_request),
+    offsetof(struct thread_request, request)},
   [BSP_SERVICE_CLIPBOARD] = {sizeof(struct clipboard_request), alignof(struct clipboard_request),
       offsetof(struct clipboard_request, request)},
   [BSP_SERVICE_AUDIO] = {sizeof(struct audio_request), alignof(struct audio_request),
@@ -169,6 +172,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_DISPLAY:
   case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_SCREEN_CAPTURE:
+  case BSP_SERVICE_THREAD:
     return true;
   default:
     panic("unknown BSP service %u", (unsigned)service);
@@ -255,7 +259,8 @@ void bsp_request_complete(struct bsp_request *request)
         request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
         request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
         request->service == BSP_SERVICE_BLUETOOTH_HCI ||
-        request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY) &&
+        request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY ||
+        request->service == BSP_SERVICE_THREAD) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
   KASSERT(!request->vm_process && !request->vm_mutator);
@@ -356,6 +361,7 @@ static void service_request(struct bsp_request *request)
     display_request_execute((struct display_request *)request);
     break;
   case BSP_SERVICE_MEMORY:
+  case BSP_SERVICE_THREAD:
     object_cleanup_leave(previous);
     process_vm_mutation_forward(request);
     return;

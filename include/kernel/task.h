@@ -12,6 +12,22 @@ struct task;
 struct execution_group;
 struct space;
 struct process_vm_held;
+struct process;
+struct thread_create;
+struct thread_control;
+
+/* BSP, drained process mutation, creator parked. Preparation owns provisional
+ * task/control/context storage; failure leaves control with its caller. */
+enum call_status task_thread_prepare(struct task *creator, const struct thread_create *input,
+    struct thread_control *control, struct task **result);
+void task_thread_discard(struct task *task);
+/* Group admission and process lifetime guards held, no allocation. Attach
+ * before observer installation, then enqueue as the final publication step. */
+enum call_status task_thread_attach_locked(struct task *task);
+void task_thread_enqueue(struct task *task);
+enum call_status task_thread_bind_fs(struct task *task, uint64_t identity, uintptr_t fs_base);
+/* Current user, after request capture; actual EXIT follows dispatch cleanup. */
+void task_thread_exit_request(uint64_t value);
 
 /* VM admission helpers, IF=0. The process VM guard owns continuation changes
  * and held links; scheduler parking/enqueue helpers take only the queue guard. */

@@ -14,6 +14,7 @@
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
+#include <kernel/object/thread.h>
 #include <kernel/panic.h>
 #include <kernel/space.h>
 #include <kernel/task.h>
@@ -135,6 +136,9 @@ bool readiness_service(struct bsp_request **active_list)
         break;
       case OBJECT_PROCESS_CONTROL:
         interest->ready = process_control_ready((struct process_control *)interest->object);
+        break;
+      case OBJECT_THREAD_COMPLETION:
+        interest->ready = thread_control_ready((struct thread_control *)interest->object);
         break;
       case OBJECT_TERMINAL_ATTACHMENT:
         interest->ready = terminal_attachment_ready(interest->object, interest->events);

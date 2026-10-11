@@ -25,6 +25,7 @@ void arch_user_state_init(struct arch_user_state *state);
 void arch_user_save(struct arch_user_state *state);
 void arch_user_restore(const struct arch_user_state *state);
 bool arch_user_entry_valid(uintptr_t entry, uintptr_t stack_top);
+bool arch_user_fs_valid(uintptr_t base);
 
 /* Stays on the calling CPU, IF=0. Both stacks must be mapped in every
  * participating space.

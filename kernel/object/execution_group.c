@@ -90,6 +90,26 @@ enum call_status execution_group_check(struct execution_group *group, struct spa
   return sealed ? CALL_ENDPOINT_CLOSED : CALL_OK;
 }
 
+bool execution_group_thread_begin(struct execution_group *group)
+{
+  if (!group) {
+    return true;
+  }
+  lock_group(group);
+  if (group->stopping) {
+    unlock_group(group);
+    return false;
+  }
+  return true;
+}
+
+void execution_group_thread_end(struct execution_group *group)
+{
+  if (group) {
+    unlock_group(group);
+  }
+}
+
 enum call_status execution_group_launch_begin(struct execution_group *group,
     struct space *space)
 {

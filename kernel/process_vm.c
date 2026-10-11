@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/thread.h>
 #include <kernel/process.h>
 #include <kernel/process_vm.h>
 #include <kernel/mm/vm.h>
@@ -156,6 +157,11 @@ static void refuse_mutation(struct bsp_request *request)
     struct memory_request *memory = (void *)request;
     memory->status = CALL_BUSY;
     memory->process = NULL;
+  } else if (request->service == BSP_SERVICE_THREAD) {
+    struct thread_request *thread = (void *)request;
+    thread->status = CALL_BUSY;
+    thread->process = NULL;
+    thread->caller = NULL;
   } else {
     KASSERT(request->service == BSP_SERVICE_DISPLAY);
     struct display_request *display = (void *)request;
@@ -170,7 +176,8 @@ static void refuse_mutation(struct bsp_request *request)
 void process_vm_mutation_forward(struct bsp_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && request->state == BSP_REQUEST_SERVICING);
-  KASSERT(request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY);
+  KASSERT(request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY ||
+      request->service == BSP_SERVICE_THREAD);
   struct process *process = request->vm_process;
   struct task *mutator = request->vm_mutator;
   KASSERT(process && mutator);
@@ -312,6 +319,8 @@ static void finish_mutation(struct process *process, bool expired)
     struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
     if (request->service == BSP_SERVICE_MEMORY) {
       memory_request_execute((struct memory_request *)request);
+    } else if (request->service == BSP_SERVICE_THREAD) {
+      thread_request_execute((struct thread_request *)request);
     } else {
       KASSERT(request->service == BSP_SERVICE_DISPLAY);
       display_request_execute((struct display_request *)request);

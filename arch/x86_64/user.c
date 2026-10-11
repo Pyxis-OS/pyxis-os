@@ -102,6 +102,11 @@ bool arch_user_entry_valid(uintptr_t entry, uintptr_t stack_top)
          stack_top <= LOWER_HALF_MAX && !(stack_top & (USER_STACK_ALIGNMENT - 1));
 }
 
+bool arch_user_fs_valid(uintptr_t base)
+{
+  return base && base <= LOWER_HALF_MAX;
+}
+
 void arch_user_set_kernel_stack(uintptr_t stack_top)
 {
   struct cpu_local *cpu = cpu_current();
