@@ -33,6 +33,10 @@ only; ZIP defaults accepted in #639, delivery tasks need separate go-aheads.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
+[Hosted Clang and LLD](hosted-clang.md): Codex (2026-10-11), accepted first
+single-source compile and separate link; Support/SDK/libc planning proceeds in
+parallel with delta's native threads gates 5–8. Implementation needs an owner go.
+
 [MX Master 3S milestone proposal](bluetooth-mouse.md): Codex (2026-10-08). Tasks 1
 to 3 are complete (#545, #552, #564); the [task 1 decision rounds](bluetooth-task1-contracts.md)
 are accepted and the [warm qualification](../development/experiments/bluetooth-runtime-hci/README.md)
@@ -78,9 +82,6 @@ Other candidates; current assignments are listed above.
 
 [Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after the
 completed analog playback milestone.
-
-Clang running on Pyxis: the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
-now that [C++ in userspace](../development/cxx-userspace.md) is complete.
 
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector
 and `top`.
