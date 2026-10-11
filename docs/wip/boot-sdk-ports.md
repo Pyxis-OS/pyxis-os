@@ -39,11 +39,21 @@ alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
-[Program bundles and ZIP archives](program-bundles.md): Codex epsilon (2026-10-11),
-on the accepted ZIP plan. The host packer and checker (task 2a, #706) are merged;
-epsilon has tasks 2b (stored-only native launch) and 2c (small-resource deflate).
-Bundles in bin:// task 1 is merged (#691); its future command index awaits its own
-go ([bundles in bin](bundles-in-bin.md)).
+[Native command execution](native-command-execution.md): Codex delta (2026-10-11),
+a shared proposal for selected native streams, capture/deadlines and shell/Lua
+pipelines, extracted from Claude/Git/ports/libuv. Direct launch without descendants
+is accepted; remaining decisions and every implementation task need a separate go; FAT32 proposal follows after review.
+
+[Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
+shared plan accepted by the owner, extracted from Claude/Git prerequisites:
+prepared POST, streamed GET/POST without an artificial response-size cap, and
+shell/Lua delivery.
+No implementation task is assigned; the command-execution proposal is separate.
+
+[Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
+guest VT composition with trusted remote pane creation and cleanup supervision.
+Tasks 1–2 are assigned together, to start after the plan merges; live resize
+(task 3) needs a separate go.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
@@ -81,7 +91,8 @@ Other candidates; current assignments are listed above.
 completed analog playback milestone.
 
 [Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09 (prepared HTTPS
-files and shell API testing, then the Lua harness; Hax after). Each delivery task
+files and shell API testing now depend on [native HTTP requests](native-http-requests.md);
+then the Lua harness, Hax after). Each delivery task
 needs a separate go-ahead.
 
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector
@@ -132,6 +143,10 @@ tasks 1 to 3 are complete (#545, #552, #564).
 non-rescue userland build from source on the installed system until a package
 manager exists.
 
+[Capability-valued environment variables](capability-environment.md): parked
+(2026-10-11); revisit before prepared HTTP requests, session configuration or
+users and authority store a capability in a variable.
+
 [Control, events and faults](control-events-faults.md): Pyxis's answer to signals,
 tied to Continuum.
 
@@ -149,6 +164,18 @@ display, pointer and keyboard interfaces as the kernel.
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, clock
 source, power, storage.
+
+[Nested execution groups](nested-execution-groups.md): parked REQUIRED direction
+(2026-10-11), contained subgroups and default child launchers before Git descendant
+helpers, driver-launched Clang tools, native make/ports builds and libuv/Neovim
+descendant jobs. No design/API or implementation is assigned.
+
+[Program bundles and ZIP archives](program-bundles.md): ZIP 2b/2c parked by the
+owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and
+qualified on draft #717/#213/#98, with authority and admission fixes required
+before any merge. Revisit for package distribution or the Clang build loop.
+The merged host packer/checker (2a, #706) stays; [bin placement](bundles-in-bin.md)
+is merged and its future command index awaits a separate go.
 
 [Selecting existing build artifacts](build-artifact-reuse.md) and the postponed
 [host development overlay](host-development-overlay.md).

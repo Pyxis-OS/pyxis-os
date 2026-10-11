@@ -6,8 +6,33 @@ bundles in [#625](https://git.internal/PyxisOS/pyxis-os/pulls/625), shared captu
 in [#629](https://git.internal/PyxisOS/pyxis-os/pulls/629), and bin placement/tree
 installation in [#691](https://git.internal/PyxisOS/pyxis-os/pulls/691). The owner
 accepted all three ZIP defaults on 2026-10-09. Task 2a, the host packer/checker,
-was owner-assigned 2026-10-11 and is implemented as a standalone host tool.
-Tasks 2b and 2c still need separate owner go-aheads. Signing, consent UI and Clang remain outside this slice.
+was owner-assigned 2026-10-11 and remains a merged standalone host tool.
+The owner parked ZIP tasks 2b/2c on 2026-10-11: no current consumer needs
+single-file archives and unpacked `.pxb` works. Signing, consent UI and Clang
+remain outside this slice.
+
+Task 2b is implemented and qualified on retained draft branches:
+[Pyxis #717](https://git.internal/PyxisOS/pyxis-os/pulls/717)
+(`bundles/zip-native-task2b`, `1d30c4cb`),
+[userland #213](https://git.internal/PyxisOS/pyxis-userland/pulls/213)
+(`bundles/zip-native-task2b`, `15dac1d8`), and
+[ports #98](https://git.internal/PyxisOS/pyxis-ports/pulls/98)
+(`bundles/zip-native-docs`, `42fce86`). These are unmerged implementation and
+qualification, not main's behavior. Task 2c has not started and is parked too.
+
+Before any merge, fix #717's authority/resource review finding with **both**
+owner-agreed requirements (2026-10-11):
+
+- Explicit authority to prepare views: a MEMORY grant or dedicated view right,
+  so possession of a READ FILE alone cannot allocate kernel pages.
+- Bounded global view-backing admission and a per-process outstanding-view limit,
+  returning `CALL_LIMIT` before allocation. Account for failure rollback and
+  backing retained by dependent handles, including after the launcher exits.
+
+The grant form and limit values must be settled when resuming, and the chosen
+accounting limits recorded with the implementation. Revisit when package
+distribution or the hosted Clang build loop needs single-file archives;
+resuming either task requires a new owner go. `tools/pxa.py` (task 2a) stays.
 
 ## Unpacked development lookup
 
@@ -259,12 +284,14 @@ performance has been measured; #629 qualifies selected-image capture only.
 
 ### Three owner decisions, accepted 2026-10-09
 
-The native view and decoding decisions remain unimplemented. Task 2a implements
-the third decision's stored-only host tool; native writing and compression remain
-deferred.
+Native views are implemented only on parked draft branches; decoding is
+unimplemented. Task 2a implements the stored-only host tool; native writing and
+compression remain deferred. The owner amended preparation authority/admission
+on 2026-10-11 as recorded above.
 
 1. **Private native DIRECTORY/FILE views over a copied, immutable revision.** A narrow native
-   preparation interface accepts a READ-authorized native source FILE, copies
+   preparation interface requires a READ-authorized native source FILE and
+   explicit preparation authority, then copies
    its bytes into unpublished backing on BSP, and supplies a read-only snapshot
    FILE for userspace inspection. It needs no mount, namespace-publication or
    system authority and grants none. Frozen backing cannot be written through
@@ -443,7 +470,7 @@ implemented cache or a fourth owner decision for tasks 2a/2b/2c.
   No native adapter, installation or launch change yet.
   **After this task, the owner can:** package a `.pxb` as a checked stored `.pxa`
   for the following native-launch slice.
-- **2b: stored-only native launch and lifetime — separate owner go required.**
+- **2b: stored-only native launch and lifetime — implemented/qualified on draft branches; parked 2026-10-11.**
   Add frozen revision preparation,
   bounded native entry/tree import and `.pxa` recognition in existing explicit
   bin/explicit/catalog lookup; pass the resulting native view to the existing manifest,
@@ -453,7 +480,7 @@ implemented cache or a fourth owner decision for tasks 2a/2b/2c.
   Reject method 8 explicitly until the next slice.
   **After this task, the owner can:** install and run stored `.pxa` development
   bundles through the same commands and `app://` layout as `.pxb`.
-- **2c: bounded small-resource deflate — separate owner go required.**
+- **2c: bounded small-resource deflate — unimplemented; parked 2026-10-11.**
   Link the existing userspace zlib port,
   add eager decode/import and the packer's opt-in compression. Qualify raw inflate,
   exact consumption, bad CRC/truncation, ratios/decoded budgets, peak/launch costs
@@ -463,8 +490,9 @@ implemented cache or a fourth owner decision for tasks 2a/2b/2c.
 
 Task 2a is authorized as a standalone host tool, with independent-reader
 qualification and no image-build integration or performance measurements.
-Tasks 2b/2c remain unassigned. No native ZIP launch, new test/benchmark
-infrastructure, signing, consent UI, ZIP64 or Clang port is authorized by 2a.
+Tasks 2b/2c are parked; their earlier assignments authorize no further work now.
+Main has no native ZIP launch. New test/benchmark infrastructure, signing,
+consent UI, ZIP64 and the Clang port remain outside task 2a.
 
 ## Selected-image admission
 
@@ -512,9 +540,10 @@ runtime or metadata blockers.
   preparation. Qualified in QEMU and merged in #625.
 - [x] Task 2a: compliant stored-only host packer/checker; owner-assigned
   2026-10-11, with [independent-reader and rejected-input qualification](../development/pxa-packing.md#qualification-2026-10-11).
-- [ ] Task 2b: stored-only native ZIP views/launch/install and lifetime; separate
-  owner go required.
-- [ ] Task 2c: bounded small-resource deflate; separate owner go required.
+- [ ] Task 2b merge: implemented/qualified on #717/#213/#98 draft branches;
+  parked 2026-10-11. Both authority and admission fixes are required before merge.
+- [ ] Task 2c: bounded small-resource deflate; unimplemented and parked
+  2026-10-11. Reassignment required.
 - [x] Shared 128 MiB captured-image ceiling and failure rollback qualification.
   Implemented and qualified in QEMU; merged in #629.
 
