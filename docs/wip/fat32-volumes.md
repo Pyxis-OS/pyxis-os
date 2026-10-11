@@ -4,8 +4,7 @@ Status: **shared milestone, decisions 1–3 accepted by the owner on 2026-10-11;
 not implemented.** Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery) into one
 end-to-end deliverable. No implementation is assigned; every FAT32 task needs
-its own later owner go. The planning freeze starts after #725 merges. Moving
-work does not complete it.
+its own later owner go. Moving work does not complete it.
 
 ## Deliverable and boundaries
 

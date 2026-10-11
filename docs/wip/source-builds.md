@@ -59,11 +59,10 @@ than throwaway work.
   status and staged smart-HTTP POSTs. Source fetch and ports consume that shared
   milestone, rather than owning HTTP engine/provider tasks. Verify the exact
   commit or SHA-256 and publish a source only after complete transfer.
-  Archives with checksums are easier than Git on Pyxis, but archives a mirror generates from Git commits may not be
-  byte-stable, which a SHA-256 pin needs. The [Git investigation](git-on-pyxis.md)
-  compares a restricted Git CLI with a native libgit2 fetch command, records
-  the investigated SDK/filesystem gaps, and tracks the accepted route and its
-  libc prerequisites for owner review.
+  Archives with checksums are easier than Git on Pyxis, but archives a mirror
+  generates from Git commits may not be byte-stable, which a SHA-256 pin needs.
+  [Git on Pyxis](git-on-pyxis.md) records the accepted libgit2 source-fetch route
+  and its open prerequisites.
 - **Running recipes.** [Native command execution](native-command-execution.md)
   supplies argv launch, selected streams, capture/deadlines, pipelines and actual
   result/cleanup for Lua and the ports runner, replacing its host

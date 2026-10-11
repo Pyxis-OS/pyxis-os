@@ -8,12 +8,11 @@ kernel around an individual application.
 Every candidate follows the [ports and native commands](../development/ports.md#ports-and-native-commands)
 boundary: ports are leaf tools, and nothing that defines Pyxis is ported.
 
-Kilo, TCC, Lua and Doom already provide useful applications; see the
-[port workflow](../development/ports.md), [edit/build/run loop](../development/edit-build-run.md),
-[Lua reference](../userland/lua.md) and [Doom reference](../userland/doom.md). The next candidates
-should improve daily use or exercise a reusable OS facility.
+See the [port workflow](../development/ports.md) and
+[edit/build/run loop](../development/edit-build-run.md) for existing ports. The
+next candidates should improve daily use or exercise a reusable OS facility.
 [Verified HTTPS](../userland/https.md) already uses the packaged Mbed TLS and
-TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
+TF-PSA-Crypto libraries; SSH remains deferred.
 
 ## Libraries and terminal tools
 
@@ -27,7 +26,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
 | Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
 | less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with BRE search/highlighting and libterm console input independent of stdin. |
-| tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md#1-busybox-tar), with whole-archive validation and regular files/directories only. |
+| tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md), with whole-archive validation and regular files/directories only. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
@@ -39,14 +38,10 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 
-The owner queued **vi, then Links, then less** on 2026-10-04; vi and Links are
-complete, as is less. The goal is
-offline development on Pyxis: reading documentation such as the Java SE 8
-Virtual Machine Specification with only what Pyxis provides. The specification
-is about 400 linked pages, too many to print, and Links pages through documents
-itself. Docs can stay open in the read-only space while development continues
-in its own space. Each port still starts with its own investigation and
-decisions, as vi did.
+Vi, Links and less (queued by the owner on 2026-10-04) are complete; they serve
+offline development on Pyxis, described in
+[developing inside Pyxis](in-pyxis-development.md). Each port still starts with
+its own investigation and decisions, as vi did.
 
 SDL2 means an upstream library port with a Pyxis platform backend, not a growing
 collection of lookalike SDL functions. Begin with the subsystems a selected
@@ -61,19 +56,18 @@ successful no-op locking/sync is not a substitute. WAL and shared-memory support
 are separate decisions. SQLite's VFS is its userspace OS adapter, distinct from
 Pyxis namespace routing or the proposed `sqlite://` provider.
 
-HTTP reads and shell pipelines are implemented. Once jq and pup are ported, this
-illustrative command could select HTML links and pass their JSON representation
-to jq:
+Once jq and pup are ported, this illustrative command could select HTML links
+and pass their JSON representation to jq:
 
 ```sh
 cat http://example.com/ | pup 'a json{}' | jq '.[].href'
 ```
 
-[Shell pipelines and native head](../userland/shell-streams.md) are implemented. The
-[libc portability milestone](../userland/libc-portability.md) packages upstream cksum and
-restricted tee through conventional descriptor APIs. jq and pup remain unported
-candidates. The separate [userspace scheme provider](userspace-scheme-providers.md)
-proposal for media-type aliases such as `json+http://` remains future work.
+Shell pipelines, native head, cksum and restricted tee are implemented
+([shell streams](../userland/shell-streams.md),
+[libc portability](../userland/libc-portability.md)). The separate
+[userspace scheme provider](userspace-scheme-providers.md) proposal for
+media-type aliases such as `json+http://` remains future work.
 
 ## Graphical applications and games
 

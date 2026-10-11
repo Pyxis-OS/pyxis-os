@@ -82,7 +82,7 @@ handles. READ_WRITE also waits for the selected device's GPT scan; inventory
 sealing does not require every GPT scan to finish. Successful raw claims block
 all mounts on the device.
 
-During [NVMe coexistence task 1](../wip/nvme-coexistence.md#1-nvme-driver--assigned-2026-10-11), NVMe
+During [NVMe coexistence task 1](../wip/nvme-coexistence.md), NVMe
 READ_WRITE OPEN and whole-disk CLAIM additionally read every logical block and
 require every byte to be zero. Missing GPT metadata or zeroed headers alone do
 not prove blank media. Nonzero data returns DENIED; invalid geometry, partial

@@ -5,7 +5,7 @@ Status: **direction and all three configuration choices accepted by the owner,
 All later tasks also need separate go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
-and [program bundles](program-bundles.md).
+and [program bundles](../userland/program-bundles.md).
 
 ## Accepted direction — 2026-10-11
 
@@ -184,9 +184,8 @@ prove that installed bytes were not modified after installation.
 
 ## Dependencies and ordered delivery
 
-Task 1 is held by the owner (2026-10-11); later tasks also need separate
-go-aheads. Progress can land independently before
-curses or coexistence. No new kernel configuration model is proposed.
+Progress coverage can land independently before curses or coexistence. No new
+kernel configuration model is proposed.
 
 1. [ ] **Complete progress coverage — held 2026-10-11.**
    Audit every installer I/O phase, including
@@ -201,10 +200,9 @@ curses or coexistence. No new kernel configuration model is proposed.
    **After this task the owner can:** review and replay an explicit install/update
    plan and see new/updated/removed/unchanged program sizes before any writes.
 3. **Shared dependency, former mounted FAT32 task (moved, not completed).**
-   Consume [FAT32 volumes](fat32-volumes.md): native read-write files/directories,
-   trusted bootstrap ESP binding, scoped rights, sync/release and exclusion against
-   raw writers. No duplicate engine/backend task remains here. Plan-time read-only
-   views must drain before publication; the editor retains its accepted config
+   Consume [FAT32 volumes](fat32-volumes.md) (native read-write files, trusted
+   bootstrap ESP binding, scoped rights, sync/release, raw-writer exclusion); no
+   duplicate engine/backend task here. The editor keeps its accepted config
    ownership/confirmation and ordinary-Update preservation obligations.
    **After that shared milestone the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
@@ -221,8 +219,8 @@ curses or coexistence. No new kernel configuration model is proposed.
    and the shared checker/editor. Integrate
    the accepted coexistence plan, conf swap/recovery and printed-entry fallback without
    firmware-variable edits or changes to Fedora's block. Replace ordinary Update's
-   ESP reformat/regeneration too, preserving editor state and recovery copies;
-   enable installed ESP config loading only with this path.
+   ESP reformat as described under plan and apply; enable installed ESP config
+   loading only with this path.
    **After this task the owner can:** plan an ordinary or coexistence update and
    apply only approved configuration changes without losing existing edits.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then

@@ -45,34 +45,25 @@ home volumes failed with CALL_NOT_FOUND. The exact message is quoted from the
 owner's record; main's `kernel/usb/xhci.c` words the same rule as "changed after
 startup snapshot; retired until reboot".
 
-Hypothesis, from code reading only: `prepare_ports` takes one startup snapshot of
-connected root ports and does not admit a device that connects, or changes,
-afterwards. If the stick (or the Deck's USB-C port controller) reconnected after
-that snapshot, the port was retired and the volumes it carried never appeared.
-This is unmeasured on the Deck.
+Hypothesis, from code reading only and unmeasured on the Deck: `prepare_ports`
+takes one startup snapshot of connected root ports, so a stick (or the USB-C port
+controller) that reconnected afterwards was retired with its volumes.
 
 ## Tasks
 
-Order: tasks 1 to 3 make the Deck usable at all; touch is the owner's priority and
-follows. Tasks 4 to 6 need no display work and can proceed in parallel with tasks
-2 and 3; task 7 needs task 3. Ethernet, Bluetooth and audio come after touch
-unless the owner reorders them ([decision 2](#owner-decisions-2026-10-11)).
+Tasks 1 to 3 make the Deck usable at all; touch follows ([decision 2](#owner-decisions-2026-10-11)).
+Tasks 4 to 6 need no display work and can proceed in parallel with tasks 2 and 3;
+task 7 needs task 3.
 
 ### First check: PXE through the dock
 
 **Result, 2026-10-11: passed.** The owner booted the Deck over UEFI PXE through the
-dock (dnsmasq tag `deck`). The dock's USB keyboard and mouse worked in Pyxis. The
-internal xHCI `04:00.4`, which carries the Steam Controller, timed out; task 2
-starts from that. The Deck's development loop is the PXE loop, with the USB stick
-as the fallback. The text below is the check as posed.
-
-An owner check, no code, and the first step: whether the Deck firmware boots by
-UEFI PXE through the dock's AX88179A, fetching Limine, the kernel and the initrd
-over TFTP as the ThinkPad does. Only the firmware's own network driver is
-involved, so Pyxis needs no networking for it. If it works, the Deck's development
-loop is the same PXE loop as the ThinkPad's, with the dock NIC's MAC kept only in
-horse's dnsmasq configuration and never in the repository. If it does not, the
-USB stick is the fallback loop and everything below still applies.
+dock (dnsmasq tag `deck`), fetching Limine, the kernel and the initrd over TFTP
+with only the firmware's own network driver, as on the ThinkPad. The dock's USB
+keyboard and mouse worked in Pyxis. The internal xHCI `04:00.4`, which carries the
+Steam Controller, timed out; task 2 starts from that. The Deck's development loop
+is the PXE loop, with the USB stick as the fallback. The dock NIC's MAC stays in
+horse's dnsmasq configuration and never in the repository.
 
 ### 1. xHCI settle window
 
@@ -269,10 +260,9 @@ records that the pointer has no touch-contact API today.
 2. **Priority: accepted.** Tasks 1 to 3, then touch (4 to 8), then dock Ethernet,
    Bluetooth and audio. The remote tools depend on task 9, so the owner can move
    Ethernet earlier if Deck iterations become frequent.
-3. **Development loop: PXE.** The owner wants the Deck in a PXE loop like the
-   ThinkPad's. The [first check](#first-check-pxe-through-the-dock) decides whether
-   the firmware can do it through the dock; if not, the USB stick is the fallback.
-   Pyxis-side networking keeps its place in task 9.
+3. **Development loop: PXE**, as on the ThinkPad; the
+   [first check](#first-check-pxe-through-the-dock) passed. The USB stick is the
+   fallback. Pyxis-side networking keeps its place in task 9.
 
 ## Not decided
 

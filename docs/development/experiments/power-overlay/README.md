@@ -1,6 +1,6 @@
 # Power overlay qualification
 
-QEMU checks for task 1 of the [system power overlay](../../../wip/system-power-overlay.md),
+QEMU checks for task 1 of the [system power overlay](../../../kernel/power-overlay.md),
 the Ctrl+Alt+Delete emergency screen, built from this change on main
 `3c3f9cfe`.
 
@@ -113,5 +113,5 @@ On the ThinkPad with a PXE build of this branch, default entry:
 - The VirtIO checks could not see the hardware cursor in screenshots; mouse
   behaviour there was judged by its effect.
 - Coverage of a stuck presenter, display or ACPI worker is by code inspection
-  only; the [emergency coverage](../../../wip/system-power-overlay.md#emergency-coverage)
+  only; the [emergency coverage](../../../kernel/power-overlay.md#emergency-coverage)
   lists what cannot work.

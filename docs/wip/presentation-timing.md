@@ -10,21 +10,16 @@ unconditional 60 Hz cap or pretend SDL vsync.
 
 ## What is done
 
-- **RAM staging for boot and Bochs:** merged in #610; one WB staging frame is
-  composed, then copied whole to the front surface. VirtIO already composes into
-  its attached backing. See the
-  [measurements](../development/experiments/presentation-staging/README.md).
-- **Completed-frame handoff:** merged in #618: three slots per session, newest
-  pending frame wins, SUBMIT never waits, continuous sampling retired. The contract
-  is in [graphics](../interfaces/graphics.md#slots-and-frame-handoff), the
-  [measurements](../development/experiments/frame-handoff/README.md) beside it.
-- **Read-only Renoir timing:** the observer is documented in the
-  [display reference](../kernel/display.md#read-only-renoir-firmware-timing) with
-  its [qualification record](../development/experiments/renoir-presentation/README.md)
-  and the [Fedora reference](../development/experiments/renoir-linux-timing/README.md).
-  It failed native qualification on 2026-10-09, with period estimates from 13.887
-  to 20.785 ms and worse tearing and input delay in blank-copy mode, so timed
-  copies stay off and the counter-derived period is not an authority. See the
+- **RAM staging for boot and Bochs** (#610): [measurements](../development/experiments/presentation-staging/README.md).
+- **Completed-frame handoff** (#618): three slots per session, newest pending
+  frame wins, SUBMIT never waits; see [graphics](../interfaces/graphics.md#slots-and-frame-handoff)
+  and the [measurements](../development/experiments/frame-handoff/README.md).
+- **Read-only Renoir timing observer:** [display reference](../kernel/display.md#read-only-renoir-firmware-timing),
+  [qualification](../development/experiments/renoir-presentation/README.md),
+  [Fedora reference](../development/experiments/renoir-linux-timing/README.md).
+  It failed native qualification on 2026-10-09 (period estimates 13.887 to
+  20.785 ms, worse tearing and input delay in blank-copy mode), so timed copies
+  stay off and the counter-derived period is not an authority; see
   [technical debt](../technical-debt.md#native-renoir-presentation-qualification).
 - **Page flips:** the opt-in [Renoir flip backend](../kernel/renoir-flip.md) is
   natively qualified for normal play and replaces beam-racing on that hardware.

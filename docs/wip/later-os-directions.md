@@ -24,18 +24,14 @@ on a direct framebuffer. Revisit it with
 
 ## Backend interfaces and scoped service dependencies
 
-Agreed direction to revisit later, not an implementation task. The
-[native filesystem writer](../devices/filesystem-native-adapter.md) is complete;
-the [runtime SMP and independent spaces milestone](../kernel/smp.md) completed
-on 2026-10-06. This idea adds no prerequisites or tasks to either.
+Agreed direction to revisit later, not an implementation task; it adds no
+prerequisites to the completed [native filesystem writer](../devices/filesystem-native-adapter.md)
+or [runtime SMP](../kernel/smp.md) milestones.
 
-Borrow explicit dependency wiring and scoped resolution from inversion of control
-and dependency injection. Launchers already supply capabilities, and FILE and
-DIRECTORY already define message contracts. HTTP/HTTPS providers implement FILE
-in userspace. Kernel filesystem wrappers still select backends through explicit
-backing kinds; a later implementation interface could reduce that repeated dispatch.
-
-Keep these responsibilities distinct:
+Borrow explicit dependency wiring and scoped resolution from inversion of control.
+Kernel filesystem wrappers still select backends through explicit backing kinds;
+a later implementation interface could reduce that repeated dispatch. Keep these
+responsibilities distinct:
 
 - Capabilities identify held resources and granted authority.
 - Protocols define operations, message layouts and result semantics.
@@ -44,49 +40,38 @@ Keep these responsibilities distinct:
 
 Prefer direct dependencies for required services: a filesystem adapter receives
 its block device; an HTTP provider receives networking, clock and trust resources.
-Pass a resolver when dynamic discovery is actually needed. The resolver itself
-must be a capability with bounded scope and delegation rights, never an ambient
+Pass a resolver only when dynamic discovery is needed. The resolver itself must be
+a capability with bounded scope and delegation rights, never an ambient
 machine-wide service locator. Different spaces may resolve the same name to
-different providers. Supporting a protocol does not grant authority to invoke it.
-
-Init is a natural place to start providers, choose implementations, bind names and
-delegate dependencies to the session. Replacing a binding affects future resolution;
-existing handles retain their established identity and lifetime. Revocation and
-replacement of held authority require separate explicit semantics. This preserves
-the existing [namespace contract](../interfaces/namespaces.md).
+different providers, and supporting a protocol does not grant authority to invoke
+it. Init is the natural place to start providers, bind names and delegate
+dependencies. Replacing a binding affects future resolution; existing handles keep
+their identity and lifetime; revocation and replacement of held authority need
+separate semantics. This preserves the [namespace contract](../interfaces/namespaces.md).
 
 Inside the kernel, consider small typed operation tables and explicit constructor
-arguments where multiple implementations already justify them. File and directory
-backends are candidates; network devices need packet-oriented contracts of their
-own. Userspace providers implement message protocols, not kernel function tables.
-Define buffer/object ownership, partial progress, completion, cancellation, sleeping
-and executor constraints before extracting an interface. Preserve worker ownership
-and leave room for asynchronous completion without implementing it speculatively.
-
-Avoid a universal object framework, inheritance hierarchy, reflection, automatic
-dependency graphs or interface discovery machinery. Revisit concrete filesystem
-backend duplication or additional network drivers when that work is selected;
-the present note does not schedule a refactor or introduce APIs.
+arguments where multiple implementations already justify them (file and directory
+backends; network devices need packet-oriented contracts of their own). Userspace
+providers implement message protocols, not kernel function tables. Define
+buffer/object ownership, partial progress, completion, cancellation, sleeping and
+executor constraints before extracting an interface, and leave room for
+asynchronous completion without implementing it speculatively. Avoid a universal
+object framework, inheritance hierarchy, reflection, automatic dependency graphs
+or interface discovery. This note schedules no refactor and introduces no APIs.
 
 ## Completion-based asynchronous operations
 
 Owner direction, 2026-10-10: a planned complement to readiness, not current
-work. [Pipes](../interfaces/pipes.md#readiness), terminals and TCP use the
-readiness model: wait until an object is ready, then make a nonblocking try
-transfer. The Neovim milestone accepted that model for its event loop.
-
-The complement is completion: submit an operation, keep running, and collect
-its single result later. The owner's original design discussion put this on
-[endpoint](../interfaces/endpoints.md) SEND and RECEIVE, and that shape fits.
-An operation would be a message to a kernel object or provider, and a receiver
-would collect completions, one per submitted operation. Submission returns at
-once; the receiver delivers the outcome, including short progress, failure or
-cancellation. It is the io_uring and IOCP family, expressed through capabilities
-rather than file descriptors.
-
-Expected consumers are graphical programs and their event loops: input, frame
-presentation, compositor messages and provider replies arriving together.
-Bulk file I/O and several outstanding provider requests are also candidates.
+work. [Pipes](../interfaces/pipes.md#readiness), terminals and TCP use readiness:
+wait until an object is ready, then make a nonblocking try transfer. The
+complement is completion: submit an operation, keep running, and collect its
+single result later. The owner's design discussion put this on
+[endpoint](../interfaces/endpoints.md) SEND and RECEIVE: an operation is a message
+to a kernel object or provider, and a receiver collects one completion per
+submitted operation, including short progress, failure or cancellation. It is the
+io_uring and IOCP family, expressed through capabilities. Expected consumers are
+graphical event loops (input, frame presentation, compositor messages and provider
+replies together), bulk file I/O and several outstanding provider requests.
 
 Settle these before any implementation:
 
@@ -97,50 +82,29 @@ Settle these before any implementation:
 - limits on outstanding operations per process and per receiver;
 - ordering between completions and readiness on the same object.
 
-A smaller step is useful to both models:
-
-- [x] [Endpoint receiver readiness](../interfaces/endpoints.md#receiver-readiness)
-  with `wait_many`, qualified with mixed receiver/console providers and
-  [matched CALL/SEND runs](../development/experiments/endpoint-readiness/README.md).
-
-This adds no prerequisites to the current milestones, and
-[BSP service requests](../kernel/bsp-service-requests.md) remain synchronous
-until a contract replaces them.
-
-Receiver contract accepted 2026-10-10 and implemented: the creating process
-needs RECEIVE transport authority, with CONTROL remaining export management.
-READABLE covers queued messages, cancellation and retirement notices; it also
-reports CLOSED on receiver shutdown, without ERROR and with READABLE suppressed.
-Explicit CLOSED interests use the same authority. Export withdrawal and final
-client closure do not close the receiver. Registration precedes the first scan;
-only real readiness/closure transitions notify, only with registered interests.
-RECEIVE remains unchanged and readiness reserves nothing. The larger completion
-model is unassigned.
+The smaller step useful to both models, [endpoint receiver readiness](../interfaces/endpoints.md#receiver-readiness)
+with `wait_many`, is implemented and qualified with
+[matched CALL/SEND runs](../development/experiments/endpoint-readiness/README.md).
+The larger completion model is unassigned, and
+[BSP service requests](../kernel/bsp-service-requests.md) remain synchronous until
+a contract replaces them.
 
 ## Additional ports
 
-Kilo and TCC provide the [edit/build/run workflow](../development/edit-build-run.md).
-[Guest Lua](../userland/lua.md) now supplies scripts, a REPL and session configuration. The [Doom port](../userland/doom.md) provides initial
-gameplay and demo playback. The [application and library port candidates](application-ports.md)
-record SQLite, zlib/libpng, SDL2, PDCurses, Mbed TLS, text utilities, awk, jq,
-Quake, DevilutionX, the C AbyssEngine investigation, a CHIP-8 interpreter,
-Frotz and NetHack. This is not an instruction to port the whole list. Neovim
-remains a later editor goal.
+The [application and library port candidates](application-ports.md) record the
+queue; this is not an instruction to port the whole list. Neovim remains a later
+editor goal. GrafX2 is another candidate, alongside the
+[desktop and graphics direction](desktop-graphics.md); that draft does not
+authorize implementation.
 
-GrafX2 is another candidate, alongside the [desktop and graphics direction](desktop-graphics.md).
-That draft records the global menu/dock/desktop ideas, software-rendering option
-and eventual compositor prerequisites; it does not authorize implementation.
-
-[retawq](https://retawq.sourceforge.net/) is a future text-browser port candidate,
+[retawq](https://retawq.sourceforge.net/) is a future text-browser candidate,
 starting with HTTP and leaving TLS optional. Terminal support needs a concrete
-choice: port a curses library, or evaluate its built-in `bicurses` backend before
-committing to ncurses. Upstream documents `--set-tg=bicurses` (terminfo-based,
-without color or mouse), optional TLS and `--set-threading=0`; see the
-[build options](https://retawq.sourceforge.net/docu/ctconfig.html). These options
-are leads for a compile probe, not a confirmed Pyxis port path. Audit terminal,
-libc and event/I/O requirements alongside the future TCP and name-resolution
-interfaces. Keep HTTP/TLS in userspace; this does not authorize starting the port
-or changing the current milestone order.
+choice: port a curses library, or evaluate its built-in `bicurses` backend
+(`--set-tg=bicurses`, terminfo-based, without color or mouse; also optional TLS and
+`--set-threading=0`, see the [build options](https://retawq.sourceforge.net/docu/ctconfig.html))
+before committing to ncurses. These are leads for a compile probe, not a confirmed
+path. Audit terminal, libc and event/I/O requirements, keep HTTP/TLS in userspace,
+and do not start the port or change milestone order on this note.
 
 A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
@@ -158,52 +122,36 @@ are parked alongside the ports, not extra tasks in the libc milestone.
 ## Lua follow-ups
 
 The shared [C configuration helper](../userland/lua.md#embedding-and-session-configuration)
-now serves session and network settings. Further consumers should keep their own
-schemas, defaults and application policy; a generic schema framework is not needed.
+serves session and network settings. Further consumers keep their own schemas,
+defaults and application policy; a generic schema framework is not needed.
 
-Build scripting for [in-Pyxis development](in-pyxis-development.md#4-lua-for-build-scripts)
-now has `io`, bounded `os`, pure-Lua `require` and a native module for running
-programs, listing directories and hashing files. Libc supplies pushback,
-exclusive temporary files and C-locale calendar formatting. The
-[runtime reference](../userland/lua.md) records implemented behavior and absent
-functions.
-
-Further interpreter work includes stdin scripts and consuming the existing
-script capability for shebang launches. Stream-buffer controls, process CPU
-time, reverse calendar conversion, debug and full math remain separate slices.
-Dynamic modules, live configuration reload and per-user/space settings policy
-also remain deferred. Existing initrd/RAM filesystems suffice for Lua scripts;
-these tasks do not depend on virtio-fs.
+Build scripting for [in-Pyxis development](in-pyxis-development.md#tooling)
+and the implemented behavior are in the [runtime reference](../userland/lua.md).
+Remaining interpreter work, each a separate slice: stdin scripts and consuming the
+existing script capability for shebang launches; `file:setvbuf`; `os.clock`
+(process CPU time); debug and the full math library. Dynamic modules, live
+configuration reload and per-user/space settings policy also remain deferred.
+None depends on virtio-fs.
 
 ## Networking and applications
 
-[Outbound TCP](../devices/tcp.md) is implemented, including native tcp and ttcp tools.
-The priority is making Pyxis useful for simple daily tasks; website hosting is
-an eventual application, not the main project target.
-
-The completed [initial networking milestone](../devices/networking.md) provides loopback,
-virtio-net, manually configured IPv4 and ping. Native
-[UDP endpoints and tools](../devices/networking.md#udp-tools) now support bounded loopback
-and host exchanges. DHCP follows through the same
-configuration operations once broadcast handling and lease deadlines are
-available. [DNS queries and hostname ping](../userland/dns.md) are complete. The
-[lwIP integration](../devices/lwip.md) owns the TCP engine; keep the
+The priority is making Pyxis useful for simple daily tasks; website hosting is an
+eventual application, not the main project target. [Outbound TCP](../devices/tcp.md),
+[UDP tools](../devices/networking.md#udp-tools), [DHCP](../devices/dhcp.md) and
+[DNS with hostname ping](../userland/dns.md) are implemented, and
+[lwIP](../devices/lwip.md) owns the TCP engine. Keep the
 [user/authority checkpoint](users-and-authority.md) ahead of remotely accessible
-services. Server resource contracts need their own scope. Hosting the Pyxis
-landing page remains an eventual application; revisit init supervision and
-restart policies when defining that web-server milestone. Virtio-blk remains
-the next intended VirtIO storage driver.
+services; server resource contracts need their own scope. Hosting the Pyxis
+landing page remains an eventual application; revisit init supervision and restart
+policies when defining that web-server milestone.
 
 [Userspace URI scheme providers](userspace-scheme-providers.md) are a separate
 future consumer: scoped kernel routing to userspace HTTP/HTTPS services, with
-readable results usable by `fopen` and `cat`. Responses may omit an upfront
-length: the provider completes a bounded download before returning a sized file.
-A bounded LRU response cache and remote compiler includes are later ideas.
-This does not add HTTP or TLS to the kernel.
-
-The same provider direction now includes [read-only SQLite views and query results](userspace-scheme-providers.md#sqlite-views-and-query-results).
+readable results usable by `fopen` and `cat`. A bounded LRU response cache and
+remote compiler includes are later ideas, and the provider direction includes
+[read-only SQLite views and query results](userspace-scheme-providers.md#sqlite-views-and-query-results).
 Structured database sessions and an editor-based query worksheet are later
-experiments, after the SQLite port and provider contract exist.
+experiments. This adds no HTTP or TLS to the kernel.
 
 ## Device ownership and network domains
 
@@ -257,17 +205,15 @@ Owner ideas, 2026-10-07; none is scheduled.
 
 ## Audio
 
-The [analog HDA engine](../devices/hda.md) and [PCM sessions](../interfaces/audio.md)
-closed 2026-10-09 with native AMD/ALC257 speaker/headphone tones and an
-error-free eleven-minute eight-session silent run. [Master/per-space volume](../userland/audio-volume.md)
-also closed with native listening/mute/reboot evidence; [remaining limits](../technical-debt.md#hd-audio-volume-control)
-include media-key input and the later native regression.
+The [analog HDA engine](../devices/hda.md), [PCM sessions](../interfaces/audio.md)
+and [master/per-space volume](../userland/audio-volume.md) are complete; the
+[remaining limits](../technical-debt.md#hd-audio-volume-control) include media-key
+input and the later native regression.
 
 SDL2 and Quake sound are separate consumer assignments. Conversion/resampling
 belongs in userspace; Quake needs its real mixer and native producer adapter.
 SDL2 needs real audio callback/thread execution under the
-[threads direction](scheduling-and-threads.md); today its port omits audio devices
-and threads. Recording, HDMI/DP, USB/dock and Bluetooth audio remain later directions.
+[threads direction](scheduling-and-threads.md); today its port has no audio backend. Recording, HDMI/DP, USB/dock and Bluetooth audio remain later directions.
 
 ## Bluetooth
 
@@ -278,18 +224,15 @@ LE scan on warm-host passthrough. The [mouse proposal](bluetooth-mouse.md) recor
 kernel USB/Intel/HCI ownership and a trusted userspace upper stack, Secure
 Connections enrollment, and cold initialization/durable bonds/native pointer
 use required for closure. HID over GATT feeds the [system pointer](../interfaces/pointer.md#input-source-coordination)
-with kernel-owned positions. Later policy rounds remain open; no implementation
-task or USB HID work is authorized by this direction.
+with kernel-owned positions. Tasks 1 to 3 are complete; tasks 4 to 8 and later
+policy rounds remain open and need explicit assignment.
 
 ## Clock source
 
-TSC with extended-HPET fallback is
-[implemented](../kernel/timekeeping.md#tsc-selection) as of 2026-10-09. KVM
-pvclock, runtime source switching, suspend and resume and VM migration remain
-separate scopes. The
-[investigation](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#what-caelum-must-establish-for-tsc)
-records the original requirements and references; the
-[TSC measurements](../development/experiments/tsc-clock/README.md) cover the delivery.
+TSC with extended-HPET fallback is [implemented](../kernel/timekeeping.md#tsc-selection)
+([measurements](../development/experiments/tsc-clock/README.md)). KVM pvclock,
+runtime source switching, suspend and resume and VM migration remain separate
+scopes.
 
 ## Power and ACPI
 
@@ -346,16 +289,15 @@ Ideas recorded when npfs was planned, none of them agreed:
   Consumer configuration/installation policy stays separate; no task is assigned.
 - **Machine settings that survive updates (owner, 2026-10-09).** Today the boot
   configuration, `boot://config/installed.lua`, is part of the boot archive, so
-  changing a per-machine value such as a future hostname means rebuilding the
-  archive, and an update replaces it. A more granular installer and update would
-  keep a small machine-settings record (hostname and similar) separate from the
-  archive and carry it across updates and reinstalls. The
-  [machine settings proposal](machine-settings.md) develops it.
-- **NVMe.** The [NVMe driver](../devices/nvme.md) is QEMU-qualified; the ThinkPad's
-  first native boot remains read-only and pending.
-  With it, the Fedora disk would appear under Read the room as a foreign disk,
-  which the owner accepted. The [coexistence proposal](nvme-coexistence.md)
-  develops the driver, FAT32 and a non-destructive installer mode beside Fedora.
+  changing a per-machine value means rebuilding the archive, and an update
+  replaces it. The [machine settings proposal](machine-settings.md) develops a
+  small record (hostname and similar) kept separate from the archive and carried
+  across updates and reinstalls; its task 1 is implemented.
+- **NVMe.** The [NVMe driver](../devices/nvme.md) is merged (#710) and read-only;
+  native writes await qualification. With it, the Fedora disk would appear
+  under Read the room as a foreign disk, which the owner accepted. The
+  [coexistence proposal](nvme-coexistence.md) develops the driver, FAT32 and a
+  non-destructive installer mode beside Fedora.
 
 ## References
 

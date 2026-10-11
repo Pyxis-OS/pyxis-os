@@ -1,6 +1,6 @@
 # Calendar and encoding qualification
 
-QEMU checks for slice 3 of [Neovim task 6](../../../wip/neovim-groundwork.md):
+QEMU checks for slice 3 of [Neovim task 6](../../../wip/neovim-libuv.md#tasks):
 libc's [`mktime`](../../../userland/timezones.md#c-interface), the reduced musl
 [`iconv`](../../../kernel/userspace.md#foundational-libc), the numeric/string
 closure, and Lua 5.1's `os.time(table)`. Built on main `93beb07a` with userland

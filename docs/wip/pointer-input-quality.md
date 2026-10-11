@@ -1,7 +1,8 @@
 # ThinkPad pointer input quality
 
-Plan accepted 2026-10-10; **implementation tasks require a separate owner go**.
-Two device tracks can proceed in parallel when assigned. Scope:
+Plan accepted 2026-10-10. Task 1 is assigned to Codex alpha (draft
+[#716](https://git.internal/PyxisOS/pyxis-os/pulls/716)); task 2 follows. The two
+device tracks can proceed in parallel. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -20,7 +21,7 @@ this milestone implements no tap or tap-and-drag synthesis. Physical buttons
 and clickpad presses supply clicks. Any later tapping option must be an explicit
 setting, defaulting off.
 
-Inspected main `131a9266`: USB uses boot protocol, except an exact QEMU wheel
+At main `131a9266`: USB uses boot protocol, except an exact QEMU wheel
 layout; the ASUS `1ea7:0066` wheel remains unqualified. PS/2 firmware-relative
 mode merges touchpad and TrackPoint and can generate taps. The Fedora
 [inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt) names
@@ -176,36 +177,34 @@ state or guessed universal pressure units.
 ## Qualification and tuning
 
 Before either implementation, capture revisions/configuration and matched
-idle/motion input and BSP/presenter costs. Repeat interleaved runs with the same
-CPU/device/accelerator settings. Existing `POINTER_SYNTHETIC=1` and
-`DISPLAY_CURSOR_PROBE=1` provide timestamped idle/motion windows without an
-owner stopwatch. Distinguish their compose/copy totals from total guest BSP/USB
-worker cost, and guest cost from QEMU emulation. They generate motion, not hardware pressure, contact count,
-wheel or palms; they measure pipeline cost, not touchpad correctness.
+idle/motion input and BSP/presenter costs, with repeated interleaved runs on the
+same CPU/device/accelerator settings. `POINTER_SYNTHETIC=1` and
+`DISPLAY_CURSOR_PROBE=1` provide timestamped idle/motion windows; they measure
+pipeline cost (distinguish compose/copy totals, guest BSP/USB worker cost and QEMU
+emulation), not pressure, contacts, wheel or palms.
 
-QEMU: ordinary PS/2 and USB mice/keyboards, boot fallback, two devices holding
-buttons, report-mode wheel/extra-button decoding and chained supported hubs;
-inspect descriptors/layouts and source/queue state in the debugger. Do not
-claim QEMU has Synaptics absolute, ASUS, horizontal or multiplier hardware
-coverage. Report unexercised layouts explicitly.
+QEMU covers ordinary PS/2 and USB mice/keyboards, boot fallback, two devices
+holding buttons, report-mode wheel/extra-button decoding and chained supported
+hubs, with descriptors and source/queue state inspected in the debugger. It does
+not cover Synaptics absolute, ASUS, horizontal or multiplier hardware; report
+unexercised layouts explicitly.
 
 Owner/luna native batch: retain identity/query/mode facts, ASUS descriptors,
-selected protocol, hub path and multiplier readback. Use an opt-in bounded
-contact diagnostic with automatically timed/named windows for normal fingers,
-edge entry, resting palms, typing, finger transitions, physical drags and
-TrackPoint use with a palm down. Summaries include pressure/width distributions,
-accepted/rejected samples, resets, queue loss and software timing; omit typed
-text/key identities. Raw records stay local/in the PR. Tune from these records,
-then rerun the same actions with diagnostics off. The owner follows prompts and
-reports behavior, not hand-timed durations. Attach/detach and normal diagnostics
-stay in ktrace; avoid an unconditional packet dump or new boot klog lines.
+selected protocol, hub path and multiplier readback. Use an opt-in bounded contact
+diagnostic with automatically timed/named windows for normal fingers, edge entry,
+resting palms, typing, finger transitions, physical drags and TrackPoint use with
+a palm down. Summaries include pressure/width distributions, accepted/rejected
+samples, resets, queue loss and software timing, omit typed text/key identities,
+and keep raw records local or in the PR. Tune from these records, then rerun with
+diagnostics off. Attach/detach and normal diagnostics stay in ktrace; no
+unconditional packet dump or new boot klog lines.
 
 Qualify natural and traditional directions separately for each source, held
 buttons on loss/replug, small opposite wheel increments, diagonal two-finger
-scroll, and unchanged keyboard/TrackPoint operation. Require native ASUS wheel
-and touchpad/palm/stick evidence for device-task closure. Links/Neovim direct
-scrolling is qualified after the terminal reporting follow-up, in tabs and mux;
-remote input needs that follow-up's independent validation.
+scroll, and unchanged keyboard/TrackPoint operation. Device-task closure requires
+native ASUS wheel and touchpad/palm/stick evidence. Links/Neovim direct scrolling
+is qualified after the terminal reporting follow-up, in tabs and mux; remote input
+needs that follow-up's independent validation.
 
 ## Deferred limits and sources
 

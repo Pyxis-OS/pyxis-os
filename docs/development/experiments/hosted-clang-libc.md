@@ -30,7 +30,7 @@ fesetround contract keeping x87/SSE controls aligned. No ilogb function or
 successful placeholder is added. LLVM's own `llvm_reg*` and vectorized BLAKE3 names are supplied by the
 separately compiled bundled sources. Comparing all successful objects with SDK
 definitions leaves no unexplained C external. The
-[disposition table](../../wip/hosted-clang.md#remaining-libc-names-classify-actual-consumers)
+[disposition table](#disposition-of-absent-names)
 records absent Unix APIs, native equivalents and precise refusals.
 
 ```sh
@@ -61,3 +61,25 @@ Task 3 changes constants and supplies a previously uncallable function; ordinary
 I/O/launch paths are unchanged. Task 2's matched cost record remains the baseline;
 no speed or storage/durability claim is made here. No startup, allocator, TLS,
 SDK/runtime makefile or delta-owned thread/memory file changes. No new klog lines.
+
+## Disposition of absent names
+
+Absence alone does not make a function a required addition. Standard functions
+actually reached belong in libc; platform policy belongs in LLVM Support. The
+native Support closure removes Unix header consumers rather than supplying fakes.
+[Native libc portability](../../userland/libc-portability.md) remains
+authoritative. Re-audit this list as the task 4 closure builds.
+
+| Name / consumer | Native disposition |
+| --- | --- |
+| `posix_memalign` | Not reached by selected Support; aligned C++ `new` uses the existing real allocator. Recheck optional allocator/intrinsic consumers in task 4. |
+| `fcntl` / Unix Path and Jobserver | Unix consumers are excluded. Native ownership/duplication is real; advisory locks refuse. No synthesized descriptor flags. |
+| `readlink`, `link/symlink` | Native Support returns not-supported; resource/executable roots are explicit. No Unix symlinks or `/proc/self/exe`. |
+| `pipe` / raw_socket_stream, interpreter capture | Unix pipe consumers are excluded; capture/interpreter features are outside file-to-object compilation. No fake descriptor adapter. |
+| `getpid` | No process-ID adapter: native Program uses owned completion handles and random exclusive temp names; retained PID-only features must be excluded or explicitly adapted. Process-ID queries terminate with a specific refusal. |
+| `sysconf` | Page size uses the native memory contract and launch limits the real payload calculation. No invented CPU/usage statistics. |
+| `chmod/fchmod`, `futimens` | Native Support mode, ownership and timestamp setters refuse. Creation uses native authority/policy, not fabricated mode bits. |
+| `posix_fallocate` | Optional persistent CAS remains off; file resize promises no reservation. |
+| `strerror_r` | Configured absent. Support Errno copies real immutable native `strerror` messages. |
+| `ECHILD/ENOEXEC/EXDEV` | No selected native consumer; Unix wait/clone-copy vocabulary stays absent. |
+| `FP_ILOGB0/FP_ILOGBNAN`, `rint` | Added in libc for APFloat FPUtil and BranchProbability; real rounding obeys the native floating environment. |

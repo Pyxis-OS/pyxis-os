@@ -1,8 +1,8 @@
 # Developing inside Pyxis
 
 Status: **experiment, recorded 2026-10-05.** The program written here is the
-owner's own project, not a Pyxis milestone. The tooling tasks below start only
-when the owner says so; nothing here authorizes code or placeholder APIs.
+owner's own project, not a Pyxis milestone. The remaining tooling task below starts
+only when the owner says so; nothing here authorizes code or placeholder APIs.
 
 ## Goal
 
@@ -34,24 +34,17 @@ comes first.
 
 ## Tooling
 
-### 1. BusyBox tar
+Delivered: BusyBox `tar` without compression
+([reference](../userland/tar.md); `gzip`, `unzip` and zlib wait until jars are
+needed, see [application ports](application-ports.md)), explicit
+[file transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer)
+(drag-and-drop upload awaits the owner's [GUI-drop check](remote-file-transfer.md#open-task)),
+and the [Lua build runtime](../userland/lua.md) for the owner's build scripts
+(its limits are in [technical debt](../technical-debt.md#lua-build-runtime-limits)).
+The build tool is the owner's own code in the JVM project; Pyxis supplies only
+the runtime.
 
-- [x] BusyBox `tar`, without compression: [implemented behavior and validation](../userland/tar.md).
-
-- **Use:** pack the HTML documentation on a host as a plain `.tar` file. Then
-  fetch it with `cat https://HOST/jvms.tar > jvms.tar`, or over HTTP from a host
-  file server, and run `tar xf jvms.tar` in `system://`.
-- **Port:** it extends the existing [BusyBox port](../../ports/busybox/README.md)
-  and shares its support library with vi and `less`.
-- **Scope:** archive members are regular files and directories. Hard and
-  symbolic links, devices, absolute paths and `..` components are refused.
-  Extraction ignores owners, permissions and timestamps; creation writes
-  uid/gid zero, 0644/0755 modes and mtime zero (owner decision, 2026-10-06).
-- **Not now:** `gzip`, `unzip` and zlib wait until jars are needed. At that
-  point, the BusyBox applets would cover the commands and zlib the library. See
-  [application ports](application-ports.md).
-
-### 2. Extra spaces on the installed system
+### Extra spaces on the installed system
 
 [Boot init](../userland/init.md#boot-configuration) reads `system://config/boot.lua` on
 installed boots, so extra spaces need no ESP edit and survive Update. The
@@ -83,47 +76,6 @@ address.
   - the remote space accepts `pyxis-remote` after the main space has
     configured the network;
   - a single-space installation behaves as before.
-
-### 3. Moving files
-
-- [x] [File transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer)
-  uploads class files and downloads backups by explicit command. Drag-and-drop
-  upload is implemented and awaits the owner's
-  [GUI-drop check](remote-file-transfer.md#tasks).
-
-### 4. Lua for build scripts
-
-- [x] [Lua build runtime](../userland/lua.md): io/os, pure-Lua require and native
-  `pyxis.run`, `pyxis.dir` and `pyxis.sha256`.
-
-The owner writes the build tool in the JVM project; Pyxis supplies its runtime
-only. Agreed 2026-10-06/07 and implemented with the following bounded contracts:
-
-- Programs start from an argument list through the native launch API.
-  `os.execute` and `io.popen` remain absent. Normal exit returns its actual
-  integer status; launch/wait failures, faults and termination raise errors.
-  Interruption remains process-only, so a child may outlive interrupted Lua.
-- Launch delegation is opt-in per space with `launch = true`. Live Development
-  and installed `pyxis` opt in, Read-only and default Remote do not. A separate
-  LAUNCH-only grant travels through init/session/shell to ordinary foreground
-  commands; no administrative launcher right is added.
-- Live C standard streams are inherited, with closed streams omitted.
-  Lua default-file rebinding remains local, and cursors/read-ahead stay private.
-- Rebuild detection belongs to the owner's content-hashing build tool.
-  No modification times are added to native files or `stat`.
-- `require` uses exact `LUA_PATH` when set; otherwise the script directory then
-  `boot://share/lua/`. Only preload and pure-Lua file searchers are installed.
-- `os.tmpname` reserves an exclusive empty `tmp://` file; the caller removes it.
-  `io.tmpfile` creates and unlinks a real file immediately. `file:setvbuf` stays
-  absent. No stale temporary names are automatically deleted.
-- `os.time()` reads wall time and `os.time(table)` uses libc's `mktime`. `os.date` uses
-  real C-locale `strftime` and actual UTC/TZif designations. `os.clock`,
-  `os.setlocale` and dynamic modules remain absent.
-
-[Runtime limits](../technical-debt.md#lua-build-runtime-limits) record the
-consequences and revisit points. The port's PSA SHA-256 adapter consumes the
-configured Mbed TLS development prefix; embedding liblua stays independent
-of the native bridge and does not open these libraries in configuration files.
 
 ## Out of scope
 

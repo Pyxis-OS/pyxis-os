@@ -16,119 +16,53 @@ this investigation.
 
 ## Baselines and evidence
 
-The current source inspection uses:
-
-| Input | Revision |
-| --- | --- |
-| Pyxis main, including threads task 4 (#700) | `2fca30fd1d5ee6a7eabc0b285bacf0a6b9b8f5c7` |
-| Pinned userland | `df210f1a2ed9e55ab9a83b0d6318d1d6e14db1af` |
-| Pinned ports / filesystem | `df3210b04142295206d0b60850cbe5959dd2cffa` / `b427df29f865bc361b8da92bcd74e114581e9a32` |
-| Host LLVM fork | `49e2c1a1518b3e4687b52ceb6001069c1b6d261e` |
-| Inspected Go source | `go1.26.7`, `e3336a22ad3f0a90bd252c95d8b5544e02674205` |
+Source inspection (2026-10-11) used Pyxis `2fca30fd`, userland `df210f1a`, ports
+`df3210b0`, filesystem `b427df29`, host LLVM fork `49e2c1a1518b` and Go
+`go1.26.7` (`e3336a22ad3f0a90bd252c95d8b5544e02674205`, official
+[source archive](https://go.dev/dl/go1.26.7.src.tar.gz), SHA-256
+`0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad`).
 
 Go supplies its own compiler, assembler and linker for the cgo-disabled slice;
 LLVM language-TLS delivery or a compiler-container rebuild is not intrinsically
 required by it. The [host LLVM reference](../development/llvm-toolchain.md)
-records the current P1F writer and retired conversion path.
+records the current P1F writer; `elf2pxe` was removed on 2026-10-07.
 
-The historical probes used Pyxis
-`3ed181115b9a737aaf2f002ce67817d1fb5441f1` and userland
-`5cbfbbd5189c2159e6059f4281bceb43af5d77e8`. The official
-[Go source archive](https://go.dev/dl/go1.26.7.src.tar.gz), SHA-256
-`0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad`,
-matched the [release manifest](https://go.dev/dl/?mode=json&include=all).
-The executed compiler was Fedora `golang{,-bin,-src}-1.26.7-1.fc44`, reporting
-`go1.26.7-X:nodwarf5 linux/amd64`. Historical sizes belong to that packaged
-compiler, not a future Pyxis backend.
-
-### Historical Linux probes
-
-Create separate files in a temporary directory:
-
-```go
-// println.go
-package main
-func main() { println("Hello, Pyxis") }
-```
-
-```go
-// fmt.go
-package main
-import "fmt"
-func main() { fmt.Println("Hello, Pyxis") }
-```
-
-These are the recorded commands, with `probe_dir` naming that directory.
-**`elf2pxe` was removed on 2026-10-07**; its build and conversion commands do
-not exist on current main. Reproducing that historical part requires a checkout
-of `625fd2a` or earlier, not adding a converter or Go toolchain to today's build.
-
-```sh
-GOTOOLCHAIN=local GOOS=pyxis GOARCH=amd64 CGO_ENABLED=0 \
-  go build -o "$probe_dir/println.pyxis" "$probe_dir/println.go"
-
-GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 \
-  go build -o "$probe_dir/println.linux" "$probe_dir/println.go"
-GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 \
-  go build -o "$probe_dir/fmt.linux" "$probe_dir/fmt.go"
-
-make -C tools elf2pxe
-readelf -lW "$probe_dir/println.linux"
-readelf -lW "$probe_dir/fmt.linux"
-build/tools/elf2pxe --format p1f -o "$probe_dir/println.pxe" "$probe_dir/println.linux"
-build/tools/elf2pxe --format p1f -o "$probe_dir/fmt.pxe" "$probe_dir/fmt.linux"
-
-GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 \
-  go list -deps "$probe_dir/println.go"
-GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 \
-  go list -deps "$probe_dir/fmt.go"
-
-gdb -q -nx -batch -iex 'set auto-load off' \
-  -ex 'set environment GOMAXPROCS 1' \
-  -ex 'set environment GODEBUG asyncpreemptoff=1' \
-  -ex 'break main.main' -ex run -ex 'info threads' -ex continue \
-  "$probe_dir/println.linux"
-```
-
-| Historical measured probe | Result |
-| --- | --- |
-| `GOOS=pyxis GOARCH=amd64` | Rejected: unsupported target pair. |
-| Linux builtin `println` | 31 dependency-list entries including main; ELF 1,869,737 bytes; converted P1F 1,193,905 bytes. |
-| Linux `fmt.Println` | 62 dependency-list entries including main; ELF 2,458,955 bytes; converted P1F 1,580,977 bytes. |
-| Both ELF layouts | Fixed-address x86-64 ET_EXEC, three page-aligned RX/R/RW LOAD segments, no INTERP/DYNAMIC/TLS program headers; converter accepted them. |
-| Linux debugger, builtin hello | With GOMAXPROCS=1 and asyncpreemptoff=1, three threads at main.main: main, runtime.usleep and runtime.futex; then printed and exited. This is one host observation, not a promised thread count. |
-
-Conversion proved container compatibility only. Linux startup, FS setup and
-syscalls still made those images unusable on Pyxis. Dependency lists are not
-executed initializer counts or a complete port inventory. No guest runtime,
-resident-memory measurement or syscall trace was obtained; `strace` was absent.
+The 2026-09-30 Linux probes used the Fedora `golang-1.26.7` package
+(`CGO_ENABLED=0`, linux/amd64, GOAMD64=v1) and the since-removed `elf2pxe`:
+`GOOS=pyxis` was rejected as an unsupported target pair; builtin `println` and
+`fmt.Println` produced 1.87 MB and 2.46 MB static ELF files (31 and 62
+dependency-list entries) with three page-aligned RX/R/RW LOAD segments and no
+INTERP/DYNAMIC/TLS headers, which the converter accepted (1.19 MB and 1.58 MB
+P1F). Under gdb with GOMAXPROCS=1 and asyncpreemptoff=1 the Linux hello showed
+three threads at `main.main` (one host observation, not a promised count).
+Conversion proved container compatibility only: Linux startup, FS setup and
+syscalls still made the images unusable on Pyxis. No guest runtime,
+resident-memory measurement or syscall trace was obtained. The probes were not
+repeated and need a checkout of `625fd2a` or earlier to reproduce.
 
 ## Current image, stack and bundle boundary
 
 [Program loading](../kernel/program-loading.md) admits a **256 MiB page-rounded
 image span**, including segment BSS, padding and gaps. This is independent of the
 **128 MiB per-selected-executable serialized capture ceiling** shared by HOST,
-NPFS and RAM. Capture is reclaimable BSP-owned backing; immutable boot archive
-bytes need no new copy. Neither ceiling guarantees physical capacity. Runtime
-VM reservations would be separate from both image budgets.
+NPFS and RAM. Neither ceiling guarantees physical capacity. Runtime VM
+reservations would be separate from both image budgets.
 
 The loader places the initial stack below `0x7ffffffff000`, with a reserved
 unmapped lower guard and eager RW/NX backing. Plain programs keep 1 MiB.
-[Unpacked bundles](program-bundles.md#manifest-and-stack) may request page-aligned
+[Unpacked bundles](../userland/program-bundles.md#manifest-and-stack) may request page-aligned
 1–8 MiB initial stacks, rejected rather than clamped. There is no automatic stack
 growth or P1F stack-size field. A Go initial g0 stack must respect that backing;
 Go's other M/g0 stacks and movable goroutine stacks need their own allocation
-and lifetime contract. A larger launch stack does not supply those contracts.
+and lifetime contract.
 
-An unpacked `bin://NAME.pxb` now resolves by bare NAME after NAME.pxe, before the
-optional development catalog/rescue path. It supplies the program's own
-read-only app:// and resource roots. Runtime memory, clock and entropy authority
-must be requested explicitly, with the actual received set read from startup.
-Native thread authority will need deliberate launcher/manifest integration;
-it is not a recognized bundle grant today. ZIP/.pxa remains unimplemented and
-cannot be a prerequisite for the first Go result.
+An unpacked `bin://NAME.pxb` resolves by bare NAME after NAME.pxe and supplies the
+program's own read-only app:// and resource roots. Runtime memory, clock and
+entropy authority must be requested explicitly, with the actual received set read
+from startup. Native thread authority is not a recognized bundle grant today.
+ZIP/.pxa remains unimplemented and cannot be a prerequisite for the first Go result.
 
-### P1F output options — no route selected
+### P1F output options: no route selected
 
 | Route | Advantages | Costs and constraints |
 | --- | --- | --- |
@@ -137,8 +71,7 @@ cannot be a prerequisite for the first Go result.
 
 Either route must obey [P1F](../../include/pxe/p1f.h) and common loader checks.
 The current LLD rejects PT_TLS; Go's own FS storage need not be an ELF PT_TLS
-segment. Neither route is implemented or chosen here. An eventual host build
-must use owner mirrors/caches and pinned sources; this refresh adds none.
+segment. An eventual host build must use owner mirrors/caches and pinned sources.
 
 ## Go prerequisites within the threads gates
 
@@ -148,10 +81,10 @@ initialize g0, allocation, locks and scheduling before main; runtime.main starts
 sysmon on an OS thread. GOMAXPROCS limits P execution resources, not the M thread
 count. Disabling asynchronous preemption does not remove sysmon or the GC.
 
-Tasks 1–4 are merged foundations, **still with one user task per process**.
-Task 4 supplies [VM transactions/activity leases](../kernel/memory.md#execution),
-not public siblings, address parking, FS setup or sparse backing operations.
-The following dependency split is required by a normal cgo-disabled runtime:
+Threads tasks 1–4 and gate 5 (native CREATE/EXIT/completion, #709; joinable
+siblings only) are merged. Task 4 supplies [VM transactions/activity leases](../kernel/memory.md#execution);
+address parking (gate 6), static TLS (gate 7) and sparse backing operations remain
+open. The following dependency split is required by a normal cgo-disabled runtime:
 
 | Gate | Parts Go needs | C/C++ parts Go need not await |
 | --- | --- | --- |

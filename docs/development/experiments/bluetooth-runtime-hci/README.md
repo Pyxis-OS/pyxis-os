@@ -8,7 +8,7 @@ Status: **task 2 implemented and warm passthrough validated 2026-10-08**, delive
 investigation's identically numbered source-assessment task. The owner authorized
 production AX200 binding, an exclusive process-owned controller grant, event and
 asynchronous ACL reception, kernel-owned command/data credits and bounded
-progress/exit/loss behavior. The [accepted contracts](../../../wip/bluetooth-task1-contracts.md)
+progress/exit/loss behavior. The [accepted contracts](../../../wip/bluetooth-mouse.md#accepted-decisions)
 settle policy and the [runtime reference](../../../devices/bluetooth-hci.md) describes
 the implementation; this record holds the measurements.
 

@@ -1,6 +1,6 @@
 # NVMe driver task 1 qualification
 
-[Accepted scope](../../../wip/nvme-coexistence.md#1-nvme-driver--assigned-2026-10-11).
+[Accepted scope](../../../wip/nvme-coexistence.md).
 No native run or native write is authorized by this record. The first native
 boot is read-only and is staged by the orchestrator through Luna.
 
