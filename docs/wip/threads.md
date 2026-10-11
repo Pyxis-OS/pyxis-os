@@ -5,7 +5,8 @@ Owner-accepted defaults, 2026-10-10, subject to the
 directions (merged #567) stand: parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault, and
 process-private address wait/wake. Tasks 1–5 are merged. Gate 6 is implemented and QEMU-qualified in the current
-PR; owner-native A/B remains pending. Gates 7–9 remain later delivery work. Moving kernel services
+PR; owner-native A/B is recorded, with CALL64 fastest about 100 ns higher.
+Gates 7–9 remain later delivery work. Moving kernel services
 [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
 Merged tasks, with qualification records:
@@ -213,7 +214,8 @@ recheck predicates. No cross-process futex ABI, requeue or priority inheritance.
 ### Gate 6 contract (owner accepted, 2026-10-11)
 
 Owner assigned gate 6 and accepted all three binding/lifetime defaults on
-2026-10-11; implemented and QEMU-qualified in this PR. Native A/B is pending.
+2026-10-11; implemented and QEMU-qualified in this PR. Native A/B records
+about 100 ns added to CALL64 fastest; see qualification.
 Scope is native address parking only, over the
 existing caller-scoped `threads` MANAGE service. No pthread/C11 kernel surface,
 libc synchronization/TLS implementation, cross-process keys or new klog lines.
@@ -261,7 +263,7 @@ timeout/stop/unmap/remap, process-key isolation and real allocation failure.
 Linked registrations/pending expiry lists drain; no mapping lease survives sleep.
 [Userland #221](https://git.internal/PyxisOS/pyxis-userland/pulls/221) supplies
 native helpers and extends the existing manual threadprobe. Merge it before the
-parent gitlink. Native A/B runs through the owner; no native speedup is claimed.
+parent gitlink. Owner-native A/B is recorded; no native speedup is claimed.
 Gates 7/8 remain separate.
 
 | Libc primitive | Required behavior |
@@ -344,7 +346,7 @@ merely completion of task 2.
 3. [x] **Shared-table delivery (#684).** Growth/atomic installations, reply slot reservations and BSP table-loan replacement; one user task.
 4. [x] **VM activity and user-buffer leases (#700).** Dispatch/root departure, BSP quiescent mutation and explicit concurrent-device refusals; one user task.
 5. [x] **Native CREATE/EXIT/completion (#709), assigned 2026-10-11.** Thread set/result election, guarded-context lifetime, initial/sibling FS setup and space placement; joinable only. Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
-6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is pending. See [qualification](../development/experiments/threads-task6/README.md).
+6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is recorded (CALL64 fastest about +100 ns). See [qualification](../development/experiments/threads-task6/README.md).
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
 7. [ ] **Static TLS and errno.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.

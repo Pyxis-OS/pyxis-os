@@ -61,7 +61,7 @@ outliers and four-CPU completion varies between boots. B launch wall times have
 more high values, including roughly one-second shifts; some overlap A. These
 nested results establish completion, not a native speedup or an attributed
 regression. The code adds token allocation/initialization per private backed
-range and 8 bytes/page metadata; native matched launch/IPC results are pending.
+range and 8 bytes/page metadata; owner-native results are recorded below.
 An unconditional scheduler-queue acquisition for empty expiry was removed before
 the timed B build; its ordinary path now reads a local empty-list pointer.
 
@@ -77,6 +77,62 @@ Keep A's initrd/config unchanged for timings; qualification may use the new SDK/
 
 B timing ELF SHA-256 `430e2199a264e3df697854d925257d8af09af5194986883076e8b3efe85f0f53`;
 ISO `13e107a406f9f93a280e96b2279c7415675cf34e70428f8c10a10754e47a31a2`.
+
+## Owner-native A/B
+
+Owner capture, 2026-10-11 around 20:00, ThinkPad (12 CPUs, AC, PXE), with
+A = main `94d0320d413452cb14a2a63aefc2e6d0bc0c96b0` and
+B = `a5c4c428958ebff0dbeca307dcff3de5c5bd5dd6`, the same A initrd for both,
+fresh A1/B1/A2/B2 boots and the usual 256-message/100-round IPC workloads.
+Raw captures: `/shared/present/batch2/ab731/`; results supplied in the
+[#731 review](https://git.internal/PyxisOS/pyxis-os/pulls/731).
+
+| Workload | A1 / A2 | B1 / B2 |
+| --- | --- | --- |
+| CALL64 fastest, ns/round trip | 3830 / 3820 | 3937 / 3912 |
+| CALL64 median, ns/round trip | 5210 / 5610 | 6946 / 6343 |
+| CALL4096 fastest, ns/round trip | 4902 / 4630 | 4718 / 4722 |
+| SEND64 fastest, ns/message | 310 / 307 | 305 / 307 |
+| SEND4096 fastest, ns/message | 605 / 640 | 621 / 594 |
+| Pages, ns/op | 23760–26686 | 23818–26495 |
+| 1024 launches, s | 1.21–1.31 | 1.19–1.40; one 5.11 outlier in B2 |
+
+CALL64 fastest rises 107/92 ns (about 2.5%) in the paired runs, on top of
+roughly 75 ns recorded for gate 5. CALL64 medians are higher but multimodal;
+CALL4096 fastest overlaps, SEND and pages are unchanged, and launches overlap
+apart from the retained B2 outlier. These are native observations, not results
+inferred from nested timings.
+
+### CALL-path inspection
+
+Endpoint descriptor/payload/reply copying, grant handling, generic sleep/wake
+and VM activity accounting are unchanged by gate 6. Ordinary CALL does not
+look up a parking token, acquire a parking bucket or update `space->waiters`.
+Its timed caller and waiting receiver still return through `task_schedule`, so
+both encounter the new empty parking-expiry check. The submitted code already
+avoids a queue-lock acquisition when that list is empty.
+
+Matched frozen A/B ELF disassembly shows that the inlined check nevertheless
+reloads `schedulers`, calls `arch_cpu_index` again, calculates the local address,
+and compares/branches on `expired_address_waits` on every scheduler pass. The
+scheduler already holds that pointer. Expanded expiry handling also makes
+`service_timers` save/restore R12 and R13 on every pass, even with no due wait.
+Gate 6 also grows the per-CPU scheduler
+stride from 64 to 72 bytes, changing address arithmetic and cache-line sharing
+(the heap guarantees 16-byte alignment, not cache-line isolation).
+The ordinary task's existing hot-field offsets are preserved; the new parking
+record is at its cold tail. Timer expiry adds a parking-kind check only when a
+wait is actually due; `task_preempt` tests pending parking expiry if its existing
+ready-queue test is false. Neither executes once per successful CALL reply.
+
+A cheap follow-up could pass the already-owned local scheduler to the expiry
+helper, retaining its empty-list check, IF=0 ordering and detach-before-notify
+semantics. That removes the redundant lookup; it does not establish that all
+100 ns disappears. Scheduler cache-line sharing and compiler code/layout changes
+remain unmeasured candidates. No profiling or functional optimization was made
+in response to this review; source/disassembly establish added work, not its
+individual share of the native delta. Owner review decides whether to qualify
+that small change before merge or retain the recorded cost.
 
 ## Manual qualification
 

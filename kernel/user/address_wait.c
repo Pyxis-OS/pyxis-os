@@ -101,6 +101,7 @@ enum call_status address_wait(const struct thread_address_wait *request)
   size_t index = bucket_index(process, request->address, incarnation, request->word_size);
   struct address_wait_bucket *bucket = &buckets[index];
   spin_lock(&bucket->lock);
+  /* Leased, token-validated user RAM; SMAP is off, and enabling it needs a user-access window here. */
   uint64_t value = request->word_size == THREAD_ADDRESS_WORD32_BYTES ?
       __atomic_load_n((uint32_t *)(uintptr_t)request->address, __ATOMIC_RELAXED) :
       __atomic_load_n((uint64_t *)(uintptr_t)request->address, __ATOMIC_RELAXED);
