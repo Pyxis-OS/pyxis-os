@@ -59,7 +59,7 @@ struct task {
   struct private_context stack_context, fs_context;
   struct thread_control *thread_control;
   struct thread_result thread_result;
-  bool fs_bound, thread_exit_pending;
+  bool fs_bound, thread_exit_pending, faulted;
   size_t cpu_index;
   bool exited, in_syscall;
   atomic_bool vm_continuation;
@@ -244,6 +244,7 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
     process_vm_syscall_leave(task->process, task);
   }
   process_set_result(task->process, result);
+  task->faulted = result.kind == PROCESS_FAULTED;
   task->thread_result = (struct thread_result){0};
   task->exited = true;
   arch_context_switch(&task->saved_stack, scheduler->stack);
@@ -1172,6 +1173,7 @@ static void reap_completed(void)
       struct private_context fs_context = task->fs_context;
       struct thread_control *control = task->thread_control;
       struct thread_result thread_result = task->thread_result;
+      bool faulted = task->faulted;
       task->stack_context = (struct private_context){0};
       task->fs_context = (struct private_context){0};
       free_task(task);
@@ -1185,12 +1187,12 @@ static void reap_completed(void)
         object_release(&control->object);
       }
       bool finalized = process_task_reclaimed(process);
-      if (finalized) {
+      if (faulted) {
+        klog("userspace: CPU %zu faulted task released\n", cpu_index);
+      } else if (finalized) {
         if (result.kind == PROCESS_TERMINATED) {
           klog("userspace: CPU %zu terminated task released\n", cpu_index);
-        } else if (result.kind == PROCESS_FAULTED) {
-          klog("userspace: CPU %zu faulted task released\n", cpu_index);
-        } else {
+        } else if (result.kind == PROCESS_EXITED) {
           ktrace("userspace: CPU %zu exited with status %d; address space released\n",
                cpu_index, (int)result.exit_status);
         }
