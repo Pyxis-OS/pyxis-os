@@ -48,6 +48,7 @@ struct task {
   struct task_profile *profile;
   enum task_kind kind;
   struct process *process; /* Borrowed submitted/prepared lifetime; NULL for workers. */
+  struct process_task_member process_member;
   uintptr_t kernel_stack;
   uintptr_t saved_stack;
   uintptr_t entry, user_stack;
@@ -923,7 +924,7 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   /* Holds only the placement preference until publication places the task. */
   task->cpu_index = preferred_cpu;
   arch_user_state_init(&task->cpu);
-  process_task_attach(process, task);
+  process_task_attach(process, &task->process_member, task);
   *result = task;
   return MM_OK;
 }
@@ -931,7 +932,7 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
-  process_task_discard(task->process, task);
+  process_task_discard(task->process, &task->process_member);
   free_task(task);
 }
 
@@ -1005,18 +1006,26 @@ static void reap_completed(void)
     struct task *next = task->next;
     struct process *process = task->process;
     if (task->kind == TASK_USER) {
-      process_task_detach(process, task);
-      struct process_result result = process->result;
+      struct process_result result;
+      if (process_result_get(process, &result)) {
+        /* Fault entry elects the result without taking lifetime ownership.
+         * Fan out its safe-stop request here on the permanent BSP stack. */
+        process_request_stop(process);
+      }
+      process_task_detach(process, &task->process_member);
+      process_result_get(process, &result);
       size_t cpu_index = task->cpu_index;
       free_task(task);
-      process_task_reclaimed(process);
-      if (result.kind == PROCESS_TERMINATED) {
-        klog("userspace: CPU %zu terminated task released\n", cpu_index);
-      } else if (result.kind == PROCESS_FAULTED) {
-        klog("userspace: CPU %zu faulted task released\n", cpu_index);
-      } else {
-        ktrace("userspace: CPU %zu exited with status %d; address space released\n",
-             cpu_index, (int)result.exit_status);
+      bool finalized = process_task_reclaimed(process);
+      if (finalized) {
+        if (result.kind == PROCESS_TERMINATED) {
+          klog("userspace: CPU %zu terminated task released\n", cpu_index);
+        } else if (result.kind == PROCESS_FAULTED) {
+          klog("userspace: CPU %zu faulted task released\n", cpu_index);
+        } else {
+          ktrace("userspace: CPU %zu exited with status %d; address space released\n",
+               cpu_index, (int)result.exit_status);
+        }
       }
     } else {
       free_task(task);

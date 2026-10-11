@@ -107,7 +107,7 @@ bool process_control_stopped(struct process_control *control)
   if (process) {
     spin_lock(&process->lifetime_lock);
     stopped = process->stopping || process->lifetime == PROCESS_RETIRED ||
-        atomic_load_explicit(&process->result_set, memory_order_acquire);
+        process_result_committed(process);
     spin_unlock(&process->lifetime_lock);
   }
   unlock_control(control);

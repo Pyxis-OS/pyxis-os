@@ -23,7 +23,13 @@ enum process_lifetime {
   PROCESS_RETIRED,
 };
 
-/* Owns submitted lifetime independently of its sole user task. space is borrowed
+/* Embedded in task storage; lifetime_lock protects the link and task pointer. */
+struct process_task_member {
+  struct process_task_member *next;
+  struct task *task;
+};
+
+/* Owns submitted lifetime independently of its user tasks. space is borrowed
  * from the initialized set and must outlive the process. */
 struct process {
   struct space *space;
@@ -41,13 +47,12 @@ struct process {
    * switch under this lock; detach control/group links only after unlocking. */
   struct spinlock lifetime_lock;
   enum process_lifetime lifetime;
-  struct task *task; /* Stop target; detached before task storage is reclaimed. */
-  bool task_storage; /* Stays true through detached kernel-stack/metadata reclamation. */
+  struct process_task_member *tasks; /* Stop targets, detached before storage reclamation. */
+  size_t task_count; /* Linked tasks, including those awaiting BSP retirement. */
+  size_t task_storage_count; /* Includes detached storage and context pins until completion. */
   bool stopping;
-  /* Sole task writes result before release-publishing result_set, including on
-   * user fault entry, where taking lifetime_lock is forbidden. */
-  atomic_bool result_set;
-  struct process_result result;
+  /* One packed first-event election, including fault entry without lifetime_lock. */
+  atomic_uint_fast64_t terminal_result;
 };
 
 /* Borrow the executing user task's process; NULL for scheduler/kernel tasks.
@@ -76,23 +81,40 @@ enum mm_result process_destroy(struct process *process);
 /* BSP, IF=0, exclusive preparation. Exactly one task may be prepared, including
  * a blocked or not-yet-published task. Failure leaves both objects with caller. */
 bool process_task_available(struct process *process);
-void process_task_attach(struct process *process, struct task *task);
-void process_task_discard(struct process *process, struct task *task);
+void process_task_attach(struct process *process, struct process_task_member *member,
+                         struct task *task);
+void process_task_discard(struct process *process, struct process_task_member *member);
 /* BSP, before ready-queue publication. Transfers process lifetime to finalization. */
 void process_publish(struct process *process);
 
+/* BSP, IF=0, lifetime_lock held. Adds a sibling only while admission is open;
+ * retained storage, including retiring threads, counts toward the tunable bound.
+ * The caller retains the guard through runnable publication and separately
+ * serializes group stopping. Group SEAL does not close internal admission.
+ * Failure leaves the task and unused member with the caller. */
+enum call_status process_thread_attach_locked(struct process *process,
+    struct process_task_member *member, struct task *task);
+
 /* IF=0, submitted or retiring process. Caller keeps it live through its task
  * or a locked control/group link. No observer or group stop link is usable
- * before task attachment/publication. Stop preserves committed exit/fault. */
+ * before task attachment/publication. Closes sibling admission before sampling
+ * stop targets and preserves the first terminal result. Outside fault entry. */
 void process_request_stop(struct process *process);
-/* Sole task's exit boundary, IF=0, including user fault entry. Writes once;
- * publication lets stop targeting observe an immutable committed result. */
+/* IF=0, submitted process, including user fault entry. Atomically elects the
+ * first process-wide terminal result; later events leave it immutable. No lock,
+ * allocation or peer stop fanout. Fault callers defer fanout to a safe stack. */
 void process_set_result(struct process *process, struct process_result result);
+/* Caller keeps process storage live. Acquire-observe immutable election;
+ * get returns false and clears *result when no event has been committed. */
+bool process_result_committed(struct process *process);
+bool process_result_get(struct process *process, struct process_result *result);
 
 /* BSP reaper after the task has left its root/stack and returned every loan.
- * Detach the stop target, then reclaim task storage, then call reclaimed.
- * The final call destroys the process and publishes completion; no access after. */
-void process_task_detach(struct process *process, struct task *task);
-void process_task_reclaimed(struct process *process);
+ * Detach the stop target, reclaim task storage, release context pins and publish
+ * native thread completion, then call reclaimed. The last detach elects EXITED/0
+ * only when no process-wide event exists and closes VM admission. Reclaimed
+ * returns true after final process destruction/completion; no access after true. */
+void process_task_detach(struct process *process, struct process_task_member *member);
+bool process_task_reclaimed(struct process *process);
 
 #endif
