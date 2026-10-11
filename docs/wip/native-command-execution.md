@@ -2,10 +2,9 @@
 
 Status: **shared milestone, all owner decisions accepted 2026-10-11; not implemented.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
-[Git run-command](git-cli-on-pyxis.md#process-model-and-a-first-cli-slice),
+[Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. Direct launch, the capture profile and concurrent pipeline pump with
-all stage results are accepted (2026-10-11). No implementation is assigned.
+owner go; no implementation is assigned.
 
 ## Deliverable and boundary
 
@@ -18,7 +17,7 @@ fork, numeric PID killing, synthetic signals or successful `system`/`popen`
 substitutes. The shell owns its parser; native callers pass argv/stage arrays.
 
 Consumers are the [Claude harness](claude-on-pyxis.md),
-[Git executable children and remote helper](git-cli-on-pyxis.md),
+[Git executable children and remote helper](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 [Lua](../userland/lua.md), the [ports runner](../development/ports.md#building-and-packaging),
 [source builds](source-builds.md) and [libuv/Neovim jobs](neovim-libuv.md).
 The first shared profile is direct programs and explicitly described pipelines,
@@ -59,8 +58,7 @@ or is forcibly stopped first, children can survive until their enclosing session
 group stops; a surviving session does not automatically stop them on a Lua caller's
 fault. Ungrouped callers have no such fallback. This profile does not promise
 per-job fail-closed behavior on caller death. The accepted trusted Claude harness
-keeps its stronger sole-CONTROL fresh-group lifetime; that does not require an
-executor for ordinary clients. Termination never rolls back committed effects,
+keeps its stronger sole-CONTROL fresh-group lifetime. Termination never rolls back committed effects,
 and published HOST work can delay retirement indefinitely.
 
 Lua `pyxis.run` inherits live streams, cwd/roots/environment and ordinary resources,
@@ -84,8 +82,7 @@ launch-capable brokers, including through bundle/namespace resources; never add
 authority implicitly or replay an uncertain launch. Libc owns descriptor/FILE
 bridging, userland execution ownership, and Lua/ports application bindings.
 Preserve ordinary `pyxis.run`/`uv_spawn` behavior and the accepted Claude harness's
-trusted fresh-group/sole-CONTROL backend. Its stronger lifetime is not a
-prerequisite for ordinary direct jobs.
+trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need.
 
 ## Accepted capture and pipeline contract (owner, 2026-10-11)
 
@@ -164,4 +161,4 @@ baselines where existing paths change. Exercise denied/absent streams, exact
 resources/no launch bypass, FILE cursor independence, short/full two-way pipes,
 silent children, early reader exit, uncertain publication, deadline races,
 caller death and session stop. Inspect owned handles/registrations and distinguish
-stage retirement from group cleanup. This proposal runs no new tests or boots.
+stage retirement from group cleanup.

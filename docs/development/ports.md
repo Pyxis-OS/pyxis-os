@@ -511,7 +511,7 @@ stages `boot://share/libuv/uv-relay.pxb`. Run the bundle from Development to rel
 a child's output with a timer and responsive console input. It requests native
 clock, memory, launcher and pipe creation explicitly. The bounded one-thread
 platform layer uses native readiness and libc descriptors; excluded APIs fail
-with unsupported errors. See [Neovim task 4](../wip/neovim-libuv.md#task-4-preflight)
+with unsupported errors. See the [libuv port notes](../../ports/libuv/README.md)
 and its [qualification](experiments/libuv-native/README.md).
 
 ## Lua 5.1 with LPeg and luv
@@ -537,7 +537,7 @@ The bundle requests memory, clock, launcher and pipe creation, which luv's loop
 and child processes need, and random for temporary files. Missing libc
 behaviour is left out of the standard libraries rather than imitated, and luv
 reports unsupported libuv families, PIDs and signals as ENOSYS; exit callbacks
-receive the native exit reason. See [Neovim task 5](../wip/neovim-libuv.md#task-5-decisions)
+receive the native exit reason. See the [Lua 5.1 port notes](../../ports/lua51/README.md)
 and its [qualification](experiments/lua51-luv/README.md).
 
 ## Neovim

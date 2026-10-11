@@ -243,7 +243,7 @@ Host publication uses Linux `renameat2(RENAME_NOREPLACE)` or macOS
 `renameatx_np(RENAME_EXCL)`; other host platforms fail publication explicitly.
 Linux behavior is validated; the macOS path requires owner validation.
 
-See the [transfer contract and remaining drag/drop task](../wip/remote-file-transfer.md)
+See the [accepted transfer decisions and remaining drag/drop check](../wip/remote-file-transfer.md)
 and the [native program notes](../../userspace/xfer/README.md) for authority,
 filename limits and the OSC 5113 SHA-256 extension. Stock kitty does not implement
 this required extension and is unsupported.
@@ -289,7 +289,7 @@ terminal wire frame or filesystem grant is added.
 
 Linux client/guest protocol checks pass; actual macOS terminal drag/drop and
 macOS publication still require owner validation. See the
-[task and acceptance record](../wip/remote-file-transfer.md#task-2-validation-2026-10-07).
+[drop validation record](../development/experiments/xfer-streaming/README.md#drop-2026-10-07).
 
 ## Client modes
 

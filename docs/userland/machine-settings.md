@@ -61,3 +61,15 @@ First-party tools use the native query.
 The validating writer, installer naming, prompt/Fastfetch, remote beacon, UDP
 log and DHCP are separate [milestone tasks](../wip/machine-settings.md#tasks).
 `remote.beacon` and its current build option retain their existing behavior.
+
+## Qualification
+
+QEMU 10.2.2 (Q35, nested KVM, four CPUs, VirtIO) with ordinary `make -j16 image`
+on 2026-10-09. An installed disk confirmed missing-key fallback with one report,
+case and LF/no-LF handling, CRLF rejection, and that synced writes change the
+running name only after reboot; a System Update then preserved the key.
+`HOSTNAME=T14-Live` printed without a store warning, `HOSTNAME=bad.name` failed
+assembly through the shared validator, and an omitted option ignored the
+container's environment name. Set-once/child authority and libc short-buffer
+behavior were source-reviewed, not forced at runtime. No native or power-loss
+checks ran.

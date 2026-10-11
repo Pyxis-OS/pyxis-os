@@ -108,7 +108,7 @@ pipeline children. Complete 1,024-launch sessions increased from median 3.06 to
 include session startup, transport and final drain, not isolated loader latency.
 Those costs prompted the owner's return to the implemented 1 MiB default.
 
-The [unpacked bundle path](../wip/program-bundles.md) now carries a bounded
+The [unpacked bundle path](../userland/program-bundles.md) now carries a bounded
 initial-stack parameter in the launch ABI. Kernel, SDK and in-tree launchers
 must use the coordinated layout; this changes no P1F field, SDK link address
 or compiler container. Plain programs keep 1 MiB. An 8 MiB bundle stack meets

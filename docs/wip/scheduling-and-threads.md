@@ -35,27 +35,13 @@ together.
 
 User threads are a separate milestone, needed by native consumers including
 [Neovim/libuv](neovim-libuv.md) and [Go](go-runtime.md). The
-[multiple-threads investigation](threads.md) audits current source and proposes
-the native contract and ordered safety/runtime gates. The three directions in
-merged #567 remain accepted; task 1's process-lifetime split is merged in #612,
-with [matched qualification](../development/experiments/threads-task1/README.md).
-The owner assigned a docs-only refresh after #612: shared CREATE/EXIT/join,
-TLS/errno, real synchronization, stack admission and libc safety. Its small next
-task is owned call references and safe capability CLOSE, retaining one user task.
-Later implementation remains unassigned; the refreshed defaults are accepted,
-subject to the native-kernel condition in the plan.
+[multiple-threads plan](threads.md) holds the native contract and ordered
+safety/runtime gates; tasks 1–5 (process lifetime through native sibling
+lifecycle) are merged and tasks 6–9 are open.
 
-Siblings break today's exclusive VM and table loans, even on one CPU. Parking one
-caller does not quiesce the process, its outstanding kernel operations or its
-retained user buffers. Two things are needed before threads:
-
-- shared-table lifetime protection;
-- process-wide VM activity and translation coordination.
-
-Private memory operations now rely on the single-task model
-([memory](../kernel/memory.md#execution)) and must be revisited with them. No
-fake threading, and no separate-process substitute for shared-pointer worker
-callbacks.
+Shared-table lifetime protection and process-wide VM activity coordination
+(thread tasks 2–4) are merged. No fake threading, and no separate-process
+substitute for shared-pointer worker callbacks.
 
 ## Smaller candidates
 

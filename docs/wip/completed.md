@@ -109,8 +109,9 @@ boot init with a Lua configuration, and a persistent home.
 and the [open native checks](../technical-debt.md#native-system-pointer-qualification).
 Clipboard and other input sources are separate milestones.
 
-[System power overlay](system-power-overlay.md), 2026-10-10 (#659): the
-installed-system flush check is pending.
+[System power overlay](../kernel/power-overlay.md), 2026-10-10 (#659, #710): the
+installed-system flush check is pending, with parked follow-ups in
+[system-power-overlay.md](system-power-overlay.md).
 
 [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: up to eight panes
 with colored scrollback.

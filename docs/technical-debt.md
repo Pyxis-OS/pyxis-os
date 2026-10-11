@@ -114,7 +114,7 @@ Host-side component timing and durable storage (fixtures are tmpfs with sync off
 ## Fixed userspace stacks
 
 Plain programs eagerly back [1 MiB stacks](kernel/program-loading.md); validated
-[bundles](wip/program-bundles.md) may request up to 8 MiB. The reserved guard
+[bundles](userland/program-bundles.md) may request up to 8 MiB. The reserved guard
 catches ordinary overruns, but a large adjustment can skip it; compiler stack
 probing and automatic growth remain absent. Revisit with compiler/runtime and
 thread-stack work, retaining the owner's small plain-program default.
@@ -220,7 +220,7 @@ flushed). Accepted limits:
 
 ## Power overlay limits
 
-The [Ctrl+Alt+Delete power overlay](wip/system-power-overlay.md#emergency-coverage) is an emergency screen with accepted limits:
+The [Ctrl+Alt+Delete power overlay](kernel/power-overlay.md#emergency-coverage) is an emergency screen with accepted limits:
 
 - The presenter task reads the chord. A presenter that never returns to its input loop (a CPU holding the output lock forever, the
   BSP stuck with interrupts off, a kernel fault) cannot open it; neither can panic or a stopped debugger. Use the power button.
@@ -560,7 +560,7 @@ character insert/delete/erase, horizontal margins and colon colours remain
 absent; the kernel/mux sequence parsers must stay in step. Scheme configuration
 and the Neovim Unicode profile follow-up are separate work. Revisit with a
 consumer needing broader text or missing controls. The owner's
-[far-future scalable-font direction](wip/neovim-groundwork.md#terminal-utf-8-first-slice)
+[far-future scalable-font direction](wip/neovim-libuv.md#later-tasks)
 is unassigned.
 
 ## Initial terminal multiplexer limits
@@ -858,7 +858,7 @@ proposal without silently changing capacity, queues or safety thresholds.
 
 ## Initial clipboard delivery limits
 
-Accepted 2026-10-09 in the [clipboard proposal](wip/clipboard.md#first-delivery-limits),
+Accepted 2026-10-09 in the [clipboard interface](interfaces/clipboard.md#bounds-and-qualification),
 implemented for local terminal and mux into opted-in stock libterm readers.
 See the [interface](interfaces/clipboard.md) and [qualification record](development/clipboard-first-delivery-qualification.md)
 for behavior, measured/manual evidence and validation limits.
@@ -1716,7 +1716,7 @@ no locale collation; revisit with locale support.
 
 ## Temporary bundle grant policy
 
-The [bundle design](wip/program-bundles.md) accepted on 2026-10-09 temporarily
+The [bundle design](userland/program-bundles.md) accepted on 2026-10-09 temporarily
 delivers every available ordinary grant, including optional grants at launch,
 without consent in the unpacked development path. This is not a permanent security
 contract; metadata never creates rights or obtains system-only authority, and programs inspect actual
@@ -1725,7 +1725,7 @@ in-context optional-grant, trusted-picker, stable-identity and revocation model.
 
 ## Published development bundle revisions
 
-Unpacked [bundles](wip/program-bundles.md#app-views-grants-and-lifetime) rely on the
+Unpacked [bundles](userland/program-bundles.md#app-views-grants-and-lifetime) rely on the
 publisher leaving a selected revision unchanged and retained. Read-only app/root
 grants and held native handles do not freeze writable aliases or protect unopened
 assets from deletion. Revisit with installation/update lifetime and revision GC;

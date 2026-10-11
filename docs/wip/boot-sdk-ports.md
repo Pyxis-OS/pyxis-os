@@ -35,13 +35,13 @@ native mounted read-write proposal extracted from NVMe coexistence and the ESP
 editor, also serving removable media. Decisions and tasks need separate owner go.
 
 [Git on Pyxis](git-on-pyxis.md): the libc prerequisites of the libgit2 source-fetch
-route are merged. A docs-only investigation of a native Git CLI and HTTP transport
-is in review (#711); no Git port task is assigned.
+route are merged. The native Git CLI and HTTP transport investigation (#711) is
+merged and its tasks are proposed, not assigned; no Git port task is assigned.
 
 [Hosted Clang and LLD](hosted-clang.md): Codex (2026-10-11), accepted first
-single-source compile and separate link. Support task 1 is delivered in the fork
-(#708), without adopting its pin; SDK/libc tasks need separate assignments and proceed
-alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
+single-source compile and separate link. Tasks 1–3 are delivered (#708, #714,
+#718), without adopting the fork's pin; task 4 waits on threads gates 6–8. No
+runnable hosted compiler yet.
 
 [Installer TUI and configuration delta editor](installer-tui.md): Codex
 (2026-10-11), PDCurses pages over a shared plan/apply executor, revision
@@ -61,8 +61,8 @@ No implementation task is assigned; the command-execution proposal is separate.
 
 [Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
 guest VT composition with trusted remote pane creation and cleanup supervision.
-Tasks 1–2 are assigned together, to start after the plan merges; live resize
-(task 3) needs a separate go.
+The plan is merged (#721); tasks 1–2 are delivered (#728) and live resize (task 3)
+needs a separate go.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
@@ -76,11 +76,11 @@ with the Steam Controller timed out). No task is assigned.
 
 [ThinkPad pointer input quality](pointer-input-quality.md): Codex alpha
 (2026-10-11), accepted USB report mice and Synaptics absolute mode and
-palm-rejection plan. Task 1 is assigned, with task 2 to follow.
+palm-rejection plan. Task 1 is assigned (draft #716), with task 2 to follow.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
-lifecycle, parking, TLS and libc delivery. Tasks 1–4 are merged and task 5 is in
-review; each later task retains its separate owner-assignment gate.
+lifecycle, parking, TLS and libc delivery. Tasks 1–5 are merged (#612, #671, #684,
+#700, #709); each later task retains its separate owner-assignment gate.
 
 ## Open
 
@@ -107,9 +107,9 @@ needs a separate go-ahead.
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector
 and `top`.
 
-[Network kernel debugger](network-debugger.md): checkpoint and guarded inspection
-implemented and natively qualified for read-only LAN attach on the RTL8111
-(tasks 1–3); task 4 is unassigned.
+[Network kernel debugger](network-debugger.md): tasks 1–3 are implemented and
+natively qualified for read-only LAN attach on the RTL8111
+([reference](../kernel/network-debugger.md)); task 4 is unassigned.
 
 [NVMe coexistence](nvme-coexistence.md): task 1's NVMe driver is merged (#710) and
 was qualified natively read-only on 2026-10-11; FAT32 depends on the separate
@@ -164,15 +164,16 @@ owner's compositor.
 
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
 [Go runtime investigation](go-runtime.md) and the
-[Neovim milestone proposal](neovim-libuv.md) with its libuv re-check.
+[Neovim milestone](neovim-libuv.md): tasks 1–6 delivered, task 7 (owner native
+qualification) open.
 
 [Interchangeable providers](interchangeable-providers.md): programs depend on
 protocols and launchers choose who serves them, so a compositor can serve the same
 display, pointer and keyboard interfaces as the kernel.
 
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
-interfaces, networking, device ownership, developer tools, audio, Bluetooth, clock
-source, power, storage.
+interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,
+storage.
 
 [Nested execution groups](nested-execution-groups.md): parked REQUIRED direction
 (2026-10-11), contained subgroups and default child launchers before Git descendant
@@ -183,8 +184,9 @@ descendant jobs. No design/API or implementation is assigned.
 owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and
 qualified on draft #717/#213/#98, with authority and admission fixes required
 before any merge. Revisit for package distribution or the Clang build loop.
-The merged host packer/checker (2a, #706) stays; [bin placement](bundles-in-bin.md)
-is merged and its future command index awaits a separate go.
+The merged host packer/checker (2a, #706) stays; bin placement is merged
+([reference](../userland/program-bundles.md)) and its
+[future command index](program-bundles.md#future-command-index) awaits a separate go.
 
 [Selecting existing build artifacts](build-artifact-reuse.md) and the postponed
 [host development overlay](host-development-overlay.md).

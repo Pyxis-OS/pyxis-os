@@ -1,6 +1,6 @@
 # Selected-image capture qualification
 
-Recorded on 2026-10-09 for [program bundles](../../../wip/program-bundles.md#selected-image-admission).
+Recorded on 2026-10-09 for [program bundles](../../../userland/program-bundles.md#selected-image-admission).
 These are manual nested-KVM measurements and read-only debugger observations.
 Temporary native fixtures, image variants and raw captures remain local in
 ignored `build/capture-*`; no test, fault-injection or benchmark infrastructure

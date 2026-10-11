@@ -1,7 +1,7 @@
 # Terminal UTF-8 qualification
 
 For the [bounded repertoire](../../../userland/terminal.md#tty-output-controls)
-and [owner assignment](../../../wip/neovim-groundwork.md#terminal-utf-8-first-slice).
+and its owner assignment (#699).
 
 ## Method
 

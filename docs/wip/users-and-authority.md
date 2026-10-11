@@ -5,10 +5,10 @@ restricted permissions and the identity/authority separation below are agreed.
 Persistent grants, prospective policy changes and the creation/move rules below
 are also agreed; explicit revocation mechanisms remain open. This is not an
 implementation assignment. See the [milestone index](boot-sdk-ports.md) and
-[native filesystem design rules](../devices/filesystem-readonly.md#design-rules). The native v1 format has no
-users or persistent permissions; it supersedes the former portable-core ownership
-implementation. The identity and sharing directions below remain deferred until
-a concrete consumer needs them.
+[native filesystem design rules](../devices/filesystem-readonly.md#design-rules).
+The native v1 format has no users or persistent permissions; it supersedes the
+former portable-core ownership implementation. The identity and sharing directions
+below remain deferred until a concrete consumer needs them.
 
 ## Agreed identity and authority direction
 
@@ -91,10 +91,9 @@ and [OAuth Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628.ht
   is defined. Terminating a session releases its own resources but cannot recall
   copies delegated outside it or data already read.
 
-The earlier portable format's ownership and policy-acquisition implementation is
-retired. [Native mounts](../devices/native-readonly-filesystem.md) enforce held
-capabilities without persistent identity or sharing records. Broker integration
-and revocation remain separate future decisions.
+[Native mounts](../devices/native-readonly-filesystem.md) enforce held capabilities
+without persistent identity or sharing records. Broker integration and revocation
+remain separate future decisions.
 
 ## Agreed creation and namespace changes
 
@@ -139,13 +138,16 @@ Discuss the identity and authority model before committing persistent home
 ownership, writable shared mounts, cross-user resource discovery or remotely
 accessible services to a single-user assumption. Authentication and account UI
 can be separate implementation milestones; ownership and grant rules need an
-earlier checkpoint. The current init and host-mount slices do not need
-a complete account system, but their prototype grants are not the eventual
-multi-user policy.
+earlier checkpoint. The current init and host-mount slices need no account system,
+but their prototype grants are not the eventual multi-user policy. The model and
+example consequences above are agreed future design direction. When a concrete
+multi-user consumer is assigned, identify its first implementation slice, required
+metadata and broker/storage enforcement responsibilities.
 
-The completed [native format and tools](../devices/filesystem-readonly.md) have no
-user ownership or permission records. They do not authorize placeholder login
-APIs, Unix IDs or mode bits, or implementation of an identity broker.
+The [native format and tools](../devices/filesystem-readonly.md) have no user
+ownership or permission records, and completing writable storage does not implement
+or require this deferred model. They do not authorize placeholder login APIs, Unix
+IDs or mode bits, or an identity broker.
 
 ## Remaining decisions
 
@@ -180,27 +182,14 @@ APIs, Unix IDs or mode bits, or implementation of an identity broker.
 
 ## Writable host prototype boundary
 
-For the implemented [writable virtio-fs development mount](../devices/virtio-fs.md), trusted
-boot-selected init scripts receive the available setup authority and delegate
-read-write or read-only roots over the same export to their sessions. The kernel
-enforces those grants and descendants cannot widen them. Mount authority stays
-out of ordinary sessions; existing handles keep their rights after init exits.
-
-The user explicitly selects the host export and daemon access. Guest operations
-use the existing single host-service identity, constrained independently by host
-permissions. This is a development mount, not persistent per-user home ownership
-or a mapping from guest users to host accounts. Do not add placeholder identity
-fields. The agreed future authority model does not change this prototype's
-behavior; authentication, multiple guest identities and persistent ownership
-enforcement still require implementation milestones.
-
-## Completion of the design checkpoint
-
-The model and example consequences above are agreed future design direction.
-When a concrete multi-user consumer is assigned, identify its first implementation
-slice, required metadata and broker/storage enforcement responsibilities. Native
-v1 deliberately has no ownership enforcement; completing its writable-storage
-milestone does not implement or require this deferred identity model.
+In the [writable virtio-fs development mount](../devices/virtio-fs.md), trusted
+boot-selected init scripts delegate read-write or read-only roots to their sessions;
+the kernel enforces those grants, descendants cannot widen them, and mount authority
+stays out of ordinary sessions. Guest operations use the single host-service
+identity, constrained independently by host permissions. This is not persistent
+per-user home ownership or a mapping from guest users to host accounts; do not add
+placeholder identity fields. Authentication, multiple guest identities and
+persistent ownership enforcement still require implementation milestones.
 
 ## Related direction
 

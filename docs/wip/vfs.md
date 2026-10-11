@@ -98,23 +98,18 @@ for later.
 
 ## Application bundles
 
-The owner accepted the [first-slice bundle design](program-bundles.md) on
-2026-10-09: restricted ZIP `.pxa` and unpacked `.pxb` forms exposing the same
-private per-program `app://`, with a JSON manifest declaring entries, commands,
-stack requests, resource directories and grants. This supersedes the earlier
-shared application-root and unspecified-format ideas. Implementation awaits
-the plan's merge and a separate owner go.
+Per-program `app://` views, `bin://` command mappings, grants and unpacked `.pxb`
+bundles are [implemented](../userland/program-bundles.md); the owner accepted the
+first-slice design on 2026-10-09 (restricted ZIP `.pxa` and unpacked `.pxb` forms
+exposing the same private per-program `app://`, with a JSON manifest declaring
+entries, commands, stack requests, resource directories and grants). Writable user
+data stays outside the bundle. Metadata cannot grant itself capabilities: requested
+grants remain bounded by ordinary launcher authority. Single-file ZIP work is
+[parked](program-bundles.md).
 
-The launcher supplies a read-only view of the program's pinned bundle revision;
-assets do not depend on installation name or cwd. `bin://` command mappings select
-declared entries without executable copies or symlinks. Writable user data stays
-outside the bundle. Metadata cannot grant itself capabilities: requested grants
-remain bounded by ordinary launcher authority. Until bundles are implemented,
-forwarding launch authority to ordinary commands remains a per-space setting
-(`launch = true` in boot configuration).
-
-The accepted note records the temporary grant policy and later consent/picker,
-identity and revocation direction. Signing ideas below remain parked.
+The [program bundles plan](program-bundles.md) records the temporary grant policy
+and the later consent/picker, identity and revocation direction. Signing ideas
+below remain parked.
 
 ### Signing, development spaces and requested grants
 

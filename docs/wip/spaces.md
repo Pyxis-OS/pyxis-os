@@ -20,21 +20,20 @@ POSIX compatibility is not a requirement.
 Spaces are what matter; a tab is only a space's visual representation in the
 space bar. Name flows and operations after spaces: "new space", not "new tab".
 
-The shared session interface could initially be a text display with a tab bar:
+The shared session interface is a text display with a tab bar:
 
 ```text
 [Caelum   ] [shell    ] [editor   ] [desktop A] [desktop B] [+]
 ```
 
-The [space bar](../userland/init.md#space-bar) is a scrolling viewport over
-equal-width tabs, with chevrons always reserved at each edge. Super+Left/Right
-changes selection and reveals the next neighbour in that direction when possible.
-These navigation choices do not implement the future dynamic creation flow below;
-the reserved chevron slots leave room for its add-space control.
+The implemented [space bar](../userland/init.md#space-bar) is a scrolling viewport
+over equal-width tabs with chevrons reserved at each edge; the reserved slots leave
+room for the add-space control of the future creation flow. Boot init can already
+[append spaces](../userland/init.md#space-creation), but they are never destroyed.
 
-Starting a new space shows it with an empty tab. The user enters the program to
-run in the new space and presses Enter to launch it, without requiring an
-intermediate shell. Tabs have a fixed width to simplify the initial interface.
+Starting a new space interactively would show it with an empty tab. The user enters
+the program to run in the new space and presses Enter to launch it, without an
+intermediate shell.
 
 A shell, editor, game or complete desktop environment is an ordinary application
 within a space. Multiple desktop instances can coexist. A desktop can manage
@@ -47,20 +46,17 @@ leave its tab visible for inspection or restart.
 
 ## Pinned kernel tab
 
-The first tab would be pinned and reserved for the kernel, probably titled
-**Caelum**. Initially it would show the live kernel log. The proposed first
-placement is on the bootstrap processor (BSP), with no direct userspace access
-to or control over the tab. This kernel-owned view has a different role from
-the application environments described above.
+The first tab is pinned and reserved for the kernel, **Caelum**, which shows the
+live kernel log with no direct userspace access to or control over the tab; boot
+init's messages also go there ([init](../userland/init.md)). This kernel-owned view
+has a different role from the application environments above.
 
-A later extension could add an interactive kernel monitor. A fixed input box
-at the bottom would accept commands while the log above continues updating
-independently. Command responses would be written into that same log. Possible
-commands include inspecting kernel state and spawning workloads; the command
-set and authority rules have not been designed.
-
-Log delivery from other cores, input handling and the relationship between this
-tab and the shared session interface remain open implementation questions.
+A later extension could add an interactive kernel monitor. A fixed input box at the
+bottom would accept commands while the log above continues updating independently.
+Command responses would be written into that same log. Possible commands include
+inspecting kernel state and spawning workloads; the command set and authority rules
+have not been designed. Input handling and the relationship between this tab and
+the shared session interface remain open.
 
 ## Kernel and supervisor responsibilities
 
@@ -79,8 +75,8 @@ remains undecided.
 
 The [filesystem and namespace draft](vfs.md) explores a shared system base,
 per-space overlays, shared writable storage and URI-based namespace views.
-The [process and capability ABI draft](../interfaces/processes.md) works through explicit
-resource grants and process lifetime using a console and boot-archive file.
+The [process and capability ABI](../interfaces/processes.md) is implemented as
+explicit resource grants and process lifetime.
 
 ## Asterism
 
@@ -157,21 +153,19 @@ advertised endpoint may refer to kernel IPC, an internal network service, or
 another transport. The space namespace model defines naming, visibility, access
 policy, and resource-accounting responsibilities. Discovery does not itself
 grant access; each transport must preserve the applicable authority and
-accounting boundaries.
+accounting boundaries. The implemented
+[userspace services](../interfaces/userspace-services.md) discover exported objects
+through namespaces.
 
 ## Execution placement
 
-The original prototype associated one space with each CPU. The
-[runtime SMP milestone](../kernel/smp.md) replaced that association with
-independent space identity and CPU eligibility. Trusted init can request affinity
-within its launcher's permitted CPU set before session handoff. Workload spaces
-share all online CPUs by default, including the BSP, or may be restricted to a
-CPU set. Affinity is neither an exclusive reservation nor a resource budget.
-Caelum remains the restricted kernel log space without owning CPU 0.
-
-This changes placement, not the requirement for memory containment, resource
-accounting and synchronization. The detailed SMP task list is authoritative for
-that transition; the wider space lifecycle and containment ideas remain future work.
+The [runtime SMP milestone](../kernel/smp.md) replaced the prototype's one space
+per CPU with independent space identity and CPU eligibility; workload spaces share
+all online CPUs by default or are restricted to a CPU set, and Caelum remains the
+restricted kernel log space without owning CPU 0. Affinity is neither an exclusive
+reservation nor a resource budget. This changes placement, not the requirement for
+memory containment, resource accounting and synchronization; the wider space
+lifecycle and containment ideas remain future work.
 
 ## Failure and resource isolation
 
@@ -193,7 +187,7 @@ supervisor failure has not been specified.
 - How are authority, namespaces and explicit sharing expressed?
 - What IPC mechanism connects spaces, and how are shared costs attributed?
 - What display and input interfaces connect applications to the shared session?
-- How does the pinned kernel tab receive logs and input across cores?
+- How does the pinned kernel tab receive input?
 - Where do the rest of the session interface and shared services execute?
 - What happens when a space exceeds a limit or its supervisor fails?
 - How do stopping, termination, inspection and restart affect resources and tabs?
@@ -202,11 +196,6 @@ supervisor failure has not been specified.
 IPC is undecided. No protocol or transport is selected by this draft.
 
 ## Scope boundary
-
-A potential next step to discuss is starting additional cores and launching
-workloads on them. That work needs its own scope, including per-CPU execution
-state and synchronization of shared kernel resources; this draft does not
-authorize starting it.
 
 This document records a design direction. It does not authorize implementing
 spaces, adding placeholder APIs or structures, or restructuring the current
