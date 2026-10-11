@@ -1,12 +1,11 @@
 # FAT32 volumes
 
-Status: **shared milestone proposal, owner direction 2026-10-11; not implemented.**
-Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp) and
-[installer task 3](installer-tui.md#dependencies-and-ordered-delivery) into one
-end-to-end deliverable. The owner accepted kernel placement and GPT-only
-first-profile discovery on 2026-10-11. The remaining choices in decisions 1–3
-stay proposed; every implementation task needs a separate go. Moving work does
-not complete it.
+Status: **shared milestone, decisions 1–3 accepted by the owner on 2026-10-11;
+not implemented.** Extract [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
+and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery) into one
+end-to-end deliverable. No implementation is assigned; every FAT32 task needs
+its own later owner go. The planning freeze starts after #725 merges. Moving
+work does not complete it.
 
 ## Deliverable and boundaries
 
@@ -56,7 +55,7 @@ right or automatic retry. The ordinary
 [FILE/directory](../interfaces/directories.md) protocols and libc adapters exist;
 wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
 
-## Proposed defaults requiring owner decisions
+## Accepted contract — 2026-10-11
 
 1. **Shared engine, kernel-owned releasable FAT mounts.** Put a freestanding
    shared engine in pyxis-fs, reusing the existing MPL-2.0 ESP algorithms with
@@ -116,19 +115,19 @@ wrapping FAT paths alone does not supply their lifetime or metadata guarantees.
    call a multi-sector FAT update an npfs journal commit. Interrupted writes
    can leave partial data, orphan clusters, inconsistent FAT copies or uncertain names; later host repair is outside Pyxis.
 
-   **Proposed mounted-RW extension:** mark dirty and flush before mutation, clear
+   **Mounted-RW policy:** mark dirty and flush before mutation, clear
    only after successful clean retirement; never clear a pre-existing dirty flag
-   or repair it. This is additional mounted policy for owner review. Preserve the
-   earlier raw-engine profile's no-dirty-bit-change rule until separately extended.
+   or repair it. Preserve the earlier raw-engine profile's no-dirty-bit-change
+   rule until separately extended.
    Dirty, damaged, cross-linked, inconsistent or unsupported volumes refuse writes;
    a clean flag alone is not proof of integrity or successful publication.
 3. **Bounded compatible names and real held-object lifetime.** GPT-only discovery
    is accepted by the owner (2026-10-11); MBR/bare sticks stay outside this milestone.
-   Remaining proposed geometry: validated FAT32 partitions, 512-byte FAT/device
+   First geometry: validated FAT32 partitions, 512-byte FAT/device
    sectors, valid cluster sizes, one FAT or two mirrored FATs. Unsupported
    geometry/features refuse explicitly. Validate long-name sequences,
    UTF-16→UTF-8 decoding, NT lowercase flags and aliases; list valid Unicode names.
-   Default first lookup to ASCII long names/short aliases, case-insensitive with
+   First lookup uses ASCII long names/short aliases, case-insensitive with
    preserved spelling; valid Unicode objects may be read via an unambiguous ASCII
    alias, but non-ASCII long-name lookup and mutation of those objects refuse.
    Namespace create/rename/remove additionally require all sibling names/aliases
@@ -188,7 +187,7 @@ and mounted file I/O do not require its implementation.
   `cat`, then release all views so an authorized raw publisher can claim the extent.
 - [ ] **4. Mounted read-write operations and sync.** Deliver real native mutations,
   held-handle/zero-fill semantics, selected profile, exclusive publication interval,
-  failed-state retention and the reviewed dirty-bit/clean-retirement policy.
+  failed-state retention and the accepted dirty-bit/clean-retirement policy.
   **After this task the owner can:** edit authorized files, explicitly sync and
   retire a scratch FAT mount; simultaneous conflicting raw writers are refused.
 - [ ] **5. Trusted mount workflow and qualification.** Thin mount/sync/release
@@ -208,4 +207,4 @@ short/denied/full writes, alias collisions, corrupt chains, live-handle replacem
 claim/mount races, sync errors and reference drainage. Capture matched baselines
 where existing mount/I/O paths change. No new test harness or fault injection;
 QEMU does not establish hardware power-loss durability. Native ESP writing needs
-its own explicit qualification go; this proposal performs no disk operations.
+its own explicit qualification go.
