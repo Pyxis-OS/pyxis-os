@@ -17,6 +17,10 @@ import tempfile
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_ENTRIES = 16384
 MAX_METADATA = 4 * 1024 * 1024
+# Native manifest rules/limits: userland/lib/bundle.c and lib/bundle_json.c
+# (the userspace submodule). Stack bounds: LAUNCH_INITIAL_STACK_MIN_SIZE and
+# LAUNCH_INITIAL_STACK_MAX_SIZE in include/abi/launcher.h. Keep this validator
+# and those native sources in step whenever either side changes.
 MAX_MANIFEST = 64 * 1024
 CHUNK = 1024 * 1024
 UTF8 = 0x0800
@@ -24,6 +28,7 @@ LOCAL = struct.Struct("<4s5H3I2H")
 CENTRAL = struct.Struct("<4s6H3I5H2I")
 END = struct.Struct("<4s4H2IH")
 P1F_MAGIC = b"PXE1FLAT"
+# Copied from the resource/right table in userland/lib/bundle.c.
 RIGHTS = {
     "memory": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
     "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
@@ -78,8 +83,11 @@ def manifest_path(path):
 
 
 def fields(value, required, optional=()):
-    require(type(value) is dict and set(value) >= set(required)
-            and set(value) <= set(required) | set(optional), "invalid object fields")
+    require(type(value) is dict, f"expected an object, got {value!r}")
+    missing = set(required) - set(value)
+    unknown = set(value) - set(required) - set(optional)
+    require(not missing, f"missing object fields: {sorted(missing)!r}")
+    require(not unknown, f"unknown object fields: {sorted(unknown)!r}")
 
 
 def unique_object(pairs):
@@ -148,12 +156,17 @@ def manifest_check(data, entries, tree):
         manifest_name(name)
         require(name not in seen, f"duplicate startup binding: {name!r}")
         seen.add(name)
-        require(type(resource) is str and resource in RIGHTS, "unknown grant resource")
-        require(type(grant["required"]) is bool, "required must be Boolean")
-        require(type(rights) is list and rights, "rights must be a nonempty list")
-        require(all(type(right) is str and right in RIGHTS[resource] for right in rights),
-                "unknown grant right")
-        require(len(set(rights)) == len(rights), "duplicate grant right")
+        require(type(resource) is str and resource in RIGHTS,
+                f"unknown grant resource {resource!r} for {name!r}")
+        require(type(grant["required"]) is bool,
+                f"grant {name!r} field 'required' must be Boolean: {grant['required']!r}")
+        require(type(rights) is list and rights,
+                f"grant {name!r} field 'rights' must be a nonempty list: {rights!r}")
+        for right in rights:
+            require(type(right) is str and right in RIGHTS[resource],
+                    f"unknown grant right {right!r} for resource {resource!r}")
+        require(len(set(rights)) == len(rights),
+                f"duplicate grant rights for {name!r}: {rights!r}")
     for path in [value["entry"], *commands.values()]:
         manifest_path(path)
         entry = entries.get("app/" + path)

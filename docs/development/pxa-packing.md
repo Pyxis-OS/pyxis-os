@@ -36,6 +36,12 @@ separate byte sequences. The destination must be outside the source tree.
 Manifest validation follows the existing [format-1 contract](../wip/program-bundles.md#manifest-and-stack):
 strict UTF-8 JSON, unique decoded keys, unsigned integer numbers, known fields,
 native name/path rules, command/resource/grant budgets and binding collisions.
+The source of truth is `lib/bundle.c` in the userland repository (the `userspace`
+submodule), with JSON syntax/depth rules in `lib/bundle_json.c`. Stack bounds
+come from `LAUNCH_INITIAL_STACK_MIN_SIZE` and `LAUNCH_INITIAL_STACK_MAX_SIZE` in
+[include/abi/launcher.h](../../include/abi/launcher.h). The host validator copies
+these rules, limits and the grant table; changes to either implementation must
+update both together.
 The stack request, when present, must be page aligned and between 1 and 8 MiB;
 omission keeps the native 1 MiB default. Every entry and command must resolve
 to a regular `app/` file with the `PXE1FLAT` prefix; each resource path must
