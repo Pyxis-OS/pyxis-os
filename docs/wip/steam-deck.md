@@ -1,8 +1,9 @@
 # Steam Deck as the second hardware target
 
 Status: **proposal; nothing is implemented and no task is assigned.** The owner
-approved writing this on 2026-10-11. Each task below needs its own go, and its
-unresolved behavior is settled in its task proposal before code starts.
+approved writing this and accepted its [three decisions](#owner-decisions-2026-10-11)
+on 2026-10-11. Each task below needs its own go, and its unresolved behavior is
+settled in its task proposal before code starts.
 
 The ThinkPad T14 Gen 1 (AMD) stays the primary machine. A Steam Deck OLED adds a
 second AMD machine with a handheld form factor: a portrait panel, a touchscreen,
@@ -23,11 +24,11 @@ UEFI x64. The firmware also offers UEFI PXE over IPv4 and IPv6 and an IOMMU opti
 | --- | --- | --- |
 | CPU | AMD Custom APU 0932, Zen 2 (family 17h, model 91h), 4 cores/8 threads | First boot (2026-10-09) showed 8 CPUs, HPET and uACPI working; the battery appears in the bar |
 | Panel/GPU | eDP 800x1280 portrait; AMD GPU `1002:1435`; DisplayPort from the dock | Limine's GOP framebuffer works at 800x1280, unrotated. No native GPU driver, as on the ThinkPad ([display](../kernel/display.md)) |
-| Storage | Phison PS5021-E21 NVMe (`1987:5021`), 954 GB, SteamOS GPT with eight partitions | Covered by the [NVMe driver task](nvme-coexistence.md#1-nvme-driver); the Deck boots from a USB stick meanwhile |
+| Storage | Phison PS5021-E21 NVMe (`1987:5021`), 954 GB, SteamOS GPT with eight partitions | Covered by the [NVMe driver task](nvme-coexistence.md#1-nvme-driver); the Deck boots over PXE or from a USB stick meanwhile |
 | SD card | O2 Micro `1217:8621` reader | Later |
 | USB | `04:00.3` xHCI (dock hubs and ports) and `04:00.4` xHCI, internal, whose USB 2 port carries the Steam Controller; its USB 3 root has no ports | The [xHCI driver](../devices/usb-xhci.md) runs on `04:00.3`; whether `04:00.4` came up is not recorded; see [first boot](#first-boot-2026-10-09) |
 | Dock | VIA hubs `2109:2817` (USB 2) and `2109:0817` (USB 3); the keyboards used for the inventory sit on the USB 2 side | The same [USB 2 hub path](../devices/usb-hid.md) that works on the ThinkPad dock |
-| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | No USB network driver exists; see [task 9](#9-dock-ethernet) |
+| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | No Pyxis USB network driver exists; see [task 9](#9-dock-ethernet). Firmware PXE through it is unchecked; see [the first check](#first-check-pxe-through-the-dock) |
 | Wi-Fi | Qualcomm QCA2066 (`17cb:1103`, ath11k) | Out of scope, as for the ThinkPad |
 | Bluetooth | The same QCA2066, attached by UART (ACPI `AMDI0020`), not USB | Needs a UART transport under the [HCI layer](../devices/bluetooth-hci.md); see [task 10](#10-bluetooth-over-uart) |
 | Controls | Steam Controller `28de:1205`, internal USB: three HID interfaces and a CDC-ACM pair | Lizard mode only; see [task 2](#2-built-in-controls-in-lizard-mode) |
@@ -55,7 +56,17 @@ This is unmeasured on the Deck.
 Order: tasks 1 to 3 make the Deck usable at all; touch is the owner's priority and
 follows. Tasks 4 to 6 need no display work and can proceed in parallel with tasks
 2 and 3; task 7 needs task 3. Ethernet, Bluetooth and audio come after touch
-unless the owner reorders them ([decision 2](#owner-decisions)).
+unless the owner reorders them ([decision 2](#owner-decisions-2026-10-11)).
+
+### First check: PXE through the dock
+
+An owner check, no code, and the first step: whether the Deck firmware boots by
+UEFI PXE through the dock's AX88179A, fetching Limine, the kernel and the initrd
+over TFTP as the ThinkPad does. Only the firmware's own network driver is
+involved, so Pyxis needs no networking for it. If it works, the Deck's development
+loop is the same PXE loop as the ThinkPad's, with the dock NIC's MAC kept only in
+horse's dnsmasq configuration and never in the repository. If it does not, the
+USB stick is the fallback loop and everything below still applies.
 
 ### 1. xHCI settle window
 
@@ -67,6 +78,9 @@ connected ports stop changing, with a fixed upper bound, and the log says whethe
 it ran to the bound. It is a boot-time wait, not a hot-plug design: runtime
 attachment of storage stays outside the current [USB profile](../devices/usb-enumeration.md#bounded-runtime-hid-attachment).
 The cost is added boot time on every machine, so record it on the ThinkPad too.
+A PXE boot removes the stick from the boot path but not the rule: Pyxis's own
+xHCI still takes one snapshot of the dock's hubs and devices, so measure the dock
+keyboards too, and keep the task for the stick fallback.
 
 **After this task the owner can:** boot the Deck from the USB-C stick to the
 shell with the system and home volumes mounted, as on the ThinkPad.
@@ -194,11 +208,14 @@ traverses supported SuperSpeed hubs, but only HID leaves on USB 2 paths and BOT
 storage are bound), bulk and interrupt endpoint scheduling for a network class,
 the CDC-NCM transfer-block framing, and a NIC provider under the existing
 [network stack](../devices/networking.md) and [`net0` selection](../devices/net0-selection.md).
-Verify the firmware's own boot support for a USB NIC; it is unconfirmed, and it
-decides whether the [PXE loop](#owner-decisions) works on the Deck.
+Firmware PXE does not depend on this task (see [the first check](#first-check-pxe-through-the-dock)),
+since the firmware fetches the boot files with its own driver. Pyxis networking
+is still what the Deck needs for the UDP log, the remote terminal, the
+[network debugger](network-debugger.md) and hands-free A/B runs; without it a
+stick-only Deck has none of them.
 
 **After this task the owner can:** get a DHCP lease and reach the network from
-the Deck through the dock.
+the Deck through the dock, and use the UDP log and remote terminal on it.
 
 ### 10. Bluetooth over UART
 
@@ -236,19 +253,19 @@ windows and the compositor; touch adds hit testing by contact, per-contact
 focus and an on-screen keyboard. [Technical debt](../technical-debt.md#pointer-gestures-and-alternative-transports)
 records that the pointer has no touch-contact API today.
 
-## Owner decisions
+## Owner decisions (2026-10-11)
 
-1. **Touch representation.** Proposed default: contacts are their own event type
-   from the first touch task, and only a small contact-drawing program consumes
-   them at first; pointer translation, if wanted, is a later userspace policy.
-   Alternative: translate touch to the system pointer first, so the shell and mux
-   respond to taps sooner, and add contacts later.
-2. **Priority.** Proposed default: tasks 1 to 3, then touch (4 to 8), then dock
-   Ethernet, Bluetooth and audio. Alternative: Ethernet before touch if a
-   network is needed to move files and logs to the Deck.
-3. **Development loop.** Proposed default: the USB stick (works after task 1, no
-   new driver). The PXE loop that the ThinkPad uses becomes an option only after
-   task 9, if the firmware boots from the dock's USB NIC.
+1. **Touch representation: accepted.** Contacts are their own event type from the
+   first touch task. Only a small contact-drawing program consumes them at first;
+   pointer translation, if wanted, is a later userspace policy, so the shell and
+   mux do not respond to taps at first.
+2. **Priority: accepted.** Tasks 1 to 3, then touch (4 to 8), then dock Ethernet,
+   Bluetooth and audio. The remote tools depend on task 9, so the owner can move
+   Ethernet earlier if Deck iterations become frequent.
+3. **Development loop: PXE.** The owner wants the Deck in a PXE loop like the
+   ThinkPad's. The [first check](#first-check-pxe-through-the-dock) decides whether
+   the firmware can do it through the dock; if not, the USB stick is the fallback.
+   Pyxis-side networking keeps its place in task 9.
 
 ## Not decided
 
