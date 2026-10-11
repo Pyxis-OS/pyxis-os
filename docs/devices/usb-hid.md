@@ -14,16 +14,18 @@ the deferred startup worker creates it after scheduling begins.
 
 ## Binding and ownership
 
-Select the first supported configuration, with at most one boot keyboard and
-one relative Mouse application interface per device, including composite dongles. Existing
+Select the first configuration with eligible HID interface metadata, with at most
+one boot keyboard and one relative Mouse application interface per device,
+including composite dongles. Existing
 storage and Bluetooth class owners take priority; a configuration mixing those
 classes with HID is not partly claimed. Each interface needs one interrupt IN
 endpoint. Boot keyboards require SET_PROTOCOL(boot); admitted boot mice select
 report protocol, and nonboot mice already use it. Configuration precedes bounded
 report admission and selected endpoint setup; receives start only after protocol,
 Feature negotiation and initial snapshots. Initial GET_REPORT queries every
-button-bearing report ID when supported; a STALL starts that interface with no held keys or
-buttons, without rejecting its composite sibling. Before continuing, xHCI
+button-bearing report ID when supported; a STALL starts that ID all-up (or the
+boot keyboard all-up), without clearing another ID or rejecting its composite
+sibling. Before continuing, xHCI
 resets halted EP0, clears the owning transaction translator when applicable,
 and advances the dequeue pointer past the failed transfer. Failed recovery or
 other GET_REPORT errors still fail closed.
@@ -80,16 +82,20 @@ keyboard; it does not add independent interface retirement.
 Admission is bounded to the prepared 4,096-byte control and 1,024-byte Input
 capacity, 16 layouts, 64 relevant fields and eight collection/global pushes.
 The largest declared Input report determines the receive length, independently
-of endpoint packet size. One worker-only adjustment before receives start handles
-confirmed boot fallback; backing remains retained until reboot.
+of endpoint packet size. HID §8.4 requires shorter reports to terminate with a
+short packet, including a zero-length packet for an exact packet multiple; one
+transfer can span multiple packets. One worker-only adjustment before receives
+start handles confirmed boot fallback; backing remains retained until reboot.
 
-Understood wheel-scoped Resolution Multiplier Features use a complete read,
+Understood logical wheel-scoped Resolution Multiplier Features use a complete read,
 scalar-only modification and readback. Unrelated bits survive. Only confirmed
 positive integral effective multipliers qualify, including logical-to-physical
 mapping and Unit Exponent. Unknown wheel scale disables the affected axis;
 a scope covering other controls refuses report admission. The coordinator keeps
 per-source/axis conversion fractions and applies mouse direction once. No
-output-report driver or guessed native wheel extension is added.
+output-report driver or guessed native wheel extension is added. Report-wide or
+otherwise unknown multiplier scopes refuse this first profile; alternate
+configurations are not retried after report admission refuses the selected one.
 
 Unsupported report admission may fall back on an actual boot mouse only after
 confirmed SET_PROTOCOL(boot), decoding the defined three-byte prefix. The exact
@@ -100,6 +106,10 @@ scroll or extra buttons. Runtime failure never switches protocol silently.
 protocol/layout/multiplier dumps at info level, for native qualification. Normal
 boots add no dump or packet logging. Device string/serial descriptors are never
 read or printed by this diagnostic.
+Dumping consumes the existing admission/progress budget; use it on a small
+qualification topology, not as a timing measurement. Maximum descriptor/field
+output is roughly 35 KiB per binding (about three seconds at 115200 baud before
+other logging costs); many candidates may exhaust the shared discovery deadline.
 
 Holds observed in a successful initial snapshot supply no new presses; release
 those keys/buttons before that source can activate input. A device that stalls
@@ -117,11 +127,12 @@ producer. Steam Deck lizard mode would be eligible only if its actual USB
 interfaces fit these admitted protocols; no Deck compatibility is established.
 
 References: [USB HID 1.11](https://www.usb.org/sites/default/files/hid1_11.pdf),
-§§7.2.4–7.2.6 and appendices B/C/F; QEMU 10.2.2
+§§7.2.4–7.2.6, §8.4 and appendices B/C/F; QEMU 10.2.2
 [HID reports](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/hw/input/hid.c),
 [queue capacity](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/include/hw/input/hid.h)
 and [USB descriptors](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/hw/usb/dev-hid.c).
 Protocol constants and descriptor bytes identify those layouts; no upstream
-implementation code is copied. The [qualification record](../development/experiments/usb-hid/README.md)
-holds the QEMU and native results, and [technical debt](../technical-debt.md#usb-hid-native-coverage)
-the coverage still open.
+implementation code is copied. The [earlier boot-input qualification](../development/experiments/usb-hid/README.md)
+and [report-mouse qualification](../development/experiments/pointer-input-quality/README.md)
+keep their QEMU/native evidence distinct; [technical debt](../technical-debt.md#usb-hid-native-coverage)
+records coverage still open.

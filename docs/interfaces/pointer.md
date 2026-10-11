@@ -71,8 +71,9 @@ A packet with no relevant change produces no ordinary event.
 
 The queue holds 64 events. At capacity, an ordinary event can coalesce with the
 newest ordinary event only when buttons and both identities match: it retains
-the latest position and independently saturates both scroll axes and locked relative counts at the signed
-32-bit limits. Otherwise the queue and accepted buttons are cleared and
+the latest position and independently saturates both scroll axes and locked
+relative counts at the signed 32-bit limits. Otherwise the queue and accepted
+buttons are cleared and
 `POINTER_STATE_RESET` is queued. Notifications wake blocked readers while
 graphics is hidden or its space is inactive; a read may otherwise continue
 waiting. Focus loss preserves execution authority. [Source loss](#input-source-coordination) resets accepted input and
