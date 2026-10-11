@@ -289,6 +289,36 @@ rebased directly onto main `dca986b`; its only ahead commit is the scroll
 integration. The stacked rint/FP_ILOGB commits are dropped; ports #99 remains
 `28b5a3bc`. Dependencies merge before the parent. No compiler rebuild.
 
+Qualification of the correction at parent `7049e9a2` / userland `f18f07b`:
+probe and default `make -j16 image` builds pass with the existing builder.
+The first QEMU ISO attempt exits 139 during Limine loading, before kernel output,
+matching the documented host AHCI CD-ROM problem. Qualification instead boots a
+read-only 192 MiB FAT disk on VirtIO-blk (same source-built kernel/initrd), QEMU
+10.2.2 Q35/nested KVM/host CPU, four CPUs/512 MiB, 1280x800 boot framebuffer.
+The archive's Development space is authored with `multiplexer = true`.
+
+With `usb.hid.describe=1` alone, two USB2 hubs, USB keyboard and two mice:
+GET_PROTOCOL returns 1 for each report mouse. USB Super+R chords, typing, second
+mouse motion and low/full-speed leaf replug pass. A 15-second interactive QMP
+wheel flood sends 12,044 down, 11,993 up and 11,674 alternating ±127 commands.
+GDB after replug finds running=true, failed=false, no pending command, 2,415
+events and empty interrupt queues; keyboard receives eight bytes, QEMU mice
+four (matching their packet capacities). The default-options boot shows both
+diagnostic flags false, no diagnostic lines, and healthy USB. Mux wheel browsing
+enters scrollback and returns to live at the newest endpoint; USB typing then
+prints `defaultalive`. Local captures/GDB/serial remain in
+`build/receiver-fix-qemu/`; all task-owned QEMU/debugger jobs are stopped.
+
+The existing manual host caller against the actual parser accepts both captured
+native descriptor layouts, rejects ID-0 four-byte and out-of-range packets
+without altering button snapshots, and accepts a subsequent valid report. No
+new framework or kernel fault injection. Per-interface streak reset, the
+sixteenth-malformed retirement and initial-snapshot paths were source-reviewed;
+no injected malformed-stream runtime result is claimed. Stock QEMU has no
+composite Logitech/ASUS model, native 1 kHz mouse cadence or Pan coverage.
+These checks do not establish that native babble was the trigger or that either
+receiver's intermittent protocol behavior is fixed.
+
 Native qualification remains pending. Luna should rebuild the submitted parent
 head with the same `USB_HID_DESCRIBE=1 LOG_LEVEL=info` and boot options
 `usb.hid.describe=1 usb.xhci.diagnose=1 log.udp=1`. Confirm ASUS works from its
