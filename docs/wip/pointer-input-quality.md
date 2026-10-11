@@ -1,7 +1,8 @@
 # ThinkPad pointer input quality
 
 Plan accepted 2026-10-10; **implementation tasks require a separate owner go**.
-Two device tracks can proceed in parallel when assigned. Scope:
+Task 1 is assigned to Codex alpha by the owner, 2026-10-11; task 2 follows a
+separate owner go. The source/scroll/policy base is part of task 1. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
