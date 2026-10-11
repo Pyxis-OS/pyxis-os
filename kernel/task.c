@@ -50,19 +50,14 @@ struct task {
   struct task_profile *profile;
   enum task_kind kind;
   struct process *process; /* Borrowed submitted/prepared lifetime; NULL for workers. */
-  struct process_task_member process_member;
   uintptr_t kernel_stack;
   uintptr_t saved_stack;
   uintptr_t entry, user_stack;
-  uintptr_t user_argument;
   struct arch_user_state cpu;
-  struct private_context stack_context, fs_context;
-  struct thread_control *thread_control;
-  struct thread_result thread_result;
-  bool fs_bound, thread_exit_pending, faulted;
   size_t cpu_index;
   bool exited, in_syscall;
   atomic_bool vm_continuation;
+  bool thread_exit_pending;
   size_t vm_borrowers; /* Process VM guard; owned by this task's active accesses. */
   struct process_vm_held vm_held;
   bool vm_parked; /* queues_locked; separate from resource waits. */
@@ -75,6 +70,13 @@ struct task {
   struct task_wait wait_record;
   struct task_wait *wait;
   bool parked; /* queues_locked: stack saved and no CPU is executing this task. */
+  /* Cold lifecycle storage stays after the scheduler/copy state. */
+  struct process_task_member process_member;
+  uintptr_t user_argument;
+  struct private_context stack_context, fs_context;
+  struct thread_control *thread_control;
+  struct thread_result thread_result;
+  bool fs_bound, faulted;
 };
 
 struct scheduler {
@@ -1161,13 +1163,12 @@ static void reap_completed(void)
     struct process *process = task->process;
     if (task->kind == TASK_USER) {
       struct process_result result;
+      process_task_detach(process, &task->process_member);
       if (process_result_get(process, &result)) {
         /* Fault entry elects the result without taking lifetime ownership.
-         * Fan out its safe-stop request here on the permanent BSP stack. */
+         * Stop only remaining members, after removing this retired target. */
         process_request_stop(process);
       }
-      process_task_detach(process, &task->process_member);
-      process_result_get(process, &result);
       size_t cpu_index = task->cpu_index;
       struct private_context stack_context = task->stack_context;
       struct private_context fs_context = task->fs_context;
