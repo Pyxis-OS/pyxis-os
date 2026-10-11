@@ -50,8 +50,9 @@ for Clang differ in the fast types: exact/least types
 use 8/16/32/64 bits, fast types use 32 bits through `int_fast32_t` and 64 bits
 for `int_fast64_t`, and pointer/max types use `long`/`unsigned long`. Limits and
 constant suffixes preserve the Pyxis choices first made with GCC. `MB_LEN_MAX` is 4
-for libc's stateless UTF-8 `mbtowc` and bounded `iconv`; these headers add no
-conversion code, signals or wide-character I/O. Only the C locale exists
+for libc's stateless UTF-8 `mbtowc` and bounded `iconv`; the limits headers
+themselves add no runtime facilities, and signals and wide-character I/O are
+absent. Only the C locale exists
 (`setlocale`, no `localeconv`).
 
 `inttypes.h` includes stdint.h and supplies PRId/PRIi/PRIo/PRIu/PRIx/PRIX

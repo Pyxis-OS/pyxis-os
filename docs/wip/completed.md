@@ -68,7 +68,7 @@ and the completed-frame handoff (#610, #618); step 3 is unassigned.
 [Program image and initial stack capacity](../kernel/program-loading.md),
 2026-10-09: 256 MiB image span and 1 MiB guarded stacks, with
 [matched costs](../development/experiments/program-capacity/README.md). Thread
-tasks 1 to 3 merged in #612, #671 and #684, and task 4 is in review (#700); see
+tasks 1 to 3 merged in #612, #671 and #684; see
 [threads](threads.md). A process still has exactly one user task.
 
 [Remote debugging without serial](../development/remote-debugging.md), 2026-10-07.
