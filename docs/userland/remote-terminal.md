@@ -87,8 +87,20 @@ build/tools/pyxis-remote --mux 127.0.0.1 2323
 
 Packaged configurations leave this opt-in false. An unavailable request is
 rejected without a fallback shell. `--mux` cannot accompany `--machine`,
-`--no-shell-echo` or `--download-dir`; initial character dimensions come from
-TIOCGWINSZ or explicit `--columns`/`--rows`. Live remote resize is unsupported.
+`--no-shell-echo` or `--download-dir`. Character dimensions follow the host
+window through TIOCGWINSZ and SIGWINCH, within 1–512 columns and 1–256 rows.
+Explicit `--columns`/`--rows` are ceilings, further limited by the actual host
+window. Transient zero dimensions are ignored. A bounded signal pipe wakes the
+client even while input, transport or stdout is stalled; one outstanding resize
+and the latest desired size coalesce window changes.
+
+Applied geometry confirms the outer native terminal's resize, independently of
+pane layout completion or host display. Shrink clips the focused pane and keeps
+hidden panes running; growth restores the retained layout. The host preserves
+partial CSI/UTF-8 and OSC-discard state, colours, tab width and queued output.
+Changed applied dimensions clamp its cursor, clear delayed wrap, reset margins
+and clear the view for mux's repaint; identical dimensions leave it unchanged.
+One-row presentation clears its row without scrolling other host rows.
 
 The daemon loads `bin://mux.pxe` inside its outer remote group and creates each
 pane's independent terminal, group and stock root shell through a private
@@ -100,6 +112,11 @@ publication. Mux receives no CREATE_GROUP, terminal creation, physical input,
 DRAW or clipboard-store grant. Pane shells receive neither broker nor group
 supervision. The live-only remote power and optional screen-capture policies
 remain unchanged.
+
+[Neovim's bundle](neovim.md) requires launcher and pipe-creation authority.
+The existing `launch = true` delegates those grants through pane shells to
+`bin://nvim.pxb`; packaged live Remote enables it. An owner-added Remote space
+needs the same setting; enabling mux alone does not provide it.
 
 The [existing mux controls](multiplexer.md#controls-and-layout) provide BSP/equal
 splits, eight stable digits, arrow focus, history and close confirmation.
@@ -121,7 +138,12 @@ four-grant cwd chunks and a current ten-second deadline; uncertain publication
 cancels tracked work and ends mux without retry. Disconnect/outer exit seals
 admission and terminates every group. FINAL and slot reuse require outer and
 all-pane cleanup, independently of the five-second transport-drain limit.
-See the [implemented contract and remaining task](../wip/remote-multiplexer.md).
+See the [implemented contract](../wip/remote-multiplexer.md) and
+[resize qualification](../development/experiments/remote-multiplexer-resize.md).
+Kilo and Neovim resize/save checks were performed in staging QEMU; native
+horse/PXE qualification remains owner work. A saturated host reader can exhaust
+the existing five-second close deadline and disconnect before FINAL even when
+guest groups are reaped.
 
 ## Reverse connections
 
@@ -297,7 +319,7 @@ macOS publication still require owner validation. See the
 
 ## Client modes
 
-Interactive mode uses a raw host terminal with fixed dimensions and restores its
+Interactive mode uses a raw host terminal and restores its
 settings and cursor on normal exit and handled failures. Ctrl+C and Ctrl+D are
 forwarded to the guest; Ctrl+] requests session closure locally. Ctrl+C cancels
 the line at the prompt and [terminates a running foreground job](shell.md#interrupting-foreground-commands).
@@ -308,7 +330,9 @@ after which the client disconnects and reports incomplete closure. A saturated
 local outgoing queue pauses stdin, so an escape behind a long paste may itself
 be delayed. Sending the host client SIGINT/SIGTERM or closing its terminal
 forces disconnection. Unacknowledged failure paths use abortive TCP close so
-a pending send backlog cannot hold FIN ahead of termination. Resize and reattachment are unsupported.
+a pending send backlog cannot hold FIN ahead of termination. Ordinary interactive
+and machine sessions keep fixed dimensions; `--mux` negotiates live resize.
+Reattachment is unsupported.
 
 The presentation tracks the native TTY subset across output records: LF resets
 the column, tabs move without erasing and clamp to the edge, wrapping is delayed,
@@ -430,16 +454,17 @@ successful command result.
 
 The shared [wire header](../../include/remote/terminal.h) is exported in the SDK
 under `remote/terminal.h`. Each frame has two big-endian unsigned 32-bit fields:
-type and payload length. Payloads are at most 4096 bytes. Integers are encoded
-explicitly; no native C layout crosses the wire. Partial headers/payloads,
-coalesced frames and short writes are ordinary TCP behavior.
+type and payload length. Payloads are at most 4096 bytes. All integers use
+explicit big-endian encoding; no native C layout crosses the wire. Partial
+headers/payloads, coalesced frames and short writes are ordinary TCP behavior.
 
 | Direction / type | Payload |
 | --- | --- |
-| Client HELLO (1) | Three u32: columns 1–512, rows 1–256, options (bit 0 NO_SHELL_ECHO, bit 1 MULTIPLEXER) |
+| Client HELLO (1) | Three u32: columns 1–512, rows 1–256, options (bit 0 NO_SHELL_ECHO, bit 1 MULTIPLEXER, bit 2 RESIZE) |
 | Client INPUT (2) | 1–4096 input bytes |
 | Client END_INPUT (3) | Empty; preserve queued input, then EOF |
 | Client CLOSE (4) | Empty; terminate outer and tracked pane groups |
+| Client RESIZE (5) | u64 request ID, u32 columns, u32 rows; exactly 16 bytes |
 | Server READY (16) | Empty; root shell or mux successfully launched |
 | Server OUTPUT (17) | 1–4096 native terminal bytes |
 | Server FRESH_LINE (18) | Empty |
@@ -447,6 +472,7 @@ coalesced frames and short writes are ordinary TCP behavior.
 | Server ERROR (20) | One u32 error code |
 | Server FINAL (21) | Four u32: cause, process reason, signed exit-status bits, drain outcome |
 | Server COMMAND_COMPLETE (22) | u64 command number, u32 kind, u32 status; exactly 16 bytes |
+| Server GEOMETRY (23) | u64 request ID, u32 applied columns, u32 applied rows; exactly 16 bytes |
 
 HELLO must arrive within ten seconds, precede other client frames and appear
 once. Unknown option bits or any other HELLO size are rejected as a bad frame.
@@ -455,6 +481,20 @@ admission is rejected as resource failure. INPUT after END_INPUT, malformed
 lengths and unknown types are rejected. COMMAND_COMPLETE follows READY and
 precedes FINAL in ordinary shell terminal output order; mux emits no per-pane
 command-completion frames.
+
+RESIZE requires MULTIPLEXER in HELLO; ordinary and machine connections do not
+negotiate it. For a negotiated connection, empty READY is followed by GEOMETRY
+with ID zero and initial dimensions before terminal records. Subsequent request
+IDs are nonzero and strictly increasing; the client has one request outstanding
+and retains only its latest desired target. An acknowledgment must match that
+request's ID and dimensions, even if the host window changed again meanwhile.
+The daemon finishes its current wire frame before applying native resize, then
+queues GEOMETRY before draining further terminal records. Native queues and
+partial parser state remain intact; queued bytes use the presentation's current
+geometry. Native resize failure reports ERROR internal and follows normal group
+cleanup without a success acknowledgment. No stream grants or additional daemon
+wait interests are needed for geometry metadata.
+
 Kinds are exited (1), faulted (2), terminated (3), launch failed (4), builtin
 (5), rejected (6) and launched (7). Status carries signed exit-code bits for
 exited, 0 or 1 for builtin and must be zero otherwise. The client rejects
@@ -558,8 +598,8 @@ there is no idle timeout or per-session CPU/memory quota. Transport record
 capacity, including pending handshakes and TIME_WAIT, can prevent admission even
 below that session count.
 
-SSH/Telnet compatibility, authentication/TLS, resize, reattachment, remote graphics,
-the [remote-multiplexer plan](../wip/remote-multiplexer.md), a navigator, task migration and process
+SSH/Telnet compatibility, authentication/TLS, ordinary/machine live resize,
+reattachment, remote graphics, a navigator, task migration and process
 threads remain separate work. Current costs and revisit points are recorded in
 [technical debt](../technical-debt.md#initial-independent-terminal-limits) and
 [execution-group shutdown](../technical-debt.md#execution-group-shutdown).
