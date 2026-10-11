@@ -371,6 +371,27 @@ at most sixteen actual bytes, with no keyboard payload. Declared Keyboard/Keypad
 collections or keyboard Input usages on a mixed Mouse interface suppress raw
 bytes there as well. No boot-format fallback is implemented or inferred.
 
+Correction checks (decoder `9afb06bc`, sampling restriction `ff884d31`, unchanged
+dependency pins): default/probe image builds pass. The existing manual host caller
+against the actual parser decodes extended G502/ASUS packets identically to the
+complete admitted prefix, zero-fills two-byte and partial-field ID-2 inputs,
+and accepts ASUS ID-1 length four as a Consumer layout. Unknown ID 0 and
+out-of-range values still fail without changing button snapshots. Both captured
+Mouse descriptors have keyboard_data=0, allowing the requested capture. These
+are constructed host inputs against measured descriptors, not captured ASUS
+payloads. Feature exactness and mixed-keyboard raw suppression were reviewed.
+No new framework or kernel fault injection.
+
+QEMU 10.2.2 Q35/nested KVM/host CPU, four CPUs/512 MiB, read-only VirtIO FAT
+boot disk, USB keyboard plus full-speed mouse (`usb_version=1`), same current
+kernel/initrd: default options have no diagnostic lines, USB `echo lengthalive`
+works, wheel/motion and replug pass; GDB finds healthy controller, no pending
+command, empty queues and 136 events. The final diagnostic boot with both options
+prints `probealive` and readback=1, handles motion/wheel, and remains healthy at
+99 events. Actual malformed wire logging and ASUS motion require the native
+retest; QEMU was not made to produce bad packets. Evidence remains local in
+`build/length-tolerance-qemu/`; all owned QEMU/debugger jobs are stopped.
+
 Luna should rebuild the next submitted head with the same flags/options. Preserve
 the G502 pass as a control; try ASUS ordinary motion, left/right buttons and
 wheel. Retain `usb HID mouse sample` and `Input ID` lines alongside readback and
