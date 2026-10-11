@@ -124,6 +124,12 @@ return {
   Local session/shell and mux pane handoffs forward each on foreground startup;
   background commands and services receive neither. Grants alone authorize no
   read: graphics calls require display/keyboard ownership and physical activation.
+- **Remote multiplexer.** `remote_multiplexer` is an optional boolean, defaulting
+  to false. It preserves a distinct terminal CREATE grant through trusted startup
+  to the remote daemon, which brokers panes for explicit `pyxis-remote --mux`
+  requests. It does not enable local mux, pointer control or clipboard stores.
+  Packaged live and installed configurations leave it false. See
+  [remote mux](remote-terminal.md#remote-multiplexer) for admission and LAN exposure.
 - **Power.** A space that sets `power = true` receives the kernel's `power`
   resource, with power-off and restart rights, for the shell's
   [`poweroff` and `reboot`](shell.md#power-off-and-restart). Any number of spaces
