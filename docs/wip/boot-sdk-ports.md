@@ -51,8 +51,13 @@ blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
 [Steam Deck second hardware target](steam-deck.md): the owner (2026-10-11), plan
-accepted with a PXE development loop; the first step is the owner's check of
-firmware PXE through the dock, and no task is assigned.
+accepted with a PXE development loop. The owner's firmware PXE check passed through
+the dock on 2026-10-11 (dock keyboard and mouse work; the internal xHCI `04:00.4`
+with the Steam Controller timed out). No task is assigned.
+
+[ThinkPad pointer input quality](pointer-input-quality.md): Codex alpha
+(2026-10-11), accepted USB report mice and Synaptics absolute mode and
+palm-rejection plan. Task 1 is assigned, with task 2 to follow.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
 lifecycle, parking, TLS and libc delivery. Tasks 1–4 are merged and task 5 is in
@@ -110,10 +115,6 @@ System layout follow-ups: network configuration on the pool instead of the archi
 
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
-
-[ThinkPad pointer input quality](pointer-input-quality.md): Codex (2026-10-10),
-accepted USB report mice and Synaptics absolute mode and palm-rejection plan;
-implementation tasks need a separate go.
 
 ## Directions
 

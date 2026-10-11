@@ -28,7 +28,7 @@ UEFI x64. The firmware also offers UEFI PXE over IPv4 and IPv6 and an IOMMU opti
 | SD card | O2 Micro `1217:8621` reader | Later |
 | USB | `04:00.3` xHCI (dock hubs and ports) and `04:00.4` xHCI, internal, whose USB 2 port carries the Steam Controller; its USB 3 root has no ports | The [xHCI driver](../devices/usb-xhci.md) runs on `04:00.3`; whether `04:00.4` came up is not recorded; see [first boot](#first-boot-2026-10-09) |
 | Dock | VIA hubs `2109:2817` (USB 2) and `2109:0817` (USB 3); the keyboards used for the inventory sit on the USB 2 side | The same [USB 2 hub path](../devices/usb-hid.md) that works on the ThinkPad dock |
-| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | No Pyxis USB network driver exists; see [task 9](#9-dock-ethernet). Firmware PXE through it is unchecked; see [the first check](#first-check-pxe-through-the-dock) |
+| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | No Pyxis USB network driver exists; see [task 9](#9-dock-ethernet). Firmware PXE through it works; see [the first check](#first-check-pxe-through-the-dock) |
 | Wi-Fi | Qualcomm QCA2066 (`17cb:1103`, ath11k) | Out of scope, as for the ThinkPad |
 | Bluetooth | The same QCA2066, attached by UART (ACPI `AMDI0020`), not USB | Needs a UART transport under the [HCI layer](../devices/bluetooth-hci.md); see [task 10](#10-bluetooth-over-uart) |
 | Controls | Steam Controller `28de:1205`, internal USB: three HID interfaces and a CDC-ACM pair | Lizard mode only; see [task 2](#2-built-in-controls-in-lizard-mode) |
@@ -59,6 +59,12 @@ follows. Tasks 4 to 6 need no display work and can proceed in parallel with task
 unless the owner reorders them ([decision 2](#owner-decisions-2026-10-11)).
 
 ### First check: PXE through the dock
+
+**Result, 2026-10-11: passed.** The owner booted the Deck over UEFI PXE through the
+dock (dnsmasq tag `deck`). The dock's USB keyboard and mouse worked in Pyxis. The
+internal xHCI `04:00.4`, which carries the Steam Controller, timed out; task 2
+starts from that. The Deck's development loop is the PXE loop, with the USB stick
+as the fallback. The text below is the check as posed.
 
 An owner check, no code, and the first step: whether the Deck firmware boots by
 UEFI PXE through the dock's AX88179A, fetching Limine, the kernel and the initrd
