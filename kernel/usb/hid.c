@@ -914,7 +914,7 @@ static bool decode_mouse_report(struct usb_hid_binding *binding,
 static void diagnose_mouse_sample(struct usb_hid_binding *binding,
     struct usb_hid_interface *interface, size_t bytes)
 {
-  if (!diagnostics_enabled() || interface->protocol != USB_PROTOCOL_MOUSE ||
+  if (!diagnostics_enabled() || interface->protocol != USB_PROTOCOL_MOUSE || !interface->report_protocol ||
       interface->malformed_samples == USB_HID_MALFORMED_SAMPLES) {
     return;
   }

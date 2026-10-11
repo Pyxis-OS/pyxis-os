@@ -128,8 +128,8 @@ It or `usb.xhci.diagnose=1` also gates protocol readback, transport loss and
 malformed-report counts. Malformed-report diagnostics are limited to one
 observation per interface per five seconds, plus the final retirement; successful
 reports are not logged. The first differing Input length is logged once per
-layout. Up to four malformed Mouse-interface Input packets per admission may
-log their ID/length and at most 16 actual bytes. Keyboard interfaces never have
+layout. Up to four malformed Input packets per admission on a report-protocol Mouse
+interface may log their ID/length and at most 16 actual bytes. Keyboard interfaces never have
 payload dumps; a Mouse descriptor declaring Keyboard/Keypad collections or
 keyboard Input usages suppresses raw bytes too. No device strings or serials are
 logged. The unavailable-device loss path reports retained failed

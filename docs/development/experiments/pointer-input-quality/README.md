@@ -365,7 +365,8 @@ zero-fill a short payload, preserve declared ID/field-range checks and exact
 Feature lengths. Missing/unknown IDs remain failures. Padding an ID-1 Consumer
 report does not make it pointer data. Boot keyboard decoding stays eight bytes.
 Under either diagnostic option, the first length mismatch per layout is recorded;
-up to four malformed Mouse-interface packets per admission log ID/length and
+up to four malformed packets per admission on a report-protocol Mouse interface
+log ID/length and
 at most sixteen actual bytes, with no keyboard payload. Declared Keyboard/Keypad
 collections or keyboard Input usages on a mixed Mouse interface suppress raw
 bytes there as well. No boot-format fallback is implemented or inferred.
