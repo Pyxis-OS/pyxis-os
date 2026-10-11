@@ -340,11 +340,10 @@ Ideas recorded when npfs was planned, none of them agreed:
   inits start which spaces.
 - **Filesystem overlays,** for example a volume overlaid on the boot archive.
 - **Writing from Linux.** The host mount is read-only; writing is a later step.
-- **FAT32 as a mountable filesystem (owner, 2026-10-09).** The installer and
-  [system updates](../userland/system-updates.md) already format and rewrite
-  the ESP whole. A read-only and later read-write FAT32 volume would let Pyxis
-  inspect and change single files on the boot partition, such as `limine.conf`,
-  and read ordinary FAT media.
+- **FAT32 as a mountable filesystem (owner, 2026-10-09).** The shared
+  [FAT32 volumes proposal](fat32-volumes.md) owns the engine and native mounted
+  read-write backend for individual ESP files and ordinary removable media.
+  Consumer configuration/installation policy stays separate; no task is assigned.
 - **Machine settings that survive updates (owner, 2026-10-09).** Today the boot
   configuration, `boot://config/installed.lua`, is part of the boot archive, so
   changing a per-machine value such as a future hostname means rebuilding the

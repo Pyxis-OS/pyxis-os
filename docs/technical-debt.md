@@ -1076,6 +1076,15 @@ wrote an expendable stick from PXE live media: writable mounting, persistence ac
 devices, ports or the dock path, and physical firmware are unqualified. The [NVMe driver](devices/nvme.md) has QEMU
 qualification; native NVMe and coexistence installation remain unqualified.
 
+## FAT32 parser in the kernel
+
+The owner accepted kernel placement for the planned [FAT32 mounts](wip/fat32-volumes.md)
+(2026-10-11), parsing user-supplied media in the kernel. Despite bounded validation,
+a malformed or malicious volume may hang or crash the kernel. Revisit before
+automatic mounting of arbitrary removable media, the server/public profile or
+multi-user work; a userspace provider is the alternative. FAT32 implementation
+is not assigned yet.
+
 ## NVMe native qualification and temporary raw authority
 
 The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's
