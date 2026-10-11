@@ -59,11 +59,6 @@ prepared POST, streamed GET/POST without an artificial response-size cap, and
 shell/Lua delivery.
 No implementation task is assigned; the command-execution proposal is separate.
 
-[Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
-guest VT composition with trusted remote pane creation and cleanup supervision.
-The plan is merged (#721); tasks 1–2 are delivered (#728) and live resize (task 3)
-needs a separate go.
-
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
@@ -76,7 +71,8 @@ with the Steam Controller timed out). No task is assigned.
 
 [ThinkPad pointer input quality](pointer-input-quality.md): Codex alpha
 (2026-10-11), accepted USB report mice and Synaptics absolute mode and
-palm-rejection plan. Task 1 is assigned (draft #716), with task 2 to follow.
+palm-rejection plan. Task 1 is implemented (#716). Task 2 is assigned and starts
+after #716 merges, with a baseline and owner decisions before code.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
 lifecycle, parking, TLS and libc delivery. Tasks 1–5 are merged (#612, #671, #684,

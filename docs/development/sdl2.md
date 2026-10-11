@@ -68,9 +68,11 @@ optional: without it, or without a mouse, the program runs from the keyboard.
   text is bounded to 64 KiB, with no upstream cached-success fallback. The
   [manual exercise](../../ports/sdl2/manual/README.md) is opt-in, outside ordinary images.
 - **Pointer.** The [native protocol](../interfaces/pointer.md#userspace-pointer-sessions)
-  provides 56-byte events with surface-local positions and geometry/mapping
+  provides 88-byte events with surface-local positions and geometry/mapping
   identities. Ordinary SDL motion follows those positions; native locked input
-  supplies relative `dx`/`dy`. `SDL_WarpMouseInWindow` requests bounded owner
+  supplies relative `dx`/`dy`. All 32 buttons and both precise 120-unit scroll axes
+  reach SDL; positive native vertical scroll becomes SDL negative (down). Signed
+  fractions cancel, and input/view boundaries clear wheel accumulation. `SDL_WarpMouseInWindow` requests bounded owner
   warp using current identities. Refusal sets an SDL error; success arrives
   through native input, without a synthetic SDL position update.
 - **Relative mode.** `SDL_SetRelativeMouseMode` requires pointer ownership and
@@ -104,10 +106,11 @@ Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 - Haptics, sensors, HIDAPI, shared objects, power, OpenGL and Vulkan are not
   built.
 
-Upstream needs five patches: the dynamic API off, the driver registered, the
-Steam virtual gamepad file skipped because Pyxis `stat` has no modification
-time, native pointer position/lock authority in SDL mouse core, and permission
-for the threadless Pyxis wait hook to run without a wakeup sender. The pointer
+The ordered upstream patches disable the dynamic API, register the driver, skip
+the Steam virtual gamepad file because Pyxis `stat` has no modification time,
+respect native pointer position/lock authority, permit the threadless wait hook
+without a wakeup sender, carry private clipboard command identity, and preserve
+signed wheel fractions and unsigned button masks. The pointer
 patch prevents synthetic warp updates and relative-mode fallback after native
 refusal; it retains other video drivers' behavior.
 

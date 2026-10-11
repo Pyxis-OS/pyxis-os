@@ -27,6 +27,8 @@ void usb_hid_process(struct usb_discovery *discovery);
 void usb_hid_controller_failed(struct usb_host_controller *host);
 /* BSP/IF=0 physical-input admission check; no USB operations. */
 bool usb_hid_input_complete(void);
+/* BSP/IF=0, read-only opt-in observer; never drains or rearms USB. */
+void usb_hid_diagnose_tick(void);
 
 /* Completeness is scoped to this retained host's final discovery record;
  * unsupported or incomplete controllers elsewhere do not change its result. */

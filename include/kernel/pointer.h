@@ -13,7 +13,7 @@ struct pointer_image;
 /* Kernel-normalized physical snapshot. Suppression describes source buttons
  * whose continuity was lost and which have not yet been observed released. */
 struct pointer_input_report {
-  int32_t dx, dy, wheel;
+  int32_t dx, dy, scroll_x, scroll_y;
   uint32_t buttons, suppressed_buttons;
 };
 

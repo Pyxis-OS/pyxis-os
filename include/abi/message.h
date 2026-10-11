@@ -54,6 +54,7 @@
 #define PROTOCOL_CLIPBOARD UINT64_C(46)
 #define PROTOCOL_THREAD_SERVICE UINT64_C(47)
 #define PROTOCOL_THREAD_COMPLETION UINT64_C(48)
+#define PROTOCOL_INPUT_POLICY UINT64_C(49)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

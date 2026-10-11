@@ -1,8 +1,9 @@
 # ThinkPad pointer input quality
 
-Plan accepted 2026-10-10. Task 1 is assigned to Codex alpha (draft
-[#716](https://git.internal/PyxisOS/pyxis-os/pulls/716)); task 2 follows. The two
-device tracks can proceed in parallel. Scope:
+Plan accepted 2026-10-10. Task 1 is assigned to Codex alpha by the owner,
+2026-10-11 (draft [#716](https://git.internal/PyxisOS/pyxis-os/pulls/716));
+task 2 follows a separate owner go. The two device tracks can proceed in
+parallel once authorized. The source/scroll/policy base is part of task 1. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -83,8 +84,10 @@ horizontal movement as vertical. Volume controls keep their discrete steps.
 Unsupported horizontal actions remain explicit consumer limits.
 
 Planned machine keys: `system://config/machine/input/mouse/scroll-direction` and
-`input/touchpad/scroll-direction`, enums `natural` / `traditional`. Missing or
-invalid values use the accepted natural defaults, with an opt-in diagnostic.
+`input/touchpad/scroll-direction`, enums `natural` / `traditional`. Accepted
+2026-10-11: missing or invalid installed values use the archive's authored value,
+matching the hostname convention, with an opt-in diagnostic. Both shipped
+archives author natural.
 Use the [plain store convention](../userland/machine-settings.md), shared schema
 validation and archive defaults; installed values survive updates, live images
 use archive configuration. Changes apply next boot. The validating writer is
@@ -95,7 +98,7 @@ state or guessed universal pressure units.
 
 ## Tasks
 
-1. [ ] **USB report-protocol mice and shared scroll integration.** The existing
+1. [x] **USB report-protocol mice and shared scroll integration.** The existing
    BSP USB worker owns descriptor admission, control requests and interrupt
    streams. Admit one standard relative Mouse application collection on a
    supported interface, including boot/non-boot mice and composite keyboard/mouse
@@ -113,9 +116,40 @@ state or guessed universal pressure units.
    an actual boot mouse after confirmed SET_PROTOCOL(boot), using its defined
    prefix and the existing qualified QEMU extension. No trailing-byte guesses.
    Unsupported mouse admission preserves a supported keyboard sibling. Runtime
-   malformed reports or transport failure retain existing whole-binding
-   retirement/reset (including a composite sibling), not a silent protocol
-   switch; independent interface lifetime is not added.
+   malformed reports are dropped without changing held state; per-interface
+   counts and consecutive streaks are retained, and a valid report resets that
+   interface's streak. Sixteen consecutive malformed reports or transport failure
+   retire/reset the whole binding (including a composite sibling). Only the
+   reserved-ID evidence rule below switches decoding; no independent interface
+   lifetime is added.
+
+   **Owner correction accepted 2026-10-11, implemented and natively qualified:**
+   receive TDs cover at least endpoint MaxPacketSize and the admitted report
+   size within HID capacity; report IDs and field ranges remain strict. Protocol admission reads
+   GET_PROTOCOL after SET_PROTOCOL(report), as diagnostic evidence without a new
+   boot fallback. Both diagnostic options cover the early unavailable/retiring
+   path's failed completion metadata before retirement. Malformed input uses
+   the drop/count/16-consecutive policy above, replacing one-report retirement.
+
+   **Later owner follow-up accepted 2026-10-11, implemented and qualified:**
+   for known mouse Input IDs, ignore trailing bytes and zero-extend missing
+   payload; never fabricate an absent ID. Keep other unknown-ID rejection, field
+   ranges, boot keyboard lengths and exact Feature images. Under either
+   diagnostic option, record the first length mismatch per layout and the
+   first four report-protocol mouse interrupt packets (ID/length plus up to 16 bytes).
+   No keyboard raw data, including declared keyboard fields on a mixed Mouse
+   interface.
+
+   **Reserved-ID switch accepted 2026-10-11, implemented and natively qualified:**
+   on a boot-subclass Mouse interface with an admitted ID-bearing descriptor,
+   a nonempty Input beginning with reserved ID 0 selects boot decoding permanently
+   for the attachment. Never switch on a nonzero byte, a nonboot interface or a
+   descriptor without IDs. Decode the three-byte boot prefix and byte-3 wheel
+   when length is at least four; wheel scale becomes 120/1, pan is absent and
+   scroll fractions reset. Short packets keep the malformed-retirement policy.
+   No device quirk table or new endpoint lifetime. Do not send SET_PROTOCOL again:
+   preserve the observed boot stream rather than changing a live device format.
+   Log the switch once under either diagnostic option. Reattachment starts fresh.
 
    Enable high-resolution wheel Features only for understood wheel-scoped
    Resolution Multipliers: read the complete Feature, preserve unrelated fields,
@@ -173,6 +207,28 @@ state or guessed universal pressure units.
    jumps, scroll with two fingers, drag using physical buttons/clickpad press,
    and use the TrackPoint while a palm rests on the touchpad. Native qualification
    must establish these together; a successful mode command is insufficient.
+
+## Task 1 delivery (2026-10-11)
+
+Implementation is in Pyxis #716, userland #214 and ports #99. Merge userland and
+ports first, then the parent pin PR. The archive fallback was accepted 2026-10-11.
+
+- [x] Report decoder, source/scroll policy, SDK and consumer integration.
+- [x] Before-code baseline, interleaved QEMU cost record and interactive checks.
+- [x] Owner native ASUS and G502 qualification; task 1 closure accepted 2026-10-11.
+      Remaining device/axis coverage stays in [technical debt](../technical-debt.md#usb-hid-native-coverage).
+
+The [qualification record](../development/experiments/pointer-input-quality/README.md)
+records revisions, measured variation, coverage limits and exact native steps.
+Task 1 is complete: ASUS motion/clicks/wheel and G502 motion/buttons/free-spin/
+Cmd+R/replug pass at `e7a18849`. ASUS back/forward buttons are unsupported and
+accepted without further work. Keychron, horizontal and multiplier coverage are
+unqualified, not claimed by closure.
+
+**Task 2 assigned 2026-10-11:** start only after #716 merges, on fresh main;
+capture the baseline first and bring at most three decisions with defaults to
+the owner before code. Current firmware-relative PS/2 input remains mouse-class;
+this delivery supplies the touchpad policy/typing/reset base, not palm filtering.
 
 ## Qualification and tuning
 

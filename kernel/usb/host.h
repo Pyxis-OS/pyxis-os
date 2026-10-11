@@ -96,10 +96,15 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
 
 /* BSP/IF=0. Notify the owning controller worker without allocating. */
 void usb_host_notify(struct usb_host_controller *controller);
+/* BSP/IF=0 observer, gated by usb.xhci.diagnose; reads retained state only. */
+void usb_host_diagnose_tick(void);
+/* Owning worker, after releasing class input; no transfer data is logged. */
+void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream, unsigned interface);
 
 /* Separate prepared HCI, HID and hub pools. Each handle names one IN endpoint;
  * slot, DCI and physical TD identity retain hardware ownership. Configure before
- * SET_CONFIGURATION, start afterwards. HID supports boot USB 2 profiles and
+ * starting receives. HID admits descriptors after SET_CONFIGURATION and prepares
+ * only selected endpoint contexts. HID supports USB 2 profiles and
  * claimed runtime LS/FS leaves; hubs are boot-present USB 2 only.
  * Wait expiry leaves receives posted. Take borrows no destination beyond return.
  * Terminal failure precedes queued data; ack_loss follows class source release.
@@ -112,6 +117,9 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
                                                 size_t receive_bytes, enum usb_interrupt_kind kind,
                                                 uint64_t deadline, struct usb_host_interrupt **stream);
 enum usb_result usb_host_interrupt_start(struct usb_host_interrupt *stream);
+/* Owning worker only, configured HID stream before its first receive. Changes
+ * TD length within prepared backing; no buffer or active DMA is reassigned. */
+enum usb_result usb_host_hid_interrupt_length(struct usb_host_interrupt *stream, size_t bytes);
 enum usb_result usb_host_interrupt_wait(struct usb_host_interrupt *stream, uint64_t deadline);
 enum usb_result usb_host_interrupt_take(struct usb_host_interrupt *stream, void *destination,
                                         size_t capacity, struct usb_interrupt_completion *completion);

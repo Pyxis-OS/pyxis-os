@@ -203,7 +203,8 @@ void pointer_queue_input(struct pointer_object *pointer, struct pointer_event ev
         last->generation == event.generation && last->mapping_identity == event.mapping_identity) {
       last->x = event.x;
       last->y = event.y;
-      last->wheel = saturating_add(last->wheel, event.wheel);
+      last->scroll_x = saturating_add(last->scroll_x, event.scroll_x);
+      last->scroll_y = saturating_add(last->scroll_y, event.scroll_y);
       last->dx = saturating_add(last->dx, event.dx);
       last->dy = saturating_add(last->dy, event.dy);
     } else {

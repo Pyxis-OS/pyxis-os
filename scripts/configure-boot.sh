@@ -7,6 +7,11 @@ case "$BOOT_MENU_TIMEOUT" in
   ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;
 esac
 command_line="init=$boot_init"
+case "${USB_HID_DESCRIBE:-0}" in
+  0) ;;
+  1) command_line="$command_line usb.hid.describe=1" ;;
+  *) echo 'USB_HID_DESCRIBE must be 0 or 1.' >&2; exit 1 ;;
+esac
 debug_net=${DEBUG_NET:-}
 debug_wait=${DEBUG_WAIT:-0}
 case "$debug_wait" in

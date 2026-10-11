@@ -18,7 +18,7 @@
 #define INPUT_POINTER_EVENTS 1024
 #define USB_REPEAT_DELAY_NS UINT64_C(500000000)
 #define USB_REPEAT_INTERVAL_NS UINT64_C(33000000)
-#define INPUT_BUTTONS (POINTER_BUTTON_LEFT | POINTER_BUTTON_RIGHT | POINTER_BUTTON_MIDDLE)
+#define PS2_BUTTONS (POINTER_BUTTON_LEFT | POINTER_BUTTON_RIGHT | POINTER_BUTTON_MIDDLE)
 
 static struct input_source *sources;
 static struct input_source ps2_keyboard, ps2_pointer;
@@ -26,6 +26,9 @@ static atomic_size_t keyboard_sources, pointer_sources;
 static size_t held[KEY_COUNT];
 static struct input_source *repeat_owner[KEY_COUNT];
 static unsigned locks;
+static uint32_t mouse_scroll_direction, touchpad_scroll_direction;
+static bool policy_installed;
+static uint64_t last_typing_ns;
 static struct key_event key_events[INPUT_KEY_EVENTS];
 static size_t key_read, key_count;
 
@@ -61,6 +64,10 @@ void input_source_attach(struct input_source *source, bool keyboard, bool pointe
     atomic_fetch_add_explicit(&keyboard_sources, 1, memory_order_release);
   }
   if (pointer && !source->pointer_live) {
+    if (!source->scroll_denominator_x || !source->scroll_denominator_y) {
+      input_source_pointer_configure(source, INPUT_POINTER_MOUSE,
+          POINTER_SCROLL_UNITS_PER_DETENT, 1, POINTER_SCROLL_UNITS_PER_DETENT, 1);
+    }
     source->pointer_live = true;
     atomic_fetch_add_explicit(&pointer_sources, 1, memory_order_release);
   }
@@ -96,6 +103,13 @@ static bool modifier_key(enum key_code key)
       key == KEY_LEFT_CONTROL || key == KEY_RIGHT_CONTROL ||
       key == KEY_LEFT_ALT || key == KEY_RIGHT_ALT ||
       key == KEY_LEFT_SUPER || key == KEY_RIGHT_SUPER;
+}
+
+static void record_typing(struct input_source *source, enum key_code key, uint64_t now)
+{
+  if (!source->synthetic && !modifier_key(key)) {
+    last_typing_ns = now ? now : arch_monotonic_ns();
+  }
 }
 
 static bool repeatable(enum key_code key)
@@ -136,15 +150,20 @@ static void change_key(struct input_source *source, enum key_code key, bool down
     bool typematic, uint64_t now)
 {
   if (source->keys[key] == down) {
-    if (down && typematic && !source->suppressed_keys[key] &&
-        repeat_owner[key] == source) {
-      queue_key(key, KEY_REPEAT);
+    if (down && typematic) {
+      /* A recognized hardware repeat is typing even when its delivery is
+       * quarantined after another source loses continuity. */
+      record_typing(source, key, now);
+      if (!source->suppressed_keys[key] && repeat_owner[key] == source) {
+        queue_key(key, KEY_REPEAT);
+      }
     }
     return;
   }
   source->keys[key] = down;
   if (down) {
     source->suppressed_keys[key] = false;
+    record_typing(source, key, now);
     if (!held[key]++) {
       if (key == KEY_CAPS_LOCK) {
         locks ^= KEY_MOD_CAPS_LOCK;
@@ -212,7 +231,7 @@ static void drain_ps2_keyboard(void)
     if (event.action == KEY_STATE_RESET) {
       reset_keyboard();
     } else if (event.key > KEY_NONE && event.key < KEY_COUNT) {
-      change_key(&ps2_keyboard, event.key, event.action != KEY_RELEASE, true, 0);
+      change_key(&ps2_keyboard, event.key, event.action != KEY_RELEASE, true, arch_monotonic_ns());
     }
   }
 }
@@ -314,6 +333,7 @@ bool keyboard_read_event(struct key_event *event)
       }
       if (now >= source->repeat_deadline && keyboard_sources_resolved() && usb_hid_input_complete()) {
         source->repeat_deadline = now + USB_REPEAT_INTERVAL_NS;
+        record_typing(source, key, now);
         queue_key(key, KEY_REPEAT);
       }
     }
@@ -362,6 +382,7 @@ static void queue_pointer(struct pending_pointer event)
     for (struct input_source *source = sources; source; source = source->next) {
       source->buttons = source->pending_buttons;
       source->suppressed_buttons |= source->buttons;
+      input_source_scroll_reset(source);
     }
     return;
   }
@@ -373,21 +394,87 @@ void input_source_initial_pointer(struct input_source *source, uint32_t buttons)
 {
   assert_input_owner();
   KASSERT(source && source->pointer_live);
-  source->pending_buttons = buttons & INPUT_BUTTONS;
+  source->pending_buttons = buttons;
   source->suppressed_buttons = source->pending_buttons;
   source->pointer_initial_hold = source->pending_buttons != 0;
   queue_pointer((struct pending_pointer){.source = source,
       .report = {.buttons = source->pending_buttons}});
 }
 
+void input_source_scroll_reset(struct input_source *source)
+{
+  assert_input_owner();
+  KASSERT(source);
+  source->scroll_remainder_x = source->scroll_remainder_y = 0;
+}
+
+void input_source_pointer_configure(struct input_source *source,
+    enum input_pointer_kind kind, uint32_t numerator_x, uint32_t denominator_x,
+    uint32_t numerator_y, uint32_t denominator_y)
+{
+  assert_input_owner();
+  KASSERT(source && (kind == INPUT_POINTER_MOUSE || kind == INPUT_POINTER_TOUCHPAD));
+  KASSERT(numerator_x && numerator_x <= INT32_MAX && denominator_x && denominator_x <= INT32_MAX);
+  KASSERT(numerator_y && numerator_y <= INT32_MAX && denominator_y && denominator_y <= INT32_MAX);
+  source->pointer_kind = kind;
+  source->scroll_numerator_x = numerator_x;
+  source->scroll_denominator_x = denominator_x;
+  source->scroll_numerator_y = numerator_y;
+  source->scroll_denominator_y = denominator_y;
+  input_source_scroll_reset(source);
+}
+
+static int32_t normalized_scroll(struct input_source *source, int32_t delta, bool horizontal)
+{
+  uint32_t numerator = horizontal ? source->scroll_numerator_x : source->scroll_numerator_y;
+  uint32_t denominator = horizontal ? source->scroll_denominator_x : source->scroll_denominator_y;
+  int64_t *remainder = horizontal ? &source->scroll_remainder_x : &source->scroll_remainder_y;
+  int64_t scaled = (int64_t)delta * numerator + *remainder;
+  int64_t units = scaled / denominator;
+  *remainder = scaled % denominator;
+  uint32_t direction = source->pointer_kind == INPUT_POINTER_TOUCHPAD ?
+      touchpad_scroll_direction : mouse_scroll_direction;
+  if (direction == INPUT_SCROLL_NATURAL) {
+    units = -units;
+  }
+  return units > INT32_MAX ? INT32_MAX : units < INT32_MIN ? INT32_MIN : (int32_t)units;
+}
+
+uint64_t input_last_typing_ns(void)
+{
+  assert_input_owner();
+  drain_ps2_keyboard();
+  return last_typing_ns;
+}
+
+bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction)
+{
+  assert_input_owner();
+  KASSERT(mouse_direction <= INPUT_SCROLL_TRADITIONAL &&
+      touchpad_direction <= INPUT_SCROLL_TRADITIONAL);
+  if (policy_installed) {
+    return false;
+  }
+  mouse_scroll_direction = mouse_direction;
+  touchpad_scroll_direction = touchpad_direction;
+  policy_installed = true;
+  for (struct input_source *source = sources; source; source = source->next) {
+    input_source_scroll_reset(source);
+  }
+  return true;
+}
+
 void input_pointer_report(struct input_source *source, int32_t dx, int32_t dy,
-    int32_t wheel, uint32_t buttons)
+    int32_t scroll_x, int32_t scroll_y, uint32_t buttons)
 {
   assert_input_owner();
   KASSERT(source && source->pointer_live);
-  source->pending_buttons = buttons & INPUT_BUTTONS;
+  source->pending_buttons = buttons;
   queue_pointer((struct pending_pointer){.source = source,
-      .report = {.dx = dx, .dy = dy, .wheel = wheel, .buttons = source->pending_buttons}});
+      .report = {.dx = dx, .dy = dy,
+        .scroll_x = normalized_scroll(source, scroll_x, true),
+        .scroll_y = normalized_scroll(source, scroll_y, false),
+        .buttons = source->pending_buttons}});
 }
 
 void input_source_lost(struct input_source *source)
@@ -406,6 +493,7 @@ void input_source_lost(struct input_source *source)
     size_t remaining = atomic_fetch_sub_explicit(&pointer_sources, 1, memory_order_release) - 1;
     bool revoke = source->pending_buttons != 0 || !remaining;
     source->pending_buttons = 0;
+    input_source_scroll_reset(source);
     queue_pointer((struct pending_pointer){.source = source, .loss = true, .revoke = revoke});
   }
 }
@@ -479,9 +567,9 @@ void input_pointer_drain(void)
     }
     if (event.reset) {
       input_source_lost(&ps2_pointer);
-      ps2_pointer.suppressed_buttons = INPUT_BUTTONS;
+      ps2_pointer.suppressed_buttons = PS2_BUTTONS;
     } else {
-      input_pointer_report(&ps2_pointer, event.dx, event.dy, event.wheel, event.buttons);
+      input_pointer_report(&ps2_pointer, event.dx, event.dy, 0, event.wheel, event.buttons);
     }
   }
   if (mouse_available() && !ps2_pointer.pointer_live) {
@@ -495,5 +583,6 @@ void input_pointer_drain(void)
   pointer_synthetic_tick(drained_physical_buttons | pointer_buttons(false));
   drain_pointer_events();
 #endif
+  usb_hid_diagnose_tick();
   cpu_restore_interrupts(flags);
 }

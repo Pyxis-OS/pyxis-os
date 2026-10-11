@@ -125,6 +125,13 @@ cannot be clipped retroactively after physical shrink. Per-pane/screen resize
 rollback is not a connection-wide allocation transaction; failure ends mux and
 retains supervision through cleanup.
 
-Owner horse/ThinkPad native qualification remains separate. Plain/machine live
-resize, reattachment, pointer/clipboard and pane-aware transfer remain outside
-this task.
+Plain/machine live resize, reattachment, pointer/clipboard and pane-aware transfer
+remain outside this task.
+
+## Owner native qualification
+
+On 2026-10-11 the owner reported native horse/ThinkPad qualification on main
+`a59a4ef3`: Neovim edit/save/quit in panes, a TCC hello world and instant live
+resize. This closes the remote-multiplexer milestone. “Instant” is the owner's
+functional observation, not a timed native latency measurement; failure/admission
+and pending-HOST evidence above remains nested QEMU/GDB evidence.
