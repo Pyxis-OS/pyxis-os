@@ -39,6 +39,12 @@ alongside delta's native threads gates 5–8. No runnable hosted compiler yet.
 inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
 The contract is accepted; task 1 is held and later tasks need separate assignments.
 
+[Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
+shared docs proposal extracted from Claude/Git prerequisites: prepared POST,
+streamed GET/POST without an artificial response-size cap, and shell/Lua delivery.
+No implementation task is assigned; command execution and FAT32 proposals follow
+separately after review.
+
 [Remote multiplexer](remote-multiplexer.md): Codex epsilon (2026-10-11), accepted
 guest VT composition with trusted remote pane creation and cleanup supervision.
 Tasks 1–2 are assigned together, to start after the plan merges; live resize
@@ -80,7 +86,8 @@ Other candidates; current assignments are listed above.
 completed analog playback milestone.
 
 [Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09 (prepared HTTPS
-files and shell API testing, then the Lua harness; Hax after). Each delivery task
+files and shell API testing now depend on [native HTTP requests](native-http-requests.md);
+then the Lua harness, Hax after). Each delivery task
 needs a separate go-ahead.
 
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector

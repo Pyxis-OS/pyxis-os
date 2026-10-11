@@ -225,25 +225,15 @@ request/response callbacks and child pipes. See versioned
 [`http.c`](https://github.com/git/git/blob/v2.53.0/http.c) and the
 [Git HTTP specification](https://git-scm.com/docs/gitprotocol-http/2.53.0).
 
-**Accepted, 2026-10-09; not implemented:** Claude-on-Pyxis already specifies the
-[prepared-request contract](claude-on-pyxis.md#accepted-prepared-request-contract-for-tasks-1b1c)
-and [tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval).
-Native git-remote-https is a consumer of that provider design, sharing those
-prerequisites with the Claude harness. It does not introduce a separate HTTP
-transaction interface or an application-side HTTP/TLS client. The HTTP
-prerequisite in proposed task 4 below means delivery of those shared tasks;
-its snapshot wording describes the accepted contract pending decision 3.
-
-PREPARE fixes URI, POST, request-scoped headers, admitted byte caps and an absolute
-deadline, without sending. It returns a body FILE with WRITE and separate
-commit/status/abort control; response access is a distinct READ grant. The first
-commit freezes the staged body and submits at most once; copied/repeated controls
-observe the same state. A lost reply leaves the remote outcome unknown, never
-an automatic retry. Complete 4xx/5xx responses retain their HTTP status/body as
-completed transactions, distinct from transport failure. The provider owns
-framing, TLS, deadlines and abort cleanup. Request credentials are private to
-that request and unreadable through the returned grants. Credential-bearing
-requests stay bound to their prepared endpoint, without redirects or downgrade.
+**Shared dependency, moved by the owner 2026-10-11; not implemented:**
+[native HTTP requests](native-http-requests.md) owns the engine, accepted prepared
+transaction, request-scoped GET/POST headers, credentials and generic adapters
+formerly in Claude tasks 1a–1c and this document's HTTP task 4. The separate
+body/control/response grants, freeze-before-submit, one-shot commit, unknown
+remote outcome/no replay and request-private credential rules remain accepted.
+Git consumes those operations; it supplies no second transaction interface or
+application-side HTTP/TLS client. Neither this move nor the shared prerequisite
+completes the Git helper, clone/fetch or push tasks.
 
 The [scheme write mapping](userspace-scheme-providers.md#future-writes-and-shell-operations)
 and [prepared handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
@@ -272,7 +262,7 @@ Git-specific extensions to that shared design are limited to:
 | Git request headers | Git-Protocol, including discovery GET, and Git Content-Type values such as application/x-git-upload-pack-request and application/x-git-receive-pack-request fit validated request-scoped headers. Git's Accept values use the same arrangement; framing headers remain provider-owned. |
 | Response media type | Expose response Content-Type among selected response headers, so the helper validates advertisements and upload-pack/receive-pack results. It is response metadata, not readable request headers. |
 | Helper credential path | Use the accepted interim request-scoped arrangement: trusted native preparation receives only the selected credential FILE, privately reads it and attaches the appropriate header to that request. No argv/env/log/header readback or ambient credential store. The owner accepts this approach for now; anonymous read-only gateway fetch comes first. |
-| Large push bodies | Support pack-sized body production through streaming with backpressure or disk-backed staging, subject to actual resources. Disk staging can preserve the existing finish-producer/freeze-before-submit boundary; concurrent production after submission would require an explicit phase change. |
+| Large push bodies | Consume the [shared HTTP staging contract](native-http-requests.md#proposed-defaults-requiring-owner-decisions) for pack-sized bodies under actual resources. Freeze each RPC before submission; production after submission is outside the first shared profile. |
 
 The eventual credential path is the parked
 [credential store as a capability service](credentials-and-biometrics.md#credential-store-as-a-capability-service):
@@ -282,29 +272,14 @@ and Git commit signing as first consumers. This is a later dependency, not an
 implementation milestone or an added task here; HTTPS uses the interim
 request-scoped arrangement until that service is assigned and delivered.
 
-**Owner direction, 2026-10-11:** no artificial response-size cap. Complete RAM
-snapshots cannot support that direction. Responses and large push bodies need
-streaming/backpressure or disk-backed staging, limited by real memory, storage,
-quota and other resources rather than a fixed total-byte ceiling. Resource
-exhaustion remains an explicit failure, not permission to allocate indefinitely.
-
-**Proposed change requiring owner confirmation:** default to a streamed response
-FILE plus explicit final status, as decision 3 below. Response access becomes
-available before completion, so a reader may observe a prefix; it may claim
-success only after the final state explicitly reports complete. Failure or
-interruption must report failed/unknown as appropriate, never an ordinary
-successful EOF. HTTP response status is separate: a completely received 4xx/5xx
-is still a completed HTTP response. Git must not publish successful refs from
-an incomplete pack. Disk-backed complete staging is an alternative where real
-storage resources and latency permit it, without a fixed response-size cap.
-
-This changes the accepted Claude contract's **complete immutable response FILE,
-response grant only after completion, partial responses not published** rule,
-as well as its whole-body RAM budgeting. It is not yet an accepted replacement
-and this PR does not amend that contract silently. The same completion/storage
-question applies to plain GET: today's implementation has a 16 MiB allowance
-across an HTTP open/redirect chain and buffers a complete snapshot. GET readers
-also need explicit completion/failure when response prefixes become readable.
+**Owner direction, 2026-10-11:** no artificial response-size cap. The
+[shared milestone's response/storage decisions](native-http-requests.md#proposed-defaults-requiring-owner-decisions)
+now own streamed GET/POST, explicit final completion and large staged bodies.
+The proposed change to Claude's complete-only snapshot and response-grant timing
+is pending there, not implicitly accepted here. Git must not publish successful
+refs from an incomplete pack, and must finish each RPC's body independently of
+child exit. Preserve the helper's existing anonymous-first and interim
+request-scoped credential direction.
 
 **Implemented boundary at the inspected revisions:**
 [`httpfs`](../../userspace/httpfs/main.c) still rejects WRITE;
@@ -390,11 +365,12 @@ is implied by these docs or ordinary libc/port work.
    POSIX process model. Qualify short transfers, EOF, failures and deadlock bounds.
    **After this task the owner can:** use supported internal Git child commands
    and pack ingestion with native lifecycle/error reporting, before network use.
-4. **Define and deliver reusable bounded native HTTP transactions.** GET/POST,
-   streaming bodies/headers/status, verified TLS, redirect/replay rules,
-   cancellation and explicit destination authority; preserve snapshots.
-   **After this task the owner can:** exchange bounded streaming HTTP requests
-   with an approved server through native interfaces, without libcurl.
+4. **Shared dependency: native HTTP requests (moved, not completed).**
+   Require [that milestone](native-http-requests.md), including request-scoped GET
+   headers, streamed completion and large staged bodies. No duplicate HTTP
+   implementation task is owned by Git.
+   **After that milestone the owner can:** use reusable HTTP through shell/Lua
+   without first delivering a Git helper.
 5. **Deliver the Git remote helper and read-only clone/fetch slice.** Discovery,
    v2 and explicit v0/fallback profile, serial pack ingestion, completeness/hash
    checks and bounded staging over the owner gateway; refuse unsupported auth,
@@ -424,11 +400,8 @@ is implied by these docs or ordinary libc/port work.
    symlink/gitlink refusal, and honest native sync/publication errors. No synthetic
    ownership/cache fields, unsupported index shortcuts or private-mode privacy
    promises.
-3. **Response delivery, confirmation needed:** default to a streamed response FILE
-   with backpressure and explicit final complete/failed status, without an
-   artificial response-size cap; account and fail against real resources.
-   This also applies to plain GET and large push-body handling. Git consumes the
-   accepted prepared-request provider design; its interim credentials remain
-   request-scoped. Confirm changing Claude-on-Pyxis's accepted complete immutable
-   response/no-partial-publication contract and response-grant timing before
-   implementing streaming. This proposal does not mark that change accepted.
+
+Response delivery was proposed decision 3 here; it is now
+[HTTP decision 1](native-http-requests.md#proposed-defaults-requiring-owner-decisions),
+still pending. The shared provider delivers it independently of this CLI. This
+move changes no previously accepted Git direction or implementation status.
