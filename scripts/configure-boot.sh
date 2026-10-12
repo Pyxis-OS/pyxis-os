@@ -146,7 +146,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (beacon != "") normal_bytes += length(beacon) - length("${PYXIS_REMOTE_BEACON}")
     if (debug_name != "") normal_bytes += length(debug_name) - length("${PYXIS_DEBUG_NET}")
     if (display != "") normal_bytes += length(display) - length("${PYXIS_DISPLAY_SIZE}")
-    install_bytes = length("init=boot://init-install.pxe boot.install=1")
+    install_bytes = length("init=boot://init-fat32-inspect.pxe boot.install=1")
     if (display != "") install_bytes += length(" display.size=") + length(display)
     if (timing != "") install_bytes += length(" display.timing=") + length(timing)
     if (timing_metrics) install_bytes += length(" display.timing.metrics=1")
@@ -168,7 +168,8 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
   $0 == "# PYXIS_BOOT_MENU_TIMEOUT" { print "timeout: " timeout; next }
   $0 == "# PYXIS_NORMAL_COMMAND_LINE" { print "  cmdline: " normal; next }
   $0 == "# PYXIS_RESCUE_COMMAND_LINE" { print "  cmdline: " rescue; next }
-  $0 == "  cmdline: init=boot://init-install.pxe boot.install=1" {
+  $0 == "  cmdline: init=boot://init-install.pxe boot.install=1" ||
+  $0 == "  cmdline: init=boot://init-fat32-inspect.pxe boot.install=1" {
     line = $0
     if (display != "") line = line " display.size=${PYXIS_DISPLAY_SIZE}"
     if (timing != "") line = line " display.timing=" timing

@@ -67,6 +67,7 @@ case "${1:-}" in
     done
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
     install -C -m 644 build/npfs-sdk/libnpfs-format.a "$sdk/sysroot/usr/lib/libnpfs-format.a"
+    install -C -m 644 build/fat32-sdk/libfat32-read.a "$sdk/sysroot/usr/lib/libfat32-read.a"
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
     # tlsf.h carries the complete upstream license; do not export its API.
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
@@ -76,6 +77,8 @@ case "${1:-}" in
     install -C -m 644 userspace/third_party/musl/UPSTREAM.md "$sdk/share/licenses/musl-upstream.md"
     mkdir -p "$sdk/share/licenses/npfs"
     install -C -m 644 fs/LICENSE fs/LICENSING.md "$sdk/share/licenses/npfs/"
+    mkdir -p "$sdk/share/licenses/fat32"
+    install -C -m 644 fs/LICENSE fs/LICENSING.md "$sdk/share/licenses/fat32/"
     {
       printf 'pyxis_revision=%s\n' "$(git rev-parse HEAD)"
       if [ -n "$(git status --porcelain)" ]; then

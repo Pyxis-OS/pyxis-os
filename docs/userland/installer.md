@@ -7,6 +7,10 @@ It runs through trusted install init with the explicit
 [disk and boot-file grants](../devices/installer-authority.md). Source files are
 already in RAM; installing does not require a driver for the live medium.
 
+The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
+and reads a selected GPT volume without invoking Install/Update. Strict inspector
+refusal never authorizes an ESP rebuild.
+
 Choose **Install** first, then **Proceed with installation** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
 installer waits for sealed boot discovery, lists retained VirtIO and USB disk
