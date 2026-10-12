@@ -1,7 +1,7 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Task 1 is delivered; later tasks still need separate owner go-aheads.
+2026-10-11.** Tasks 1–2 are delivered; later tasks still need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -131,23 +131,33 @@ state and preserved previous files. Old defaults in the archive provide rescue,
 not automatic restoration of owner edits. Multi-file publication can be partial;
 validation/fallback and a reported recovery path are mandatory.
 
-## Revision manifest
+## Task 2 choices — accepted 2026-10-11
 
-Proposed representation: one reserved manifest file in `bin/REVISION`, sorted
-relative paths, byte sizes and SHA-256 hashes, with bundle descendants included.
-It does not list itself; directory structure/empty directories need separate
-records for complete-tree verification. Publish it only after the revision's
-copies have passed verification and sync it before the ESP switch. Bounds and
-parsing must reuse the installed-tree admission limits, with no implicit budget
-increase. It is a copy inventory, distinct from a bundle's launch manifest.
+The owner accepted the text SHA-256 manifest with explicit legacy scanning,
+standard-stream replay bound to a unique validated GPT logical identity, and
+stale-plan refusal under exclusive revalidation. The implementation lives in the
+[installer reference](../userland/installer.md#plans-and-programs-report) and
+[revision inventory](../userland/installer.md#revision-inventory).
 
-Compare the immutable new-source inventory to the prior revision manifest without
-rereading every installed payload for the report. A missing/invalid old manifest
-means unknown, not unchanged: offer an explicit one-time read/verify inventory
-with progress, or refuse that comparison. Hash newly copied destination bytes
-and check structure against the manifest; do not replace read-back verification
-with trust in the manifest. Unsigned hashes do not authenticate a revision or
-prove that installed bytes were not modified after installation.
+Manifests include sorted paths, kinds, empty directories, sizes and hashes;
+metadata is bounded at 16 MiB alongside traversal limits. Programs are whole
+selected roots with old/new payload sizes. Missing/invalid manifests need
+explicit raw read/hash consent; unknown history stays unknown. A valid manifest
+is historical inventory, without a recurring full old-payload audit.
+
+Printed plans convey no authority. Replay requires unique validated existing
+GPT identity and matching geometry/state, rather than an enumeration number.
+Blank/unidentified targets remain interactive-only for apply. Install IDs and
+journal choices are recorded once. Preparation/cancel/dry-run never mount,
+persist replay or write. One executor rechecks consumed sources, target metadata,
+ESP and prior inventory before writing, refuses stale plans without automatic
+replanning and conservatively checks capacity without promising allocation.
+
+Programs remain synced/verified before the ESP switch; verification may use
+cached filesystem pages. Existing interruption, retention and whole-ESP limits
+remain. This task provides no FAT32 mount/config editor or stronger device
+read-back contract. [Matched costs and qualification](../development/experiments/installer-plan/README.md)
+record the QEMU evidence and its limits.
 
 ## Accepted configuration contract — 2026-10-11
 
@@ -195,10 +205,12 @@ kernel configuration model is proposed.
    needs a separate owner decision. No TUI or verification behavior change.
    **After this task the owner can:** see the active phase throughout an
    ordinary install/update, including verification.
-2. [ ] **Shared planner/executor and revision inventory.** Extract current
-   install/update behavior behind read-only plan construction, print/replay and
-   one confirmation boundary; write/verify revision manifests and the Programs
-   report. Retain all existing authority and interruption limits.
+2. [x] **Shared planner/executor and revision inventory — delivered 2026-10-11.**
+   Read-only plan construction, print/replay and one confirmed executor implement
+   the [accepted choices](#task-2-choices--accepted-2026-10-11). Revision manifests
+   and whole-program sizes are published/verified before the ESP switch; existing
+   authority and interruption limits remain. [Reference](../userland/installer.md#plans-and-programs-report)
+   and [QEMU qualification/costs](../development/experiments/installer-plan/README.md).
    **After this task the owner can:** review and replay an explicit install/update
    plan and see new/updated/removed/unchanged program sizes before any writes.
 3. **Shared dependency, former mounted FAT32 task (moved, not completed).**

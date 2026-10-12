@@ -1,7 +1,8 @@
 # Native installation
 
 Build live media with `make -j16 image BOOT_MENU_TIMEOUT=5`, then select
-**Install Pyxis** in Limine. The native installer takes no command-line options.
+**Install Pyxis** in Limine. The stock entry starts the interactive planner. Trusted launchers may pass
+`--plan`, `--dry-run` or `--apply` with explicit consent as described below.
 It runs through trusted install init with the explicit
 [disk and boot-file grants](../devices/installer-authority.md). Source files are
 already in RAM; installing does not require a driver for the live medium.
@@ -76,6 +77,71 @@ missing ESP; readable foreign disk bindings and raw I/O/allocation failures
 refuse. A selected committed journal must first be recovered by booting the
 installed system. No wipe marker is needed. See
 [system updates](system-updates.md) for admission, recovery and qualification.
+
+## Plans and Programs report
+
+Preparation is read-only: no target mount, persistent journal replay, formatting,
+cleanup or writes. Review shows the target, partition extents, journal/policy
+choices, destruction/recovery limits and whole-program changes with old/new
+payload sizes. Its Apply/Print/Dry-run choice edits no disk. Only the exact word
+`wipe` or `update` authorizes the prepared plan; exclusive revalidation precedes
+the first write and changed inputs refuse without automatic replanning.
+
+Programs are selected non-rescue root `.pxe` files and complete `.pxb` trees.
+Compare paths, kinds, empty directories, sizes and SHA-256 per root, showing new,
+updated, removed and unchanged. Removed means absent from the new revision;
+current/known previous retention still applies. Install lists its selected roots
+as new. A known previous tree without a valid inventory requires explicit `scan`
+consent for one-time raw read/hash inventory, repeated at exclusive revalidation.
+Unknown prior revision/ancestry stays unknown. A valid manifest describes the
+recorded revision; it is not a full live audit of subsequent payload changes.
+
+`--plan` prints and exits; `--dry-run` reviews and exits. `--apply` reads one
+`pyxis-install-plan 1` frame from stdin, ending with `end` plus LF, rebuilds its
+read-only inspection and displays Review. `--apply --confirm=wipe` or
+`--apply --confirm=update` provides separate non-interactive consent and skips
+restart prompting. Human output/progress uses stderr; stdout carries the data-only
+plan. The stock menu also offers replay. A caller may save printed bytes with
+its own grants; the installer obtains no writable root to save them. Plans are
+not commands and carry no authority. Only trusted install-mode launches have
+the [required grants](../devices/installer-authority.md).
+
+Replay requires a uniquely observed validated existing GPT GUID, matching geometry
+and consumed state, never an enumeration number. Duplicate identities refuse;
+this binds a logical disk, not authenticated physical identity. Blank/damaged
+unidentified targets support in-process printing/dry-run and interactive apply;
+their serialized plans cannot select a target for apply. Recorded Install IDs
+and journal choices are never regenerated during replay. Hashes bind the choices,
+all immutable source assets and consumed raw target reads. Missing, malformed or
+stale input refuses. Standard input is framed; following bytes cannot amend or
+execute that plan.
+
+## Revision inventory
+
+Every installed revision has `bin/REVISION/.pyxis-revision-manifest`: a canonical
+text tag, hex-encoded revision, sorted relative-path records, directory records
+including empty directories, and file records with byte size/SHA-256. It excludes
+itself; its installed file counts toward the 65,536-entry bound. The manifest and
+serialized plan each have a 16 MiB cap, alongside 32 directory levels and 255-byte
+component names. Long trees admitted by older entry/depth limits may exceed this
+metadata cap. Raw inspection also bounds decoded records (including free slots)
+at 65,536 per directory. This is consumed-path validation, not whole-pool fsck.
+The [source format and ownership](../../userspace/installer/README.md) define
+canonical decimals/hex, ancestor validation and stream lifetime.
+
+The executor copies/syncs programs, verifies exact tree structure and source
+bytes and hashes destination bytes against the inventory. It then writes, syncs
+and byte-verifies the manifest before switching the ESP. Unsigned hashes neither
+authenticate a revision nor prove later payload integrity. This is ordinary
+filesystem-view verification and may use copied pages; no stronger device-read
+contract is introduced. Planning uses raw codecs because a read-only mount would
+retain the pool until reboot and prevent later write admission. Staging space is
+conservatively checked without credit for cleanup; it is not a promise against
+all allocation limits. The existing whole-ESP replacement and configuration are
+unchanged; owned-file FAT/config publication is later.
+
+[QEMU record](../development/experiments/installer-plan/README.md) separates
+baseline costs, measurements, inspected behavior and qualification limits.
 
 ## Progress
 
