@@ -109,8 +109,8 @@ output while an application write is pending fails explicitly.
 
 **Remaining synchronous waits:** DNS ID/port entropy up to **3 seconds**, TLS
 entropy up to **5 seconds**, both additionally bounded by the request deadline.
-STATUS/ABORT cannot run during these calls, clock/UDP open/cleanup IPC, allocation
-or local cryptography. Trust/PSA setup precedes publication. No random completion
+STATUS/ABORT cannot run during these calls, clock/UDP open/cleanup IPC,
+capability export/table admission, allocation or local cryptography. Trust/PSA setup precedes publication. No random completion
 or fabricated entropy-WANT result is implemented. Cooperative TLS cleanup closes
 native transport without attempting close_notify; STATUS explicitly records that
 cleanup was not attempted. Authenticated-EOF rules for received bodies remain.

@@ -218,7 +218,8 @@ never block on stale readiness. Ordinary RECEIVE is unchanged. See
 
 The provider uses cooperative native completion/TCP/TLS progress. Remaining
 synchronous phases: DNS ID/port randomness (**3 s**), TLS entropy (**5 s**), clock/
-UDP open/cleanup IPC, allocation and local cryptography. The request deadline
+UDP open/cleanup IPC, capability export/table admission, allocation and local
+cryptography. The request deadline
 also bounds entropy waits; STATUS/ABORT cannot run during these calls. Trust/PSA
 setup precedes publication. No fabricated entropy-WANT result is included.
 [Implemented facets and limits](../interfaces/http-transactions.md).
