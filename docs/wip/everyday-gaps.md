@@ -21,9 +21,3 @@ focused root shell's cwd and Ctrl+B digit focus (owner requests, 2026-10-11).
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
 [boot configuration checker](boot-configuration-checker.md).
-
-Directory moves: the owner's three defaults were accepted 2026-10-12 and are
-delivered for review in the [native rename contract](../interfaces/directories.md#atomic-rename-and-directory-moves)
-and [mv reference/qualification](../userland/mv.md). The completed implementation
-and QEMU qualification replace the former proposal worklist; FAT32/host directory
-moves remain a [debt item](../technical-debt.md#directory-moves-outside-ram-and-npfs).

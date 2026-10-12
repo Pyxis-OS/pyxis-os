@@ -43,8 +43,8 @@ normal initrd `256a4edefc50ac123701d2f23a6ce6f8b6a8bfefa152c05146053651818c1558`
 
 Manual QEMU 10.2.2, Q35/nested KVM, host CPU, 512 MiB, one/four CPUs,
 fresh matching OVMF, modern VirtIO block/RNG, PS/2 and software GOP 1280x800.
-No NIC, USB or physical media. The unchanged baseline (`8d8a1e39`, userland
-`5af803ef`) reproduced `mv`'s directory refusal. Ignored local native callers
+No NIC, USB or physical media. The unchanged code baseline (`8d8a1e39`, docs-only build `48448a84`,
+userland `5af803ef`) reproduced `mv`'s directory refusal. Ignored local native callers
 in a qualification archive passed 44 RAM checks on four CPUs and 45 npfs checks
 on each of four/one CPUs: same/cross-parent moves, same-kind empty replacement,
 held file/directory identity, unchanged moved enumeration, detached-victim
