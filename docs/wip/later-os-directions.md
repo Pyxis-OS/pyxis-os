@@ -94,10 +94,11 @@ SEND/RECEIVE and native FILE/DIRECTORY staging, one pending operation per instan
 one owned receiver per correlated result, reserved admission before submission,
 and cancel/close/exit ownership drain. Its
 [accepted submission/cancel/collection contract](native-http-requests.md#native-completion-accepted-contract)
-is accepted and its bounded implementation assigned, 2026-10-12. The broader completion model remains
+is accepted; the bounded [interface](../interfaces/native-completion.md) is
+delivered for review. The broader completion model remains
 parked and unassigned; this permits no general async rewrite or extra per-operation
 capability API. [BSP service requests](../kernel/bsp-service-requests.md) remain
-synchronous until the selected paths implement an accepted replacement.
+synchronous outside the separate native completion admission route.
 
 ## Additional ports
 
