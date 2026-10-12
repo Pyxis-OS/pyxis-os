@@ -15,6 +15,7 @@
 #define ENDPOINT_RECEIVE UINT64_C(1)
 #define ENDPOINT_WITHDRAW UINT64_C(2)
 #define ENDPOINT_RETIRE_ACK UINT64_C(3)
+#define ENDPOINT_TRY_RECEIVE UINT64_C(4)
 #define ENDPOINT_REPLY UINT64_C(1)
 #define ENDPOINT_DATA_MAX 4096
 #define ENDPOINT_GRANTS_MAX 4
@@ -66,7 +67,7 @@ struct endpoint_control_message {
  * REPLY invokes the receipt, not the receiving endpoint. result is an opaque
  * application result on REPLY and must be zero on CALL/SEND. Unused grants are zero.
  * deadline_ns is an absolute monotonic CALL deadline, zero for unlimited.
- * SEND and REPLY must supply zero. RECEIVE and CREATE take only a message_header
+ * SEND and REPLY must supply zero. RECEIVE, TRY_RECEIVE and CREATE take only a message_header
  * with their own protocol. */
 struct endpoint_message {
   struct message_header header;
@@ -94,6 +95,10 @@ enum endpoint_delivery {
 };
 
 /* RECEIVE supplies a single-use receipt and a kernel-authenticated kind.
+ * TRY_RECEIVE uses the same owned receiver/RECEIVE transport and selection,
+ * collection and receipt rules. Empty open receivers return WOULD_BLOCK without
+ * parking for a message; closure returns ENDPOINT_CLOSED. Readiness reserves
+ * nothing, so multiplexed providers use TRY after a readiness scan.
  * RETIRE has no receipt, grants or payload. It identifies the export whose
  * provider state is no longer in use. ACK on the receiver releases that ID.
  * CALL receipts carry reply authority; SEND receipts carry zero operation rights.

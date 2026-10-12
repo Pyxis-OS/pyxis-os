@@ -1264,13 +1264,12 @@ static enum call_status ordinary_receive_output(uintptr_t address, size_t capaci
 }
 
 static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, bool nonblocking)
 {
   struct endpoint_state *state = endpoint->state;
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slots[ENDPOINT_GRANTS_MAX + 1];
   for (;;) {
-    struct task_wait *wait = task_wait_prepare();
     uint64_t ready_before = begin_endpoint_update(state);
     if (task_stop_requested() || state->closed) {
       end_endpoint_update(state, ready_before);
@@ -1327,6 +1326,12 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     }
     struct endpoint_delivery_record *record = state->head;
     if (!record) {
+      if (nonblocking) {
+        end_endpoint_update(state, ready_before);
+        capability_reservation_release(&reservation, slots);
+        return (struct syscall_result){CALL_WOULD_BLOCK, 0};
+      }
+      struct task_wait *wait = task_wait_prepare();
       KASSERT(!state->waiting_receiver);
       state->waiting_receiver = wait;
       end_endpoint_update(state, ready_before);
@@ -1453,7 +1458,7 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
 }
 
 static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr_t reply_address,
-    size_t reply_capacity)
+    size_t reply_capacity, bool nonblocking)
 {
   struct endpoint_state *state = endpoint->state;
   lock_endpoint(state);
@@ -1464,7 +1469,8 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
   state->receiving = true;
   unlock_endpoint(state);
 
-  struct syscall_result result = receive_endpoint_owned(endpoint, reply_address, reply_capacity);
+  struct syscall_result result = receive_endpoint_owned(endpoint, reply_address, reply_capacity,
+      nonblocking);
   lock_endpoint(state);
   state->receiving = false;
   unlock_endpoint(state);
@@ -1660,7 +1666,7 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
       }
       return control_export(endpoint, operation, request_address, request_size);
     }
-    if (operation != ENDPOINT_RECEIVE) {
+    if (operation != ENDPOINT_RECEIVE && operation != ENDPOINT_TRY_RECEIVE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     if (!(transport & HANDLE_TRANSPORT_RECEIVE)) {
@@ -1692,6 +1698,6 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   return object->type == OBJECT_ENDPOINT_RECEIVER ?
-      receive_endpoint(endpoint, reply_address, reply_capacity) :
+      receive_endpoint(endpoint, reply_address, reply_capacity, operation == ENDPOINT_TRY_RECEIVE) :
       call_endpoint(endpoint, target, rights, request_address, request_size, reply_address);
 }

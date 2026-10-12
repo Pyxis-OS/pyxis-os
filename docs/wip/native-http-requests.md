@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 implementation in progress; native completion prerequisite merged, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–3 delivered; adapters/coordinator tasks 4–5 remain; native completion prerequisite merged, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -25,6 +25,15 @@ HTTP/2, compression, proxies, PUT/PATCH/DELETE, caching and general credential
 storage are outside this first milestone.
 HTTP/TLS stay in userspace; any shared stream/readiness contract is generic,
 with no HTTP-shaped or POSIX-shaped kernel calls.
+
+**Pyxis must be able to hit good network targets overall in the future.**
+End-to-end HTTP throughput should track the native TCP path. The ThinkPad xfer
+measurements of 2026-10-09 (70.5 MiB/s send, 85 MiB/s receive) are the current
+[reference measurement](../development/network-throughput.md), **not a contract**.
+Track the HTTP/TCP gap with each relevant change. The owner accepted task 3's
+native whole-GET cost (+18%, 14.3 → 17.2 ms) on 2026-10-12;
+[measurements](../development/experiments/http-prepared.md) and
+[revisit points](../technical-debt.md#http-provider-throughput) remain explicit.
 
 ## Inspected starting point
 
@@ -205,46 +214,28 @@ staging CREATE/REMOVE/READ/WRITE/RESIZE/SIZE on RAM/archive/npfs. HOST/FAT32 and
 provider forwarding are excluded. See the [completion ABI and limits](../interfaces/native-completion.md),
 [admission debt](../technical-debt.md#native-completion-per-process-admission) and
 [QEMU qualification/cost finding](../development/experiments/native-completion.md).
-The broader completion direction stays parked. Provider/DNS/TLS cooperative
-integration and the HTTP fix below remain task 3 work.
+The broader completion direction stays parked. Task 3 integrates the provider,
+cooperative DNS/TLS and the 205 correction; its limits remain explicit.
 
 ### Task 3 receive contract — accepted 2026-10-12
 
-Source inspection during implementation, 2026-10-12: receiver READABLE reserves
-nothing. A queued CALL can expire between `wait_many` and `RECEIVE`; ordinary
-RECEIVE then waits indefinitely if the queue is empty. The provider cannot
-guarantee network/deadline/status/abort progress through that wait. This is a
-new interface decision, not part of the accepted native completion scope.
+Owner option A: header-only `ENDPOINT_TRY_RECEIVE` and libpyxis helper, with
+RECEIVE's owner/transport authority, packet, selection priority and retryable
+collection. An empty open receiver returns `CALL_WOULD_BLOCK`; service loops
+never block on stale readiness. Ordinary RECEIVE is unchanged. See
+[receiver readiness](../interfaces/endpoints.md#receiver-readiness).
 
-**Option A accepted by the owner, 2026-10-12: add `ENDPOINT_TRY_RECEIVE` and a libpyxis helper.** Header-only
-request and the existing endpoint packet. Same owning process and
-`HANDLE_TRANSPORT_RECEIVE` authority, selection/receipt/grant semantics,
-CANCEL/RETIRE priority and retryable native-completion collection as RECEIVE.
-An empty open receiver returns `CALL_WOULD_BLOCK` without parking or installing
-grants; a closed receiver returns `CALL_ENDPOINT_CLOSED`. Readiness still
-reserves nothing. The provider waits with `wait_many`, then collects with TRY
-and continues its other work if readiness became stale. Ordinary RECEIVE stays
-unchanged. Qualify empty/closed cases, queued-message expiry and a provider's
-receiver/TCP/deadline progress in QEMU. This needs a narrow kernel/ABI change.
+The provider uses cooperative native completion/TCP/TLS progress. Remaining
+synchronous phases: DNS ID/port randomness (**3 s**), TLS entropy (**5 s**), clock/
+UDP open/cleanup IPC, capability export/table admission, allocation and local
+cryptography. The request deadline
+also bounds entropy waits; STATUS/ABORT cannot run during these calls. Trust/PSA
+setup precedes publication. No fabricated entropy-WANT result is included.
+[Implemented facets and limits](../interfaces/http-transactions.md).
 
-The provider loop uses TRY after readiness, never ordinary blocking RECEIVE.
-This adds no threads, reservations or native completion operation. Implementation
-and QEMU qualification are assigned within task 3; deadline-bounded RECEIVE is
-not selected.
-
-Other synchronous phases retained by this first scope: DNS ID/port randomness
-(up to three seconds), TLS entropy callbacks (up to five seconds), clock and
-UDP open/cleanup service handoffs, allocation and local cryptographic work.
-Status/abort cannot run during those calls; no asynchronous RANDOM operation or
-fabricated entropy-WANT result is included. Trust/PSA setup occurs before service
-publication. The provider uses cooperative HTTP/TLS steps; the legacy blocking
-libhttp APIs remain for compatibility callers, not for its OPEN/COMMIT handlers.
-
-**Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
-fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
-204). Enforce zero decoded content and retain 205 on failure; qualify empty/nonempty
-fixed, chunked and close-delimited cases. This is distinct from 204 framing
-([RFC 9110 §15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6),
+The task 3 205 correction rejects nonempty decoded Reset Content while retaining
+HTTP status; empty fixed/chunked/close-delimited framing remains valid, distinct
+from 204 ([RFC 9110 §15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6),
 [RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3)).
 
 ## Accepted owner decisions
@@ -326,23 +317,17 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   [QEMU qualification and costs](../development/experiments/http-fixed-post.md).
   **After this task the owner can:** exercise local POST/error/slow-response
   fixtures with a body larger than the resident buffer, without an HTTP port.
-- [ ] **3. Prepared provider transactions and responsive stream service.**
-  The object/rights/lifetime/inheritance review and native completion contract
-  are accepted; the bounded kernel prerequisite is merged. Provider integration
-  is in progress, including the accepted nonblocking receive operation above.
-  Deliver body/control/response/observation grants, freeze, status, abort,
-  private storage, credential cleanup and retirement. Start with one active
-  exchange per provider instance and explicit admission failure. An instance is
-  one provider process with its service exports, TLS/network state and storage;
-  aliases such as `https`/`json+https` and all binding clients share its limit.
-  Separate processes are independent; per-consumer provisioning/concurrency is
-  deferred in [shared-instance admission debt](../technical-debt.md#http-shared-instance-admission).
-  A cooperative service loop must progress network work while servicing reads/
-  status/abort/retirement; do not fetch synchronously inside OPEN/commit or assume
-  future user threads.
-  Bound resident queues/scratch and export counts; cumulative transfer bytes
-  are not a RAM reservation. Publish streamed GET and request-scoped GET headers
-  as well as POST. Retain read-only GET authority and register JSON aliases.
+- [x] **3. Prepared provider transactions and responsive stream service.**
+  Delivered separate body/control/response/observation exports, freeze, status,
+  abort, private npfs staging and retirement; cooperative DNS/TCP/staging
+  completion/TLS steps and nonblocking receiver collection. The 205 correction,
+  request-scoped GET fields and read-only JSON aliases are included.
+  [Implemented contract and limits](../interfaces/http-transactions.md);
+  [QEMU qualification and native/nested matched costs](../development/experiments/http-prepared.md).
+  One active exchange per process is shared by aliases and clients; provisioning/
+  concurrency is deferred in [admission debt](../technical-debt.md#http-shared-instance-admission).
+  DNS entropy (3 s), TLS entropy callbacks (5 s), capability/service handoffs
+  and local cryptography remain synchronous; STATUS/ABORT cannot run during them.
   **After this task the owner can:** use native prepared grants to submit once,
   read a prefix and distinguish complete, failed and unknown outcomes.
 - [ ] **4. Generic libc/Lua adapters and stream propagation.** Implement `"r"`,

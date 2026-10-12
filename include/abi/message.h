@@ -56,6 +56,8 @@
 #define PROTOCOL_THREAD_COMPLETION UINT64_C(48)
 #define PROTOCOL_INPUT_POLICY UINT64_C(49)
 #define PROTOCOL_COMPLETION UINT64_C(50)
+#define PROTOCOL_STREAM UINT64_C(51)
+#define PROTOCOL_HTTP_TRANSACTION UINT64_C(52)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
