@@ -237,6 +237,15 @@ use required for closure. HID over GATT feeds the [system pointer](../interfaces
 with kernel-owned positions. Tasks 1 to 3 are complete; tasks 4 to 8 and later
 policy rounds remain open and need explicit assignment.
 
+## Wi-Fi on the ThinkPad and the Steam Deck
+
+Owner idea, 2026-10-12; not scheduled. One shared 802.11 core (WPA2/WPA3
+supplicant, connection management, 802.11-to-Ethernet frames) plus a small driver
+per chip. Both targets look SoftMAC-class: the ThinkPad's Intel AX200 (iwlwifi-class,
+[firmware already loaded for Bluetooth](../devices/ax200-bluetooth.md)) and the
+Deck OLED's Qualcomm QCA2066 (ath11k-class). The chip identification and the
+SoftMAC classification are from memory and need confirming against the inventories.
+
 ## Clock source
 
 TSC with extended-HPET fallback is [implemented](../kernel/timekeeping.md#tsc-selection)
