@@ -234,21 +234,22 @@ static enum call_status ensure_workspace(struct fat32_mount *mount, size_t bytes
   if (bytes <= mount->workspace.bytes) {
     return CALL_OK;
   }
-  size_t extra = bytes - mount->workspace.bytes;
-  if (extra > FAT32_WORKSPACE_BYTES - workspace_used) {
+  /* Both buffers remain live until replacement succeeds. */
+  if (bytes > FAT32_WORKSPACE_BYTES - workspace_used) {
     return CALL_LIMIT;
   }
-  workspace_used += extra;
+  workspace_used += bytes;
   uint64_t flags = cpu_save_interrupts();
   void *memory = kmalloc(bytes);
   cpu_restore_interrupts(flags);
   if (!memory) {
-    workspace_used -= extra;
+    workspace_used -= bytes;
     return CALL_NO_MEMORY;
   }
   flags = cpu_save_interrupts();
   kfree(mount->workspace.memory);
   cpu_restore_interrupts(flags);
+  workspace_used -= mount->workspace.bytes;
   mount->workspace.memory = memory;
   mount->workspace.bytes = bytes;
   return CALL_OK;
@@ -434,16 +435,15 @@ static enum call_status reserve_chain(struct fat32_node *node, uint64_t capacity
     return CALL_LIMIT;
   }
   size_t bytes = capacity * sizeof(uint32_t);
-  size_t extra = bytes - node->chain_bytes;
-  if (extra > FAT32_WORKSPACE_BYTES - workspace_used) {
+  if (bytes > FAT32_WORKSPACE_BYTES - workspace_used) {
     return CALL_LIMIT;
   }
-  workspace_used += extra;
+  workspace_used += bytes;
   uint64_t flags = cpu_save_interrupts();
   uint32_t *chain = kmalloc(bytes);
   cpu_restore_interrupts(flags);
   if (!chain) {
-    workspace_used -= extra;
+    workspace_used -= bytes;
     return CALL_NO_MEMORY;
   }
   uint32_t *previous = node->record.chain;
@@ -456,7 +456,7 @@ static enum call_status reserve_chain(struct fat32_node *node, uint64_t capacity
     node->record.chain_capacity = capacity;
   }
   if (status != CALL_OK) {
-    workspace_used -= extra;
+    workspace_used -= bytes;
     flags = cpu_save_interrupts();
     kfree(chain);
     cpu_restore_interrupts(flags);
@@ -465,6 +465,7 @@ static enum call_status reserve_chain(struct fat32_node *node, uint64_t capacity
   flags = cpu_save_interrupts();
   kfree(previous);
   cpu_restore_interrupts(flags);
+  workspace_used -= node->chain_bytes;
   node->chain_bytes = bytes;
   return CALL_OK;
 }

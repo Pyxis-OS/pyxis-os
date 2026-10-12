@@ -92,7 +92,8 @@ struct mount_interval_request { uint64_t id; };
 #define MOUNT_STATE_INTERVAL (UINT64_C(1) << 6)
 #define MOUNT_STATE_CLEANUP_PENDING (UINT64_C(1) << 7)
 /* failure_phase is the shared FAT engine's fat32_mounted_phase when FAILED;
- * failed_sector is the absolute backing sector. Names are diagnostic components,
+ * failed_sector is the absolute backing sector, or UINT64_MAX for a flush.
+ * Names are diagnostic components,
  * never authority or paths to automatically replay. */
 struct mount_state_reply {
   uint64_t domain, device, partition, first_block, block_count, flags;
