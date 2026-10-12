@@ -178,23 +178,21 @@ include path so `-MMD` tracks them.
 
 | Supported | Not provided |
 | --- | --- |
-| Exceptions, RTTI, static constructors and destructors, local statics | Threads, `thread_local`, `<thread>`, `<mutex>`, non-lock-free atomics |
-| Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>` | `<iostream>`, `<locale>`, `<regex>` and wide characters |
-| `system_clock` and `steady_clock` | `<filesystem>`, `random_device`, time zones |
+| Exceptions, RTTI, static constructors/destructors, local statics, executable-only `thread_local` | Thread-safe C++ library, `<thread>`, `<mutex>`, non-lock-free atomics |
+| Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>`, streams, C-only locale, wide facilities | Non-C locales |
+| `system_clock`, `steady_clock`, native `random_device` | `<filesystem>`, time zones |
 | Aligned `new` up to 4096 bytes | Most of `<cmath>`, which follows libc's [math subset](../kernel/userspace.md#foundational-libc) |
 
-This table describes installed pin `49e2c1a`. The hosted-Clang
-[task 2 closure](experiments/hosted-clang-cxx.md) builds streams, the native C-only
-locale, wide facilities and `random_device` in the fork. The SDK script enables
-that profile only when the installed compiler's exact runtime source contains
-its native locale backend. Adoption waits for an owner-published matching
-container; it does not silently move the fork pin. Thread/filesystem/TZdb
-settings stay separate.
+The matching gate 7 compiler adopts the hosted-Clang
+[task 2 closure](experiments/hosted-clang-cxx.md) and static local-exec TLS. The
+SDK builds from the installed compiler's exact runtime source. It enables the
+native `__cxa_thread_atexit_impl` bridge while keeping general runtime threads
+OFF: language TLS does not make shared C++ or libc state thread-safe. Gate 8
+still owns that audit and its C11/pthread adapter.
 
 The headers of absent features still include, but their names do not exist, so
-a program using one fails to compile. `thread_local` and `_Thread_local` are
-rejected by the compiler. `-fno-exceptions` and `-fno-rtti` code links against
-the same archives.
+a program using one fails to compile. `-fno-exceptions` and `-fno-rtti` code links
+against the same archives.
 
 An uncaught exception prints `libc++abi: terminating due to uncaught
 exception of type …` with the mangled type name, to keep the demangler out of
@@ -202,6 +200,41 @@ every program, and exits with status 1 through `abort`. C code has no unwind
 tables, so an exception thrown through a C frame, such as a `qsort`
 comparator, also terminates. A C++ program printing a `vector<string>` is about
 108 KB; `echo` in C is 56 KB.
+
+## Static TLS and runtime keys
+
+Executable-only `_Thread_local`/`thread_local` use x86-64 local-exec variant II.
+`pyxis.ld` exposes `__tls_template_start`, `__tls_template_init_end`,
+`__tls_template_end` and absolute `__tls_alignment`. The zero-tail extent can
+share ELF virtual addresses with ordinary data; bootstrap copies only initialized
+bytes, then zeros the private instance. TLS block padding follows its alignment;
+TCB alignment is separate. Other TLS models, emulation and dynamic modules reject.
+The final P1F contains ordinary load segments, without a TLS header.
+
+Before errno, stdio, malloc or constructors, TLS-free startup validates native
+bindings, retains MEMORY MANAGE, allocates guarded backing and binds the caller's
+FS once using the distinct startup `thread_fs` grant. That grant supplies SET_FS
+only and is closed after binding. Missing authority, allocation or bind failure
+exits with status 1; there is no global errno fallback. FS:0 points to libc's TCB;
+`errno` is an accessor to its field. Rebuild SDK, applications and ports together;
+old runtime archives expecting a global errno are not compatible.
+
+`<pyxis/thread_runtime.h>` prepares contexts for native CREATE, drains ordinary
+thread exit, and collects context backing after the matching native completion.
+It does not supply CREATE/join policy or a C11/pthread profile. Distinct guarded
+stacks and prepared FS contexts remain caller-owned; native pins prevent RELEASE
+until retirement. Raw native entries that omit libc still start with FS=0.
+TCC's TLS-free writer exports empty-template bounds and still refuses language TLS.
+
+Keys are process-local and generational, initially 128 slots as tunable policy.
+Deletion invokes no callback; stale generations reject. Values belong to each TCB.
+Ordinary exit drains language destructors in reverse registration order, then up
+to four key passes with values cleared before callbacks. Callbacks run outside
+registry exclusion. Required language-destructor registration allocation failure
+terminates the process honestly. Main-thread FS remains alive through atexit,
+.fini_array and stdio shutdown. Forced process stop/fault runs no user destructors.
+See [gate 7 qualification](experiments/threads-task7/README.md) and the remaining
+[thread gates](../wip/threads.md#delivery-gates).
 
 ## CMake
 

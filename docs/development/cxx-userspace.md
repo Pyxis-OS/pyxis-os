@@ -17,7 +17,7 @@ in the [SDK's C++ section](sdk.md#c). The accepted
   - for C++, the Pyxis driver searches the sysroot's `usr/include/c++/v1`
     ahead of libc's headers and links libc++, libc++abi and libunwind;
   - every executable link passes `--eh-frame-hdr`;
-  - `thread_local` and `_Thread_local` fail when compiling;
+  - executable-only local-exec language TLS uses the gate 7 SDK template/bootstrap;
   - libc++ uses `timespec_get` for its clocks, skips the terminal check in
     `print` and needs no `ELAST` limit;
   - the toolchain installs `x86_64-unknown-pyxis-clang++`.
