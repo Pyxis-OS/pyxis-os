@@ -88,7 +88,7 @@ Each needs its own proposal and the owner's go.
   bytes must not become control authority, and Unix `flock` is not a basic-editor
   prerequisite. Poll-based change detection needs truthful metadata and timers;
   file watches can follow.
-- Jobs and `system()` consume [native command execution](native-command-execution.md)
+- Jobs and `system()` consume [native command execution](../userland/native-jobs.md)
   for opt-in FILE/resource selection and supervised capture and deadlines; Neovim
   retains its job and terminal integration. Ordinary `uv_spawn` stays the
   default without executor authority. Descendant jobs require

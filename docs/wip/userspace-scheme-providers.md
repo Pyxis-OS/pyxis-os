@@ -75,7 +75,7 @@ bytes remain excluded from argv/environment/history/logs. The
 records that boundary and the accepted native completion prerequisite. Capability-valued environment implementation needs a
 separate owner assignment.
 
-The shared [native command execution](native-command-execution.md) milestone
+The shared [native command execution](../userland/native-jobs.md) milestone
 supplies selected producer/consumer streams and per-stage results/cleanup. The
 HTTP redirection coordinator still owns the rule to commit only after every body
 producer succeeds; last-stage pipeline status is insufficient.

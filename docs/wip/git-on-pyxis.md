@@ -244,7 +244,7 @@ hooks/filters; existing hooks/filters needing execution cause an explicit refusa
 of the affected operation.
 
 **Inference: native run-command backend.** Consume the shared
-[native command execution](native-command-execution.md) foundation for streams,
+[native command execution](../userland/native-jobs.md) foundation for streams,
 cwd/env snapshots, result/stop and cleanup. Git owns bundle resolution, enforced
 external-feature policy and fork-callback/sideband adaptation. Resolve internal
 Git children from one retained bundle revision, launching the same native Git
@@ -474,7 +474,7 @@ parent pins only after dependencies are published. No compiler rebuild is implie
    log, internal diff and serial checkout for supported ordinary local repositories.
 3. **Consume shared command execution; adapt Git run-command/sideband.** Generic
    stream/cwd/env/result/stop/cleanup work lives in
-   [native command execution](native-command-execution.md). Git retains its
+   [native command execution](../userland/native-jobs.md). Git retains its
    executable bundle/grant policy, helper flow and non-fork callback/sideband
    adaptation; remove shell/fork fallback without a kernel POSIX process model.
    Descendant-enabled subcommands and remote helpers require

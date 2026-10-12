@@ -179,5 +179,86 @@ available; missing observers never receive invented stage results.
 `close` returns BUSY before completion. A failed start may retain an owned record;
 never retry launch. Unknown admission without observers quarantines the record
 until caller/session teardown. A retained fresh group stops and waits cleanup
-without fabricating process results. No descendants, adapter, per-job caller-death
+without fabricating process results. No descendants, per-job caller-death
 guarantee, backing quota or hard admission/retirement wall-time bound is added.
+
+## Lua and declared clients
+
+[Lua's owned jobs](lua.md#owned-native-jobs) use this core for one-stage capture
+and pipelines, with exact role/root selection, owned cwd/environment snapshots
+and finite binary input. Strong recovery ownership survives Lua errors and GC;
+explicit cancellation, observation and once-only close retain the native result
+and cleanup distinctions. `pyxis.commands` supplies argv wrappers for ports;
+ordinary `pyxis.run`, shell syntax and libuv spawn remain unchanged.
+
+[Declared contexts](program-bundles.md#private-job-contexts), accepted by the
+owner 2026-10-12, gate fresh private RAM `job_work` provisioning on `jobs=true`
+and usable selected clock/pipe/delegated-launch grants. Lua's declarations are
+optional; users invoke it normally. Ordinary children receive no implicit
+context, provisioning ancestor or descendant launcher in this capture profile.
+A surviving creator cleans after confirmed client/group retirement. Stranded
+named trees remain private until reboot under the accepted
+[cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+Continuum supervision and nested groups remain parked; no new executor/broker
+or capability-valued environment mechanism is added.
+
+## Adapter qualification (2026-10-12)
+
+Delivery: [userland #239](https://git.internal/PyxisOS/pyxis-userland/pulls/239),
+`143c89549b00f81a5ef761f257e74facb69f8182`, then
+[ports #102](https://git.internal/PyxisOS/pyxis-ports/pulls/102),
+`f93becb9e5455f19e0389f6dd1b19240bdb38a87`, then
+[parent #760](https://git.internal/PyxisOS/pyxis-os/pulls/760).
+The accepted design and lifetime record is #757; its history replaces the
+completed worklist. No compiler-container rebuild is needed.
+
+Before-code source image: main `36bcd7e9`, userland `3daa2461`, ports `fd1eb30f`,
+fs `30f625a2`, lwIP `a1aadb91`, LLVM 23.1.3 builder `2d23443`, LOG_LEVEL=info.
+Default image build passed; kernel SHA256
+`dca3f0eb181e9ffb92d2d044c82bd62f3288020b0a608437333500ca1fbacf2c`, initrd
+`e477a59b2a5492440a17ed7c559d54fcd4574fca5c9f7490055355a712afe4c9`.
+The implementation used current-main kernel `9bd3d66d` after #758 and the
+dependency heads above. Source SDK/ports/userland/default-image builds passed;
+the SDK records pre-qualification-doc parent `6fa9e785` with modified pins, clean
+userland/fs sources. Kernel SHA256
+`cefb436979e4524b4a9bb9201cd2889c41c32bfde0845acfff30c078d41a3c15`, normal initrd
+`674664eeef27689279a1475b3611857e19a36f07bc8242e234a515675e3bc795`.
+
+Interactive QEMU 10.2.2 q35/nested KVM, host CPU, 512 MiB, one/four CPUs,
+fresh OVMF variables, read-only FAT VirtIO boot disk, VirtIO RNG and PS/2 input.
+Local baseline/adapter boots use no NIC/USB and software GOP 1280x800. Separate
+four-CPU session checks add VirtIO networking with localhost TCP forwarding;
+only that local qualification archive enables Development mux and Remote jobs.
+Ordinary images retain their configured gates. Local C consumers and required
+manifest fixtures stay in the ignored qualification archive, not the product.
+
+| Check | Measured/observed result |
+| --- | --- |
+| Ordinary shell launch and pipeline; Lua `pyxis.run` | Same output/native failure behavior; absent new API before implementation. |
+| 150,000-byte binary input through `cat` → `cat` | Byte-for-byte captured stdout, empty stderr, both EXITED/0 and all input accepted on one/four CPUs. |
+| Early first-stage exit with 200,000-byte input | EPIPE closes only feeder; 4,096 accepted / 195,904 unsent in the sampled runs; remaining output drains and both results survive. |
+| Silent child with 50 ms deadline; explicit cancel | Actual TERMINATED result after observed cleanup; policy cause remains separate. |
+| Output limit 64 bytes on 20,000-byte input | 64 returned, truncated; sampled stored size 4,096, showing the polled cap's overshoot. |
+| Protected Lua error, GC, BUSY close, `pyxis.jobs()` | One retained record; cancel/wait/close recovers it and registry returns to zero. |
+| Read-only selected root/cwd; empty roots and absent cwd | Mutation refused; exact minimal echo still succeeds. Positive timeout enforced before effects. |
+| Replay to read-only FILE | Actual EXITED/0 preserved alongside write error/uncertain delivery; no replay and no retained completed record. |
+| Optional context absent / required context absent | Pure Lua runs; job refuses before admission / client admission refuses respectively. |
+| Exact libuv FILE and PIPE selection | Buffered FILE output flushed before child; independent child cursor starts at zero, parent's stays 16; sources survive. Native EXITED/7 and EXITED/4 callbacks; PIPE output/EOF drains. |
+| libuv failed spawn / live close | Inactive observerless handles close cleanly; independent WAIT confirms EXITED/9 after detach without an exit callback or hidden stop. |
+| Local mux panes, remote plain shell and remote mux | Native captures/pipelines run; remote error/GC recovery works; final session drain completes. |
+
+Read-only GDB inspection confirms exactly memory/threads/clock/random for a
+captured stage, directional PIPE stdout/stderr, no stdin/roots/cwd/namespace and
+owned `X=owned` environment. It also sees a distinct empty RAM leaf while Lua is
+alive, normal leaf removal after retirement, local pane subtree removal after
+confirmed close, and zero Remote provisioning children after group cleanup.
+Unknown admission, creator faults and stalled provider cleanup are source/lifetime
+limits, not injected or natively measured cases.
+
+Inline 1000 ordinary `pyxis.run{"cat","tmp://job-empty"}` calls, twice per CPU
+configuration: before 3/3 seconds (one CPU), 5/8 (four); after 3/3 and 6/7 in the
+initial adapter samples. One-second clock quantization and shared-host scheduling
+prevent a native latency/speedup claim. Screens/logs/consumers remain under
+`build/adapters-baseline` and `build/adapters-qualification`. All owned QEMU,
+debugger and remote-client processes are stopped after qualification. No native
+hardware, Git/Neovim integration or full guest recipe execution is claimed.
