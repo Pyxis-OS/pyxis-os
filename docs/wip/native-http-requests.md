@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted by the owner, 2026-10-11; not implemented.**
+Status: **shared milestone accepted 2026-10-11; task 1 assigned 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. All three

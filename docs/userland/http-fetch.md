@@ -64,8 +64,8 @@ Clients receive FILE authority, not trust-management or additional TCP grants.
 
 ## Library and authority
 
-`userspace/libhttp/http.h` declares `http_fetch`, `http_body_release`,
-`http_result_status` and the result/storage structures. This is an application library, built as `libhttp.a`,
+`userspace/libhttp/http.h` declares the incremental GET interface and the
+`http_fetch` snapshot collector, `http_body_release` and `http_result_status`. This is an application library, built as `libhttp.a`,
 outside the SDK runtime. Its parser dependency is the pinned
 [picohttpparser port](../../ports/picohttpparser/README.md), exported separately at
 `build/ports-dev/picohttpparser`. Consumers also link userland's `libtls.a` and
@@ -105,6 +105,37 @@ status mapper translates certificate rejection to `CALL_DENIED`, TLS protocol
 or truncation to `CALL_IO`, allocation quota to `CALL_QUOTA`, allocation failure
 to `CALL_NO_MEMORY`, and encoded-size limits to `CALL_FILE_TOO_LARGE`. Native
 TLS transport, entropy and clock failures preserve their native status.
+
+## Incremental GET
+
+`http_get_open` performs one GET through the final headers and returns an owned
+stream. It follows no redirects. `http_stream_read` copies at most 4 KiB into a
+positive-capacity caller buffer; the engine owns fixed scratch, not body storage.
+There is no cumulative body allowance. Metadata retains the bounds below, and
+byte counters fail on integer overflow. The existing 30-second overall deadline
+(or an earlier caller deadline) still applies; longer transfers and cooperative
+provider service belong to [later tasks](../wip/native-http-requests.md#ordered-delivery-tasks).
+
+The caller retains `http_response`, the borrowed capabilities and any TLS runtime
+until `http_stream_close`. The response separates HTTP status from pending,
+complete and failed framing: a framed 4xx/5xx can complete with a body. DATA never
+proves completion. Inspect the retained terminal result after COMPLETE/FAILED;
+repeated terminal reads do no I/O. A later failure retains the delivered prefix
+and its byte count. Close before completion records aborted failure and releases
+transport/scratch; it never certifies a partial download.
+
+Fixed bodies finish at their declared length; chunked bodies finish only after
+payload delimiters, the zero chunk and bounded validated trailers. Close-delimited
+HTTPS requires authenticated TLS EOF. Native handle-close failure invalidates
+completion; a TLS close-notification failure after valid framing is diagnostic.
+These are the [HTTP framing rules](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3),
+with the existing identity-only representation and trailer restrictions.
+The snapshot collector keeps the existing HTTP status, redirect and storage
+policy. `httpfs` still publishes complete immutable FILE snapshots; this API does
+not make them streaming or make the provider responsive during OPEN.
+
+Qualification, configuration and measured allocation demand are recorded in the
+[task 1 experiment](../development/experiments/http-incremental-get.md).
 
 ## Request and response policy
 
@@ -225,11 +256,11 @@ separates controlled QEMU results from source inspection. Protocol references:
 | Shared body-storage reservations | 64 MiB |
 | Overall fetch time | 30 seconds, capped by an earlier caller deadline |
 
-The unmodified parser also rejects excessive chunk framing overhead: once
-accumulated overhead reaches 100 KiB, streams dominated by overhead can fail its
-ratio bound. Tiny-chunk responses can therefore be rejected below the body limit.
-Parser/request scratch is fixed and bounded separately from body storage; the
-large receive buffer and field array live on the heap.
+Chunk framing is decoded incrementally with checked sizes, exact CRLF delimiters
+and bounded size/extension lines. It has no cumulative framing-overhead allowance.
+Parser/request scratch is fixed and bounded separately from snapshot body storage;
+the large receive buffer and field array live on the heap. The 16 MiB body and
+64 MiB storage rows apply to the snapshot collector, not the incremental engine.
 
 For path/libc HTTP opens the deadline starts before URI processing/binding lookup
 and spans all hops. A direct one-hop fetch starts its own bounded deadline. It covers DNS, connect, send and the
