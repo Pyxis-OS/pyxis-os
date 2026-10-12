@@ -19,6 +19,12 @@ profile is claimed; those remain gate 8.
   initrd `38f9717f8ba077f98beb0aa0795e18e84a0c9b088f2a8ab407777684ea3ceba3`.
   Each A/B kernel used its matching initrd: the startup ABI and errno changed.
 
+Review rebase: integration now contains main `173f1321`; userland #231 is
+`3184f097`, containing main `5fa4f42`. Range-diff confirms all three TLS
+runtime/probe commits are unchanged. Ports `fd1eb30` still contains current
+ports main `5ba172c`. The measurements above and below retain their original
+inputs; no static initial-thread storage change was made.
+
 Local compiler/linker probes passed mixed, empty, zero-only and over-aligned
 TLS, P1F/ELF ordinary-load equivalence and malformed/unsupported model refusal.
 The intermediate PT_TLS zero tail may overlap ordinary ELF data addresses;
