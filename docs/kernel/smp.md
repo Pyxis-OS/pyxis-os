@@ -579,7 +579,8 @@ close admission, permit old syscall continuations to drain, and require zero
 roots/borrowers before effects. Mutator-only reply reentry remains closed to
 ordinary dispatch until its final copy/cleanup. Pending drainage is serviced
 without blocking the BSP executor; retirement reclaims only drained activity.
-Exactly one user task remains. The kernel TLB-flush IPI is a separate contract.
+Native siblings share the process address space under these rules; an ordinary
+launch still has one task. The kernel TLB-flush IPI is a separate contract.
 
 Kernel code, CPU records, scheduler stacks, heap pools and direct boot/Bochs
 framebuffer mappings remain mapped throughout AP execution. Resizable TTY backing follows

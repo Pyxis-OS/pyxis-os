@@ -149,10 +149,11 @@ availability while waiting reports ERROR.
 Ownership belongs to the process, not an individual handle. Copying a grant
 does not transfer an acquired session; closing its last handle does not release
 it. Another handle to the same object can release the session, and process
-exit/fault releases it even if all handles have been closed. There is one task
-per process, so the owner cannot release or exit concurrently with its blocked
-READ. External termination wakes an interruptible READ, which detaches its
-waiter and returns ENDPOINT_CLOSED before process cleanup releases the session.
+exit/fault releases it even if all handles have been closed. One READ may be
+active; a sibling task's second READ, or its RELEASE during a blocked READ,
+returns `CALL_BUSY` before effects. A process stop, including one a sibling
+requests by exiting, wakes an interruptible READ, which detaches its waiter and
+returns ENDPOINT_CLOSED before process cleanup releases the session.
 
 While capture is the input destination, physical input does not also enter the
 console queue. A presented but hidden graphics session overrides capture and

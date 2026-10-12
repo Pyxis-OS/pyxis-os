@@ -175,7 +175,9 @@ A deadline already reached succeeds immediately. Sleep never completes before
 its deadline, but becoming runnable and executing again can happen later. A
 sleep uses the existing task-owned timed-wait record and no allocation, BSP
 allocation request, or separate timer object. The capability keeps the clock
-object alive while the sole user task is blocked.
+object alive while the calling task is blocked, even if a sibling closes the
+handle. Sleeps keep only per-task wait records, so siblings sleep independently
+and are never refused; a process stop wakes a sleeper with ENDPOINT_CLOSED.
 
 Libpyxis exposes `clock_now`, `clock_sleep_until` and `clock_sleep_for` in
 `<clock.h>`. The relative helper reads the clock once and checks addition for

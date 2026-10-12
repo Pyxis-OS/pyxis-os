@@ -198,9 +198,15 @@ search/copy/duplication, numeric conversion/formatting, environment lookup and
 [file/terminal stdio](../userland/stdio.md), unbuffered unless `setvbuf` or `setbuf` selects buffering.
 `snprintf`/`vsnprintf` report the full required length and terminate a nonempty
 destination even when truncated. Their header lists supported formats, including
-floating point. Wide characters are limited to `wcslen`. `setlocale` knows
-only the "C" locale: queries, `""` and `"C"` return `"C"`, and other names
-return NULL. There is no `localeconv` or other locale state.
+floating point. [`wchar.h`](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/libc/include/wchar.h)
+provides wide string length, comparison, search and `wmem*` operations, wide
+numeric conversion (`wcstol` through `wcstold`), UTF-8 multibyte conversion
+(`mbrtowc`, `wcrtomb` and the string forms), `swprintf`/`vswprintf` and selected wide FILE
+operations (`fgetwc`, `fputwc`, `ungetwc`, `fwide`). `setlocale` knows only the
+"C" locale: queries, `""` and `"C"` return `"C"`, and other names return NULL.
+`localeconv` returns static C-locale data with no grouping or currency
+information. There is no other locale state, so this is not complete POSIX
+wide-character or locale support.
 `errno` is process-global today; ordinary libc is not thread-safe. Native siblings
 must avoid shared libc state until the later TLS/runtime gates.
 Native libpyxis calls continue to return native statuses without setting it.

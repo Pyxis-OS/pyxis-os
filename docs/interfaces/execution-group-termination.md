@@ -8,7 +8,9 @@ The public contract is in [execution groups](execution-groups.md).
 A stop request prevents further userspace execution at the assigned scheduler's
 safe point. Group members and process-control objects borrow process links; the
 process owns its group member record, terminal result and sole task stop target.
-There is still exactly one user task per process. Both group stop and a process
+The text below follows one task per process, the case for ordinary launches.
+With native siblings, process stop and termination stop the whole task set
+([threads](../kernel/userspace.md#entry-and-loading)). Both group stop and a process
 observer's [TERMINATE](processes.md) operation target that process through the
 same path, for grouped and ungrouped processes alike. The lock order is control
 or group, then process lifetime, then scheduler queues. Running/runnable user
