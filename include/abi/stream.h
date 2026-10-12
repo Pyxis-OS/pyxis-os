@@ -9,6 +9,7 @@
 /* Exported forward-only byte stream. Copies share consumption. A nonzero READ
  * waits for data or a terminal result; successful zero means validated EOF.
  * Errors never mean EOF. A lost delivered reply may have consumed its bytes.
+ * Zero capacity is BAD_REQUEST, never a successful premature EOF.
  * No offset, seek, SIZE, write or native readiness operation is implied. */
 struct stream_read_request {
   uint64_t capacity;
