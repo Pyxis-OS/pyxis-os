@@ -7,12 +7,14 @@
 
 struct hostfs_node;
 struct npfs_node;
+struct fat32_node;
 
 enum directory_backing {
   DIRECTORY_INITRD,
   DIRECTORY_RAM,
   DIRECTORY_HOST,
   DIRECTORY_NPFS,
+  DIRECTORY_FAT32,
 };
 
 struct directory_entry {
@@ -33,6 +35,7 @@ struct directory_object {
   enum directory_backing backing;
   struct fs_metadata metadata; /* RAM/archive, under the directory lock. */
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
+  struct fat32_node *fat32; /* Worker-owned read-only FAT view. */
   struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
   atomic_bool locked;
   bool detached;
@@ -49,6 +52,7 @@ struct directory_object *directory_create(enum directory_backing backing);
 /* BSP worker, IF=0. Initialize embedded storage without allocating. Final
  * destruction retires the node; it does not free the directory separately. */
 void directory_init_npfs(struct directory_object *directory, struct npfs_node *node);
+void directory_init_fat32(struct directory_object *directory, struct fat32_node *node);
 
 /* Current user task, IF=0, with a live reference. Named operations capture and
  * validate immutable input before waits; outputs use short mapping leases.

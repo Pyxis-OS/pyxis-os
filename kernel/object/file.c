@@ -6,6 +6,7 @@
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/fs/fat32.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
@@ -142,6 +143,10 @@ static void destroy_file(struct kernel_object *object)
 {
   struct file_object *file = (struct file_object *)object;
   KASSERT(!file->busy && !file->first_waiter);
+  if (file->backing == FILE_FAT32) {
+    fat32_retire_node(file->fat32);
+    return;
+  }
   if (file->backing == FILE_NPFS) {
     npfs_retire(file->npfs);
     return;
@@ -229,6 +234,13 @@ void file_init_npfs(struct file_object *file, struct npfs_node *node)
   KASSERT(arch_cpu_index() == 0 && file && node);
   *file = (struct file_object){.backing = FILE_NPFS, .npfs = node};
   atomic_init(&file->locked, false);
+  object_init(&file->object, OBJECT_FILE, destroy_file);
+}
+
+void file_init_fat32(struct file_object *file, struct fat32_node *node)
+{
+  KASSERT(arch_cpu_index() == 0);
+  *file = (struct file_object){.backing = FILE_FAT32, .fat32 = node};
   object_init(&file->object, OBJECT_FILE, destroy_file);
 }
 
@@ -347,9 +359,10 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
   }
   uintptr_t data_address = reply_address + sizeof(reply);
 
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_READ);
     pending->job.node = file->npfs;
+    pending->job.fat_node = file->fat32;
     pending->job.rights = rights;
     pending->job.offset = request->offset;
     pending->job.count = request->capacity;
@@ -570,9 +583,10 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_INFO);
     pending->job.node = file->npfs;
+    pending->job.fat_node = file->fat32;
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
@@ -726,9 +740,10 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_SIZE);
     pending->job.node = file->npfs;
+    pending->job.fat_node = file->fat32;
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;

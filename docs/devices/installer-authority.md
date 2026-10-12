@@ -78,11 +78,9 @@ DISKS OPEN requires OPEN and selects an ID plus READ_ONLY or READ_WRITE access.
 READ_ONLY returns disk INFO/READ/MOUNT grants for inspection. It acquires no
 exclusive claim and provides no snapshot against another raw writer. READ_WRITE
 also grants WRITE/RELEASE and requires an operational writable device with flush
-support and no latched write failure. Any existing raw claim or retained npfs
-pool on that device returns BUSY, including a read-only pool or one with no live
-handles. READ_WRITE also waits for the selected device's GPT scan; inventory
-sealing does not require every GPT scan to finish. Successful raw claims block
-all mounts on the device.
+support and no latched write failure. Any existing raw claim, pending admission or active npfs/FAT mount on that
+device returns BUSY, including a read-only instance with no live handles. READ_WRITE also waits for the selected device's GPT scan; inventory
+sealing does not require every GPT scan to finish. Successful raw claims block overlapping mount admissions.
 
 During [NVMe coexistence task 1](../wip/nvme-coexistence.md), NVMe
 READ_WRITE OPEN and whole-disk CLAIM additionally read every logical block and
@@ -109,8 +107,8 @@ tickets; no userspace buffer is lent to DMA.
 CLAIM requires WRITE and re-establishes raw mutation authority on a disk object
 whose claim was released. Partition zero claims the whole disk under READ_WRITE
 opening's rules. A GPT entry claims only that partition: no other claim may
-exist on the device and that partition must not hold a mounted pool, while
-other partitions' pools stay mounted. WRITE is then confined to the partition,
+exist on the device and its physical extent must not overlap a pending admission or active npfs/FAT
+mount, while disjoint partitions stay mounted. WRITE is then confined to the partition,
 and mounts of it are refused.
 
 NVMe partition CLAIM is refused during task 1, including on an object that
@@ -129,6 +127,11 @@ observe the result. INFO and READ remain available on the released object.
 
 ## Mounts, consent and limits
 
+The shared [extent registry](fat32-mounts.md#exclusion-and-retirement) reserves
+physical ranges before probing; comparisons do not depend only on GPT ordinals.
+`DISK_OPEN_FAT32` requires MOUNT and returns a read-only root plus a bound
+retirement control. READ alone cannot admit a native view.
+
 DISK OPEN_VOLUME requires MOUNT and uses the ordinary npfs partition/volume
 request and validation path. It permits read-only directory rights, including
 independently requested filesystem information, and mutation rights when the
@@ -140,8 +143,8 @@ from the kernel's entropy source; the installer uses it to add `bin`. Closing th
 a returned root. The normal configured-GUID mount authority remains separate.
 
 Mounted pools stay retained for the boot. Opening a volume for inspection can
-therefore prevent a later raw-write claim on the same device even after every
-root closes. There is no pool teardown or installer exception. Installer
+therefore prevent a later whole-disk or overlapping partition claim even after every
+root closes. FAT instances instead support explicit drained retirement. There is no pool teardown or installer exception. Installer
 sequencing follows the owner-accepted current direction: inspect consent through
 raw reads and the format library, reading COMMITTED journal images as an
 in-memory overlay without modifying the disk. The installer looks up regular

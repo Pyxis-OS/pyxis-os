@@ -10,6 +10,7 @@
 struct initrd_file;
 struct hostfs_node;
 struct npfs_node;
+struct fat32_node;
 struct image_capture;
 
 enum file_backing {
@@ -17,6 +18,7 @@ enum file_backing {
   FILE_RAM,
   FILE_HOST,
   FILE_NPFS,
+  FILE_FAT32,
 };
 
 /* The short spinlock protects busy and its FIFO. An operation owns busy for its
@@ -33,6 +35,7 @@ struct file_object {
   enum file_backing backing;
   struct fs_metadata metadata; /* RAM/archive, under operation ownership. */
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
+  struct fat32_node *fat32; /* Worker-owned read-only FAT view. */
   struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
   const void *data; /* Boot-file bytes only. */
   size_t size;
@@ -63,6 +66,7 @@ struct file_object *file_create_host(struct hostfs_node *host);
 /* BSP worker, IF=0. Initialize embedded storage without allocating or supplying
  * in-memory data. Final destruction retires the complete node. */
 void file_init_npfs(struct file_object *file, struct npfs_node *node);
+void file_init_fat32(struct file_object *file, struct fat32_node *node);
 
 /* Initrd/RAM only, IF=0, with an owned/borrowed live reference. Begin runs on a user task and
  * may sleep; end can run on BSP after a loan. Ownership keeps the contents and

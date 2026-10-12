@@ -4,6 +4,7 @@
 #include <abi/disk.h>
 #include <abi/syscall.h>
 #include <kernel/block.h>
+#include <kernel/fs/extents.h>
 #include <kernel/object/object.h>
 
 struct npfs_job;
@@ -15,8 +16,8 @@ struct disk_object {
   bool claimed;
   /* Claim scope: GPT entry, or zero for the whole disk, and its block range. */
   uint32_t partition;
-  uint64_t first_block, block_count;
-  struct disk_object *claim_next, *retired_next;
+  struct storage_extent extent;
+  struct disk_object *retired_next;
   struct execution_group *cleanup_group;
 };
 
@@ -30,7 +31,7 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
 
 /* Filesystem worker only, IF=1. Raw claims and pool registration share its queue. */
 bool disk_device_claimed(block_device_id device);
-/* True when a whole-disk claim exists, or PARTITION is nonzero and claimed. */
+/* Whole-disk claim, or physical overlap with the selected GPT entry. */
 bool disk_partition_claimed(block_device_id device, uint32_t partition);
 enum call_status disk_perform(struct npfs_store_context *context, struct npfs_job *job);
 void disk_cleanup_retired(struct disk_object *disks);

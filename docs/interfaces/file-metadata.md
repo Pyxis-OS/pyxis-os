@@ -24,6 +24,7 @@ promise. Paths, capability slots and directory generations are not identities.
 | RAM | Common RAM domain; ID allocated before publishing each object, shared by delegated paths |
 | Archive | Separate archive domain; ID of the retained imported object |
 | npfs | Mounted volume domain; retained inode ID, renewed when a free inode slot is reused |
+| FAT32 | Mounted-instance domain; canonical live directory-entry object shared by ASCII long-name/short-alias paths; a remount has a new domain |
 | HOST | Session domain; live mapping of the complete FUSE node incarnation, shared by same-mount hardlinks and repeated roots |
 | HTTP/text private snapshots | Reserved private-byte domain, disjoint from native backing; object ID unavailable |
 
@@ -39,7 +40,8 @@ MTIME is sampled signed Unix seconds with a normalized nanosecond fraction.
 HOST uses fresh GETATTR; npfs uses its existing modified_ns validity, including
 accepted cached writes. RAM records real wall time at creation and successful
 content/namespace changes, clearing validity if wall time is unavailable.
-Authored archive time is unknown. No filesystem format change is needed.
+Authored archive time is unknown. FAT32 DOS timestamps have no known UTC offset,
+so its mounted backend leaves MTIME invalid. No filesystem format change is needed.
 Time may repeat or move backwards; equality never proves unchanged contents.
 
 `file_info()` and `directory_info()` validate replies and clear outputs on

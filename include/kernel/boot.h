@@ -54,6 +54,13 @@ struct boot_framebuffer {
   uint8_t blue_shift;
 };
 
+enum boot_media { BOOT_MEDIA_UNKNOWN, BOOT_MEDIA_DISK, BOOT_MEDIA_OPTICAL, BOOT_MEDIA_NETWORK };
+struct boot_origin {
+  enum boot_media media;
+  bool gpt;
+  uint8_t disk[16], partition[16];
+};
+
 /* All retained metadata is copied into the kernel image. No response pointers. */
 struct boot_info {
   uint64_t kernel_phys;
@@ -64,6 +71,7 @@ struct boot_info {
   int64_t utc_seconds; /* Unix seconds from Limine; not an exact handoff sample. */
   bool utc_available;
   char command_line[BOOT_COMMAND_LINE_SIZE];
+  struct boot_origin origin;
   struct boot_module kernel_file; /* Original ELF bytes, not the loaded image. */
   struct boot_module initrd;
   struct boot_framebuffer framebuffer;

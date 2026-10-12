@@ -3,6 +3,7 @@
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/fs/fat32.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/capability.h>
@@ -185,6 +186,13 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct disk_object *disk = (struct disk_object *)object;
+  if (operation == DISK_OPEN_FAT32) {
+    if (!(rights & DISK_RIGHT_MOUNT)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    return fat32_open_device(disk->device, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   if (operation == DISK_OPEN_VOLUME) {
     if (!(rights & DISK_RIGHT_MOUNT)) {
       return (struct syscall_result){CALL_DENIED, 0};

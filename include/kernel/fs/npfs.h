@@ -3,10 +3,12 @@
 
 #include <abi/directory.h>
 #include <abi/file.h>
+#include <abi/mount.h>
 #include <abi/disk.h>
 #include <abi/syscall.h>
 #include <kernel/block.h>
 #include <kernel/gpt.h>
+#include <kernel/boot.h>
 #include <kernel/service/request.h>
 #include <kernel/object/capability.h>
 #include <kernel/user/image_capture.h>
@@ -23,6 +25,7 @@ _Static_assert(DISK_IO_MAX_BYTES >= FILE_READ_MAX_BYTES &&
 
 struct disk_object;
 struct npfs_node;
+struct fat32_node;
 struct kernel_object;
 struct npfs_request;
 
@@ -30,6 +33,7 @@ enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_INFO, NPFS_CREATE, NPFS_REMOVE,
   NPFS_RENAME, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
+  NPFS_FAT_OPEN, NPFS_FAT_ROOT, NPFS_FAT_STATE, NPFS_FAT_RETIRE,
   NPFS_RAW_INFO, NPFS_RAW_OPEN, NPFS_RAW_READ, NPFS_RAW_WRITE,
   NPFS_RAW_FLUSH, NPFS_RAW_RELEASE, NPFS_RAW_CLAIM,
 };
@@ -57,6 +61,8 @@ struct npfs_job {
   struct disk_object *raw;
   uint32_t partition;
   struct npfs_node *node, *destination;
+  struct fat32_node *fat_node;
+  struct boot_origin origin;
   uint64_t rights, child_rights, destination_rights, kind, offset;
   size_t count;
   char name[NPFS_NAME_MAX + 1];
@@ -76,11 +82,12 @@ struct npfs_job {
     struct directory_filesystem_info info;
     struct file_info_reply file_info;
     struct disk_info disk_info;
+    struct mount_state_reply mount_state;
   };
   enum call_status status;
   enum npfs_status format_status;
   enum block_result backing_error;
-  struct kernel_object *object;
+  struct kernel_object *object, *control;
   struct image_capture captured;
   /* Internal queue/completion ownership. */
   struct npfs_job *next;
@@ -116,6 +123,9 @@ enum call_status npfs_submit(struct npfs_job *job);
 void npfs_start(void);
 /* Engine invariant: only the filesystem worker on BSP with IF=1 owns state. */
 void npfs_require_worker(void);
+/* Sole worker, shared bounded native-wrapper allocation. */
+enum call_status npfs_adapter_allocate(size_t bytes, void **out);
+void npfs_adapter_free(void *data, size_t bytes);
 /* BSP/IF=0 object destructor: allocation-free transfer of wrapper, inode reference,
  * backing reference and deferred group cleanup to the owning worker. */
 void npfs_retire(struct npfs_node *node);

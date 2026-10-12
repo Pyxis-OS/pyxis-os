@@ -1085,7 +1085,7 @@ These bounds can exclude usable media; revisit only for a consumer with explicit
 
 The [installer disk service](devices/installer-authority.md) supplies explicit raw claims and immutable boot sources, and the
 [native installer](userland/installer.md) establishes target consent (the kernel does not interpret `SAFE_TO_WIPE`). Any retained npfs pool blocks
-an exclusive raw-write claim on its device, even read-only and after all handles close, so opening a volume to inspect a marker cannot be followed by
+a whole-disk or overlapping raw-write claim, even read-only and after all handles close, so opening a volume to inspect a marker cannot be followed by
 raw formatting of that device in the same boot (owner-accepted direction; no pool teardown or installer bypass). The installer instead inspects each
 volume's root marker through raw reads and the format library, overlaying a committed journal in memory with no write before consent, so rejected
 consent leaves the disk untouched and accepted targets are wiped rather than receiving a persisted replay. Pool retirement with an explicit ownership
@@ -1125,12 +1125,15 @@ qualification; native NVMe and coexistence installation remain unqualified.
 
 ## FAT32 parser in the kernel
 
-The owner accepted kernel placement for the planned [FAT32 mounts](wip/fat32-volumes.md)
+The owner accepted kernel placement for [FAT32 mounts](devices/fat32-mounts.md)
 (2026-10-11), parsing user-supplied media in the kernel. Despite bounded validation,
 a malformed or malicious volume may hang or crash the kernel. Revisit before
 automatic mounting of arbitrary removable media, the server/public profile or
-multi-user work; a userspace provider is the alternative. FAT32 implementation
-is not assigned yet.
+multi-user work; a userspace provider is the alternative. Native mounts are
+read-only; mounted writes remain unassigned. Final-control close retains bounded
+state/exclusion until authorized reacquisition and retirement or reboot, which
+can exhaust admission after controller failures. Revisit controller recovery in
+the accepted trusted-mount workflow.
 
 ## NVMe native qualification and temporary raw authority
 

@@ -24,6 +24,7 @@
 #define DISK_OPEN_VOLUME UINT64_C(6)
 #define DISK_CREATE_VOLUME UINT64_C(7)
 #define DISK_CLAIM UINT64_C(8)
+#define DISK_OPEN_FAT32 UINT64_C(9)
 #define DISK_IO_MAX_BYTES 4096u
 
 #define DISK_ACCESS_READ_ONLY UINT64_C(0)
@@ -59,10 +60,10 @@ struct disk_info {
   uint8_t gpt_guid[16];
 };
 
-/* READ_WRITE acquires exclusive raw access: any retained mounted pool on the
+/* READ_WRITE acquires exclusive raw access: any pending or active mounted extent on the
  * device or existing claim returns BUSY. READ_ONLY permits inspection only.
  * Success returns INFO/READ/MOUNT; READ_WRITE also grants WRITE/RELEASE.
- * A claim blocks all mounts on this device. WRITE and FLUSH require a live
+ * A claim blocks overlapping mount admissions. WRITE and FLUSH require a live
  * claim. WRITE captures the input before queuing; success does not imply
  * durability. A failed WRITE may have changed a prefix. FLUSH is the durability
  * point. Published uncertain failures
@@ -90,11 +91,18 @@ struct disk_write_request { uint64_t offset, length, data; };
 
 struct disk_create_volume_request { uint64_t partition, name, name_length; };
 
+/* Requires MOUNT, selects one GPT entry, returns mount_fat32_reply. Only the
+ * read-only root rights from mount_fat32_root_request are admitted. Both GPT
+ * copies and full FAT structure validate under physical-extent exclusion.
+ * READ alone cannot allocate a mounted view; no implicit URI mount. */
+struct disk_fat32_request { uint64_t partition, rights; };
+_Static_assert(sizeof(struct disk_fat32_request) == 16, "FAT disk request");
+
 /* CLAIM needs WRITE and re-establishes raw mutation authority on an object
  * whose claim was released. PARTITION zero claims the whole disk, under
  * READ_WRITE opening's rules. A one-based GPT entry claims only that
  * partition: no other claim may exist on the device and that partition must
- * not hold a mounted pool, though other partitions' pools may stay mounted.
+ * not overlap any pending or active mount, though disjoint partitions may stay mounted.
  * WRITE is then confined to the partition's blocks, mounts of it are refused,
  * and RELEASE flushes without a GPT rescan, since the table cannot change. */
 struct disk_claim_request { uint64_t partition; };

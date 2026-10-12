@@ -1,6 +1,8 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/fs/fat32.h>
+#include <kernel/fs/extents.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -23,6 +25,7 @@
 
 struct npfs_pool {
   struct npfs_pool *next;
+  struct storage_extent extent;
   struct gpt_partition partition;
   struct gpt_guid disk;
   block_device_id device;
@@ -79,8 +82,9 @@ void npfs_require_worker(void)
   cpu_restore_interrupts(flags);
 }
 
-static enum call_status adapter_allocate(size_t bytes, void **out)
+enum call_status npfs_adapter_allocate(size_t bytes, void **out)
 {
+  npfs_require_worker();
   if (bytes > NPFS_ADAPTER_BYTES - adapter_used ||
       wrapper_count == NPFS_WRAPPER_LIMIT) {
     return CALL_LIMIT;
@@ -98,8 +102,9 @@ static enum call_status adapter_allocate(size_t bytes, void **out)
   return CALL_OK;
 }
 
-static void adapter_free(void *data, size_t bytes)
+void npfs_adapter_free(void *data, size_t bytes)
 {
+  npfs_require_worker();
   KASSERT(bytes <= adapter_used && wrapper_count);
   adapter_used -= bytes;
   --wrapper_count;
@@ -267,19 +272,27 @@ static enum call_status open_pool(struct npfs_store_context *context,
     }
   }
   struct npfs_pool *pool;
-  status = adapter_allocate(sizeof(*pool), (void **)&pool);
+  status = npfs_adapter_allocate(sizeof(*pool), (void **)&pool);
   if (status != CALL_OK) {
+    return status;
+  }
+  status = storage_extent_reserve(&pool->extent, job->device, partition.first_block,
+      partition.block_count, STORAGE_EXTENT_PENDING_NPFS);
+  if (status != CALL_OK) {
+    npfs_adapter_free(pool, sizeof(*pool));
     return status;
   }
   status = npfs_store_open(context, job->device, &partition, &device, writable, &pool->store);
   if (status != CALL_OK) {
-    adapter_free(pool, sizeof(*pool));
+    storage_extent_release(&pool->extent);
+    npfs_adapter_free(pool, sizeof(*pool));
     return status;
   }
   pool->partition = partition;
   pool->disk = job->disk;
   pool->device = job->device;
   pool->gpt_degraded = degraded;
+  storage_extent_publish(&pool->extent, STORAGE_EXTENT_NPFS);
   pool->next = pools;
   pools = pool;
   *out = pool;
@@ -296,7 +309,7 @@ static enum call_status allocate_node(uint64_t kind, uint64_t rights,
     struct npfs_node **out)
 {
   struct npfs_node *node;
-  enum call_status status = adapter_allocate(sizeof(*node), (void **)&node);
+  enum call_status status = npfs_adapter_allocate(sizeof(*node), (void **)&node);
   if (status != CALL_OK) {
     return status;
   }
@@ -357,7 +370,7 @@ static void destroy_nodes(struct npfs_node *list)
       npfs_store_release(node->inode);
     }
     struct execution_group *group = node->cleanup_group;
-    adapter_free(node, sizeof(*node));
+    npfs_adapter_free(node, sizeof(*node));
     if (group) {
       uint64_t flags = cpu_save_interrupts();
       execution_group_cleanup_end(group);
@@ -547,6 +560,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (task_deadline_expired(context->deadline)) {
     return CALL_TIMED_OUT;
   }
+  if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_RETIRE)) {
+    return fat32_perform(context, job);
+  }
   if (job->operation >= NPFS_RAW_INFO) {
     return disk_perform(context, job);
   }
@@ -701,6 +717,10 @@ static void complete_job(struct npfs_job *job)
   job->node = NULL;
   job->destination = NULL;
   job->raw = NULL;
+  if (job->admitted && job->fat_node) {
+    fat32_request_complete(job->fat_node);
+  }
+  job->fat_node = NULL;
   capability_grant_release(&job->grant);
   capability_reservation_release(&job->reservation, &job->slot);
   job->next = NULL;
@@ -725,6 +745,8 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_INFO:
   case NPFS_CAPTURE:
   case NPFS_FILESYSTEM_INFO:
+  case NPFS_FAT_STATE:
+  case NPFS_FAT_RETIRE:
   case NPFS_RAW_INFO:
   case NPFS_RAW_READ:
   case NPFS_RAW_RELEASE:
@@ -784,6 +806,7 @@ static void npfs_worker(void *argument)
     bool shutdown = shutdown_requested;
     bool pressure = mm_pressure_take();
     struct disk_object *disks = disk_take_retired();
+    struct fat32_node *fat_nodes = fat32_take_retired();
     struct npfs_node *nodes = retired_nodes;
     retired_nodes = NULL;
     struct npfs_job *job = first_job;
@@ -798,7 +821,7 @@ static void npfs_worker(void *argument)
     bool flush = task_deadline_expired(next_flush);
     bool maintenance = !sealed && (pressure || flush ||
         task_deadline_expired(next_maintenance) || pending);
-    if (!nodes && !disks && !job && !maintenance && !shutdown) {
+    if (!nodes && !fat_nodes && !disks && !job && !maintenance && !shutdown) {
       KASSERT(!worker_wait);
       struct task_wait *wait = task_wait_prepare();
       worker_wait = wait;
@@ -812,6 +835,7 @@ static void npfs_worker(void *argument)
     cpu_restore_interrupts(flags);
     disk_cleanup_retired(disks);
     destroy_nodes(nodes);
+    fat32_cleanup_nodes(fat_nodes);
     if (job) {
       flags = cpu_save_interrupts();
       struct execution_group *previous = object_cleanup_enter(job->user_request ?
@@ -827,6 +851,10 @@ static void npfs_worker(void *argument)
         if (job->object) {
           object_release(job->object);
           job->object = NULL;
+        }
+        if (job->control) {
+          object_release(job->control);
+          job->control = NULL;
         }
         image_capture_release(&job->captured);
       }
@@ -908,6 +936,9 @@ enum call_status npfs_submit(struct npfs_job *job)
     return CALL_BUSY;
   }
   job->admitted = true;
+  if (job->fat_node) {
+    fat32_request_published(job->fat_node);
+  }
   job->deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   enqueue_job(job);
   return CALL_OK;
@@ -928,9 +959,9 @@ void npfs_request_submit_and_wait(struct npfs_request *request)
 
 void npfs_request_release(struct npfs_request *request)
 {
-  KASSERT(!request->job.raw && !request->job.node && !request->job.destination &&
+  KASSERT(!request->job.raw && !request->job.node && !request->job.destination && !request->job.fat_node &&
       !request->job.reservation.table && !request->job.grant.object &&
-      !request->job.object && !request->job.captured.address &&
+      !request->job.object && !request->job.control && !request->job.captured.address &&
       !request->job.captured.size && !request->job.captured.backing_bytes &&
       !request->job.next && !request->job.user_request && !request->job.admitted);
   bsp_request_release(&request->request);
@@ -941,6 +972,9 @@ void npfs_request_published(struct npfs_request *request)
   KASSERT(request->request.state == BSP_REQUEST_PREPARED);
   request->job.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   request->job.admitted = reserve_job();
+  if (request->job.admitted && request->job.fat_node) {
+    fat32_request_published(request->job.fat_node);
+  }
 }
 
 void npfs_forward(struct npfs_request *request)
@@ -969,24 +1003,24 @@ void npfs_start(void)
 
 bool npfs_device_mounted(block_device_id device)
 {
-  npfs_require_worker();
-  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
-    if (pool->device == device) {
-      return true;
-    }
-  }
-  return false;
+  return storage_extent_device_mounted(device);
 }
 
 bool npfs_partition_mounted(block_device_id device, uint32_t partition)
 {
   npfs_require_worker();
-  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
-    if (pool->device == device && pool->partition.entry_number == partition) {
-      return true;
+  struct gpt_partition selected = {0};
+  uint64_t flags = cpu_save_interrupts();
+  const struct gpt_snapshot *snapshot = gpt_get_snapshot(device);
+  for (size_t i = 0; snapshot && i < snapshot->partition_count; ++i) {
+    if (snapshot->partitions[i].entry_number == partition) {
+      selected = snapshot->partitions[i];
+      break;
     }
   }
-  return false;
+  cpu_restore_interrupts(flags);
+  return selected.block_count && storage_extent_range_mounted(device,
+      selected.first_block, selected.block_count);
 }
 
 enum call_status npfs_shutdown_flush(void)
