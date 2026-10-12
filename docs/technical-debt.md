@@ -263,6 +263,13 @@ resizes through image validation and loading, which avoids another whole-image c
 callers using that file. Revisit staging size and preparation scheduling when larger applications or concurrent launches make this
 material; a snapshot or immutable backing could shorten file ownership at a memory and complexity cost.
 
+## Private native capture limits
+
+[Private capture](userland/native-jobs.md#private-capture-and-deadlines) requires a trusted private RAM root and reachability audit.
+The 1 MiB per-stream polled trigger/cap is not a backing quota, and admission/retirement has no hard wall-time guarantee. Unknown
+direct admission retains captures until caller/session teardown. Revisit bounded backing or recovery when a consumer requires it;
+Lua/shell/pipeline delivery remains in the separately assigned [execution milestone](wip/native-command-execution.md).
+
 ## Initial terminal editor
 
 Libterm redraws the full visible line on each edit or cursor move and reads one input byte per call, keeping cursor and scroll

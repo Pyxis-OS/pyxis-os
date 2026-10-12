@@ -53,7 +53,9 @@ and revision inventory). Later tasks need separate assignments.
 [Native command execution](native-command-execution.md): Codex alpha (2026-10-12),
 an accepted shared plan for direct native launch without descendants, selected
 streams, capture/deadlines and shell/Lua pipelines, extracted from Claude/Git/ports/
-libuv. Task 1, the one-child direct job core, is assigned; later tasks need
+libuv. Task 2, private FILE capture and deadlines, is delivered in
+[userland #232](https://git.internal/PyxisOS/pyxis-userland/pulls/232) and
+[parent #749](https://git.internal/PyxisOS/pyxis-os/pulls/749); later tasks need
 separate owner go.
 
 [Native HTTP requests](native-http-requests.md): an
