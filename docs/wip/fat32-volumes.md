@@ -1,6 +1,6 @@
 # FAT32 volumes
 
-Status: **task 1 merged (#740); task 2 assigned by the owner on 2026-10-12.**
+Status: **task 1 merged (#740); task 2 implemented and qualified for review.**
 The directory-validation fixes (#743 / fs #33) are merged. The owner accepted the
 raw-write contract below on 2026-10-12. Later tasks still need their own go.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
@@ -177,13 +177,6 @@ inspection still requires quiescent media; writer exclusion remains task 3.
 
 ## Task 2 mutation contract — accepted 2026-10-12
 
-The [directory-validation qualification](../development/experiments/fat32-directory-validation.md)
-records the early fixes from daybreak's review: refuse nonzero entry first bytes
-after a directory end marker and validate root volume-label names/attributes.
-The reader preserves embedded short-name spaces per its documented compatibility
-profile; this neither reconstructs creation provenance nor authorizes mutation.
-The following contract is accepted; task 2 implements it.
-
 1. **Creation provenance lifetime: writer-session receipts.** The trusted
    caller provides bounded receipt storage. Only a successful create issues a
    receipt, bound to that session/volume, parent, entry and complete chain;
@@ -215,6 +208,14 @@ The following contract is accepted; task 2 implements it.
    device failure latch rather than promising retained raw exclusion. No native ESP
    write qualification or NVMe coexistence authority is added here.
 
+The [shared raw writer](../../fs/docs/fat32-write.md) and separate trusted
+[scratch profile](../devices/fat32-scratch-writing.md) implement this contract.
+[Qualification](../development/experiments/fat32-raw-writes.md) records baseline
+revisions, host/mtools checks, actual capacity failure and interactive QEMU/GDB.
+Directory-tail and volume-label fixes are included; embedded short-name spaces
+remain read compatibility, never creation provenance. No mount/write adapter,
+formatting or native ESP qualification is added.
+
 ## Parked cross-cutting directions
 
 [Nested execution groups](nested-execution-groups.md) are not a prerequisite for
@@ -244,7 +245,7 @@ and mounted file I/O do not require its implementation.
   refusing unsupported/corrupt metadata; no writes or mount API yet.
   **After this task the owner can:** inspect supported scratch FAT media and read
   the real ESP read-only without running coexistence or the editor.
-- [ ] **2. Incremental raw engine writes — assigned 2026-10-12; mutation contract accepted.** Allocation, directories, long names
+- [x] **2. Incremental raw engine writes — assigned 2026-10-12; mutation contract accepted.** Allocation, directories, long names
   within the chosen profile, create/extend/staged replacement of created files,
   ordered flush/sync and failure preservation. Keep explicit ownership policy and
   partition claims; qualify on disposable images, without whole-tree formatting.

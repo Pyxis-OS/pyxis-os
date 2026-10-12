@@ -124,9 +124,10 @@ history. They do not describe current interfaces or assign further writer work.
 The authoritative [format](../../fs/docs/npfs-format.md) and
 [host tools](../../fs/docs/npfs-host-tools.md) describe the codecs, source-importing
 formatter, journal replay and structural checker. Pyxis owns capabilities,
-namespace integration, the cache, writeback and kernel recovery. The library has
+namespace integration, the cache, writeback and kernel recovery. NPFS codecs have
 no allocator, I/O or callback tables; the host, Caelum and native installer
-provide its two memory symbols at link time. The SDK exports the target archive
+provide their two memory symbols at link time. FAT32 engines borrow bounded
+caller-owned workspace and backing callbacks. The SDK exports the target archives
 and records its filesystem revision/local state. Ports consumes that complete
 SDK without accessing filesystem sources.
 

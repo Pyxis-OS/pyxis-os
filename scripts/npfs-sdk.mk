@@ -1,5 +1,5 @@
-# Build the authoritative codecs for target applications. Each consumer
-# supplies its own two memory symbols; the archive owns no allocation or I/O.
+# Build filesystem codecs and FAT32 engines for target applications.
+# Allocation and backing I/O remain caller-owned.
 include $(SDK)/share/pyxis.mk
 export SDK CC PYXIS_COMPILER_ID PYXIS_CPPFLAGS PYXIS_CFLAGS
 
