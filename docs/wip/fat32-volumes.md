@@ -1,8 +1,8 @@
 # FAT32 volumes
 
 Status: **task 1 merged (#740); task 2 assigned by the owner on 2026-10-12.**
-The early directory-validation fixes are submitted separately; the raw-write
-choices below are proposals awaiting the owner. Later tasks still need their own go.
+The directory-validation fixes (#743 / fs #33) are merged. The owner accepted the
+raw-write contract below on 2026-10-12. Later tasks still need their own go.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -175,23 +175,23 @@ host corruption/budget checks and interactive QEMU/GDB authority and retirement.
 This is nested-VM evidence, not native ESP/hardware qualification. Read-only
 inspection still requires quiescent media; writer exclusion remains task 3.
 
-## Task 2 startup — proposed details, 2026-10-12
+## Task 2 mutation contract — accepted 2026-10-12
 
 The [directory-validation qualification](../development/experiments/fat32-directory-validation.md)
 records the early fixes from daybreak's review: refuse nonzero entry first bytes
 after a directory end marker and validate root volume-label names/attributes.
 The reader preserves embedded short-name spaces per its documented compatibility
 profile; this neither reconstructs creation provenance nor authorizes mutation.
-No raw-write implementation has started. Three material choices remain:
+The following contract is accepted; task 2 implements it.
 
-1. **Creation provenance lifetime — default: writer-session receipts.** The trusted
+1. **Creation provenance lifetime: writer-session receipts.** The trusted
    caller provides bounded receipt storage. Only a successful create issues a
    receipt, bound to that session/volume, parent, entry and complete chain;
    append/replacement revalidate it. Existing files are never adopted by name or
    marker. Closing/restarting loses permission to update those objects. This
    keeps the first raw slice useful for create→extend→replace in one session,
    without inventing persistent FAT object identity or on-disk ownership metadata.
-2. **Operation result and failure state — default: synchronous durable operations.**
+2. **Operation result and failure state: synchronous durable operations.**
    Preflight whole-volume integrity, namespace/allocation and finite workspace/work
    budgets before effects. Create, directory creation, append and staged replacement
    succeed only after their final flush, following the accepted data→FAT→directory/
@@ -201,7 +201,7 @@ No raw-write implementation has started. Three material choices remain:
    promise crash atomicity, untorn sectors or preservation of every old byte after
    an uncertain in-place append. Persistent adoption/recovery remains outside this
    slice; mounted-RW dirty/retirement policy remains task 4.
-3. **Native raw-write entry point — default: separate trusted scratch-write profile.**
+3. **Native raw-write entry point: separate trusted scratch-write profile.**
    Explicit disk/GPT selection, initially disposable VirtIO and qualified USB;
    keep the read-only inspector and installer separate. Existing RW open first
    claims the whole disk; successfully release it, claim the selected partition,
@@ -244,7 +244,7 @@ and mounted file I/O do not require its implementation.
   refusing unsupported/corrupt metadata; no writes or mount API yet.
   **After this task the owner can:** inspect supported scratch FAT media and read
   the real ESP read-only without running coexistence or the editor.
-- [ ] **2. Incremental raw engine writes — assigned 2026-10-12; choices above pending.** Allocation, directories, long names
+- [ ] **2. Incremental raw engine writes — assigned 2026-10-12; mutation contract accepted.** Allocation, directories, long names
   within the chosen profile, create/extend/staged replacement of created files,
   ordered flush/sync and failure preservation. Keep explicit ownership policy and
   partition claims; qualify on disposable images, without whole-tree formatting.
