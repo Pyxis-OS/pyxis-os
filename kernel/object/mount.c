@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/fs/fat32.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/capability.h>
@@ -10,17 +11,42 @@
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 
-enum mount_backend { MOUNT_HOST, MOUNT_NATIVE };
-
-struct mount_object {
-  struct kernel_object object;
-  enum mount_backend backend;
-  struct mount_config config;
-};
+static struct boot_origin boot_origin;
 
 static void destroy_mount(struct kernel_object *object)
 {
-  kfree(object);
+  struct mount_object *mount = (void *)object;
+  if (mount->backend == MOUNT_FAT32) {
+    fat32_retire_node(mount->fat32);
+  } else {
+    kfree(object);
+  }
+}
+
+void mount_set_boot_origin(const struct boot_origin *origin)
+{
+  boot_origin = *origin;
+}
+
+struct kernel_object *mount_create_boot_esp(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (!boot_origin.gpt) {
+    return NULL;
+  }
+  struct mount_object *mount = kmalloc(sizeof(*mount));
+  if (!mount) {
+    return NULL;
+  }
+  *mount = (struct mount_object){.backend = MOUNT_BOOT_ESP, .origin = boot_origin};
+  object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
+  return &mount->object;
+}
+
+void mount_init_fat32(struct mount_object *mount, struct fat32_node *node)
+{
+  *mount = (struct mount_object){.backend = MOUNT_FAT32, .fat32 = node};
+  object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
 }
 
 struct kernel_object *mount_create(void)
@@ -188,6 +214,10 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct mount_object *mount = (struct mount_object *)object;
+  if (mount->backend == MOUNT_FAT32 || mount->backend == MOUNT_BOOT_ESP) {
+    return fat32_mount_call(mount, rights, operation, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   if (operation == MOUNT_SYNC && mount->backend == MOUNT_NATIVE) {
     if (!(rights & MOUNT_RIGHT_WRITE)) {
       return (struct syscall_result){CALL_DENIED, 0};

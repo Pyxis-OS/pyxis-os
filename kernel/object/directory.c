@@ -4,6 +4,7 @@
 #include <kernel/memory.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/fs/fat32.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/directory.h>
@@ -33,6 +34,10 @@ static void unlock_mutation(void)
 static void destroy_directory(struct kernel_object *object)
 {
   struct directory_object *directory = (struct directory_object *)object;
+  if (directory->backing == DIRECTORY_FAT32) {
+    fat32_retire_node(directory->fat32);
+    return;
+  }
   if (directory->backing == DIRECTORY_NPFS) {
     npfs_retire(directory->npfs);
     return;
@@ -75,6 +80,13 @@ void directory_init_npfs(struct directory_object *directory, struct npfs_node *n
   KASSERT(arch_cpu_index() == 0 && directory && node);
   *directory = (struct directory_object){.backing = DIRECTORY_NPFS, .npfs = node};
   atomic_init(&directory->locked, false);
+  object_init(&directory->object, OBJECT_DIRECTORY, destroy_directory);
+}
+
+void directory_init_fat32(struct directory_object *directory, struct fat32_node *node)
+{
+  KASSERT(arch_cpu_index() == 0);
+  *directory = (struct directory_object){.backing = DIRECTORY_FAT32, .fat32 = node};
   object_init(&directory->object, OBJECT_DIRECTORY, destroy_directory);
 }
 
@@ -204,7 +216,7 @@ static enum call_status check_child_request(struct directory_object *directory, 
       (request->kind != DIRECTORY_KIND_FILE && request->kind != DIRECTORY_KIND_DIRECTORY)) {
     return CALL_BAD_REQUEST;
   }
-  if (directory->backing == DIRECTORY_NPFS) {
+  if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
     uint64_t mask = request->kind == DIRECTORY_KIND_FILE ? FILE_RIGHTS : DIRECTORY_RIGHTS;
     if (request->rights & ~mask) {
       return CALL_BAD_REQUEST;
@@ -296,9 +308,10 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     return (struct syscall_result){status, 0};
   }
   struct kernel_object *object = NULL;
-  if (directory->backing == DIRECTORY_NPFS) {
+  if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_LOOKUP);
     pending->job.node = directory->npfs;
+    pending->job.fat_node = directory->fat32;
     pending->job.rights = rights;
     pending->job.child_rights = request->rights;
     pending->job.kind = request->kind;
@@ -824,9 +837,10 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
       reply_address < request->name + request->capacity) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (directory->backing == DIRECTORY_NPFS) {
+  if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_ENUMERATE);
     pending->job.node = directory->npfs;
+    pending->job.fat_node = directory->fat32;
     pending->job.rights = rights;
     pending->job.cursor = request->cursor;
     pending->job.count = request->capacity;
@@ -934,9 +948,10 @@ static struct syscall_result query_info(struct directory_object *directory, uint
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (directory->backing == DIRECTORY_NPFS) {
+  if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_INFO);
     pending->job.node = directory->npfs;
+    pending->job.fat_node = directory->fat32;
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
@@ -1017,6 +1032,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
 {
   if (directory->backing == DIRECTORY_NPFS && (rights & ~DIRECTORY_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (directory->backing == DIRECTORY_FAT32 && operation == DIRECTORY_FILESYSTEM_INFO) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   uint64_t required;
   switch (operation) {

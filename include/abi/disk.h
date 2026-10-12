@@ -24,6 +24,7 @@
 #define DISK_OPEN_VOLUME UINT64_C(6)
 #define DISK_CREATE_VOLUME UINT64_C(7)
 #define DISK_CLAIM UINT64_C(8)
+#define DISK_OPEN_FAT32 UINT64_C(9)
 #define DISK_IO_MAX_BYTES 4096u
 
 #define DISK_ACCESS_READ_ONLY UINT64_C(0)
@@ -97,6 +98,13 @@ struct disk_create_volume_request { uint64_t partition, name, name_length; };
  * not hold a mounted pool, though other partitions' pools may stay mounted.
  * WRITE is then confined to the partition's blocks, mounts of it are refused,
  * and RELEASE flushes without a GPT rescan, since the table cannot change. */
+/* Requires MOUNT, selects one GPT entry, returns mount_fat32_reply. Only the
+ * read-only root rights from mount_fat32_root_request are admitted. Both GPT
+ * copies and full FAT structure validate under physical-extent exclusion.
+ * READ alone cannot allocate a mounted view; no implicit URI mount. */
+struct disk_fat32_request { uint64_t partition, rights; };
+_Static_assert(sizeof(struct disk_fat32_request) == 16, "FAT disk request");
+
 struct disk_claim_request { uint64_t partition; };
 
 _Static_assert(sizeof(struct disk_info) == 64, "disk info layout");

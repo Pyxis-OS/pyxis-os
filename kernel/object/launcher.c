@@ -561,9 +561,10 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     discard_launch_capture(capture);
     return error;
   }
-  if (capture->image->backing == FILE_NPFS) {
+  if (capture->image->backing == FILE_NPFS || capture->image->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_CAPTURE);
     pending->job.node = capture->image->npfs;
+    pending->job.fat_node = capture->image->fat32;
     pending->job.rights = image_rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
