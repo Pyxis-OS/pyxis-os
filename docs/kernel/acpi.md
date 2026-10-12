@@ -20,9 +20,10 @@ battery queries. Its policy choices, all made by the owner:
 - **Power authority.** The `power` capability (OFF, RESTART) goes to spaces
   configured with `power = true`, never to remote shells, and the shell keeps
   it for its builtins. A physical button press needs no capability.
-- **What "clean" means.** User tasks are held, not asked to exit; every pool is
-  flushed and sealed before S5 or reset, and a failed flush keeps the system
-  up.
+- **What "clean" means.** User tasks are held, not asked to exit; native FAT
+  operations drain and retained RW mounts are flushed/sealed before npfs pools,
+  NVMe shutdown and S5/reset. An unresolved FAT mutation or failed storage flush
+  keeps the system up; held detached FAT chains alone do not.
 - **Events.** Only the embedded controller's GPE and the fixed-feature power
   button are enabled. An unclaimed SCI is re-armed after one second.
 - **Battery data.** The kernel polls every five seconds. The widget is always
@@ -206,9 +207,9 @@ the overlay to collect; it returns BUSY while another operation is pending or
 running, and UNAVAILABLE without a worker. A request or press arriving during
 it is answered as during a press's power-off. After collecting a failed local
 operation, the overlay may explicitly choose `acpi_power_local_force()` with
-an unsafe-shutdown and data-loss warning. That worker operation bypasses both
-pool flush and NVMe shutdown, and logs the force choice. Forwarded userspace
-requests and short power-button presses always use the clean sequence.
+an unsafe-shutdown and data-loss warning. That worker operation bypasses
+FAT/npfs storage checks and NVMe shutdown, and logs the force choice. Forwarded
+userspace requests and short power-button presses always use the clean sequence.
 
 A call travels as the `BSP_SERVICE_POWER` request: the executor forwards it to
 the ACPI worker, which runs one power operation at a time. A second request
@@ -221,12 +222,18 @@ UNAVAILABLE. The worker runs the operation at its top level, like deferred work:
    mode, from a syscall, a timer preemption or the ready queue. A task already
    inside a syscall finishes that syscall first. Programs are not asked to exit;
    kernel workers keep running.
-3. It asks the native filesystem worker to flush. After the requests already
-   queued, that worker writes every writable pool's dirty data and checkpoints
-   it until its journal is EMPTY. Pools that failed earlier or are read-only
-   take no writes and are skipped. On success the pools are sealed: requests
-   that could change a pool or a device fail with UNAVAILABLE, and background
-   writeback stops.
+3. It asks the native filesystem worker to flush. The worker closes new storage
+   admission and drains admitted operations, including upstream executor work,
+   and deferred cleanup. It first flushes each mutated RW
+   [FAT instance](../devices/fat32-mounts.md#failure-and-clean-power). With no
+   detached allocated chains it clears only that instance's owned dirty mark and
+   flushes the clear; otherwise it leaves dirty set without refusing power.
+   An unresolved FAT mutation failure refuses clean power. This seal retains
+   every view, handle and publication interval; it does not retire the mounts.
+   The worker then writes every writable npfs pool's dirty data and checkpoints
+   until its journal is EMPTY. Failed/read-only npfs pools take no writes and are
+   skipped. On success storage is sealed: mutations fail with UNAVAILABLE,
+   background writeback stops and FAT/raw-disk cleanup waits for cancellation.
 4. It asks NVMe to stop admitting work, drain and confirm bounded normal
    controller shutdown. Any unconfirmed shutdown refuses clean S5 or reset.
    Controllers remain retired until reboot, even if firmware entry then fails.
@@ -242,13 +249,20 @@ When S5 entry returns, uACPI has already disabled the runtime GPEs and armed
 only wake GPEs, so the worker runs uACPI's S5 wake path, which enables the
 runtime GPEs again and runs `_WAK`.
 
-If the flush or NVMe shutdown fails, or the firmware does not power off, any
-sealed pools are unsealed, held tasks are released, `power: power-off failed
-(status N); the system stays up` is logged and the call returns that status.
+If the flush or NVMe shutdown fails, or the firmware does not power off, storage
+admission reopens, sealed pools are unsealed and held tasks are released. FAT
+views and publication intervals survive; unresolved FAT failures remain frozen.
+On a healthy instance whose owned mark sealing cleared, the first subsequent
+mutation durably sets dirty before its first effect.
+`power: power-off failed (status N); the system stays up` is logged and the call
+returns that status.
 NVMe retirement is not undone. A successful operation never returns.
 
 Host file systems (`host://`) and RAM volumes need no flush. Raw disk handles
 used by the installer are not flushed; the installer flushes them itself.
+FAT scratch-media checks are recorded separately in
+[mounted-write qualification](../development/experiments/fat32-mounted-writes.md);
+they do not establish native hardware power-loss durability.
 
 ## Measurements
 
@@ -451,7 +465,8 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
   registers.
 - The SCI must share the keyboard's I/O APIC.
 - Inline completion of deferred work has not yet been exercised.
-- Power-off skips pools that already failed and cannot stop services in order.
+- Power-off skips failed npfs pools; an unresolved FAT mutation blocks clean
+  power. It cannot stop services in order.
 - EC transactions busy-wait on the BSP and do not take the ACPI global lock.
 - Battery changes are polled; notifications are not handled yet.
 - Only a fixed-feature power button works.

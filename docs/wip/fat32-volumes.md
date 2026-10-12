@@ -1,10 +1,11 @@
 # FAT32 volumes
 
-Status: **tasks 1–3 merged (#740, #747, #755); task 4 assigned 2026-10-12.**
+Status: **tasks 1–3 merged (#740, #747, #755); task 4 implemented for review.**
 The directory-validation fixes (#743 / fs #33) and task 3's binding (#750) are
-merged. Task 4's binding is accepted with the clean-power amendment below;
-the owner authorized implementation after the seal-at-power replacement below.
-The baseline is captured. Task 5 remains unassigned. Task 4 qualifies
+merged. Task 4 implements the accepted seal-at-power contract below; its
+[qualification record](../development/experiments/fat32-mounted-writes.md) separates
+executed scratch-image checks from source review and remaining hardware limits.
+Task 5 remains unassigned. Task 4 qualifies
 only disposable scratch VirtIO images, never writes the owner's real ESP.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
@@ -43,10 +44,10 @@ complete FAT/name/allocation validator.
 real ordered flush; a published failure may have changed media and can latch
 writes off. [Raw claims](../devices/installer-authority.md) and
 [npfs mounts](../devices/filesystem-native-adapter.md) exclude conflicting use,
-but their registry currently knows npfs, and pools stay retained until reboot.
-Current NVMe raw partition claims are still refused until the coexistence
+but at that revision their registry knew npfs only, and pools stayed retained until reboot.
+NVMe raw partition claims were still refused until the coexistence
 authority gate lands; engine writes qualify on scratch VirtIO/USB first.
-FAT mount/release and cross-backend exclusion do not exist. The FAT mount's
+FAT mount/release and cross-backend exclusion did not exist. The FAT mount's
 trusted WRITE authority must still meet backend qualification and `nvme.write=1`;
 that boot option alone grants neither a root nor a raw claim. Mounted FAT dirty
 state must join [clean power operations](../devices/nvme.md#health-and-shutdown)
@@ -558,7 +559,7 @@ and mounted file I/O do not require its implementation.
   before code; no userspace scheme proxy or implicit mount authority.
   **After this task the owner can:** mount supported FAT32 and use ordinary `ls`/
   `cat`, then release all views so an authorized raw publisher can claim the extent.
-- [ ] **4. Mounted read-write operations and sync — assigned 2026-10-12; binding accepted, implementation authorized.** Deliver real native mutations,
+- [x] **4. Mounted read-write operations and sync — assigned 2026-10-12; implemented for review.** Deliver real native mutations,
   held-handle/zero-fill semantics, selected profile, exclusive publication interval,
   failed-state retention and the accepted dirty-bit/clean-retirement policy.
   **After this task the owner can:** edit authorized files, explicitly sync and
