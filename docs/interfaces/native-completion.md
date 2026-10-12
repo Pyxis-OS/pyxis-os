@@ -15,7 +15,7 @@ of target grants retain their existing authority; closing the original after
 admission does not cancel captured work.
 
 **One unacknowledged native completion per process. A second submission returns
-`CALL_BUSY`, without waiting or admission, even with another receiver.** The HTTP
+`CALL_BUSY` (9), without waiting or admission, even with another receiver.** The HTTP
 provider consequently progresses one async operation at a time. Admission remains
 held through receipt acknowledgement, or uncollected work's drain after receiver
 closure. See [the limit and revisit point](../technical-debt.md#native-completion-per-process-admission).

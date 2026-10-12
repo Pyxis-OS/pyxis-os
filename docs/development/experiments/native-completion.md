@@ -13,6 +13,9 @@ commits merge main and document it. Ports `fd1eb30f`, fs `28386cc7`, lwIP
 `a1aadb91`; existing LLVM builder `2d23443`. Ordinary kernel, SDK and image builds
 passed. The endpoint ABI and helpers change together, so this is an integration
 comparison, with separately rebuilt matching SDK/ports/userland outputs.
+A latest-main refresh compares `36bcd7e9`/`3daa24611` with
+`0009e50a`/`62da3399`, both with fs `30f625a2`; ordinary kernel/SDK/image
+builds passed again. The older comparison remains separately identified below.
 No compiler-container rebuild is needed.
 
 Q35, nested KVM, `-cpu max`, four CPUs/one socket/four cores/one thread, 2 GiB,
@@ -59,10 +62,14 @@ admission/collection sequence passed. GDB found zero admitted requests, empty
 queues/retirement list, healthy pool and EMPTY journal. Clean powerdown flushed;
 stopped-image fsck passed. These checks used kernel `9e4d815c`, helper `94404a4`
 before its conflict-free rebase; fresh-main `4fe7a585` RAM/admission checks passed
-again after the rebase. Native hardware, HOST/provider forwarding, physical I/O
+again after the rebase. The latest-main refresh (`0009e50a`, userland `62da3399`,
+fs `30f625a2`) rebuilt the ordinary image and repeated the same mounted-npfs
+sequence, including both-receiver BUSY and retryable collection. The pool again
+drained healthy with an EMPTY journal and clean powerdown. Native hardware,
+HOST/provider forwarding, physical I/O
 failure and active-journal cancellation remain unrun; excluded backends refuse.
 
-## Costs and open performance finding
+## Costs and performance history
 
 Existing commands, five verified rounds after an untimed warmup:
 
@@ -100,16 +107,40 @@ repeat resolved that concern but **retained a material measured shift**:
 | Payload, ms | 0.355 (0.346–0.376) | 0.626 (0.615–0.658) |
 | Complete, ms | 0.430 (0.421–0.460) | 0.938 (0.913–0.961) |
 
-Payload rose 76%, complete 118%. Cause is unresolved and needs review before
-merge; ordinary RAM read performance is not claimed preserved. Inspected ordinary
+In that earlier integration comparison, payload rose 76%, complete 118%.
+The cause remains unresolved; the latest-main repeat below does not reproduce it. Inspected ordinary
 RAM read/copy, VM-buffer checks, SDK file_read/handle_query and syscall entry/exit
 retain their instruction structure. Native dispatch adds one protocol comparison;
 the generic SDK FILE adapter's frame grows 32 bytes for endpoint metadata. Neither
 establishes the observed cost's cause. No cheaper-timekeeping task or speculative
 optimization was added.
 
+### Latest-main interleaved repeat
+
+After the FAT32 merge and final userland rebase, the same commands ran on the
+latest revisions above. The filesystem qualification guest had exited before
+these timed runs; an earlier overlapping preliminary CALL pair was excluded.
+Five timed samples per boot after an untimed warmup, A/B/B/A for RAM:
+
+| Workload | Before | After |
+| --- | --- | --- |
+| CALL 64 completion, ms | 106.749 (92.101–125.177) | 104.496 (98.895–120.600) |
+| SEND 64 admission, ms | 1.265 (1.209–1.455) | 1.298 (1.261–1.443) |
+| SEND 64 completion, ms | 18.561 (16.084–21.891) | 15.948 (13.657–17.482) |
+| RAM A/B payload, ms | 0.390 (0.383–0.552) | 0.354 (0.342–0.400) |
+| RAM A/B complete, ms | 0.469 (0.456–0.730) | 0.433 (0.417–0.477) |
+| RAM reverse B/A payload, ms | 0.367 (0.346–0.399) | 0.376 (0.365–0.407) |
+| RAM reverse B/A complete, ms | 0.443 (0.424–0.542) | 0.453 (0.440–0.489) |
+
+All 20 IPC and 20 RAM timed samples plus eight warmups verified. Latest SEND
+admission median grew 2.6%, with overlapping ranges. RAM complete changed -7.7%
+in the first pair and +2.2% in reverse order, also with overlapping ranges.
+The earlier roughly twofold RAM shift is not reproduced on these submitted
+heads. Its cause is not established; neither a general speedup nor native-host
+performance follows from the latest timings.
+
 Debugger type sizes: owned operation 8,392 bytes, gate 48, admission request 4,304,
-npfs job 4,952. Receiver records grow 16 bytes each. Backend/global slot limits
+npfs job 5,008 after the FAT32 merge (4,952 in the earlier comparison). Receiver records grow 16 bytes each. Backend/global slot limits
 are unchanged; transient stack copies, allocator bookkeeping and retained resource
 objects are separate. Resident operation storage is bounded per process; no
 cumulative HTTP-body allowance is added by this prerequisite.

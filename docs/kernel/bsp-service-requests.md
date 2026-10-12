@@ -115,7 +115,7 @@ Native filesystem requests also use FORWARDED. Publication reserves one of the
 32 shared native slots and stamps the deadline before entering the executor
 FIFO. The worker derives authority from held views plus captured caller rights,
 detaches input nodes and releases admission before common completion. The
-5,008-byte typed record, including completion ownership and CAPTURE staging, fits
+5,064-byte typed record, including FAT32/completion ownership and CAPTURE staging, fits
 the current 5,064-byte shared request allocation. See
 [native object ownership](../devices/filesystem-native-adapter.md#build-and-ownership).
 
