@@ -30,7 +30,7 @@ A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
 `ci/Containerfile` runs the same build script. The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a` before merging
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-2d23443` before merging
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
@@ -41,8 +41,8 @@ rebuild; a new fork commit does:
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-2d23443 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-2d23443
 ```
 
 ## Installation
@@ -90,8 +90,10 @@ x87/SSE state across task switches; AVX remains unsupported. Do not select
 builds explicitly retain `-mgeneral-regs-only`. The compiler-rt builtins include
 the x87, quad, half-precision and complex helpers and are built without the red
 zone; they are not a libc or libm implementation. The target has no 32-bit/x32
-multilib, shared libraries, PIE, threads or thread-local storage: `thread_local`
-and `_Thread_local` fail when compiling.
+multilib, shared libraries or PIE. Executable-only `thread_local` and
+`_Thread_local` use x86-64 local-exec TLS (variant II); other TLS models and
+emulation are rejected. They require the matching gate 7 SDK linker template
+and libc FS bootstrap. C11/pthread and C++ synchronization remain gate 8.
 
 Applications select an external SDK with `--sysroot=/path/to/sdk/sysroot`.
 The driver finds `crt0.o`, `pyxis.ld`, libc and libpyxis there, and the
@@ -115,7 +117,7 @@ changing SDK headers/libraries/startup/linker script does not.
 [LLVM 23.1.3](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.3),
 through the `mirrors/llvm-project` mirror and the `pyxis-llvm` fork, adds:
 - Pyxis OS support in LLVM's triple, Clang's target information and its driver,
-  including the SDK's C++ runtime and rejecting thread-local storage;
+  including the SDK's C++ runtime and static local-exec TLS;
 - P1F output in LLD;
 - a compiler-rt helper that avoids the red zone;
 - libc++ selections for Pyxis libc: `timespec_get` clocks, no terminal check
