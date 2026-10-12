@@ -205,7 +205,7 @@ or capability-valued environment mechanism is added.
 ## Adapter qualification (2026-10-12)
 
 Delivery: [userland #239](https://git.internal/PyxisOS/pyxis-userland/pulls/239),
-`143c89549b00f81a5ef761f257e74facb69f8182`, then
+`1dc88c178e659ada4d9a2eabc36ffcad61322bac`, then
 [ports #102](https://git.internal/PyxisOS/pyxis-ports/pulls/102),
 `f93becb9e5455f19e0389f6dd1b19240bdb38a87`, then
 [parent #760](https://git.internal/PyxisOS/pyxis-os/pulls/760).
@@ -223,6 +223,18 @@ the SDK records pre-qualification-doc parent `6fa9e785` with modified pins, clea
 userland/fs sources. Kernel SHA256
 `cefb436979e4524b4a9bb9201cd2889c41c32bfde0845acfff30c078d41a3c15`, normal initrd
 `674664eeef27689279a1475b3611857e19a36f07bc8242e234a515675e3bc795`.
+
+Before reporting, rebased onto main `4366eb28` after managed libc #756,
+with userland main `21cf935c` plus this task (`1dc88c17`), unchanged ports
+`f93becb9`. The bundle-schema overlap keeps main's `threads/manage` and adds
+only keyboard/pointer/job_work; intrinsic caller-only FS bootstrap is not a
+manifest right. Ordinary SDK/ports/userland/image build passed again with the
+same compiler. SDK parent `02dbd067` has qualification-doc changes only;
+userland/fs are clean. Kernel SHA256
+`043fb05d4cfb2534307cd3fdc08fb16db5d624781a0100a48e0084cf5a368846`, normal initrd
+`05694c5194be337381cd8d8b41a5a45f925b53f87af87239fb447cfedf072f17`.
+Earlier costs remain pre-managed-libc measurements, not an isolated attribution
+against the new runtime. Functional rechecks use the rebuilt current image.
 
 Interactive QEMU 10.2.2 q35/nested KVM, host CPU, 512 MiB, one/four CPUs,
 fresh OVMF variables, read-only FAT VirtIO boot disk, VirtIO RNG and PS/2 input.
@@ -257,7 +269,8 @@ limits, not injected or natively measured cases.
 
 Inline 1000 ordinary `pyxis.run{"cat","tmp://job-empty"}` calls, twice per CPU
 configuration: before 3/3 seconds (one CPU), 5/8 (four); after 3/3 and 6/7 in the
-initial adapter samples. One-second clock quantization and shared-host scheduling
+initial adapter samples, with 8/6 on the final pre-managed-libc four-CPU image
+(userland `143c8954`, ports `f93becb9`). One-second clock quantization and shared-host scheduling
 prevent a native latency/speedup claim. Screens/logs/consumers remain under
 `build/adapters-baseline` and `build/adapters-qualification`. All owned QEMU,
 debugger and remote-client processes are stopped after qualification. No native
