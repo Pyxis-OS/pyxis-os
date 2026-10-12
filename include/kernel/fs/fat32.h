@@ -22,11 +22,13 @@ void fat32_retire_node(struct fat32_node *node);
 struct fat32_node *fat32_take_retired(void);
 /* Sole worker, IF=1. */
 void fat32_cleanup_nodes(struct fat32_node *nodes);
+/* Sole worker: flush/seal retained views for clean power. */
+enum call_status fat32_shutdown_seal(struct npfs_store_context *context);
 /* Native control/issuer dispatch, caller holds a live object through waits. */
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
-struct syscall_result fat32_open_device(block_device_id device,
+struct syscall_result fat32_open_device(block_device_id device, uint64_t disk_rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
 

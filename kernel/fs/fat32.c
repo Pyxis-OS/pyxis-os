@@ -1,5 +1,6 @@
 #include <abi/mount.h>
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/fs/extents.h>
 #include <kernel/fs/fat32.h>
@@ -9,10 +10,13 @@
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
 #include <kernel/object/execution_group.h>
+#include <kernel/object/process.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <pyxis_fs/fat32.h>
+#include <pyxis_fs/fat32_mounted.h>
 #include "npfs_store.h"
 
 #define FAT32_MOUNT_LIMIT 4u
@@ -21,25 +25,36 @@
 #define FAT32_SECTOR_LIMIT UINT64_C(16777216)
 #define FAT32_DEPTH_LIMIT 64u
 
+struct fat32_interval {
+  struct fat32_interval *next;
+  struct process_control *actor;
+  uint64_t id, deadline;
+  bool active;
+};
+
 struct fat32_mount {
   struct fat32_mount *next;
   struct storage_extent extent;
   block_device_id device;
   struct fat32_volume volume;
+  struct fat32_mounted writer;
+  struct fat32_interval *intervals;
   struct fat32_workspace workspace;
   struct npfs_store_context *context; /* Borrowed only while this worker executes. */
   struct fat32_node *nodes;
   uint64_t domain;
   size_t data_nodes, controls;
-  enum call_status backing_status;
-  bool probing, published, retired;
+  enum call_status backing_status, first_failure;
+  bool probing, published, retired, writable;
 };
 
 struct fat32_node {
   struct fat32_node *next, *retired_next;
   struct fat32_mount *mount;
   struct fat32_locator locator;
-  uint64_t id, kind, ceiling;
+  struct fat32_mounted_object record;
+  size_t chain_bytes;
+  uint64_t id, kind, ceiling, generation;
   atomic_size_t admitted;
   atomic_bool returned;
   struct execution_group *cleanup_group;
@@ -124,8 +139,71 @@ static bool read_sectors(void *argument, uint64_t first, uint32_t count, void *b
   return true;
 }
 
+static bool write_backing(struct fat32_mount *mount, enum block_operation operation,
+    uint64_t first, uint32_t count, const void *bytes)
+{
+  struct npfs_store_context *context = mount->context;
+  KASSERT(context && mount->writable);
+  if (operation == BLOCK_WRITE && (!count || count > DISK_IO_MAX_BYTES / FAT32_SECTOR_BYTES ||
+      first < mount->extent.first_block || first - mount->extent.first_block >=
+      mount->extent.block_count || count > mount->extent.block_count -
+      (first - mount->extent.first_block))) {
+    mount->backing_status = CALL_IO;
+    return false;
+  }
+  struct block_ticket ticket;
+  enum block_result result;
+  for (;;) {
+    if (task_deadline_expired(context->deadline)) {
+      mount->backing_status = CALL_TIMED_OUT;
+      return false;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    result = block_submit(mount->device, operation, first, count, bytes, &ticket);
+    cpu_restore_interrupts(flags);
+    if (result != BLOCK_FULL) {
+      break;
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(1));
+  }
+  if (result == BLOCK_OK) {
+    result = block_wait(&ticket, context->deadline);
+    uint64_t flags = cpu_save_interrupts();
+    if (result != BLOCK_OK) {
+      KASSERT(block_abandon(&ticket) == BLOCK_OK);
+    } else {
+      struct block_completion completion;
+      KASSERT(block_collect(&ticket, NULL, 0, &completion) == BLOCK_OK);
+      result = completion.result;
+    }
+    cpu_restore_interrupts(flags);
+  }
+  if (result != BLOCK_OK) {
+    context->backing_error = result;
+    mount->backing_status = block_status(result);
+    return false;
+  }
+  return true;
+}
+
+static bool write_sectors(void *context, uint64_t first, uint32_t count, const void *bytes)
+{
+  return write_backing(context, BLOCK_WRITE, first, count, bytes);
+}
+
+static bool flush_backing(void *context)
+{
+  return write_backing(context, BLOCK_FLUSH, 0, 0, NULL);
+}
+
 static enum call_status format_status(struct fat32_mount *mount, enum fat32_status status)
 {
+  if (mount->writable && mount->writer.stopped) {
+    if (mount->first_failure == CALL_OK) {
+      mount->first_failure = mount->backing_status == CALL_OK ? CALL_IO : mount->backing_status;
+    }
+    return CALL_OUTCOME_UNKNOWN;
+  }
   switch (status) {
   case FAT32_OK: return CALL_OK;
   case FAT32_INVALID: return CALL_BAD_REQUEST;
@@ -135,10 +213,167 @@ static enum call_status format_status(struct fat32_mount *mount, enum fat32_stat
   case FAT32_LIMIT: return CALL_LIMIT;
   case FAT32_NAME_TOO_LONG: return CALL_NAME_TOO_LONG;
   case FAT32_NOT_FOUND: return CALL_NOT_FOUND;
+  case FAT32_EXISTS: return CALL_ALREADY_EXISTS;
+  case FAT32_NO_SPACE: return CALL_NO_SPACE;
+  case FAT32_READ_ONLY: return CALL_READ_ONLY;
+  case FAT32_NOT_EMPTY: return CALL_NOT_EMPTY;
+  case FAT32_STOPPED: return CALL_OUTCOME_UNKNOWN;
   case FAT32_NOT_DIRECTORY:
   case FAT32_IS_DIRECTORY: return CALL_WRONG_TYPE;
   default: return CALL_IO;
   }
+}
+
+static enum call_status ensure_workspace(struct fat32_mount *mount, size_t bytes)
+{
+  if (bytes <= mount->workspace.bytes) {
+    return CALL_OK;
+  }
+  size_t extra = bytes - mount->workspace.bytes;
+  if (extra > FAT32_WORKSPACE_BYTES - workspace_used) {
+    return CALL_LIMIT;
+  }
+  workspace_used += extra;
+  uint64_t flags = cpu_save_interrupts();
+  void *memory = kmalloc(bytes);
+  cpu_restore_interrupts(flags);
+  if (!memory) {
+    workspace_used -= extra;
+    return CALL_NO_MEMORY;
+  }
+  flags = cpu_save_interrupts();
+  kfree(mount->workspace.memory);
+  cpu_restore_interrupts(flags);
+  mount->workspace.memory = memory;
+  mount->workspace.bytes = bytes;
+  return CALL_OK;
+}
+
+static enum call_status prepare_workspace(struct fat32_mount *mount, uint64_t changed)
+{
+  size_t bytes;
+  enum call_status status = format_status(mount, fat32_mounted_workspace_size(
+      &mount->writer.volume, FAT32_DEPTH_LIMIT, changed, &bytes));
+  return status == CALL_OK ? ensure_workspace(mount, bytes) : status;
+}
+
+static void free_interval(struct fat32_interval *interval)
+{
+  uint64_t flags = cpu_save_interrupts();
+  object_release(&interval->actor->object);
+  cpu_restore_interrupts(flags);
+  npfs_adapter_free(interval, sizeof(*interval));
+}
+
+static void update_intervals(struct fat32_mount *mount)
+{
+  struct fat32_interval **link = &mount->intervals;
+  while (*link) {
+    struct fat32_interval *interval = *link;
+    uint64_t flags = cpu_save_interrupts();
+    bool stopped = process_control_stopped(interval->actor);
+    cpu_restore_interrupts(flags);
+    if (stopped) {
+      *link = interval->next;
+      free_interval(interval);
+      continue;
+    }
+    if (task_deadline_expired(interval->deadline)) {
+      interval->active = false;
+    }
+    link = &interval->next;
+  }
+}
+
+static bool active_interval(struct fat32_mount *mount)
+{
+  for (struct fat32_interval *interval = mount->intervals; interval; interval = interval->next) {
+    if (interval->active) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static enum call_status mutation_admission(struct fat32_mount *mount, struct npfs_job *job)
+{
+  if (!mount->writable) {
+    return CALL_READ_ONLY;
+  }
+  if (mount->writer.stopped) {
+    return CALL_OUTCOME_UNKNOWN;
+  }
+  if (!job->fat_actor) {
+    return CALL_DENIED;
+  }
+  update_intervals(mount);
+  for (struct fat32_interval *interval = mount->intervals; interval; interval = interval->next) {
+    if (interval->actor == job->fat_actor && !interval->active) {
+      return CALL_TIMED_OUT;
+    }
+    if (interval->active && interval->actor != job->fat_actor) {
+      return CALL_BUSY;
+    }
+  }
+  return CALL_OK;
+}
+
+static enum call_status interval_operation(struct fat32_mount *mount, struct npfs_job *job)
+{
+  if (!mount->writable || mount->retired) {
+    return CALL_UNAVAILABLE;
+  }
+  if (!job->fat_actor) {
+    return CALL_DENIED;
+  }
+  update_intervals(mount);
+  struct fat32_interval **owned = &mount->intervals;
+  while (*owned && (*owned)->actor != job->fat_actor) {
+    owned = &(*owned)->next;
+  }
+  if (job->operation == NPFS_FAT_END) {
+    if (!*owned || (*owned)->id != job->interval_id) {
+      return CALL_BAD_REQUEST;
+    }
+    struct fat32_interval *interval = *owned;
+    *owned = interval->next;
+    free_interval(interval);
+    return CALL_OK;
+  }
+  if (mount->writer.stopped) {
+    return CALL_OUTCOME_UNKNOWN;
+  }
+  if (active_interval(mount)) {
+    return CALL_BUSY;
+  }
+  struct fat32_interval *interval;
+  enum call_status status = npfs_adapter_allocate(sizeof(*interval), (void **)&interval);
+  if (status != CALL_OK) {
+    return status;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool identified = fs_metadata_allocate_id(&interval->id);
+  if (identified) {
+    object_retain(&job->fat_actor->object);
+  }
+  cpu_restore_interrupts(flags);
+  if (!identified) {
+    npfs_adapter_free(interval, sizeof(*interval));
+    return CALL_LIMIT;
+  }
+  interval->actor = job->fat_actor;
+  interval->deadline = task_deadline_after_ms(30000);
+  interval->active = true;
+  if (*owned) {
+    struct fat32_interval *previous = *owned;
+    *owned = previous->next;
+    free_interval(previous);
+  }
+  interval->next = mount->intervals;
+  mount->intervals = interval;
+  job->interval_id = interval->id;
+  job->interval_deadline = interval->deadline;
+  return CALL_OK;
 }
 
 static void free_workspace(struct fat32_mount *mount)
@@ -155,9 +390,73 @@ static void free_workspace(struct fat32_mount *mount)
   mount->workspace.bytes = 0;
 }
 
+static void free_chain(struct fat32_node *node)
+{
+  if (!node->chain_bytes) {
+    return;
+  }
+  KASSERT(node->chain_bytes <= workspace_used);
+  workspace_used -= node->chain_bytes;
+  uint64_t flags = cpu_save_interrupts();
+  kfree(node->record.chain);
+  cpu_restore_interrupts(flags);
+  node->record.chain = NULL;
+  node->record.chain_capacity = 0;
+  node->chain_bytes = 0;
+}
+
+static enum call_status reserve_chain(struct fat32_node *node, uint64_t capacity)
+{
+  if (capacity <= node->record.chain_capacity) {
+    return CALL_OK;
+  }
+  if (capacity > UINT32_MAX || capacity > SIZE_MAX / sizeof(uint32_t)) {
+    return CALL_LIMIT;
+  }
+  size_t bytes = capacity * sizeof(uint32_t);
+  size_t extra = bytes - node->chain_bytes;
+  if (extra > FAT32_WORKSPACE_BYTES - workspace_used) {
+    return CALL_LIMIT;
+  }
+  workspace_used += extra;
+  uint64_t flags = cpu_save_interrupts();
+  uint32_t *chain = kmalloc(bytes);
+  cpu_restore_interrupts(flags);
+  if (!chain) {
+    workspace_used -= extra;
+    return CALL_NO_MEMORY;
+  }
+  uint32_t *previous = node->record.chain;
+  enum call_status status = CALL_OK;
+  if (node->record.mounted) {
+    status = format_status(node->mount, fat32_mounted_object_reserve(
+        &node->record, chain, capacity));
+  } else {
+    node->record.chain = chain;
+    node->record.chain_capacity = capacity;
+  }
+  if (status != CALL_OK) {
+    workspace_used -= extra;
+    flags = cpu_save_interrupts();
+    kfree(chain);
+    cpu_restore_interrupts(flags);
+    return status;
+  }
+  flags = cpu_save_interrupts();
+  kfree(previous);
+  cpu_restore_interrupts(flags);
+  node->chain_bytes = bytes;
+  return CALL_OK;
+}
+
 static void remove_instance(struct fat32_mount *mount)
 {
   KASSERT(!mount->data_nodes && !mount->controls && !mount->nodes && !mount->context);
+  while (mount->intervals) {
+    struct fat32_interval *interval = mount->intervals;
+    mount->intervals = interval->next;
+    free_interval(interval);
+  }
   if (!mount->retired) {
     free_workspace(mount);
     storage_extent_release(&mount->extent);
@@ -223,6 +522,28 @@ void fat32_cleanup_nodes(struct fat32_node *nodes)
     struct fat32_node *node = nodes;
     nodes = node->retired_next;
     struct fat32_mount *mount = node->mount;
+    struct execution_group *group = node->cleanup_group;
+    node->cleanup_group = NULL;
+    if (node->kind != OBJECT_MOUNT && mount->writable && node->record.mounted) {
+      struct npfs_store_context context = {.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS)};
+      mount->context = &context;
+      enum call_status status = prepare_workspace(mount, 0);
+      if (status == CALL_OK) {
+        status = format_status(mount, fat32_mounted_object_forget(&node->record,
+            &mount->workspace));
+      }
+      mount->context = NULL;
+      if (status != CALL_OK) {
+        /* Retain the failed record/chain under mount accounting, not a dead
+         * process or execution group's cleanup ownership. */
+        if (group) {
+          uint64_t flags = cpu_save_interrupts();
+          execution_group_cleanup_end(group);
+          cpu_restore_interrupts(flags);
+        }
+        continue;
+      }
+    }
     struct fat32_node **link = &mount->nodes;
     while (*link != node) {
       KASSERT(*link);
@@ -239,7 +560,7 @@ void fat32_cleanup_nodes(struct fat32_node *nodes)
       KASSERT(mount->data_nodes);
       --mount->data_nodes;
     }
-    struct execution_group *group = node->cleanup_group;
+    free_chain(node);
     npfs_adapter_free(node, sizeof(*node));
     if (!mount->data_nodes && !mount->controls && (mount->retired || !mount->published)) {
       remove_instance(mount);
@@ -262,9 +583,10 @@ static bool same_locator(const struct fat32_locator *a, const struct fat32_locat
 static enum call_status wrap(struct fat32_mount *mount, uint64_t kind,
     const struct fat32_locator *locator, uint64_t ceiling, struct kernel_object **out)
 {
-  if (kind != OBJECT_MOUNT) {
+  if (kind != OBJECT_MOUNT && locator) {
     for (struct fat32_node *node = mount->nodes; node; node = node->next) {
-      if (node->kind == kind && same_locator(&node->locator, locator)) {
+      if (node->kind == kind && (!mount->writable || node->record.attached) &&
+          same_locator(mount->writable ? &node->record.locator : &node->locator, locator)) {
         uint64_t flags = cpu_save_interrupts();
         /* A cached wrapper can reach zero on an AP while still awaiting this
          * worker's destruction. Try-retain never resurrects that object. */
@@ -317,6 +639,24 @@ static enum call_status wrap(struct fat32_mount *mount, uint64_t kind,
   if (!identified) {
     npfs_adapter_free(node, sizeof(*node));
     return CALL_LIMIT;
+  }
+  node->generation = node->id;
+  if (kind != OBJECT_MOUNT && locator && mount->writable) {
+    uint32_t count;
+    status = format_status(mount, fat32_mounted_object_chain_size(&mount->writer,
+        locator, &mount->workspace, &count));
+    if (status == CALL_OK) {
+      status = reserve_chain(node, (uint64_t)count + (kind == OBJECT_DIRECTORY ? 2 : 0));
+    }
+    if (status == CALL_OK) {
+      status = format_status(mount, fat32_mounted_object_bind(&mount->writer,
+          locator, &mount->workspace, &node->record));
+    }
+    if (status != CALL_OK) {
+      free_chain(node);
+      npfs_adapter_free(node, sizeof(*node));
+      return status;
+    }
   }
   node->next = mount->nodes;
   mount->nodes = node;
@@ -455,11 +795,21 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
           memcmp(mount->volume.partition_guid, partition.guid.bytes, 16)) {
         return CALL_BUSY;
       }
+      if (mount->writable && !job->fat_write_authority) {
+        return CALL_DENIED;
+      }
+      if (job->fat_access == MOUNT_ACCESS_READ_WRITE && !mount->writable) {
+        return CALL_BUSY;
+      }
       mount->context = context;
       mount->backing_status = CALL_OK;
       *out = mount;
       return CALL_OK;
     }
+  }
+  if (job->fat_access == MOUNT_ACCESS_READ_WRITE &&
+      (!info.writable || !info.flush_supported)) {
+    return CALL_READ_ONLY;
   }
   if (instance_count == FAT32_MOUNT_LIMIT) {
     return CALL_LIMIT;
@@ -477,6 +827,7 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
   }
   ++instance_count;
   mount->device = job->device;
+  mount->writable = job->fat_access == MOUNT_ACCESS_READ_WRITE;
   mount->next = mounts;
   mounts = mount;
   mount->context = context;
@@ -512,6 +863,19 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
     struct fat32_check_report report;
     status = format_status(mount, fat32_check(&mount->volume, &mount->workspace, &report));
   }
+  if (status == CALL_OK && mount->writable) {
+    size_t bytes;
+    status = format_status(mount, fat32_mounted_workspace_size(&mount->volume,
+        FAT32_DEPTH_LIMIT, 0, &bytes));
+    if (status == CALL_OK) {
+      status = ensure_workspace(mount, bytes);
+    }
+    if (status == CALL_OK) {
+      struct fat32_write_io io = {write_sectors, flush_backing, mount};
+      status = format_status(mount, fat32_mounted_open(&mount->writer,
+          &mount->volume, &io, &mount->workspace));
+    }
+  }
   if (status == CALL_OK) {
     uint64_t flags = cpu_save_interrupts();
     bool identified = fs_metadata_allocate_id(&mount->domain);
@@ -534,7 +898,8 @@ static enum call_status root(struct fat32_mount *mount, uint64_t rights,
   struct fat32_entry entry;
   struct fat32_locator locator;
   enum call_status status = format_status(mount,
-      fat32_root(&mount->volume, &mount->workspace, &entry, &locator));
+      fat32_root(mount->writable ? &mount->writer.volume : &mount->volume,
+          &mount->workspace, &entry, &locator));
   return status == CALL_OK ? wrap(mount, OBJECT_DIRECTORY, &locator, rights, out) : status;
 }
 
@@ -550,13 +915,234 @@ static bool collect_bytes(void *argument, const void *bytes, size_t length)
   return true;
 }
 
+static struct fat32_node *object_node(struct kernel_object *object)
+{
+  return object->type == OBJECT_DIRECTORY ? ((struct directory_object *)object)->fat32 :
+      ((struct file_object *)object)->fat32;
+}
+
+static void release_object(struct kernel_object *object)
+{
+  if (object) {
+    uint64_t flags = cpu_save_interrupts();
+    object_release(object);
+    cpu_restore_interrupts(flags);
+  }
+}
+
+static enum call_status lookup_object(struct fat32_node *parent, const char *name,
+    size_t length, struct kernel_object **out)
+{
+  struct fat32_mount *mount = parent->mount;
+  struct fat32_entry entry;
+  struct fat32_locator locator;
+  enum call_status status = format_status(mount, fat32_mounted_lookup(&parent->record,
+      name, length, &mount->workspace, &entry, &locator));
+  return status == CALL_OK ? wrap(mount, entry.attributes & FAT32_ATTR_DIRECTORY ?
+      OBJECT_DIRECTORY : OBJECT_FILE, &locator, 0, out) : status;
+}
+
+static bool new_generation(uint64_t *generation)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool identified = fs_metadata_allocate_id(generation);
+  cpu_restore_interrupts(flags);
+  return identified;
+}
+
+static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mount *mount)
+{
+  struct fat32_node *node = job->fat_node;
+  bool directory = node->kind == OBJECT_DIRECTORY;
+  uint64_t required;
+  switch (job->operation) {
+  case NPFS_CREATE: required = DIRECTORY_RIGHT_CREATE; break;
+  case NPFS_REMOVE:
+  case NPFS_RENAME: required = DIRECTORY_RIGHT_REMOVE; break;
+  case NPFS_WRITE:
+  case NPFS_RESIZE: required = FILE_RIGHT_WRITE; break;
+  case NPFS_SYNC: required = directory ? DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE :
+      FILE_RIGHT_WRITE; break;
+  default: return CALL_BAD_OPERATION;
+  }
+  if (!(job->rights & required)) {
+    return CALL_DENIED;
+  }
+  if (((job->operation == NPFS_WRITE || job->operation == NPFS_RESIZE) && directory) ||
+      ((job->operation == NPFS_CREATE || job->operation == NPFS_REMOVE ||
+        job->operation == NPFS_RENAME) && !directory)) {
+    return CALL_WRONG_TYPE;
+  }
+  enum call_status status = mutation_admission(mount, job);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (job->operation == NPFS_SYNC) {
+    return format_status(mount, fat32_mounted_sync(&mount->writer));
+  }
+  uint64_t cluster_bytes = (uint64_t)mount->writer.volume.sectors_per_cluster * FAT32_SECTOR_BYTES;
+  if (job->operation == NPFS_WRITE || job->operation == NPFS_RESIZE) {
+    if (job->operation == NPFS_WRITE && job->count > FILE_WRITE_MAX_BYTES) {
+      return CALL_BAD_REQUEST;
+    }
+    uint64_t target = job->offset;
+    if (job->operation == NPFS_WRITE) {
+      if (job->count && (target > UINT32_MAX || job->count > UINT32_MAX - target)) {
+        return CALL_FILE_TOO_LARGE;
+      }
+      target = job->count ? target + job->count : node->record.entry.file_bytes;
+      if (target < node->record.entry.file_bytes) {
+        target = node->record.entry.file_bytes;
+      }
+    } else if (target > UINT32_MAX) {
+      return CALL_FILE_TOO_LARGE;
+    }
+    uint64_t changed = (target > node->record.entry.file_bytes ?
+        target - node->record.entry.file_bytes : 0) + 2 * cluster_bytes + job->count;
+    status = prepare_workspace(mount, changed);
+    if (status == CALL_OK) {
+      status = reserve_chain(node, (target + cluster_bytes - 1) / cluster_bytes);
+    }
+    if (status != CALL_OK) {
+      return status;
+    }
+    return format_status(mount, job->operation == NPFS_WRITE ?
+        fat32_mounted_write(&node->record, job->offset, job->data, job->count,
+            &mount->workspace) : fat32_mounted_resize(&node->record, job->offset,
+            &mount->workspace));
+  }
+  status = prepare_workspace(mount, 0);
+  if (status != CALL_OK) {
+    return status;
+  }
+  uint64_t generation;
+  if (!new_generation(&generation)) {
+    return CALL_LIMIT;
+  }
+  if (job->operation == NPFS_CREATE) {
+    if (!job->reservation.table ||
+        (job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY)) {
+      return CALL_BAD_REQUEST;
+    }
+    uint64_t allowed = job->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
+        (job->rights & DIRECTORY_RIGHT_READ_FILES ? FILE_RIGHT_READ : 0) |
+        (job->rights & DIRECTORY_RIGHT_WRITE_FILES ? FILE_RIGHT_WRITE : 0);
+    if (job->child_rights & ~allowed) {
+      return CALL_DENIED;
+    }
+    struct kernel_object *object = NULL;
+    status = wrap(mount, job->kind == DIRECTORY_KIND_DIRECTORY ? OBJECT_DIRECTORY :
+        OBJECT_FILE, NULL, job->child_rights, &object);
+    struct fat32_node *created = object ? object_node(object) : NULL;
+    if (status == CALL_OK) {
+      status = reserve_chain(node, (uint64_t)node->record.chain_count + 2);
+    }
+    if (status == CALL_OK && job->kind == DIRECTORY_KIND_DIRECTORY) {
+      status = reserve_chain(created, 1);
+    }
+    if (status == CALL_OK) {
+      uint64_t flags = cpu_save_interrupts();
+      enum capability_result prepared = capability_grant_retain(object,
+          job->child_rights, 0, &job->grant);
+      if (prepared == CAP_OK) {
+        prepared = capability_validate_grants(job->reservation.table, &job->grant, 1);
+      }
+      cpu_restore_interrupts(flags);
+      status = prepared == CAP_OK ? CALL_OK : prepared == CAP_NO_MEMORY ?
+          CALL_NO_MEMORY : prepared == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+    }
+    if (status == CALL_OK) {
+      status = format_status(mount, fat32_mounted_create(&node->record, job->name,
+          job->count, job->kind == DIRECTORY_KIND_DIRECTORY, &mount->workspace,
+          &created->record));
+    }
+    if (status == CALL_OK) {
+      node->generation = generation;
+      uint64_t flags = cpu_save_interrupts();
+      capability_install_reserved(&job->reservation, &job->slot, &job->grant, 1,
+          &job->handle);
+      cpu_restore_interrupts(flags);
+    }
+    release_object(object);
+    return status;
+  }
+  struct kernel_object *source = NULL, *victim = NULL;
+  status = lookup_object(node, job->name, job->count, &source);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct fat32_node *selected = object_node(source);
+  if (job->operation == NPFS_REMOVE) {
+    if ((job->kind == DIRECTORY_KIND_FILE && selected->kind != OBJECT_FILE) ||
+        (job->kind == DIRECTORY_KIND_DIRECTORY && selected->kind != OBJECT_DIRECTORY)) {
+      status = CALL_WRONG_TYPE;
+    } else {
+      status = format_status(mount, fat32_mounted_remove(&node->record,
+          &selected->record, &mount->workspace));
+    }
+    if (status == CALL_OK) {
+      node->generation = generation;
+    }
+  } else {
+    struct fat32_node *target = job->fat_destination;
+    if (!target || target->kind != OBJECT_DIRECTORY || target->mount != mount) {
+      status = CALL_BAD_OPERATION;
+    } else if (!(job->destination_rights & DIRECTORY_RIGHT_CREATE) ||
+        (job->replace && !(job->destination_rights & DIRECTORY_RIGHT_REMOVE))) {
+      status = CALL_DENIED;
+    } else if (selected->kind != OBJECT_FILE) {
+      status = CALL_WRONG_TYPE;
+    } else {
+      uint64_t target_generation = generation;
+      if (target != node && !new_generation(&target_generation)) {
+        status = CALL_LIMIT;
+      } else {
+        status = lookup_object(target, job->destination_name, job->destination_length, &victim);
+        if (status == CALL_NOT_FOUND) {
+          status = CALL_OK;
+        }
+        if (status == CALL_OK) {
+          status = reserve_chain(target, (uint64_t)target->record.chain_count + 2);
+        }
+        if (status == CALL_OK) {
+          status = format_status(mount, fat32_mounted_rename(&node->record,
+              &selected->record, &target->record, job->destination_name,
+              job->destination_length, job->replace, victim ? &object_node(victim)->record :
+              NULL, &mount->workspace));
+        }
+        if (status == CALL_OK && source != victim) {
+          node->generation = generation;
+          target->generation = target_generation;
+        }
+      }
+    }
+  }
+  release_object(victim);
+  release_object(source);
+  return status;
+}
+
 static enum call_status data_operation(struct npfs_job *job, struct fat32_mount *mount)
 {
   struct fat32_node *node = job->fat_node;
   bool directory = node->kind == OBJECT_DIRECTORY;
-  uint64_t all = directory ? FAT32_ROOT_RIGHTS : FILE_RIGHT_READ;
+  uint64_t all = directory ? (mount->writable ? DIRECTORY_CONTENT_RIGHTS : FAT32_ROOT_RIGHTS) :
+      (mount->writable ? FILE_RIGHTS : FILE_RIGHT_READ);
   if (job->rights & ~all) {
     return CALL_DENIED;
+  }
+  if (mount->writable && mount->writer.stopped) {
+    return CALL_OUTCOME_UNKNOWN;
+  }
+  switch (job->operation) {
+  case NPFS_CREATE:
+  case NPFS_REMOVE:
+  case NPFS_RENAME:
+  case NPFS_WRITE:
+  case NPFS_RESIZE:
+  case NPFS_SYNC:
+    return mutation_operation(job, mount);
+  default: break;
   }
   struct fat32_entry entry;
   enum call_status status;
@@ -566,13 +1152,15 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
       return CALL_DENIED;
     }
     uint64_t allowed = job->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
-        (job->rights & DIRECTORY_RIGHT_READ_FILES ? FILE_RIGHT_READ : 0);
+        (job->rights & DIRECTORY_RIGHT_READ_FILES ? FILE_RIGHT_READ : 0) |
+        (job->rights & DIRECTORY_RIGHT_WRITE_FILES ? FILE_RIGHT_WRITE : 0);
     if ((job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY) ||
         (job->child_rights & ~allowed)) {
       return CALL_DENIED;
     }
     struct fat32_locator child;
-    status = format_status(mount, fat32_lookup(&mount->volume, &node->locator,
+    status = format_status(mount, mount->writable ? fat32_mounted_lookup(&node->record, job->name, job->count,
+        &mount->workspace, &entry, &child) : fat32_lookup(&mount->volume, &node->locator,
         job->name, job->count, &mount->workspace, &entry, &child));
     if (status != CALL_OK) {
       return status;
@@ -591,7 +1179,7 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
       return CALL_BAD_REQUEST;
     }
     struct directory_enumerate_reply reply = {.cursor = job->cursor};
-    if (job->cursor.generation && job->cursor.generation != node->id) {
+    if (job->cursor.generation && job->cursor.generation != node->generation) {
       reply.outcome = DIRECTORY_CHANGED;
       job->entry = reply;
       return CALL_OK;
@@ -599,14 +1187,15 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
     uint64_t next;
     bool found;
     struct fat32_locator child;
-    status = format_status(mount, fat32_enumerate(&mount->volume, &node->locator,
-        job->cursor.position, &mount->workspace, &entry, &child, &next, &found));
+    status = format_status(mount, mount->writable ? fat32_mounted_enumerate(&node->record, job->cursor.position,
+        &mount->workspace, &entry, &child, &next, &found) : fat32_enumerate(&mount->volume,
+        &node->locator, job->cursor.position, &mount->workspace, &entry, &child, &next, &found));
     if (status != CALL_OK) {
       return status;
     }
     if (!found) {
       reply.outcome = DIRECTORY_END;
-      reply.cursor = (struct directory_cursor){node->id, next};
+      reply.cursor = (struct directory_cursor){node->generation, next};
     } else {
       reply.name_size = entry.name_bytes + 1;
       reply.kind = entry.attributes & FAT32_ATTR_DIRECTORY ? DIRECTORY_KIND_DIRECTORY : DIRECTORY_KIND_FILE;
@@ -614,7 +1203,7 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
         reply.outcome = DIRECTORY_BUFFER_TOO_SMALL;
       } else {
         reply.outcome = DIRECTORY_ENTRY;
-        reply.cursor = (struct directory_cursor){node->id, next};
+        reply.cursor = (struct directory_cursor){node->generation, next};
         memcpy(job->name, entry.name, entry.name_bytes);
         job->name[entry.name_bytes] = 0;
       }
@@ -627,8 +1216,9 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
       return CALL_BAD_REQUEST;
     }
     struct byte_output output = {job->data, 0, job->count};
-    status = format_status(mount, fat32_read_range(&mount->volume, &node->locator,
-        job->offset, job->count, &mount->workspace, collect_bytes, &output));
+    status = format_status(mount, mount->writable ? fat32_mounted_read_range(&node->record, job->offset, job->count,
+        &mount->workspace, collect_bytes, &output) : fat32_read_range(&mount->volume,
+        &node->locator, job->offset, job->count, &mount->workspace, collect_bytes, &output));
     if (status == CALL_OK) {
       job->count = output.used;
     }
@@ -638,8 +1228,8 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
     if (directory || !(job->rights & FILE_RIGHT_READ)) {
       return CALL_DENIED;
     }
-    status = format_status(mount, fat32_locate(&mount->volume, &node->locator,
-        &mount->workspace, &entry));
+    status = format_status(mount, mount->writable ? fat32_mounted_locate(&node->record, &mount->workspace, &entry) :
+        fat32_locate(&mount->volume, &node->locator, &mount->workspace, &entry));
     if (status != CALL_OK) {
       return status;
     }
@@ -656,8 +1246,8 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
   }
   case NPFS_SIZE:
   case NPFS_INFO:
-    status = format_status(mount, fat32_locate(&mount->volume, &node->locator,
-        &mount->workspace, &entry));
+    status = format_status(mount, mount->writable ? fat32_mounted_locate(&node->record, &mount->workspace, &entry) :
+        fat32_locate(&mount->volume, &node->locator, &mount->workspace, &entry));
     if (status == CALL_OK) {
       job->offset = directory ? 0 : entry.file_bytes;
       job->file_info = (struct file_info_reply){
@@ -673,11 +1263,63 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
 
 static void state(struct fat32_mount *mount, struct mount_state_reply *reply)
 {
-  *reply = (struct mount_state_reply){mount->domain, mount->device,
-      mount->volume.gpt_entry, mount->volume.partition_first, mount->volume.partition_sectors,
-      (mount->retired ? MOUNT_STATE_RETIRED : 0) |
-      (mount->volume.clean_shutdown ? MOUNT_STATE_CLEAN_SHUTDOWN : 0) |
-      (mount->volume.no_hard_error ? MOUNT_STATE_NO_HARD_ERROR : 0)};
+  const struct fat32_volume *volume = mount->writable ? &mount->writer.volume : &mount->volume;
+  *reply = (struct mount_state_reply){
+    .domain = mount->domain, .device = mount->device,
+    .partition = volume->gpt_entry, .first_block = volume->partition_first,
+    .block_count = volume->partition_sectors,
+    .flags = (mount->retired ? MOUNT_STATE_RETIRED : 0) |
+        (volume->clean_shutdown ? MOUNT_STATE_CLEAN_SHUTDOWN : 0) |
+        (volume->no_hard_error ? MOUNT_STATE_NO_HARD_ERROR : 0) |
+        (mount->writable ? MOUNT_STATE_READ_WRITE : 0) |
+        (mount->writer.dirty_owned ? MOUNT_STATE_DIRTY_OWNED : 0) |
+        (mount->writer.stopped ? MOUNT_STATE_FAILED : 0),
+  };
+  if (mount->writer.stopped) {
+    reply->failure_status = mount->first_failure;
+    reply->failure_phase = mount->writer.recovery.phase;
+    reply->failed_sector = mount->writer.recovery.failed_sector;
+    memcpy(reply->source_name, mount->writer.recovery.source_name, sizeof(reply->source_name));
+    memcpy(reply->destination_name, mount->writer.recovery.target_name,
+        sizeof(reply->destination_name));
+  }
+  for (struct fat32_mounted_object *object = mount->writer.objects; object; object = object->next) {
+    if (!object->attached) {
+      ++reply->detached_objects;
+    }
+  }
+  for (struct fat32_interval *interval = mount->intervals; interval; interval = interval->next) {
+    if (interval->active) {
+      reply->flags |= MOUNT_STATE_INTERVAL;
+      reply->interval_id = interval->id;
+      reply->interval_deadline_ns = interval->deadline;
+      break;
+    }
+  }
+}
+
+enum call_status fat32_shutdown_seal(struct npfs_store_context *context)
+{
+  npfs_require_worker();
+  for (struct fat32_mount *mount = mounts; mount; mount = mount->next) {
+    if (mount->retired || !mount->writable) {
+      continue;
+    }
+    if (mount->writer.stopped) {
+      return CALL_OUTCOME_UNKNOWN;
+    }
+    if (!mount->writer.mutated) {
+      continue;
+    }
+    mount->context = context;
+    enum call_status status = format_status(mount, fat32_mounted_seal(&mount->writer,
+        &mount->workspace));
+    mount->context = NULL;
+    if (status != CALL_OK) {
+      return status;
+    }
+  }
+  return CALL_OK;
 }
 
 enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_job *job)
@@ -705,6 +1347,7 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
   }
   mount->context = context;
   mount->backing_status = CALL_OK;
+  update_intervals(mount);
   switch (job->operation) {
   case NPFS_FAT_STATE:
     mount->published = true;
@@ -715,9 +1358,21 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
     mount->published = true;
     if (mount->retired) {
       status = CALL_OK;
-    } else if (mount->data_nodes || other_requests(mount, job->fat_node)) {
+    } else if (mount->writable && mount->writer.stopped) {
+      status = CALL_OUTCOME_UNKNOWN;
+    } else if (mount->data_nodes || other_requests(mount, job->fat_node) || active_interval(mount)) {
       status = CALL_BUSY;
     } else {
+      status = mount->writable ? format_status(mount, fat32_mounted_seal(&mount->writer,
+          &mount->workspace)) : CALL_OK;
+      if (status != CALL_OK) {
+        break;
+      }
+      while (mount->intervals) {
+        struct fat32_interval *interval = mount->intervals;
+        mount->intervals = interval->next;
+        free_interval(interval);
+      }
       free_workspace(mount);
       storage_extent_release(&mount->extent);
       KASSERT(instance_count);
@@ -726,9 +1381,20 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
       status = CALL_OK;
     }
     break;
+  case NPFS_FAT_BEGIN:
+  case NPFS_FAT_END:
+    status = interval_operation(mount, job);
+    break;
+  case NPFS_FAT_SYNC:
+    status = mount->retired ? CALL_UNAVAILABLE : mutation_admission(mount, job);
+    if (status == CALL_OK) {
+      status = format_status(mount, fat32_mounted_sync(&mount->writer));
+    }
+    break;
   case NPFS_FAT_ROOT:
     status = (job->rights & ~job->fat_node->ceiling) ? CALL_DENIED :
-        mount->retired ? CALL_UNAVAILABLE : root(mount, job->rights, &job->object);
+        mount->retired ? CALL_UNAVAILABLE : mount->writer.stopped ? CALL_OUTCOME_UNKNOWN :
+        root(mount, job->rights, &job->object);
     if (status == CALL_OK) {
       mount->published = true;
     }
@@ -755,9 +1421,12 @@ static enum call_status capability_status(enum capability_result result)
 }
 
 static struct syscall_result open_pair(block_device_id device, const struct boot_origin *origin,
-    uint32_t partition, uint64_t rights, uintptr_t reply_address, size_t reply_capacity)
+    uint32_t partition, uint64_t access, bool write_authority, uint64_t rights,
+    uintptr_t reply_address, size_t reply_capacity)
 {
-  if ((rights & ~FAT32_ROOT_RIGHTS) || reply_capacity < sizeof(struct mount_fat32_reply)) {
+  uint64_t allowed = access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_CONTENT_RIGHTS : FAT32_ROOT_RIGHTS;
+  if (access > MOUNT_ACCESS_READ_WRITE || (rights & ~allowed) ||
+      reply_capacity < sizeof(struct mount_fat32_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (!user_buffer_check(reply_address, sizeof(struct mount_fat32_reply), USER_BUFFER_WRITE)) {
@@ -777,6 +1446,8 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
   request->job.device = device;
   request->job.partition = partition;
   request->job.rights = rights;
+  request->job.fat_access = access;
+  request->job.fat_write_authority = write_authority;
   if (origin) {
     request->job.origin = *origin;
   }
@@ -796,7 +1467,9 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
       status = capability_status(capability_grant_retain(objects[0], rights, 0, &grants[0]));
       if (status == CALL_OK) {
         status = capability_status(capability_grant_retain(objects[1],
-            MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_RETIRE, 0, &grants[1]));
+            MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_RETIRE |
+            (access == MOUNT_ACCESS_READ_WRITE ? MOUNT_RIGHT_WRITE | MOUNT_RIGHT_INTERVAL : 0),
+            0, &grants[1]));
       }
       if (status == CALL_OK) {
         status = capability_status(capability_validate_grants(reservation.table, grants, 2));
@@ -830,7 +1503,7 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
   return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
 }
 
-struct syscall_result fat32_open_device(block_device_id device,
+struct syscall_result fat32_open_device(block_device_id device, uint64_t disk_rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -844,7 +1517,11 @@ struct syscall_result fat32_open_device(block_device_id device,
   if (!request.partition || request.partition > UINT32_MAX) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  return open_pair(device, NULL, request.partition, request.rights, reply_address, reply_capacity);
+  if (request.access == MOUNT_ACCESS_READ_WRITE && !(disk_rights & DISK_RIGHT_WRITE)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  return open_pair(device, NULL, request.partition, request.access,
+      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity);
 }
 
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
@@ -865,7 +1542,8 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
     if (!copy_from_user(&request, request_address, sizeof(request))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    return open_pair(0, &mount->origin, 0, request.rights, reply_address, reply_capacity);
+    return open_pair(0, &mount->origin, 0, MOUNT_ACCESS_READ_ONLY, false,
+        request.rights, reply_address, reply_capacity);
   }
   enum npfs_operation op;
   uint64_t required;
@@ -879,6 +1557,18 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
     op = NPFS_FAT_STATE; required = MOUNT_RIGHT_OBSERVE;
     reply_size = sizeof(struct mount_state_reply);
     break;
+  case MOUNT_SYNC:
+    op = NPFS_FAT_SYNC; required = MOUNT_RIGHT_WRITE;
+    reply_size = 0;
+    break;
+  case MOUNT_BEGIN:
+    op = NPFS_FAT_BEGIN; required = MOUNT_RIGHT_INTERVAL;
+    reply_size = sizeof(struct mount_interval_reply);
+    break;
+  case MOUNT_END:
+    op = NPFS_FAT_END; required = MOUNT_RIGHT_INTERVAL;
+    reply_size = 0;
+    break;
   case MOUNT_RETIRE:
     op = NPFS_FAT_RETIRE; required = MOUNT_RIGHT_RETIRE;
     reply_size = 0;
@@ -888,7 +1578,7 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  uint64_t root_rights = 0;
+  uint64_t root_rights = 0, interval_id = 0;
   if (op == NPFS_FAT_ROOT) {
     struct mount_fat32_root_request request;
     if (request_size != sizeof(request)) {
@@ -897,13 +1587,25 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
     if (!copy_from_user(&request, request_address, sizeof(request))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (request.rights & ~FAT32_ROOT_RIGHTS) {
+    if (request.rights & ~DIRECTORY_CONTENT_RIGHTS) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if ((request.rights & ~FAT32_ROOT_RIGHTS) && !(rights & MOUNT_RIGHT_WRITE)) {
+      return (struct syscall_result){CALL_DENIED, 0};
     }
     if (request.rights & ~mount->fat32->ceiling) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
     root_rights = request.rights;
+  } else if (op == NPFS_FAT_END) {
+    struct mount_interval_request interval;
+    if (request_size != sizeof(interval)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&interval, request_address, sizeof(interval))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    interval_id = interval.id;
   } else if (request_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -923,10 +1625,13 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
   }
   struct npfs_request *request = npfs_request_prepare(op);
   request->job.fat_node = mount->fat32;
+  request->job.fat_actor = process_current()->control;
+  request->job.interval_id = interval_id;
   request->job.rights = root_rights;
   npfs_request_submit_and_wait(request);
   enum call_status status = request->job.status;
   struct mount_state_reply observed = request->job.mount_state;
+  struct mount_interval_reply interval = {request->job.interval_id, request->job.interval_deadline};
   struct kernel_object *root_object = request->job.object;
   request->job.object = NULL;
   npfs_request_release(request);
@@ -953,7 +1658,8 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
       status = CALL_BAD_BUFFER;
     }
   } else if (status == CALL_OK && reply_size &&
-      !copy_to_user(reply_address, &observed, reply_size)) {
+      !copy_to_user(reply_address, op == NPFS_FAT_BEGIN ? (void *)&interval :
+          (void *)&observed, reply_size)) {
     status = CALL_BAD_BUFFER;
   }
   return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};

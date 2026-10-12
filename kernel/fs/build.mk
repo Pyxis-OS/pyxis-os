@@ -22,7 +22,7 @@ build/kernel/user/boot.o build/kernel/user/launch.o build/kernel/syscall.o \
 build/kernel/acpi/power.o: CPPFLAGS += -Ifs/include
 
 # Strict FAT32 reader shares its allocator-free, MPL-2.0 engine with host tools.
-FAT32_READ_SOURCES := $(addprefix fs/fat32/,$(addsuffix .c,base gpt volume directory read check))
+FAT32_READ_SOURCES := $(addprefix fs/fat32/,$(addsuffix .c,base gpt volume directory read check mounted))
 FAT32_READ_OBJECTS := $(patsubst %.c,build/%.o,$(FAT32_READ_SOURCES))
 OBJECTS += $(FAT32_READ_OBJECTS)
 $(FAT32_READ_OBJECTS): CPPFLAGS += -Ifs/include -Ifs/fat32

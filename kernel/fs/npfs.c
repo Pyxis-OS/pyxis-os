@@ -8,6 +8,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pressure.h>
 #include <kernel/object/clock.h>
+#include <kernel/object/process.h>
 #include <kernel/object/object.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
@@ -567,7 +568,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (task_deadline_expired(context->deadline)) {
     return CALL_TIMED_OUT;
   }
-  if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_RETIRE)) {
+  if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_END)) {
     return fat32_perform(context, job);
   }
   if (job->operation >= NPFS_RAW_INFO) {
@@ -731,7 +732,15 @@ static void complete_job(struct npfs_job *job)
   if (job->admitted && job->fat_node) {
     fat32_request_complete(job->fat_node);
   }
+  if (job->admitted && job->fat_destination) {
+    fat32_request_complete(job->fat_destination);
+  }
   job->fat_node = NULL;
+  job->fat_destination = NULL;
+  if (job->fat_actor) {
+    object_release(&job->fat_actor->object);
+    job->fat_actor = NULL;
+  }
   if (!completion) {
     capability_grant_release(&job->grant);
   }
@@ -791,7 +800,6 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_CAPTURE:
   case NPFS_FILESYSTEM_INFO:
   case NPFS_FAT_STATE:
-  case NPFS_FAT_RETIRE:
   case NPFS_RAW_INFO:
   case NPFS_RAW_READ:
   case NPFS_RAW_RELEASE:
@@ -806,7 +814,11 @@ static bool allowed_while_sealed(enum npfs_operation operation)
  * take no writes and are skipped; a failure was logged when it happened. */
 static enum call_status flush_for_shutdown(void)
 {
-  enum call_status result = CALL_OK;
+  struct npfs_store_context fat_context = context_for(task_deadline_after_ms(NPFS_TIMEOUT_MS));
+  enum call_status result = fat32_shutdown_seal(&fat_context);
+  if (result != CALL_OK) {
+    return result;
+  }
   for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
     if (!npfs_store_writable(pool->store)) {
       continue;
@@ -851,7 +863,7 @@ static void npfs_worker(void *argument)
     bool shutdown = shutdown_requested;
     bool pressure = mm_pressure_take();
     struct disk_object *disks = disk_take_retired();
-    struct fat32_node *fat_nodes = fat32_take_retired();
+    struct fat32_node *fat_nodes = sealed ? NULL : fat32_take_retired();
     struct npfs_node *nodes = retired_nodes;
     retired_nodes = NULL;
     struct npfs_job *job = first_job;
@@ -992,8 +1004,14 @@ enum call_status npfs_submit(struct npfs_job *job)
     return CALL_BUSY;
   }
   job->admitted = true;
+  if (job->fat_actor) {
+    object_retain(&job->fat_actor->object);
+  }
   if (job->fat_node) {
     fat32_request_published(job->fat_node);
+  }
+  if (job->fat_destination) {
+    fat32_request_published(job->fat_destination);
   }
   job->deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   enqueue_job(job);
@@ -1059,6 +1077,7 @@ void npfs_request_submit_and_wait(struct npfs_request *request)
 void npfs_request_release(struct npfs_request *request)
 {
   KASSERT(!request->job.raw && !request->job.node && !request->job.destination && !request->job.fat_node &&
+      !request->job.fat_destination && !request->job.fat_actor &&
       !request->job.reservation.table && !request->job.grant.object &&
       !request->job.object && !request->job.control && !request->job.captured.address &&
       !request->job.captured.size && !request->job.captured.backing_bytes &&
@@ -1071,8 +1090,14 @@ void npfs_request_published(struct npfs_request *request)
   KASSERT(request->request.state == BSP_REQUEST_PREPARED);
   request->job.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   request->job.admitted = reserve_job();
+  if (request->job.fat_actor) {
+    object_retain(&request->job.fat_actor->object);
+  }
   if (request->job.admitted && request->job.fat_node) {
     fat32_request_published(request->job.fat_node);
+  }
+  if (request->job.admitted && request->job.fat_destination) {
+    fat32_request_published(request->job.fat_destination);
   }
 }
 
