@@ -1,12 +1,12 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 assigned to
-Codex alpha 2026-10-12, baseline captured, not implemented.**
+Codex alpha 2026-10-12, implemented and qualified for review.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go; later tasks are not assigned. Task 1 has the owner go, with the
-delegation boundary below requiring an answer before code.
+owner go; later tasks are not assigned. Task 1 has the owner go, including the
+trusted-caller delegation boundary accepted below.
 
 ## Deliverable and boundary
 
@@ -79,9 +79,10 @@ and deferred-cleanup limits above. A local owned job record retains each observe
 normal cancel/error paths explicitly stop and observe all stages.
 
 Use explicit image READ, argv, selected roots/namespace, owned cwd/env snapshots
-and exact child resources. Omit space factories, administrative grants and
-launch-capable brokers, including through bundle/namespace resources; never add
-authority implicitly or replay an uncertain launch. Libc owns descriptor/FILE
+and exact child resources. Reject direct space-factory, administrative and launch
+grants. The trusted caller must omit launch-capable brokers, including through
+bundle/namespace resources; never add authority implicitly or replay an uncertain
+launch. Libc owns descriptor/FILE
 bridging, userland execution ownership, and Lua/ports application bindings.
 Preserve ordinary `pyxis.run`/`uv_spawn` behavior and the accepted Claude harness's
 trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need.
@@ -120,12 +121,15 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
 
 ## Ordered delivery tasks
 
-- [ ] **1. Small first task: one-child direct job core.** Explicit streams and
+- [x] **1. Small first task: one-child direct job core.** Explicit streams and
   resource lists, owned cwd/env, native result, terminate and stage retirement
   over existing launcher/process APIs. No Lua, shell grammar, service protocol or
   capture policy. Qualify normal/failing/stopped children and observer ownership.
   **After this task the owner can:** launch one known native program with selected
   streams from a LAUNCH-authorized caller, inspect its result and stop it.
+  Implemented in [userland #228](https://git.internal/PyxisOS/pyxis-userland/pulls/228),
+  exact pin `20fb34f871beed7e25f6ac454e0d53f51dba5f3f`; merge dependency before parent.
+  [Implemented contract](../userland/native-jobs.md). Tasks 2–4 remain unassigned.
 - [ ] **2. Private FILE capture and deadlines.** Implement the profile above for
   direct callers and the trusted Claude group backend; retain storage/observers
   through actual stage retirement, with sizes, truncation and stop cause.
@@ -179,7 +183,7 @@ allows descendants where configured; it is a baseline, not the new restricted
 core. Raw logs/debugger output/screens stay local in `build/direct-job-baseline/`;
 all owned QEMU/debugger jobs are stopped.
 
-**One owner decision, proposed default; not accepted:** the core authenticates
+**Trusted-caller boundary, accepted by the owner 2026-10-12:** the core authenticates
 and rejects known direct launch/administrative grants across the **entire final
 grant array**, not just named resources, and adds nothing implicitly. A trusted
 caller is responsible for provisioning/auditing selected namespace bindings and
@@ -194,8 +198,65 @@ change them. [Endpoint transfers](../interfaces/endpoints.md) can return grants,
 and opaque providers can broker effects under their own authority. The kernel
 [installs every grant entry](../../kernel/user/spawn.c), including unnamed ones.
 Proving arbitrary providers cannot launch would need new mechanisms outside
-task 1. No code or new capability/environment/group interface is authorized by
-this checkpoint; implementation waits for that responsibility to be settled.
+task 1. This acceptance authorizes task 1 implementation, without new kernel
+capability/environment/group interfaces or bundle expansion in the core.
+
+Implementation is based on updated main `48219eca`, with userland `2ccb58eb`
+and fs `b5003ab3`; the baseline above predates that update. Public ABI and
+userland libc/lib/include/crt are unchanged across the baseline and updated
+main. The implementation build rebuilds the SDK from its current inputs.
+
+## Task 1 implementation and qualification (2026-10-12)
+
+Libc's `pyxis/job.h` owns one native child and its WAIT/TERMINATE observer.
+Preparation deep-copies explicit metadata, appends directional live-descriptor
+grants, authenticates every final grant (named or unnamed), then retains exact
+restricted copies through synchronous launch capture. Existing capture/startup
+and stack bounds are checked before selected output flushing. The observer is
+allocated before publication; successful wait caches the actual native result.
+Close refuses with BUSY before successful wait and releases once afterwards.
+Malformed single-launch replies now report OUTCOME_UNKNOWN, matching batch
+launch; automatic replay remains prohibited.
+
+Ordinary `make -j16 image LOG_LEVEL=info` passed with a fresh SDK/runtime and
+ports build; no compiler-container rebuild. Interactive qualification uses the
+same QEMU/device/1- and 4-CPU configuration as the baseline. A local native caller
+is added only to the qualification archive, not the delivered image or a test
+framework. It supplies the selected memory grant explicitly; the failing `cat`
+also receives the boot root explicitly. Both CPU configurations show:
+
+| Check | Observed result |
+| --- | --- |
+| `echo direct-job` | EXITED, 0; selected buffered output precedes child output |
+| `cat boot://missing-file` | EXITED, 1; missing-file diagnostic, as baseline |
+| blocked `cat`, explicit terminate twice | TERMINATED, 0; requests acknowledged without replacing result |
+| observer ownership | WAIT/TERMINATE retained; WAIT-only copy cannot stop; close before wait BUSY |
+| retirement | repeat wait stable; WAIT_COMPLETE ready; independent WAIT copy works after job close |
+| explicit state | child has selected memory only, no launcher, no roots; saved `tmp://` cwd and environment survive parent mutation |
+| FILE stdin | child reads `ab` from offset zero; parent's offset remains 3 and next byte is `d` |
+| absent stdin | child read fails with EBADF; no console input is added |
+| unnamed launcher grant, including zero rights | DENIED; no job/child returned |
+| READ-only descriptor selected for output | DENIED; no job/child returned |
+
+GDB sees the exact captured inventory, zero cwd/environment/namespace when
+omitted, LOOKUP-only selected namespace, and distinct directional stream grants.
+Stop on a live process requests safe retirement; completion publication has a
+detached process link. These are stage ownership/results, not group or all
+deferred-object cleanup. Uncertain publication and caller-death limits are source
+contracts; no fault injection or native-hardware measurement is claimed.
+
+Qualification kernel SHA256
+`fa5ac5994f455633b0cc69ed4a900683340eef8c423fc1e383e947bc8ddf93dc`,
+ordinary initrd `c4e8c1a94311a0a8354fcd49b288b39c3aef09ed89fc1663010f3d57a2ed2fea`,
+local caller archive `8b2ac7d4623f42ceb760ce9cb6cb4799cf6ec3edb1229d7c30d2bfd73c1221b9`.
+Raw caller source, screenshots and GDB/log records remain local in
+`build/direct-job-qualification/`. No default klog output, kernel/ABI changes,
+Lua/shell adapters, captures, deadlines, pipelines or descendant groups were added.
+Before opening the parent PR, the branch rebased cleanly onto main `5dc08c5b`
+(fs `9b4479e8`). This brings the independent FAT32 validation update and docs;
+the public ABI and direct-job/runtime sources used for the checks are unchanged.
+The ordinary image is rebuilt for that integrated input set and exact-head CI
+qualifies the published dependency pin.
 
 ## Required descendant follow-up
 

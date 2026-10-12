@@ -39,6 +39,8 @@ including relative executable lookup there. Child mutations do not affect the
 parent. Deliberate restrictions remain: remote shells start at `tmp://`, network
 configuration overlays selected variables, and grants are explicitly attenuated.
 The generic launcher still consumes only the supplied request.
+The [direct job core](native-jobs.md) copies explicitly selected snapshots and
+live descriptors without implicit state or resource inheritance.
 
 Snapshots close once. Native cwd clear prevents bootstrap-chain resurrection;
 the session daemon clears retained cwd before releasing its original bootstrap
