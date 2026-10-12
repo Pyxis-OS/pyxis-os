@@ -5,11 +5,18 @@
 Baseline captured before implementation: Pyxis `2f0b64d83d33`, userland
 `d2437266d459`, fs `b427df29f8` and ports `df3210b04142`; lwIP
 `a1aadb91a503` unchanged. The fs main merge `0ece2d7960f5` is tree-identical
-to that pinned fs revision. Dependency heads for this task: fs
+to that pinned fs revision. Qualified dependency heads before the installer integration: fs
 `b5003ab37e70`, userland `80da50931a25` (rebased onto main `95888f0b29bf`).
 Integration code `8c06e8876a7f` is rebased onto Pyxis main `df7ec8ab` and keeps
 that main's ports pin `28b5a3bce9aa`; no ports change belongs to this task.
 Documentation follow-ups do not change the implementation.
+
+After installer #741 merged on 2026-10-12, userland #226 rebased onto main
+`e878f4f`; its new head is `2ccb58eb8246`. The FAT32 inspector/bootstrap sources
+are identical, and the four-commit range comparison differs only in Makefile
+context. Parent #740 rebases onto main `088816ab`, retaining fs `b5003ab37e70`.
+The original runtime measurements above/below remain tied to their recorded
+revisions; this integration rebase is validated by the submitted head's existing CI.
 
 Builder: `git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-49e2c1a`;
 `make -j16 image BOOT_MENU_TIMEOUT=5`, native ELF debug links against the same
@@ -46,10 +53,12 @@ Disk ID 1 and layout match: ESP byte offset 1,048,576/length 536,870,912,
 pool byte offset 537,919,488/length 1,609,543,680. Byte comparison confirms that
 recognition made no disk changes.
 
-`userspace/installer/esp_read.c` remains byte-identical, SHA-256
+At the original qualification revisions, `userspace/installer/esp_read.c` was
+byte-identical, SHA-256
 `04211b00939921f6c14a713e9b8c2172c36d819910fa820cac74a7d8b4ccc778`.
-It retains its lenient recovery and foreign-binding checks; the strict library
-is not substituted into that path. No existing I/O implementation changed, so
+The FAT32 task retains its lenient recovery and foreign-binding checks; the
+strict library is not substituted into that path. Later installer-plan changes
+on main, including revision-name validation, belong to #741. No existing I/O implementation changed, so
 this record compares recognition behavior, not invented before/after timings.
 
 ## Host media and refusals

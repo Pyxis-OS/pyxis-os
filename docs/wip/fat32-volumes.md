@@ -166,7 +166,8 @@ The [shared engine](../../fs/docs/fat32-read.md) exports `libfat32-read.a` and
 [native inspection profile](../devices/fat32-inspection.md) support info/check/list/read.
 The live menu selects a trusted bootstrap, explicit disk/GPT selection and an
 INFO|READ-only child. No mount or write API was added, and the separate installer
-reader is byte-identical to the baseline.
+reader was byte-identical during task 1 qualification; this task does not
+replace or modify it.
 
 [Qualification](../development/experiments/fat32-read-only.md) records exact
 baseline/dependency revisions, disposable-media preparation, ordinary builds,
