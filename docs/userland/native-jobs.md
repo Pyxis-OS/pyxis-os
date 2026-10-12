@@ -4,7 +4,7 @@ Libc's [`pyxis/job.h`](../../userspace/libc/include/pyxis/job.h) launches one
 known native executable through the caller's existing LAUNCH-authorized launcher.
 The child stays in that launcher's space, CPU and execution group. The core
 does not resolve images, expand bundles, interpret scripts or create groups.
-Lua, shell and pipelines remain later work in the
+Lua and shell adapters remain later work in the
 [execution milestone](../wip/native-command-execution.md).
 
 ## Explicit inputs
@@ -125,3 +125,51 @@ group, the wrapper stops and waits group cleanup, allowing release but leaving
 `result_valid` false rather than inventing a process result. Other errors also
 retain pending ownership for cleanup retries. `step` can observe retirement
 after a clock-policy failure; operation failures return a result snapshot.
+
+## Native pipelines and the event pump
+
+[`pyxis/pipeline.h`](../../userspace/libc/include/pyxis/pipeline.h) accepts one
+to eight explicit `pyxis_job_options` stages and a native PIPE service. Stage
+streams must all be `-1`: the library installs directional pipes for adjacent
+stages, the last stdout and a shared stderr. It uses the capture profile's
+private-root audit, clock, deadline, limits and optional sole-CONTROL fresh group.
+Every stage's metadata and final grant inventory are checked before setup; one
+atomic batch publishes all stages. Child-only parent endpoints close promptly.
+
+`has_input` distinguishes absent stdin from finite supplied input. The library
+copies supplied bytes before effectful setup, so later caller mutation has no
+effect; allocation failure refuses before launch. Supplied zero bytes delivers
+EOF, while absent stdin remains absent. There is no live FILE, descriptor or
+callback producer. Intermediate stdout goes only to the next stage; final stdout
+and combined stderr drain into two separate private unlinked RAM FILEs. Stderr
+has no stage attribution, writer atomicity or cross-stream chronology guarantee.
+
+`start` returns an owned record; `step` performs one bounded concurrent round,
+and `wait` advances rounds until cleanup, using `wait_many` when immediate
+progress ends. Each round observes all stages, drains both outputs with bounded
+try reads and appends, and try-writes input. A full input or output pipe never
+causes a serial blocking drain. Native short writes retain their unwritten suffix;
+unknown mutation outcomes are never replayed. Waits share one absolute deadline
+and are bounded by the existing native wait limit, without refreshing on progress.
+
+Every stage has an independent `stage_valid` and actual native result. A nonzero
+exit is a result, not an automatic pump error. Input EPIPE closes only the feeder:
+`input_peer_closed`, confirmed `input_accepted` and `input_unsent` describe delivery
+while output drain and observation continue. Acceptance means pipe acceptance,
+not child consumption; `input_uncertain` marks an unconfirmed input write.
+Deadline, limit, cancellation or other operation error requests stop of every
+unfinished stage, then observes them and drains buffered output through EOF.
+
+`complete` requires every known stage's retirement, both output drains and the
+optional group's cleanup. Sizes, capped reads and truncation use the capture
+contract. A transfer failure marks the affected output incomplete; a retained
+prefix can still be read after cleanup without inventing EOF or a complete
+capture. Error calls return a result snapshot, and the owner may continue cleanup
+with `step`/`wait`. `failed_stage` records the native batch refusal index when
+available; missing observers never receive invented stage results.
+
+`close` returns BUSY before completion. A failed start may retain an owned record;
+never retry launch. Unknown admission without observers quarantines the record
+until caller/session teardown. A retained fresh group stops and waits cleanup
+without fabricating process results. No descendants, adapter, per-job caller-death
+guarantee, backing quota or hard admission/retirement wall-time bound is added.

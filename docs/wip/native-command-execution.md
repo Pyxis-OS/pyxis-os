@@ -1,12 +1,13 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
-and userland #228. Task 2 merged in #749 and userland #232. Task 3 assigned to
-Codex alpha 2026-10-12; its three defaults below are accepted 2026-10-12; implementation is authorized.**
+and userland #228. Task 2 merged in #749 and userland #232. Task 3 implemented
+for review in #754 and userland #235; its three defaults are accepted 2026-10-12.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. Task 3 has the owner go for implementation under the accepted defaults; task 4 remains unassigned. The trusted-caller delegation boundary below remains accepted.
+owner go. Task 4 remains unassigned. The trusted-caller delegation boundary below
+remains accepted.
 
 ## Deliverable and boundary
 
@@ -139,12 +140,16 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   exact pin `40f81eb2299d9eb0f06fc4d6440401d85437e352`; dependency merges first,
   then [parent #749](https://git.internal/PyxisOS/pyxis-os/pulls/749).
   [Implemented contract](../userland/native-jobs.md#private-capture-and-deadlines). Merged.
-- [ ] **3. Native pipeline and event pump.** Reuse batch launch and bounded pipes,
+- [x] **3. Native pipeline and event pump.** Reuse batch launch and bounded pipes,
   concurrent input/output, per-stage results, early-reader-close handling,
   deadlines and all stage/endpoint cleanup. No threads assumption.
   **After this task the owner can:** run a described pipeline with captured output
   without deadlocking on a full stdout/stderr pipe.
-  Assigned 2026-10-12; three defaults accepted that day. Implementation in progress.
+  Assigned 2026-10-12; three defaults accepted that day. Implemented for review
+  in [userland #235](https://git.internal/PyxisOS/pyxis-userland/pulls/235), exact
+  pin `06275d0feeb30c96e142f8e681cee392b1c18b00`; fast-forward dependency first,
+  then [parent #754](https://git.internal/PyxisOS/pyxis-os/pulls/754).
+  [Implemented contract](../userland/native-jobs.md#native-pipelines-and-the-event-pump).
 - [ ] **4. Lua/shell delivery and reusable port adapters.** Add native Lua argv/
   pipeline/capture options and shell capture/deadline/per-stage observation with
   existing launch authority. Preserve ordinary run/pipeline behavior. Carry
@@ -329,11 +334,11 @@ and local callers remain under `build/capture-baseline`/`build/capture-after`.
 ## Task 3 checkpoint and accepted choices (2026-10-12)
 
 Fresh branch `execution/native-pipeline` from main `ecdeb0f4`, userland main/pin
-`d6842f87`, fs `28386cc7`, ports `28b5a3bc`, lwIP `a1aadb91`. No production code
-changes. Before-code `make -j16 image LOG_LEVEL=info` passed using the existing
+`d6842f87`, fs `28386cc7`, ports `28b5a3bc`, lwIP `a1aadb91`. At that checkpoint,
+before production code changes, `make -j16 image LOG_LEVEL=info` passed using the existing
 LLVM 23.1.3 builder. Ordinary source build; copied port caches were rebuilt as
 required, with no PREBUILT substitution. Raw artifacts stay local under
-`build/pipeline-baseline`.
+`/home/chronium/src/pyxis-pipeline-artifacts/pre-tls-build/pipeline-baseline`.
 
 Interactive baseline: QEMU 10.2.2, q35/nested KVM, host CPU, 512 MiB, identical
 1/4-CPU images, fresh OVMF variables, read-only FAT VirtIO boot disk, VirtIO RNG,
@@ -389,6 +394,82 @@ never invents stage results. No kernel/ABI or consumer adapter is planned.
    child consumed those bytes. Other transfer errors stop/observe all stages.
    Native callers decide success from the stage array and delivery report;
    existing shell last-stage behavior stays unchanged.
+
+## Task 3 implementation and qualification (2026-10-12)
+
+Userland #235 implements `pyxis/pipeline.h`, shared all-stage preparation and
+one batch admission, plus the concurrent pump. It reuses the direct encoder and
+capture grant audit; children receive directional PIPE streams, not FILEs or
+private-root authority. The ordinary one-child FILE-capture path is preserved.
+No kernel/ABI, compiler rebuild, shell/Lua adapter or descendant work.
+
+While this task was active, main #748 introduced static TLS and the published
+LLVM image changed. The initial pre-code samples above remain separate. The
+matched final comparison refreshes the raw-primitive baseline at main `7db4cb31`,
+userland main `2bc56bf4`, ports `fd1eb30f`, fs `28386cc7`, lwIP `a1aadb91`, then
+uses task userland `4163f84c` on four CPUs and `06275d0f` on one CPU (the
+intervening change only expands a capped-read conditional into the required
+style). Both use the published LLVM 23.1.3 image
+`pyxis-llvm23.1.3-2d23443` and ordinary `make -j16 image LOG_LEVEL=info`, which
+passed. QEMU configuration is unchanged from the checkpoint. Kernel SHA256 is
+`40db238acdc04a4f4b373b1882b978a8e27af761b9db7f5d61c392fcfb97ecea` for both;
+the baseline default initrd is
+`67df4d4bb7845d3307f76b6e00c594bd76099c07c5a580c9db5756f3cc022faf`.
+A qualification-only caller and space configuration replace the same payload in
+otherwise matched archives. They are local artifacts, not installed tests.
+
+Two-sample end-to-end ranges exclude capped-output reading and debugger pauses.
+The raw and library callers use the same child workloads; execution/preparation
+and host scheduling dominate these variable nested-QEMU samples. They establish
+progress and deadline behavior, not a native or general speed comparison.
+
+| CPUs / path | Full two-way (ms) | Early reader exit (ms) | 250 ms timeout (ms) |
+| --- | ---: | ---: | ---: |
+| 1 / raw primitives | 96.74–118.26 | 8.42–17.48 | 257.59–263.19 |
+| 1 / pipeline library | 201.84–217.08 | 14.85–16.45 | 256.70–275.17 |
+| 4 / raw primitives | 59.27–71.37 | 6.92–7.93 | 258.06–262.32 |
+| 4 / pipeline library | 38.02–62.80 | 8.04–8.97 | 256.97–259.95 |
+
+Both one- and four-CPU paths complete the full two-way workload above with exact
+sizes and byte sums, all stage results valid and EXITED/0. The implementation
+caller overwrites its source input immediately after start; the output still
+contains the original bytes, establishing the owned input snapshot. Early exit
+retains 4,096 stdout bytes with producer EXITED/7 and reader EXITED/0; the feeder
+reports its confirmed prefix and unsent remainder without job cancellation.
+
+Silent/failing children return exact empty/16-byte stdout and empty/15-byte stderr
+with actual 0/0 and 3/0 exits. Explicit empty input returns EOF; absent input
+returns the child's input error exit (9), not EOF. Eight-stage two-way execution
+completes with all eight EXITED/0 results. Deadline and explicit cancel observe
+both actual TERMINATED results; early close is BUSY, repeated wait returns the
+same snapshot and late cancel/close succeed. Fresh-group full two-way, early exit,
+timeout and cancellation also complete. Both ordinary and fresh-group single
+FILE captures retain their prior 16/15-byte output and EXITED/3 result.
+
+The 1 MiB trigger stops both stages and drains queued tails; four-CPU backing
+sizes were 1,114,112 stdout and 1,118,176 stderr bytes, with 1,048,576 returned
+from each and both truncation flags. This is intentional polled overshoot, not
+a quota. Wrong-kind image, oversized metadata, expired deadline and private-root
+delegation refuse with no returned record. A native batch with an empty image
+at stage 1 refuses BAD_REQUEST atomically.
+The direct path returns no record; the fresh-group path retains and confirms
+group cleanup, reports failed_stage=1 and both stage_valid flags false, then
+allows release without inventing results.
+
+GDB separately inspected a live fresh-group timeout, then stopped immediately
+before release. Both retained process controls were complete with NULL process
+links and no waiters. The sealed/stopped group had one controller, zero members,
+launches and cleanup pending, and complete=true. Input/output PIPE roles were
+closed with no pending append bytes. Both RAM FILEs remained owned, with no
+operation waiters, and the private RAM directory was empty throughout. Children
+had directional PIPE streams and no private root, launcher or CONTROL grant.
+Debugger pauses are excluded from the timing samples.
+
+Source review covers uncertain admission and transport-failure cleanup; no
+transport-failure injection or native hardware run was performed. The accepted
+caller-death/admission/retirement limits remain. Raw callers, screens and logs are
+local under `build/pipeline-current-baseline` and `build/pipeline-after`; original
+pre-TLS artifacts are preserved separately as noted above. Task 4 is not started.
 
 ## Required descendant follow-up
 

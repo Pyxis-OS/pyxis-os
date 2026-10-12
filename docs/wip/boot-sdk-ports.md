@@ -53,7 +53,8 @@ and revision inventory). Later tasks need separate assignments.
 [Native command execution](native-command-execution.md): Codex alpha (2026-10-12),
 an accepted shared plan for direct native launch without descendants, selected
 streams, capture/deadlines and shell/Lua pipelines, extracted from Claude/Git/ports/
-libuv. Tasks 1–2 are merged; task 3, native pipeline and event pump, is assigned.
+libuv. Tasks 1–2 are merged; task 3, native pipeline and event pump, is implemented
+in userland #235 and parent #754, with bounded finite input and private capture.
 Later tasks need separate owner go.
 
 [Native HTTP requests](native-http-requests.md): an
