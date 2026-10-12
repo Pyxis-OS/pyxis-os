@@ -71,8 +71,8 @@ cannot transfer authority. Private shell bindings are the first form of
 capability-valued variables and must fit the cross-cutting
 [capability-valued environment direction](capability-environment.md). Credential
 bytes remain excluded from argv/environment/history/logs. The
-[task 3 object/rights/lifetime/inheritance review](native-http-requests.md#capability-valued-variables-and-task-3-review)
-is required before code; capability-valued environment implementation needs a
+[accepted task 3 object/rights/lifetime/inheritance contract](native-http-requests.md#task-3-accepted-facets-and-lifetime)
+records that boundary and the accepted native completion prerequisite. Capability-valued environment implementation needs a
 separate owner assignment.
 
 The shared [native command execution](native-command-execution.md) milestone

@@ -63,8 +63,8 @@ or interface discovery. This note schedules no refactor and introduces no APIs.
 
 ## Completion-based asynchronous operations
 
-Owner direction, 2026-10-10: a planned complement to readiness, not current
-work. [Pipes](../interfaces/pipes.md#readiness), terminals and TCP use readiness:
+Owner direction, 2026-10-10: a planned complement to readiness.
+[Pipes](../interfaces/pipes.md#readiness), terminals and TCP use readiness:
 wait until an object is ready, then make a nonblocking try transfer. The
 complement is completion: submit an operation, keep running, and collect its
 single result later. The owner's design discussion put this on
@@ -87,9 +87,17 @@ Settle these before any implementation:
 The smaller step useful to both models, [endpoint receiver readiness](../interfaces/endpoints.md#receiver-readiness)
 with `wait_many`, is implemented and qualified with
 [matched CALL/SEND runs](../development/experiments/endpoint-readiness/README.md).
-The larger completion model is unassigned, and
-[BSP service requests](../kernel/bsp-service-requests.md) remain synchronous until
-a contract replaces them.
+**Owner exception to the planning freeze, accepted 2026-10-12:**
+[prepared HTTP requests](native-http-requests.md#task-3-accepted-facets-and-lifetime)
+need a bounded native completion prerequisite now: TCP CONNECT, DNS UDP
+SEND/RECEIVE and native FILE/DIRECTORY staging, one pending operation per instance,
+one owned receiver per correlated result, reserved admission before submission,
+and cancel/close/exit ownership drain. Its
+[accepted submission/cancel/collection contract](native-http-requests.md#native-completion-accepted-contract)
+is accepted and its bounded implementation assigned, 2026-10-12. The broader completion model remains
+parked and unassigned; this permits no general async rewrite or extra per-operation
+capability API. [BSP service requests](../kernel/bsp-service-requests.md) remain
+synchronous until the selected paths implement an accepted replacement.
 
 ## Additional ports
 

@@ -1,11 +1,11 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 facets/lifetime accepted; native completion contract accepted and implementation assigned, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
-Their accepted one-shot transaction and credential rules carry forward. All three
-defaults below are accepted, including streamed GET/POST without an artificial
-response-size cap. Each implementation task needs its own owner go.
+Their accepted one-shot transaction and credential rules carry forward. The
+provider/adapter defaults are accepted, including streamed GET/POST without an
+artificial response-size cap. The native completion contract is accepted too. Each implementation task needs its own owner go.
 
 ## Deliverable and consumers
 
@@ -28,13 +28,14 @@ with no HTTP-shaped or POSIX-shaped kernel calls.
 
 ## Inspected starting point
 
-Before task 1: main `088816ab`, userland `e878f4f`: [httpfs/libhttp](../userland/http-fetch.md)
-provide GET-only complete immutable snapshots, with a 16 MiB body allowance
-across redirects and 64 MiB shared body storage; OPEN fetches synchronously.
-[Verified TLS](../userland/https.md) has one active connection per process-local
-runtime. Native FILE uses explicit offsets and zero-length reads mean EOF;
-`pyxis_stdio_response` is copied open metadata, not live final status. These must
-not be reinterpreted as a growing seekable FILE or a successful truncated download.
+Inspected main `7db4cb31`, userland `2bc56bf4`: [libhttp](../userland/http-fetch.md)
+now streams GET/fixed-file POST with retained framing results and explicit long
+deadlines. Its OPEN/upload path still waits through headers; the provider cannot
+call it synchronously from its service loop. Task 3 must expose cooperative
+progress between bounded network operations. [httpfs](../interfaces/file-providers.md#http-and-https-snapshots)
+still returns complete FILE snapshots, with a 16 MiB chain allowance and 64 MiB
+body storage. TLS has one active connection per runtime. Native FILE offsets/SIZE
+and copied `pyxis_stdio_response` metadata remain unsuitable for a live response.
 
 ## Carried-forward accepted contract
 
@@ -76,29 +77,248 @@ in-flight receipts. Metadata/admission bounds and real memory/storage exhaustion
 remain explicit failures. Claude's 64 KiB request/1 MiB response budgets are
 consumer policy, not limits imposed on Git, GET or downloads.
 
-## Capability-valued variables and task 3 review
+## Task 3 accepted facets and lifetime
 
-A prepared request is a capability. Task 5's private shell bindings are the first
-form of capability-valued variables and must be designed to later become, or sit
-under, entries of the cross-cutting
-[capability-valued environment direction](capability-environment.md), not a
-separate shell-only mechanism. Never encoding a capability as an environment
-string or printed handle does not exclude that direction; the credential rule
-forbids secret bytes in argv/environment/history/logs, not request capabilities.
-Implementing the capability environment is outside this milestone unless
-separately assigned.
+**All three defaults accepted by the owner, 2026-10-12.** This refines the
+accepted HTTP contract. Task 5 uses the same request value; the parked
+[capability environment](capability-environment.md) and
+[nested groups](nested-execution-groups.md) get no implementation here.
 
-**Before implementing task 3, the assigned agent must stop for owner review**
-with an object/rights/lifetime/inheritance proposal: what a prepared-request
-capability carries; how body/control/response/observation rights split; what
-copying, child inheritance or holding it past the shell means; and how it sits
-in a capability-valued variable. Accepted defaults do not waive this checkpoint.
-Motivating workflow: log in, extract a token with jq, and prepare another request
-with it, keeping credential bytes on the private preparation path.
+### 1. Facets and values — separate exports, typed values, explicit copies
+
+The prepared capability is an opaque control reference to one provider record:
+fixed method/endpoint/validated headers, trust context, deadline, resource admission
+and state. It grants no network/trust/backing-file or credential-read authority.
+
+| Facet | Rights and behaviour |
+| --- | --- |
+| Control | Independently attenuable COMMIT/ABORT; repeated COMMIT observes, never resubmits |
+| Body | Exported FILE WRITE, including SIZE/RESIZE; POST only; no READ; copies freeze together; SYNC unsupported |
+| Response | Generic exported STREAM READ: shared forward consumption, no offset/seek/SIZE; failure is an error, never successful EOF |
+| Observation | Separate STATUS-only export: phase, submission certainty, HTTP/framing status, counters and cleanup errors; no mutation/request headers |
+
+PREPARE atomically returns control/body/observation (GET omits body), without
+network activity. Existing read-only authority permits GET preparation; POST
+needs separate preparation authority, never granted by an alias. First COMMIT
+freezes and starts; its retained receipt owns opening work until its deferred
+reply hands off a reader after headers, before the whole body, with observation.
+That initial handoff is single-use; later readers copy a holder's grant. Later
+COMMIT returns status, not another reader. Cancel before REPLY commits aborts
+unfinished work and releases provisional readers; after successful REPLY, reader
+retirement governs, even if collection fails. Never replay submission/data.
+
+The native binding owns control and selected facets, adding response after handoff;
+a response-only value owns reader/observation. Copying retains the same request
+and cursor, not a new POST. Unset/replacement closes only that binding's references.
+Launch copies selected narrower grants as named resources: producer gets body,
+reader gets response/observation, monitor gets observation. Control inheritance is
+opt-in and may retain staging past shell exit; ordinary children inherit nothing
+merely because the binding exists.
+No handle serialization, credential strings or session-wide request publication.
+String getenv/startup stay unchanged; future typed lookup/configuration/revocation
+remain the parked direction's questions.
+
+Separate exports matter because [retirement](../interfaces/endpoints.md#exports-and-retirement)
+counts all references, not rights: observers must not retain control. Even a
+zero-right control copy retains its export. Providers authorize facets using
+invocation rights, not payload masks, and drop provisional client handles after
+handoff. Task 3 supplies native STREAM helpers; task 4 adds stdio/standard-stream support. Lost delivered
+READ replies may consume bytes and fail that reader; framing observation cannot
+turn its IPC failure into success. Ordinary FILE semantics stay unchanged.
+
+### 2. Lifetime and admission — one reservation, references, fixed deadline
+
+Reserve the instance's one transfer slot at PREPARE; other preparations refuse
+until terminal framing/abort, with no queue/automatic retry. Bounded unread bytes
+and observations may remain afterwards. Admission counts memory/storage and the
+existing 64 live/unacknowledged exports; terminal references can exhaust it.
+This exposes shared-instance contention even while a large body is being staged.
+
+COMMIT closes mutation admission, rejects queued/new writes and drains mutations
+already admitted by the provider before pinning length. Provider-observed failed
+or uncertain mutations prevent submission. Lost client WRITE replies are not
+always visible to it; producer/coordinator failure must also prevent COMMIT.
+Private disk backing needs an explicitly delegated, isolated mounted directory:
+exclusive create, unlink before writer export, retain native READ|WRITE privately.
+Clients get no subtree access/writable alias. Missing provision refuses staging;
+shared home/tmp names are not privacy. RAM staging is explicit/countable. Erase
+owned credentials/scratch; unlink/close does not promise secure disk erasure.
+
+Control retirement before COMMIT abandons staging even with writers/observers.
+Closing one copy does not revoke others/admitted calls. After handoff, readers
+retain the exchange; their final retirement aborts unfinished reception. Observers
+retain small final state, not active work/backing storage. The original deadline
+bounds staging/network/framing; completed bytes/status remain readable afterwards.
+ABORT is idempotent local cancellation, not rollback; terminal framing is immutable.
+Native work retains storage until drain, even after a receipt is finished; no reply
+uses a finished receipt and ACK cannot precede safe reclamation. Provider death
+fails facets; missing final status fails, never completes.
+
+The provider is independently owned, not a caller's job descendant. Group stop
+closes member grants, but outside holders can retain authority. Job/subtree cleanup
+is not HTTP completion/rollback; the coordinator ABORTs and observes unfinished
+work. Later nesting contains execution/delegation, without implicit HTTP authority.
+The loop handles receiver work/retirement and TCP/deadlines under backpressure;
+bound deferred receipts and leave room for status/abort. Cleanup has no fixed bound.
+
+### 3. Cooperative I/O prerequisite — bounded native completion
+
+[CONNECT](../../include/abi/tcp.h) waits for handshake; [UDP](../../include/abi/udp.h),
+TLS setup and staging I/O also wait. TRY transfers alone do not make the provider
+responsive. Keep one provider process and take the generic kernel/ABI prerequisite
+from the owner's [endpoint completion direction](later-os-directions.md#completion-based-asynchronous-operations)
+before task 3 implementation, rather than assuming threads/helper processes.
+
+Its bounded first scope is TCP CONNECT, DNS UDP SEND/RECEIVE and the native
+FILE/DIRECTORY staging operations, plus userspace DNS/TLS steps. Copy bounded
+inputs/capture existing grants; one owned receiver collects each correlated final
+result, with completion admission reserved before submission. Start with one
+pending operation per instance under existing native bounds; TCP TRY/service IPC
+continue independently. Cancel/receiver closure/exit must drain ownership and
+cleanup, not drop a live receiver's completion or fabricate rollback.
+
+**Owner exception to the planning freeze, accepted 2026-10-12:** this prerequisite
+is justified now, limited to the scope above. Its contract below is accepted and
+implementation assigned, 2026-10-12. The exception permits no general async rewrite
+or additional per-operation capability API. The broader completion direction remains parked. Any synchronous
+phase left must be reported; task 3 cannot claim responsive status/abort through it.
+
+## Native completion accepted contract
+
+**All three defaults accepted; implementation assigned by the owner, 2026-10-12.** Existing
+[native grants and endpoint transport](../interfaces/endpoints.md) are distinct:
+native objects have zero transport rights, ordinary SEND reports admission only,
+and ordinary RECEIVE may grow its destination table. This proposal adds a bounded
+native submission route and authenticated completion records on an existing owned
+receiver. It leaves ordinary CALL/SEND/RECEIVE semantics intact.
+
+### 1. Submission — copied inputs and fully reserved admission
+
+Submit through the existing target grant, checking its native operation rights;
+no extra ambient authority or per-operation capability. The envelope names the
+owned receiver, a nonzero 64-bit correlation ID, native protocol/operation, absolute
+deadline and bounded inputs. The receiver requires its owner's RECEIVE authority;
+CONTROL remains export management. Neither receiver nor operation can be inherited.
+IDs increase without reuse during that receiver's lifetime; exhaustion refuses.
+An ID alone grants nothing. No user address is retained after submission.
+
+| First operation set | Captured inputs / completion data |
+| --- | --- |
+| TCP CONNECT | Existing address/port and deadline / connected TCP grant or error |
+| DNS UDP SEND / RECEIVE | Endpoint grant, copied datagram or receive capacity / native send status or copied datagram and peer |
+| DIRECTORY CREATE / REMOVE | Delegated private directory, copied name, exclusive FILE create with READ\|WRITE / FILE grant or native result |
+| FILE READ / WRITE / RESIZE / SIZE | Captured file, offset/count or copied bytes / copied read data, count or size |
+
+FILE/DIRECTORY support starts with RAM, archive reads and mounted npfs; immutable
+objects retain their real refusals. HOST loans and exported-provider forwarding
+are outside this first backend profile. LOOKUP, enumeration, rename and sync do
+not belong to HTTP staging's create/unlink/read/write/resize/size sequence.
+Submission metadata is outside the native payload, which retains its 4,096-byte
+bound and each operation's current bounds (FILE READ 4,088 bytes, WRITE 4,080;
+UDP 1,472). Copied names must fit the bounded request and backend limits; this adds no global 255-byte RAM-name rule.
+
+Reserve, before acceptance, an independent operation/input/result record, one of
+the receiver's sixteen delivery records, exact table claims for a receipt and any
+returned grant, native operation admission and execution-group cleanup attribution.
+Ordinary traffic cannot consume that reservation. Any admission failure unwinds
+without work or a completion. Successful submission means accepted work only;
+its return needs no user output copy that could fail after acceptance.
+
+**One unacknowledged native completion operation per process**, hence per
+HTTP provider instance, even with several receivers. Existing global and per-object
+limits still apply; this does not serialize different processes or ordinary TRY/IPC.
+A second submission returns `CALL_BUSY`, including through a different receiver;
+see [the admission debt](../technical-debt.md#native-completion-per-process-admission).
+There is no hidden queue beyond reserved work. Short BSP allocation handoffs may
+park admission; it never waits for the submitted I/O. Borrowed buffers or several
+outstanding operations would widen ownership and admission policy; defer them.
+
+### 2. Collection — retryable RECEIVE, receipt close acknowledges
+
+A kernel-authenticated completion kind carries the ID, native operation/result,
+known progress and separate cancellation/deadline information. Result bytes use
+the existing bounded payload; completion metadata is outside it so the native
+FILE reply still fits. Returned authority is an attached grant, never a number
+in payload. Userspace SEND cannot forge this kind.
+
+A reserved unfinished record is not READABLE. Terminal publication makes it
+READABLE with existing registration-before-scan/transition notification rules.
+Completed records join normal message FIFO, below cancellation/retirement notices;
+there is no cross-object completion ordering. Readiness consumes nothing. Worker
+loans end before publication, with owned result references retained for collection.
+
+For this kind, RECEIVE uses the preclaimed slots and validates the full destination
+before committing delivery. A short buffer or invalid output leaves the result,
+grants and claims queued for retry, with no native operation replay. Successful
+collection copies the result and installs the receipt/returned grants together.
+The zero-right receipt's CLOSE is acknowledgement: release the record, copied
+storage and per-process admission. Forgetting it applies backpressure, without
+expiry or eviction. Returned grants are independent after collection.
+
+This is deliberately stronger than ordinary message collection; it needs no new
+collection handle type. A successful collection lost to caller failure is not a
+new I/O attempt; exit disposes owned receipts/unreported grants. Collection failure
+must not manufacture native uncertainty.
+
+### 3. Cancellation and teardown — stop, drain, retain the real outcome
+
+CANCEL requires the owner's receiver with RECEIVE and names its correlation ID,
+using the captured operation rather than the original target handle. It requires
+no second slot. Repeat cancellation while pending is idempotent; terminal work
+returns an already-terminal acknowledgement without consuming its result. Unknown
+or acknowledged IDs return NOT_FOUND. RECEIVE alone collects results/grants.
+Closing the original target alone does not cancel admitted work. Cancel and terminal
+publication serialize; cancellation never alters a terminal result or creates a
+second completion.
+
+Before backend start, cancellation can report NOT_STARTED with no effects. Once
+started, request safe interruption and drain; preserve the backend's actual result,
+known byte count, received data or returned grant. Cancellation/deadline is separate:
+a late successful write/create stays successful, and an unknown outcome stays
+unknown. UDP receive may already have consumed a datagram. HTTP ABORT nevertheless
+latches against later COMMIT. Neither cancel nor receipt close promises rollback.
+
+Use one absolute operation deadline, within existing bounds: CONNECT 30 s,
+UDP SEND 5 s, RECEIVE 30 s; FILE/DIRECTORY admission maximum 30 s matches
+the current npfs request budget. Expired submission is refused without acceptance.
+After admission, expiry requests cancellation; it is not a promise that safe
+reclamation finishes by that instant. Longer HTTP deadlines use separate bounded
+operations without replaying accepted mutations.
+
+A live receiver gets exactly one terminal record, including cancellation. Receiver
+close/exit immediately stops admission, cancels work and detaches its process/table
+claims before teardown. Workers drain using independent owned records/references
+and group cleanup tokens, never a borrowed process, table or user VM. With no live
+receiver, dispose the outcome after drain rather than enqueue to a closed endpoint.
+Receiver close retains per-process admission until uncollected work drains;
+a replacement receiver cannot bypass it. The admission counter has independently
+retained storage, with no worker borrow of the process. Already collected work
+retains admission until receipt close. Group cleanup includes drain; externally
+held grants keep their independent lifetime. This must replace synchronous caller
+loans for the selected operations, not return early from today's [BSP request storage](../kernel/bsp-service-requests.md).
+
+No compensating filesystem mutation is implicit: CREATE succeeding before unlink
+and owner death can leave an entry in the private staging directory. Reconcile that
+private area before reuse; close does not prove absence or secure erasure. A captured
+cleanup recipe would require another authority/lifetime decision. The default
+preserves known effects and the [group cleanup boundary](../interfaces/execution-group-termination.md),
+rather than acknowledging cancellation while a worker still borrows freed storage.
+
+Before delivery, qualify reservation exhaustion, invalid collection buffers,
+receiver shutdown/exit, cancel-before-start and cancel-versus-success, plus a service
+loop waiting on receiver and TCP readiness. Include the `CALL_BUSY` second-submission refusal on the same and different
+receivers. Implementation/runtime qualification remain pending.
+
+**Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
+fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
+204). Enforce zero decoded content and retain 205 on failure; qualify empty/nonempty
+fixed, chunked and close-delimited cases. This is distinct from 204 framing
+([RFC 9110 §15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6),
+[RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3)).
 
 ## Accepted owner decisions
 
-All three defaults accepted 2026-10-11; not implemented.
+All three provider/adapter defaults accepted 2026-10-11; delivery is tasks 3–5.
 
 1. **Forward-only response stream plus read-only final observation.** Make the
    reader available after response headers, before completion, with bounded RAM
@@ -176,7 +396,8 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   **After this task the owner can:** exercise local POST/error/slow-response
   fixtures with a body larger than the resident buffer, without an HTTP port.
 - [ ] **3. Prepared provider transactions and responsive stream service.**
-  Start with the mandatory object/rights/lifetime/inheritance review above.
+  The object/rights/lifetime/inheritance review is accepted. Start with the
+  accepted native completion prerequisite above.
   Deliver body/control/response/observation grants, freeze, status, abort,
   private storage, credential cleanup and retirement. Start with one active
   exchange per provider instance and explicit admission failure. An instance is
