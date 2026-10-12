@@ -117,7 +117,7 @@ omitted.
 | Resource | Rights |
 | --- | --- |
 | `memory` | `manage` |
-| `threads` | `manage`, `set-fs` |
+| `threads` | `manage` |
 | `keyboard`, `pointer` | `input` |
 | `job_work` | `create`, `remove`, `read-files`, `write-files` |
 | `clock` | `read`, `sleep` |
