@@ -3,10 +3,9 @@
 Owner-assigned planning, 2026-10-11. This is the
 [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting):
 compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
-and running the [ports runner](source-builds.md) come later. No hosted compiler
-has run yet: tasks 1-3 deliver Support, C++ and libc prerequisites, and the
-target Clang/LLD links remain unqualified. Threads gates 5–8 are now merged;
-task 4 is assigned to delta (2026-10-12), with its qualification defaults accepted.
+and running the [ports runner](source-builds.md) come later. Tasks 1–4 are qualified: both native target links complete and default
+single-source `-c` runs on Pyxis in 1/4-CPU QEMU. Installed tools, standalone LLD
+execution and native-hardware budgets remain task 5, which is not assigned.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -60,11 +59,16 @@ task 5 still needs its own separate assignment.
    [#217](https://git.internal/PyxisOS/pyxis-userland/pulls/217), Pyxis #718.
    Disposition of absent names and the 155/170 Support compile inventory are in
    [hosted-clang-libc](../development/experiments/hosted-clang-libc.md).
-4. [ ] **Thread-gated compiler/linker integration — assigned 2026-10-12.** Threads
+4. [x] **Thread-gated compiler/linker integration — qualified 2026-10-12.** Threads
    gates 5–8 and the audited C++ adapter are merged. Build the real Clang/LLD closure with LLVM workers
    off, static TLS and real runtime primitives. **Owner check:** both target links
    complete; compile one default single-source `-c`, with diagnostics/failure exit
-   and no child crash helper. No serial-only source adaptation.
+   and no child crash helper. No serial-only source adaptation. Fork
+   [#7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7), userland
+   [#242](https://git.internal/PyxisOS/pyxis-userland/pulls/242), integration
+   [#763](https://git.internal/PyxisOS/pyxis-os/pulls/763);
+   [build and QEMU/GDB record](../development/experiments/hosted-clang-integration.md).
+   Production fork adoption waits for the matching owner-published container.
 5. [ ] **Installed tools and first completion.** Pool-volume bundles delegate
    explicit resource/sysroot roots, scratch/output authority and launcher rights
    only where needed. Measure native image/span/stack/peak memory before settling
@@ -72,17 +76,17 @@ task 5 still needs its own separate assignment.
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
 
-### Open gaps for task 4
+### Qualified task 4 closure
 
 Source inspection of the current
 [pinned fork](https://git.internal/PyxisOS/pyxis-llvm/src/commit/2d2344355c6825f3293e026aafe185c5632abfdb).
 
 | Area | Boundary and work |
 | --- | --- |
-| C++ synchronization/TLS | `ThreadPool.h` still instantiates genuine deferred futures; `Parallel.h` has mutex/condition state and LLD uses `thread_local`. Gate 8 supplies the real primitives; task 4 must qualify the reached closure. General detached async remains outside the profile. Pyxis LLD unlink is already synchronous in the current pin. |
-| Metadata consumers | ASTReader/Writer, PrecompiledPreamble, ModuleCache, the driver module-session path and CodeGenModule retain deleted unconditional metadata accessors. Capture the full build inventory, then adapt supported operations through checked optionals and preserve explicit cache refusals; no zero values or unchecked dereferences ([LLVM Support](../development/llvm-support.md#paths-and-inputs)). |
+| C++ synchronization/TLS | `ThreadPool.h` still instantiates genuine deferred futures; `Parallel.h` has mutex/condition state and LLD uses `thread_local`. Gate 8 supplies the real primitives; task 4 links the genuine closure and observes native TLS/mutex use. General detached async remains outside the profile. Pyxis LLD unlink is already synchronous in the current pin. |
+| Metadata consumers | ASTReader/Writer, PrecompiledPreamble, ModuleCache, the driver module-session path and CodeGenModule retain deleted unconditional metadata accessors. Fork #7 captures the full inventory and adapts supported operations through checked optionals, preserving explicit cache refusals; no fake zero values or unchecked dereferences ([LLVM Support](../development/llvm-support.md#paths-and-inputs)). |
 | Existing refusals | Module locking, PCH/modules/preambles and child crash helpers already refuse in the current fork. Preserve those policies; default integrated cc1 is already configured. |
-| Retained-handle, memory, stack budgets | Need actual native compiler artifacts (task 5); see Resources below. |
+| Native image and stack | Clang 90,335,834-byte P1F / 90,927,104-byte span; LLD 55,731,474 / 56,340,480. Temporary Clang requests 8 MiB stack; both fit existing ceilings. Installed heap/handle/native-hardware budgets remain task 5. |
 
 ### Accepted task 4 qualification defaults (2026-10-12)
 

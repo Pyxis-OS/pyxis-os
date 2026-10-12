@@ -37,7 +37,7 @@ Raw commands, provenance/hashes and captures remain local in
 `build/hosted-clang-task4-baseline/`; owned VM/client jobs are stopped.
 
 
-## Cross-build in progress
+## Cross-build and qualification
 
 Source baseline: fork `2d234435`, current threaded SDK above, verified payload
 checksums. Main advanced to `505ec816` with docs-only changes; all non-doc inputs
@@ -59,8 +59,8 @@ C API size-type includes, TextAPI equivalence and nondeterministic archive
 metadata. [Fork #7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7) checks metadata
 or refuses unsupported operations, preserving native cache refusals before effects;
 optional file inputs use the real copied-buffer backend. Reached changed target
-TUs compile. Both full links, image/span sizes and interactive compilation/error
-qualification remain pending; no completion or compiler-performance claim.
+TUs compile; both real target links complete with the math dependency below.
+This is a native-target build, not a host binary renamed as a Pyxis program.
 
 The reached links require `log2`, `log2f`, `logb`, `log1p`, `erf`, `exp2` and
 `lround`. [Userland #242](https://git.internal/PyxisOS/pyxis-userland/pulls/242)
@@ -72,8 +72,66 @@ Ordinary SDK/kernel and fresh ports/userland image builds pass, including all
 four bundle verifiers. Those later ABI/kernel changes are separate from this
 compiler task; the earlier OS baseline does not establish their cost or source
 equivalence. Setup-only missing Kconfig Python module was corrected before the
-successful build. The complete final-header cross-build is in progress.
+successful build. The complete final-header cross-build passes (fork `4c23a208`,
+compiler/SDK C++ runtime source `2d234435`, LLVM workers off).
 
 Full configuration and build logs remain local in the fork worktree's `build/`.
-No compiler pin is adopted yet. A matching container is required only when that
-new fork pin is adopted; the final SHA/build instructions follow qualification.
+No new compiler pin was needed for local qualification; the current host
+compiler generates the required code. Production fork adoption requires its
+matching owner-published container under the single source-pin contract.
+
+
+## Native artifacts and interactive result (2026-10-12)
+
+P1F stores loadable bytes only, without ELF debug/symbol sections. Exact payload
+lengths and page-rounded segments were inspected before boot; no ceiling changed.
+
+| Tool | Serialized P1F bytes | Mapped span/page bytes | Zero tails |
+| --- | --- | --- | --- |
+| Clang | 90,335,834 | 90,927,104 | 586,912 |
+| LLD | 55,731,474 | 56,340,480 | 603,608 |
+
+A temporary unpacked Clang bundle lives in a private read-only virtio-fs export,
+outside the boot archive. Its 8 MiB stack, `clang_resources`/`sysroot` roots and
+four required runtime grants match the accepted profile. A declared Remote space
+has read-only host access and writable `tmp://`; a separate network-owner space
+performs normal network setup. Small source inputs alone are in `boot://`.
+No call-site grant wrapper, installation or launcher grant is used.
+
+Interactive QEMU 10.2.2 Q35, nested KVM/host CPU, 1 then 4 CPUs, 2 GiB, fresh
+OVMF variables, VGA, VirtIO SCSI/net/RNG/fs. Qualification image `2a410105…` uses
+the above `e5dc4b2c` kernel base, userland `b0c0c0a` and fs `30f625`; these actual
+inputs were frozen before subsequent FAT32 main advances. Userland rebased as
+`a53c1490` without math/header/build changes. Ordinary delivery CI uses the later
+main; neither its cost nor native ThinkPad behavior is inferred from these boots.
+
+```text
+host://clang.pxb -c boot://share/clang/hello.c -o tmp://hello.o
+host://clang.pxb -c boot://share/clang/bad.c -o tmp://bad.o
+host://clang.pxb -c boot://share/clang/missing.c -o tmp://missing.o
+# 4 CPUs: output to the read-only host root
+host://clang.pxb -c boot://share/clang/hello.c -o host://denied.o
+```
+
+Default compilation exits 0 on both CPU counts. The SDK stdint/stdio source
+produces the same 1,160-byte x86-64 ET_REL ELF object (SHA256 `1138fa33…`).
+Syntax and missing-source cases diagnose and exit 1 on both boots; denied output
+also exits 1. No failed output survives; ordinary shell listing, binary readback
+and final 0/complete session cleanup work.
+
+QEMU's GDB confirms `clang_main → CC1Command::Execute → ExecuteCC1Tool → cc1_main`;
+FS points at its self-addressed libc record, with readable thread errno. On four
+CPUs the process has one linked/storage member, one active root, no borrowers,
+and exactly `memory`, `threads`, `clock`, `random` startup resources. A real
+`pthread_mutex_lock` is reached through libc++abi `__cxa_guard_acquire` during
+MemoryBuffer input. Creation/detach hardware breakpoints have no hits during
+default compilation. The symbol ELF's load segments are byte-identical to P1F.
+Together with the native no-recovery/no-helper source policy, this qualifies
+integrated compilation without a child crash helper; no fault was injected.
+
+Standalone LLD links but is not executed here; that and installed/native-hardware
+budgets remain task 5. No compiler-performance or universal heap admission claim;
+pure math additions introduce no new always-on libc work. Direct special-value
+math testing was not performed. Raw configuration, hashes, GDB/remote/serial logs
+remain in local `build/hosted-clang-task4-qualification/`; all owned VM/debugger
+and filesystem-daemon jobs are stopped.
