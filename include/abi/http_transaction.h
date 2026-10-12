@@ -65,9 +65,12 @@ struct http_transaction_status {
   uint64_t status, source_status, cleanup_status;
   uint64_t uploaded, received, consumed, deadline_ns;
   uint64_t tls_error, tls_native_status;
+  uint64_t tls_cleanup_attempted;
+  char media_type[PROVIDER_MEDIA_TYPE_MAX_BYTES + 1];
+  char location[PROVIDER_HTTP_URI_MAX_BYTES + 1];
 };
 
 _Static_assert(sizeof(struct http_prepare_request) == 40, "HTTP prepare layout");
-_Static_assert(sizeof(struct http_transaction_status) == 104, "HTTP status layout");
+_Static_assert(sizeof(struct http_transaction_status) == 2296, "HTTP status layout");
 
 #endif
