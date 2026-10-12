@@ -59,3 +59,18 @@ actual `pipe_call` admission, not a ready flag or scheduling delay.
 Raw input hashes, commands, captures and debugger records remain under the
 isolated gate8 baseline and implementation worktrees' `build/gate8-*` directories.
 No native performance or hardware result is claimed.
+
+Four-CPU qualification exposed two failures before delivery. GDB caught a worker
+returning from its first failed malloc with native MEMORY `CALL_BUSY` still in
+its request record and errno ENOMEM. The reviewed allocator now rechecks published
+pools and retries only bounded, definite pre-effect BUSY refusals outside guards;
+managed backing/CREATE/cleanup uses the same bounded policy. Real NO_MEMORY and
+unknown outcomes are not retried.
+
+The 63-sibling stress also hit a kernel exception with a stack-address RIP and
+corrupted interrupt return fields. An admission breakpoint independently caught
+a migrated, not-yet-admitted syscall retaining CPU2's scheduler pointer/stack
+while executing on CPU0. A repeated rejection could switch onto the wrong CPU's
+permanent stack. The kernel correction refreshes the CPU-local scheduler after
+that handoff, preserving pre-admission migration/stop behavior and adding no
+ordinary successful-entry operation. Fixed-image repeats remain pending.

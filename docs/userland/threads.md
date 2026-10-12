@@ -23,7 +23,11 @@ An ambiguous native CREATE result stops the process; it cannot safely be retried
 or have its possibly live backing released. One joiner claims a record, waits
 for native retirement and pin release, then releases TLS, stack and observer.
 Repeated/stale joins fail. Cleanup failure quarantines the record until process
-teardown rather than reusing possibly live storage.
+teardown rather than reusing possibly live storage. Definite pre-effect native
+VM BUSY refusals get at most eight attempts outside guards; persistent BUSY and
+all other errors remain failures. Unknown outcomes are never retried. The retry
+budget is tuning, not an API guarantee. Heap growth rechecks already published
+pools between BUSY attempts.
 
 Ordinary sibling return/exit drains language TLS destructors in reverse order,
 then up to four key passes, and reports its return value. Keys are generational;
