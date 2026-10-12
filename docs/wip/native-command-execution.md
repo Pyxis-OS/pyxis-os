@@ -1,12 +1,13 @@
 # Native command execution
 
-Status: **shared milestone contracts accepted 2026-10-11; task 1 assigned to
-Codex alpha 2026-10-12, implemented and qualified for review.**
+Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
+and userland #228. Task 2 assigned to Codex alpha 2026-10-12; baseline build
+captured, implementation awaits the exceptional lifetime decision below.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go; later tasks are not assigned. Task 1 has the owner go, including the
-trusted-caller delegation boundary accepted below.
+owner go. Task 2 has the owner go under the accepted capture profile; tasks 3–4
+remain unassigned. The trusted-caller delegation boundary below remains accepted.
 
 ## Deliverable and boundary
 
@@ -129,12 +130,13 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   streams from a LAUNCH-authorized caller, inspect its result and stop it.
   Implemented in [userland #228](https://git.internal/PyxisOS/pyxis-userland/pulls/228),
   exact pin `20fb34f871beed7e25f6ac454e0d53f51dba5f3f`; merge dependency before parent.
-  [Implemented contract](../userland/native-jobs.md). Tasks 2–4 remain unassigned.
+  [Implemented contract](../userland/native-jobs.md). Merged; task 2 is now assigned.
 - [ ] **2. Private FILE capture and deadlines.** Implement the profile above for
   direct callers and the trusted Claude group backend; retain storage/observers
   through actual stage retirement, with sizes, truncation and stop cause.
   **After this task the owner can:** capture separate stdout/stderr from silent,
   noisy and failing programs and distinguish timeout from actual termination.
+  Assigned 2026-10-12; no implementation yet.
 - [ ] **3. Native pipeline and event pump.** Reuse batch launch and bounded pipes,
   concurrent input/output, per-stage results, early-reader-close handling,
   deadlines and all stage/endpoint cleanup. No threads assumption.
@@ -257,6 +259,35 @@ Before opening the parent PR, the branch rebased cleanly onto main `5dc08c5b`
 the public ABI and direct-job/runtime sources used for the checks are unchanged.
 The ordinary image is rebuilt for that integrated input set and exact-head CI
 qualifies the published dependency pin.
+
+## Task 2 checkpoint (2026-10-12)
+
+Fresh branch `execution/private-capture`, main `1536d997`, userland main/pin
+`20fb34f8`, ports `28b5a3bc`, fs `9b4479e8`, lwIP `a1aadb91`. Before-code
+ordinary `make -j16 image LOG_LEVEL=info` passed using the existing LLVM builder;
+SDK/runtime and ports built from source. Baseline kernel/initrd are retained
+locally in `build/capture-baseline/`; no runtime samples or task-2 code yet.
+
+The existing accepted profile settles private storage and normal cleanup:
+trusted startup supplies the private RAM root; metadata cannot certify RAM or
+exclusive access. All final grants receive the stricter capture policy, while
+namespace/provider/credential reachability remains the trusted caller's audit.
+Cancellation/error retains captures and observers through actual process (and,
+for the trusted fresh-group backend, group) retirement.
+
+**One open decision; recommended default, not accepted:** when direct launch
+returns OUTCOME_UNKNOWN without an observer, return an owned cleanup-unconfirmed
+record and retain the captures. Refuse normal release/replay: direct capture
+cannot prove retirement, so the quarantined record remains for the caller's
+lifetime/session teardown. The trusted fresh-group backend can request group
+stop and observe its retained group's completion before releasing captures,
+without inventing an actual process result. No kernel recovery mechanism or new
+group interface is added in task 2.
+
+The [single launcher wrapper](../../userspace/lib/launcher.c) clears the child
+handle on uncertainty, and [task 1's job record](../../userspace/libc/job.c) is
+not returned on failed launch. The no-replay rule is accepted; the capture
+owner's exceptional disposition above needs the owner's answer before code.
 
 ## Required descendant follow-up
 
