@@ -4,7 +4,7 @@ Libc's [`pyxis/job.h`](../../userspace/libc/include/pyxis/job.h) launches one
 known native executable through the caller's existing LAUNCH-authorized launcher.
 The child stays in that launcher's space, CPU and execution group. The core
 does not resolve images, expand bundles, interpret scripts or create groups.
-Lua, shell, capture, deadlines and pipelines remain later work in the
+Lua, shell and pipelines remain later work in the
 [execution milestone](../wip/native-command-execution.md).
 
 ## Explicit inputs
@@ -76,3 +76,52 @@ There is no per-job group completion or caller-death stop guarantee. A surviving
 session can retain a child after caller death; an ungrouped caller has no group
 fallback. Published HOST work can delay retirement indefinitely. Descendant
 launch authority is refused; the parked nested-group direction is separate.
+
+## Private capture and deadlines
+
+[`pyxis/capture.h`](../../userspace/libc/include/pyxis/capture.h) wraps one direct
+job with separate native RAM stdout/stderr FILEs. The trusted caller explicitly
+supplies an exclusively provisioned work root and READ clock. Create/unlink
+happens before either WRITE-only stream is delegated. No stdin is installed;
+the command options must leave all three streams at `-1`. There is no implicit
+cwd, environment, namespace, image lookup, bundle expansion or adapter.
+
+The capture profile validates the final inventory, including unnamed entries
+and appended cwd. It excludes terminal, keyboard, pointer, display, capture,
+clipboard, audio, space, log, mount and raw-disk bypass, alongside the direct
+core's authority exclusions. Exact private-root handles and valid domain/object
+identity aliases refuse. The caller audits the entire private subtree,
+credentials and namespace/provider reachability throughout the job. Directory
+metadata cannot prove RAM backing or exclusive access; shared `tmp://` and
+unpredictable names are insufficient.
+
+`pyxis_capture_start` retains the record and FILEs; `step` polls policy/readiness,
+`wait` uses bounded `wait_many` intervals, and `cancel` requests stop. One required
+absolute monotonic deadline covers the job; it never refreshes. Synchronous
+preparation/admission can exceed it, and expiry is checked when launch returns.
+The default poll interval is 10 ms. Zero limits select 1 MiB per stream: these
+are polled stop triggers and returned-byte caps, **not hard backing quotas**.
+Output can overshoot before the caller runs again.
+
+The first local stop observation (deadline, either stream limit, cancellation
+or operation error) is separate from the actual native result. Stop racing exit
+or fault can still produce EXITED or FAULTED. After successful retirement, the
+result exposes each final size, capped returned size and truncation flag.
+`read` accepts explicit stream/offset and returns native short reads up to the
+cap, without allocating backing-sized output or exposing its FILE capability.
+There is no chronology between stdout and stderr. `close` returns BUSY until
+retirement; source grants survive and owned releases are attempted once.
+
+`fresh_group` requires CREATE_GROUP on an unbound launcher. The wrapper creates
+one group internally, retains sole CONTROL, seals it after launch and observes
+both process retirement and group completion. It does not retrofit nested groups
+or descendants. Direct capture retains the existing caller/session fallback;
+there is no new caller-death mechanism or hard cleanup wall-time guarantee.
+
+A failed start can return a non-NULL owned record. Never replay the launch.
+`CALL_OUTCOME_UNKNOWN` without a process observer quarantines the captures:
+normal close remains BUSY until caller/session teardown. With its retained fresh
+group, the wrapper stops and waits group cleanup, allowing release but leaving
+`result_valid` false rather than inventing a process result. Other errors also
+retain pending ownership for cleanup retries. `step` can observe retirement
+after a clock-policy failure; operation failures return a result snapshot.
