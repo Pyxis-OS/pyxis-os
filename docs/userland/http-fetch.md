@@ -343,15 +343,17 @@ Normal final-client retirement also releases the body/reservation, acknowledges
 retirement, then permits slot reuse. Removing a binding stops discovery; retained
 files remain served until retirement. Once its OPEN export and all file exports
 retire, the old provider exits naturally. Provider failure invalidates its exports.
-There is no kill operation or supervisor.
+No automatic supervisor or rebinding is supplied.
 
-One provider task fetches synchronously. While fetching, reads of existing files,
-new opens and retirement processing wait. The supplied caller deadline bounds
-network phases; otherwise one fetch has a 30-second budget. Cancellation notices
-cannot interrupt a blocking fetch immediately. Expiry is checked by the fetch
-library and a canceled reply is finished without terminating the service. This
-is not a bound on the total wait for ordinary file helpers, which supply no IPC
-deadline. No worker processes, threads or wait-set facility are introduced.
+The provider's cooperative loop services snapshot reads and lifecycle notices
+while one exchange progresses through native completions and TCP/TLS TRY steps.
+A concurrent new OPEN/PREPARE returns BUSY; aliases share that process's gate.
+Legacy OPEN retains its 30-second/earlier-caller budget. Readiness reserves
+nothing and collection uses TRY_RECEIVE. The remaining synchronous DNS entropy
+(**3 s**) and TLS entropy (**5 s**) waits, local cryptography and native service
+handoffs still delay STATUS/ABORT; see
+[service limits](../interfaces/http-transactions.md#service-and-limits).
+Ordinary FILE helpers still supply no IPC deadline.
 
 ## Operation errors
 
