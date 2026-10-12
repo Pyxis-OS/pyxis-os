@@ -40,7 +40,8 @@ in the [SDK's C++ section](sdk.md#c). The accepted
     `ceilf` and `timespec_get(TIME_MONOTONIC)`.
 - **The first consumer:** the [fmt port](ports.md#fmt-development-library), a
   development library under `build/ports-dev/fmt` and a DevilutionX
-  prerequisite. No program in the image uses C++ yet.
+  prerequisite. The gate 7 manual threadprobe now includes a small C++
+  language-TLS helper; it does not deliver a thread-safe C++ application profile.
 
 ## Decisions
 

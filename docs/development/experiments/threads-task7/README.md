@@ -91,3 +91,17 @@ straddled A. IPC completion medians rose here with overlapping ranges; admission
 medians stayed close. Nested-host load varied, including another agent's VM;
 these observations do not establish native costs. Native A/B must precede a
 performance conclusion. Raw captures/commands/hashes remain local and in the PR.
+
+For the owner-native run, stage each exact head's matching kernel and initrd,
+then use the existing hands-free remote harness with these commands (launches
+three times, after the 16-child warmup):
+
+```text
+session bin://ipcbench.pxe call --size 64 --messages 256 --rounds 100
+session bin://ipcbench.pxe call --size 4096 --messages 256 --rounds 100
+session bin://ipcbench.pxe send --size 64 --messages 256 --rounds 100
+session bin://ipcbench.pxe send --size 4096 --messages 256 --rounds 100
+allocbench pages --size 65536 --live 8 --rounds 100
+session bin://lua.pxe -e "for i=1,16 do assert(pyxis.run{'echo','-n'}==0) end; print('launches=16')"
+session bin://lua.pxe -e "for i=1,1024 do assert(pyxis.run{'echo','-n'}==0) end; print('launches=1024')"
+```
