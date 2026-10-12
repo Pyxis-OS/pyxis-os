@@ -108,7 +108,8 @@ plaintext retry arguments; accepted bytes are never replayed. A TLS read requiri
 output while an application write is pending fails explicitly.
 
 **Remaining synchronous waits:** DNS ID/port entropy up to **3 seconds**, TLS
-entropy up to **5 seconds**, both additionally bounded by the request deadline.
+entropy callbacks up to **5 seconds**, per call and additionally bounded by
+the request deadline. These bounds do not preempt an entire cryptographic step.
 STATUS/ABORT cannot run during these calls, clock/UDP open/cleanup IPC,
 capability export/table admission, allocation or local cryptography. Trust/PSA setup precedes publication. No random completion
 or fabricated entropy-WANT result is implemented. Cooperative TLS cleanup closes
