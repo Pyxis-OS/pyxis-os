@@ -54,8 +54,7 @@ and revision inventory). Later tasks need separate assignments.
 an accepted shared plan for direct native launch without descendants, selected
 streams, capture/deadlines and native pipelines, extracted from Claude/Git/ports/
 libuv. Tasks 1–3 are merged. Task 4, Lua/C delivery and reusable port adapters,
-is assigned; Lua/ownership are accepted and revised context delegation waits
-for the owner. Shell delivery is excluded from this task.
+is assigned; all decisions are accepted and implementation is authorized. Shell delivery is excluded from this task.
 
 [Native HTTP requests](native-http-requests.md): an
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:

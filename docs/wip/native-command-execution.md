@@ -3,12 +3,12 @@
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
 and userland #228. Task 2 merged in #749 and userland #232. Task 3 merged in
 #754 and userland #235. Task 4 assigned 2026-10-12;
-Lua surface and ownership are accepted; revised context delegation awaits the owner.**
+all task 4 decisions are accepted 2026-10-12; implementation is authorized.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
 owner go. Task 4 is assigned for baseline and surface proposal first; adapter
-implementation waits for acceptance. The trusted-caller delegation boundary
+implementation is authorized under the accepted contracts below. The trusted-caller delegation boundary
 below remains accepted.
 
 ## Deliverable and boundary
@@ -160,8 +160,7 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   separately from session cleanup. Ordinary shell behavior stays unchanged.
   **After this task the owner can:** run/capture direct commands and native
   pipelines from Lua and C, with real deadlines and results.
-  Assigned 2026-10-12; baseline recorded, Lua/ownership accepted, revised context
-  delegation pending. No adapter code yet.
+  Assigned 2026-10-12; baseline recorded, all decisions accepted 2026-10-12; implementation authorized.
 
 ## Task 1 checkpoint (2026-10-12)
 
@@ -477,9 +476,8 @@ at that checkpoint.
 
 ## Task 4 surface proposal (2026-10-12)
 
-Assigned after #754 and userland #235 merged. **Decisions 2 (Lua only) and 3
-accepted 2026-10-12; decision 1's context delegation is revised and pending. No
-adapter implementation or placeholder API.** Ordinary shell commands/pipelines,
+Assigned after #754 and userland #235 merged. **All three decisions accepted by the owner,
+2026-10-12. Implementation is authorized; this PR records documentation only.** Ordinary shell commands/pipelines,
 `pyxis.run` and `uv_spawn` retain their behavior.
 
 Future shell capture waits for [capability-valued variables](capability-environment.md), with a held result rather than an implicit current-job slot.
@@ -520,14 +518,14 @@ calls after implementation; new capture/loop semantics need their own functional
 qualification. Raw screens/logs stay in `build/adapters-baseline`; owned QEMU
 processes are stopped. The task-3 core's richer baseline remains above.
 
-### 1. Declared context grants — revised default, pending
+### 1. Declared context grants — accepted 2026-10-12
 
-**Accepted parts, owner 2026-10-12:** `jobs = true` space opt-in (false when
+**Owner accepted 2026-10-12:** `jobs = true` space opt-in (false when
 absent), private RAM `job_work` directories, and the minimal captured-stage
 resource profile below. No per-invocation wrapper, prefix, keyword or launch
 option; users type `lua script.lua`, `nvim`, or another client normally.
 
-**Recommended default:** use the existing [bundle manifest grant model](../userland/program-bundles.md#app-views-grants-and-lifetime).
+Use the existing [bundle manifest grant model](../userland/program-bundles.md#app-views-grants-and-lifetime).
 An execution client declares `job_work` plus the existing `launcher/launch`,
 `pipe/create` and runtime grants it needs. Extend the recognized manifest
 resource set with `job_work`: a native DIRECTORY resource with `create`,
@@ -582,12 +580,6 @@ bundle lookup. Ordinary `lua script.lua` therefore resolves the declaration,
 without an alternate command name or flag. Other native clients use their
 normal bundle entry; trusted C embeddings can explicitly supply the same grants.
 No inference from an executable basename or argv, and no implicit forwarding.
-
-**Alternatives:** space-level per-program selection could explicitly provision
-normal client launches, but duplicates the program's needs in configuration and
-loses the bundle required/optional policy. Plain-file sidecar declarations would
-avoid packaging a bundle, but introduce a second declaration/resolution contract.
-Neither is recommended; all per-invocation forms are ruled out by the owner.
 
 The adapters construct each final inventory explicitly. Default runtime roles
 are the **present** memory, threads, clock and random grants; selected content
@@ -741,7 +733,7 @@ limits, FILE cursor/flush behavior, exact child inventories, Lua errors/GC/expli
 close, native UV loop exit/detach and port-wrapper binary output/results. Caller
 exit/fault limits are checked separately from eventual session cleanup. Publish
 userland/ports dependencies before the parent pin; native implementation still
-waits for the revised context-delegation decision.
+is authorized under the accepted decisions.
 
 ## Required descendant follow-up
 
