@@ -205,6 +205,14 @@ Owner ideas, 2026-10-07; none is scheduled.
   for per-CPU busy and idle time and per-process CPU time, and a decision on
   which processes a caller may see.
 
+## Full-screen space
+
+Owner idea, 2026-10-12; not scheduled. A key combination hides the
+[space bar](../userland/init.md#space-bar) for the current space. It reappears
+while the pointer is pushed past the top edge and hides again when the pointer
+leaves. The motivation is recovering at least two text rows in the mux and
+Neovim workflow.
+
 ## Audio
 
 The [analog HDA engine](../devices/hda.md), [PCM sessions](../interfaces/audio.md)
