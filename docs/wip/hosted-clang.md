@@ -119,26 +119,30 @@ qualification; installed tools still require a separate task 5 go.
 
 ### Compiler-container boundary
 
-Tasks 1-3 leave the installed pin unchanged. Their Support/header and libc++
-changes are fork PRs, not ports-only patches. **Before a parent PR adopts the new
-fork pin**, the owner must build/publish the matching compiler container and the
-PR must update `toolchain/build.sh`, `ci/Containerfile`, workflow image tag and
-[toolchain documentation](../development/llvm-toolchain.md#changing-the-pin)
-together. Ordinary SDK configuration or libc edits alone need no container
-rebuild. Coordinate the chosen fork head with delta's gate 7 TLS change to avoid
-publishing incompatible compiler/runtime pins. Gate 7 adoption pins fork #6 at
-`2d2344355c6825f3293e026aafe185c5632abfdb`, including merged fork #5;
-its matching owner-published image is `pyxis-llvm23.1.3-2d23443`. Gate 8 now supplies
-the audited synchronization/C++ runtime through the SDK, without another container.
-No rebuild is needed for this baseline. The remaining metadata source adaptations
-are in [fork #7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7)
-against `pyxis-23.1.3`; local closure qualification can use the
-current compiler first. Adopting that new fork pin into the single installed
-compiler/SDK pin requires the owner to build/push its matching image before parent
-CI. Fork #7 is published; an adoption branch and qualified final source head
-are not ready yet. Delta will provide the
-exact published SHA, adoption branch and `podman build`/`podman push` commands
-when ready, rather than requesting a speculative rebuild now.
+Local task 4 qualification uses the existing `pyxis-llvm23.1.3-2d23443` image
+and its matching C++ runtime source. It already generates the required code;
+math additions alone need no new container. Fork #7 supplies the remaining
+native source closure at `4c23a208a023007024a1b4ff32e5d9cd8733cf1c`.
+
+Before production adoption, the owner publishes its matching image under the
+[single compiler/SDK source-pin contract](../development/llvm-toolchain.md#changing-the-pin).
+The prepared branch `toolchain/hosted-integration-container` at
+`efcc309ae465bdbca6224e2b31da9b0a9c73a136` updates `toolchain/build.sh`, the
+Containerfile revision check, workflow tag and toolchain documentation together.
+From that branch:
+
+```sh
+podman build -f ci/Containerfile \
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20
+```
+
+Then integration adopts that commit and checks exact-head CI. Skipping publication
+makes CI unable to pull the image; keeping the old source pin omits these native
+metadata/driver/host fixes and breaks URI header staging in the ordinary target
+build. This is source adoption, not a new codegen/TLS ABI requirement. Merge order:
+fork #7 and userland #242, owner image publication, then Pyxis #763 with the
+adoption commit. No LLVM rebuild belongs in ordinary CI. Task 5 still needs a go.
 
 ## Resources and native limits
 
