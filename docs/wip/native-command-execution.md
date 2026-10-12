@@ -1,8 +1,8 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
-and userland #228. Task 2 delivered for review by Codex alpha 2026-10-12; the exceptional
-lifetime decision is accepted and implementation is authorized.**
+and userland #228. Task 2 delivered in #749 and userland #232; the exceptional
+lifetime decision is accepted 2026-10-12.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
@@ -294,7 +294,10 @@ failing is EXITED/3 with exact 16/15-byte stdout/stderr; noisy and timeout retur
 actual TERMINATED with separate limit/deadline causes. Noisy reads return exactly
 1 MiB per stream with truncation, verified `O`/`E` bytes. Early close is BUSY.
 Already-expired deadlines return TIMED_OUT without a record. Unnamed private
-root, copied private cwd, and console bypass refuse with DENIED.
+root, copied private cwd, and console bypass refuse with DENIED. A wrong-type
+image refuses direct admission without a record; fresh-group admission returns
+an owned record, confirms empty group cleanup, and releases with result_valid
+false (no invented process result).
 
 End-to-end timings include preparation and retirement, exclude capped-output
 reading and debugger pauses. One-CPU ranges are three samples; four-CPU ranges
