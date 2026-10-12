@@ -63,7 +63,7 @@ than throwaway work.
   generates from Git commits may not be byte-stable, which a SHA-256 pin needs.
   [Git on Pyxis](git-on-pyxis.md) records the accepted libgit2 source-fetch route
   and its open prerequisites.
-- **Running recipes.** [Native command execution](native-command-execution.md)
+- **Running recipes.** [Native command execution](../userland/native-jobs.md)
   supplies argv launch, selected streams, capture/deadlines, pipelines and actual
   result/cleanup for Lua and the ports runner, replacing its host
   `os.execute`/`io.popen` backend. This shared milestone can deliver independently

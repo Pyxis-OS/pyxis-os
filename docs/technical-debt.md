@@ -289,7 +289,7 @@ The 1 MiB per-stream polled trigger/cap is not a backing quota, and admission/re
 direct admission retains captures until caller/session teardown. Revisit bounded backing or recovery when a consumer requires it.
 [Native pipelines](userland/native-jobs.md#native-pipelines-and-the-event-pump) copy finite input before launch, capture final stdout
 and combined stderr, and have no live producer or stderr stage attribution. Revisit streaming producers when a consumer needs them;
-Lua/C adapters remain in the separately assigned [execution milestone](wip/native-command-execution.md).
+[Lua](userland/lua.md#owned-native-jobs) and exact libuv adapters expose this profile; descendant execution remains outside it.
 
 ## Private job context cleanup after caller failure
 

@@ -42,7 +42,7 @@ Gaps that stay with this harness:
 | --- | --- | --- |
 | Files and directories | Lua has real `io` reads/writes, seek, rename/remove and `pyxis.dir`. Directory enumeration accumulates the whole table and reports changed-generation errors. | Project-relative text tools; bounded enumeration/results, explicit errors and same-parent replacement for writes. Flush/close are not durability; explicit sync needs a binding if durable writes are promised. |
 | Lua/TLS boundary | The Lua port supplies file I/O and `pyxis`; TLS is already isolated in the HTTPS provider. | Keep that boundary. No Lua HTTPS binding, application HTTP library dependency or crypto-owner integration task. |
-| Command output | `pyxis.run` inherits current streams and waits; changing Lua `io.output` does not redirect child stdout. No capture/deadline option exists. | [Shared command execution](native-command-execution.md) supplies selected streams, result/deadline observation and cleanup; harness result budgets remain consumer policy. |
+| Command output | `pyxis.run` retains live streams. `pyxis.job`/`pipeline` and `pyxis.commands` provide explicit capture/deadlines; ordinary Lua needs its declared context in a jobs-enabled space. | [Shared command execution](../userland/native-jobs.md) supplies selected streams, result/deadline observation and cleanup; harness result budgets remain consumer policy. |
 
 Existing [TLS](../userland/https.md) verifies chain, DNS name and dates with
 explicit random/clock/TCP grants and public/custom trust roots. Keep that policy.
@@ -197,7 +197,7 @@ delegated network authority. This is the exposure the owner chooses, not a new
 destination sandbox. Keep harness code/resources outside the writable project.
 
 The former task 1e's reusable launch/capture delivery moves to
-[native command execution](native-command-execution.md) on 2026-10-11; this is
+[native command execution](../userland/native-jobs.md) on 2026-10-11; this is
 not completion. Keep the accepted harness profile: it remains an ungrouped
 trusted coordinator with sole CONTROL of each sealed command group, private
 created-then-unlinked RAM FILE captures, absent stdin, no descendant launcher
@@ -233,7 +233,7 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
   bounded parsing and schema validation.
   **After this task, the owner can:** construct and decode Messages/tool data locally without API spending.
 - **Shared dependency, former 1e (moved, not completed):** consume
-  [native command execution](native-command-execution.md)'s trusted-coordinator
+  [native command execution](../userland/native-jobs.md)'s trusted-coordinator
   core and private FILE capture/deadline profile. No duplicated launch/capture
   implementation task is owned by the harness; its narrow grants and budgets
   remain as above.

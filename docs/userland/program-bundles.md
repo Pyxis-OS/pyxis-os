@@ -117,6 +117,9 @@ omitted.
 | Resource | Rights |
 | --- | --- |
 | `memory` | `manage` |
+| `threads` | `manage` |
+| `keyboard`, `pointer` | `input` |
+| `job_work` | `create`, `remove`, `read-files`, `write-files` |
 | `clock` | `read`, `sleep` |
 | `launcher` | `launch` |
 | `random`, `system_info` | `read` |
@@ -153,6 +156,34 @@ App/resource handles delegated to a child keep backing after the launching
 process closes its own view. The manifest is launch policy, not a restriction on
 independently delegated FILE/launcher capabilities.
 
+## Private job contexts
+
+The space's `jobs = true` gate supplies a private RAM provisioning tree to the
+trusted startup path, independently of `launch`. A declaring client also needs
+selected native clock READ, PIPE CREATE and delegated LAUNCH. The manifest's
+`job_work` request causes a fresh leaf to be created for that launch; it receives
+only its requested CREATE/REMOVE/READ_FILES/WRITE_FILES rights. Lua's requests
+are optional, so pure Lua works without job authority and its job API refuses.
+An unavailable required request refuses client admission.
+
+`bundle_launch_prepare_jobs` receives the provisioner separately from ordinary
+resource inventory. `bundle_launch_prepare` never forwards a caller's existing
+client leaf. Ordinary children, captured stages and app views receive neither
+the provisioning ancestor nor implicit context aliases. Existing trusted init
+and session-successor handoffs retain provisioning authority, while mux and
+remote startup create private subtrees for their retained session groups.
+The ancestor is outside public roots, cwd and namespaces. No basename, path or
+environment string authenticates a context.
+
+Ownership is prepared before directory creation and client admission. A retained
+WAIT observer allows the creator to clean a leaf only after confirmed retirement;
+group-owned subtrees require confirmed group cleanup. Transient bundle release
+does not destroy a live context. Unknown admission or creator failure retains
+the named tree privately in RAM until reboot, without retry or invented cleanup.
+See the accepted [caller-failure limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+Grant-all-when-available remains the current manifest policy; future consent is
+still in the [bundle direction](../wip/program-bundles.md#future-consent-policy).
+
 ## Budgets
 
 | Input or preparation | Budget |
@@ -161,7 +192,7 @@ independently delegated FILE/launcher capabilities.
 | Catalog bundles | 8 |
 | Commands per bundle | 32 |
 | Named resource directories per bundle | 8, plus `app` |
-| Grant requests per bundle | 16 |
+| Grant requests per bundle | 19 |
 | JSON nesting | 16 |
 | Name/path component | 255 bytes |
 | Relative entry/resource path | 1024 bytes |

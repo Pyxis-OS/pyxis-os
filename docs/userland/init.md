@@ -112,6 +112,14 @@ return {
   including every foreground pipeline stage. Background commands and services
   do not receive it. This does not delegate the trusted launcher's CREATE_GROUP
   authority or add terminal input rights.
+- **Declared native jobs.** `jobs` is an optional boolean, defaulting to false.
+  It makes a private RAM provisioning tree available to trusted startup and
+  explicit successor handoff. A bundle must request `job_work`, plus usable
+  launcher/pipe/clock grants; the trusted launch path creates a fresh leaf for
+  that client. Ordinary commands receive neither leaf nor ancestor implicitly.
+  Live Development and installed `pyxis` enable it; other spaces can opt in.
+  The setting does not enable ordinary launch when `launch` is false. See
+  [declared contexts](program-bundles.md#private-job-contexts).
 - **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
   It supplies a distinct trusted `mux_terminal` grant. After configuration and
   service setup, the session launcher selects `bin://mux.pxe`, giving it

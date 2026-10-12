@@ -2,7 +2,7 @@
 
 Status: **parked REQUIRED direction, owner decision 2026-10-11.** Not implemented,
 not a code assignment, and not a settled API or accounting design. Keep the first
-[native command milestone](native-command-execution.md) on direct launch with no
+[native command milestone](../userland/native-jobs.md) on direct launch with no
 descendant launcher. This direction is required before descendant execution in
 the consumers below; it is not a prerequisite for their independent first slices.
 

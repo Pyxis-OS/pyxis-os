@@ -1,6 +1,7 @@
 # Lua in Pyxis
 
-The normal image includes `bin://lua.pxe`, resolved as `lua` by the shell.
+The normal image includes `bin://lua.pxb`, resolved as `lua` by the shell.
+Its native interpreter is inside `app/`; the bundle declares optional job grants.
 The port uses Lua 5.5.1, pinned to upstream commit
 `7579fc9d7ed90240487251dfb69168f8e64e9294`, with the recorded upstream GC fix.
 The MIT notice is installed at `boot://share/licenses/lua/lua.h`.
@@ -114,9 +115,73 @@ nonzero values. There is no descendant supervision: shell Ctrl+C stops Lua,
 and a process Lua launched may outlive it. Remote execution-group lifetime
 still applies to group members.
 
-The proposed [shared command milestone](../wip/native-command-execution.md) adds
-opt-in selected-stream capture, deadlines and supervised pipelines; it does not
-change the implemented ordinary `pyxis.run` contract above.
+The capture API below keeps the ordinary `pyxis.run` contract above.
+
+## Owned native jobs
+
+Where the space enables `jobs` and ordinary launch, the trusted launcher grants
+Lua a fresh private `job_work` leaf through its manifest. `lua script.lua` needs
+no invocation prefix. In a space without these optional grants, pure Lua still
+runs and job creation returns nil plus a native refusal status. See
+[declared contexts](program-bundles.md#private-job-contexts).
+
+```lua
+local job, status = pyxis.job({"cat"}, {timeout_ms=1000, input="hello\n"})
+assert(status == pyxis.CALL_OK)
+local result, wait_status = job:wait()
+local bytes, read_status = job:read("stdout", 0, result.stdout_output.returned_size)
+local close_status = job:close()
+```
+
+`pyxis.pipeline({argv1, argv2, ...}, options)` uses the same record and options
+for one to eight stages. Stages are native images, resolved through caller-held
+content; bundle/catalog/shebang expansion is excluded from this captured path.
+Both entry points capture final stdout and combined stderr, with every stage's
+native result. A nonzero exit is data. Native admission may return an owned job
+with a nonzero status; never replay it.
+
+Options select a required positive `timeout_ms`, binary finite `input` (nil is
+absent; an empty string supplies EOF), `stdout_limit`/`stderr_limit`, exact
+`resources`, selected `roots`, `cwd`, `environment`, and `namespace`. The
+[native job contract](native-jobs.md) defines capture limits, bounded concurrent
+pumping and actual retirement; the timeout becomes one absolute monotonic
+deadline before preparation, not a hard wall-time bound on launch or cleanup.
+
+Omitted runtime roles select present memory/threads/clock/random. Explicit role
+names are `memory`, `threads`, `clock`, `random`, `tcp`, `udp`, `pipe`, and
+`system_info`; missing requested authority refuses. Roots default to current
+held roots, or an exact list of `{name="home", access="read"}` / `"read-write"`.
+Read-only selection rebuilds the entire cwd chain under attenuated roots.
+`cwd=false` omits it, and an exact environment table replaces the copied current
+environment. Namespace LOOKUP is omitted unless explicitly selected with true;
+the trusted caller still audits provider reachability. Paths and selector names
+create no authority. Captured children receive no launcher or private context.
+
+`job:step()` pumps a bounded round; `:wait()` drives bounded native waits;
+`:cancel()` requests stop, then normal cleanup still needs wait and close.
+`:read(stream,offset,count)` is available after confirmed cleanup and caps each
+transfer at `pyxis.READ_MAX_BYTES`. Results retain native statuses, stop cause,
+per-stage validity/kind/signed exit status, input acceptance/unsent/uncertainty,
+output sizes/truncation and incomplete flags. `pyxis.LAUNCH_NO_STAGE` is the -1 Lua
+representation of the native no-stage sentinel; process kind constants are
+`PROCESS_EXITED`, `PROCESS_FAULTED`, and `PROCESS_TERMINATED`.
+
+The strong ownership registry survives protected Lua errors and GC. Recover
+unclosed records with `pyxis.jobs()`; dropping a variable performs no hidden
+stop or wait. `:close()` returns BUSY until cleanup. Once native close consumes
+ownership, the userdata is invalidated and unregistered even on release error.
+Uncertain admission remains quarantined until caller/session teardown; named
+private directories have the separately accepted until-reboot retention limit.
+There is no hidden background pump or deadline worker.
+
+`require "pyxis.commands"` supplies argv wrappers: `capture` and `pipeline`
+return stdout, stderr, result, status, retained-job; `run` returns result, status,
+retained-job and replays capped output to current `io.stdout`/`io.stderr`, or
+explicit `options.stdout`/`options.stderr` FILEs. Capture preserves binary bytes
+and trailing newlines. Read/replay/flush errors accompany actual child results;
+partial or uncertain delivery is never replayed. Unresolved ownership remains
+recoverable. These wrappers replace port calls to `os.execute`/`io.popen`; they
+do not add shell grammar or qualify native make/ports descendant execution.
 
 `pyxis.dir(path)` returns an array of entries with `name` and `kind` (`file` or
 `directory`), in native enumeration order. It does not add metadata, sorting or

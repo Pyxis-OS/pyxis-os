@@ -57,6 +57,12 @@ ChaCha20 with hardware reseeding; see the
 2026-10-10 (#687): `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel
 statuses.
 
+[Native command execution](../userland/native-jobs.md), 2026-10-12: direct jobs,
+private capture, concurrent pipelines, declared Lua contexts and exact C/libuv
+adapters (#745, #749, #754, #757, #760). Shell syntax is unchanged; surviving
+cleanup supervision and descendants remain with Continuum/nested groups.
+[Qualification](../userland/native-jobs.md#adapter-qualification-2026-10-12).
+
 [Network throughput](../development/network-throughput.md), 2026-10-09: on-link
 segments, larger windows and Nagle off, natively measured; see the
 [remaining limits](../technical-debt.md#tcp-throughput-limits).
