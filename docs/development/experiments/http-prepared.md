@@ -6,7 +6,9 @@ VirtIO net/user networking and entropy, no HDA. Disposable local fixtures at
 no paid API or real credentials. These are QEMU results, not native measurements.
 
 Baseline parent `4366eb28`, userland `21cf935c`; implementation kernel `62e57184`,
-userland `705b148` (parent integration #765). Both use fs `30f625a2`, ports
+timed userland `705b148`; final qualification uses `c72971b` / parent
+`98b51307` (#765). The later changes correct concurrent COMMIT observation and
+validate STATUS fields, without changing the timed snapshot/direct-POST paths. Both use fs `30f625a2`, ports
 `fd1eb30f`, lwIP `a1aadb91`, LLVM23.1.3-2d23443. Original pre-edit
 `9bd3d66d`/`62da3399` measurements are retained locally; the table refreshes the
 comparison after the managed-libc merge. No compiler-container rebuild.
@@ -51,11 +53,62 @@ throughput from this nested-QEMU cost.
 
 ## Qualification and limits
 
-Manual native-grant qualification is in progress. This record will be completed
-with actual chunk/framing, ownership, cancellation and storage results before
-#765 becomes ready. Ordinary kernel/SDK/C++ runtime/ports/userland/image builds
-passed; focused review-fix image builds passed. Dependent userland #240 has no
-independent CI workflow; the parent builds its published head.
+Plain HTTP manual native-grant checks passed:
+
+- Fixed/chunked/close-delimited GET at 1/17 MiB, exact bytes, max READ 4,088;
+  shared cursor, single-use handoff and zero-capacity refusal. Truncated fixed/
+  chunked bodies retain a prefix then IO, not EOF. Complete 404/500 retain bodies.
+- All six 205 fixed/chunked/close cases: empty completes; nonempty exposes no
+  content, returns IO and retains 205. Legacy FILE snapshots remain capped at
+  16 MiB; over-limit OPEN returns FILE_TOO_LARGE without a grant.
+- POST 0/1/17 MiB, independently verified upload length/SHA-256; 404/500 bodies
+  and early 413 retained. Frozen writer copies cannot mutate; no READ/SYNC,
+  observer ABORT or control STATUS authority. Invalid Host refuses before wire;
+  credential-marked 302 returns Location without following it.
+- Concurrent COMMIT in both winner orders returns one reader and one status-only
+  success, with one server POST. The initial BUSY-on-opening defect was corrected
+  and rechecked. Cancellation, control/reader retirement, expiry, repeated ABORT
+  and export exhaustion/recovery passed (15 retained GET records, then LIMIT).
+- STATUS/ABORT work during pending headers/body reads and concurrent npfs staging.
+  The body-only child has no roots/cwd/control/observation; cancellation retained
+  420,240 known bytes across 103 writes, no HTTP submission, cleanup OK. Specific
+  DIRECTORY-operation responsiveness remains source-inspected. GET body and POST
+  headers delayed 35 seconds complete within the original 120-second deadline.
+- Pausing after 4,088 bytes of a 17 MiB GET leaves received/consumed counters
+  12,280/4,088 unchanged for two seconds (8 KiB queued); resumption completes.
+
+The custom local init initially omitted net configuration; it was corrected with
+checked native VirtIO bind and static usernet assignment, not a provider change.
+Final native fixture uses a disposable GPT/256 MiB npfs pool with an 8 MiB journal;
+private staging is unlinked before writer export and all caller directory/cwd
+aliases are closed. Helpers and runtime config are excluded from ordinary images.
+
+Compiled debug types (source inspection, not a heap-peak measurement) show
+transaction 2,888 B, work 31,664 B, engine 48,824 B, shared loop 1,128 B and an
+8,192 B response queue. Request-header allocations, TLS, allocator bookkeeping,
+kernel network buffers and npfs cache are additional. Terminal observation-only
+records release engine/work/queue/backing. The old 1 MiB snapshot allocation was
+inspected before code changes; native streams do not reserve total response size.
+
+HTTPS checks passed on the final source: fixed/chunked/authenticated-close 1 MiB
+and fixed 17 MiB GET; 1/17 MiB POST with independent length/hash checks; complete
+404 and early 413 bodies; all six 205 cases. Raw TLS EOF after a prefix fails
+TLS_TRUNCATED/IO; authenticated EOF before fixed/chunked completion remains HTTP
+framing failure. A 35-second body wait completes under the original deadline;
+STATUS/ABORT remain available during header/body waits. Provider death after a
+4,088-byte prefix makes READ and observation both ENDPOINT_CLOSED, not EOF.
+TLS 1.2-only compatibility was then checked with 1 MiB GET and POST by forcing
+the local peer's version range to TLS 1.2. Both completed with exact bytes/hash.
+A separate 17 MiB chunked HTTPS run was not performed; the shared chunk decoder
+was checked at 17 MiB over HTTP and 1 MiB over HTTPS.
+
+Ordinary kernel/SDK/C++ runtime/ports/userland/image builds passed, including the
+final ABI/observation build. The guest reclaimed its provider processes and powered
+off with pool flush; the extracted npfs pool passed the existing read-only
+`fsck.npfs --image` structural check. This is no power-loss or native-disk evidence.
+All task-owned QEMU/GDB/fixture-server processes are stopped. Raw captures remain
+local. Userland #240 has no independent CI workflow; parent #765 builds its
+published head.
 
 The [interface](../../interfaces/http-transactions.md#service-and-limits) retains
 synchronous DNS randomness (3 s) and TLS entropy callbacks (5 s), additionally

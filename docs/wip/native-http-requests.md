@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 implementation in progress; native completion prerequisite merged, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–3 delivered; adapters/coordinator tasks 4–5 remain; native completion prerequisite merged, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -205,8 +205,8 @@ staging CREATE/REMOVE/READ/WRITE/RESIZE/SIZE on RAM/archive/npfs. HOST/FAT32 and
 provider forwarding are excluded. See the [completion ABI and limits](../interfaces/native-completion.md),
 [admission debt](../technical-debt.md#native-completion-per-process-admission) and
 [QEMU qualification/cost finding](../development/experiments/native-completion.md).
-The broader completion direction stays parked. Provider/DNS/TLS cooperative
-integration and the HTTP fix below remain task 3 work.
+The broader completion direction stays parked. Task 3 integrates the provider,
+cooperative DNS/TLS and the 205 correction; its limits remain explicit.
 
 ### Task 3 receive contract — accepted 2026-10-12
 
@@ -308,23 +308,17 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   [QEMU qualification and costs](../development/experiments/http-fixed-post.md).
   **After this task the owner can:** exercise local POST/error/slow-response
   fixtures with a body larger than the resident buffer, without an HTTP port.
-- [ ] **3. Prepared provider transactions and responsive stream service.**
-  The object/rights/lifetime/inheritance review and native completion contract
-  are accepted; the bounded kernel prerequisite is merged. Provider integration
-  is in progress, including the accepted nonblocking receive operation above.
-  Deliver body/control/response/observation grants, freeze, status, abort,
-  private storage, credential cleanup and retirement. Start with one active
-  exchange per provider instance and explicit admission failure. An instance is
-  one provider process with its service exports, TLS/network state and storage;
-  aliases such as `https`/`json+https` and all binding clients share its limit.
-  Separate processes are independent; per-consumer provisioning/concurrency is
-  deferred in [shared-instance admission debt](../technical-debt.md#http-shared-instance-admission).
-  A cooperative service loop must progress network work while servicing reads/
-  status/abort/retirement; do not fetch synchronously inside OPEN/commit or assume
-  future user threads.
-  Bound resident queues/scratch and export counts; cumulative transfer bytes
-  are not a RAM reservation. Publish streamed GET and request-scoped GET headers
-  as well as POST. Retain read-only GET authority and register JSON aliases.
+- [x] **3. Prepared provider transactions and responsive stream service.**
+  Delivered separate body/control/response/observation exports, freeze, status,
+  abort, private npfs staging and retirement; cooperative DNS/TCP/staging
+  completion/TLS steps and nonblocking receiver collection. The 205 correction,
+  request-scoped GET fields and read-only JSON aliases are included.
+  [Implemented contract and limits](../interfaces/http-transactions.md);
+  [QEMU qualification and matched costs](../development/experiments/http-prepared.md).
+  One active exchange per process is shared by aliases and clients; provisioning/
+  concurrency is deferred in [admission debt](../technical-debt.md#http-shared-instance-admission).
+  DNS entropy (3 s), TLS entropy callbacks (5 s), capability/service handoffs
+  and local cryptography remain synchronous; STATUS/ABORT cannot run during them.
   **After this task the owner can:** use native prepared grants to submit once,
   read a prefix and distinguish complete, failed and unknown outcomes.
 - [ ] **4. Generic libc/Lua adapters and stream propagation.** Implement `"r"`,
