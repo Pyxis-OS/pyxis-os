@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/fs/extents.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -23,6 +24,7 @@
 
 struct npfs_pool {
   struct npfs_pool *next;
+  struct storage_extent extent;
   struct gpt_partition partition;
   struct gpt_guid disk;
   block_device_id device;
@@ -271,8 +273,15 @@ static enum call_status open_pool(struct npfs_store_context *context,
   if (status != CALL_OK) {
     return status;
   }
+  status = storage_extent_reserve(&pool->extent, job->device, partition.first_block,
+      partition.block_count, STORAGE_EXTENT_PENDING_NPFS);
+  if (status != CALL_OK) {
+    adapter_free(pool, sizeof(*pool));
+    return status;
+  }
   status = npfs_store_open(context, job->device, &partition, &device, writable, &pool->store);
   if (status != CALL_OK) {
+    storage_extent_release(&pool->extent);
     adapter_free(pool, sizeof(*pool));
     return status;
   }
@@ -280,6 +289,7 @@ static enum call_status open_pool(struct npfs_store_context *context,
   pool->disk = job->disk;
   pool->device = job->device;
   pool->gpt_degraded = degraded;
+  storage_extent_publish(&pool->extent, STORAGE_EXTENT_NPFS);
   pool->next = pools;
   pools = pool;
   *out = pool;
@@ -969,24 +979,24 @@ void npfs_start(void)
 
 bool npfs_device_mounted(block_device_id device)
 {
-  npfs_require_worker();
-  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
-    if (pool->device == device) {
-      return true;
-    }
-  }
-  return false;
+  return storage_extent_device_mounted(device);
 }
 
 bool npfs_partition_mounted(block_device_id device, uint32_t partition)
 {
   npfs_require_worker();
-  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
-    if (pool->device == device && pool->partition.entry_number == partition) {
-      return true;
+  struct gpt_partition selected = {0};
+  uint64_t flags = cpu_save_interrupts();
+  const struct gpt_snapshot *snapshot = gpt_get_snapshot(device);
+  for (size_t i = 0; snapshot && i < snapshot->partition_count; ++i) {
+    if (snapshot->partitions[i].entry_number == partition) {
+      selected = snapshot->partitions[i];
+      break;
     }
   }
-  return false;
+  cpu_restore_interrupts(flags);
+  return selected.block_count && storage_extent_range_mounted(device,
+      selected.first_block, selected.block_count);
 }
 
 enum call_status npfs_shutdown_flush(void)
