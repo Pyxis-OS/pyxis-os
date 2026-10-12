@@ -10,9 +10,11 @@ local gateway; no paid API, credential or remote HTTP service was used.
 Baseline: parent `088816ab`, userland `e878f4f`, ports `28b5a3bc`,
 fs `b427df29`. Baseline costs were captured before decoder changes.
 The first implementation was `9559ab4`; final userland is `b24f390`, rebased
-onto `2ccb58e`. The final ordinary image uses parent main `5dc08c5b`, fs
+onto `2ccb58e`. Measured final image uses parent main `5dc08c5b`, fs
 `9b4479e8` and the same ports pin. The compiler container stays
-`pyxis-llvm23.1.3-49e2c1a`; no rebuild is needed.
+`pyxis-llvm23.1.3-49e2c1a`; no rebuild is needed. Delivery rebases the same
+HTTP commits onto userland `20fb34f` as `bdef26b`, and parent `1536d997`,
+retaining the concurrent native-job work.
 
 ## Snapshot cost
 
