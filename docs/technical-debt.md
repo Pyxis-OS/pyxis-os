@@ -91,9 +91,11 @@ the allocator still needs the gate 8 synchronization audit before concurrent ord
 ## TLS bootstrap launch cost
 
 Gate 7 prepares guarded TCB backing and binds FS through separate BSP VM transactions on every libc process launch, including
-TLS-free C programs. This adds startup work and retained TCB backing; native cost remains unmeasured. See the
-[interleaved qualification](development/experiments/threads-task7/README.md). Revisit during the gate 8 runtime audit if matched
-native launches show a material cost, preserving caller-only FS authority and context pins.
+TLS-free C programs. The owner accepted the measured native launch cost of +6–9% (about +0.11 ms/launch) on 2026-10-12;
+IPC and pages were unchanged. See [qualification](development/experiments/threads-task7/README.md#owner-native-cost).
+Initial-thread static TLS could avoid its guarded reservation; siblings would remain guarded. This is a much-later follow-up,
+not gate 8 work: revisit when launch-heavy shell scripts or native builds make startup cost material, preserving caller-only
+FS authority, template alignment, destructor lifetime and context pins.
 
 ## Allocation measurement follow-ups
 

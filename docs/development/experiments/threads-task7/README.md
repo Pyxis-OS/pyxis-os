@@ -14,13 +14,14 @@ profile is claimed; those remain gate 8.
   `2d2344355c6825f3293e026aafe185c5632abfdb`. Ordinary kernel, SDK, C++ runtime,
   ports, userland and image builds passed with locally rebuilt Clang/LLD;
   unchanged-source compiler-rt/tools reused the existing compiler installation.
-  The owner-built matching container is published; exact-head CI is being rerun.
+  The owner-built matching container is published. Exact-head CI passed on
+  `6042dc18` (#748) and `fe4fede5` (#744); the latest rebase is being checked.
 - B ELF SHA256 `c3d2b1b3737eea96b6054eb6fb76a69c9a1a82c25b302a9919d1a6200a27d375`;
   initrd `38f9717f8ba077f98beb0aa0795e18e84a0c9b088f2a8ab407777684ea3ceba3`.
   Each A/B kernel used its matching initrd: the startup ABI and errno changed.
 
-Review rebase: integration now contains main `dc4b1487`; userland #231 is
-`24f6b6bb`, containing main `40f81eb`. Range-diff confirms all three TLS
+Review rebase: integration now contains main `ecdeb0f4`; userland #231 is
+`2bc56bf4`, containing main `d6842f8`. Range-diff confirms all three TLS
 runtime/probe commits are unchanged. Ports `fd1eb30` still contains current
 ports main `5ba172c`. The measurements above and below retain their original
 inputs; no static initial-thread storage change was made. The published image
@@ -63,7 +64,7 @@ NO_MEMORY; bootstrap exited 1 with FS=0 before main, then echo succeeded.
 Guest TCC compiled and ran a stdio/errno C program. Host TCC rejected actual TLS
 objects without output. No native hardware result is claimed.
 
-## Matched cost
+## Nested-QEMU matched cost
 
 Same four-core configuration, identical kernel configs, info logging/profile
 OFF, no debugger or task build during capture. Final A3/B3 follow an earlier
@@ -96,8 +97,35 @@ and bind each take a BSP VM transaction. Exact cost attribution is unmeasured.
 B3 pages rose 57.2% in this pair, while earlier B samples ranged 266–453 ms and
 straddled A. IPC completion medians rose here with overlapping ranges; admission
 medians stayed close. Nested-host load varied, including another agent's VM;
-these observations do not establish native costs. Native A/B must precede a
-performance conclusion. Raw captures/commands/hashes remain local and in the PR.
+these observations do not establish native costs. Raw captures/commands/hashes
+remain local and in the PR.
+
+## Owner-native cost
+
+2026-10-12, ThinkPad on AC/Ethernet, A/B/A/B fresh boots: A `dc4b1487`
+with compiler `49e2c1a`, B `6042dc18` with `2d23443`, each using its own kernel
+and initrd. The owner reported these results in #748; raw data remains at
+`/shared/present/batch2/ab748/`.
+
+| Workload | A1 / A2 | B1 / B2 |
+| --- | --- | --- |
+| 1024 launches, s (three runs each) | 1.262 / 1.228 / 1.448; 1.296 / 1.237 / 1.383 | 1.344 / 1.356 / 1.355; 1.526 / 1.638 / 5.85 |
+| CALL64 fastest, ns | 3696 / 3876 | 3694 / 3669 |
+| CALL4096 fastest, ns | 4494 / 4662 | 4479 / 4475 |
+| SEND64 fastest, ns | 305 / 306 | 303 / 304 |
+| SEND4096 fastest, ns | 685 / 707 | 583 / 583 |
+| Pages, ns/op | 23630–26256 | 23599–26603 |
+
+The owner's reading is +6–9% launch cost, about +0.11 ms per launch; the
+5.85 s B2 launch was reported as an outlier and remains visible above. CALL,
+SEND64 and pages are unchanged; faster SEND4096 may be layout noise, not a
+claimed speedup. No individual bootstrap operation was profiled. This native
+run measures costs, not a new hardware TLS/destructor inspection.
+
+The owner accepted the launch cost on 2026-10-12. Initial-thread static TLS,
+avoiding its guarded reservation while keeping siblings guarded, is a
+much-later follow-up for launch-heavy shell scripts or native builds. No
+optimization is assigned by this result; see [technical debt](../../../technical-debt.md#tls-bootstrap-launch-cost).
 
 For the owner-native run, stage each exact head's matching kernel and initrd,
 then use the existing hands-free remote harness with these commands (launches
