@@ -1,9 +1,11 @@
 # FAT32 volumes
 
-Status: **tasks 1–2 merged (#740, #747); task 3 implemented for review.**
-The directory-validation fixes (#743 / fs #33) are merged. The owner accepted the
-raw-write contract below on 2026-10-12. The owner accepted task 3's binding on 2026-10-12 and assigned its implementation.
-Task 3 has read-only native views and explicit retirement; tasks 4–5 are unassigned.
+Status: **tasks 1–3 merged (#740, #747, #755); task 4 assigned 2026-10-12.**
+The directory-validation fixes (#743 / fs #33) and task 3's binding (#750) are
+merged. Task 4's binding is accepted with the clean-power amendment below;
+the owner authorized implementation after the seal-at-power replacement below.
+The baseline is captured. Task 5 remains unassigned. Task 4 qualifies
+only disposable scratch VirtIO images, never writes the owner's real ESP.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -223,7 +225,8 @@ The [pre-task baseline](../development/experiments/fat32-mount-baseline.md)
 records main `173f1321`. The [native mount reference](../devices/fat32-mounts.md)
 defines the implementation's protocols, browsing profiles, limits and lifetime.
 Configured npfs MOUNT authority and boot-long pool retention remain unchanged.
-The following accepted contract governs task 3; tasks 4–5 remain unassigned.
+The following accepted contract governs task 3; task 4 is assigned below and
+task 5 remains unassigned.
 
 ### Three accepted owner decisions — 2026-10-12
 
@@ -363,6 +366,157 @@ failed-reply/group ordering from executed cases. This is QEMU/debugger evidence;
 owner-routed native ESP checks remain later, read-only. No writes, new test
 harness, fault injection, generic mount CLI or task 4 work.
 
+## Task 4 mounted-write binding — accepted, 2026-10-12
+
+The [exact-main baseline](../development/experiments/fat32-mounted-write-baseline.md)
+uses `36bcd7e9`, fs `30f625a2` and userland `3daa2461`. This section settles the
+remaining task 4 binding. Decisions 1–2 are accepted unchanged; decision 3 is
+accepted with the owner's replacement clean-power contract below. Implementation
+is authorized; no new session-termination phase is required.
+The accepted ASCII profile, retained-object semantics, dirty marking, ordered
+flushes and explicit retirement above remain requirements.
+
+### Three accepted owner decisions — 2026-10-12
+
+1. **RW admission and authority: fixed instance mode, no upgrade in place.**
+   Add explicit RO/RW selection to `DISK_OPEN_FAT32`, independent of the
+   exact returned root rights. RW requires both DISK MOUNT and WRITE, qualified
+   write/flush support. Creating a new RW instance requires a clean/error-free
+   volume and full structural preflight. Exact RW reacquisition accepts its own
+   dirty mark and tracked held chains, preserving the existing domain/state; it
+   cannot reset failure or treat unexplained orphans as valid.
+   Requesting an RO root from an RW instance still requires RW admission authority;
+   it does not create an upgrade route. An existing RO instance makes an RW open
+   BUSY until explicitly retired. An existing RW instance may supply attenuated
+   RO views, all sharing its identity/state. No root or FILE authority upgrades a
+   mount, and no boot-ESP issuer gains write authority.
+
+   Bound controls have independently attenuable OPEN_ROOT, OBSERVE, WRITE, RETIRE
+   and publication-interval rights; their recorded root ceiling cannot widen.
+   OPEN_ROOT additionally requires control WRITE for mutation-capable root rights.
+   RO admission supplies neither WRITE nor interval rights and records an RO ceiling.
+   Native FILE WRITE and directory CREATE/REMOVE/WRITE_FILES retain their ordinary
+   checks. FAT's read-only regular-file attribute additionally refuses content
+   changes, resize, removal and rename/replacement of that object; this slice adds
+   no attribute-changing operation. Directory attribute bits confer no authority.
+   The scratch bootstrap uses an eligible RW disk opened before mounting, releases
+   its raw claim, then selects GPT/RW and delegates exact native roots/control.
+   It does not bypass whole-disk claim, disjoint npfs or NVMe admission policy.
+
+   The boot browser stays RO; writable installed bindings and the real ESP
+   remain outside this task.
+2. **Cross-call publication interval: mount-wide, owned by one process.**
+   A separate control right permits BEGIN/END. BEGIN returns a
+   non-reused interval identifier; another owner receives BUSY immediately.
+   The owner retains its ordinary data grants; the interval neither grants access
+   nor bypasses FILE/directory checks. All its sibling tasks share ownership;
+   children and delegated controls do not inherit it. Reads remain available and
+   observe each coherent completed operation. Other processes' mutations and sync
+   return BUSY. This serializes compare/stage/swap against other mutations, not
+   readers, and promises neither rollback nor multi-call atomic visibility.
+
+   Use an absolute, initially 30-second bounded lease, separate from the worker's
+   per-operation deadline. Repeated BEGIN does not extend it. END must name the
+   owner's identifier. Expiry or owner stop closes admission under that interval;
+   effects already submitted drain before another owner can begin. A mutation
+   admitted under an expired interval cannot silently execute outside it. A live
+   expired owner receives TIMED_OUT on further mutations until it explicitly
+   acknowledges END or obtains a new interval. Successful END permits subsequent
+   ordinary mutations; it neither removes staging names nor clears dirty state.
+   Closing the final control does not retire the mount; an abandoned interval ends
+   through its deadline/owner-stop rule, without revoking data grants.
+
+   Retain the existing storage-independent
+   [process control](../../include/kernel/object/process.h), not a raw process/VM
+   pointer, as owner identity. The BSP worker owns interval state, samples stop
+   through the existing short IF=0 handoff, and bounds retained lease records with
+   the mount's admission accounting. This avoids pinning execution storage until
+   a deadline. Ownership requires shared-process cooperation and explicit expiry
+   handling; it is not transferable.
+3. **Sync, uncertainty and clean power: durable calls, failed mount retained.**
+   Each successful mutation completes its ordered barriers and final
+   flush before returning. FILE/DIRECTORY sync may conservatively flush the whole
+   instance; control SYNC requires WRITE. Ordinary sync never clears the owned
+   dirty mark. Preflight capacity/budget/authority refusal has no media effects;
+   an unconfirmed write or flush returns OUTCOME_UNKNOWN and permanently freezes
+   that instance's data operations, including reads whose media may be inconsistent.
+   OBSERVE/recovery diagnostics remain available. Retain the first failure, phase,
+   sector, affected names, prepared images and held chains with extent exclusion.
+   There is no retry, repair, forced retirement or recovery by closing/reopening.
+
+   RETIRE remains BUSY with data references, an active interval or deferred cleanup.
+   After drainage, reclaim detached chains durably, clear only this mount's owned
+   dirty mark, flush that clear, and release state/exclusion only on known success.
+   Failure during dirty marking, reclamation or clean marking follows the same
+   terminal rule. A pre-existing dirty/error state is never cleared or admitted RW.
+
+   **Clean power: seal, do not retire — accepted 2026-10-12.** Hold user tasks,
+   drain admitted FAT operations and deferred work, then flush each mutated RW
+   mount. When it has no detached held chains, clear its owned dirty mark and
+   flush that clear without revoking views, handles or publication intervals.
+   Follow this with the existing npfs seal, NVMe shutdown and S5/reset. If power
+   fails and programs resume, the first subsequent mutation durably re-marks the
+   volume dirty before its first effect. When detached held chains remain, flush
+   but leave the dirty mark set for later mount/fsck reclamation; that condition
+   never refuses power. Only unresolved mutation failure blocks clean power under
+   this FAT policy. Force off/reboot and clean-only delegated POWER are unchanged.
+   RO mounts never change dirty bits, and no pre-existing dirty mark is cleared.
+   Normal-operation RETIRE retains its BUSY/drain/clean-retirement rule above.
+
+### Existing power sequencing and task 4 integration
+
+Inspected main `36bcd7e9`, userland `3daa2461`, 2026-10-12. The
+[power overlay](../kernel/power-overlay.md#shut-down-and-reboot) and
+[ACPI reference](../kernel/acpi.md#power-off-and-restart) match the code:
+[`acpi_power_run`](../../kernel/acpi/power.c) holds user execution with
+[`task_user_hold`](../../kernel/task.c); queued filesystem work and available
+cleanup drain; the [filesystem worker](../../kernel/fs/npfs.c) flushes/checkpoints
+and seals npfs; NVMe shuts down; then S5/reset follows. Failure unseals pools and
+releases held tasks; NVMe retirement is not undone. User holding does not terminate
+processes or close capabilities. Boot init starts spaces and exits; shell POWER,
+local overlay and power-button requests converge on the same ACPI worker.
+
+Task 4 inserts FAT drain/flush/owned-dirty handling before the existing npfs seal,
+using retained mount state for failure/resumption. The owner replaced the earlier
+stop-spaces amendment with this sequence; no session-termination redesign remains.
+
+### Implementation obligations
+
+The [raw writer](../../fs/include/pyxis_fs/fat32_write.h) still uses session-only
+creation receipts, cannot shrink and immediately reclaims replaced chains. Do not
+weaken that profile or use its receipts to authorize existing native objects.
+Add mounted-engine records with attached/detached state, current location, size
+and retained chains; the kernel owns genuine native IDs and references. Rename
+moves the source identity and replacement detaches a distinct victim. Held FILEs
+continue authorized reads/writes against their retained object; removed directories
+reject namespace mutation. Separate mutable directory generations from object IDs.
+
+Whole-volume mutation preflight must account for explicitly tracked mount-owned
+held chains as additional roots, without accepting unexplained orphan allocation
+or weakening the public checker. Free a detached chain only after its last data
+reference drains. Preflight backing/work/sector budgets before effects, charging
+prepared images and detached records to the existing aggregate mount limits;
+return LIMIT/NO_MEMORY rather than allocating unbounded plans. No per-file image
+copy or new journal is implied. Preserve real FAT length limits and genuine
+metadata validity; DOS-local timestamps still do not supply a valid UTC MTIME.
+
+Beyond-EOF writes and resize growth zero the entire exposed gap, including old
+slack; shrink discards the tail so later regrowth cannot expose it. Publish a
+smaller directory length before cutting/reclaiming a shrink tail. Growth and
+namespace edits retain the appropriate data/FAT/directory/FSInfo dependencies;
+complete multi-sector rename is hidden from live readers by the sole worker,
+without a crash-atomicity claim. Success updates records/generations only after
+confirmed publication. Preserve the shared reader, npfs/RAM semantics, BSP
+allocation/VM ownership, queued grant drainage and no caller pointer or held lock
+across disk waits.
+
+Implementation qualification repeats the baseline with preserved control binaries/
+images interleaved. Use scratch VirtIO media, mtools/fsck.fat cross-checks and
+interactive QEMU/GDB for held victims, zero gaps, aliases, detached directories,
+interval contention/expiry, sync, clean retirement and retained failed states.
+Daybreak's adversarial pass follows the implementation. No writes to the owner's
+ESP, new test framework, fault hook, klog line or task 5 work.
+
 ## Parked cross-cutting directions
 
 [Nested execution groups](nested-execution-groups.md) are not a prerequisite for
@@ -398,13 +552,13 @@ and mounted file I/O do not require its implementation.
   partition claims; qualify on disposable images, without whole-tree formatting.
   **After this task the owner can:** add and replace Pyxis-created files on a
   scratch FAT volume that Linux reads, without rebuilding that volume.
-- [x] **3. Native read-only mount and release — assigned 2026-10-12; implemented for review.** Kernel FILE/directory wrappers,
+- [x] **3. Native read-only mount and release — merged #755.** Kernel FILE/directory wrappers,
   shared extent registry, alias/object identity, claim exclusion, reference drainage
   and trusted ESP bootstrap/root delegation. Design the native mount/retire binding
   before code; no userspace scheme proxy or implicit mount authority.
   **After this task the owner can:** mount supported FAT32 and use ordinary `ls`/
   `cat`, then release all views so an authorized raw publisher can claim the extent.
-- [ ] **4. Mounted read-write operations and sync.** Deliver real native mutations,
+- [ ] **4. Mounted read-write operations and sync — assigned 2026-10-12; binding accepted, implementation authorized.** Deliver real native mutations,
   held-handle/zero-fill semantics, selected profile, exclusive publication interval,
   failed-state retention and the accepted dirty-bit/clean-retirement policy.
   **After this task the owner can:** edit authorized files, explicitly sync and
