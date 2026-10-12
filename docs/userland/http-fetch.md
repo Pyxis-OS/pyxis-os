@@ -64,7 +64,7 @@ Clients receive FILE authority, not trust-management or additional TCP grants.
 
 ## Library and authority
 
-`userspace/libhttp/http.h` declares the incremental GET interface and the
+`userspace/libhttp/http.h` declares the incremental GET/POST interface and the
 `http_fetch` snapshot collector, `http_body_release` and `http_result_status`. This is an application library, built as `libhttp.a`,
 outside the SDK runtime. Its parser dependency is the pinned
 [picohttpparser port](../../ports/picohttpparser/README.md), exported separately at
@@ -112,9 +112,12 @@ TLS transport, entropy and clock failures preserve their native status.
 stream. It follows no redirects. `http_stream_read` copies at most 4 KiB into a
 positive-capacity caller buffer; the engine owns fixed scratch, not body storage.
 There is no cumulative body allowance. Metadata retains the bounds below, and
-byte counters fail on integer overflow. The existing 30-second overall deadline
-(or an earlier caller deadline) still applies; longer transfers and cooperative
-provider service belong to [later tasks](../wip/native-http-requests.md#ordered-delivery-tasks).
+byte counters fail on integer overflow. A zero deadline selects 30 seconds; an explicit absolute deadline may be longer.
+DNS, connect, upload and response share it. Native waits remain at most 30 seconds;
+CONNECT is one bounded attempt, with no reconnect. Terminal transport failures
+remain failures. The snapshot collector and redirect bridge keep their existing
+30-second budget. Cooperative provider service belongs to
+[later tasks](../wip/native-http-requests.md#ordered-delivery-tasks).
 
 The caller retains `http_response`, the borrowed capabilities and any TLS runtime
 until `http_stream_close`. The response separates HTTP status from pending,
@@ -136,6 +139,40 @@ not make them streaming or make the provider responsive during OPEN.
 
 Qualification, configuration and measured allocation demand are recorded in the
 [task 1 experiment](../development/experiments/http-incremental-get.md).
+
+## Fixed-body requests
+
+`http_request_open` selects GET or POST and accepts copied header spans. POST
+borrows a native READ FILE and its exact frozen length, reading from offset zero
+in at most 4 KiB chunks. The caller keeps the file unchanged through OPEN and may
+release it afterwards. This layer provides no staging writer or freeze mechanism;
+those belong to the provider transaction task. A source size/authority failure
+occurs before connecting; later read failures retain `source_status`. Native
+FILE reads have no interruptible deadline; the engine checks time before sending
+again after a read.
+
+Request metadata is limited to 32 KiB on the wire and 256 fields including the
+engine's fields. Names must be HTTP tokens; values reject NUL, CR/LF and controls
+except HTAB. Case-insensitive duplicate names refuse. The engine owns Host,
+Content-Length, Connection and Accept-Encoding. Transfer/content encoding,
+Expect, trailers, upgrade and proxy connection controls are unsupported.
+GET can use caller fields too. Owned copies and upload scratch are erased on
+release; the library never logs request fields.
+
+The upload loop reads responses between send attempts. Final response headers
+stop an incomplete upload; a completely framed 4xx/5xx retains its body and
+completes normally. `request_started` means a send was attempted;
+`request_sent` and `upload_bytes` describe known local acceptance, never remote
+execution. A failure after starting may have an unknown remote outcome, even
+with zero reported bytes. There is no retry, redirect or replay in this API.
+Pending/incomplete TLS output is retired without close_notify; ordinary early
+responses remain readable. A read that tries TLS output while an application
+write is pending fails explicitly under the
+[accepted TLS policy](../wip/native-http-requests.md#task-2-accepted-tls-policy).
+
+[Task 2 qualification and costs](../development/experiments/http-fixed-post.md)
+cover local HTTP/HTTPS fixtures in nested QEMU. Provider FILE opens, libc and Lua
+still expose GET snapshots; they do not submit POST yet.
 
 ## Request and response policy
 
@@ -254,7 +291,9 @@ separates controlled QEMU results from source inspection. Protocol references:
 | Each chunk size/extension line | 8 KiB |
 | Body allowance across an open chain | 16 MiB |
 | Shared body-storage reservations | 64 MiB |
-| Overall fetch time | 30 seconds, capped by an earlier caller deadline |
+| Snapshot/redirect fetch time | 30 seconds, capped by an earlier caller deadline |
+| Incremental request time | 30 seconds by default; caller absolute deadline may be longer |
+| Request headers, including request line and terminator | 32 KiB; 256 fields including generated fields |
 
 Chunk framing is decoded incrementally with checked sizes, exact CRLF delimiters
 and bounded size/extension lines. It has no cumulative framing-overhead allowance.
