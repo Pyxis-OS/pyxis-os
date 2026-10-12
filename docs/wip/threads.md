@@ -294,6 +294,39 @@ no-op locks, cancellation, robust owner-death recovery or scheduling promises.
 Detached threads require a separate bounded collection contract before their
 API or a consumer requiring it is enabled.
 
+### Gate 8 contract (owner accepted, 2026-10-12)
+
+1. **Libc-owned creation and collection.** A process-local generational registry
+   reserves one of the accepted 64 records before publication, including the
+   initial record. Libc-created siblings own their guarded stack, TLS context
+   and native completion observer until one joiner observes retirement and
+   collects them. Initial/raw-native joins are refused; self/equal and initial
+   thread exit remain available. Libc retains only supplied threads, memory and
+   clock grants, never widening caller-only startup SET_FS authority. Ambiguous
+   CREATE publication terminates the process without retry or premature cleanup.
+2. **Explicit synchronization profile.** Process-private normal/recursive
+   mutexes, conditions (including monotonic attributes), unnamed semaphores,
+   once and keys use real native address parking. C11/default pthread absolute
+   UTC deadlines are checked against the existing clock and translated to
+   monotonic parking; missing time/authority and overflow fail honestly. Detach,
+   cancellation, robust/process-shared objects, scheduling and C11 yield are
+   refused. Enable C++ threads only after exception state, guards, fallback
+   allocation and unwinder audit, including real rwlocks for the latter.
+3. **Preserved close and pointer lifetime.** Admit descriptor operations into
+   stable libc storage without retaining extra native grants or postponing final
+   native CLOSE. Preserve uncertain-close rules. Serialize FILE operations;
+   callers exclude new use during FILE/DIR destruction, with same-DIR operations
+   caller-serialized. Internal cwd/environment users take owned snapshots;
+   borrowed results require caller exclusion through their use. Registry/cache
+   guards do not span blocking I/O, allocation growth or callbacks. Timezone
+   snapshots retain escaped designations through process lifetime.
+
+The gate 7 baseline at `ce8c53d1` was captured before gate 8 code on one/four
+CPU nested QEMU using matching successful CI bundles; raw commands, hashes and
+captures remain local. Native gate 7 launch cost is accepted and its static
+initial-TLS optimization remains a much-later follow-up. Gate 8 does not deliver
+consumer adapters or introduce POSIX-shaped kernel operations.
+
 ## Libc safety gate
 
 | Shared state | Work required before ordinary threaded consumers |
@@ -305,8 +338,10 @@ API or a consumer requiring it is enabled.
 | Time/timezone/rand | Protect generator/cache publication and borrowed timezone strings; document static time-result lifetimes and provide safe reentrant paths. |
 | C++ runtime | Replace disabled-thread exception state, guards/once, fallback allocator and unwinder assumptions before enabling libc++ threads. |
 
-Immutable startup getenv values and the permanent C-only locale need no invented
-mutable state or new locks. Synchronizing syscalls alone does not protect libc
+The permanent C-only locale needs no mutable-state locks. The existing
+setenv/unsetenv and working-path overrides require synchronized publication and
+owned internal snapshots; borrowed public results retain their documented
+caller-exclusion rules. Synchronizing syscalls alone does not protect libc
 userspace state, and synchronizing malloc alone does not protect FILE lifetime.
 
 ## Placement and stack limits
@@ -366,7 +401,7 @@ merely completion of task 2.
 7. [x] **Static TLS and errno (#748).** Compiler/LLD template/bootstrap, SDK/startup, per-thread errno and runtime keys/destructors are implemented and build/QEMU qualified. The matching compiler is published and CI passed before the latest dependency rebase. Native launch cost (+6–9%, about +0.11 ms/launch) is accepted by the owner, 2026-10-12; IPC/pages are unchanged. Initial-thread static TLS is a much-later launch-heavy-workload follow-up, not gate 8 work; see [qualification](../development/experiments/threads-task7/README.md).
 
    Owner can inspect distinct language TLS/errno and ordinary thread destructors on native siblings.
-8. [ ] **Thread-safe libc and C11/pthread profile — assigned 2026-10-12; baseline and pre-code decisions next.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
+8. [ ] **Thread-safe libc and C11/pthread profile — assigned 2026-10-12; decisions accepted and baseline captured, implementation in progress.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
 
    Owner can use the documented thread profile and shared allocation/I/O, without unsupported detach/cancellation promises.
 9. [ ] **Separate consumer tasks.** SDL workers/timers then audio callbacks; libuv pool, Hax and Go each retain their own adapter/qualification scope.
