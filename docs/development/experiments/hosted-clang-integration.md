@@ -62,6 +62,18 @@ optional file inputs use the real copied-buffer backend. Reached changed target
 TUs compile. Both full links, image/span sizes and interactive compilation/error
 qualification remain pending; no completion or compiler-performance claim.
 
+The reached links require `log2`, `log2f`, `logb`, `log1p`, `erf`, `exp2` and
+`lround`. [Userland #242](https://git.internal/PyxisOS/pyxis-userland/pulls/242)
+extends the existing FP-exception-only musl subset from its exact cached
+`0784374d` source, with required `ilogb` and paired `erfc`; no new download.
+The ordinary libc build passes. After main advanced with merged HTTP work,
+qualification rebased on `e5dc4b2c`, userland `b0c0c0a`, ports `f93becb9`.
+Ordinary SDK/kernel and fresh ports/userland image builds pass, including all
+four bundle verifiers. Those later ABI/kernel changes are separate from this
+compiler task; the earlier OS baseline does not establish their cost or source
+equivalence. Setup-only missing Kconfig Python module was corrected before the
+successful build. The complete final-header cross-build is in progress.
+
 Full configuration and build logs remain local in the fork worktree's `build/`.
 No compiler pin is adopted yet. A matching container is required only when that
 new fork pin is adopted; the final SHA/build instructions follow qualification.

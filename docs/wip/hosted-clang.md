@@ -24,32 +24,20 @@ task 4 is assigned to delta (2026-10-12), with its qualification defaults accept
 
 ## Process boundary
 
-**Inspected in the pinned fork** (LLVM `49e2c1a1518b`): `-fintegrated-cc1 -c`
-with one source and integrated assembly runs cc1 in-process.
-`clang/lib/Driver/Driver.cpp:5562` disables integration for multiple jobs or
-process statistics, so source-to-executable and multiple-source invocations
-still launch cc1 externally. `clang/lib/Driver/ToolChains/Pyxis.cpp:96` creates
-an external LLD `Command`; `-fuse-ld=lld` does not embed the linker. The first
-completion keeps compilation and native LLD launch separate.
-
-The driver launching LLD or external cc1 requires
-[nested execution groups](nested-execution-groups.md), a parked required direction
-for contained descendant execution. It does not change the accepted first
-completion: the caller compiles one source and separately invokes LLD.
+**Inspected in the current fork:** default integrated cc1 and integrated assembly
+run one source `-c` in-process. Multiple jobs or process statistics disable cc1
+integration; the Pyxis toolchain constructs an external LLD command rather than
+embedding LLD. The native fork already disables child crash helpers and recovery:
+a fatal compiler/library fault terminates the process. Task 4 keeps these policies.
 
 **Owner requirement (2026-10-12), not an assigned design:** Clang must eventually
 invoke LLD itself (`clang hello.c -o hello`). Task 5 or a follow-up must provide
 that through declared launch grants, the
 [native command-execution core](native-command-execution.md) and the
 [nested execution groups direction](nested-execution-groups.md), never a wrapper.
-Task 4 retains its no-launcher profile.
-
-`lldMain` in `lld/include/lld/Common/Driver.h` is the later library-entry route;
-embedding must respect `canRunAgain`, context cleanup and fatal-exit containment.
-Integrated cc1 enables signal-based crash recovery
-(`clang/tools/driver/driver.cpp:384`). The native adaptation must make faults
-terminate the process, without continuing after a fatal compiler/library failure.
-This is not permission to add crash helpers or start embedding work.
+Task 4 retains its no-launcher profile; first completion still permits separately
+launching LLD. General multi-job execution and reusable embedded compilation
+remain later work.
 
 ## Parallel delivery tasks
 
@@ -143,7 +131,8 @@ are in [fork #7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7)
 against `pyxis-23.1.3`; local closure qualification can use the
 current compiler first. Adopting that new fork pin into the single installed
 compiler/SDK pin requires the owner to build/push its matching image before parent
-CI. No adoption branch or new fork commit is ready yet: delta will provide the
+CI. Fork #7 is published; an adoption branch and qualified final source head
+are not ready yet. Delta will provide the
 exact published SHA, adoption branch and `podman build`/`podman push` commands
 when ready, rather than requesting a speculative rebuild now.
 
