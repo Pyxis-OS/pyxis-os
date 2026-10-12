@@ -77,7 +77,8 @@ setup, pages has one sample/boot. B pages are higher in both four-CPU pairs
 higher. These shifts are recorded, not accepted native costs. Four-CPU host
 load varied with unrelated VMs, left untouched; no unrelated VM was observed
 in the one-CPU snapshots. No causal attribution or speedup is established.
-Owner-native interleaved A/B is required before accepting a steady cost.
+The owner-native follow-ups below found no attributable native regression;
+these nested shifts remain unattributed.
 
 Source inspection separates startup from timed work: libc now queries/copies
 supplied THREADS and CLOCK grants and establishes managed identity at startup,
@@ -172,45 +173,55 @@ summaries' median ms per256-message pass, not single-message latency percentiles
 The CALL64 floor is3851–3859ns/round trip and SEND64 admission floor306–307ns/send;
 CALL4096 reaches4611–4618ns apart from B1's5230ns minimum. These are minimum
 batch means. Pages/launch and SEND4096 admission are unchanged within variation;
-small-message batch medians are higher in both B cycles. The shift is not
-dismissed as noise or accepted as a steady cost.
+the initial small-message batch medians were higher in B1/B2. Those observed
+values are preserved as variance in the complete run set below.
 
-**Inspected hot paths:** linked ipcbench `.text` has all9411non-relocated bytes
-identical within its10383-byte instruction block at `0x400000`. Native
-endpoint/clock blocks match outside relocations; memcpy/memset's1063bytes match.
-CALL invokes native endpoints and copies; the receiver receives/copies/replies.
-SEND calls native sends, with a DRAIN control CALL per8messages (32per pass).
-Receipt release is native `syscall_close`, not libc descriptor close. No new
-lock, thread-self, descriptor or allocation call executes in these loops.
-All sample reporting happens **after all timed passes have finished**, so FILE locking is
-neither inside timing nor between passes. Successful kernel syscall-entry
-instructions/spills match; its scheduler correction is only after rejected entry.
+### Crossed and reverse-order follow-ups
 
-**Changed state, not a percentage attribution:** B runtime retains one extra
-CLOCK READ handle in each receiver (no THREADS/SLEEP authority is supplied).
-Accounting for the common retained TLS and allocator MEMORY grants, source
-reconstruction predicts DRAIN's receipt at slot3 and data receipts at A slot7
-versus B slot8: eight versus nine entry tests in the guarded scan from slot0.
-This predicts256extra tests per pass; it is not a live table/count measurement. Standalone
-CALL receiver receipts still select slot3 in both; the sender's four-reply-slot
-reservation can scan farther depending on its startup grants. Indexed handle
-lookup is unchanged. This corrects the narrower earlier assertion that unchanged
-instructions imply no added timed work: retained grants can add scan work.
+Owner results, 2026-10-12 ~17:40, same ThinkPad/artifacts/setup. After the
+initial A1/B1/A2/B2, both crossed configurations were repeated; the final pure
+configuration order was **B3 then A3**. All labelled captures are retained here,
+including both numbered repetitions of each crossed configuration. Across the
+complete raw run set, all 40 IPC captures contain 100 verified timed passes and
+FINAL 0/complete: 4,000 timed passes, with no exclusions.
 
-B also adds27792executable bytes and7152writable-memory bytes to ipcbench,
-moving helpers (endpoint block `0x410420` to `0x4170b0`). Fresh receiver setup,
-allocation and cleanup occur outside each interval but can alter placement/cache
-state for the next pass. Scan, layout and background-userland contributions to
-the native percentages remain unmeasured; none is a proven cause. An unsupported
-borrowed-clock shortcut would weaken retained-grant lifetime, and a speculative
-reservation optimization is not applied to conceal the regression.
+Cells remain median ms per 256-message pass. `AkBi` means A kernel/B initrd;
+`BkAi` means B kernel/A initrd. These use the original ABI-compatible artifacts.
 
-The bounded next native diagnostic uses the **old ABI-compatible artifacts**:
-kernel A + initrd B, then kernel B + initrd A; run only CALL64/SEND64 with the
-existing256messages/100rounds commands. A shift following initrd B narrows the
-cause to userland/state/background activity; following kernel B narrows it to
-kernel effects; an interaction remains possible. Do not cross these old images
-with the subsequent completion ABI. No source probe or profiling is required.
+| Capture | CALL64 completion | CALL4096 completion | SEND64 completion | SEND64 admission | SEND4096 completion | SEND4096 admission |
+| --- | --- | --- | --- | --- | --- | --- |
+| XAkBi1 | 1.648 | 2.387 | 0.577 | 0.132 | 1.282 | 0.270 |
+| XAkBi2 | 1.346 | 2.100 | 0.545 | 0.095 | 0.973 | 0.270 |
+| XBkAi1 | 1.401 | 2.025 | 0.531 | 0.094 | 1.039 | 0.271 |
+| XBkAi2 | 1.311 | 2.481 | 0.493 | 0.116 | 1.130 | 0.269 |
+| B3 | 1.427 | 2.143 | 0.451 | 0.092 | 1.017 | 0.263 |
+| A3 | 1.384 | 2.331 | 0.535 | 0.111 | 1.232 | 0.260 |
+
+All follow-up page and launch samples:
+
+| Capture | Pages ns/operation, all 3 samples | 1024 launches wall s, all 3 samples |
+| --- | --- | --- |
+| XAkBi1 | 26546.7 / 26020.6 / 23824.2 | 1.499 / 1.438 / 1.462 |
+| XAkBi2 | 26044.5 / 26112.1 / 25987.5 | 1.663 / 1.588 / 1.462 |
+| XBkAi1 | 25541.5 / 24520.2 / 26081.9 | 1.733 / 1.775 / 1.885 |
+| XBkAi2 | 26168.7 / 26006.1 / 23758.7 | 1.662 / 1.694 / 1.626 |
+| B3 | 26453.8 / 25900.6 / 25927.1 | 1.472 / 1.557 / 1.593 |
+| A3 | 26272.2 / 23763.9 / 26829.3 | 1.735 / 1.807 / 1.754 |
+
+**Conclusion (owner, 2026-10-12): no attributable native regression from gate 8.**
+Neither crossed configuration reproduced the earlier shift; pure B3 gave the
+best SEND64 completion at 0.451 ms, compared with A3's 0.535 ms. Pure A samples span
+0.505–0.578 ms and pure B 0.451–0.742 ms. Floors, pages and launch are unchanged
+within observed variation. B1/B2 remain observed variance rather than a property
+of the change. This establishes neither a speedup nor a fixed correction factor.
+Nested-QEMU shifts remain unattributed. Attribution is closed; no optimization
+or further profiling was made or assigned.
+
+The completed source/linked review found no added libc lock/thread-self/descriptor
+operation in ipcbench's timed loops. Reporting runs after all timed passes;
+successful syscall-entry instructions/spills match. Retained grants and helper
+layout differ, but their timing contribution was not measured and is not a
+cause assigned to the earlier variance.
 
 Userland #236 is now rebased onto `62da3399` (merged completion helpers), at
 `21cf935c`; #756 also includes current main's merged #758 completion ABI. The
