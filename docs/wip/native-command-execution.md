@@ -1,8 +1,8 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
-and userland #228. Task 2 assigned to Codex alpha 2026-10-12; baseline build
-captured, implementation awaits the exceptional lifetime decision below.**
+and userland #228. Task 2 assigned to Codex alpha 2026-10-12; the exceptional
+lifetime decision is accepted and implementation is authorized.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
@@ -275,7 +275,7 @@ namespace/provider/credential reachability remains the trusted caller's audit.
 Cancellation/error retains captures and observers through actual process (and,
 for the trusted fresh-group backend, group) retirement.
 
-**One open decision; recommended default, not accepted:** when direct launch
+**Exceptional lifetime, accepted by the owner 2026-10-12:** when direct launch
 returns OUTCOME_UNKNOWN without an observer, return an owned cleanup-unconfirmed
 record and retain the captures. Refuse normal release/replay: direct capture
 cannot prove retirement, so the quarantined record remains for the caller's
@@ -286,8 +286,8 @@ group interface is added in task 2.
 
 The [single launcher wrapper](../../userspace/lib/launcher.c) clears the child
 handle on uncertainty, and [task 1's job record](../../userspace/libc/job.c) is
-not returned on failed launch. The no-replay rule is accepted; the capture
-owner's exceptional disposition above needs the owner's answer before code.
+not returned on failed launch. Both the no-replay rule and the capture owner's
+exceptional disposition above are accepted. Task 2 implementation is authorized.
 
 ## Required descendant follow-up
 
