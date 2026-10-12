@@ -25,7 +25,8 @@ the exported SDK manifest records dirty userland and filesystem inputs.
 
 Kernel source builds require the pinned native filesystem format library.
 `make -j16 fs-tools` builds `build/fs-tools/libnpfs-format.a`,
-`mkfs.npfs`, `fsck.npfs`, `npfs-inspect`, `libfat32-read.a` and `fat32-inspect`.
+`mkfs.npfs`, `fsck.npfs`, `npfs-inspect`, the FAT32 reader/writer archives and
+`fat32-inspect` / `fat32-write`.
 The [FAT32 inspector](../../fs/docs/fat32-inspect.md) reads explicitly selected
 GPT media without mounting or changing it; the shared engine has no allocator or
 kernel dependencies.
@@ -77,7 +78,8 @@ the checked-out revision or dependency pins.
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
-linker support, the pinned target `libnpfs-format.a` and `libfat32-read.a`,
+linker support, the pinned target `libnpfs-format.a`, `libfat32-read.a` and
+`libfat32-write.a`,
 and their public headers and licenses
 into `build/sdk`. `make userspace` builds applications against that
 SDK and the Lua, HTTP-parser and TLS libraries exported by `make ports`. Ports consumes only the SDK,

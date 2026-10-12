@@ -68,6 +68,7 @@ case "${1:-}" in
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
     install -C -m 644 build/npfs-sdk/libnpfs-format.a "$sdk/sysroot/usr/lib/libnpfs-format.a"
     install -C -m 644 build/fat32-sdk/libfat32-read.a "$sdk/sysroot/usr/lib/libfat32-read.a"
+    install -C -m 644 build/fat32-sdk/libfat32-write.a "$sdk/sysroot/usr/lib/libfat32-write.a"
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
     # tlsf.h carries the complete upstream license; do not export its API.
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
