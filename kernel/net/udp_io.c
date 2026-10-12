@@ -84,7 +84,9 @@ static void complete_io(struct udp_io *call, enum call_status status)
   call->state = IO_DONE;
   struct task_wait *wait = call->wait;
   call->wait = NULL;
-  task_wait_wake(wait);
+  if (wait) {
+    task_wait_wake(wait);
+  }
   /* Caller may immediately consume/reuse this slot after the lock is released. */
 }
 
