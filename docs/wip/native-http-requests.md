@@ -26,6 +26,15 @@ storage are outside this first milestone.
 HTTP/TLS stay in userspace; any shared stream/readiness contract is generic,
 with no HTTP-shaped or POSIX-shaped kernel calls.
 
+**Pyxis must be able to hit good network targets overall in the future.**
+End-to-end HTTP throughput should track the native TCP path. The ThinkPad xfer
+measurements of 2026-10-09 (70.5 MiB/s send, 85 MiB/s receive) are the current
+[reference measurement](../development/network-throughput.md), **not a contract**.
+Track the HTTP/TCP gap with each relevant change. The owner accepted task 3's
+native whole-GET cost (+18%, 14.3 → 17.2 ms) on 2026-10-12;
+[measurements](../development/experiments/http-prepared.md) and
+[revisit points](../technical-debt.md#http-provider-throughput) remain explicit.
+
 ## Inspected starting point
 
 Inspected main `7db4cb31`, userland `2bc56bf4`: [libhttp](../userland/http-fetch.md)
@@ -314,7 +323,7 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   completion/TLS steps and nonblocking receiver collection. The 205 correction,
   request-scoped GET fields and read-only JSON aliases are included.
   [Implemented contract and limits](../interfaces/http-transactions.md);
-  [QEMU qualification and matched costs](../development/experiments/http-prepared.md).
+  [QEMU qualification and native/nested matched costs](../development/experiments/http-prepared.md).
   One active exchange per process is shared by aliases and clients; provisioning/
   concurrency is deferred in [admission debt](../technical-debt.md#http-shared-instance-admission).
   DNS entropy (3 s), TLS entropy callbacks (5 s), capability/service handoffs

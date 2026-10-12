@@ -1,4 +1,4 @@
-# Prepared HTTP transactions: QEMU qualification
+# Prepared HTTP transactions: qualification and costs
 
 2026-10-12, nested KVM, Q35 `-cpu max -smp 4 -m 2G`, HPET, UTC RTC,
 VirtIO net/user networking and entropy, no HDA. Disposable local fixtures at
@@ -13,7 +13,7 @@ validate STATUS fields, without changing the timed snapshot/direct-POST paths. B
 `9bd3d66d`/`62da3399` measurements are retained locally; the table refreshes the
 comparison after the managed-libc merge. No compiler-container rebuild.
 
-## Matched cost runs
+## Nested-QEMU matched cost runs
 
 Separate baseline/initial implementation/baseline/final implementation boots
 (A1/B1/A2/B2), same configuration, fresh OVMF variables. No task-owned build or
@@ -48,10 +48,42 @@ about 35–42 microseconds/read. Source inspection shows readiness/BSP/timer wor
 when the next READ is not queued at TRY, replacing the old blocking RECEIVE loop;
 this is not a measured per-function attribution. The cooperative loop is retained
 for deadline/network/status progress. No generic timekeeping or wait-worker
-optimization is included. Revisit after native evidence, without inferring native
-throughput from this nested-QEMU cost.
+optimization is included. The native comparison below measures a smaller regression; nested-QEMU cost
+does not predict native throughput.
 
-## Qualification and limits
+## Native ThinkPad A/B
+
+Owner-provided results on [#765](https://git.internal/PyxisOS/pyxis-os/pulls/765),
+2026-10-12 about 22:30: ThinkPad on AC, Ethernet, PXE; each revision booted its
+own kernel and initrd. A is main `4366eb28`; B is #765's `98b51307` lineage with
+userland #240. The fixture is the same 1 MiB iobench file served by
+`python3 -m http.server` on horse over the LAN. Command:
+`iobench read http://192.168.0.213:18080/fixed --rounds 5`.
+Five byte-verified samples per boot; order A0 (already running), B1, A1, B2, A2.
+Ranges are minimum–maximum. Raw files remain at
+`horse:~/xf/765{A0,A1,A2,B1,B2}`; the table is the posted native summary,
+not a new run by this task.
+
+| Boot | OPEN median (range), ms | Payload reads median (range), ms | Whole GET median, ms | MiB/s |
+| --- | --- | --- | --- | --- |
+| A0 | 12.375 (11.92–13.46) | 1.862 (1.85–1.99) | 14.289 | 70.0 |
+| A1 | 12.244 (12.08–12.45) | 2.231 (2.03–2.48) | 14.693 | 68.1 |
+| A2 | 12.275 (11.98–13.66) | 2.008 (1.91–2.11) | 14.310 | 69.9 |
+| B1 | 12.569 (12.15–12.63) | 4.638 (4.63–4.67) | 17.243 | 58.0 |
+| B2 | 12.617 (12.04–14.31) | 4.597 (4.58–4.61) | 17.265 | 57.9 |
+
+OPEN is unchanged. Buffered payload reads add about 2.6 ms/MiB, roughly
+10 µs per 4,088-byte READ (257 reads); the whole GET costs +18%
+(14.3 → 17.2 ms, about 70 → 58 MiB/s). Source inspection attributes the extra
+work to cooperative readiness, BSP and timers when no READ is queued at TRY;
+this is not a measured per-function profile. The owner accepted the cost on
+2026-10-12, with the [throughput obligation and revisit points](../../technical-debt.md#http-provider-throughput).
+The approximately 220 MiB/s buffered-read ceiling exceeds the current native TCP
+reference (70.5 MiB/s send, 85 MiB/s receive, 2026-10-09); expecting larger
+HTTP downloads to remain network-bound is an inference, not a measured result
+or throughput contract. Track the HTTP/TCP gap with each relevant change.
+
+## QEMU qualification and limits
 
 Plain HTTP manual native-grant checks passed:
 
@@ -113,6 +145,6 @@ published head.
 The [interface](../../interfaces/http-transactions.md#service-and-limits) retains
 synchronous DNS randomness (3 s) and TLS entropy callbacks (5 s), additionally
 bounded by the request deadline. STATUS/ABORT cannot run during those calls,
-capability/service handoffs, allocation or cryptography. No native run or
-multi-GB transfer is claimed in task 3; final end-to-end multi-GB shell/Lua delivery
+capability/service handoffs, allocation or cryptography. Native coverage is the GET cost comparison above, not the full functional
+matrix. No multi-GB transfer is claimed; final end-to-end multi-GB shell/Lua delivery
 belongs to the later adapter/coordinator tasks.

@@ -1426,6 +1426,17 @@ for that boot. The owner must confirm the generator and startup path natively (Q
 handshakes; controlled connections show fit for the measured roots and peers, not all chains or suites, and deadline checks between operations do not preempt
 CPU-bound cryptography. Revisit with demonstrated endpoint or scheduling demand and bounded ownership, never weakening verification or silently raising budgets.
 
+## HTTP provider throughput
+
+**Pyxis must be able to hit good network targets overall in the future.**
+The cooperative provider adds about 10 µs per 4,088-byte buffered READ from
+readiness, BSP and timer work when the next READ is not queued at TRY time;
+the native 1 MiB GET is 18% slower (14.3 → 17.2 ms). The owner accepted this
+cost on 2026-10-12. Revisit before HTTP-heavy consumers (package fetching, Git,
+the Claude harness), and whenever end-to-end HTTP throughput falls measurably
+short of native TCP; track the gap with each relevant change.
+[Native A/B and nested results](development/experiments/http-prepared.md).
+
 ## HTTP provider responsiveness
 
 The [prepared provider](interfaces/http-transactions.md#service-and-limits) uses

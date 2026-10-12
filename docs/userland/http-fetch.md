@@ -15,6 +15,15 @@ before completion. This does not yet change libc FILE opens or shell redirection
 The stock JSON aliases preserve read-only authority; POST requires explicitly
 provisioned private staging and separate write authority.
 
+**Pyxis must be able to hit good network targets overall in the future.**
+End-to-end HTTP throughput should track the native TCP path. The ThinkPad xfer
+measurements of 2026-10-09 (70.5 MiB/s send, 85 MiB/s receive) are the current
+[reference measurement](../development/network-throughput.md), **not a contract**.
+Track the HTTP/TCP gap with each relevant change. The owner accepted task 3's
+native whole-GET cost (+18%, 14.3 → 17.2 ms) on 2026-10-12;
+[measurements](../development/experiments/http-prepared.md) and
+[revisit points](../technical-debt.md#http-provider-throughput) remain explicit.
+
 ## Use and startup
 
 Build with `make -j16 image`, then boot with networking explicitly enabled:
