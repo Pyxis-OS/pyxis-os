@@ -751,7 +751,7 @@ static void complete_job(struct npfs_job *job)
     enum call_status status = job->status;
     if (job->operation == NPFS_READ) {
       completion->progress = job->progress;
-      completion->progress_known = status != CALL_OUTCOME_UNKNOWN;
+      completion->progress_known = job->progress || status != CALL_OUTCOME_UNKNOWN;
       if (status == CALL_OK || job->progress) {
         struct file_read_reply reply = {.read = job->progress};
         memcpy(output, &reply, sizeof(reply));

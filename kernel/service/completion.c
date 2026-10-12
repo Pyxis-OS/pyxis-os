@@ -267,7 +267,6 @@ void completion_admit_execute(struct completion_admit_request *request)
     start_backend(operation);
     object_cleanup_leave(previous);
   }
-  bsp_request_complete(&request->request);
 }
 
 static enum call_status source_status(struct kernel_object *object, uint64_t rights,

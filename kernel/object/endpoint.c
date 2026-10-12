@@ -445,7 +445,8 @@ enum call_status endpoint_completion_commit(struct native_completion *operation)
   lock_endpoint(state);
   KASSERT(record->state == DELIVERY_FILLING && record->completion == operation &&
       !record->completion_committed);
-  enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED : CALL_OK;
+  enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
+      deadline_expired(operation->deadline_ns) ? CALL_TIMED_OUT : CALL_OK;
   if (status == CALL_OK) {
     KASSERT(operation->correlation_id > state->last_completion_id);
     state->last_completion_id = operation->correlation_id;
