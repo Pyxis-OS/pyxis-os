@@ -234,7 +234,9 @@ userland/fs are clean. Kernel SHA256
 `043fb05d4cfb2534307cd3fdc08fb16db5d624781a0100a48e0084cf5a368846`, normal initrd
 `05694c5194be337381cd8d8b41a5a45f925b53f87af87239fb447cfedf072f17`.
 Earlier costs remain pre-managed-libc measurements, not an isolated attribution
-against the new runtime. Functional rechecks use the rebuilt current image.
+against the new runtime. Functional rechecks use the rebuilt current image: binary pipelines on one CPU,
+local mux and remote plain sessions on four, with Lua error/GC recovery and
+libuv FILE/PIPE/detach checks. Earlier split/remote-mux/GDB evidence predates this dependency rebase.
 
 Interactive QEMU 10.2.2 q35/nested KVM, host CPU, 512 MiB, one/four CPUs,
 fresh OVMF variables, read-only FAT VirtIO boot disk, VirtIO RNG and PS/2 input.
@@ -259,8 +261,8 @@ manifest fixtures stay in the ignored qualification archive, not the product.
 | libuv failed spawn / live close | Inactive observerless handles close cleanly; independent WAIT confirms EXITED/9 after detach without an exit callback or hidden stop. |
 | Local mux panes, remote plain shell and remote mux | Native captures/pipelines run; remote error/GC recovery works; final session drain completes. |
 
-Read-only GDB inspection confirms exactly memory/threads/clock/random for a
-captured stage, directional PIPE stdout/stderr, no stdin/roots/cwd/namespace and
+Read-only GDB inspection confirms the selected memory/threads/clock/random
+inventory before the normal intrinsic caller-only FS bootstrap, directional PIPE stdout/stderr, no stdin/roots/cwd/namespace and
 owned `X=owned` environment. It also sees a distinct empty RAM leaf while Lua is
 alive, normal leaf removal after retirement, local pane subtree removal after
 confirmed close, and zero Remote provisioning children after group cleanup.
