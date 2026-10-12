@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 facets/lifetime accepted; native completion prerequisite delivered for review, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 implementation in progress; native completion prerequisite merged, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -186,7 +186,7 @@ phase left must be reported; task 3 cannot claim responsive status/abort through
 ## Native completion accepted contract
 
 All three defaults accepted and bounded implementation assigned by the owner,
-2026-10-12; the prerequisite is delivered for review:
+2026-10-12; the prerequisite is merged in #758:
 
 1. Copied submission through existing native authority, with operation/result,
    receiver delivery, returned-handle capacity and cleanup admission reserved
@@ -207,6 +207,38 @@ provider forwarding are excluded. See the [completion ABI and limits](../interfa
 [QEMU qualification/cost finding](../development/experiments/native-completion.md).
 The broader completion direction stays parked. Provider/DNS/TLS cooperative
 integration and the HTTP fix below remain task 3 work.
+
+### Task 3 receive contract — accepted 2026-10-12
+
+Source inspection during implementation, 2026-10-12: receiver READABLE reserves
+nothing. A queued CALL can expire between `wait_many` and `RECEIVE`; ordinary
+RECEIVE then waits indefinitely if the queue is empty. The provider cannot
+guarantee network/deadline/status/abort progress through that wait. This is a
+new interface decision, not part of the accepted native completion scope.
+
+**Option A accepted by the owner, 2026-10-12: add `ENDPOINT_TRY_RECEIVE` and a libpyxis helper.** Header-only
+request and the existing endpoint packet. Same owning process and
+`HANDLE_TRANSPORT_RECEIVE` authority, selection/receipt/grant semantics,
+CANCEL/RETIRE priority and retryable native-completion collection as RECEIVE.
+An empty open receiver returns `CALL_WOULD_BLOCK` without parking or installing
+grants; a closed receiver returns `CALL_ENDPOINT_CLOSED`. Readiness still
+reserves nothing. The provider waits with `wait_many`, then collects with TRY
+and continues its other work if readiness became stale. Ordinary RECEIVE stays
+unchanged. Qualify empty/closed cases, queued-message expiry and a provider's
+receiver/TCP/deadline progress in QEMU. This needs a narrow kernel/ABI change.
+
+The provider loop uses TRY after readiness, never ordinary blocking RECEIVE.
+This adds no threads, reservations or native completion operation. Implementation
+and QEMU qualification are assigned within task 3; deadline-bounded RECEIVE is
+not selected.
+
+Other synchronous phases retained by this first scope: DNS ID/port randomness
+(up to three seconds), TLS entropy callbacks (up to five seconds), clock and
+UDP open/cleanup service handoffs, allocation and local cryptographic work.
+Status/abort cannot run during those calls; no asynchronous RANDOM operation or
+fabricated entropy-WANT result is included. Trust/PSA setup occurs before service
+publication. The provider uses cooperative HTTP/TLS steps; the legacy blocking
+libhttp APIs remain for compatibility callers, not for its OPEN/COMMIT handlers.
 
 **Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
 fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
@@ -296,8 +328,8 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   fixtures with a body larger than the resident buffer, without an HTTP port.
 - [ ] **3. Prepared provider transactions and responsive stream service.**
   The object/rights/lifetime/inheritance review and native completion contract
-  are accepted; the bounded kernel prerequisite is delivered for review.
-  Provider integration remains pending.
+  are accepted; the bounded kernel prerequisite is merged. Provider integration
+  is in progress, including the accepted nonblocking receive operation above.
   Deliver body/control/response/observation grants, freeze, status, abort,
   private storage, credential cleanup and retirement. Start with one active
   exchange per provider instance and explicit admission failure. An instance is
