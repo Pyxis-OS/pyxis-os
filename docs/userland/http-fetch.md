@@ -122,8 +122,9 @@ byte counters fail on integer overflow. A zero deadline selects 30 seconds; an e
 DNS, connect, upload and response share it. Native waits remain at most 30 seconds;
 CONNECT is one bounded attempt, with no reconnect. Terminal transport failures
 remain failures. The snapshot collector and redirect bridge keep their existing
-30-second budget. Cooperative provider service belongs to
-[later tasks](../wip/native-http-requests.md#ordered-delivery-tasks).
+30-second budget. The provider uses the separate cooperative
+`http_request_start`/`http_stream_step`/completion API; the blocking functions
+remain for compatibility callers.
 
 The caller retains `http_response`, the borrowed capabilities and any TLS runtime
 until `http_stream_close`. The response separates HTTP status from pending,
@@ -141,7 +142,8 @@ These are the [HTTP framing rules](https://www.rfc-editor.org/rfc/rfc9112.html#s
 with the existing identity-only representation and trailer restrictions.
 The snapshot collector keeps the existing HTTP status, redirect and storage
 policy. `httpfs` still publishes complete immutable FILE snapshots; this API does
-not make them streaming or make the provider responsive during OPEN.
+does not turn those FILE opens into live streams. The provider now progresses
+OPEN cooperatively; PREPARE exposes the separate live STREAM interface.
 
 Qualification, configuration and measured allocation demand are recorded in the
 [task 1 experiment](../development/experiments/http-incremental-get.md).
@@ -264,8 +266,9 @@ per hop; no custom headers, credentials, cookies or Referer are supplied.
 
 One absolute **30 s** deadline (or earlier caller cap), **16 MiB body allowance**,
 **32 KiB headers/trailers**, **256 fields** and **eight informational responses**
-cover the chain. Enforce remaining amounts inside each provider before reads or
-allocations. Charge redirect HTTP-parser body read-ahead conservatively; unread
+cover the chain. Bound decoded reads and storage inside each provider. HTTP
+header reads can include body read-ahead, which is charged conservatively for
+redirects and refused if it exceeds the remaining allowance; unread
 redirect bodies are neither allocated nor drained. Final decoded bytes use the
 remainder; the existing framing-overhead bound and 64 MiB per-instance storage
 quota still apply. An exact-limit close-delimited body needs a bounded one-byte
@@ -330,8 +333,9 @@ No body is exposed before success.
 
 ## Snapshot lifetime and scheduling
 
-The provider has 63 snapshot slots, including empty snapshots, plus one OPEN
-service export. A slot is reserved through retirement acknowledgment. Returned
+The provider shares 63 transaction/snapshot export slots, including empty
+snapshots, plus one OPEN service export. A slot is reserved through retirement
+acknowledgment; prepared requests reserve multiple slots. Returned
 FILE grants carry READ and CALL authority. Copies/attachments retain the same
 body; READ uses explicit offsets and SIZE remains stable. Every OPEN fetches
 independently, with no shared cache or eviction.
@@ -378,4 +382,5 @@ existing native statuses; libc uses its ordinary translation, without HTTP logic
 Other native network errors retain their existing translation. Final HTTP status,
 when available, survives provider failures as diagnostic metadata; a transport
 failure does not promise a provider reply. Failed opens return no partial file.
-There is no automatic retry, reconnection, rebinding or redirect following.
+There is no automatic transport retry, reconnection or rebinding. Legacy
+anonymous GET redirect following uses the shared open bridge described above.
