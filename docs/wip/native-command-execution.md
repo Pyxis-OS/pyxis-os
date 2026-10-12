@@ -1,13 +1,13 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
-and userland #228. Task 2 delivered in #749 and userland #232; the exceptional
-lifetime decision is accepted 2026-10-12.**
+and userland #228. Task 2 merged in #749 and userland #232. Task 3 assigned to
+Codex alpha 2026-10-12; its remaining choices below are proposed, not accepted.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. Task 2 has the owner go under the accepted capture profile; tasks 3–4
-remain unassigned. The trusted-caller delegation boundary below remains accepted.
+owner go. Task 3 has the owner go for implementation after its open choices are
+settled; task 4 remains unassigned. The trusted-caller delegation boundary below remains accepted.
 
 ## Deliverable and boundary
 
@@ -130,7 +130,7 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   streams from a LAUNCH-authorized caller, inspect its result and stop it.
   Implemented in [userland #228](https://git.internal/PyxisOS/pyxis-userland/pulls/228),
   exact pin `20fb34f871beed7e25f6ac454e0d53f51dba5f3f`; merge dependency before parent.
-  [Implemented contract](../userland/native-jobs.md). Merged; task 2 is now assigned.
+  [Implemented contract](../userland/native-jobs.md). Merged.
 - [x] **2. Private FILE capture and deadlines.** Implement the profile above for
   direct callers and the trusted Claude group backend; retain storage/observers
   through actual stage retirement, with sizes, truncation and stop cause.
@@ -139,12 +139,13 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   Implemented in [userland #232](https://git.internal/PyxisOS/pyxis-userland/pulls/232),
   exact pin `40f81eb2299d9eb0f06fc4d6440401d85437e352`; dependency merges first,
   then [parent #749](https://git.internal/PyxisOS/pyxis-os/pulls/749).
-  [Implemented contract](../userland/native-jobs.md#private-capture-and-deadlines).
+  [Implemented contract](../userland/native-jobs.md#private-capture-and-deadlines). Merged.
 - [ ] **3. Native pipeline and event pump.** Reuse batch launch and bounded pipes,
   concurrent input/output, per-stage results, early-reader-close handling,
   deadlines and all stage/endpoint cleanup. No threads assumption.
   **After this task the owner can:** run a described pipeline with captured output
   without deadlocking on a full stdout/stderr pipe.
+  Assigned 2026-10-12. No task-3 implementation yet.
 - [ ] **4. Lua/shell delivery and reusable port adapters.** Add native Lua argv/
   pipeline/capture options and shell capture/deadline/per-stage observation with
   existing launch authority. Preserve ordinary run/pipeline behavior. Carry
@@ -325,6 +326,70 @@ no backing quota, admission or cleanup wall-time guarantee is implied. Source
 review covers unknown-without-observer quarantine and retained-group cleanup;
 no transport-failure injection or native run was performed. Raw screens, logs
 and local callers remain under `build/capture-baseline`/`build/capture-after`.
+
+## Task 3 checkpoint and open choices (2026-10-12)
+
+Fresh branch `execution/native-pipeline` from main `ecdeb0f4`, userland main/pin
+`d6842f87`, fs `28386cc7`, ports `28b5a3bc`, lwIP `a1aadb91`. No production code
+changes. Before-code `make -j16 image LOG_LEVEL=info` passed using the existing
+LLVM 23.1.3 builder. Ordinary source build; copied port caches were rebuilt as
+required, with no PREBUILT substitution. Raw artifacts stay local under
+`build/pipeline-baseline`.
+
+Interactive baseline: QEMU 10.2.2, q35/nested KVM, host CPU, 512 MiB, identical
+1/4-CPU images, fresh OVMF variables, read-only FAT VirtIO boot disk, VirtIO RNG,
+PS/2 keyboard, no NIC/USB and software GOP 1280x800. A local native caller uses
+existing batch launch and four directional pipes, explicit memory/clock grants,
+try-I/O, mixed waits and native process results. No normal-image test program.
+
+Both configurations complete the full two-way case: 196,608 input bytes accepted,
+294,912 stdout and 196,608 stderr bytes drained, expected byte sums, EXITED/0 for
+both stages. The input writer reports WOULD_BLOCK 16 times while both output
+preambles are drained, so the workload exceeds the 64 KiB pipe capacity. Early
+reader exit drains 4,096 stdout bytes, returns producer EXITED/7 and reader
+EXITED/0, and reports EPIPE after 0–4,096 input bytes accepted. Silent returns
+0/0 with empty output; failing returns 3/0 with exact 16/15-byte streams. Timeout
+and the local 1 MiB trigger stop/observe both stages. Trigger output drains to
+1,114,112 bytes per stream, illustrating queued tails rather than a hard quota.
+
+Two-sample end-to-end baseline ranges, excluding debugger pauses/output reading
+outside the pump; nested-QEMU observations, not native performance:
+
+| CPUs | Full two-way (ms) | Early reader exit (ms) | 250 ms timeout (ms) |
+| --- | ---: | ---: | ---: |
+| 1 | 82.70–112.13 | 7.18–8.04 | 256.95–257.29 |
+| 4 | 57.83–65.95 | 6.33–7.37 | 256.96–258.05 |
+
+The accepted concurrent pump, all stage results, batch publication, absolute
+deadline and stop/observe-all rules remain unchanged. Existing 64 KiB pipes,
+4 KiB try transfers, eight-stage batch and 32-interest wait suffice. Reuse the
+capture inventory policy and private unlinked FILE storage, with distinct PIPE
+wiring. The existing single-capture stream shape (absent stdin/FILE outputs) is
+not the pipeline shape. Unknown batch admission follows task 2: retain owned
+cleanup-unconfirmed storage without replay; sole-CONTROL fresh-group cleanup
+never invents stage results. No kernel/ABI or consumer adapter is planned.
+
+**Three proposed defaults, awaiting owner answers:**
+
+1. **Finite owned input snapshot.** Explicitly choose absent stdin or supplied
+   finite bytes, copied into the job record before launch/effectful setup. An
+   explicitly supplied empty input closes its pipe for real EOF; absence stays
+   absent. Allocation failure refuses before launch. The pump feeds it with
+   bounded try writes while draining both outputs; no arbitrary live descriptor,
+   FILE producer or callback source in this slice.
+2. **Final stdout and combined stderr.** Capture the last stage's stdout and one
+   combined stderr pipe from every stage into two separate private unlinked RAM
+   FILEs, retaining the accepted configurable 1 MiB polled trigger/returned cap
+   per stream. Intermediate stdout flows only to the next stage. Return every
+   stage's actual result, but promise no stderr attribution, writer atomicity or
+   cross-stream chronology. Drain buffered output through EOF after stop or
+   stage retirement before final sizes/release.
+3. **Early stdin closure is observable, not automatic job cancellation.** On
+   EPIPE, close that feeder, report bytes accepted by the pipe and unsent bytes,
+   then continue draining/observing every stage. Acceptance does not prove the
+   child consumed those bytes. Other transfer errors stop/observe all stages.
+   Native callers decide success from the stage array and delivery report;
+   existing shell last-stage behavior stays unchanged.
 
 ## Required descendant follow-up
 
