@@ -56,11 +56,12 @@ streams, capture/deadlines and shell/Lua pipelines, extracted from Claude/Git/po
 libuv. Task 1, the one-child direct job core, is assigned; later tasks need
 separate owner go.
 
-[Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
+[Native HTTP requests](native-http-requests.md): an
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
 prepared POST, streamed GET/POST without an artificial response-size cap, and
 shell/Lua delivery.
-No implementation task is assigned; the command-execution proposal is separate.
+Task 1 (incremental libhttp GET) is delivered, 2026-10-12. Later tasks need their
+own go; the command-execution proposal is separate.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
