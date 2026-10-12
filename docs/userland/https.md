@@ -182,9 +182,14 @@ origin chain, and HTTPS never downgrades. No runtime silently drops custom roots
 
 ## Accepted limits
 
-This is read-only client HTTPS. TLS servers, SSH, certificate issuance, mutual
-TLS, automatic trust updates, authenticated writes and asynchronous
-fetching require separate scope. Platform trust, revocation, numeric HTTPS
+The provider still exposes read-only HTTPS snapshots; the native library also
+supports [fixed-body POST](http-fetch.md#fixed-body-requests). Cooperative TLS
+steps retain identical plaintext across pending writes. A read-side send while
+an application write is pending refuses before native I/O; a read-owned alert
+must finish before another application write. Early response cleanup never
+flushes an incomplete upload. No TLS control-output queue or POST replay exists.
+TLS servers, SSH, certificate issuance, mutual TLS, automatic trust updates and
+responsive provider transactions require separate scope. Platform trust, revocation, numeric HTTPS
 identity and deadline limits are recorded in
 [technical debt](../technical-debt.md#https-trust-and-platform-limits).
 The existing [startup reporting limitation](../technical-debt.md#service-startup-failure-before-publication)

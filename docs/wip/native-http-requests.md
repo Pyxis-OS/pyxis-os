@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; task 1 delivered, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. All three
@@ -136,6 +136,28 @@ All three defaults accepted 2026-10-11; not implemented.
    `"w+"` adopts the response reader at its start rather than reading the body
    or issuing GET. Ordinary `fclose` and editor saves remain non-submitting.
 
+## Task 2 accepted TLS policy
+
+**Option A accepted by the owner, 2026-10-12.** Allow ordinary early HTTP
+responses during POST upload, but fail explicitly before transmitting if a read
+attempts TLS output while an application write is pending. Retain identical
+plaintext arguments across write retries; never replay accepted bytes. Stop
+uploading on final response headers. If upload is incomplete or a TLS write is
+pending, abort/free without close_notify so cleanup cannot flush unsent body.
+A completely framed HTTP error response still completes independently of status.
+
+In pinned Mbed TLS 4.1.1 `ssl_msg.c`, the TLS 1.2 HelloRequest path sends
+NO_RENEGOTIATION through `mbedtls_ssl_send_alert_message`, which can flush an
+existing application record. A later `ssl_write_real` retry can then rebuild the
+same plaintext ([upstream record layer](https://github.com/Mbed-TLS/mbedtls/blob/mbedtls-4.1.1/library/ssl_msg.c)).
+The guard makes this control-message path an explicit TLS failure instead.
+If a real server triggers it, revisit the later alternative: a separate bounded,
+counted ciphertext queue, with proven control-record ordering and progress.
+
+Overall deadlines use bounded native TCP waits. One TRY after a slice timeout
+distinguishes transient WOULD_BLOCK from terminal timeout without INSPECT.
+CONNECT remains one bounded attempt; there is no reconnect or POST replay.
+
 ## Ordered delivery tasks
 
 - [x] **1. Incremental libhttp GET and final framing result.** Delivered
@@ -145,10 +167,12 @@ All three defaults accepted 2026-10-11; not implemented.
   [QEMU qualification and costs](../development/experiments/http-incremental-get.md).
   **After this task the owner can:** exercise the native engine against local
   slow/truncated and over-16-MiB GET fixtures and inspect chunks/final results.
-- [ ] **2. Fixed-body POST and overall deadlines.** Read a fixed-length staged
-  native file in chunks; validate caller headers and retain complete HTTP error
-  responses. One request deadline may exceed 30 seconds, using bounded native
-  waits underneath; adapt TLS timeout handling without replaying accepted bytes.
+- [x] **2. Fixed-body POST and overall deadlines.** Delivered bounded native
+  FILE reads, validated copied request headers, early final responses and retained
+  HTTP error bodies. Explicit overall deadlines may exceed 30 seconds; bounded
+  native waits and stable TLS retry arguments preserve accepted bytes.
+  [Interface](../userland/http-fetch.md#fixed-body-requests);
+  [QEMU qualification and costs](../development/experiments/http-fixed-post.md).
   **After this task the owner can:** exercise local POST/error/slow-response
   fixtures with a body larger than the resident buffer, without an HTTP port.
 - [ ] **3. Prepared provider transactions and responsive stream service.**
