@@ -10,6 +10,7 @@ struct boot_options {
   bool nvme_write;
   bool usb_hid_describe;
   bool usb_xhci_diagnose;
+  bool ps2_synaptics, ps2_synaptics_diagnose;
   bool default_config;
   const char *remote_beacon;
   bool log_udp;

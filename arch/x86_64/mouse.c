@@ -1,9 +1,12 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/ps2.h>
+#include <kernel/boot/options.h>
 #include <kernel/log.h>
 #include <kernel/mouse.h>
 #include <kernel/panic.h>
+
+#include "ps2/synaptics.h"
 
 #define PS2_WRITE_AUXILIARY 0xd4
 #define MOUSE_GET_DEVICE_ID 0xf2
@@ -72,22 +75,22 @@ static bool mouse_command_timeout(struct ps2_setup *setup, uint8_t command, uint
   return false;
 }
 
-static bool mouse_command(struct ps2_setup *setup, uint8_t command)
+bool mouse_ps2_command(struct ps2_setup *setup, uint8_t command)
 {
   return mouse_command_timeout(setup, command, MOUSE_REPLY_TIMEOUT_NS);
 }
 
-static bool read_mouse_reply(struct ps2_setup *setup, uint8_t *reply, uint64_t timeout_ns)
+bool mouse_ps2_reply(struct ps2_setup *setup, uint8_t *reply, uint64_t timeout_ns)
 {
   return ps2_read_reply(setup, PS2_AUXILIARY_CHANNEL, reply, timeout_ns) == PS2_REPLY_RECEIVED;
 }
 
 static bool set_sample_rate(struct ps2_setup *setup, uint8_t rate)
 {
-  return mouse_command(setup, MOUSE_SET_SAMPLE_RATE) && mouse_command(setup, rate);
+  return mouse_ps2_command(setup, MOUSE_SET_SAMPLE_RATE) && mouse_ps2_command(setup, rate);
 }
 
-bool mouse_configure(struct ps2_setup *setup)
+bool mouse_ps2_reset(struct ps2_setup *setup)
 {
   uint8_t reply, id;
   setup->step = "reset";
@@ -95,17 +98,39 @@ bool mouse_configure(struct ps2_setup *setup)
     return false;
   }
   setup->step = "reset self-test";
-  if (!read_mouse_reply(setup, &reply, MOUSE_RESET_TIMEOUT_NS) ||
+  if (!mouse_ps2_reply(setup, &reply, MOUSE_RESET_TIMEOUT_NS) ||
       reply != MOUSE_SELF_TEST_PASSED) {
     return false;
   }
   setup->step = "reset device ID";
-  if (!read_mouse_reply(setup, &id, MOUSE_REPLY_TIMEOUT_NS)) {
+  if (!mouse_ps2_reply(setup, &id, MOUSE_REPLY_TIMEOUT_NS)) {
     return false;
   }
   setup->step = "set defaults";
-  if (!mouse_command(setup, MOUSE_SET_DEFAULTS)) {
+  if (!mouse_ps2_command(setup, MOUSE_SET_DEFAULTS)) {
     return false;
+  }
+
+  return true;
+}
+
+bool mouse_configure(struct ps2_setup *setup)
+{
+  uint8_t id;
+  if (!mouse_ps2_reset(setup)) {
+    return false;
+  }
+  const struct boot_options *options = boot_options_get();
+  if (options->ps2_synaptics || options->ps2_synaptics_diagnose) {
+    enum synaptics_setup_result result = synaptics_configure(setup, options->ps2_synaptics,
+                                                           options->ps2_synaptics_diagnose);
+    if (result == SYNAPTICS_UNAVAILABLE) {
+      return false;
+    }
+    if (result == SYNAPTICS_ABSOLUTE || result == SYNAPTICS_RELATIVE) {
+      packet_bytes = MOUSE_STANDARD_PACKET_BYTES;
+      return true;
+    }
   }
 
   setup->step = "wheel probe";
@@ -115,8 +140,8 @@ bool mouse_configure(struct ps2_setup *setup)
     }
   }
   setup->step = "read device ID";
-  if (!mouse_command(setup, MOUSE_GET_DEVICE_ID) ||
-      !read_mouse_reply(setup, &id, MOUSE_REPLY_TIMEOUT_NS)) {
+  if (!mouse_ps2_command(setup, MOUSE_GET_DEVICE_ID) ||
+      !mouse_ps2_reply(setup, &id, MOUSE_REPLY_TIMEOUT_NS)) {
     return false;
   }
   setup->step = "restore sample rate";
@@ -133,7 +158,7 @@ bool mouse_configure(struct ps2_setup *setup)
 bool mouse_enable_reporting(struct ps2_setup *setup)
 {
   setup->step = "enable reporting";
-  if (!mouse_command(setup, MOUSE_ENABLE_REPORTING)) {
+  if (!mouse_ps2_command(setup, MOUSE_ENABLE_REPORTING)) {
     return false;
   }
   available = true;
@@ -160,6 +185,11 @@ void mouse_receive(uint8_t status, uint8_t data)
 bool mouse_available(void)
 {
   return available;
+}
+
+const struct mouse_profile *mouse_profile(void)
+{
+  return synaptics_profile();
 }
 
 enum raw_result {
@@ -244,10 +274,19 @@ bool mouse_read_event(struct mouse_event *event)
     case RAW_LOST:
       packet_index = 0;
       ++lost_inputs;
-      *event = (struct mouse_event){.reset = true};
+      synaptics_reset_decoder();
+      *event = (struct mouse_event){.kind = MOUSE_EVENT_RESET};
       return true;
     case RAW_BYTE:
-      if (decode(byte, event)) {
+      if (mouse_profile()->absolute) {
+        enum synaptics_decode_result result = synaptics_decode(byte, event);
+        if (result == SYNAPTICS_STOPPED) {
+          available = false;
+        }
+        if (result != SYNAPTICS_INCOMPLETE) {
+          return true;
+        }
+      } else if (decode(byte, event)) {
         return true;
       }
       break;

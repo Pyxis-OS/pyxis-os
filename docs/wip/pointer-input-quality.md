@@ -1,9 +1,8 @@
 # ThinkPad pointer input quality
 
-Plan accepted 2026-10-10. Task 1 is assigned to Codex alpha by the owner,
-2026-10-11 (draft [#716](https://git.internal/PyxisOS/pyxis-os/pulls/716));
-task 2 follows a separate owner go. The two device tracks can proceed in
-parallel once authorized. The source/scroll/policy base is part of task 1. Scope:
+Plan accepted 2026-10-10. Task 1 is merged (#716, userland #214, ports #99).
+Task 2 is assigned to Codex alpha (2026-10-11); baseline captured from fresh
+main `df7ec8ab`, decisions below accepted; opt-in implementation is assigned. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -46,9 +45,10 @@ Device decoding alone cannot claim those consumers work.
    touch motion/scroll while typing and for an initial 500 ms after the last
    non-modifier physical press/repeat, from either keyboard path. Contacts begun
    while suppressed require lift. Physical clicks and TrackPoint remain
-   independent. Relative fallback on a Synaptics device is permitted only with
-   established tap-off; otherwise report the touchpad unavailable, retaining a
-   verified guest path if possible.
+   independent. Relative fallback on a Synaptics device requires established
+   tap-off, except for the owner's geometry-only exception accepted 2026-10-11
+   below. Other failures report the touchpad unavailable if a format/tap-off
+   path cannot be proven.
 3. **Settings authority and application integration.** Boot-only validated
    machine keys, read by stock boot init and installed once through a
    boot-init-only input-policy right; ordinary programs cannot change policy.
@@ -189,7 +189,8 @@ state or guessed universal pressure units.
    write to enforce tap-off. On failed negotiation, reset/re-establish a proven
    format; never send absolute bytes to the relative decoder. Preserve ordinary
    PS/2 mice. A known/expected Synaptics fallback that cannot distinguish or
-   disable firmware taps cannot meet this milestone's tap-off contract.
+   disable firmware taps cannot qualify tap-off; the accepted geometry-only
+   exception preserves legacy motion despite that limit.
 
    Use pressure hysteresis for contact admission, qualified width/pressure for
    strong palms, and edge-origin exclusion with deliberate inward movement
@@ -225,10 +226,74 @@ Cmd+R/replug pass at `e7a18849`. ASUS back/forward buttons are unsupported and
 accepted without further work. Keychron, horizontal and multiplier coverage are
 unqualified, not claimed by closure.
 
-**Task 2 assigned 2026-10-11:** start only after #716 merges, on fresh main;
-capture the baseline first and bring at most three decisions with defaults to
-the owner before code. Current firmware-relative PS/2 input remains mouse-class;
-this delivery supplies the touchpad policy/typing/reset base, not palm filtering.
+**Task 2 assigned 2026-10-11:** #739 implements the accepted opt-in path from
+fresh main after #716, with the before-code baseline recorded. Default boots
+remain firmware-relative and mouse-class during qualification. Absolute touch
+and guest input use separate logical sources; physical holds/loss still follow
+the common coordinator. Native qualification and the accepted default-on change
+remain outstanding.
+
+## Task 2 accepted decisions (2026-10-11)
+
+Before-code [baseline](../development/experiments/pointer-input-quality/README.md#task-2-before-code-baseline)
+is captured before implementation. Natural directions, tap-off, palm
+quarantine until lift and the initial 500 ms typing rule remain accepted.
+Pressure/width hysteresis, edge band, motion gain, scroll dead zone and sample
+rate are authored tuning, to be adjusted from native evidence rather than made
+new architectural constants.
+
+The checked-in ThinkPad inventory names Synaptics and Elan devices but does not
+establish firmware, query capabilities, clickpad/stick-button routing, bounds or
+resolution. [Rev. B §4.3](https://studylib.net/doc/18112502/synaptics-ps-2-touchpad-interfacing-guide)
+says mode bit 2 is DisGest with Wmode=0 and EWmode with Wmode=1. Basic W replaces
+gesture fields; physical switches are decoded independently. [Linux v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
+is protocol evidence, not code to vendor into the MPL driver. No licence reuse
+is proposed.
+
+1. **Qualification boundary. Accepted:** first implementation/owner boot is
+   opt-in, using basic six-byte absolute W, qualified finger-count hints and
+   separate pass-through/physical-button paths. Query identity/capabilities and
+   validate the format before publishing touch input. Extended-W/AGM stays off
+   unless the actual device needs it and its advertised layout/native evidence
+   is established; report that prerequisite rather than guessing contacts.
+   Ordinary boots retain today's path during qualification. After the owner
+   confirms the complete native palm/scroll/button/TrackPoint checks, enable the
+   qualified Synaptics profile by default in this same task, before closure.
+2. **Single-switch clickpad. Accepted:** each physical clickpad press is
+   primary click, with no click zones or finger-count right-click synthesis.
+   Preserve separately decoded physical TrackPoint left/middle/right buttons.
+   This follows Linux's capability-qualified primary-switch interpretation;
+   it does not treat firmware tap bits as physical switches. If the device is
+   not a clickpad, retain its advertised physical button mapping.
+3. **Missing usable geometry. Changed and accepted:** use validated queries or
+   an explicitly calibrated identity profile when available. Otherwise fall back
+   to today's relative PS/2 mode so touch motion keeps working. This geometry
+   fallback is an explicit exception to withholding the touchpad; it does not
+   qualify absolute palm/edge filtering, two-finger scrolling or independent
+   touch/stick separation. Establish tap-off when the relative firmware supports
+   it; if unavailable, the accepted legacy fallback can retain firmware taps.
+   Other mode/transport failures keep the existing proven-format recovery rule.
+   Do not substitute panel dimensions or claim calibrated edge rejection.
+Keep PS/2 commands/query/packet decoding in arch; keep contact
+admission, palm/edge/typing rejection and one-/two-finger conversion beside
+kernel input. Reuse the existing per-source scroll/hold/loss coordinator, with
+separate touchpad and guest sources; no public contact or raw-input interface.
+The first native record must establish identity/query bytes, physical switch
+routing and usable geometry, then qualify finger, palm, typing, lift/count
+transitions, physical drag and guest behavior. Luna stages owner-run builds;
+no native hardware was touched in the baseline. Native qualification is still
+pending.
+
+Implementation uses `ps2.synaptics=1` to qualify basic W and
+`ps2.synaptics.diagnose=1` for bounded info-level query/contact summaries.
+Neither option is present by default. The first implements queried geometry
+only; no calibrated identity profile is invented. Physical-button layouts
+outside standard switches, single-switch clickpad and the advertised three
+TrackPoint switches recover to proven relative input rather than silently lose
+buttons. [Mouse input](../devices/mouse.md#synaptics-opt-in-absolute-input)
+describes the filtering, loss and fallback behaviour. The existing
+[qualification record](../development/experiments/pointer-input-quality/README.md)
+contains the QEMU limits and exact owner/luna native steps.
 
 ## Qualification and tuning
 

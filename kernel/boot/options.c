@@ -134,6 +134,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *usb_hid_describe = NULL;
   const char *usb_xhci_diagnose = NULL;
   const char *nvme_write = NULL;
+  const char *ps2_synaptics = NULL, *ps2_synaptics_diagnose = NULL;
 #if POINTER_SYNTHETIC_ENABLED
   const char *pointer_synthetic = NULL;
 #endif
@@ -171,6 +172,10 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&usb_hid_describe, key, value);
     } else if (same_text(key, "usb.xhci.diagnose")) {
       take_option(&usb_xhci_diagnose, key, value);
+    } else if (same_text(key, "ps2.synaptics")) {
+      take_option(&ps2_synaptics, key, value);
+    } else if (same_text(key, "ps2.synaptics.diagnose")) {
+      take_option(&ps2_synaptics_diagnose, key, value);
     } else if (same_text(key, "nvme.write")) {
       take_option(&nvme_write, key, value);
     } else if (same_text(key, "boot.default_config")) {
@@ -253,6 +258,12 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.display_flip = display_flip && flag_option("display.flip", display_flip);
   options.display_flip_metrics = display_flip_metrics &&
     flag_option("display.flip.metrics", display_flip_metrics);
+  if (ps2_synaptics && !same_text(ps2_synaptics, "0") && !same_text(ps2_synaptics, "1")) {
+    panic("kernel option ps2.synaptics accepts only 0 or 1");
+  }
+  options.ps2_synaptics = ps2_synaptics && same_text(ps2_synaptics, "1");
+  options.ps2_synaptics_diagnose = ps2_synaptics_diagnose &&
+    flag_option("ps2.synaptics.diagnose", ps2_synaptics_diagnose);
   options.usb_hid_describe = usb_hid_describe && flag_option("usb.hid.describe", usb_hid_describe);
   options.usb_xhci_diagnose = usb_xhci_diagnose && flag_option("usb.xhci.diagnose", usb_xhci_diagnose);
   options.display_cursor_probe = display_cursor_probe &&
