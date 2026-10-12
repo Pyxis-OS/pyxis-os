@@ -1,10 +1,12 @@
 # Native command execution
 
-Status: **shared milestone, all owner decisions accepted 2026-10-11; not implemented.**
+Status: **shared milestone contracts accepted 2026-10-11; task 1 assigned to
+Codex alpha 2026-10-12, baseline captured, not implemented.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go; no implementation is assigned.
+owner go; later tasks are not assigned. Task 1 has the owner go, with the
+delegation boundary below requiring an answer before code.
 
 ## Deliverable and boundary
 
@@ -145,6 +147,55 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   session cleanup.
   **After this task the owner can:** run/capture direct commands and native
   pipelines from Lua or the shell, with real deadlines and results.
+
+## Task 1 checkpoint (2026-10-12)
+
+Branch `execution/direct-job`, fresh main `088816ab`, userland `e878f4f9`
+(also dependency main), ports `28b5a3bc`, fs `b427df29`, lwIP `a1aadb91`.
+Before-code build: `make -j16 image PREBUILT="sdk ports" LOG_LEVEL=info`,
+existing LLVM 23.1.3 builder. Verified SDK/ports bundles retain their recorded
+task-1 pointer provenance; current public ABI and userland libc/lib/include/crt
+are unchanged from those inputs. Kernel and current userland apps are freshly
+built; no implementation or pin changes. Kernel SHA256
+`655ba0a3e03ff295146dc5e7f44cc68423263802ea082462184a572d044a03fe`,
+initrd `f94e987b6cc5bdeb833ded76968a382456009ef9ced7c135179ec14d3e931d3a`.
+
+Interactive QEMU 10.2.2 Q35/nested KVM, host CPU, 512 MiB, separate 1/4-CPU
+boots with identical images, fresh OVMF variables, read-only FAT VirtIO boot
+disk, virtio RNG, PS/2 keyboard and no NIC. Existing shell one-stage launches
+produce the same native results in both configurations:
+
+| Child | Result |
+| --- | --- |
+| `echo baseline` | EXITED, 0 |
+| `cat boot://missing-file` | EXITED, 1 |
+| blocked `cat`, then Ctrl+C | TERMINATED, 0 |
+
+GDB sees a detached process link before each completion publication. The stop
+request has WAIT|TERMINATE rights, targets the still-live process and does not
+itself report retirement. This establishes the existing stage boundary, not
+group/deferred-object cleanup or isolated launch cost. Shell launch currently
+allows descendants where configured; it is a baseline, not the new restricted
+core. Raw logs/debugger output/screens stay local in `build/direct-job-baseline/`;
+all owned QEMU/debugger jobs are stopped.
+
+**One owner decision, proposed default; not accepted:** the core authenticates
+and rejects known direct launch/administrative grants across the **entire final
+grant array**, not just named resources, and adds nothing implicitly. A trusted
+caller is responsible for provisioning/auditing selected namespace bindings and
+provider semantics for the job's lifetime. Accept a known native image and final
+explicit inventory; bundle lookup/manifest expansion remains outside the core.
+This is a trusted delegation policy, not a kernel-enforced transitive sandbox.
+
+[Handle metadata](../../include/abi/handle.h) reports protocol/kind/rights/
+transport, without provider identity or behavior. [Namespace LOOKUP](../interfaces/namespaces.md)
+does not enumerate, filter or freeze bindings; another management holder can
+change them. [Endpoint transfers](../interfaces/endpoints.md) can return grants,
+and opaque providers can broker effects under their own authority. The kernel
+[installs every grant entry](../../kernel/user/spawn.c), including unnamed ones.
+Proving arbitrary providers cannot launch would need new mechanisms outside
+task 1. No code or new capability/environment/group interface is authorized by
+this checkpoint; implementation waits for that responsibility to be settled.
 
 ## Required descendant follow-up
 
