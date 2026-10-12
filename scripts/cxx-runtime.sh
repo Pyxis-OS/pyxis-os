@@ -66,7 +66,8 @@ fi
 # its bare-metal mode only silences the uncaught-exception message.
 # Configure checks only compile test programs, so the library checks for
 # pthread, rt, dl and atomic would pass spuriously; *_HAS_*_LIB says they do
-# not exist.
+# not exist. Thread operations live in libc: libc++/libc++abi select the native
+# external adapter, while libunwind uses libc's real process-private rwlocks.
 flags="--target=$target --sysroot=$sdk/sysroot -march=x86-64"
 cmake -G 'Unix Makefiles' -S "$source/runtimes" -B "$build" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -86,13 +87,14 @@ cmake -G 'Unix Makefiles' -S "$source/runtimes" -B "$build" \
   -DLLVM_ENABLE_RUNTIMES='libunwind;libcxxabi;libcxx' \
   -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_DOCS=OFF \
   -DLIBUNWIND_ENABLE_SHARED=OFF \
-  -DLIBUNWIND_ENABLE_THREADS=OFF \
+  -DLIBUNWIND_ENABLE_THREADS=ON \
   -DLIBUNWIND_IS_BAREMETAL=ON \
   -DLIBUNWIND_USE_COMPILER_RT=ON \
   -DLIBUNWIND_ENABLE_ASSERTIONS=OFF \
   -DLIBUNWIND_HAS_PTHREAD_LIB=OFF -DLIBUNWIND_HAS_DL_LIB=OFF \
   -DLIBCXXABI_ENABLE_SHARED=OFF \
-  -DLIBCXXABI_ENABLE_THREADS=OFF \
+  -DLIBCXXABI_ENABLE_THREADS=ON \
+  -DLIBCXXABI_HAS_EXTERNAL_THREAD_API=ON \
   -DLIBCXXABI_USE_LLVM_UNWINDER=ON \
   -DLIBCXXABI_USE_COMPILER_RT=ON \
   -DLIBCXXABI_ENABLE_ASSERTIONS=OFF \
@@ -103,7 +105,8 @@ cmake -G 'Unix Makefiles' -S "$source/runtimes" -B "$build" \
   -DLIBCXX_CXX_ABI=libcxxabi \
   -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=OFF \
   -DLIBCXX_USE_COMPILER_RT=ON \
-  -DLIBCXX_ENABLE_THREADS=OFF \
+  -DLIBCXX_ENABLE_THREADS=ON \
+  -DLIBCXX_HAS_EXTERNAL_THREAD_API=ON \
   -DLIBCXX_ENABLE_LOCALIZATION="$localization" \
   -DLIBCXX_ENABLE_WIDE_CHARACTERS="$wide_characters" \
   -DLIBCXX_ENABLE_FILESYSTEM=OFF \
