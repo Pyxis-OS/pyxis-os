@@ -1,6 +1,9 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
+#include <kernel/completion.h>
+#include <kernel/memory.h>
 #include <kernel/net/tcp.h>
+#include <kernel/net/udp.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/task.h>
 #include <caelum_hooks.h>
@@ -13,7 +16,7 @@ enum control_operation {
   CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT, CONTROL_SHUTDOWN_WRITE,
   CONTROL_LISTEN, CONTROL_ACCEPT, CONTROL_LISTENER_INSPECT,
 };
-enum control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
+enum control_state { CONTROL_FREE, CONTROL_RESERVED, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
 
 struct tcp_control {
   enum control_state state;
@@ -31,6 +34,7 @@ struct tcp_control {
   struct tcp_listen_reply listen_reply;
   enum call_status status;
   struct task_wait *wait;
+  struct native_completion *completion;
   bool cancelled;
   struct execution_group *cleanup_group; /* Attributes failed provisional objects. */
 };
@@ -121,7 +125,11 @@ static enum call_status prepare_stream(struct tcp_control *call, bool listening)
   uint64_t flags = cpu_save_interrupts();
   call->grant = (struct capability_grant){&stream->object,
       listening ? TCP_LISTENER_RIGHTS : TCP_RIGHTS, 0};
-  KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
+  if (call->completion) {
+    KASSERT(object_authority_valid(&stream->object, TCP_RIGHTS, 0));
+  } else {
+    KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
+  }
   cpu_restore_interrupts(flags);
   call->stream = stream;
   return CALL_OK;
@@ -176,6 +184,25 @@ static void finish_created(struct tcp_control *call, enum call_status status)
 /* ACTIVE grants the worker exclusive access until completion publication. */
 static void complete_control(struct tcp_control *call, enum call_status status)
 {
+  if (call->completion) {
+    struct native_completion *operation = call->completion;
+    uint64_t flags = cpu_save_interrupts();
+    struct execution_group *previous = object_cleanup_enter(operation->cleanup_group);
+    cpu_restore_interrupts(flags);
+    finish_created(call, status);
+    flags = cpu_save_interrupts();
+    object_cleanup_leave(previous);
+    struct tcp_connect_reply reply = call->reply;
+    struct capability_grant grant = call->grant;
+    lock_control();
+    *call = (struct tcp_control){0};
+    operation->backend = NULL;
+    unlock_control();
+    native_completion_finish(operation, status, status == CALL_OK ? &reply : NULL,
+        status == CALL_OK ? sizeof(reply) : 0, &grant);
+    cpu_restore_interrupts(flags);
+    return;
+  }
   if (call->operation == CONTROL_CONNECT || call->operation == CONTROL_LISTEN ||
       call->operation == CONTROL_ACCEPT) {
     uint64_t flags = cpu_save_interrupts();
@@ -309,6 +336,90 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
   return status;
 }
 
+enum call_status native_completion_net_reserve(struct native_completion *operation)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (operation->protocol == PROTOCOL_UDP) {
+    return net_udp_completion_reserve(operation);
+  }
+  if (operation->protocol != PROTOCOL_TCP_SERVICE || operation->operation != TCP_CONNECT ||
+      operation->target.object->type != OBJECT_TCP_SERVICE) {
+    return CALL_BAD_OPERATION;
+  }
+  if (!(operation->target.rights & TCP_SERVICE_RIGHT_CONNECT)) {
+    return CALL_DENIED;
+  }
+  if (operation->input_size != sizeof(struct completion_connect_request)) {
+    return CALL_BAD_REQUEST;
+  }
+  struct completion_connect_request request;
+  memcpy(&request, operation->input, sizeof(request));
+  if (request.reserved || !request.port) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t now = arch_monotonic_ns();
+  if (operation->deadline_ns <= now) {
+    return CALL_TIMED_OUT;
+  }
+  if (operation->deadline_ns - now > TCP_CONNECT_MAX_WAIT_NS) {
+    return CALL_BAD_REQUEST;
+  }
+  if (!net_worker_available()) {
+    return CALL_UNAVAILABLE;
+  }
+  lock_control();
+  struct tcp_control *call = NULL;
+  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
+    if (pending[i].state == CONTROL_FREE) {
+      call = &pending[i];
+      break;
+    }
+  }
+  if (call) {
+    *call = (struct tcp_control){
+      .state = CONTROL_RESERVED, .operation = CONTROL_CONNECT, .completion = operation,
+      .address = request.address, .port = request.port, .deadline = operation->deadline_ns,
+    };
+    operation->backend = call;
+  }
+  unlock_control();
+  return call ? CALL_OK : CALL_QUEUE_FULL;
+}
+
+void native_completion_net_start(struct native_completion *operation)
+{
+  if (operation->protocol == PROTOCOL_UDP) {
+    net_udp_completion_start(operation);
+    return;
+  }
+  lock_control();
+  struct tcp_control *call = operation->backend;
+  KASSERT(call && call->state == CONTROL_RESERVED && call->completion == operation);
+  call->state = CONTROL_QUEUED;
+  unlock_control();
+  net_worker_notify();
+}
+
+void native_completion_net_discard(struct native_completion *operation)
+{
+  if (operation->protocol == PROTOCOL_UDP) {
+    net_udp_completion_discard(operation);
+    return;
+  }
+  lock_control();
+  struct tcp_control *call = operation->backend;
+  KASSERT(call && call->state == CONTROL_RESERVED && call->completion == operation);
+  *call = (struct tcp_control){0};
+  operation->backend = NULL;
+  unlock_control();
+}
+
+void native_completion_net_cancel(struct native_completion *operation)
+{
+  (void)operation;
+  net_worker_notify();
+}
+
 enum call_status net_tcp_listen(struct capability_table *table, uint32_t address,
     uint16_t port, struct tcp_listen_reply *reply)
 {
@@ -401,6 +512,34 @@ bool net_tcp_service(void)
     unlock_control();
     cpu_restore_interrupts(flags);
     if (!start && !active) {
+      continue;
+    }
+    if (call->completion) {
+      if (start && !native_completion_mark_started(call->completion)) {
+        complete_control(call, native_completion_cancel_reason(call->completion));
+        worked = true;
+        continue;
+      }
+      if (start) {
+        enum call_status status = prepare_connect(call);
+        worked = true;
+        if (status != CALL_OK) {
+          complete_control(call, status);
+          continue;
+        }
+      }
+      struct tcp_connection *connection = call->stream->connection;
+      enum call_status status = connection->terminal_status;
+      /* A finished handshake keeps its real result even when cancellation or
+       * the deadline was latched before this worker pass collected it. */
+      if (status == CALL_OK && !connection->connected) {
+        status = native_completion_cancel_reason(call->completion);
+        if (status == CALL_OK) {
+          continue;
+        }
+      }
+      complete_control(call, status);
+      worked = true;
       continue;
     }
     if (cancelled) {
