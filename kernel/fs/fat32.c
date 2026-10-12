@@ -323,15 +323,16 @@ static enum call_status mutation_admission(struct fat32_mount *mount, struct npf
     return CALL_ENDPOINT_CLOSED;
   }
   update_intervals(mount);
+  bool other_owner = false;
   for (struct fat32_interval *interval = mount->intervals; interval; interval = interval->next) {
     if (interval->actor == job->fat_actor && !interval->active) {
       return CALL_TIMED_OUT;
     }
     if (interval->active && interval->actor != job->fat_actor) {
-      return CALL_BUSY;
+      other_owner = true;
     }
   }
-  return CALL_OK;
+  return other_owner ? CALL_BUSY : CALL_OK;
 }
 
 static enum call_status interval_operation(struct fat32_mount *mount, struct npfs_job *job)
