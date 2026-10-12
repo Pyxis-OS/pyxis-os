@@ -50,10 +50,11 @@ inventories, mounted read-write FAT32 and owned ESP configuration reconciliation
 The contract is accepted; tasks 1–2 are delivered (progress, shared planner/executor
 and revision inventory). Later tasks need separate assignments.
 
-[Native command execution](native-command-execution.md): Codex delta (2026-10-11),
+[Native command execution](native-command-execution.md): Codex alpha (2026-10-12),
 an accepted shared plan for direct native launch without descendants, selected
 streams, capture/deadlines and shell/Lua pipelines, extracted from Claude/Git/ports/
-libuv. No implementation task is assigned.
+libuv. Task 1, the one-child direct job core, is assigned; later tasks need
+separate owner go.
 
 [Native HTTP requests](native-http-requests.md): Codex delta (2026-10-11), a
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
