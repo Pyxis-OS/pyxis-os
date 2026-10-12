@@ -48,8 +48,8 @@ struct process_startup {
  * bootstrap; it neither inherits nor adds optional thread-management authority.
  * The 64 KiB budget includes both mappings' page padding. MM_INVALID covers
  * malformed/oversized data; MM_NO_MEMORY covers allocation exhaustion.
- * Success publishes startup_address and its intrinsic grant once; failure frees partial backing and
- * changes neither startup_address nor capability ownership. */
+ * Success publishes startup_address and its intrinsic grant once; failure frees
+ * partial backing and changes neither startup_address nor capability ownership. */
 enum mm_result process_prepare_startup(struct process *process,
                                        const struct process_startup *source);
 
