@@ -327,19 +327,19 @@ captures remain local. Native gate 7 launch cost is accepted and its static
 initial-TLS optimization remains a much-later follow-up. Gate 8 does not deliver
 consumer adapters or introduce POSIX-shaped kernel operations.
 
-## Libc safety gate
+## Implemented libc safety gate
 
-| Shared state | Work required before ordinary threaded consumers |
+| Shared state | Implemented gate 8 profile |
 | --- | --- |
-| malloc/TLSF pools | Allocation-free lock bootstrap, metadata/pool growth exclusion and cross-thread free/realloc; no allocator lock held while quiescence needs its owner to run. |
-| Descriptors | Stable admitted-operation references separate from table storage; close/unwind lifetime plus cursor/read-ahead serialization. No table lock across I/O; preserve uncertain-close behavior. |
-| FILE and DIR | Per-stream serialization and open/list/close lifetime; define FILE-to-descriptor ordering. For DIR, document same-object caller serialization unless operation locking is supplied. |
-| Exit handlers/startup | Initialize once; synchronize registrations and run callbacks outside locks. Require workers joined before orderly process finalizers; force-stopping a mutex owner can deadlock callbacks. Kernel forced teardown cannot depend on them. |
-| Time/timezone/rand | Protect generator/cache publication and borrowed timezone strings; document static time-result lifetimes and provide safe reentrant paths. |
-| C++ runtime | Replace disabled-thread exception state, guards/once, fallback allocator and unwinder assumptions before enabling libc++ threads. |
+| malloc/TLSF pools | Metadata exclusion and cross-thread free/realloc; native growth outside the guard, with bounded pre-effect BUSY retries and retained pools. |
+| Descriptors | Stable storage-only admissions, immediate final native CLOSE and serialized cursor/read-ahead; no table guard across I/O. |
+| FILE and DIR | Whole FILE operations serialize; admitted storage outlives close. Callers exclude new use during destruction and serialize same-DIR operations. |
+| Exit handlers/startup | Registrations serialize, callbacks run outside guards. Only the initial thread after worker collection runs process finalizers; forced teardown runs none. |
+| Time/timezone/rand | Serialized generator/cache publication, per-TCB implicit results/state and retained conversion snapshots; designation strings last until exit. |
+| C++ runtime | Audited external joinable-thread adapter, per-thread exception state, guard/once retry, fallback allocation and checked unwinder rwlocks. |
 
 The permanent C-only locale needs no mutable-state locks. The existing
-setenv/unsetenv and working-path overrides require synchronized publication and
+setenv/unsetenv and working-path overrides use synchronized publication and
 owned internal snapshots; borrowed public results retain their documented
 caller-exclusion rules. Synchronizing syscalls alone does not protect libc
 userspace state, and synchronizing malloc alone does not protect FILE lifetime.
@@ -372,8 +372,8 @@ Accepted initial resource policy: **64 live/retiring native threads and 64
 unreclaimed libc context records per process**, both including the initial
 thread. Reserve before publication and release each count only at its respective
 completion/reclamation boundary. Exhaustion returns a real limit/allocation
-error. The native live/retiring storage bound is implemented; the separate libc record
-budget belongs to task 8. Retaining a native completion observer consumes heap
+error. Both the native live/retiring bound and libc unreclaimed-record budget
+are implemented. Retaining a native completion observer consumes heap
 and capability storage, not a live-task slot. These tunable bounds allow roughly 64 MiB of default user stacks and
 1 MiB of 16 KiB kernel stacks, plus TLS/metadata; they guarantee no physical
 capacity. Large native contexts remain subject to VM/allocation admission.
@@ -394,14 +394,14 @@ merely completion of task 2.
 2. [x] **Admitted call references and CLOSE (#671).** Owned storage/rights and detached-generation close; one user task.
 3. [x] **Shared-table delivery (#684).** Growth/atomic installations, reply slot reservations and BSP table-loan replacement; one user task.
 4. [x] **VM activity and user-buffer leases (#700).** Dispatch/root departure, BSP quiescent mutation and explicit concurrent-device refusals; one user task.
-5. [x] **Native CREATE/EXIT/completion (#709), assigned 2026-10-11.** Thread set/result election, guarded-context lifetime, initial/sibling FS setup and space placement; joinable only. Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc is not ready yet.
+5. [x] **Native CREATE/EXIT/completion (#709), assigned 2026-10-11.** Thread set/result election, guarded-context lifetime, initial/sibling FS setup and space placement; joinable only. Owner can run minimal native sibling probes with distinct stacks/FS and shared CR3, then join; ordinary threaded libc requires gate 8.
 6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is recorded (CALL64 fastest about +100 ns). See [qualification](../development/experiments/threads-task6/README.md).
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
-7. [x] **Static TLS and errno (#748).** Compiler/LLD template/bootstrap, SDK/startup, per-thread errno and runtime keys/destructors are implemented and build/QEMU qualified. The matching compiler is published and CI passed before the latest dependency rebase. Native launch cost (+6–9%, about +0.11 ms/launch) is accepted by the owner, 2026-10-12; IPC/pages are unchanged. Initial-thread static TLS is a much-later launch-heavy-workload follow-up, not gate 8 work; see [qualification](../development/experiments/threads-task7/README.md).
+7. [x] **Static TLS and errno (#748).** Compiler/LLD template/bootstrap, SDK/startup, per-thread errno and runtime keys/destructors are implemented and build/QEMU qualified. The matching compiler is published; final rebased CI passed and #748 is merged. Native launch cost (+6–9%, about +0.11 ms/launch) is accepted by the owner, 2026-10-12; IPC/pages are unchanged. Initial-thread static TLS is a much-later launch-heavy-workload follow-up, not gate 8 work; see [qualification](../development/experiments/threads-task7/README.md).
 
    Owner can inspect distinct language TLS/errno and ordinary thread destructors on native siblings.
-8. [ ] **Thread-safe libc and C11/pthread profile — assigned 2026-10-12; decisions accepted and baseline captured, implementation in progress.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
+8. [x] **Thread-safe libc and C11/pthread profile (#756 + userland #236) — assigned 2026-10-12.** Managed creation/collection, allocator, descriptors, stdio/caches/shutdown and parking-backed mutex/condition/semaphore/once are implemented, with an audited joinable C++ adapter. Ordinary builds and one/four-CPU QEMU/GDB qualification pass; matched nested timings are recorded, owner-native A/B pending. See [contracts](../userland/threads.md) and [qualification](../development/experiments/threads-task8/README.md).
 
    Owner can use the documented thread profile and shared allocation/I/O, without unsupported detach/cancellation promises.
 9. [ ] **Separate consumer tasks.** SDL workers/timers then audio callbacks; libuv pool, Hax and Go each retain their own adapter/qualification scope.
@@ -414,7 +414,7 @@ needs workers and synchronization; Neovim's first slice continues to avoid them.
 needs timed conditions, drainers and a qualified concurrent TLS transport.
 [Go](go-runtime.md) needs native thread/TLS/parking plus its own stack/GC/VM
 adaptation; GOMAXPROCS=1 does not eliminate OS threads, and cgo-disabled Go need
-not go through pthreads. No consumer is delivered by this proposal.
+not go through pthreads. Consumer adapters remain separately assigned.
 
 Qualify later changes with matched/interleaved existing launch/IPI workloads and
 one-/four-CPU QEMU inspection. At native sibling delivery inspect shared CR3,
@@ -424,8 +424,8 @@ after task 7. Measure creation/join, uncontended/contended primitives, VM pause
 and consumer workloads, distinguishing
 nested-VM evidence from owner-native results. Kernel/ABI/SDK changes belong in
 Pyxis, libc/libpyxis/startup in userland, adapters in ports; publish dependency
-PRs before gitlinks. Task 5 adds the native SDK ABI and libpyxis helpers; no
-compiler-container rebuild or libc runtime/startup change is required.
+PRs before gitlinks. Task 5 added the native ABI/libpyxis bridge; gate 8 adds the managed libc/C++
+profile. The published gate 7 compiler suffices, without another container build.
 
 ## Accepted owner decisions (2026-10-10)
 

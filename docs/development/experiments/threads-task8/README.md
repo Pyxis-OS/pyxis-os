@@ -37,17 +37,105 @@ launch counts and20FINAL0/complete records verified; no exclusions. Median
 
 Clock calibration35,818–40,910ns/read was not subtracted. Launch wall includes
 reverse discovery/session setup; pages has one sample/boot and four-CPU ranges
-are broad. Matched B results and native owner A/B are not yet recorded.
+are broad. The final matched comparison below includes later merged pipeline
+and FAT32 inputs; this original capture establishes the before-code baseline.
 
-## Implementation qualification in progress
+## Final matched nested-QEMU comparison
 
-Ordinary runtime, SDK (including threaded libc++/abi/unwind), ports, userland and
-image builds pass with the existing published compiler. The first one-CPU manual
-runtime/time/once/C++/I/O/63-sibling limit runs passed. GDB established real word
-parking, distinct FS/stacks/errno, native blocked pipe admission with zero mapping
-borrowers, and post-join task/storage count1, cleared backing identities/observers
-and zero waiters. Final reviewed-input one/four-CPU checks, stream coverage and
-real backing exhaustion are in progress; these are not yet final-head claims.
+A: `98a4b1b05e762efe53e209da46cd8609189868c0` (#755, now merged), userland
+`3daa24611e1e0a3471e182bb34e281e861be5515`. B: `c6449601`, userland `486d80e`.
+Both use fs `30f625`, ports `fd1eb30`, lwIP `a1aadb91`, the same published
+compiler and byte-identical kernel configuration. A's successful exact-source
+CI REST2106/UI2028 bundles passed all ordinary verifiers/image assembly; B is
+the local ordinary build independently covered by successful exact-source CI
+REST2108/UI2030. Each image uses its matching initrd.
+
+Same configuration/commands as above, frozen client and firmware, fresh boots
+in order **1A, 1B, 4A1, 4B1, 4A2, 4B2**. All2400timed IPC passes,24warmups,
+six800-allocation/release page runs, six16-launch warmups,18x1024launch loops
+and60FINAL0/complete records were independently verified; no exclusions.
+Cells are median (minimum–maximum) ms per256-message pass; four-CPU cells pool
+200samples/mode across two boots. These are batch timings, not latency percentiles.
+
+| Workload | 1CPU A | 1CPU B | 4CPU A | 4CPU B |
+| --- | --- | --- | --- | --- |
+| CALL64 completion | 84.091 (83.441–90.502) | 87.148 (84.856–89.832) | 102.794 (73.608–129.004) | 100.456 (69.692–159.581) |
+| CALL4096 completion | 84.375 (83.631–86.594) | 86.987 (85.351–98.195) | 103.579 (73.747–143.900) | 104.266 (72.355–142.060) |
+| SEND64 completion | 13.038 (12.840–14.757) | 13.430 (12.872–16.599) | 15.471 (11.668–24.450) | 18.130 (12.848–32.711) |
+| SEND64 admission | 1.204 (1.184–1.709) | 1.232 (1.185–1.633) | 1.228 (1.152–2.172) | 1.287 (1.193–3.000) |
+| SEND4096 completion | 13.119 (12.917–13.655) | 13.733 (13.078–16.965) | 15.690 (11.463–26.435) | 18.241 (12.365–29.234) |
+| SEND4096 admission | 1.260 (1.240–1.483) | 1.332 (1.261–1.919) | 1.312 (1.206–2.031) | 1.345 (1.210–2.958) |
+| Pages ms, all samples | 185.388 | 212.470 | 261.706 / 272.922 | 448.980 / 447.933 |
+| 1024launches wall median s | 3.380 | 3.770 | 4.655 | 5.025 |
+
+Launch samples: 1A3.37/3.38/4.38s;1B3.81/3.77/3.76s;
+4A1 4.69/4.58/4.62s;4B1 4.61/4.72/4.66s;
+4A2 4.53/4.79/5.73s;4B2 5.36/6.51/5.33s. Clock calibration
+35,567–42,120ns/read was not subtracted. Launch wall includes discovery/session
+setup, pages has one sample/boot. B pages are higher in both four-CPU pairs
+(64–72%) and the single one-CPU pair (15%); four-CPU SEND medians are about17%
+higher. These shifts are recorded, not accepted native costs. Four-CPU host
+load varied with unrelated VMs, left untouched; no unrelated VM was observed
+in the one-CPU snapshots. No causal attribution or speedup is established.
+Owner-native interleaved A/B is required before accepting a steady cost.
+
+Source inspection separates startup from timed work: libc now queries/copies
+supplied THREADS and CLOCK grants and establishes managed identity at startup,
+and adds shared-state exclusion to allocation and FILE/cache operations. Launch
+therefore includes real additional setup; its individual contribution is not
+measured. `allocbench pages` calls native MEMORY directly inside its timed loop,
+with calloc/stdio outside it; new TLSF locks/BUSY helpers are not that loop's
+allocation path. Kernel reply staging, payload copies and syscall root accounting
+remain unchanged. The pending-entry scheduler correction executes after rejected
+admission handoff, not on an ordinary successful entry. None of these inspected
+facts attributes the measured pages/SEND shift.
+
+Commands for native capture use each image's matching initrd and the same client:
+
+```sh
+for mode in call send; do
+  for size in 64 4096; do
+    printf 'session bin://ipcbench.pxe %s --size %s --messages 256 --rounds 100\n' "$mode" "$size" |
+      pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323
+  done
+done
+printf 'allocbench pages --size 65536 --live 8 --rounds 100\nexit\n' |
+  pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323
+printf 'session bin://lua.pxe -e "for i=1,1024 do assert(pyxis.run{\x27echo\x27,\x27-n\x27}==0) end; print(\x27launches=1024\x27)"\n' |
+  pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323
+```
+
+Use16launches for warmup, then three1024-launch samples measured with the host's
+`time`. Exact commands, hashes, raw JSONL and independently checked results are
+retained in `pyxis-threads-gate8-control-755/build/gate8-comparison/`.
+
+## Interactive implementation qualification
+
+B: parent `c6449601`, userland `486d80e` (contains pipeline/FAT32 main `3daa246`),
+fs `30f625`, unchanged ports/compiler. Required FAT32 ABI dependency #755 is now
+merged; it is not gate 8 implementation. Ordinary runtime, SDK (threaded
+libc++/abi/unwind), ports, userland and image builds pass. Exact-head CI
+REST2108/UI2030 passed changes/pins/filesystem/build. No new compiler container.
+
+One-CPU2GiB final image passed all six managed runtime modes, TLS and forced
+TLS stop/fault/parking-stop; each returned FINAL0/complete. C++ covered separate
+TLS/errno and concurrently held exceptions, static/once exception retry,
+cross-thread heap-backed objects, language-before-key drain, thread-exit
+notification and string/shared streams. Guest TCC built and ran a TLS-free
+stdio/errno C program. Earlier four-CPU2GiB fixed-core runs passed these paths
+and repeated the63-sibling limit/collection. The final four-CPU512MiB image
+repeated all six runtime modes and exhausted341,598,208bytes in523native
+regions: native allocation/CREATE returned NO_MEMORY and managed create returned
+thrd_nomem, then both created/joined after cleanup.
+
+GDB established real word parking, shared process/CR3 and distinct FS/stacks/
+TLS/errno; post-join task/storage counts1, cleared backing identities/observers
+and zero waiters/borrowers. Final four-CPU pipe checkpoints established actual
+`task_wait_sleep_interruptible <- pipe_call` admissions with zero mapping
+borrowers before FILE/raw close/reuse; both returned verified EOF/EPIPE/occupant
+results. C++ readiness flags/delays establish retry opportunities, not observed
+guard enrollment; native parking was inspected separately. No injected calls,
+user-data mutation, new test infrastructure or klog lines.
 
 Manual commands use `session bin://threadprobe.pxe` with modes `runtime`,
 `runtime-inspect`, `runtime-time`, `runtime-once`, `runtime-limit`, `runtime-cxx`,
@@ -73,4 +161,4 @@ a migrated, not-yet-admitted syscall retaining CPU2's scheduler pointer/stack
 while executing on CPU0. A repeated rejection could switch onto the wrong CPU's
 permanent stack. The kernel correction refreshes the CPU-local scheduler after
 that handoff, preserving pre-admission migration/stop behavior and adding no
-ordinary successful-entry operation. Fixed-image repeats remain pending.
+ordinary successful-entry operation. Fixed-image runtime/capacity repeats passed without another panic.

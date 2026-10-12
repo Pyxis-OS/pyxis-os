@@ -80,7 +80,8 @@ The SDK's C++ adapter uses this profile for joinable `std::thread`, synchronizat
 thread-local exception state, static guards, once and unwinder locks. C++ once
 exceptions reset the initializer state before rethrow. `std::thread::detach`
 throws while retaining joinability. Detached async workers (`std::async`) are not
-qualified by this profile. Consumer adapters such as SDL and libuv remain separate
+qualified by this profile. Wider non-lock-free compiler atomic helpers are not
+supplied; the thread probes use lock-free integral atomics. Consumer adapters such as SDL and libuv remain separate
 [gates](../wip/threads.md#delivery-gates).
 
 [Gate 8 qualification](../development/experiments/threads-task8/README.md)

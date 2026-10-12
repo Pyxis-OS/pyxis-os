@@ -178,7 +178,7 @@ include path so `-MMD` tracks them.
 
 | Supported | Not provided |
 | --- | --- |
-| Exceptions, RTTI, static constructors/destructors, local statics, executable-only `thread_local`, joinable threads and synchronization | Detached workers and general `std::async` launch |
+| Exceptions, RTTI, static constructors/destructors, local statics, executable-only `thread_local`, joinable threads and synchronization | Detached workers, general `std::async` launch and non-lock-free compiler atomic helpers |
 | Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>`, streams, C-only locale, wide facilities | Non-C locales |
 | `system_clock`, `steady_clock`, native `random_device` | `<filesystem>`, time zones |
 | Aligned `new` up to 4096 bytes | Most of `<cmath>`, which follows libc's [math subset](../kernel/userspace.md#foundational-libc) |

@@ -89,6 +89,22 @@ in-place aligned growth when long-lived applications make retained capacity or c
 and supports cross-thread free/realloc. Concurrent misses can prepare separate pools outside the guard; each published pool is
 retained until process exit. Revisit surplus-pool disposal only if measured concurrent growth makes retained capacity material.
 
+## Retained timezone designations
+
+The threaded time conversion cache interns escaped `tm_zone` strings until process exit, keeping them valid across concurrent
+TZ replacement. Repeated selection can retain additional designations even after zone bytes are released. This is the accepted
+borrowed-pointer contract; revisit reclamation only with a consumer that can use owned results and demonstrates material retained
+capacity, rather than invalidating escaped pointers.
+
+## Threaded libc cost qualification
+
+Gate 8's [matched nested-QEMU comparison](development/experiments/threads-task8/README.md#final-matched-nested-qemu-comparison)
+records higher pages elapsed (one CPU about15%; four CPU64–72%) and four-CPU SEND completion medians (about17%), with changing
+unrelated host VM load. These are measured sample shifts, not accepted native costs or an attributed lock/retry overhead.
+The timed pages loop uses native MEMORY operations directly, outside libc allocation/stdio; creation also adds managed runtime
+grant/identity setup before work begins. Revisit at the owner-native gate 8 A/B before accepting steady costs or assigning a
+targeted correction. Preserve the guarded admission, lifetime and immediate native CLOSE contracts.
+
 ## TLS bootstrap launch cost
 
 Gate 7 prepares guarded TCB backing and binds FS through separate BSP VM transactions on every libc process launch, including
@@ -157,7 +173,9 @@ remains after batching leases. Reply staging allocation/free, the extra payload
 copy and syscall root accounting are untested candidates, not established
 causes. The owner parks profiling until threads task 8, when IPC and allocation
 paths are touched anyway; preserve authority, bounded lifetimes, root drainage
-and late-output semantics. Gate 6 adds roughly 100 ns to CALL64 fastest; the
+and late-output semantics. Gate 8 changes libc allocation/I/O, not kernel reply staging, payload copies or syscall root
+accounting; its owner-native comparison is the task-8 review input for any separately assigned residual investigation.
+Gate 6 adds roughly 100 ns to CALL64 fastest; the
 [#733 native follow-up](development/experiments/threads-task6/README.md#scheduler-pointer-follow-up)
 recovers at most 25 ns, within noise. Its residual cause is unmeasured; revisit
 with the same task-8 IPC/allocation work, without further profiling now.
@@ -825,7 +843,8 @@ The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliber
 
 - **Joinable C++ thread profile:** gate 8 supplies native synchronization and thread-local exception bookkeeping, including static
   guards and checked unwinder locks. Detach and general `std::async` workers remain unsupported; revisit with the first consumer
-  needing detached lifetime/collection, not by silently dropping its completion observer.
+  needing detached lifetime/collection, not by silently dropping its completion observer. Wider non-lock-free compiler atomic
+  helpers are still absent; revisit if a reached consumer needs them, independently of the native parking profile.
 - **C-only locale:** the matching gate 7 compiler adopts the native locale, wide FILE/UTF-8 and entropy closure; full locale databases
   and wide scanning remain absent.
 - **Most of `<cmath>` is missing:** libc's math subset leaves 161 of the 186 imported names undefined, so first use fails to compile.
@@ -1715,7 +1734,7 @@ between those operations or a failed unlink can leave a named file with no stale
 are not ISO C `tmpnam`). `pyxis.run` inherits live C streams, omitting closed ones, but cursors, append mode, pushback and read-ahead belong to the parent runtime, so child
 streams begin at zero, unread buffered pipe bytes stay in Lua and `io.input`/`io.output` rebinding is local; revisit shared stream state only with a native ownership design.
 C-locale `strftime` supports standard conversions and E/O forms without width or flag extensions, `%z` loses historical offset seconds at minute precision (`tm_gmtoff` keeps
-them), a `tm_zone` designation is borrowed until timezone-cache replacement or exit, and locale selection is deferred.
+them), a `tm_zone` designation is borrowed until process exit, including across cache replacement; locale selection is deferred.
 
 ## Sorted ls memory and live file details
 
