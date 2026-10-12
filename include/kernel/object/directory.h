@@ -7,8 +7,8 @@
 
 struct hostfs_node;
 struct npfs_node;
-struct fat32_node;
 struct native_completion;
+struct fat32_node;
 
 enum directory_backing {
   DIRECTORY_INITRD,

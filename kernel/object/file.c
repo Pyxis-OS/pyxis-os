@@ -643,7 +643,8 @@ enum call_status file_completion_reserve(struct native_completion *operation)
   if (!(operation->target.rights & required)) {
     return CALL_DENIED;
   }
-  if (file->backing == FILE_HOST) {
+  if (file->backing != FILE_RAM && file->backing != FILE_INITRD &&
+      file->backing != FILE_NPFS) {
     return CALL_BAD_OPERATION;
   }
   if (file->backing == FILE_NPFS) {

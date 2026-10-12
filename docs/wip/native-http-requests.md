@@ -201,7 +201,7 @@ All three defaults accepted and bounded implementation assigned by the owner,
    acknowledgement; a replacement receiver cannot bypass it.
 
 The bounded first scope is TCP CONNECT, DNS UDP SEND/RECEIVE and private native
-staging CREATE/REMOVE/READ/WRITE/RESIZE/SIZE on RAM/archive/npfs. HOST and exported
+staging CREATE/REMOVE/READ/WRITE/RESIZE/SIZE on RAM/archive/npfs. HOST/FAT32 and exported
 provider forwarding are excluded. See the [completion ABI and limits](../interfaces/native-completion.md),
 [admission debt](../technical-debt.md#native-completion-per-process-admission) and
 [QEMU qualification/cost finding](../development/experiments/native-completion.md).

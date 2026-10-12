@@ -662,7 +662,8 @@ enum call_status directory_completion_reserve(struct native_completion *operatio
       length != operation->input_size - header_size) {
     return CALL_BAD_REQUEST;
   }
-  if (directory->backing == DIRECTORY_HOST) {
+  if (directory->backing != DIRECTORY_RAM && directory->backing != DIRECTORY_INITRD &&
+      directory->backing != DIRECTORY_NPFS) {
     return CALL_BAD_OPERATION;
   }
   if (directory->backing == DIRECTORY_NPFS && length > NPFS_NAME_MAX) {

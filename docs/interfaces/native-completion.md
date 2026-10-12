@@ -45,7 +45,7 @@ user buffers, pointers in delivered data or per-operation capability handles.
 | DIRECTORY CREATE | `completion_create_request` plus one name component; exclusive FILE READ/WRITE creation, attached FILE_RIGHTS grant |
 | DIRECTORY REMOVE | `completion_remove_request` plus one name component; native result |
 
-FILE/DIRECTORY backends are RAM, archive reads and mounted npfs. HOST, exported
+FILE/DIRECTORY backends are RAM, archive reads and mounted npfs. HOST, FAT32, exported
 providers, lookup, enumeration, rename and sync are unsupported here. Existing
 rights, immutable-backend refusals and native bounds apply: READ 4,088 bytes,
 WRITE 4,080, UDP 1,472; names must fit the copied request and backend limits.
