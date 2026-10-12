@@ -6,7 +6,7 @@ compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
 and running the [ports runner](source-builds.md) come later. No hosted compiler
 has run yet: tasks 1-3 deliver Support, C++ and libc prerequisites, and the
 target Clang/LLD links remain unqualified. Threads gates 5–8 are now merged;
-task 4 is assigned to delta (2026-10-12), stopped at the pre-code decisions below.
+task 4 is assigned to delta (2026-10-12), with its qualification defaults accepted.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -36,6 +36,13 @@ The driver launching LLD or external cc1 requires
 [nested execution groups](nested-execution-groups.md), a parked required direction
 for contained descendant execution. It does not change the accepted first
 completion: the caller compiles one source and separately invokes LLD.
+
+**Owner requirement (2026-10-12), not an assigned design:** Clang must eventually
+invoke LLD itself (`clang hello.c -o hello`). Task 5 or a follow-up must provide
+that through declared launch grants, the
+[native command-execution core](native-command-execution.md) and the
+[nested execution groups direction](nested-execution-groups.md), never a wrapper.
+Task 4 retains its no-launcher profile.
 
 `lldMain` in `lld/include/lld/Common/Driver.h` is the later library-entry route;
 embedding must respect `canRunAgain`, context cleanup and fatal-exit containment.
@@ -89,12 +96,11 @@ Source inspection of the current
 | Existing refusals | Module locking, PCH/modules/preambles and child crash helpers already refuse in the current fork. Preserve those policies; default integrated cc1 is already configured. |
 | Retained-handle, memory, stack budgets | Need actual native compiler artifacts (task 5); see Resources below. |
 
-### Proposed task 4 qualification defaults — awaiting owner
+### Accepted task 4 qualification defaults (2026-10-12)
 
 The [pre-code baseline](../development/experiments/hosted-clang-integration.md)
-is captured at current main. No compiler source changes or cross-build have
-started. Owner wind-down instruction, 2026-10-12: record these choices and stop;
-do not proceed on assumed answers.
+is captured before compiler source changes. These defaults authorize task 4
+qualification; installed tools still require a separate task 5 go.
 
 1. **Resource defaults.** A temporary unpacked development Clang bundle contains
    read-only `clang_resources` and `sysroot` directories. Configure only the hosted
