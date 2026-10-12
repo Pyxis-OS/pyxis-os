@@ -422,6 +422,8 @@ Two-sample end-to-end ranges exclude capped-output reading and debugger pauses.
 The raw and library callers use the same child workloads; execution/preparation
 and host scheduling dominate these variable nested-QEMU samples. They establish
 progress and deadline behavior, not a native or general speed comparison.
+The raw baseline counts drained bytes in memory; the library also owns metadata
+and appends both private FILE captures. These are not equal storage-cost paths.
 
 | CPUs / path | Full two-way (ms) | Early reader exit (ms) | 250 ms timeout (ms) |
 | --- | ---: | ---: | ---: |
