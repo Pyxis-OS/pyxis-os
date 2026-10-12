@@ -679,8 +679,8 @@ trimming. The optional final `job` is nil when ownership was consumed, otherwise
 the retained record for explicit cancel/wait/close. They retain unresolved cleanup
 in the same ownership registry and never rerun a failed/uncertain command.
 Nonzero stage exits remain in the result. The host ports runner extracts its existing shell boundary into a host-only adapter,
-preserving current recipe `ctx.run`/`ctx.capture` behavior, including the latter's
-single trailing-LF removal. The native adapter never calls `os.execute`/`io.popen`
+preserving current recipe `ctx.run` behavior and internal capture's single
+trailing-LF removal (capture is not added to the recipe context). The native adapter never calls `os.execute`/`io.popen`
 or turns argv into shell text. Full native recipes/make/driver-launched tools
 remain blocked on actual tools and nested groups; this is not a recipe runner
 qualification or a broker workaround.

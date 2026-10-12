@@ -4,8 +4,8 @@ Libc's [`pyxis/job.h`](../../userspace/libc/include/pyxis/job.h) launches one
 known native executable through the caller's existing LAUNCH-authorized launcher.
 The child stays in that launcher's space, CPU and execution group. The core
 does not resolve images, expand bundles, interpret scripts or create groups.
-Lua and shell adapters remain later work in the
-[execution milestone](../wip/native-command-execution.md).
+Lua exposes owned capture/pipeline records, and libuv has an exact-inventory
+opt-in alongside its ordinary spawn path. The shell retains its existing syntax.
 
 ## Explicit inputs
 
@@ -69,6 +69,14 @@ EXITED/FAULTED/TERMINATED result; repeated waits return the same result.
 paths must request stop and observe retirement before closing. After retirement,
 close attempts release once and clear the record even if the release is
 uncertain. Closing an independent observer never terminates the child.
+
+`pyxis_job_launch_observer` shares the same preparation, final-grant checks and
+selected-output flushing, but returns an owned WAIT|TERMINATE observer directly.
+Event loops own its dispatch/close policy. It adds no capture record or hidden
+stop on close; [`uv_pyxis_spawn_job`](../../ports/libuv/README.md) uses this path.
+A launch whose observer publication fails reports OUTCOME_UNKNOWN: a framed
+BAD_BUFFER can occur after the kernel has started the child, so it is not proof
+of refusal. Missing batch observers have the same conservative rule. Never replay.
 
 The API is single-owner. WAIT observes execution-resource retirement, including
 the process/task/VM/grant table, rather than all deferred object destruction.
