@@ -297,6 +297,21 @@ static struct boot_module copy_file_extent(const struct limine_file *file,
   return (struct boot_module){.physical = physical, .size = file->size};
 }
 
+static void copy_uuid(uint8_t bytes[16], const struct limine_uuid *uuid)
+{
+  bytes[0] = uuid->a;
+  bytes[1] = uuid->a >> 8;
+  bytes[2] = uuid->a >> 16;
+  bytes[3] = uuid->a >> 24;
+  bytes[4] = uuid->b;
+  bytes[5] = uuid->b >> 8;
+  bytes[6] = uuid->c;
+  bytes[7] = uuid->c >> 8;
+  for (size_t i = 0; i < 8; ++i) {
+    bytes[8 + i] = uuid->d[i];
+  }
+}
+
 static void copy_boot_files(void)
 {
   const struct limine_module_response *response = module_request.response;
@@ -308,6 +323,23 @@ static void copy_boot_files(void)
   boot.initrd = copy_file_extent(response->modules[0], "initrd", false);
   boot.kernel_file = copy_file_extent(executable_file_request.response->executable_file,
                                     "kernel ELF", true);
+  const struct limine_file *file = executable_file_request.response->executable_file;
+  switch (file->media_type) {
+  case LIMINE_MEDIA_TYPE_GENERIC: boot.origin.media = BOOT_MEDIA_DISK; break;
+  case LIMINE_MEDIA_TYPE_OPTICAL: boot.origin.media = BOOT_MEDIA_OPTICAL; break;
+  case LIMINE_MEDIA_TYPE_TFTP: boot.origin.media = BOOT_MEDIA_NETWORK; break;
+  default: boot.origin.media = BOOT_MEDIA_UNKNOWN; break;
+  }
+  if (boot.origin.media == BOOT_MEDIA_DISK) {
+    copy_uuid(boot.origin.disk, &file->gpt_disk_uuid);
+    copy_uuid(boot.origin.partition, &file->gpt_part_uuid);
+    uint8_t disk_nonzero = 0, partition_nonzero = 0;
+    for (size_t i = 0; i < 16; ++i) {
+      disk_nonzero |= boot.origin.disk[i];
+      partition_nonzero |= boot.origin.partition[i];
+    }
+    boot.origin.gpt = disk_nonzero && partition_nonzero;
+  }
 }
 
 static void copy_acpi_address(void)

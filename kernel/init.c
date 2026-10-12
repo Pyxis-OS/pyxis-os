@@ -10,6 +10,7 @@
 #include <kernel/boot/options.h>
 #include <kernel/boot_files.h>
 #include <kernel/initrd.h>
+#include <kernel/object/mount.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
@@ -54,6 +55,7 @@
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
   arch_clock_maintain();
 
+  mount_set_boot_origin(&boot->origin);
   enum mm_result boot_files_result = boot_files_init(boot);
   if (boot_files_result != MM_OK) {
     panic("cannot retain boot files (error %u)", (unsigned)boot_files_result);

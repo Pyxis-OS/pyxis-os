@@ -237,6 +237,16 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     object_release(mount);
     mount = NULL;
   }
+  handle_t esp_mount_handle = HANDLE_INVALID;
+  mount = mount_create_boot_esp();
+  if (mount) {
+    if (capability_install(&process->capabilities, mount, MOUNT_RIGHT_OPEN_ROOT,
+        0, &esp_mount_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(mount);
+    mount = NULL;
+  }
   handle_t native_mount_handle = HANDLE_INVALID;
   if (mount_config->enabled && (block_device_count() || !block_inventory_complete())) {
     mount = mount_create_native(mount_config);
@@ -318,7 +328,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[28] = {
+  struct process_binding resources[29] = {
     {"memory", memory_handle},
     {"threads", threads_handle},
     {"launcher", launcher_handle},
@@ -350,6 +360,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   }
   if (mount_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"host_mount", mount_handle};
+  }
+  if (esp_mount_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"esp_mount", esp_mount_handle};
   }
   if (native_mount_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"native_mount", native_mount_handle};
