@@ -1854,3 +1854,11 @@ folds ([calendar limits](#calendar-and-encoding-profile)). luv reports TCP, UDP,
 callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
 descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
 [task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.
+
+## Directory moves outside RAM and npfs
+
+Owner accepted 2026-10-12: directory moves support RAM and writable npfs only;
+FAT32/host return BAD_OPERATION, with no cross-store copying. FAT32 needs atomic
+runtime identity/held-child locator repair, on-disk `..` updates and qualification
+of its ordered failure behavior; host external-name races need their own contract.
+Revisit when directory moves on either store are required. See [native rename](interfaces/directories.md#atomic-rename-and-directory-moves).

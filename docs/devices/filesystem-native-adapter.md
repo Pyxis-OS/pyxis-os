@@ -58,8 +58,10 @@ supply no capability authority and are not exposed as `..` entries.
 READ and executable capture require file READ; SIZE accepts READ or WRITE.
 WRITE, RESIZE and file SYNC require WRITE; even an empty write reaches the worker's
 authority/argument checks.
-CREATE/REMOVE and file rename use directory CREATE/REMOVE rights; replacement
-also requires destination REMOVE. Native rename requires the same volume, and
+CREATE/REMOVE and file/directory rename use directory CREATE/REMOVE rights; replacement
+also requires destination REMOVE. Directory moves journal the inode parent
+backlink with both namespace edits and preserve held identity; replacement
+requires an empty directory. Native rename requires the same volume, and
 mixed backends fail BAD_OPERATION. Directory sync requires CREATE or REMOVE.
 Archive, RAM and HOST behavior remains separate.
 

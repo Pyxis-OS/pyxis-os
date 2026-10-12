@@ -1,6 +1,6 @@
 # Filesystem mutations
 
-The native directory protocol supports creation, removal and atomic file
+The native directory protocol supports creation, removal and atomic file/directory
 rename/replacement. These operations act on single component names through
 capabilities; libc and libpyxis resolve paths in userspace. The initrd remains
 immutable. RAM data survives process exit, not reboot.
@@ -12,7 +12,7 @@ open, but rejects creation of new children. Enumeration returns copied names
 and reports CHANGED when its generation no longer matches.
 
 RAM rename requires REMOVE on the source parent and CREATE on the destination;
-replacing another entry also requires destination REMOVE. Both parents must
+REPLACE also requires destination REMOVE, including for an absent destination. Both parents must
 refer to writable RAM directories. The operation supports explicit replace or
 no-replace policy, and failure preserves both entries. No missing-destination
 interval is observable during replacement. Existing destination handles retain
@@ -20,8 +20,8 @@ the old object. A rename to the same entry is a successful no-op.
 
 `directory_remove` and `directory_rename` expose native component operations;
 `path_remove` and `path_rename` resolve parents using caller-owned scratch space.
-Libc provides `remove` and file-only `rename`. The `rm`, `rmdir` and `mv` utilities
-exercise these interfaces; `mv` names each file's destination in userspace,
+Libc provides `remove` and file/directory `rename`. The `rm`, `rmdir` and `mv` utilities
+exercise these interfaces; `mv` names each source's destination in userspace,
 appending the source's last name when the destination is a directory, and never
 falls back to copy-and-delete.
 
@@ -30,16 +30,17 @@ save, then atomically replace the selected slot under
 `home://doom/saves/<iwad-name>/`. Shareware and retail saves are separated.
 Configuration persistence remains independent and disabled.
 
-Directory moves, hard links, recursive deletion and cross-filesystem moves are
-not implemented. Directory moves need cycle prevention, lock ordering and a
-policy for retained working-directory chains and `..`. The filesystem does not
+RAM/npfs directory moves retain the tree identity, reject self/descendant moves
+and replace only empty same-kind victims. Held cwd chains keep their granted
+ancestors, and delegated roots cannot escape to a new parent. Hard links,
+recursive deletion and cross-filesystem copying are not implemented. The filesystem does not
 automatically create missing parents; applications create the directories they
 need explicitly. Native storage uses the [mounted pool writer](../devices/filesystem-native-adapter.md)
 through these same component operations.
 
 ## Native persistent backing
 
-Native CREATE, REMOVE and regular-file RENAME use the same capability checks.
+Native CREATE, REMOVE and file/directory RENAME use the same capability checks.
 Parents for native rename must belong to one volume; mixed backends return
 BAD_OPERATION. REPLACE requires destination REMOVE even when its name is absent.
 The serial worker stages CREATE's returned capability before publishing the entry;
