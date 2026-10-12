@@ -129,6 +129,8 @@ Asterism is today's spaces plus:
 
 Names (owner, 2026-10-07):
 
+Owner direction (2026-10-12): surviving private `job_work` cleanup belongs with Continuum and its family, alongside [nested execution groups](nested-execution-groups.md), revisiting the [caller-failure RAM retention limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+
 - **Continuum** is the supervisor. It oversees both kinds of space below.
 - **A haven** is a space without a terminal, managed exclusively by Continuum:
   a web server, S3-style storage, or today's remote space. Nobody types into a

@@ -569,8 +569,11 @@ request a new context. Captured stages receive no `job_work`, provisioning
 ancestor or launcher; their audited resource selections follow the profile below.
 
 The creator owns the leaf until client retirement, removes private entries/link
-and closes it afterward. Uncertain client admission retains the context until
-session teardown, without replay or invented retirement. Existing boot init's
+and closes it afterward. Owner accepted 2026-10-12: uncertain admission or creator failure retains the
+named context privately in RAM until reboot, without replay or invented
+retirement; confirmed retirement cleans it when the creator survives. The
+[bounded caller-failure leak](../technical-debt.md#private-job-context-cleanup-after-caller-failure)
+returns with Continuum and its family, alongside nested execution groups. Existing boot init's
 private RAM backing suffices; neither a kernel RAM factory nor shared `tmp://`
 is used. Captures are created then unlinked inside the leaf.
 
