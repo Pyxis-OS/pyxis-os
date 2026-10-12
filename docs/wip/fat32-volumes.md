@@ -2,8 +2,8 @@
 
 Status: **tasks 1–2 merged (#740, #747); task 3 assigned 2026-10-12.**
 The directory-validation fixes (#743 / fs #33) are merged. The owner accepted the
-raw-write contract below on 2026-10-12. Task 3's binding below is proposed,
-not accepted or implemented; stop for owner review before code. Tasks 4–5 are unassigned.
+raw-write contract below on 2026-10-12. The owner accepted task 3's binding on 2026-10-12 and assigned its implementation.
+Task 3 is not implemented yet; tasks 4–5 are unassigned.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -217,7 +217,7 @@ Directory-tail and volume-label fixes are included; embedded short-name spaces
 remain read compatibility, never creation provenance. No mount/write adapter,
 formatting or native ESP qualification is added.
 
-## Task 3 binding proposal — 2026-10-12
+## Task 3 binding — accepted 2026-10-12
 
 [Baseline](../development/experiments/fat32-mount-baseline.md) records current
 main `173f1321` before changes. **Inspected:** [MOUNT](../../kernel/object/mount.c)
@@ -229,9 +229,9 @@ not retained native objects or offset reads. Limine supplies GPT disk/partition
 UUIDs, but the [boot adapter](../../boot/limine/entry.c) currently keeps neither.
 These are implementation gaps, not interfaces already available to applications.
 
-### Three owner decisions, with proposed defaults
+### Three accepted owner decisions — 2026-10-12
 
-1. **Binding and retirement — default: separate root and bound control.** Add
+1. **Binding and retirement: separate root and bound control.** Add
    `DISK_OPEN_FAT32`, requiring the selected disk's existing MOUNT right, with
    a one-based GPT entry and exact read-only directory rights. Successful admission
    returns a root and a control for that mounted instance in one capability-table
@@ -265,7 +265,7 @@ These are implementation gaps, not interfaces already available to applications.
    it cannot revoke references a sibling already copied/delegated. Release a new
    provisional instance's backing/exclusion only after all its references drain.
    Never discard a previously published or shared instance on another opener's failure.
-2. **Admission and exclusion — default: one worker-owned physical-extent registry.**
+2. **Admission and exclusion: one worker-owned physical-extent registry.**
    Key entries by inventoried device and checked half-open ranges in that device's
    logical blocks. Track pending admissions, FAT instances, retained npfs pools and
    raw claims. Reserve before probing/allocating, validate both GPT copies and the
@@ -294,7 +294,7 @@ These are implementation gaps, not interfaces already available to applications.
    Charge pending and retained storage before allocation; LIMIT and NO_MEMORY are
    distinct, with no partial root publication. These are implementation settings,
    not FAT format limits or a total-kernel-memory guarantee.
-3. **Trusted ESP selection — default: boot provenance, explicit root delegation.**
+3. **Trusted ESP selection: boot provenance, explicit root delegation.**
    Copy valid GPT disk/partition UUIDs and media kind from the executable's Limine
    file into owned boot metadata; normalize UUID fields in the adapter and retain
    no bootloader pointer. Match exactly one healthy inventoried GPT disk/ESP by both
@@ -303,7 +303,7 @@ These are implementation gaps, not interfaces already available to applications.
    optical/PXE boot does not select an attached ESP merely because one exists.
 
    The initial trusted bootstrap alone receives a boot-only MOUNT selection backend,
-   bound to that disk/partition. Its proposed OPEN_FAT32 operation takes only read-only
+   bound to that disk/partition. Its OPEN_FAT32 operation takes only read-only
    root rights and uses the same admission path to return the first root/control pair;
    it accepts no device/partition selector and grants no generic DISK MOUNT authority.
    The returned control is the instance backend from decision 1, not this issuer.
@@ -317,7 +317,7 @@ These are implementation gaps, not interfaces already available to applications.
    disk or a global `esp://`. Installed shell bindings/config loading/editor workflows
    remain task 5; task 3 introduces no descendant-launch policy.
 
-### Adapter and lifetime details proposed within task 3
+### Adapter and lifetime details within task 3
 
 Extend the shared read engine with confined entry locators, single-component
 lookup/enumeration and offset reads. Intern canonical objects across long-name,
@@ -352,7 +352,7 @@ capability entry or held lock crosses disk waits. Worker cleanup returns backing
 identity records and admission charges before releasing exclusion. Admission and
 retirement must also unwind correctly during process/group stop and failed replies.
 
-### Qualification after acceptance
+### Task 3 qualification
 
 Keep task 3 as one bounded implementation: dependency reader-locator APIs first,
 then the native adapter/registry/control and trusted bootstrap. Repeat the baseline
@@ -403,7 +403,7 @@ and mounted file I/O do not require its implementation.
   partition claims; qualify on disposable images, without whole-tree formatting.
   **After this task the owner can:** add and replace Pyxis-created files on a
   scratch FAT volume that Linux reads, without rebuilding that volume.
-- [ ] **3. Native read-only mount and release — assigned 2026-10-12; binding proposal pending.** Kernel FILE/directory wrappers,
+- [ ] **3. Native read-only mount and release — assigned 2026-10-12; binding accepted, implementation assigned.** Kernel FILE/directory wrappers,
   shared extent registry, alias/object identity, claim exclusion, reference drainage
   and trusted ESP bootstrap/root delegation. Design the native mount/retire binding
   before code; no userspace scheme proxy or implicit mount authority.
