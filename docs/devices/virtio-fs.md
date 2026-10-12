@@ -77,8 +77,8 @@ read-write, and gives each space the access its `live.lua` entry asks for:
 Development receives read-write grants and Read-only receives read-only grants.
 The Remote profile delegates an optional read-write view to its remote
 shell sessions, sharing the same export.
-Both shells start in the shared RAM-backed `tmp://` directory, so use an
-explicit `host://` path or `cd host://` to reach the export.
+The Development and Read-only shells start in `home://`, and the Remote shell in
+`tmp://`, so use an explicit `host://` path or `cd host://` to reach the export.
 From the shell, try:
 
 ```text
@@ -494,7 +494,7 @@ apply, with no write probe or silent read-only fallback. A validated zero-byte
 write is a backend-free no-op. Missing required rights fail with DENIED first.
 Boot init opens the root once, read-write if any space asks for that, and
 forwards read-only grants to read-only roots. The packaged roots are optional
-and leave the initial working directory at `tmp://`. The shell's
+and do not change a space's initial working directory. The shell's
 `mount ... host` command still works for a holder of `host_mount`.
 The mount operation uses the existing object-call ABI and creates neither a
 global namespace entry nor a kernel URI parser.

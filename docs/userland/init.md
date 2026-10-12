@@ -128,7 +128,8 @@ return {
   to false. It preserves a distinct terminal CREATE grant through trusted startup
   to the remote daemon, which brokers panes for explicit `pyxis-remote --mux`
   requests. It does not enable local mux, pointer control or clipboard stores.
-  Packaged live and installed configurations leave it false. See
+  The packaged live Remote space enables it; installed defaults have no Remote
+  space, so nothing sets it there. See
   [remote mux](remote-terminal.md#remote-multiplexer) for admission and LAN exposure.
 - **Power.** A space that sets `power = true` receives the kernel's `power`
   resource, with power-off and restart rights, for the shell's

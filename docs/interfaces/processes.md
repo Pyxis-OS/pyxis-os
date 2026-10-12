@@ -15,7 +15,8 @@ remains in Git history.
 ## Current programs
 
 [Boot init](../userland/init.md) creates each space and its init; the session
-then starts the [shell](../userland/shell.md) at tmp:// with terminal, launcher,
+then starts the [shell](../userland/shell.md) in the space's start directory
+(`home://` for stock interactive spaces) with terminal, launcher,
 memory, display, clock, keyboard, pointer, optional [space-title authority](../userland/init.md#space-titles)
 and boot/tmp root grants. It launches foreground utilities
 with explicit resources, waits for completion and returns to its prompt. Its space and TTY
@@ -85,9 +86,12 @@ prospective logical authority outside that guard, then rechecks the exact source
 generation, object and masks. A stale source fails and unwinds; admitted grants
 survive later CLOSE. Ordinary CALL/readiness references remain storage-only.
 
-There is still exactly one user task per process. Growth and installation use
-the shared-table protocols below; teardown requires drained activity and claims.
-This does not enable concurrent siblings.
+A process starts with one initial user task. Only a holder of the optional
+`threads` resource can add native siblings, which share this table; ordinary
+application launches omit it. Libc is not thread-safe and the compiler has no
+language TLS until thread gates 7 and 8, so siblings are native-only for now.
+Growth and installation use the shared-table
+protocols below; teardown requires drained activity and claims.
 See the [thread gates](../wip/threads.md#shared-capability-and-vm-ownership).
 
 Each space would have a capability table describing resources available to its
@@ -287,10 +291,12 @@ and allocation/reclamation constraints when a syscall runs on an AP.
 ## Kernel ownership and lifetime
 
 A process owns its address space, capability table, process observation and
-execution-group membership independently of its sole user task. The task owns
-execution storage and borrows that process. Exactly one prepared/submitted task
-is permitted, including blocked tasks. Shared address-space execution and
-multiple tasks require the later [thread tasks](../wip/threads.md).
+execution-group membership independently of any one user task. Each task owns
+its execution storage and borrows that process. Preparation admits exactly one
+prepared/submitted initial task, including blocked tasks. Native sibling tasks
+are created later in the same address space through the `threads` resource
+([threads](../wip/threads.md), tasks 5 and 6); process retirement waits for the
+whole task set.
 
 The ownership walkthrough for the example is:
 
@@ -343,8 +349,8 @@ Requests carry owned inputs/claims instead of an exclusive table loan. Their
 admitted caller and uninterruptible completion keep destination storage alive;
 stop unwinds references and claims before retirement. Final table teardown still
 requires all activity drained. VM leases and scoped device admission are
-implemented; actual sibling entry remains a separate
-[thread gate](../wip/threads.md). The kernel result enum remains separate from
+implemented, and native siblings enter through the
+[thread ABI](../kernel/userspace.md#entry-and-loading). The kernel result enum remains separate from
 public syscall statuses.
 
 Objects have an atomic reference count and a destruction callback, with no
@@ -517,8 +523,10 @@ executables are read in place. See [image capture](../kernel/program-loading.md#
 Request metadata and write payloads are captured before waiting or committing,
 including overlapping buffers. Read output is validated and copied under a short
 mapping lease after acquiring file ownership; no lease crosses that wait. Late
-output failure is BAD_BUFFER and does not undo committed effects. There is still
-one user task; sibling entry must qualify concurrent file/device operations.
+output failure is BAD_BUFFER and does not undo committed effects. A process has one
+initial user task; siblings use the same operations, and the
+[thread gates](../wip/threads.md) refuse unsupported concurrency with BUSY
+before effects.
 
 [Libpyxis wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) return native status for all four
 operations and validate reply sizes/counts; failure clears output values.

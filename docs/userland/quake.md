@@ -41,10 +41,14 @@ Arguments are Quake's own. `-basedir` replaces `boot://share/quake` and
 
 Quake's default bindings apply: arrows move and turn, Ctrl fires, Space jumps,
 Shift runs, Alt strafes, 1–8 select weapons and `/` selects the next one.
-Escape opens the menu and backquote the console. Mouse look is on at every
-start, so moving the mouse turns and looks up and down; the left button fires
-and the right moves forward. On a first run without a saved configuration, the
-middle button selects the next weapon rather than toggling mouse look. The
+Escape opens the menu and backquote the console. Quake requests native pointer
+locking once after its first presentation and applies mouse motion and buttons
+only while locked, so moving the mouse turns and looks up and down; the left
+button fires and the right moves forward. The kernel can refuse or later revoke
+the lock; keyboard play and rendering continue. Super+Esc unlocks, and a fresh
+left click on the game surface lets Quake request the lock again. On a first run
+without a saved configuration, the middle button selects the next weapon rather
+than toggling mouse look. The
 wheel is unbound by default (`bind mwheelup "impulse 10"` binds it).
 Super+Left/Right remains space navigation. Super+Down shows the terminal and
 Super+Up restores graphics; further frames preserve that choice.
