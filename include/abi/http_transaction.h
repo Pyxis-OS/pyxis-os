@@ -57,6 +57,12 @@ enum http_submission_state {
   HTTP_SUBMISSION_SENT,
 };
 
+enum http_framing_state {
+  HTTP_FRAMING_PENDING,
+  HTTP_FRAMING_COMPLETE,
+  HTTP_FRAMING_FAILED,
+};
+
 /* STATUS is observation-only. Native failure, HTTP status, framing, known
  * counters and cleanup diagnostics are separate. A missing final observation
  * never establishes completion. No credentials/request headers are returned. */
