@@ -36,7 +36,7 @@ enum npfs_operation {
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_INFO, NPFS_CREATE, NPFS_REMOVE,
   NPFS_RENAME, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
   NPFS_FAT_OPEN, NPFS_FAT_ROOT, NPFS_FAT_STATE, NPFS_FAT_RETIRE,
-  NPFS_FAT_SYNC, NPFS_FAT_BEGIN, NPFS_FAT_END,
+  NPFS_FAT_SYNC, NPFS_FAT_BEGIN, NPFS_FAT_END, NPFS_FAT_FINISH_BEGIN,
   NPFS_RAW_INFO, NPFS_RAW_OPEN, NPFS_RAW_READ, NPFS_RAW_WRITE,
   NPFS_RAW_FLUSH, NPFS_RAW_RELEASE, NPFS_RAW_CLAIM,
 };
@@ -74,7 +74,7 @@ struct npfs_job {
   char name[NPFS_NAME_MAX + 1];
   char destination_name[NPFS_NAME_MAX + 1];
   size_t destination_length;
-  bool replace, fat_write_authority;
+  bool replace, fat_write_authority, interval_delivered;
   /* CREATE claims capacity before submission and prepares logical ownership
    * before native mutation. Completion drains both before returning ownership. */
   struct capability_reservation reservation;
@@ -115,6 +115,8 @@ struct npfs_request {
 struct npfs_request *npfs_request_prepare(enum npfs_operation operation);
 void npfs_request_submit_and_wait(struct npfs_request *request);
 void npfs_request_release(struct npfs_request *request);
+/* Successful BEGIN retains admission through this allocation-free finish. */
+void npfs_request_finish_fat32_begin(struct npfs_request *request, bool delivered);
 /* Any publishing CPU, IF=0. Includes time in the executor FIFO and reserves one
  * of the 32 slots there; saturation is completed by the executor with BUSY. */
 void npfs_request_published(struct npfs_request *request);

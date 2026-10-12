@@ -577,6 +577,9 @@ static enum call_status capture_file(struct npfs_store_context *context, struct 
 
 static enum call_status perform(struct npfs_store_context *context, struct npfs_job *job)
 {
+  if (job->operation == NPFS_FAT_FINISH_BEGIN) {
+    return fat32_perform(context, job);
+  }
   if (task_deadline_expired(context->deadline)) {
     return CALL_TIMED_OUT;
   }
@@ -736,20 +739,23 @@ static void complete_job(struct npfs_job *job)
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct npfs_request *request = job->user_request;
   struct native_completion *completion = job->completion;
+  bool pending_begin = request && job->operation == NPFS_FAT_BEGIN && job->status == CALL_OK;
   job->completion = NULL;
   job->user_request = NULL;
   job->node = NULL;
   job->destination = NULL;
   job->raw = NULL;
-  if (job->admitted && job->fat_node) {
+  if (!pending_begin && job->admitted && job->fat_node) {
     fat32_request_complete(job->fat_node);
   }
   if (job->admitted && job->fat_destination) {
     fat32_request_complete(job->fat_destination);
   }
-  job->fat_node = NULL;
+  if (!pending_begin) {
+    job->fat_node = NULL;
+  }
   job->fat_destination = NULL;
-  if (job->fat_actor) {
+  if (!pending_begin && job->fat_actor) {
     object_release(&job->fat_actor->object);
     job->fat_actor = NULL;
   }
@@ -758,7 +764,7 @@ static void complete_job(struct npfs_job *job)
   }
   capability_reservation_release(&job->reservation, &job->slot);
   job->next = NULL;
-  if (job->admitted) {
+  if (!pending_begin && job->admitted) {
     KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
     job->admitted = false;
   }
@@ -813,6 +819,7 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_CAPTURE:
   case NPFS_FILESYSTEM_INFO:
   case NPFS_FAT_STATE:
+  case NPFS_FAT_FINISH_BEGIN:
   case NPFS_RAW_INFO:
   case NPFS_RAW_READ:
     return true;
@@ -1115,9 +1122,36 @@ void npfs_request_release(struct npfs_request *request)
   bsp_request_release(&request->request);
 }
 
+void npfs_request_finish_fat32_begin(struct npfs_request *request, bool delivered)
+{
+  KASSERT(request->job.operation == NPFS_FAT_BEGIN && request->job.status == CALL_OK &&
+      request->job.admitted && request->job.fat_node && request->job.fat_actor);
+  struct fat32_node *node = request->job.fat_node;
+  struct process_control *actor = request->job.fat_actor;
+  uint64_t id = request->job.interval_id;
+  request->job.fat_node = NULL;
+  request->job.fat_actor = NULL;
+  request->job.admitted = false;
+  npfs_request_release(request);
+  /* Transfer the existing admission and references; no second capacity claim. */
+  request = npfs_request_prepare(NPFS_FAT_FINISH_BEGIN);
+  request->job.admitted = true;
+  request->job.fat_node = node;
+  request->job.fat_actor = actor;
+  request->job.interval_id = id;
+  request->job.interval_delivered = delivered;
+  npfs_request_submit_and_wait(request);
+  KASSERT(request->job.status == CALL_OK);
+  npfs_request_release(request);
+}
+
 void npfs_request_published(struct npfs_request *request)
 {
   KASSERT(request->request.state == BSP_REQUEST_PREPARED);
+  if (request->job.operation == NPFS_FAT_FINISH_BEGIN) {
+    KASSERT(request->job.admitted && request->job.fat_node && request->job.fat_actor);
+    return;
+  }
   request->job.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   request->job.admitted = reserve_job();
   request->job.status = request->job.admitted ? CALL_OK :

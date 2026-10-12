@@ -24,12 +24,13 @@
 #define FAT32_STEP_LIMIT UINT64_C(67108864)
 #define FAT32_SECTOR_LIMIT UINT64_C(16777216)
 #define FAT32_DEPTH_LIMIT 64u
+#define FAT32_INTERVAL_LIMIT 16u
 
 struct fat32_interval {
   struct fat32_interval *next;
   struct process_control *actor;
-  uint64_t id, deadline;
-  bool active;
+  uint64_t id, deadline, previous_id, previous_deadline;
+  bool active, pending;
 };
 
 struct fat32_mount {
@@ -43,7 +44,7 @@ struct fat32_mount {
   struct npfs_store_context *context; /* Borrowed only while this worker executes. */
   struct fat32_node *nodes;
   uint64_t domain;
-  size_t data_nodes, controls;
+  size_t data_nodes, controls, interval_count;
   enum call_status backing_status, first_failure;
   bool probing, published, retired, writable;
 };
@@ -263,8 +264,10 @@ static enum call_status prepare_workspace(struct fat32_mount *mount, uint64_t ch
   return status == CALL_OK ? ensure_workspace(mount, bytes) : status;
 }
 
-static void free_interval(struct fat32_interval *interval)
+static void free_interval(struct fat32_mount *mount, struct fat32_interval *interval)
 {
+  KASSERT(mount->interval_count);
+  --mount->interval_count;
   uint64_t flags = cpu_save_interrupts();
   object_release(&interval->actor->object);
   cpu_restore_interrupts(flags);
@@ -276,12 +279,16 @@ static void update_intervals(struct fat32_mount *mount)
   struct fat32_interval **link = &mount->intervals;
   while (*link) {
     struct fat32_interval *interval = *link;
+    if (interval->pending) {
+      link = &interval->next;
+      continue;
+    }
     uint64_t flags = cpu_save_interrupts();
     bool stopped = process_control_stopped(interval->actor);
     cpu_restore_interrupts(flags);
     if (stopped) {
       *link = interval->next;
-      free_interval(interval);
+      free_interval(mount, interval);
       continue;
     }
     if (task_deadline_expired(interval->deadline)) {
@@ -332,6 +339,9 @@ static enum call_status mutation_admission(struct fat32_mount *mount, struct npf
     if (interval->active && interval->actor != job->fat_actor) {
       other_owner = true;
     }
+    if (interval->pending) {
+      other_owner = true;
+    }
   }
   return other_owner ? CALL_BUSY : CALL_OK;
 }
@@ -356,9 +366,12 @@ static enum call_status interval_operation(struct fat32_mount *mount, struct npf
     if (!*owned || (*owned)->id != job->interval_id) {
       return CALL_BAD_REQUEST;
     }
+    if ((*owned)->pending) {
+      return CALL_BUSY;
+    }
     struct fat32_interval *interval = *owned;
     *owned = interval->next;
-    free_interval(interval);
+    free_interval(mount, interval);
     return CALL_OK;
   }
   if (mount->writer.stopped) {
@@ -367,34 +380,69 @@ static enum call_status interval_operation(struct fat32_mount *mount, struct npf
   if (active_interval(mount)) {
     return CALL_BUSY;
   }
-  struct fat32_interval *interval;
-  enum call_status status = npfs_adapter_allocate(sizeof(*interval), (void **)&interval);
-  if (status != CALL_OK) {
-    return status;
+  struct fat32_interval *interval = *owned;
+  if (!interval) {
+    if (mount->interval_count == FAT32_INTERVAL_LIMIT) {
+      return CALL_LIMIT;
+    }
+    enum call_status status = npfs_adapter_allocate(sizeof(*interval), (void **)&interval);
+    if (status != CALL_OK) {
+      return status;
+    }
   }
+  uint64_t id;
   uint64_t flags = cpu_save_interrupts();
-  bool identified = fs_metadata_allocate_id(&interval->id);
-  if (identified) {
+  bool identified = fs_metadata_allocate_id(&id);
+  if (identified && !*owned) {
     object_retain(&job->fat_actor->object);
   }
   cpu_restore_interrupts(flags);
   if (!identified) {
-    npfs_adapter_free(interval, sizeof(*interval));
+    if (!*owned) {
+      npfs_adapter_free(interval, sizeof(*interval));
+    }
     return CALL_LIMIT;
   }
-  interval->actor = job->fat_actor;
+  if (!*owned) {
+    interval->actor = job->fat_actor;
+    interval->next = mount->intervals;
+    mount->intervals = interval;
+    ++mount->interval_count;
+  } else {
+    interval->previous_id = interval->id;
+    interval->previous_deadline = interval->deadline;
+  }
+  interval->id = id;
   interval->deadline = task_deadline_after_ms(30000);
   interval->active = true;
-  if (*owned) {
-    struct fat32_interval *previous = *owned;
-    *owned = previous->next;
-    free_interval(previous);
-  }
-  interval->next = mount->intervals;
-  mount->intervals = interval;
+  interval->pending = true;
   job->interval_id = interval->id;
   job->interval_deadline = interval->deadline;
   return CALL_OK;
+}
+
+static void finish_begin(struct fat32_mount *mount, struct npfs_job *job)
+{
+  struct fat32_interval **link = &mount->intervals;
+  while (*link && (*link)->id != job->interval_id) {
+    link = &(*link)->next;
+  }
+  struct fat32_interval *interval = *link;
+  KASSERT(interval && interval->pending && interval->actor == job->fat_actor);
+  if (!job->interval_delivered && !interval->previous_id) {
+    *link = interval->next;
+    free_interval(mount, interval);
+  } else {
+    if (!job->interval_delivered) {
+      interval->id = interval->previous_id;
+      interval->deadline = interval->previous_deadline;
+      interval->active = false;
+    }
+    interval->previous_id = 0;
+    interval->previous_deadline = 0;
+    interval->pending = false;
+  }
+  update_intervals(mount);
 }
 
 static void free_workspace(struct fat32_mount *mount)
@@ -476,7 +524,7 @@ static void remove_instance(struct fat32_mount *mount)
   while (mount->intervals) {
     struct fat32_interval *interval = mount->intervals;
     mount->intervals = interval->next;
-    free_interval(interval);
+    free_interval(mount, interval);
   }
   if (!mount->retired) {
     free_workspace(mount);
@@ -1420,6 +1468,10 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
   if (!mount) {
     return CALL_BAD_REQUEST;
   }
+  if (job->operation == NPFS_FAT_FINISH_BEGIN) {
+    finish_begin(mount, job);
+    return CALL_OK;
+  }
   mount->context = context;
   mount->backing_status = CALL_OK;
   update_intervals(mount);
@@ -1450,7 +1502,7 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
       while (mount->intervals) {
         struct fat32_interval *interval = mount->intervals;
         mount->intervals = interval->next;
-        free_interval(interval);
+        free_interval(mount, interval);
       }
       free_workspace(mount);
       storage_extent_release(&mount->extent);
@@ -1713,6 +1765,12 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
   struct mount_interval_reply interval = {request->job.interval_id, request->job.interval_deadline};
   struct kernel_object *root_object = request->job.object;
   request->job.object = NULL;
+  if (op == NPFS_FAT_BEGIN && status == CALL_OK) {
+    bool delivered = copy_to_user(reply_address, &interval, sizeof(interval));
+    npfs_request_finish_fat32_begin(request, delivered);
+    return (struct syscall_result){delivered ? CALL_OK : CALL_BAD_BUFFER,
+        delivered ? sizeof(interval) : 0};
+  }
   npfs_request_release(request);
   if (op == NPFS_FAT_ROOT) {
     struct capability_grant grant = {0};
