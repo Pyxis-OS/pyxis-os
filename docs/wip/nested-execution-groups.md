@@ -8,6 +8,8 @@ the consumers below; it is not a prerequisite for their independent first slices
 
 ## Required direction
 
+Owner direction (2026-10-12): surviving private `job_work` cleanup belongs with [Continuum and its family](spaces.md#asterism), alongside this direction, revisiting the [caller-failure RAM retention limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+
 - Any group member can create a subgroup **inside its own group**.
 - A subgroup cannot outlive or escape its parent. Stopping the parent stops the
   whole subtree; parent cleanup completion covers the whole subtree too.

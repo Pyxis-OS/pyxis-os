@@ -289,7 +289,15 @@ The 1 MiB per-stream polled trigger/cap is not a backing quota, and admission/re
 direct admission retains captures until caller/session teardown. Revisit bounded backing or recovery when a consumer requires it.
 [Native pipelines](userland/native-jobs.md#native-pipelines-and-the-event-pump) copy finite input before launch, capture final stdout
 and combined stderr, and have no live producer or stderr stage attribution. Revisit streaming producers when a consumer needs them;
-Lua/shell adapters remain in the separately assigned [execution milestone](wip/native-command-execution.md).
+Lua/C adapters remain in the separately assigned [execution milestone](wip/native-command-execution.md).
+
+## Private job context cleanup after caller failure
+
+Owner accepted 2026-10-12: preserve today's init handoff. The trusted creator removes private RAM `job_work` directories after confirmed
+client retirement when it survives. A crashed creator or unconfirmed admission can strand linked directories privately until reboot:
+a bounded RAM leak per crashed job-capable client. No public root/namespace exposes that provisioning tree, and unknown launch is never
+replayed. Revisit a surviving cleanup supervisor with [Continuum, the Asterism supervisor](wip/spaces.md#asterism) and its family,
+alongside [nested execution groups](wip/nested-execution-groups.md); neither is implemented by the command adapters.
 
 ## Initial terminal editor
 

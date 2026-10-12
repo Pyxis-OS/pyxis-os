@@ -1,18 +1,20 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
-and userland #228. Task 2 merged in #749 and userland #232. Task 3 implemented
-for review in #754 and userland #235; its three defaults are accepted 2026-10-12.**
+and userland #228. Task 2 merged in #749 and userland #232. Task 3 merged in
+#754 and userland #235. Task 4 assigned 2026-10-12;
+all task 4 decisions are accepted 2026-10-12; implementation is authorized.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. Task 4 remains unassigned. The trusted-caller delegation boundary below
-remains accepted.
+owner go. Task 4 is assigned for baseline and surface proposal first; adapter
+implementation is authorized under the accepted contracts below. The trusted-caller delegation boundary
+below remains accepted.
 
 ## Deliverable and boundary
 
-Lua and the shell can launch native argv commands with selected stdin/stdout/
-stderr, capture output, apply deadlines and observe per-stage results and cleanup.
+Lua and C consumers can launch native argv commands with selected streams,
+capture output, apply deadlines and observe per-stage results and cleanup.
 The shell already runs native pipelines; the new work is reusable capture,
 deadlines, per-stage observation and Lua access, including a concurrent I/O pump.
 Use existing FILE, PIPE, CONSOLE, launcher and process contracts. No POSIX shell,
@@ -145,22 +147,20 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   deadlines and all stage/endpoint cleanup. No threads assumption.
   **After this task the owner can:** run a described pipeline with captured output
   without deadlocking on a full stdout/stderr pipe.
-  Assigned 2026-10-12; three defaults accepted that day. Implemented for review
+  Assigned 2026-10-12; three defaults accepted that day. Merged
   in [userland #235](https://git.internal/PyxisOS/pyxis-userland/pulls/235), exact
   pin `06275d0feeb30c96e142f8e681cee392b1c18b00`; fast-forward dependency first,
   then [parent #754](https://git.internal/PyxisOS/pyxis-os/pulls/754).
   [Implemented contract](../userland/native-jobs.md#native-pipelines-and-the-event-pump).
-- [ ] **4. Lua/shell delivery and reusable port adapters.** Add native Lua argv/
-  pipeline/capture options and shell capture/deadline/per-stage observation with
-  existing launch authority. Preserve ordinary run/pipeline behavior. Carry
-  exact per-stage results into HTTP redirection coordination. Offer libuv FILE/
-  exact-resource selection as opt-in, preserving ordinary `uv_spawn` inheritance
-  and loop/callback behavior. Give ports native argv run/capture replacements
-  for host `os.execute`/`io.popen`; full recipes still need tools, adaptation and
-  the required nested-group direction below. Qualify caller exit/fault limits separately from
-  session cleanup.
+- [ ] **4. Lua/C delivery and reusable port adapters.** Add the accepted native
+  Lua argv/pipeline/capture options and libuv FILE/exact-resource opt-in,
+  preserving ordinary `pyxis.run`, `uv_spawn` and loop/callback behavior. Give
+  ports native argv run/capture wrappers; full recipes still need tools and the
+  required nested-group direction below. Qualify caller exit/fault limits
+  separately from session cleanup. Ordinary shell behavior stays unchanged.
   **After this task the owner can:** run/capture direct commands and native
-  pipelines from Lua or the shell, with real deadlines and results.
+  pipelines from Lua and C, with real deadlines and results.
+  Assigned 2026-10-12; baseline recorded, all decisions accepted 2026-10-12; implementation authorized.
 
 ## Task 1 checkpoint (2026-10-12)
 
@@ -471,7 +471,272 @@ Source review covers uncertain admission and transport-failure cleanup; no
 transport-failure injection or native hardware run was performed. The accepted
 caller-death/admission/retirement limits remain. Raw callers, screens and logs are
 local under `build/pipeline-current-baseline` and `build/pipeline-after`; original
-pre-TLS artifacts are preserved separately as noted above. Task 4 is not started.
+pre-TLS artifacts are preserved separately as noted above. Task 4 was not started
+at that checkpoint.
+
+## Task 4 surface proposal (2026-10-12)
+
+Assigned after #754 and userland #235 merged. **All three decisions accepted by the owner,
+2026-10-12. Implementation is authorized; this PR records documentation only.** Ordinary shell commands/pipelines,
+`pyxis.run` and `uv_spawn` retain their behavior.
+
+Future shell capture waits for [capability-valued variables](capability-environment.md), with a held result rather than an implicit current-job slot.
+
+### Before-code baseline
+
+Fresh worktree `pyxis-job-adapters`, branch `execution/adapters-surface`, main
+`50140b52`, userland `06275d0f`, ports `fd1eb30f`, fs `28386cc7`, lwIP `a1aadb91`.
+Reused the task-3 final source-built normal image with those exact dependency
+pins, LLVM 23.1.3 `pyxis-llvm23.1.3-2d23443` and `LOG_LEVEL=info`. Checked that
+tracked kernel/ABI/toolchain/build inputs and all dependency source pins match
+fresh main; the intervening parent changes are documentation/merge history.
+No stale implementation or modified runtime is substituted. Kernel SHA256
+`41463360d4b55767218ccb75ff08eac9f8db4ab990159fb8a2a622a82d6253db`, initrd
+`354f5d4c802d1e3d595caa6a43d26537ce0d6026076c2b3ebe96c04a511a2b3b`.
+
+Interactive QEMU 10.2.2, q35/nested KVM, host CPU, 512 MiB, one/four CPUs,
+fresh OVMF variables, read-only FAT VirtIO boot disk, VirtIO RNG, PS/2 keyboard,
+no NIC/USB, default software GOP 1280x800. Both configurations pass ordinary
+`echo`, `echo pipeline | sha256sum` and `pyxis.run{"echo","lua-direct"}`. A
+missing-file `cat | echo` reports the first-stage EXITED/1 while retaining
+last-stage success; ordinary Lua returns 1 for that `cat`, and missing program
+lookup raises its existing error. `pyxis.job`/`pyxis.pipeline` are nil.
+
+After creating an empty `tmp://job-empty` with existing Lua `io.open`, ran this
+inline workload twice per CPU configuration, without a new test/benchmark tool:
+
+```lua
+local a = os.time()
+for i = 1, 1000 do assert(pyxis.run{"cat", "tmp://job-empty"} == 0) end
+print("runs", 1000, "seconds", os.time() - a)
+```
+
+Observed 3/3 seconds on one CPU and 6/6 on four CPUs. These have one-second
+clock quantization and shared-host/nested-KVM scheduling variation, not native
+launch latency or a performance acceptance threshold. Repeat unchanged ordinary
+calls after implementation; new capture/loop semantics need their own functional
+qualification. Raw screens/logs stay in `build/adapters-baseline`; owned QEMU
+processes are stopped. The task-3 core's richer baseline remains above.
+
+### 1. Declared context grants — accepted 2026-10-12
+
+**Owner accepted 2026-10-12:** `jobs = true` space opt-in (false when
+absent), private RAM `job_work` directories, and the minimal captured-stage
+resource profile below. No per-invocation wrapper, prefix, keyword or launch
+option; users type `lua script.lua`, `nvim`, or another client normally.
+
+Use the existing [bundle manifest grant model](../userland/program-bundles.md#app-views-grants-and-lifetime).
+An execution client declares `job_work` plus the existing `launcher/launch`,
+`pipe/create` and runtime grants it needs. Extend the recognized manifest
+resource set with `job_work`: a native DIRECTORY resource with `create`,
+`remove`, `read-files`, `write-files`. This is a real grant set over existing
+interfaces, not a new JOB protocol or service. `jobs = true` makes context
+provisioning available to the trusted launch path; the declaration requests it.
+The manifest alone supplies no authority. The gate controls this new context,
+not existing ordinary launch permissions. Default packaged Development opts in;
+other spaces retain an explicit choice.
+
+For example, the Lua bundle's job-related requests are optional so pure Lua
+still starts where jobs are unavailable:
+
+```json
+{"grants": [
+  {"name":"job_work","resource":"job_work", "required":false,
+   "rights":["create","remove","read-files","write-files"]},
+  {"name":"launcher","resource":"launcher","rights":["launch"],"required":false},
+  {"name":"pipe","resource":"pipe","rights":["create"],"required":false}
+]}
+```
+
+These are entries in the existing `grants` array, alongside memory/clock and
+other declared ordinary Lua resources. A client whose operation requires jobs
+marks the relevant requests required. Apply today's grant-all-when-available
+policy: unavailable optional context is absent and the job API refuses before
+launch; an unsatisfied required request refuses client admission. Future
+required/optional first-launch consent follows the accepted [bundle grant direction](program-bundles.md#future-consent-policy), without implementing consent now.
+
+Trusted boot/session/mux/remote startup retains a private RAM provisioning tree,
+outside public roots, cwd and namespaces. The trusted launcher reads the
+client's explicit declaration, checks the space gate and its selected authority,
+then creates a fresh `job_work` directory for that launch. It requires usable
+clock/PIPE/LAUNCH selections too; optional context is absent if the complete
+context cannot be supplied. Shell delegation of LAUNCH comes only from
+`child_launcher`, never its own supervision launcher or a `launch = false`
+bypass. The client receives the leaf grant; the provisioner retains the trusted
+ancestor. Ordinary children get no automatic `job_work`, ancestor or alias;
+only an explicit declaration through a context-authorized launch path can
+request a new context. Captured stages receive no `job_work`, provisioning
+ancestor or launcher; their audited resource selections follow the profile below.
+
+The creator owns the leaf until client retirement, removes private entries/link
+and closes it afterward. Owner accepted 2026-10-12: uncertain admission or creator failure retains the
+named context privately in RAM until reboot, without replay or invented
+retirement; confirmed retirement cleans it when the creator survives. The
+[bounded caller-failure leak](../technical-debt.md#private-job-context-cleanup-after-caller-failure)
+returns with Continuum and its family, alongside nested execution groups. Existing boot init's
+private RAM backing suffices; neither a kernel RAM factory nor shared `tmp://`
+is used. Captures are created then unlinked inside the leaf.
+
+Package the interpreter as the normal `lua.pxb` command, with its native binary
+inside `app/`; remove the top-level `lua.pxe` candidate that currently shadows
+bundle lookup. Ordinary `lua script.lua` therefore resolves the declaration,
+without an alternate command name or flag. Other native clients use their
+normal bundle entry; trusted C embeddings can explicitly supply the same grants.
+No inference from an executable basename or argv, and no implicit forwarding.
+
+The adapters construct each final inventory explicitly. Default runtime roles
+are the **present** memory, threads, clock and random grants; selected content
+roots/cwd and string environment are copied from the caller. Network, PIPE
+creation and system-info roles require explicit selection. Never forward the
+ordinary terminal/display/log/audio/clipboard/power/launcher inventory into a
+captured stage. Initial symbolic resource selectors are `memory`, `threads`,
+`clock`, `random`, `tcp`, `udp`, `pipe`, `system_info`; each selects an already
+held grant with its documented native role rights, intersected with held rights.
+Explicit missing or refused selections fail. Root selection can narrow to
+read-only; rebuild/attenuate the entire cwd chain under those selected roots too,
+or refuse an incompatible cwd before effects. Copying old write-capable cwd
+handles would undo that attenuation. The core audits every final grant; the
+trusted caller owns namespace/provider and credential reachability throughout
+the job.
+
+New job lookup selects native `.pxe` files (bare bin, then boot on absence) or
+explicit native FILE paths. Bundle/catalog and shebang expansion remain on the
+ordinary paths until their final expanded inventories are explicitly adapted
+and audited; never forward an ordinary bundle's launcher into this profile.
+Graphical/interactive programs needing bypass grants refuse this captured mode.
+
+### 2. Lua surface — accepted 2026-10-12
+
+Accepted for Lua only; no shell command, builtin, capture syntax or current-job
+slot. Native status integers and owned job objects retain the accepted options
+and result shape:
+
+```lua
+job, status = pyxis.job(argv, options)
+job, status = pyxis.pipeline({argv1, argv2, ...}, options)
+result, status = job:step()
+result, status = job:wait()
+status = job:cancel()
+bytes, status = job:read("stdout" or "stderr", offset, count)
+status = job:close()
+jobs = pyxis.jobs()
+```
+
+Both entry points capture; `pyxis.job` is a one-stage convenience. Options are
+`timeout_ms` (required), binary-string `input` (nil means absent; `""` means EOF),
+`stdout_limit`, `stderr_limit`, `resources` (exact role list), `roots` (list of
+`{name=..., access="read" or "read-write"}`), `cwd` (path or false for absent),
+`environment` (exact string map) and `namespace` (false by default; true explicitly
+selects held LOOKUP, with the trusted audit above). Omitted roots/cwd/environment
+use owned current snapshots. Roots and resource names select held grants;
+paths/strings confer no authority. NUL in argv, path, environment or selector
+text refuses; finite input remains binary. Dense argv/stage arrays retain native
+metadata limits. Stages use the same explicit profile; per-stage arbitrary
+capability construction is not part of the Lua binding.
+
+Results mirror the core's stage validity, actual kind/exit status, admission/
+operation status, local stop, sizes/caps/truncation/incomplete flags and input
+acceptance/unsent/uncertainty. A nonzero child exit is data, not a Lua exception.
+Argument errors may raise before effects; native start can return an owned job
+**and** a nonzero status. Read is explicit, bounded and available only after
+confirmed cleanup. No job/observer/FILE handle number appears in text.
+
+### 3. Adapter ownership and port/loop integration — accepted 2026-10-12
+
+Unknown direct admission stays quarantined until caller/session teardown,
+without normal release or replay.
+
+Lua keeps a strong native ownership registry from before admission until the
+native close consumes the record. A completed close attempt can consume it while
+returning an error: invalidate/unregister then, never retry that release. BUSY
+preserves it. Losing a Lua variable, GC or a protected Lua error does not
+release a live observer or capture. Explicit `cancel`, `wait` and `close` own
+normal retirement; GC never performs an unbounded blocking wait. Unreached
+records remain held until caller/session teardown. `step`/`wait` drive the pump
+and policy: there is no hidden background producer or automatic deadline worker.
+A completed record returns stable repeatable snapshots. Killing/exiting Lua
+still has the accepted session-group fallback, without a per-job caller-death
+stop guarantee. A captured stage receives no descendant launcher.
+`pyxis.jobs()` returns the still-owned userdata records for explicit recovery
+after a protected Lua error; it prints no handles and invents no background work.
+
+Port-facing pure-Lua adapters reuse those entry points:
+
+```lua
+local commands = require "pyxis.commands"
+result, status, job = commands.run(argv, options)
+stdout, stderr, result, status, job = commands.capture(argv, options)
+stdout, stderr, result, status, job = commands.pipeline(stages, options)
+```
+
+These synchronous conveniences wait, read capped binary outputs and close after
+confirmed cleanup. `run` replays captured stdout/stderr to selected caller outputs
+after completion: current `io.stdout`/`io.stderr`, or explicit writable
+`options.stdout`/`options.stderr` Lua FILEs. Read/replay/flush errors return an
+operation error alongside the actual child results, including partial delivery;
+never replay uncertain writes. Capture/pipeline return both streams without
+trimming. The optional final `job` is nil when ownership was consumed, otherwise
+the retained record for explicit cancel/wait/close. They retain unresolved cleanup
+in the same ownership registry and never rerun a failed/uncertain command.
+Nonzero stage exits remain in the result. The host ports runner extracts its existing shell boundary into a host-only adapter,
+preserving current recipe `ctx.run`/`ctx.capture` behavior, including the latter's
+single trailing-LF removal. The native adapter never calls `os.execute`/`io.popen`
+or turns argv into shell text. Full native recipes/make/driver-launched tools
+remain blocked on actual tools and nested groups; this is not a recipe runner
+qualification or a broker workaround.
+
+Accepted libuv opt-in:
+
+```c
+int uv_pyxis_spawn_job(uv_loop_t *loop, uv_process_t *process,
+    handle_t launcher, const struct pyxis_job_options *command,
+    uv_exit_cb exit_cb);
+```
+
+It selects the complete native image/argv/grants/resources/roots/namespace/cwd/
+environment and live descriptor inventory, replacing additive inheritance.
+FILE streams use libc's bridge/selected-output flush and independent child
+cursor semantics. The caller can prepare/register its own PIPE endpoints with
+the loop. Ordinary `uv_spawn` and additive `uv_pyxis_spawn` stay unchanged.
+Reuse shared libc preparation through an explicit observer-returning entry:
+
+```c
+enum call_status pyxis_job_launch_observer(handle_t launcher,
+    const struct pyxis_job_options *command, handle_t *observer);
+```
+
+This returns the owned native WAIT|TERMINATE observer directly to the loop,
+without adopting the owned-job record's BUSY-close contract. Its preparation,
+final grant audit and no-replay rule are the same direct core. Observer output
+is invalid on failure; source grants/descriptors survive. Failed UV spawn
+handles still require the usual close. Loop readiness,
+actual native exit reason/callback and observer-only `uv_close` remain intact;
+close does not become cancellation or hidden blocking. Capturing job records
+retain their stronger explicit stop/observe/release rules.
+
+### Relation to parked directions and qualification
+
+Jobs are local owned records, not environment values. Startup grants and Lua
+userdata remain real native ownership; no handle is printed/parsed, smuggled in
+argv/environment or converted into a capability-bearing string. The resource
+selectors only name authority already held by the caller. Task 4 implements
+neither capability-valued environment inheritance nor prepared-request bindings.
+Their object/rights/transfer design remains separately parked.
+
+Every explicit stage is directly launched through the client's existing launcher.
+Captured children receive no launcher; no nested group, outside-group executor
+or service protocol is added. Native result arrays stay available to Lua/C
+consumers. This does not implement prepared HTTP objects or shell bindings.
+Nested execution groups remain required before real descendant jobs and
+transitive caller-death cleanup.
+
+After acceptance, qualify both new adapters and unchanged ordinary paths in
+interactive one-/four-CPU QEMU/GDB: full two-way and early exit, timeout/cancel,
+limits, FILE cursor/flush behavior, exact child inventories, Lua errors/GC/explicit
+close, native UV loop exit/detach and port-wrapper binary output/results. Caller
+exit/fault limits are checked separately from eventual session cleanup. Publish
+userland/ports dependencies before the parent pin; native implementation still
+is authorized under the accepted decisions.
 
 ## Required descendant follow-up
 
