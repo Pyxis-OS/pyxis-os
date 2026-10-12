@@ -152,7 +152,7 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   pin `06275d0feeb30c96e142f8e681cee392b1c18b00`; fast-forward dependency first,
   then [parent #754](https://git.internal/PyxisOS/pyxis-os/pulls/754).
   [Implemented contract](../userland/native-jobs.md#native-pipelines-and-the-event-pump).
-- [ ] **4. Lua/C delivery and reusable port adapters.** Add the accepted native
+- [x] **4. Lua/C delivery and reusable port adapters.** Add the accepted native
   Lua argv/pipeline/capture options and libuv FILE/exact-resource opt-in,
   preserving ordinary `pyxis.run`, `uv_spawn` and loop/callback behavior. Give
   ports native argv run/capture wrappers; full recipes still need tools and the
@@ -160,7 +160,7 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   separately from session cleanup. Ordinary shell behavior stays unchanged.
   **After this task the owner can:** run/capture direct commands and native
   pipelines from Lua and C, with real deadlines and results.
-  Assigned 2026-10-12; baseline recorded, all decisions accepted 2026-10-12; implementation authorized.
+  Implemented in userland #239, ports #102 and parent #760, with QEMU/GDB qualification; owner review precedes merge.
 
 ## Task 1 checkpoint (2026-10-12)
 
