@@ -363,7 +363,7 @@ merely completion of task 2.
 6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is recorded (CALL64 fastest about +100 ns). See [qualification](../development/experiments/threads-task6/README.md).
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
-7. [ ] **Static TLS and errno — assigned 2026-10-12.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.
+7. [ ] **Static TLS and errno — assigned 2026-10-12; implementation/QEMU qualified.** Compiler/LLD template/bootstrap, SDK/startup, per-thread errno and runtime keys/destructors are implemented in the gate 7 PRs. Matching compiler-container publication, exact-head CI and the owner-native run remain pending; see [qualification](../development/experiments/threads-task7/README.md).
 
    Owner can inspect distinct language TLS/errno and ordinary thread destructors on native siblings.
 8. [ ] **Thread-safe libc and C11/pthread profile.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
