@@ -85,8 +85,9 @@ non-power-of-two thread counts stay isolated until a supported target needs them
 Libc's TLSF allocator reuses freed blocks but keeps every backing pool (at least 64 KiB, no fixed pool-count registry) until process
 exit, so a short-lived peak leaves memory mapped for that process; shrinking `realloc` keeps the block capacity and growth may hold
 both blocks while copying to preserve 16-byte alignment. Process destruction reclaims everything. Revisit empty-pool release and
-in-place aligned growth when long-lived applications make retained capacity or copying material. errno is per-thread after gate 7;
-the allocator still needs the gate 8 synchronization audit before concurrent ordinary allocation is supported.
+in-place aligned growth when long-lived applications make retained capacity or copying material. Gate 8 serializes metadata
+and supports cross-thread free/realloc. Concurrent misses can prepare separate pools outside the guard; each published pool is
+retained until process exit. Revisit surplus-pool disposal only if measured concurrent growth makes retained capacity material.
 
 ## TLS bootstrap launch cost
 
@@ -822,8 +823,9 @@ could then match the header.
 
 The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliberate subset (owner, 2026-10-08):
 
-- **No thread-safe C++ profile:** static local-exec language TLS is supported after gate 7, but `<thread>`, `<mutex>`, non-lock-free
-  atomics, exception bookkeeping and local-static guards still need the gate 8 runtime audit.
+- **Joinable C++ thread profile:** gate 8 supplies native synchronization and thread-local exception bookkeeping, including static
+  guards and checked unwinder locks. Detach and general `std::async` workers remain unsupported; revisit with the first consumer
+  needing detached lifetime/collection, not by silently dropping its completion observer.
 - **C-only locale:** the matching gate 7 compiler adopts the native locale, wide FILE/UTF-8 and entropy closure; full locale databases
   and wide scanning remain absent.
 - **Most of `<cmath>` is missing:** libc's math subset leaves 161 of the 186 imported names undefined, so first use fails to compile.
@@ -832,7 +834,7 @@ The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliber
 - **No `<filesystem>` or time zones**, and fmt's license is not staged for the boot payload (a port shipping an fmt
   program must install it).
 
-Revisit synchronization at threads gate 8, and remaining math/locale facilities when a reached consumer needs them. Additions belong in
+Revisit remaining math/locale facilities when a reached consumer needs them. Additions belong in
 libc or the runtime configuration, never in a port-local stub.
 
 ## HD Audio volume control

@@ -1,7 +1,7 @@
 # Working path and environment
 
 Libc owns one mutable working-path context and one copied environment per process.
-They are single-threaded userspace state, seeded lazily from the immutable
+They use synchronized immutable snapshots, seeded lazily from the immutable
 [startup snapshot](../../userspace/include/startup.h). The kernel has no cwd or
 implicit environment inheritance. Native code can still use independent
 [capability path contexts](paths.md).
@@ -26,7 +26,8 @@ change establishes a description. A short buffer returns ERANGE unchanged.
 nonempty and exclude `=`; empty values differ from absence. `overwrite == 0`
 preserves an existing value, and removing an absent name succeeds. Failure
 preserves existing values. Borrowed `getenv` pointers must not be modified or
-freed and may be invalidated by mutation. There is no writable `environ` or
+freed and may be invalidated by mutation; exclude mutation from lookup through
+the last borrowed use. Internal callers use owned copies across mutation. There is no writable `environ` or
 `putenv`. Native [`pyxis_environment_get`](../../userspace/libc/include/pyxis/environment.h)
 distinguishes absence from failed initialization so configuration cannot silently
 fall back after allocation failure.
@@ -44,7 +45,8 @@ live descriptors without implicit state or resource inheritance.
 
 Snapshots close once. Native cwd clear prevents bootstrap-chain resurrection;
 the session daemon clears retained cwd before releasing its original bootstrap
-grants. The mutable state adds no directory authority. Lua, libuv, Fastfetch,
+grants. Publication uses short guards; allocation, traversal and native handle cleanup
+run outside them. The mutable state adds no directory authority. Lua, libuv, Fastfetch,
 TCC, Links and EDuke32 use this shared state. Links keeps relative file URLs to
 avoid replacing a retained cwd with a reopened descriptive spelling.
 

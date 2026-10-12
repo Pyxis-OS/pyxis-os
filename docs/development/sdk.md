@@ -178,7 +178,7 @@ include path so `-MMD` tracks them.
 
 | Supported | Not provided |
 | --- | --- |
-| Exceptions, RTTI, static constructors/destructors, local statics, executable-only `thread_local` | Thread-safe C++ library, `<thread>`, `<mutex>`, non-lock-free atomics |
+| Exceptions, RTTI, static constructors/destructors, local statics, executable-only `thread_local`, joinable threads and synchronization | Detached workers and general `std::async` launch |
 | Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>`, streams, C-only locale, wide facilities | Non-C locales |
 | `system_clock`, `steady_clock`, native `random_device` | `<filesystem>`, time zones |
 | Aligned `new` up to 4096 bytes | Most of `<cmath>`, which follows libc's [math subset](../kernel/userspace.md#foundational-libc) |
@@ -186,9 +186,10 @@ include path so `-MMD` tracks them.
 The matching gate 7 compiler adopts the hosted-Clang
 [task 2 closure](experiments/hosted-clang-cxx.md) and static local-exec TLS. The
 SDK builds from the installed compiler's exact runtime source. It enables the
-native `__cxa_thread_atexit_impl` bridge while keeping general runtime threads
-OFF: language TLS does not make shared C++ or libc state thread-safe. Gate 8
-still owns that audit and its C11/pthread adapter.
+native `__cxa_thread_atexit_impl` bridge and enables the audited external thread
+profile. The [libc adapter](../userland/threads.md) supplies real parking-backed
+mutexes/conditions/once and checked unwinder rwlocks; no host pthread library
+or POSIX-shaped kernel surface is introduced. No new compiler build is needed.
 
 The headers of absent features still include, but their names do not exist, so
 a program using one fails to compile. `-fno-exceptions` and `-fno-rtti` code links
@@ -221,7 +222,8 @@ old runtime archives expecting a global errno are not compatible.
 
 `<pyxis/thread_runtime.h>` prepares contexts for native CREATE, drains ordinary
 thread exit, and collects context backing after the matching native completion.
-It does not supply CREATE/join policy or a C11/pthread profile. Distinct guarded
+This low-level bridge remains separate from the managed
+[C11/pthread creation and collection profile](../userland/threads.md). Distinct guarded
 stacks and prepared FS contexts remain caller-owned; native pins prevent RELEASE
 until retirement. Raw native entries that omit libc still start with FS=0.
 TCC's TLS-free writer exports empty-template bounds and still refuses language TLS.

@@ -211,7 +211,7 @@ Gate 7 defaults accepted by the owner, 2026-10-12; implementation assigned:
   registration order, then runs at most four key-destructor passes, clearing a
   value before its callback and calling outside registry exclusion. FS stays
   alive through atexit, .fini_array and stdio shutdown. Forced stop/fault executes
-  no user destructors. Full libc synchronization and C11/pthreads remain gate 8.
+  no user destructors. The [managed libc profile](../userland/threads.md) builds on this native bridge.
 
 Native WAIT compares an aligned word and enrolls atomically under wait-bucket
 exclusion; mismatch never sleeps. Keys include process, address and mapping
@@ -321,7 +321,7 @@ API or a consumer requiring it is enabled.
    guards do not span blocking I/O, allocation growth or callbacks. Timezone
    snapshots retain escaped designations through process lifetime.
 
-The gate 7 baseline at `ce8c53d1` was captured before gate 8 code on one/four
+The gate 8 baseline at `ce8c53d1` was captured before gate 8 code on one/four
 CPU nested QEMU using matching successful CI bundles; raw commands, hashes and
 captures remain local. Native gate 7 launch cost is accepted and its static
 initial-TLS optimization remains a much-later follow-up. Gate 8 does not deliver
