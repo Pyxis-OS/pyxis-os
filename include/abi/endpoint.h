@@ -85,6 +85,7 @@ enum endpoint_message_kind {
   ENDPOINT_MESSAGE_SEND = 2,
   ENDPOINT_MESSAGE_CANCEL = 3,
   ENDPOINT_MESSAGE_RETIRE = 4,
+  ENDPOINT_MESSAGE_COMPLETION = 5,
 };
 
 enum endpoint_delivery {
@@ -117,6 +118,11 @@ enum endpoint_delivery {
  * endpoint returns CALL_TIMED_OUT without consuming the receipt; CLOSE releases
  * it and any pending notice. Validation and endpoint-closure errors still apply.
  * Delivered attachments remain owned independently of cancellation. */
+/* COMPLETION joins ordinary FIFO only after native worker ownership drains.
+ * result is the native status; reason and completion_flags retain independent
+ * cancellation/progress information. Its zero-right receipt's CLOSE acknowledges
+ * the operation. RECEIVE uses preclaimed slots: invalid or short output leaves
+ * the result and grants queued for retry without repeating native work. */
 struct endpoint_packet {
   handle_t receipt;
   uint64_t delivery;
@@ -129,7 +135,10 @@ struct endpoint_packet {
   uint64_t protocol;
   uint64_t operation;
   uint64_t rights; /* Actual invoking grant, not the export ceiling. */
-  uint64_t reason; /* CANCEL: CALL_TIMED_OUT or CALL_ENDPOINT_CLOSED. */
+  uint64_t reason; /* CANCEL or COMPLETION cancellation/deadline reason. */
+  uint64_t correlation_id; /* COMPLETION: native submission identity. */
+  uint64_t completion_flags;
+  uint64_t progress;
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
   uint8_t data[ENDPOINT_DATA_MAX];
 };
@@ -139,7 +148,7 @@ struct endpoint_packet {
 _Static_assert(sizeof(struct endpoint_export_message) == 56, "endpoint export layout");
 _Static_assert(sizeof(struct endpoint_control_message) == 24, "endpoint control layout");
 _Static_assert(sizeof(struct endpoint_message) == 168, "endpoint message layout");
-_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 192, "endpoint packet layout");
+_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 216, "endpoint packet layout");
 _Static_assert(sizeof(struct endpoint_create_reply) == 16, "endpoint create layout");
 
 #endif

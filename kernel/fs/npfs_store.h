@@ -12,6 +12,7 @@
 struct npfs_store_pool;
 struct npfs_store_volume;
 struct npfs_store_inode;
+struct native_completion;
 
 /* Every entry runs on the sole npfs BSP worker with IF=1. No pointer escapes
  * to another task. Context is borrowed for one call, never retained across it.
@@ -23,6 +24,7 @@ struct npfs_store_context {
   enum npfs_status format_error;
   bool time_valid;
   int64_t time_ns;
+  struct native_completion *completion; /* Optional owned cancellation control. */
 };
 
 enum call_status npfs_store_open(struct npfs_store_context *context,

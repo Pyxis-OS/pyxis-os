@@ -1,5 +1,6 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
+#include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/net/arp.h>
 #include <kernel/panic.h>
@@ -11,7 +12,7 @@
 #define UDP_SEND_LIMIT 8
 #define UDP_RECEIVE_LIMIT 16
 
-enum udp_io_state { IO_FREE, IO_QUEUED, IO_RUNNING, IO_WAITING, IO_FINISHED, IO_DONE };
+enum udp_io_state { IO_FREE, IO_RESERVED, IO_QUEUED, IO_RUNNING, IO_WAITING, IO_FINISHED, IO_DONE };
 struct udp_io {
   enum udp_io_state state;
   struct udp_endpoint *endpoint;
@@ -23,11 +24,13 @@ struct udp_io {
   struct udp_receive_reply reply;
   enum call_status status;
   struct task_wait *wait;
+  struct native_completion *completion;
   bool cancelled;
 };
 
 /* Separate bounded copies let AP callers sleep without lending private memory.
- * DONE retains its slot and per-direction exclusion until the caller resumes. */
+ * Synchronous DONE retains direction ownership until its caller resumes; native
+ * completions transfer the copied outcome before releasing their worker slot. */
 static struct udp_io sends[UDP_SEND_LIMIT], receives[UDP_RECEIVE_LIMIT];
 static atomic_bool io_locked;
 static uint64_t next_token;
@@ -81,7 +84,9 @@ static void complete_io(struct udp_io *call, enum call_status status)
   call->state = IO_DONE;
   struct task_wait *wait = call->wait;
   call->wait = NULL;
-  task_wait_wake(wait);
+  if (wait) {
+    task_wait_wake(wait);
+  }
   /* Caller may immediately consume/reuse this slot after the lock is released. */
 }
 
@@ -180,6 +185,123 @@ enum call_status net_udp_receive(struct kernel_object *object, size_t capacity,
   *call = (struct udp_io){0};
   unlock_io();
   return status;
+}
+
+enum call_status net_udp_completion_reserve(struct native_completion *operation)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  bool sending = operation->operation == UDP_SEND;
+  if (operation->target.object->type != OBJECT_UDP ||
+      (!sending && operation->operation != UDP_RECEIVE)) {
+    return CALL_BAD_OPERATION;
+  }
+  uint64_t rights = sending ? UDP_RIGHT_SEND : UDP_RIGHT_RECEIVE;
+  if (!(operation->target.rights & rights)) {
+    return CALL_DENIED;
+  }
+  struct completion_udp_send_request request = {0};
+  size_t length;
+  if (sending) {
+    if (operation->input_size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    if (request.reserved || !request.port ||
+        request.size != operation->input_size - sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (request.size > UDP_MAX_PAYLOAD) {
+      return CALL_LIMIT;
+    }
+    length = request.size;
+  } else {
+    struct completion_udp_receive_request receive;
+    if (operation->input_size != sizeof(receive)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&receive, operation->input, sizeof(receive));
+    length = receive.capacity < UDP_MAX_PAYLOAD ? receive.capacity : UDP_MAX_PAYLOAD;
+  }
+  enum call_status status = check_deadline(operation->deadline_ns,
+      sending ? UDP_SEND_MAX_WAIT_NS : UDP_RECEIVE_MAX_WAIT_NS);
+  if (status != CALL_OK || !net_worker_available()) {
+    return status != CALL_OK ? status : CALL_UNAVAILABLE;
+  }
+  lock_io();
+  struct udp_io *call = reserve_io(sending ? sends : receives,
+      sending ? UDP_SEND_LIMIT : UDP_RECEIVE_LIMIT,
+      (struct udp_endpoint *)operation->target.object, &status);
+  if (!call || (sending && next_token == UINT64_MAX)) {
+    unlock_io();
+    return call ? CALL_LIMIT : status;
+  }
+  *call = (struct udp_io){
+    .state = IO_RESERVED, .endpoint = (struct udp_endpoint *)operation->target.object,
+    .token = sending ? ++next_token : 0, .deadline = operation->deadline_ns,
+    .address = request.address, .port = request.port, .length = length,
+    .completion = operation,
+  };
+  if (sending) {
+    memcpy(call->data, operation->input + sizeof(request), length);
+  }
+  operation->backend = call;
+  unlock_io();
+  return CALL_OK;
+}
+
+void net_udp_completion_start(struct native_completion *operation)
+{
+  lock_io();
+  struct udp_io *call = operation->backend;
+  KASSERT(call && call->state == IO_RESERVED && call->completion == operation);
+  call->state = IO_QUEUED;
+  unlock_io();
+  net_worker_notify();
+}
+
+void net_udp_completion_discard(struct native_completion *operation)
+{
+  lock_io();
+  struct udp_io *call = operation->backend;
+  KASSERT(call && call->state == IO_RESERVED && call->completion == operation);
+  *call = (struct udp_io){0};
+  operation->backend = NULL;
+  unlock_io();
+}
+
+static bool finish_completions(struct udp_io *calls, size_t count, bool sending)
+{
+  bool worked = false;
+  for (size_t i = 0; i < count; ++i) {
+    uint64_t flags = cpu_save_interrupts();
+    lock_io();
+    struct udp_io *call = &calls[i];
+    if (call->state != IO_DONE || !call->completion) {
+      unlock_io();
+      cpu_restore_interrupts(flags);
+      continue;
+    }
+    struct native_completion *operation = call->completion;
+    enum call_status status = call->status;
+    uint8_t output[sizeof(struct udp_receive_reply) + UDP_MAX_PAYLOAD];
+    size_t size = 0;
+    if (status == CALL_OK) {
+      operation->progress_known = true;
+      operation->progress = sending ? call->length : call->reply.length;
+      if (!sending) {
+        memcpy(output, &call->reply, sizeof(call->reply));
+        memcpy(output + sizeof(call->reply), call->data, call->reply.length);
+        size = sizeof(call->reply) + call->reply.length;
+      }
+    }
+    *call = (struct udp_io){0};
+    operation->backend = NULL;
+    unlock_io();
+    native_completion_finish(operation, status, size ? output : NULL, size, NULL);
+    cpu_restore_interrupts(flags);
+    worked = true;
+  }
+  return worked;
 }
 
 static enum call_status send_status(enum net_result result)
@@ -308,13 +430,24 @@ static bool service_receives(void)
       cpu_restore_interrupts(flags);
       continue;
     }
+    bool start = call->state == IO_QUEUED;
     bool cancelled = call->cancelled;
     call->state = IO_RUNNING;
     unlock_io();
     cpu_restore_interrupts(flags);
 
     struct udp_endpoint *endpoint = call->endpoint;
-    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : endpoint_status(endpoint);
+    enum call_status status = CALL_OK;
+    if (call->completion) {
+      bool started = !start || native_completion_mark_started(call->completion);
+      status = native_completion_cancel_reason(call->completion);
+      KASSERT(started || status != CALL_OK);
+    } else if (cancelled) {
+      status = CALL_ENDPOINT_CLOSED;
+    }
+    if (status == CALL_OK) {
+      status = endpoint_status(endpoint);
+    }
     if (status == CALL_OK && task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     }
@@ -355,11 +488,19 @@ bool net_udp_service_io(void)
     lock_io();
     struct udp_io *call = &sends[i];
     bool active = call->state == IO_QUEUED || call->state == IO_WAITING;
-    if (active && (call->cancelled || task_deadline_expired(call->deadline))) {
-      enum call_status status = call->cancelled ? CALL_ENDPOINT_CLOSED : CALL_TIMED_OUT;
+    enum call_status cancellation = CALL_OK;
+    if (active && call->completion) {
+      if (task_deadline_expired(call->deadline)) {
+        native_completion_request_cancel(call->completion, CALL_TIMED_OUT);
+      }
+      cancellation = native_completion_cancel_reason(call->completion);
+    } else if (active && (call->cancelled || task_deadline_expired(call->deadline))) {
+      cancellation = call->cancelled ? CALL_ENDPOINT_CLOSED : CALL_TIMED_OUT;
+    }
+    if (active && cancellation != CALL_OK) {
       unlock_io();
       cpu_restore_interrupts(flags);
-      cancel_send(call, status);
+      cancel_send(call, cancellation);
       worked = true;
       continue;
     }
@@ -373,7 +514,12 @@ bool net_udp_service_io(void)
     unlock_io();
     cpu_restore_interrupts(flags);
 
-    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : endpoint_status(call->endpoint);
+    enum call_status status = CALL_OK;
+    if (call->completion && !native_completion_mark_started(call->completion)) {
+      status = native_completion_cancel_reason(call->completion);
+    } else {
+      status = cancelled ? CALL_ENDPOINT_CLOSED : endpoint_status(call->endpoint);
+    }
     if (status == CALL_OK) {
       status = send_status(net_udp_send_packet(call->endpoint, call->address,
           call->port, call->data, call->length, call->deadline, call->token));
@@ -392,6 +538,8 @@ bool net_udp_service_io(void)
     cpu_restore_interrupts(flags);
     worked = true;
   }
+  worked |= finish_completions(sends, UDP_SEND_LIMIT, true);
+  worked |= finish_completions(receives, UDP_RECEIVE_LIMIT, false);
   return worked;
 }
 
@@ -425,15 +573,16 @@ void net_udp_deliver(uint32_t source, uint32_t destination, uint16_t port,
   service_receives();
 }
 
-/* io lock held. QUEUED must run before the worker sleeps; WAITING contributes
- * its application deadline. Completed slots no longer need a timer wake. */
+/* io lock held. Pending native publication must run before worker sleep too:
+ * RX and ARP callbacks can complete after the service pass. */
 static bool io_next_deadline(const struct udp_io *calls, size_t count, uint64_t *deadline)
 {
   bool found = false;
   for (size_t i = 0; i < count; ++i) {
     const struct udp_io *call = &calls[i];
-    if (call->state == IO_QUEUED || call->state == IO_WAITING) {
-      uint64_t next = call->state == IO_QUEUED ? 0 : call->deadline;
+    if (call->state == IO_QUEUED || call->state == IO_WAITING ||
+        (call->state == IO_DONE && call->completion)) {
+      uint64_t next = call->state == IO_WAITING ? call->deadline : 0;
       if (next < *deadline) {
         *deadline = next;
       }

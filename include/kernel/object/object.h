@@ -56,6 +56,7 @@ enum object_type {
   OBJECT_THREAD_SERVICE = 49,
   OBJECT_THREAD_COMPLETION = 50,
   OBJECT_INPUT_POLICY = 51,
+  OBJECT_COMPLETION_STORAGE = 52, /* Internal ownership; never a public grant. */
 };
 
 struct execution_group;

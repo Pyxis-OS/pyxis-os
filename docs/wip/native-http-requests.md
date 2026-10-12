@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 facets/lifetime accepted; native completion contract accepted and implementation assigned, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 facets/lifetime accepted; native completion prerequisite delivered for review, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -185,129 +185,28 @@ phase left must be reported; task 3 cannot claim responsive status/abort through
 
 ## Native completion accepted contract
 
-**All three defaults accepted; implementation assigned by the owner, 2026-10-12.** Existing
-[native grants and endpoint transport](../interfaces/endpoints.md) are distinct:
-native objects have zero transport rights, ordinary SEND reports admission only,
-and ordinary RECEIVE may grow its destination table. This proposal adds a bounded
-native submission route and authenticated completion records on an existing owned
-receiver. It leaves ordinary CALL/SEND/RECEIVE semantics intact.
+All three defaults accepted and bounded implementation assigned by the owner,
+2026-10-12; the prerequisite is delivered for review:
 
-### 1. Submission — copied inputs and fully reserved admission
+1. Copied submission through existing native authority, with operation/result,
+   receiver delivery, returned-handle capacity and cleanup admission reserved
+   before acceptance. One unacknowledged operation per process; a second valid
+   submission returns `CALL_BUSY`, even through another receiver.
+2. Authenticated results on the owned receiver, retryable RECEIVE after a short
+   or invalid output buffer, and receipt CLOSE as acknowledgement. Readiness
+   consumes nothing; returned grants remain independent.
+3. Cancel/deadline/receiver-close/exit drain independent ownership and preserve
+   actual late results and known progress. No implicit rollback, compensating
+   deletion or replay. The process gate holds through uncollected drain or
+   acknowledgement; a replacement receiver cannot bypass it.
 
-Submit through the existing target grant, checking its native operation rights;
-no extra ambient authority or per-operation capability. The envelope names the
-owned receiver, a nonzero 64-bit correlation ID, native protocol/operation, absolute
-deadline and bounded inputs. The receiver requires its owner's RECEIVE authority;
-CONTROL remains export management. Neither receiver nor operation can be inherited.
-IDs increase without reuse during that receiver's lifetime; exhaustion refuses.
-An ID alone grants nothing. No user address is retained after submission.
-
-| First operation set | Captured inputs / completion data |
-| --- | --- |
-| TCP CONNECT | Existing address/port and deadline / connected TCP grant or error |
-| DNS UDP SEND / RECEIVE | Endpoint grant, copied datagram or receive capacity / native send status or copied datagram and peer |
-| DIRECTORY CREATE / REMOVE | Delegated private directory, copied name, exclusive FILE create with READ\|WRITE / FILE grant or native result |
-| FILE READ / WRITE / RESIZE / SIZE | Captured file, offset/count or copied bytes / copied read data, count or size |
-
-FILE/DIRECTORY support starts with RAM, archive reads and mounted npfs; immutable
-objects retain their real refusals. HOST loans and exported-provider forwarding
-are outside this first backend profile. LOOKUP, enumeration, rename and sync do
-not belong to HTTP staging's create/unlink/read/write/resize/size sequence.
-Submission metadata is outside the native payload, which retains its 4,096-byte
-bound and each operation's current bounds (FILE READ 4,088 bytes, WRITE 4,080;
-UDP 1,472). Copied names must fit the bounded request and backend limits; this adds no global 255-byte RAM-name rule.
-
-Reserve, before acceptance, an independent operation/input/result record, one of
-the receiver's sixteen delivery records, exact table claims for a receipt and any
-returned grant, native operation admission and execution-group cleanup attribution.
-Ordinary traffic cannot consume that reservation. Any admission failure unwinds
-without work or a completion. Successful submission means accepted work only;
-its return needs no user output copy that could fail after acceptance.
-
-**One unacknowledged native completion operation per process**, hence per
-HTTP provider instance, even with several receivers. Existing global and per-object
-limits still apply; this does not serialize different processes or ordinary TRY/IPC.
-A second submission returns `CALL_BUSY`, including through a different receiver;
-see [the admission debt](../technical-debt.md#native-completion-per-process-admission).
-There is no hidden queue beyond reserved work. Short BSP allocation handoffs may
-park admission; it never waits for the submitted I/O. Borrowed buffers or several
-outstanding operations would widen ownership and admission policy; defer them.
-
-### 2. Collection — retryable RECEIVE, receipt close acknowledges
-
-A kernel-authenticated completion kind carries the ID, native operation/result,
-known progress and separate cancellation/deadline information. Result bytes use
-the existing bounded payload; completion metadata is outside it so the native
-FILE reply still fits. Returned authority is an attached grant, never a number
-in payload. Userspace SEND cannot forge this kind.
-
-A reserved unfinished record is not READABLE. Terminal publication makes it
-READABLE with existing registration-before-scan/transition notification rules.
-Completed records join normal message FIFO, below cancellation/retirement notices;
-there is no cross-object completion ordering. Readiness consumes nothing. Worker
-loans end before publication, with owned result references retained for collection.
-
-For this kind, RECEIVE uses the preclaimed slots and validates the full destination
-before committing delivery. A short buffer or invalid output leaves the result,
-grants and claims queued for retry, with no native operation replay. Successful
-collection copies the result and installs the receipt/returned grants together.
-The zero-right receipt's CLOSE is acknowledgement: release the record, copied
-storage and per-process admission. Forgetting it applies backpressure, without
-expiry or eviction. Returned grants are independent after collection.
-
-This is deliberately stronger than ordinary message collection; it needs no new
-collection handle type. A successful collection lost to caller failure is not a
-new I/O attempt; exit disposes owned receipts/unreported grants. Collection failure
-must not manufacture native uncertainty.
-
-### 3. Cancellation and teardown — stop, drain, retain the real outcome
-
-CANCEL requires the owner's receiver with RECEIVE and names its correlation ID,
-using the captured operation rather than the original target handle. It requires
-no second slot. Repeat cancellation while pending is idempotent; terminal work
-returns an already-terminal acknowledgement without consuming its result. Unknown
-or acknowledged IDs return NOT_FOUND. RECEIVE alone collects results/grants.
-Closing the original target alone does not cancel admitted work. Cancel and terminal
-publication serialize; cancellation never alters a terminal result or creates a
-second completion.
-
-Before backend start, cancellation can report NOT_STARTED with no effects. Once
-started, request safe interruption and drain; preserve the backend's actual result,
-known byte count, received data or returned grant. Cancellation/deadline is separate:
-a late successful write/create stays successful, and an unknown outcome stays
-unknown. UDP receive may already have consumed a datagram. HTTP ABORT nevertheless
-latches against later COMMIT. Neither cancel nor receipt close promises rollback.
-
-Use one absolute operation deadline, within existing bounds: CONNECT 30 s,
-UDP SEND 5 s, RECEIVE 30 s; FILE/DIRECTORY admission maximum 30 s matches
-the current npfs request budget. Expired submission is refused without acceptance.
-After admission, expiry requests cancellation; it is not a promise that safe
-reclamation finishes by that instant. Longer HTTP deadlines use separate bounded
-operations without replaying accepted mutations.
-
-A live receiver gets exactly one terminal record, including cancellation. Receiver
-close/exit immediately stops admission, cancels work and detaches its process/table
-claims before teardown. Workers drain using independent owned records/references
-and group cleanup tokens, never a borrowed process, table or user VM. With no live
-receiver, dispose the outcome after drain rather than enqueue to a closed endpoint.
-Receiver close retains per-process admission until uncollected work drains;
-a replacement receiver cannot bypass it. The admission counter has independently
-retained storage, with no worker borrow of the process. Already collected work
-retains admission until receipt close. Group cleanup includes drain; externally
-held grants keep their independent lifetime. This must replace synchronous caller
-loans for the selected operations, not return early from today's [BSP request storage](../kernel/bsp-service-requests.md).
-
-No compensating filesystem mutation is implicit: CREATE succeeding before unlink
-and owner death can leave an entry in the private staging directory. Reconcile that
-private area before reuse; close does not prove absence or secure erasure. A captured
-cleanup recipe would require another authority/lifetime decision. The default
-preserves known effects and the [group cleanup boundary](../interfaces/execution-group-termination.md),
-rather than acknowledging cancellation while a worker still borrows freed storage.
-
-Before delivery, qualify reservation exhaustion, invalid collection buffers,
-receiver shutdown/exit, cancel-before-start and cancel-versus-success, plus a service
-loop waiting on receiver and TCP readiness. Include the `CALL_BUSY` second-submission refusal on the same and different
-receivers. Implementation/runtime qualification remain pending.
+The bounded first scope is TCP CONNECT, DNS UDP SEND/RECEIVE and private native
+staging CREATE/REMOVE/READ/WRITE/RESIZE/SIZE on RAM/archive/npfs. HOST/FAT32 and exported
+provider forwarding are excluded. See the [completion ABI and limits](../interfaces/native-completion.md),
+[admission debt](../technical-debt.md#native-completion-per-process-admission) and
+[QEMU qualification/cost finding](../development/experiments/native-completion.md).
+The broader completion direction stays parked. Provider/DNS/TLS cooperative
+integration and the HTTP fix below remain task 3 work.
 
 **Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
 fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
@@ -396,8 +295,9 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   **After this task the owner can:** exercise local POST/error/slow-response
   fixtures with a body larger than the resident buffer, without an HTTP port.
 - [ ] **3. Prepared provider transactions and responsive stream service.**
-  The object/rights/lifetime/inheritance review is accepted. Start with the
-  accepted native completion prerequisite above.
+  The object/rights/lifetime/inheritance review and native completion contract
+  are accepted; the bounded kernel prerequisite is delivered for review.
+  Provider integration remains pending.
   Deliver body/control/response/observation grants, freeze, status, abort,
   private storage, credential cleanup and retirement. Start with one active
   exchange per provider instance and explicit admission failure. An instance is

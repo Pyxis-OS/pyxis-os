@@ -2,6 +2,7 @@
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
@@ -21,6 +22,7 @@ struct packet_header {
   handle_t receipt;
   uint64_t delivery, kind, result, size, grant_count, deadline_ns;
   uint64_t object_id, protocol, operation, rights, reason;
+  uint64_t correlation_id, completion_flags, progress;
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
 };
 _Static_assert(sizeof(struct packet_header) == ENDPOINT_PACKET_HEADER_SIZE,
@@ -40,6 +42,8 @@ struct endpoint_delivery_record {
   struct kernel_object receipt;
   struct endpoint_state *endpoint;
   struct endpoint_export *target;
+  struct native_completion *completion;
+  bool completion_committed, completion_pending;
   uint64_t operation, rights;
   struct endpoint_delivery_record *next;
   struct task_wait *wait;
@@ -70,6 +74,7 @@ struct endpoint_state {
   struct task_wait *waiting_receiver;
   size_t storage_references;
   size_t readiness_waiters;
+  uint64_t last_completion_id;
   bool closed, receiving;
 };
 
@@ -262,6 +267,12 @@ static void free_delivery(struct endpoint_delivery_record *record)
     KASSERT(!record->cancel_pending);
     KASSERT(!record->reply_reservation.table && !record->reply_count);
     record->state = DELIVERY_FREE;
+    if (record->completion) {
+      struct native_completion *operation = record->completion;
+      KASSERT(record->completion_committed && !record->completion_pending);
+      record->completion = NULL;
+      native_completion_ack(operation);
+    }
     if (record->target) {
       struct endpoint_export *export = record->target;
       record->target = NULL;
@@ -273,7 +284,7 @@ static void free_delivery(struct endpoint_delivery_record *record)
   }
 }
 
-static void release_queued_receipt(struct endpoint_delivery_record *record);
+static bool release_queued_receipt(struct endpoint_delivery_record *record);
 
 static bool deadline_expired(uint64_t deadline_ns)
 {
@@ -309,7 +320,8 @@ static void cancel_delivery(struct endpoint_state *state,
   record->status = reason;
   wake_waiter(&record->wait);
   if (queued) {
-    release_queued_receipt(record);
+    bool destroy = release_queued_receipt(record);
+    KASSERT(!destroy);
   }
 }
 
@@ -329,8 +341,10 @@ static bool release_receipt(struct endpoint_delivery_record *record)
   KASSERT(record->receipt_live);
   if (record->state == DELIVERY_RECEIVED) {
     record->state = DELIVERY_COMPLETE;
-    record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
-        (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
+    if (record->kind != ENDPOINT_MESSAGE_COMPLETION) {
+      record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
+          (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
+    }
     wake_waiter(&record->wait);
   }
   record->cancel_pending = false;
@@ -353,16 +367,177 @@ void endpoint_receipt_release(struct kernel_object *object)
   }
 }
 
-static void release_queued_receipt(struct endpoint_delivery_record *record)
+static bool release_queued_receipt(struct endpoint_delivery_record *record)
 {
-  /* No handle was published. The caller/receiver still owns endpoint storage,
-   * and dropping this initial reference must not reacquire the endpoint lock. */
+  /* No handle was published. Dropping this initial reference must not reacquire
+   * the endpoint lock. Detached completion drain may release the last owner. */
   KASSERT(!record->delivered && !record->receipt_handle);
   size_t previous = atomic_fetch_sub_explicit(&record->receipt.references, 1,
       memory_order_acq_rel);
   KASSERT(previous == 1);
-  bool destroy = release_receipt(record);
-  KASSERT(!destroy);
+  return release_receipt(record);
+}
+
+enum call_status endpoint_completion_reserve(struct endpoint *receiver,
+    struct native_completion *operation, struct capability_reservation *reservation,
+    struct capability_reserved_slot *slots)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!operation->delivery && reservation->table && reservation->count >= 1 &&
+      reservation->count <= 2);
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  enum call_status status = CALL_OK;
+  struct endpoint_delivery_record *record = NULL;
+  if (state->closed) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (state->last_completion_id == UINT64_MAX) {
+    status = CALL_LIMIT;
+  } else if (!operation->correlation_id || operation->correlation_id <= state->last_completion_id) {
+    status = CALL_BAD_REQUEST;
+  } else {
+    for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
+      if (state->deliveries[i].state == DELIVERY_FREE) {
+        record = &state->deliveries[i];
+        break;
+      }
+    }
+    if (!record) {
+      status = CALL_QUEUE_FULL;
+    }
+  }
+  if (record) {
+    record->endpoint = state;
+    record->target = NULL;
+    record->completion = operation;
+    record->completion_committed = false;
+    record->completion_pending = true;
+    record->operation = operation->operation;
+    record->rights = 0;
+    record->next = NULL;
+    record->wait = NULL;
+    record->state = DELIVERY_FILLING;
+    record->kind = ENDPOINT_MESSAGE_COMPLETION;
+    record->status = CALL_OK;
+    record->caller_active = false;
+    record->receipt_live = true;
+    record->delivered = record->cancel_pending = record->replying = false;
+    record->receipt_handle = HANDLE_INVALID;
+    record->deadline_ns = operation->deadline_ns;
+    record->request_size = record->reply_size = record->result = 0;
+    record->request_count = record->reply_count = 0;
+    record->reply_reservation = *reservation;
+    memcpy(record->reply_slots, slots, reservation->count * sizeof(*slots));
+    *reservation = (struct capability_reservation){0};
+    object_init(&record->receipt, OBJECT_ENDPOINT_RECEIPT, NULL);
+    ++state->storage_references;
+    operation->delivery = record;
+  }
+  unlock_endpoint(state);
+  return status;
+}
+
+enum call_status endpoint_completion_commit(struct native_completion *operation)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct endpoint_delivery_record *record = operation->delivery;
+  struct endpoint_state *state = record->endpoint;
+  lock_endpoint(state);
+  KASSERT(record->state == DELIVERY_FILLING && record->completion == operation &&
+      !record->completion_committed);
+  enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
+      deadline_expired(operation->deadline_ns) ? CALL_TIMED_OUT : CALL_OK;
+  if (status == CALL_OK) {
+    KASSERT(operation->correlation_id > state->last_completion_id);
+    state->last_completion_id = operation->correlation_id;
+    record->completion_committed = true;
+  }
+  unlock_endpoint(state);
+  return status;
+}
+
+void endpoint_completion_discard(struct native_completion *operation)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct endpoint_delivery_record *record = operation->delivery;
+  struct endpoint_state *state = record->endpoint;
+  lock_endpoint(state);
+  KASSERT(record->state == DELIVERY_FILLING && !record->completion_committed &&
+      record->completion == operation);
+  capability_reservation_release(&record->reply_reservation, record->reply_slots);
+  record->completion = NULL;
+  record->completion_pending = false;
+  operation->delivery = NULL;
+  record->state = DELIVERY_COMPLETE;
+  bool destroy = release_queued_receipt(record);
+  unlock_endpoint(state);
+  if (destroy) {
+    object_release(&state->storage);
+  }
+}
+
+void endpoint_completion_publish(struct native_completion *operation)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!operation->backend && operation->output_size <= ENDPOINT_DATA_MAX);
+  struct endpoint_delivery_record *record = operation->delivery;
+  struct endpoint_state *state = record->endpoint;
+  uint64_t ready_before = begin_endpoint_update(state);
+  KASSERT(record->state == DELIVERY_FILLING && record->completion_committed &&
+      record->completion_pending && record->completion == operation);
+  record->completion_pending = false;
+  record->status = operation->result;
+  record->request_size = operation->output_size;
+  memcpy(record->request, operation->output, operation->output_size);
+  if (operation->returned.object) {
+    record->request_grants[0] = operation->returned;
+    operation->returned = (struct capability_grant){0};
+    record->request_count = 1;
+  }
+  bool destroy = false;
+  if (state->closed) {
+    release_grants(record->request_grants, record->request_count);
+    record->request_count = 0;
+    capability_reservation_release(&record->reply_reservation, record->reply_slots);
+    record->state = DELIVERY_COMPLETE;
+    destroy = release_queued_receipt(record);
+  } else {
+    record->state = DELIVERY_QUEUED;
+    if (state->tail) {
+      state->tail->next = record;
+    } else {
+      state->head = record;
+    }
+    state->tail = record;
+    wake_waiter(&state->waiting_receiver);
+  }
+  end_endpoint_update(state, ready_before);
+  if (destroy) {
+    object_release(&state->storage);
+  }
+}
+
+enum call_status endpoint_completion_cancel(struct endpoint *receiver, uint64_t id)
+{
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED : CALL_NOT_FOUND;
+  if (!state->closed) {
+    for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
+      struct endpoint_delivery_record *record = &state->deliveries[i];
+      if (!record->completion || !record->completion_committed ||
+          record->completion->correlation_id != id) {
+        continue;
+      }
+      if (record->completion_pending) {
+        native_completion_request_cancel(record->completion, CALL_ABANDONED);
+      }
+      status = CALL_OK;
+      break;
+    }
+  }
+  unlock_endpoint(state);
+  return status;
 }
 
 static void close_endpoint(struct endpoint_state *state)
@@ -384,6 +559,24 @@ static void close_endpoint(struct endpoint_state *state)
   state->head = state->tail = NULL;
   for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
     struct endpoint_delivery_record *record = &state->deliveries[i];
+    if (record->state != DELIVERY_FREE && record->kind == ENDPOINT_MESSAGE_COMPLETION) {
+      capability_reservation_release(&record->reply_reservation, record->reply_slots);
+      if (record->completion_pending) {
+        if (record->completion_committed) {
+          native_completion_request_cancel(record->completion, CALL_ENDPOINT_CLOSED);
+        }
+      } else if (record->state == DELIVERY_QUEUED) {
+        release_grants(record->request_grants, record->request_count);
+        record->request_count = 0;
+        record->next = NULL;
+        record->state = DELIVERY_COMPLETE;
+        bool destroy = release_queued_receipt(record);
+        KASSERT(!destroy);
+      } else if (record->state == DELIVERY_RECEIVED) {
+        record->state = DELIVERY_COMPLETE;
+      }
+      continue;
+    }
     if (record->state != DELIVERY_QUEUED && record->state != DELIVERY_RECEIVED) {
       continue;
     }
@@ -399,7 +592,8 @@ static void close_endpoint(struct endpoint_state *state)
     record->cancel_pending = false;
     wake_waiter(&record->wait);
     if (queued) {
-      release_queued_receipt(record);
+      bool destroy = release_queued_receipt(record);
+      KASSERT(!destroy);
     }
   }
   for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
@@ -421,8 +615,10 @@ void endpoint_handle_close(struct kernel_object *object)
     uint64_t ready_before = begin_endpoint_update(state);
     if (record->state == DELIVERY_RECEIVED) {
       record->state = DELIVERY_COMPLETE;
-      record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
-          (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
+      if (record->kind != ENDPOINT_MESSAGE_COMPLETION) {
+        record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
+            (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
+      }
       wake_waiter(&record->wait);
     }
     record->cancel_pending = false;
@@ -892,6 +1088,8 @@ static enum call_status admit_message(struct endpoint *endpoint,
     return CALL_LIMIT;
   }
   record->target = target;
+  record->completion = NULL;
+  record->completion_committed = record->completion_pending = false;
   if (target) {
     ++target->in_flight;
   }
@@ -1056,8 +1254,17 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   return result;
 }
 
+static enum call_status ordinary_receive_output(uintptr_t address, size_t capacity)
+{
+  if (capacity < sizeof(struct endpoint_packet)) {
+    return CALL_BAD_REQUEST;
+  }
+  return user_buffer_check(address, sizeof(struct endpoint_packet), USER_BUFFER_WRITE) ?
+      CALL_OK : CALL_BAD_BUFFER;
+}
+
 static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
-    uintptr_t reply_address)
+    uintptr_t reply_address, size_t reply_capacity)
 {
   struct endpoint_state *state = endpoint->state;
   struct capability_reservation reservation = {0};
@@ -1084,6 +1291,12 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
       }
       KASSERT(cancel->state == DELIVERY_COMPLETE && cancel->receipt_live &&
           cancel->receipt_handle);
+      enum call_status status = ordinary_receive_output(reply_address, reply_capacity);
+      if (status != CALL_OK) {
+        end_endpoint_update(state, ready_before);
+        capability_reservation_release(&reservation, slots);
+        return (struct syscall_result){status, 0};
+      }
       struct packet_header output = {.receipt = cancel->receipt_handle,
         .delivery = ENDPOINT_DELIVERED, .kind = ENDPOINT_MESSAGE_CANCEL,
         .deadline_ns = cancel->deadline_ns,
@@ -1097,6 +1310,12 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     }
     for (struct endpoint_export *export = state->exports; export; export = export->next) {
       if (export->retire_pending) {
+        enum call_status status = ordinary_receive_output(reply_address, reply_capacity);
+        if (status != CALL_OK) {
+          end_endpoint_update(state, ready_before);
+          capability_reservation_release(&reservation, slots);
+          return (struct syscall_result){status, 0};
+        }
         struct packet_header output = {.kind = ENDPOINT_MESSAGE_RETIRE,
           .object_id = export->object_id, .protocol = export->protocol};
         export->retire_pending = false;
@@ -1124,8 +1343,18 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
       }
       continue;
     }
+    bool completion = record->kind == ENDPOINT_MESSAGE_COMPLETION;
+    enum call_status status = completion ?
+        (reply_capacity < ENDPOINT_PACKET_HEADER_SIZE + record->request_size ?
+            CALL_BUFFER_TOO_SMALL : CALL_OK) :
+        ordinary_receive_output(reply_address, reply_capacity);
+    if (status != CALL_OK) {
+      end_endpoint_update(state, ready_before);
+      capability_reservation_release(&reservation, slots);
+      return (struct syscall_result){status, 0};
+    }
     size_t count = record->request_count;
-    if (reservation.count < count + 1) {
+    if (!completion && reservation.count < count + 1) {
       capability_reservation_release(&reservation, slots);
       enum capability_result result = capability_reserve(&process_current()->capabilities,
           count + 1, &reservation, slots);
@@ -1141,13 +1370,16 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
         return (struct syscall_result){grant_status(result), 0};
       }
     }
+    struct capability_reservation *claim = completion ? &record->reply_reservation : &reservation;
+    struct capability_reserved_slot *claimed_slots = completion ? record->reply_slots : slots;
+    KASSERT(claim->table && claim->count >= count + 1);
     struct capability_grant grants[ENDPOINT_GRANTS_MAX + 1];
     grants[0] = (struct capability_grant){&record->receipt,
         record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0, 0};
     for (size_t i = 0; i < count; ++i) {
       grants[i + 1] = record->request_grants[i];
     }
-    enum capability_result result = capability_validate_grants(reservation.table, grants, count + 1);
+    enum capability_result result = capability_validate_grants(claim->table, grants, count + 1);
     if (result != CAP_OK) {
       end_endpoint_update(state, ready_before);
       capability_reservation_release(&reservation, slots);
@@ -1159,6 +1391,15 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
       .object_id = record->target ? record->target->object_id : 0,
       .protocol = record->target ? record->target->protocol : 0,
       .operation = record->operation, .rights = record->rights};
+    if (completion) {
+      struct native_completion *operation = record->completion;
+      output.result = record->status;
+      output.protocol = operation->protocol;
+      output.correlation_id = operation->correlation_id;
+      output.completion_flags = native_completion_flags(operation);
+      output.progress = operation->progress;
+      output.reason = native_completion_cancel_reason(operation);
+    }
     for (size_t i = 0; i < count; ++i) {
       output.grants[i].rights = grants[i + 1].rights;
       output.grants[i].transport = grants[i + 1].transport;
@@ -1179,7 +1420,7 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     handle_t handles[ENDPOINT_GRANTS_MAX + 1];
     /* Move the queue's initial receipt reference and captured attachment grants
      * into the claimed slots. No logical retain runs under the endpoint lock. */
-    capability_install_reserved(&reservation, slots, grants, count + 1, handles);
+    capability_install_reserved(claim, claimed_slots, grants, count + 1, handles);
     for (size_t i = 0; i < count; ++i) {
       record->request_grants[i] = (struct capability_grant){0};
       output.grants[i].handle = handles[i + 1];
@@ -1197,8 +1438,12 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
      * until its bounded copy finishes; the lease keeps both outputs mapped. */
     bool copied = copy_reply_to_user_leased(&lease, reply_address, &output, sizeof(output),
         reply_address + sizeof(output), record->request, output.size);
+    /* Completion output was validated under this same mapping lease before
+     * consuming its private claims; no later recoverable copy failure exists. */
+    KASSERT(!completion || copied);
     end_endpoint_update(state, ready_before);
     user_buffer_lease_release(&lease);
+    capability_reservation_release(&reservation, slots);
     if (!copied) {
       capability_close_returned(&process_current()->capabilities, handles, count + 1);
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
@@ -1207,7 +1452,8 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
   }
 }
 
-static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr_t reply_address)
+static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr_t reply_address,
+    size_t reply_capacity)
 {
   struct endpoint_state *state = endpoint->state;
   lock_endpoint(state);
@@ -1218,7 +1464,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
   state->receiving = true;
   unlock_endpoint(state);
 
-  struct syscall_result result = receive_endpoint_owned(endpoint, reply_address);
+  struct syscall_result result = receive_endpoint_owned(endpoint, reply_address, reply_capacity);
   lock_endpoint(state);
   state->receiving = false;
   unlock_endpoint(state);
@@ -1436,13 +1682,16 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
       return send_endpoint(endpoint, target, rights, request_address, request_size);
     }
   }
-  if (reply_capacity < sizeof(struct endpoint_packet)) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  size_t required = object->type == OBJECT_ENDPOINT_RECEIVER ?
+      ENDPOINT_PACKET_HEADER_SIZE : sizeof(struct endpoint_packet);
+  if (reply_capacity < required) {
+    return (struct syscall_result){object->type == OBJECT_ENDPOINT_RECEIVER ?
+        CALL_BUFFER_TOO_SMALL : CALL_BAD_REQUEST, 0};
   }
-  if (!user_buffer_check(reply_address, sizeof(struct endpoint_packet), USER_BUFFER_WRITE)) {
+  if (!user_buffer_check(reply_address, required, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   return object->type == OBJECT_ENDPOINT_RECEIVER ?
-      receive_endpoint(endpoint, reply_address) :
+      receive_endpoint(endpoint, reply_address, reply_capacity) :
       call_endpoint(endpoint, target, rights, request_address, request_size, reply_address);
 }

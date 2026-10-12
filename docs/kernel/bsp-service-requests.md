@@ -55,6 +55,13 @@ removes any remaining queue link after resumption. No spinlock spans a wait or
 service operation. Logical FILE busy ownership can survive a detached resource
 wait and a later backing-replacement request.
 
+[Native completion admission](../interfaces/native-completion.md) uses a short
+synchronous BSP request solely to capture independently owned work and reserve
+capacity. Its asynchronous backend record is a separate allocation, not this
+caller's request area. Receiver close/exit releases table claims while workers
+retain independent operation/gate storage and group cleanup attribution through
+drain. The existing synchronous catalog remains unchanged outside that route.
+
 ## Publication and completion
 
 The [internal interface](../../include/kernel/service/request.h) separates completion
@@ -108,8 +115,8 @@ Native filesystem requests also use FORWARDED. Publication reserves one of the
 32 shared native slots and stamps the deadline before entering the executor
 FIFO. The worker derives authority from held views plus captured caller rights,
 detaches input nodes and releases admission before common completion. The
-4,592-byte typed record, including the owned CAPTURE staging pointer, fits the
-existing 4,928-byte request allocation. See
+5,064-byte typed record, including FAT32/completion ownership and CAPTURE staging, fits
+the current 5,064-byte shared request allocation. See
 [native object ownership](../devices/filesystem-native-adapter.md#build-and-ownership).
 
 Readiness waits also use FORWARDED. The executor hands their copied interests to

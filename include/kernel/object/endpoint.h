@@ -9,6 +9,7 @@
 
 struct process;
 struct endpoint_state;
+struct native_completion;
 struct endpoint {
   struct kernel_object object;
   struct endpoint_state *state;
@@ -53,6 +54,20 @@ void endpoint_handle_close(struct kernel_object *object);
 /* IF=0, final receipt reference already dropped, endpoint lock not held.
  * Releases logical delivery ownership; backing destruction remains on BSP. */
 void endpoint_receipt_release(struct kernel_object *object);
+
+/* BSP, IF=0. Reserve before backend admission; commit accepts the correlation
+ * ID and moves operation storage ownership to the delivery. Discard only an
+ * uncommitted reservation; it leaves operation storage with its caller. */
+enum call_status endpoint_completion_reserve(struct endpoint *receiver,
+    struct native_completion *operation, struct capability_reservation *reservation,
+    struct capability_reserved_slot *slots);
+enum call_status endpoint_completion_commit(struct native_completion *operation);
+void endpoint_completion_discard(struct native_completion *operation);
+/* BSP, IF=0, after worker loans end. May acknowledge and release operation;
+ * caller must not access it after publication. */
+void endpoint_completion_publish(struct native_completion *operation);
+/* Any CPU, IF=0, caller already holds the owned receiver authority. */
+enum call_status endpoint_completion_cancel(struct endpoint *receiver, uint64_t id);
 
 /* BSP, IF=0. Register each retained receiver interest before its first scan;
  * unregister before releasing that interest's object reference. */

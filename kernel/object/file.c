@@ -3,6 +3,7 @@
 #include <arch/cpu.h>
 #include <arch/paging.h>
 #include <kernel/object/file.h>
+#include <kernel/completion.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
@@ -546,11 +547,8 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
-static struct syscall_result resize_file(struct file_object *file, size_t size)
+static void resize_owned(struct file_object *file, size_t size)
 {
-  if (!file_begin_operation(file)) {
-    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
-  }
   bool changed = size != file->size;
   /* Growth leaves holes. Shrinking frees whole pages past the new size and
    * zeroes the rest of its last page, so truncated bytes never reappear. */
@@ -569,8 +567,197 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
   if (changed) {
     fs_metadata_touch(&file->metadata);
   }
+}
+
+static struct syscall_result resize_file(struct file_object *file, size_t size)
+{
+  if (!file_begin_operation(file)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  resize_owned(file, size);
   file_end_operation(file);
   return (struct syscall_result){CALL_OK, 0};
+}
+
+enum call_status file_completion_reserve(struct native_completion *operation)
+{
+  struct file_object *file = (struct file_object *)operation->target.object;
+  uint64_t required;
+  enum npfs_operation code;
+  uint64_t offset = 0;
+  size_t count = 0;
+  switch (operation->operation) {
+  case FILE_READ: {
+    required = FILE_RIGHT_READ;
+    code = NPFS_READ;
+    struct file_read_request request;
+    if (operation->input_size != sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    if (request.capacity > FILE_READ_MAX_BYTES) {
+      return CALL_BAD_REQUEST;
+    }
+    offset = request.offset;
+    count = request.capacity;
+    break;
+  }
+  case FILE_WRITE: {
+    required = FILE_RIGHT_WRITE;
+    code = NPFS_WRITE;
+    struct file_write_request request;
+    if (operation->input_size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    if (request.size > FILE_WRITE_MAX_BYTES ||
+        request.size != operation->input_size - sizeof(request) ||
+        request.size > UINT64_MAX - request.offset) {
+      return CALL_BAD_REQUEST;
+    }
+    offset = request.offset;
+    count = request.size;
+    break;
+  }
+  case FILE_RESIZE: {
+    required = FILE_RIGHT_WRITE;
+    code = NPFS_RESIZE;
+    struct file_resize_request request;
+    if (operation->input_size != sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    offset = request.size;
+    break;
+  }
+  case FILE_SIZE:
+    required = FILE_RIGHTS;
+    code = NPFS_SIZE;
+    if (operation->input_size) {
+      return CALL_BAD_REQUEST;
+    }
+    break;
+  default:
+    return CALL_BAD_OPERATION;
+  }
+  if (!(operation->target.rights & required)) {
+    return CALL_DENIED;
+  }
+  if (file->backing != FILE_RAM && file->backing != FILE_INITRD &&
+      file->backing != FILE_NPFS) {
+    return CALL_BAD_OPERATION;
+  }
+  if (file->backing == FILE_NPFS) {
+    enum call_status status = npfs_completion_reserve(operation, code, file->npfs);
+    if (status != CALL_OK) {
+      return status;
+    }
+    struct npfs_job *job = operation->backend;
+    job->offset = offset;
+    job->count = count;
+    if (code == NPFS_WRITE && count) {
+      memcpy(job->data, operation->input + sizeof(struct file_write_request), count);
+    }
+    return CALL_OK;
+  }
+  lock_file(file);
+  if (file->busy) {
+    unlock_file(file);
+    return CALL_BUSY;
+  }
+  file->busy = true;
+  unlock_file(file);
+  operation->backend = file;
+  return CALL_OK;
+}
+
+void file_completion_discard(struct native_completion *operation)
+{
+  struct file_object *file = (struct file_object *)operation->target.object;
+  if (file->backing == FILE_NPFS) {
+    npfs_completion_discard(operation);
+  } else if (operation->backend) {
+    KASSERT(operation->backend == file);
+    operation->backend = NULL;
+    file_end_operation(file);
+  }
+}
+
+void file_completion_start(struct native_completion *operation)
+{
+  struct file_object *file = (struct file_object *)operation->target.object;
+  if (file->backing == FILE_NPFS) {
+    npfs_completion_start(operation);
+    return;
+  }
+  KASSERT(operation->backend == file);
+  enum call_status status = CALL_OK;
+  uint8_t output[FILE_PAYLOAD_MAX];
+  size_t output_size = 0;
+  operation->progress_known = operation->operation == FILE_READ ||
+      operation->operation == FILE_WRITE;
+  if (!native_completion_mark_started(operation)) {
+    status = native_completion_cancel_reason(operation);
+  } else if (operation->operation == FILE_READ) {
+    struct file_read_request request;
+    memcpy(&request, operation->input, sizeof(request));
+    size_t count = request.offset < file->size ? file->size - request.offset : 0;
+    if (count > request.capacity) {
+      count = request.capacity;
+    }
+    struct file_read_reply reply = {.read = count};
+    memcpy(output, &reply, sizeof(reply));
+    if (count && file->backing == FILE_RAM) {
+      copy_out_pages(file, request.offset, count, output + sizeof(reply));
+    } else if (count) {
+      memcpy(output + sizeof(reply), (const uint8_t *)file->data + request.offset, count);
+    }
+    output_size = sizeof(reply) + count;
+    operation->progress = count;
+  } else if (operation->operation == FILE_WRITE) {
+    struct file_write_request request;
+    memcpy(&request, operation->input, sizeof(request));
+    if (!request.size) {
+      struct file_write_reply reply = {0};
+      memcpy(output, &reply, sizeof(reply));
+      output_size = sizeof(reply);
+    } else if (file->backing != FILE_RAM) {
+      status = CALL_READ_ONLY;
+    } else {
+      size_t end = request.offset + request.size;
+      size_t first = request.offset / PAGE_SIZE, last = (end - 1) / PAGE_SIZE;
+      if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
+        status = CALL_NO_MEMORY;
+      } else {
+        copy_in_pages(file, request.offset, request.size,
+            operation->input + sizeof(request));
+        if (end > file->size) {
+          file->size = end;
+        }
+        fs_metadata_touch(&file->metadata);
+        struct file_write_reply reply = {.written = request.size};
+        memcpy(output, &reply, sizeof(reply));
+        output_size = sizeof(reply);
+        operation->progress = request.size;
+      }
+    }
+  } else if (operation->operation == FILE_RESIZE) {
+    struct file_resize_request request;
+    memcpy(&request, operation->input, sizeof(request));
+    if (file->backing != FILE_RAM) {
+      status = CALL_READ_ONLY;
+    } else {
+      resize_owned(file, request.size);
+    }
+  } else {
+    KASSERT(operation->operation == FILE_SIZE);
+    struct file_size_reply reply = {.size = file->size};
+    memcpy(output, &reply, sizeof(reply));
+    output_size = sizeof(reply);
+  }
+  operation->backend = NULL;
+  file_end_operation(file);
+  native_completion_finish(operation, status, output, output_size, NULL);
 }
 
 static struct syscall_result query_info(struct file_object *file, uint64_t rights,

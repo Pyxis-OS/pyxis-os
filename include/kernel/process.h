@@ -13,6 +13,7 @@ struct vm_space;
 struct private_allocation;
 struct process_control;
 struct endpoint;
+struct completion_gate;
 struct clipboard_receiver;
 struct execution_group;
 struct task;
@@ -41,6 +42,7 @@ struct process {
   struct execution_group_member group_member;
   struct clipboard_receiver *paste_receiver; /* Scoped process-owned line reader. */
   struct endpoint *endpoints; /* BSP-owned weak list of receiving endpoints. */
+  _Atomic(struct completion_gate *) completion_gate; /* Independently owned async admission. */
   struct private_allocation *allocations; /* Private-memory service regions only. */
   uintptr_t startup_address; /* Read-only record in address_space; zero until prepared. */
   /* Control/group -> lifetime -> parking bucket -> scheduler queues. No allocation or context

@@ -11,6 +11,21 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/completion.h>
+
+/* Stop only between cache chunks or before namespace mutation. Journal
+ * publication/checkpointing and an admitted physical ticket always drain. */
+static enum call_status completion_interruption(struct npfs_store_context *context)
+{
+  if (!context->completion) {
+    return CALL_OK;
+  }
+  enum call_status reason = native_completion_cancel_reason(context->completion);
+  if (reason != CALL_OK) {
+    return reason;
+  }
+  return task_deadline_expired(context->deadline) ? CALL_TIMED_OUT : CALL_OK;
+}
 
 #define STORE_IMAGES_MAX 128u
 #define STORE_CACHE_CHUNKS 4u
@@ -1649,6 +1664,10 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
   size_t length = remaining < capacity ? (size_t)remaining : capacity;
   uint8_t *destination = bytes;
   while (length) {
+    enum call_status interrupted = completion_interruption(context);
+    if (interrupted != CALL_OK) {
+      return *read ? CALL_OK : interrupted;
+    }
     unsigned within = (unsigned)(offset % NPFS_BLOCK_SIZE);
     size_t count = NPFS_BLOCK_SIZE - within;
     if (count > length) {
@@ -1833,6 +1852,10 @@ enum call_status npfs_store_write(struct npfs_store_context *context, struct npf
   if (!length) {
     return CALL_OK;
   }
+  status = completion_interruption(context);
+  if (status != CALL_OK) {
+    return status;
+  }
   status = finish_shrink(context, inode);
   if (status != CALL_OK) {
     return status;
@@ -1845,6 +1868,10 @@ enum call_status npfs_store_write(struct npfs_store_context *context, struct npf
   }
   const uint8_t *source = bytes;
   while (length) {
+    status = completion_interruption(context);
+    if (status != CALL_OK) {
+      return *written ? CALL_OK : status;
+    }
     unsigned within = (unsigned)(offset % NPFS_BLOCK_SIZE);
     size_t count = NPFS_BLOCK_SIZE - within;
     if (count > length) {
@@ -2052,7 +2079,11 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   }
   struct npfs_store_volume *volume = directory->volume;
   struct npfs_store_pool *pool = volume->pool;
-  enum call_status status = begin_namespace(context, pool);
+  enum call_status status = completion_interruption(context);
+  if (status != CALL_OK) {
+    return status;
+  }
+  status = begin_namespace(context, pool);
   if (status != CALL_OK) {
     return status;
   }
@@ -2061,6 +2092,10 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   status = directory_find(context, directory, name, length, &existing, &position);
   if (status != CALL_NOT_FOUND) {
     return status == CALL_OK ? CALL_ALREADY_EXISTS : status;
+  }
+  status = completion_interruption(context);
+  if (status != CALL_OK) {
+    return status;
   }
   uint64_t identity;
   if (!allocate_identity(&identity)) {
@@ -2273,7 +2308,11 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
     return CALL_NOT_FOUND;
   }
   struct npfs_store_pool *pool = directory->volume->pool;
-  enum call_status status = begin_namespace(context, pool);
+  enum call_status status = completion_interruption(context);
+  if (status != CALL_OK) {
+    return status;
+  }
+  status = begin_namespace(context, pool);
   if (status != CALL_OK) {
     return status;
   }
@@ -2302,6 +2341,11 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
       discard_idle_inode(target, false);
       return status;
     }
+  }
+  status = completion_interruption(context);
+  if (status != CALL_OK) {
+    discard_idle_inode(target, false);
+    return status;
   }
   struct npfs_inode parent_previous = directory->record;
   struct npfs_inode target_previous = target->record;
@@ -2875,6 +2919,10 @@ enum call_status npfs_store_resize(struct npfs_store_context *context, struct np
   if (size > NPFS_FILE_SIZE_MAX) {
     return CALL_FILE_TOO_LARGE;
   }
+  status = completion_interruption(context);
+  if (status != CALL_OK) {
+    return status;
+  }
   status = finish_shrink(context, inode);
   if (status != CALL_OK || size == inode->record.size) {
     return status;
@@ -2895,6 +2943,10 @@ enum call_status npfs_store_resize(struct npfs_store_context *context, struct np
   if (status == CALL_OK) {
     status = begin_namespace(context, pool);
   }
+  if (status != CALL_OK) {
+    return status;
+  }
+  status = completion_interruption(context);
   if (status != CALL_OK) {
     return status;
   }

@@ -98,6 +98,12 @@ shuts down its endpoint and wakes affected callers with `CALL_ENDPOINT_CLOSED`.
 Process exit has the same effect on every receiver it owns, even while clients
 still hold callable handles. Final object reclamation is deferred to the BSP.
 
+Native operation submissions can also reserve a delivery record for the
+authenticated `ENDPOINT_MESSAGE_COMPLETION` kind. They use existing native
+resource authority, not client SEND transport. Their preclaimed collection and
+receipt acknowledgement are defined in [native completions](native-completion.md);
+ordinary client SEND continues to report admission only.
+
 ## Operation admission and user buffers
 
 One RECEIVE operation owns admission per receiving endpoint through capacity

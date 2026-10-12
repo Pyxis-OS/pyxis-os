@@ -1416,13 +1416,13 @@ service work and wait sets; no worker-process or thread framework is included.
 ## Native completion per-process admission
 
 Owner-accepted first profile, 2026-10-12: one unacknowledged native completion
-operation per process. A second submission returns **`CALL_BUSY`**, without
+operation per process. A second submission returns **`CALL_BUSY` (9)**, without
 admission or waiting; several receivers in the same process do not bypass it.
 The HTTP provider therefore progresses one async operation at a time. Receiver
 closure retains admission until uncollected work drains; collected work holds it
 until receipt acknowledgement. Revisit for a second consumer or provider
 concurrency, with explicit per-process/receiver budgets and teardown ownership.
-[Accepted contract](wip/native-http-requests.md#native-completion-accepted-contract).
+[Interface and limit](interfaces/native-completion.md#authority-and-admission).
 
 ## HTTP shared-instance admission
 

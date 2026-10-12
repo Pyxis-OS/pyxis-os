@@ -29,6 +29,12 @@ enum call_status net_udp_send(struct kernel_object *object, uint32_t address,
 enum call_status net_udp_receive(struct kernel_object *object, size_t capacity,
     uint64_t deadline, uint8_t *data, struct udp_receive_reply *reply);
 
+struct native_completion;
+/* BSP/IF=0. Reserve direction/slot before acceptance; no packet work or wait. */
+enum call_status net_udp_completion_reserve(struct native_completion *operation);
+void net_udp_completion_start(struct native_completion *operation);
+void net_udp_completion_discard(struct native_completion *operation);
+
 /* Worker, IF=1. Borrow RX bytes only for this call. Completion tokens identify
  * send requests, never endpoint addresses or reusable slot indices. */
 void net_udp_receive_packet(uint32_t source, uint32_t destination,

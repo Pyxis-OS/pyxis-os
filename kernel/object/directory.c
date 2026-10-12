@@ -7,7 +7,9 @@
 #include <kernel/fs/fat32.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/mm/heap.h>
+#include <kernel/completion.h>
 #include <kernel/object/directory.h>
+#include <kernel/object/file.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
@@ -512,6 +514,47 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
+static enum call_status unlink_ram_child(struct directory_object *directory,
+    const char *name, size_t length, uint64_t kind, struct directory_entry **removed)
+{
+  enum call_status status = CALL_OK;
+  *removed = NULL;
+  lock_mutation();
+  lock_directory(directory);
+  struct directory_entry *entry = find_named_entry(directory, (uintptr_t)name, length);
+  if (!entry) {
+    status = CALL_NOT_FOUND;
+  } else if (kind != DIRECTORY_KIND_ANY && entry_kind(entry) != kind) {
+    status = CALL_WRONG_TYPE;
+  } else if (directory->generation == UINT64_MAX) {
+    status = CALL_LIMIT;
+  } else if (entry_kind(entry) == DIRECTORY_KIND_DIRECTORY) {
+    /* The mutation lock excludes other two-directory operations. The child
+     * lock serializes the empty check with creation in that directory. */
+    struct directory_object *child = (struct directory_object *)entry->object;
+    lock_directory(child);
+    if (child->entry_count) {
+      status = CALL_NOT_EMPTY;
+    } else {
+      child->detached = true;
+    }
+    unlock_directory(child);
+  }
+
+  if (status == CALL_OK) {
+    unlink_entry(directory, entry);
+    ++directory->generation;
+    fs_metadata_touch(&directory->metadata);
+  }
+  unlock_directory(directory);
+  unlock_mutation();
+
+  if (status == CALL_OK) {
+    *removed = entry;
+  }
+  return status;
+}
+
 static struct syscall_result remove_child(struct directory_object *directory, uint64_t rights,
     const struct directory_remove_request *request)
 {
@@ -557,42 +600,188 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
 
-  lock_mutation();
-  lock_directory(directory);
-  struct directory_entry *entry = find_named_entry(directory, request->name, request->name_length);
-  if (!entry) {
-    status = CALL_NOT_FOUND;
-  } else if (request->kind != DIRECTORY_KIND_ANY && entry_kind(entry) != request->kind) {
-    status = CALL_WRONG_TYPE;
-  } else if (directory->generation == UINT64_MAX) {
-    status = CALL_LIMIT;
-  } else if (entry_kind(entry) == DIRECTORY_KIND_DIRECTORY) {
-    /* The mutation lock excludes other two-directory operations. The child
-     * lock serializes the empty check with creation in that directory. */
-    struct directory_object *child = (struct directory_object *)entry->object;
-    lock_directory(child);
-    if (child->entry_count) {
-      status = CALL_NOT_EMPTY;
-    } else {
-      child->detached = true;
-    }
-    unlock_directory(child);
-  }
-
-  if (status == CALL_OK) {
-    unlink_entry(directory, entry);
-    ++directory->generation;
-    fs_metadata_touch(&directory->metadata);
-  }
-  unlock_directory(directory);
-  unlock_mutation();
-
-  if (status == CALL_OK) {
+  struct directory_entry *removed;
+  status = unlink_ram_child(directory, (const char *)request->name,
+      request->name_length, request->kind, &removed);
+  if (removed) {
     /* The removed entry still owns its child until BSP disposal. Independent
      * handles keep the object alive after that reference is released. */
-    ramfs_request_discard(entry);
+    ramfs_request_discard(removed);
   }
   return (struct syscall_result){status, 0};
+}
+
+enum call_status directory_completion_reserve(struct native_completion *operation)
+{
+  struct directory_object *directory = (struct directory_object *)operation->target.object;
+  uint64_t kind, length, child_rights = 0;
+  size_t header_size;
+  enum npfs_operation code;
+  uint64_t required;
+  if (operation->operation == DIRECTORY_CREATE) {
+    struct completion_create_request request;
+    if (operation->input_size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    kind = request.kind;
+    length = request.name_length;
+    child_rights = request.rights;
+    header_size = sizeof(request);
+    code = NPFS_CREATE;
+    required = DIRECTORY_RIGHT_CREATE;
+    if (kind != DIRECTORY_KIND_FILE || child_rights != FILE_RIGHTS) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!(operation->target.rights & DIRECTORY_RIGHT_READ_FILES) ||
+        !(operation->target.rights & DIRECTORY_RIGHT_WRITE_FILES)) {
+      return CALL_DENIED;
+    }
+  } else if (operation->operation == DIRECTORY_REMOVE) {
+    struct completion_remove_request request;
+    if (operation->input_size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    kind = request.kind;
+    length = request.name_length;
+    header_size = sizeof(request);
+    code = NPFS_REMOVE;
+    required = DIRECTORY_RIGHT_REMOVE;
+    if (kind != DIRECTORY_KIND_FILE && kind != DIRECTORY_KIND_DIRECTORY &&
+        kind != DIRECTORY_KIND_ANY) {
+      return CALL_BAD_REQUEST;
+    }
+  } else {
+    return CALL_BAD_OPERATION;
+  }
+  if (!(operation->target.rights & required)) {
+    return CALL_DENIED;
+  }
+  if (operation->input_size > COMPLETION_PAYLOAD_MAX ||
+      length != operation->input_size - header_size) {
+    return CALL_BAD_REQUEST;
+  }
+  if (directory->backing != DIRECTORY_RAM && directory->backing != DIRECTORY_INITRD &&
+      directory->backing != DIRECTORY_NPFS) {
+    return CALL_BAD_OPERATION;
+  }
+  if (directory->backing == DIRECTORY_NPFS && length > NPFS_NAME_MAX) {
+    return CALL_NAME_TOO_LONG;
+  }
+  const char *name = (const char *)operation->input + header_size;
+  enum call_status status = check_name((uintptr_t)name, length);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (directory->backing == DIRECTORY_NPFS) {
+    status = npfs_completion_reserve(operation, code, directory->npfs);
+    if (status == CALL_OK) {
+      struct npfs_job *job = operation->backend;
+      job->kind = kind;
+      job->child_rights = child_rights;
+      job->count = length;
+      memcpy(job->name, name, length);
+      job->name[length] = 0;
+    }
+  }
+  return status;
+}
+
+void directory_completion_discard(struct native_completion *operation)
+{
+  struct directory_object *directory = (struct directory_object *)operation->target.object;
+  if (directory->backing == DIRECTORY_NPFS) {
+    npfs_completion_discard(operation);
+  }
+}
+
+static enum call_status completion_create_ram(struct directory_object *directory,
+    const char *name, size_t length, struct capability_grant *grant)
+{
+  lock_directory(directory);
+  bool detached = directory->detached;
+  bool exists = find_named_entry(directory, (uintptr_t)name, length) != NULL;
+  unlock_directory(directory);
+  if (detached || exists) {
+    return detached ? CALL_NOT_FOUND : CALL_ALREADY_EXISTS;
+  }
+  struct directory_entry *entry = kmalloc(sizeof(*entry) + length + 1);
+  if (!entry) {
+    return CALL_NO_MEMORY;
+  }
+  *entry = (struct directory_entry){.name_length = length};
+  memcpy(entry->name, name, length);
+  entry->name[length] = 0;
+  struct file_object *file = file_create_ram();
+  if (!file) {
+    kfree(entry);
+    return CALL_NO_MEMORY;
+  }
+  entry->object = &file->object;
+  enum call_status status = child_capability_status(
+      capability_grant_retain(entry->object, FILE_RIGHTS, 0, grant));
+  if (status == CALL_OK) {
+    lock_directory(directory);
+    if (directory->detached) {
+      status = CALL_NOT_FOUND;
+    } else if (name_exists(directory, entry)) {
+      status = CALL_ALREADY_EXISTS;
+    } else if (directory->generation == UINT64_MAX || directory->entry_count == SIZE_MAX) {
+      status = CALL_LIMIT;
+    } else {
+      append_entry(directory, entry);
+      ++directory->generation;
+      fs_metadata_touch(&directory->metadata);
+    }
+    unlock_directory(directory);
+  }
+  if (status != CALL_OK) {
+    capability_grant_release(grant);
+    object_release(entry->object);
+    kfree(entry);
+  }
+  return status;
+}
+
+static enum call_status completion_remove_ram(struct directory_object *directory,
+    const char *name, size_t length, uint64_t kind)
+{
+  struct directory_entry *removed;
+  enum call_status status = unlink_ram_child(directory, name, length, kind, &removed);
+  if (removed) {
+    object_release(removed->object);
+    kfree(removed);
+  }
+  return status;
+}
+
+void directory_completion_start(struct native_completion *operation)
+{
+  struct directory_object *directory = (struct directory_object *)operation->target.object;
+  if (directory->backing == DIRECTORY_NPFS) {
+    npfs_completion_start(operation);
+    return;
+  }
+  enum call_status status;
+  struct capability_grant grant = {0};
+  if (!native_completion_mark_started(operation)) {
+    status = native_completion_cancel_reason(operation);
+  } else if (directory->backing != DIRECTORY_RAM) {
+    status = CALL_READ_ONLY;
+  } else if (operation->operation == DIRECTORY_CREATE) {
+    struct completion_create_request request;
+    memcpy(&request, operation->input, sizeof(request));
+    status = completion_create_ram(directory,
+        (const char *)operation->input + sizeof(request), request.name_length, &grant);
+  } else {
+    KASSERT(operation->operation == DIRECTORY_REMOVE);
+    struct completion_remove_request request;
+    memcpy(&request, operation->input, sizeof(request));
+    status = completion_remove_ram(directory,
+        (const char *)operation->input + sizeof(request), request.name_length, request.kind);
+  }
+  native_completion_finish(operation, status, NULL, 0, &grant);
 }
 
 /* Both parents locked. Returned entries are borrowed only until unlocking. */

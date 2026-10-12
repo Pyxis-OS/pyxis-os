@@ -12,6 +12,7 @@ struct hostfs_node;
 struct npfs_node;
 struct fat32_node;
 struct image_capture;
+struct native_completion;
 
 enum file_backing {
   FILE_INITRD,
@@ -92,5 +93,11 @@ enum call_status file_ram_capture(struct file_object *file, struct image_capture
 struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
+
+/* BSP/IF=0, copied kernel payload and retained target. RAM/archive reserve busy
+ * without waiting; native admission reserves the existing filesystem queue. */
+enum call_status file_completion_reserve(struct native_completion *operation);
+void file_completion_start(struct native_completion *operation);
+void file_completion_discard(struct native_completion *operation);
 
 #endif
