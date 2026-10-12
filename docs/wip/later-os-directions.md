@@ -93,8 +93,8 @@ need a bounded native completion prerequisite now: TCP CONNECT, DNS UDP
 SEND/RECEIVE and native FILE/DIRECTORY staging, one pending operation per instance,
 one owned receiver per correlated result, reserved admission before submission,
 and cancel/close/exit ownership drain. Its
-[submission/cancel/collection proposal](native-http-requests.md#native-completion-contract--owner-review)
-requires owner review before kernel code. The broader completion model remains
+[accepted submission/cancel/collection contract](native-http-requests.md#native-completion-accepted-contract)
+is accepted and its bounded implementation assigned, 2026-10-12. The broader completion model remains
 parked and unassigned; this permits no general async rewrite or extra per-operation
 capability API. [BSP service requests](../kernel/bsp-service-requests.md) remain
 synchronous until the selected paths implement an accepted replacement.

@@ -1,11 +1,11 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 facets/lifetime accepted; native completion contract proposed, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 facets/lifetime accepted; native completion contract accepted and implementation assigned, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
 provider/adapter defaults are accepted, including streamed GET/POST without an
-artificial response-size cap; the native completion contract remains proposed. Each implementation task needs its own owner go.
+artificial response-size cap. The native completion contract is accepted too. Each implementation task needs its own owner go.
 
 ## Deliverable and consumers
 
@@ -178,21 +178,21 @@ continue independently. Cancel/receiver closure/exit must drain ownership and
 cleanup, not drop a live receiver's completion or fabricate rollback.
 
 **Owner exception to the planning freeze, accepted 2026-10-12:** this prerequisite
-is justified now, limited to the scope above. It authorizes the contract proposal
-below, not kernel code, a general async rewrite or an additional per-operation
-capability API. The broader completion direction remains parked. Any synchronous
+is justified now, limited to the scope above. Its contract below is accepted and
+implementation assigned, 2026-10-12. The exception permits no general async rewrite
+or additional per-operation capability API. The broader completion direction remains parked. Any synchronous
 phase left must be reported; task 3 cannot claim responsive status/abort through it.
 
-## Native completion contract — owner review
+## Native completion accepted contract
 
-**Proposal, 2026-10-12; three decisions required before kernel code.** Existing
+**All three defaults accepted; implementation assigned by the owner, 2026-10-12.** Existing
 [native grants and endpoint transport](../interfaces/endpoints.md) are distinct:
 native objects have zero transport rights, ordinary SEND reports admission only,
 and ordinary RECEIVE may grow its destination table. This proposal adds a bounded
 native submission route and authenticated completion records on an existing owned
 receiver. It leaves ordinary CALL/SEND/RECEIVE semantics intact.
 
-### 1. Submission — default: copied inputs and fully reserved admission
+### 1. Submission — copied inputs and fully reserved admission
 
 Submit through the existing target grant, checking its native operation rights;
 no extra ambient authority or per-operation capability. The envelope names the
@@ -224,14 +224,16 @@ Ordinary traffic cannot consume that reservation. Any admission failure unwinds
 without work or a completion. Successful submission means accepted work only;
 its return needs no user output copy that could fail after acceptance.
 
-Default: **one unacknowledged native completion operation per process**, hence per
+**One unacknowledged native completion operation per process**, hence per
 HTTP provider instance, even with several receivers. Existing global and per-object
 limits still apply; this does not serialize different processes or ordinary TRY/IPC.
+A second submission returns `CALL_BUSY`, including through a different receiver;
+see [the admission debt](../technical-debt.md#native-completion-per-process-admission).
 There is no hidden queue beyond reserved work. Short BSP allocation handoffs may
 park admission; it never waits for the submitted I/O. Borrowed buffers or several
 outstanding operations would widen ownership and admission policy; defer them.
 
-### 2. Collection — default: retryable RECEIVE, receipt close acknowledges
+### 2. Collection — retryable RECEIVE, receipt close acknowledges
 
 A kernel-authenticated completion kind carries the ID, native operation/result,
 known progress and separate cancellation/deadline information. Result bytes use
@@ -255,11 +257,10 @@ expiry or eviction. Returned grants are independent after collection.
 
 This is deliberately stronger than ordinary message collection; it needs no new
 collection handle type. A successful collection lost to caller failure is not a
-new I/O attempt; exit disposes owned receipts/unreported grants. Alternative:
-consume on copy failure, losing a successful CREATE or CONNECT result. Prefer
-retention because collection failure must not manufacture native uncertainty.
+new I/O attempt; exit disposes owned receipts/unreported grants. Collection failure
+must not manufacture native uncertainty.
 
-### 3. Cancellation and teardown — default: stop, drain, retain the real outcome
+### 3. Cancellation and teardown — stop, drain, retain the real outcome
 
 CANCEL requires the owner's receiver with RECEIVE and names its correlation ID,
 using the captured operation rather than the original target handle. It requires
@@ -278,7 +279,7 @@ unknown. UDP receive may already have consumed a datagram. HTTP ABORT neverthele
 latches against later COMMIT. Neither cancel nor receipt close promises rollback.
 
 Use one absolute operation deadline, within existing bounds: CONNECT 30 s,
-UDP SEND 5 s, RECEIVE 30 s; proposed FILE/DIRECTORY admission maximum 30 s matches
+UDP SEND 5 s, RECEIVE 30 s; FILE/DIRECTORY admission maximum 30 s matches
 the current npfs request budget. Expired submission is refused without acceptance.
 After admission, expiry requests cancellation; it is not a promise that safe
 reclamation finishes by that instant. Longer HTTP deadlines use separate bounded
@@ -305,8 +306,8 @@ rather than acknowledging cancellation while a worker still borrows freed storag
 
 Before delivery, qualify reservation exhaustion, invalid collection buffers,
 receiver shutdown/exit, cancel-before-start and cancel-versus-success, plus a service
-loop waiting on receiver and TCP readiness. No code or runtime evidence exists for
-this proposed contract yet.
+loop waiting on receiver and TCP readiness. Include the `CALL_BUSY` second-submission refusal on the same and different
+receivers. Implementation/runtime qualification remain pending.
 
 **Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
 fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
@@ -396,7 +397,7 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   fixtures with a body larger than the resident buffer, without an HTTP port.
 - [ ] **3. Prepared provider transactions and responsive stream service.**
   The object/rights/lifetime/inheritance review is accepted. Start with the
-  native completion contract review above and its bounded prerequisite.
+  accepted native completion prerequisite above.
   Deliver body/control/response/observation grants, freeze, status, abort,
   private storage, credential cleanup and retirement. Start with one active
   exchange per provider instance and explicit admission failure. An instance is

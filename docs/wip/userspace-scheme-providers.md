@@ -72,8 +72,7 @@ capability-valued variables and must fit the cross-cutting
 [capability-valued environment direction](capability-environment.md). Credential
 bytes remain excluded from argv/environment/history/logs. The
 [accepted task 3 object/rights/lifetime/inheritance contract](native-http-requests.md#task-3-accepted-facets-and-lifetime)
-records that boundary; its native completion prerequisite still needs contract
-review before kernel code. Capability-valued environment implementation needs a
+records that boundary and the accepted native completion prerequisite. Capability-valued environment implementation needs a
 separate owner assignment.
 
 The shared [native command execution](native-command-execution.md) milestone
