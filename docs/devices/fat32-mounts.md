@@ -1,34 +1,45 @@
-# Native read-only FAT32 mounts
+# Native FAT32 mounts
 
 The BSP filesystem worker serves supported GPT FAT32 partitions through native
 FILE/directory objects. The [shared engine](../../fs/docs/fat32-read.md) validates
-both GPT copies and the whole volume before admission. Subsequent reads remain
-confined to the selected physical extent. No write, flush, repair or implicit URI
-mount is performed. Keep media quiescent; raw read handles and external writers
-do not provide snapshots.
+both GPT copies and the whole volume before admission. Subsequent I/O remains
+confined to the selected physical extent. Each instance has a fixed read-only or
+read-write mode; read-only instances never write, flush or change dirty flags.
+There is no repair or implicit URI mount. Keep external writers excluded; raw
+read handles do not provide snapshots.
 
 ## Authority and interfaces
 
-[`DISK_OPEN_FAT32`](../../include/abi/disk.h) requires MOUNT on an explicitly selected DISK and takes a
-one-based GPT entry plus exact LOOKUP/ENUMERATE/READ_FILES rights, independently
-narrowed, including zero. A successful call installs a root and bound MOUNT
-control in one capability-table batch. Both slots are reserved before work;
+[`DISK_OPEN_FAT32`](../../include/abi/disk.h) requires MOUNT on an explicitly selected
+DISK and takes a one-based GPT entry, RO/RW access and exact root rights, including
+zero. RO rights are LOOKUP/ENUMERATE/READ_FILES; RW permits DIRECTORY_CONTENT_RIGHTS.
+RW additionally requires DISK WRITE and qualified write/flush support, even for
+an attenuated RO root. New RW admission requires a clean, error-free volume and
+full structural preflight. An RO instance cannot upgrade: an RW open returns
+BUSY until it is retired. An RW instance may supply RO views to an opener with
+RW disk authority, sharing its domain, records and failure state.
+
+A successful call installs a root and bound MOUNT control in one capability-table
+batch. Both slots are reserved before work;
 copying the reply into user memory is a separate operation. A failed reply closes
 this call's new handles and drains provisional ownership; escaped sibling grants
 and already published instances are preserved.
 
-The [control protocol](../../include/abi/mount.h) grants OPEN_ROOT, OBSERVE and RETIRE. OPEN_ROOT accepts only rights
-within that opener's original ceiling and returns another root for the same
-instance. OBSERVE returns genuine domain, device, GPT entry, physical range,
-retired status and observed FAT clean/error flags. Flags are observations, not
-integrity or durability promises. Closing a control never retires a mount.
+The [control protocol](../../include/abi/mount.h) grants independently attenuable
+OPEN_ROOT, OBSERVE and RETIRE; RW admission also supplies WRITE and INTERVAL.
+OPEN_ROOT accepts only rights within that opener's original ceiling; mutation
+rights additionally require control WRITE. It returns another root for the same
+instance. OBSERVE reports genuine domain, device, GPT entry, physical range,
+mode, dirty ownership, retirement, active interval and retained failure/cleanup
+state. Clean/error flags are observations, not integrity or durability promises.
+Closing a control never retires a mount or ends its process's interval.
 
 FILE READ/SIZE/INFO, directory LOOKUP/ENUMERATE/INFO and selected-executable
 capture use the existing native protocols. Capturing uses the common 128 MiB
 serialized-image ceiling; capture backing ceases to pin the mount when its FILE
 and operation references drain. Data grants never confer mounting or retirement
-authority. Mutation is unavailable. DIRECTORY_FILESYSTEM_INFO remains
-BAD_OPERATION because its existing record describes npfs pools.
+authority. DIRECTORY_FILESYSTEM_INFO remains BAD_OPERATION because its existing
+record describes npfs pools.
 
 The [metadata contract](../interfaces/file-metadata.md) reports genuine
 domain/object identity, shared by live long-name/ASCII-alias references. Empty
@@ -36,6 +47,80 @@ files remain distinct. Full close and remount promise no identity continuity.
 File size is valid; directory size and DOS-local modification time are not.
 Enumeration returns valid UTF-8 names; lookup supports ASCII long names and
 short aliases, case-insensitively. Dot entries confer no parent authority.
+
+## Native mutations and publication intervals
+
+RW instances serve FILE WRITE/RESIZE/SYNC and directory CREATE/REMOVE,
+same-volume file RENAME and SYNC with ordinary native rights. CREATE reserves
+returned-handle capacity and prepares its grant before media effects. FILE sync
+requires WRITE; directory sync requires CREATE or REMOVE; control SYNC requires
+WRITE. Sync may flush the whole instance and never clears its owned dirty mark.
+Every successful mutation completes its ordered barriers and final flush before
+returning; closing a handle does not synchronize it. Rename is serialized for
+live readers, without a crash-atomicity or rollback promise.
+
+New names preserve ASCII spelling in LFNs. Namespace changes require supported
+ASCII names/aliases for the affected parent and every sibling; Unicode objects
+elsewhere remain readable. Supported ASCII content writes do not require ASCII
+siblings. The regular-file read-only attribute refuses write, resize, removal
+and rename/replacement of that object; directory attributes grant no authority.
+No attribute-changing operation is supplied. FAT lengths remain at most
+UINT32_MAX bytes, and backing/work budgets may refuse smaller operations.
+
+Beyond-EOF writes and resize growth zero the entire exposed gap, including old
+cluster slack. Shrink discards the tail so later growth cannot expose it; the
+smaller directory length becomes durable before its FAT tail is reclaimed.
+Zero-byte writes validate authority and object state without extending the file.
+Rename moves the source's native identity. Removal/replacement detaches a distinct
+victim; surviving FILE grants retain authorized access to its own content and
+chain until their last reference drains. Detached directories reject namespace
+changes. Directory generations change independently of object identities.
+
+Control BEGIN/END require INTERVAL. BEGIN returns a non-reused identifier and an
+absolute 30-second lease owned by the calling process; sibling tasks share it,
+children and delegated controls do not inherit it. BEGIN while an interval is
+active returns BUSY and never extends the deadline. Other processes' mutations
+and sync return BUSY; reads remain available and observe each completed operation.
+The interval grants no data authority, rollback or atomic visibility across calls.
+END must name the owner's identifier and does not synchronize or remove staging
+names. Expiry or owner stop closes interval admission; submitted work drains
+before another owner can begin. A live expired owner receives TIMED_OUT on further
+mutations/sync until it acknowledges END or obtains a new interval, including
+while another owner holds the mount.
+
+BEGIN remains provisional until its identifier/deadline reply is delivered.
+The original storage admission and actor/node references cover an allocation-free
+worker finish; failed copy-out removes that exact new interval or restores the
+owner's prior expired record. Shutdown drainage includes this finish. Pending
+intervals block mutations and cannot be replaced by another BEGIN or END.
+Each mount admits at most 16 active, pending or expired-owner interval records,
+charged to the shared wrapper budget. A new owner at capacity gets LIMIT before
+allocation. An expired owner renews its existing record in place; live-owner
+tombstones are never evicted to admit another owner.
+
+## Failure and clean power
+
+Capacity, budget and authority refusals before effects leave media unchanged.
+An unconfirmed write or flush returns OUTCOME_UNKNOWN and permanently freezes
+the instance's data operations, including reads. OBSERVE retains the first
+failure, phase, absolute sector and affected names; prepared images and held
+chains remain under mount accounting and extent exclusion. Closing/reopening
+cannot reset failure. There is no retry, repair or forced retirement of uncertain
+effects. Known preflight reclamation refusals remain explicit CLEANUP_PENDING
+records; a later explicit RETIRE may retry that cleanup.
+
+The [clean-power sequence](../kernel/acpi.md#power-off-and-restart) holds user
+tasks, closes storage admission and drains admitted operations and deferred work.
+It flushes each mutated RW instance and, when no detached allocated chains remain,
+clears only its owned dirty mark and flushes that clear. Views, handles and
+publication intervals remain retained. Detached chains leave the mark dirty after
+the flush and never refuse power merely by remaining held. Unresolved mutation
+failure blocks clean power. RO instances never change dirty bits.
+
+The worker then seals npfs pools, stops NVMe and enters S5/reset. If power fails
+and programs resume, storage admission reopens and the next mutation durably
+re-marks a previously sealed FAT instance before its first effect. Normal RETIRE
+still requires reference drainage; power sealing does not retire a mount.
 
 ## Exclusion and retirement
 
@@ -47,13 +132,15 @@ disjoint partition claims preserve existing transport/NVMe policy. A raw claim
 still remains unique per device. npfs retention and duplicate-pool policy are
 unchanged.
 
-RETIRE requires its separate right and returns BUSY until data wrappers,
-delegated/cwd/queued grants, admitted operations and deferred destruction drain.
+RETIRE requires its separate right and returns BUSY while data wrappers,
+delegated/cwd/queued grants, admitted operations or an active interval remain.
+Known pending cleanup is retried explicitly and its failure is reported.
 It revokes nothing and does not wait for the caller to close references. Control
-aliases and the retiring request itself are exempt. OK releases workspace and
-exclusion on the worker. Controls then become inert tombstones: OBSERVE and
-repeated RETIRE remain safe; OPEN_ROOT returns UNAVAILABLE. New admission gets a
-new domain. A completed failed read drains normally.
+aliases and the retiring request itself are exempt. Once drained, RW retirement
+durably reclaims detached chains, clears its owned dirty mark and flushes before
+releasing workspace and exclusion. Controls then become inert tombstones:
+OBSERVE and repeated RETIRE remain safe; OPEN_ROOT returns UNAVAILABLE. New
+admission gets a new domain. A completed failed read drains normally.
 
 Final-control close retains a published instance until an authorized opener
 reacquires control and retires it, or reboot. This intentionally bounded retention
@@ -61,12 +148,14 @@ also applies when its controller faults. Unpublished failure instead releases
 backing and reservations after all owned/escaped references drain. No user buffer,
 AP stack or held lock crosses storage waits.
 
-Admission settings in the [adapter](../../kernel/fs/fat32.c) are four active instances, 32 MiB aggregate FAT workspace,
-the shared 1 MiB/1024 native-wrapper budget, depth 64, 67,108,864 work steps and
-16,777,216 sectors per engine operation. The existing serial worker admits at
-most 32 jobs with a cooperative 30-second deadline. Pending charges count before
-allocation; LIMIT and NO_MEMORY remain distinct. These are implementation settings,
-not FAT format limits or a total-memory guarantee.
+Admission settings in the [adapter](../../kernel/fs/fat32.c) are four active
+instances, 32 MiB aggregate FAT workspace/chain storage, the shared 1 MiB/1024
+native-wrapper budget, depth 64, 67,108,864 work steps and 16,777,216 sectors per
+engine operation. The existing serial worker admits at most 32 jobs with a
+cooperative 30-second deadline. Pending charges count before allocation; LIMIT
+and NO_MEMORY remain distinct. Growing a workspace or retained chain charges both
+old and replacement backing until the replacement succeeds. These are implementation settings, not FAT format
+limits or a total-memory guarantee.
 
 ## Trusted browsing profiles
 
@@ -92,5 +181,24 @@ memory and console streams, with no DISKS, MOUNT, control or descendant launcher
 This is a trusted browsing bootstrap, not an installed shell binding, generic
 mount command, editor or writable ESP workflow.
 
+For disposable scratch media only, the separate trusted bootstrap
+`init=boot://init-fat32-mount-write.pxe boot.install=1` opens the explicitly
+selected disk RW and starts the mounted writer. It never falls back to the real
+boot ESP. Commands include `create`, `mkdir`, `remove`, `rmdir`,
+`rename /FROM | /TO`, `replace /FROM | /TO`, `sync`, `begin` and `end ID`.
+Eight held-file slots support `hold SLOT ro|rw /PATH`, `hinfo SLOT`,
+`hread SLOT OFFSET LENGTH`, `hwrite SLOT OFFSET = LITERAL`, `resize SLOT SIZE`,
+`hsync SLOT` and `drop SLOT`. `shell` receives RO roots and explicit streams,
+without mounting, interval or write authority. This profile exercises native
+operations; configured writable bindings and an everyday mount command are
+task 5, not supplied by this bootstrap.
+In QEMU, attach scratch media writable with modern VirtIO block. After GPT
+discovery, focus **Mounted FAT32 Scratch Writer** with Super+Right from Caelum
+(HMP `sendkey meta_l-right`), then enter the displayed disk ID and one-based GPT
+entry. Selection requires focus; READ_ONLY media cannot support this writer.
+
 The [qualification record](../development/experiments/fat32-native-mount.md)
 separates QEMU/debugger evidence from later owner-routed native ESP checks.
+Mounted-write and clean-power evidence belongs to the
+[scratch RW qualification record](../development/experiments/fat32-mounted-writes.md).
+Writable installed bindings and native ESP writing remain outside this workflow.

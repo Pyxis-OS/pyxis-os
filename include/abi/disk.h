@@ -91,12 +91,12 @@ struct disk_write_request { uint64_t offset, length, data; };
 
 struct disk_create_volume_request { uint64_t partition, name, name_length; };
 
-/* Requires MOUNT, selects one GPT entry, returns mount_fat32_reply. Only the
- * read-only root rights from mount_fat32_root_request are admitted. Both GPT
- * copies and full FAT structure validate under physical-extent exclusion.
- * READ alone cannot allocate a mounted view; no implicit URI mount. */
-struct disk_fat32_request { uint64_t partition, rights; };
-_Static_assert(sizeof(struct disk_fat32_request) == 16, "FAT disk request");
+/* Select one GPT entry and fixed RO/RW instance mode. MOUNT is required;
+ * READ_WRITE also requires WRITE even when returning an RO root. Exact rights
+ * are attenuated DIRECTORY_CONTENT_RIGHTS. Existing RO instances cannot upgrade.
+ * Both GPT copies/full structure validate under extent exclusion. */
+struct disk_fat32_request { uint64_t partition, access, rights; };
+_Static_assert(sizeof(struct disk_fat32_request) == 24, "FAT disk request");
 
 /* CLAIM needs WRITE and re-establishes raw mutation authority on an object
  * whose claim was released. PARTITION zero claims the whole disk, under

@@ -78,8 +78,8 @@ the checked-out revision or dependency pins.
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
-linker support, the pinned target `libnpfs-format.a`, `libfat32-read.a` and
-`libfat32-write.a`,
+linker support, the pinned target `libnpfs-format.a`, `libfat32-read.a`,
+`libfat32-write.a` and `libfat32-mounted.a`,
 and their public headers and licenses
 into `build/sdk`. `make userspace` builds applications against that
 SDK and the Lua, HTTP-parser and TLS libraries exported by `make ports`. Ports consumes only the SDK,

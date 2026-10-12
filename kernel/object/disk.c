@@ -190,7 +190,7 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     if (!(rights & DISK_RIGHT_MOUNT)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    return fat32_open_device(disk->device, request_address, request_size,
+    return fat32_open_device(disk->device, rights, request_address, request_size,
         reply_address, reply_capacity);
   }
   if (operation == DISK_OPEN_VOLUME) {

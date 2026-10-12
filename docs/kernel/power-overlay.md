@@ -75,16 +75,24 @@ or without a display it is consumed and ignored.
 
 The chosen button calls `acpi_power_local()`, which hands the operation to the
 ACPI worker with the power button's authority; the worker runs the clean
-[power-off sequence](acpi.md#power-off-and-restart): hold user tasks, flush and
-seal writable pools, stop NVMe admission, drain and confirm bounded normal
-controller shutdown, then S5 or reset. The overlay shows:
+[power-off sequence](acpi.md#power-off-and-restart): hold user tasks, close storage
+admission and drain admitted/deferred work, flush and seal retained RW FAT mounts,
+then seal writable npfs pools, stop NVMe admission, drain and confirm bounded
+normal controller shutdown, then S5 or reset. FAT sealing retains handles and
+publication intervals. It clears an owned dirty mark only without detached
+allocated chains; otherwise the flush leaves dirty set and that condition never
+refuses power. An unresolved FAT mutation blocks clean power. If power fails and
+programs resume, the next mutation durably re-marks a cleared FAT instance before
+effects. See [FAT power handling](../devices/fat32-mounts.md#failure-and-clean-power)
+and its [scratch qualification](../development/experiments/fat32-mounted-writes.md).
+The overlay shows:
 
 - "Shutting down: checking storage..." (or "Restarting: ...") while the worker
   runs, with buttons disabled; Escape does nothing, since programs are held.
 - On a completed failure, "Shutdown failed (status N); the system stays up." with
   Cancel selected. The power buttons become **Force off** and **Force reboot**
   beside "Unsafe: bypasses storage checks; data may be lost." A further explicit
-  selection asks the worker to enter S5 or reset without flushing pools or
+  selection asks the worker to enter S5 or reset without FAT/npfs storage checks or
   checking NVMe, and logs the forced operation. The failure and warning frame
   must complete presentation before a fresh key press or click can select force.
   Force is never automatic and never available through userspace `POWER` rights;
@@ -98,9 +106,9 @@ The worker's `power:` log lines record the operation and NVMe shutdown stage.
 
 Remote shells keep `remote_power`; a remote `poweroff` while the overlay is open
 runs as today and the BUSY message covers the race. Installed and live behave the
-same: the worker flushes whatever pools are writable, and a live image's RAM
-volumes are lost on shutdown as with `poweroff`, without a warning. An Update in
-progress is not protected, as with the power button.
+same: the worker seals writable FAT instances and npfs pools, and a live image's
+RAM volumes are lost on shutdown as with `poweroff`, without a warning. An Update
+in progress is not protected, as with the power button.
 
 ## Emergency coverage
 

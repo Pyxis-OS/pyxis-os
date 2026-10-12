@@ -59,6 +59,12 @@ void disk_retire(struct disk_object *disk)
   npfs_notify();
 }
 
+bool disk_retired_pending(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  return retired != NULL;
+}
+
 struct disk_object *disk_take_retired(void)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));

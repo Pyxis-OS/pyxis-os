@@ -172,6 +172,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
   $0 == "  cmdline: init=boot://init-fat32-inspect.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-write.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-mount.pxe boot.install=1" ||
+  $0 == "  cmdline: init=boot://init-fat32-mount-write.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-mount.pxe" {
     line = $0
     if (display != "") line = line " display.size=${PYXIS_DISPLAY_SIZE}"
