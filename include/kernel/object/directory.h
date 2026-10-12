@@ -28,7 +28,9 @@ struct directory_entry {
 /* The lock protects links/count/generation/detached. Entries own child
  * references; children do not retain parents. Removed empty directories stay
  * detached and reject creation through surviving handles. Multi-directory
- * mutations take the mutation lock before any directory locks. Only the
+ * mutations and RAM publication take the mutation lock before directory locks.
+ * RAM parent links are borrowed under that lock; destruction clears them before
+ * releasing child references. They confer no parent capability. Only the
  * unpublished initrd builder bypasses locking. Native directories use only
  * their worker-owned node, never these in-memory links or the lock. */
 struct directory_object {
@@ -40,6 +42,7 @@ struct directory_object {
   struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
   atomic_bool locked;
   bool detached;
+  struct directory_object *parent; /* RAM only; non-owning, mutation lock. */
   struct directory_entry *first, *last;
   size_t entry_count;
   uint64_t generation;

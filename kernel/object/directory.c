@@ -17,8 +17,11 @@
 
 /* REMOVE may lock parent then child, while RENAME locks two arbitrary parents.
  * Serialize these multi-directory mutations before taking any directory lock.
- * Single-directory readers/creators never take this lock. No waits/allocations
+ * RAM creation and parent retirement join the same topology boundary. Readers
+ * only take their directory lock. No waits/allocations
  * may occur while it is held. */
+#define RAM_RENAME_ANCESTORS_MAX 1024u
+
 static atomic_bool mutation_locked;
 
 static void lock_mutation(void)
@@ -47,6 +50,15 @@ static void destroy_directory(struct kernel_object *object)
   if (directory->backing == DIRECTORY_HOST) {
     hostfs_retire(directory->host);
     return;
+  }
+  if (directory->backing == DIRECTORY_RAM) {
+    lock_mutation();
+    for (struct directory_entry *child = directory->first; child; child = child->next) {
+      if (child->object->type == OBJECT_DIRECTORY) {
+        ((struct directory_object *)child->object)->parent = NULL;
+      }
+    }
+    unlock_mutation();
   }
   struct directory_entry *entry = directory->first;
   while (entry) {
@@ -139,6 +151,9 @@ static void unlink_entry(struct directory_object *directory, struct directory_en
     directory->last = previous;
   }
   entry->next = NULL;
+  if (directory->backing == DIRECTORY_RAM && entry->object->type == OBJECT_DIRECTORY) {
+    ((struct directory_object *)entry->object)->parent = NULL;
+  }
   --directory->entry_count;
 }
 
@@ -150,6 +165,9 @@ static void append_entry(struct directory_object *directory, struct directory_en
     directory->first = entry;
   }
   directory->last = entry;
+  if (directory->backing == DIRECTORY_RAM && entry->object->type == OBJECT_DIRECTORY) {
+    ((struct directory_object *)entry->object)->parent = directory;
+  }
   ++directory->entry_count;
 }
 
@@ -493,6 +511,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   }
 
   struct directory_child_reply reply;
+  lock_mutation();
   lock_directory(directory);
   /* Recheck after the allocation wait. Namespace publication and the owned
    * grant move cannot fail once these checks pass. */
@@ -509,6 +528,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     capability_install_reserved(&reservation, &slot, &grant, 1, &reply.handle);
   }
   unlock_directory(directory);
+  unlock_mutation();
 
   capability_grant_release(&grant);
   capability_reservation_release(&reservation, &slot);
@@ -735,6 +755,7 @@ static enum call_status completion_create_ram(struct directory_object *directory
   enum call_status status = child_capability_status(
       capability_grant_retain(entry->object, FILE_RIGHTS, 0, grant));
   if (status == CALL_OK) {
+    lock_mutation();
     lock_directory(directory);
     if (directory->detached) {
       status = CALL_NOT_FOUND;
@@ -748,6 +769,7 @@ static enum call_status completion_create_ram(struct directory_object *directory
       fs_metadata_touch(&directory->metadata);
     }
     unlock_directory(directory);
+    unlock_mutation();
   }
   if (status != CALL_OK) {
     capability_grant_release(grant);
@@ -797,6 +819,22 @@ void directory_completion_start(struct native_completion *operation)
   native_completion_finish(operation, status, NULL, 0, &grant);
 }
 
+/* Mutation lock keeps borrowed parent links alive and excludes topology edits. */
+static enum call_status check_directory_destination(struct directory_object *moved,
+    struct directory_object *destination)
+{
+  for (unsigned depth = 0; destination; ++depth) {
+    if (destination == moved) {
+      return CALL_BAD_REQUEST;
+    }
+    if (depth == RAM_RENAME_ANCESTORS_MAX) {
+      return CALL_LIMIT;
+    }
+    destination = destination->parent;
+  }
+  return CALL_OK;
+}
+
 /* Both parents locked. Returned entries are borrowed only until unlocking. */
 static enum call_status check_rename(struct directory_object *source,
     struct directory_object *destination, uint64_t destination_rights,
@@ -809,11 +847,18 @@ static enum call_status check_rename(struct directory_object *source,
   if (source->detached || destination->detached || !*old) {
     return CALL_NOT_FOUND;
   }
-  if (entry_kind(*old) != DIRECTORY_KIND_FILE) {
+  uint64_t kind = entry_kind(*old);
+  if (request->kind != DIRECTORY_KIND_ANY && request->kind != kind) {
     return CALL_WRONG_TYPE;
   }
   if (*old == *replaced) {
     return CALL_OK;
+  }
+  if (kind == DIRECTORY_KIND_DIRECTORY) {
+    enum call_status status = check_directory_destination((void *)(*old)->object, destination);
+    if (status != CALL_OK) {
+      return status;
+    }
   }
   if (*replaced) {
     if (request->policy == DIRECTORY_RENAME_NO_REPLACE) {
@@ -822,8 +867,22 @@ static enum call_status check_rename(struct directory_object *source,
     if (!(destination_rights & DIRECTORY_RIGHT_REMOVE)) {
       return CALL_DENIED;
     }
-    if (entry_kind(*replaced) != DIRECTORY_KIND_FILE) {
+    if (entry_kind(*replaced) != kind) {
       return CALL_WRONG_TYPE;
+    }
+    if (kind == DIRECTORY_KIND_DIRECTORY) {
+      struct directory_object *victim = (void *)(*replaced)->object;
+      bool parent_locked = victim == source || victim == destination;
+      if (!parent_locked) {
+        lock_directory(victim);
+      }
+      bool empty = victim->entry_count == 0;
+      if (!parent_locked) {
+        unlock_directory(victim);
+      }
+      if (!empty) {
+        return CALL_NOT_EMPTY;
+      }
     }
   }
   if (source->generation == UINT64_MAX || destination->generation == UINT64_MAX ||
@@ -875,6 +934,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     pending->job.count = request->source_length;
     pending->job.destination_length = request->destination_length;
     pending->job.replace = request->policy == DIRECTORY_RENAME_REPLACE;
+    pending->job.kind = request->kind;
     memcpy(pending->job.name, (const void *)request->source_name, request->source_length);
     pending->job.name[request->source_length] = 0;
     memcpy(pending->job.destination_name, (const void *)request->destination_name, request->destination_length);
@@ -905,6 +965,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     pending->count = request->source_length;
     pending->destination_length = request->destination_length;
     pending->replace = replace;
+    pending->kind = request->kind;
     memcpy(pending->name, (const void *)request->source_name, request->source_length);
     memcpy(pending->destination_name, (const void *)request->destination_name, request->destination_length);
     hostfs_request_submit_and_wait(pending);
@@ -938,13 +999,20 @@ static struct syscall_result rename_to_directory(struct directory_object *source
 
   lock_parents(source, destination);
   status = check_rename(source, destination, destination_rights, request, &old, &replaced);
-  if (status == CALL_OK) {
+  unchanged = status == CALL_OK && old == replaced;
+  if (status == CALL_OK && !unchanged) {
     /* Transfer the source entry's reference, without copying file data or
      * changing existing handles. Nothing fallible remains before publication. */
     entry->object = old->object;
     unlink_entry(source, old);
     old->object = NULL;
     if (replaced) {
+      if (entry_kind(replaced) == DIRECTORY_KIND_DIRECTORY) {
+        struct directory_object *victim = (void *)replaced->object;
+        lock_directory(victim);
+        victim->detached = true;
+        unlock_directory(victim);
+      }
       unlink_entry(destination, replaced);
     }
     append_entry(destination, entry);
@@ -957,7 +1025,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
   }
   unlock_parents(source, destination);
 
-  if (status != CALL_OK) {
+  if (status != CALL_OK || unchanged) {
     ramfs_request_discard(entry);
   } else {
     ramfs_request_discard(old);
@@ -971,8 +1039,10 @@ static struct syscall_result rename_to_directory(struct directory_object *source
 static struct syscall_result rename_child(struct directory_object *source, uint64_t rights,
     const struct directory_rename_request *request)
 {
-  if (request->policy != DIRECTORY_RENAME_NO_REPLACE &&
-      request->policy != DIRECTORY_RENAME_REPLACE) {
+  if ((request->policy != DIRECTORY_RENAME_NO_REPLACE &&
+      request->policy != DIRECTORY_RENAME_REPLACE) ||
+      (request->kind != DIRECTORY_KIND_ANY && request->kind != DIRECTORY_KIND_FILE &&
+      request->kind != DIRECTORY_KIND_DIRECTORY)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   struct capability_reference destination;

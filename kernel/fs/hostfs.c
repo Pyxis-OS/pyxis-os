@@ -531,6 +531,14 @@ static enum call_status rename_child(struct hostfs_request *request)
   if (result != VIRTIO_FS_OK) {
     return call_result(result);
   }
+  uint64_t source_kind = kind == VIRTIO_FS_DIRECTORY ? DIRECTORY_KIND_DIRECTORY :
+      kind == VIRTIO_FS_FILE ? DIRECTORY_KIND_FILE : DIRECTORY_KIND_OTHER;
+  if (request->kind != DIRECTORY_KIND_ANY && request->kind != source_kind) {
+    return CALL_WRONG_TYPE;
+  }
+  if (kind == VIRTIO_FS_DIRECTORY) {
+    return CALL_BAD_OPERATION;
+  }
   if (kind != VIRTIO_FS_FILE) {
     return CALL_WRONG_TYPE;
   }
