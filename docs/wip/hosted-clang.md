@@ -139,7 +139,8 @@ publishing incompatible compiler/runtime pins. Gate 7 adoption pins fork #6 at
 its matching owner-published image is `pyxis-llvm23.1.3-2d23443`. Gate 8 now supplies
 the audited synchronization/C++ runtime through the SDK, without another container.
 No rebuild is needed for this baseline. The remaining metadata source adaptations
-will be a fork PR against `pyxis-23.1.3`; local closure qualification can use the
+are in [fork #7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7)
+against `pyxis-23.1.3`; local closure qualification can use the
 current compiler first. Adopting that new fork pin into the single installed
 compiler/SDK pin requires the owner to build/push its matching image before parent
 CI. No adoption branch or new fork commit is ready yet: delta will provide the

@@ -1,4 +1,4 @@
-# Hosted Clang task 4 pre-code baseline
+# Hosted Clang task 4 integration record
 
 2026-10-12, before implementation. Requested base `4366eb28`, userland
 `21cf935c`, ports `fd1eb30`, fs `30f625`, lwIP `a1aadb91`; compiler fork
@@ -32,6 +32,36 @@ No exclusions. Median (minimum–maximum), milliseconds except launch wall:
 Clock calibration was 35,625–114,283 ns/read, not subtracted. Launch includes
 discovery/session setup; RAM writes grow without sync. This is an OS baseline,
 not compiler performance, physical-storage durability or native ThinkPad evidence.
-No hosted Clang/LLD cross-build or execution has occurred for task 4.
+This baseline preceded the task 4 cross-build; compiler execution remains pending.
 Raw commands, provenance/hashes and captures remain local in
 `build/hosted-clang-task4-baseline/`; owned VM/client jobs are stopped.
+
+
+## Cross-build in progress
+
+Source baseline: fork `2d234435`, current threaded SDK above, verified payload
+checksums. Main advanced to `505ec816` with docs-only changes; all non-doc inputs
+remain identical. Current compiler/container and exact-pin host TableGen binaries
+are reused; no target generator executes on the build host.
+
+Release, Generic/Pyxis `x86_64-unknown-pyxis`, X86 target, projects Clang and LLD;
+LLVM workers, tests, examples, benchmarks, docs, PCH and optional external
+libraries off. Only `clang` and `lld` targets are built (`make -j8 -k clang lld`);
+unrelated shared-library tools are disabled. Standalone LLD retains its real
+format-driver closure. Hosted-only CMake defaults are `clang_resources://` and
+`sysroot://`; no serial-only source replacement or target host-libc linkage.
+
+The untouched build reached deleted metadata accessors in Clang cache/header,
+driver, dependency scanning and code generation; direct time-type includes,
+file-stream inputs unavailable in the SDK profile, a Unix exit-code assumption,
+and the absent native host-triple definition. Subsequent builds reached explicit
+C API size-type includes, TextAPI equivalence and nondeterministic archive
+metadata. [Fork #7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7) checks metadata
+or refuses unsupported operations, preserving native cache refusals before effects;
+optional file inputs use the real copied-buffer backend. Reached changed target
+TUs compile. Both full links, image/span sizes and interactive compilation/error
+qualification remain pending; no completion or compiler-performance claim.
+
+Full configuration and build logs remain local in the fork worktree's `build/`.
+No compiler pin is adopted yet. A matching container is required only when that
+new fork pin is adopted; the final SHA/build instructions follow qualification.
