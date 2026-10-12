@@ -252,7 +252,10 @@ other readers get BUSY. Slot exhaustion returns QUEUE_FULL. Successful slots own
 object reference until the worker has returned credit and reclaimed the slot.
 A failed read has no receive credit; its caller clears the slot and releases the
 extra reference before returning, including on WOULD_BLOCK.
-The sole caller task's existing grant and mappings remain live while it parks.
+The admitted call keeps the stream object alive while the caller parks, even if a
+sibling closes the handle. A sibling's read on the same stream gets BUSY. The
+data is copied out after wake, so a sibling that unmapped the output buffer meanwhile
+makes the read return BAD_BUFFER; the consumed bytes are not restored.
 
 lwIP validates sequence space and trims duplicates/overlaps. The receive callback
 copies ordered data into a 65,535-byte ring, allocated on first payload receipt, and

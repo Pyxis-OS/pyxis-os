@@ -191,11 +191,13 @@ independent: timeout never reclaims a DMA buffer. ARP discards expired software
 packets before sending, even if a late resolution reply arrives. Its completion
 uses the non-reused token rather than a pointer to a reusable echo slot.
 
-Processes currently have one task and no external cancellation. The blocked
-call keeps its capability and private mappings alive; closing a copied grant
-elsewhere does not revoke it. Request state belongs to the call, not the echo
-object, so closing another grant cannot destroy that state. Multithreading,
-external termination or asynchronous cancellation must extend this contract.
+Each exchange owns its pending slot, so sibling tasks and other processes
+exchange independently until the slots run out (QUEUE_FULL). The blocked call
+keeps the echo object alive through a CLOSE of its handle, whether by a sibling or
+elsewhere; request state belongs to the call, not the object. No mapping is held across the
+wait: the reply is copied after wake, and a sibling that unmapped it meanwhile
+makes the call return BAD_BUFFER. A process stop wakes the wait, cancels the slot
+and returns ENDPOINT_CLOSED; there is no other cancellation.
 
 A missing worker returns CALL_UNAVAILABLE, a missing route CALL_NO_ROUTE, and
 allocation failure CALL_NO_MEMORY. Queue errors propagate. This synchronous echo

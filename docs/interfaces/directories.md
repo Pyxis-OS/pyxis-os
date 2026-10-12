@@ -174,10 +174,11 @@ permission to read or modify the child.
 Existing names return ALREADY_EXISTS, regardless of kind; nothing is opened,
 replaced or truncated. There is no recursive parent creation.
 
-For native CREATE, the handler captures the name and lends its capability table
-exclusively to the worker. The worker stages the returned handle before publishing
-creation; failed creation removes that staged handle. No table-entry pointer
-crosses the wait. The entry survives closing the returned handle. Successful native
+For native CREATE, the handler captures the name and reserves the result slot in
+the caller's table, which stays usable by sibling tasks. The worker stages the
+returned handle before publishing creation; failed creation removes that staged
+handle. No table-entry pointer crosses the wait. The entry survives closing the
+returned handle. Successful native
 namespace mutations reach durable COMMITTED before returning; file data may remain
 dirty until synchronization.
 
@@ -193,14 +194,16 @@ typed RAMFS request in the common BSP FIFO. Entry allocation, name-only allocati
 and discard use task-owned records, with no directory lock held and no VM handoff.
 The BSP allocates an unpublished entry and child; it never dereferences a remote
 private stack or user address. The resumed caller owns the returned entry, copies
-its validated name into it and installs the provisional child handle, using the
-existing BSP table-growth request if needed.
+its validated name into it and prepares an owned grant for the reserved slot, which
+is installed only at publication.
 
 Under the directory lock, CREATE rechecks detached state, the name and generation
 capacity, then links the complete entry and increments the generation. That is the publication
-point. Nothing fallible remains afterward: the caller's sole task owns stable,
-already-validated reply mappings. A competing creator returns ALREADY_EXISTS,
-closes its provisional handle and asks the BSP to discard its unpublished entry.
+point, and nothing fallible remains in the directory itself. The reply copy still
+follows: if a sibling unmapped the reply buffer during the wait, the call returns
+BAD_BUFFER, closes only the exact returned handle generation and leaves the
+created name in place. A competing creator returns ALREADY_EXISTS, releases its
+grant and reserved slot and asks the BSP to discard its unpublished entry.
 A directory removed while staging waited rejects publication with NOT_FOUND.
 Failed staging also discards partial ownership. Existing handles and names remain
 valid; a failed request may have grown its own capability table.

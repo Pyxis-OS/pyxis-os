@@ -419,15 +419,21 @@ synchronous BSP service, such as capability-table growth during child installati
 or launch preparation, starts only after that release; detached outputs retain
 their independent ownership.
 
-Creation exclusively lends the parked caller's capability table to the BSP
-worker. It allocates the wrapper and installs the result handle before sending
-CREATE or MKDIR. The caller cannot use that handle until wakeup. Failure closes
-the private handle and retires any acquired FUSE ownership; success has no remaining
-fallible local allocation. Write bytes are captured before parking, never read
-from a private mapping by the worker.
+Creation reserves the result slot in the caller's table before parking, so the
+table stays usable by sibling tasks. The BSP worker allocates the wrapper, retains
+and preflights the grant, and sends CREATE or MKDIR. Only after the host succeeds
+does it install the handle into the reserved slot, which is invisible until
+then. Failure releases the grant and wrapper and retires any acquired FUSE
+ownership; success has no remaining fallible local allocation. If the final copy
+of the handle to a buffer a sibling has unmapped fails, only that exact handle
+generation is closed and the call returns BAD_BUFFER; the host change stays.
+Write bytes are captured before parking, never read from a private mapping by
+the worker.
 
-There is one task per process and no external cancellation: a blocked caller
-cannot close its capability or exit until the operation finishes. Its capability
+Host operations are not refused to siblings: they queue in the FIFO and one
+worker services them in turn. There is no external cancellation of an outstanding
+request, so a stop waits for it, and process retirement waits for it to drain.
+A sibling may close the handle meanwhile; the admitted call's storage reference
 keeps the source object alive. Failure to install a returned child releases its
 owned reference. Process exit closes remaining capabilities normally. Final
 object reaping transfers the wrapper to a worker cleanup queue without sleeping
