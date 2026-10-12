@@ -314,6 +314,9 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     struct npfs_request *pending = npfs_request_prepare(NPFS_LOOKUP);
     pending->job.node = directory->npfs;
     pending->job.fat_node = directory->fat32;
+    if (directory->backing == DIRECTORY_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.child_rights = request->rights;
     pending->job.kind = request->kind;
@@ -397,7 +400,8 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   if (directory->backing == DIRECTORY_HOST && request->name_length > VIRTIO_FS_NAME_MAX) {
     return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }
-  if (directory->backing != DIRECTORY_NPFS && directory->backing != DIRECTORY_HOST &&
+  if (directory->backing != DIRECTORY_NPFS && directory->backing != DIRECTORY_FAT32 &&
+      directory->backing != DIRECTORY_HOST &&
       directory->backing != DIRECTORY_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
@@ -411,9 +415,13 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  if (directory->backing == DIRECTORY_NPFS) {
+  if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_CREATE);
     pending->job.node = directory->npfs;
+    pending->job.fat_node = directory->fat32;
+    if (directory->backing == DIRECTORY_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.child_rights = request->rights;
     pending->job.kind = request->kind;
@@ -562,16 +570,21 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
       request->kind != DIRECTORY_KIND_DIRECTORY) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (directory->backing == DIRECTORY_NPFS && request->name_length > NPFS_NAME_MAX) {
+  if ((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
+      request->name_length > NPFS_NAME_MAX) {
     return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }
   enum call_status status = check_name(request->name, request->name_length);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  if (directory->backing == DIRECTORY_NPFS) {
+  if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_REMOVE);
     pending->job.node = directory->npfs;
+    pending->job.fat_node = directory->fat32;
+    if (directory->backing == DIRECTORY_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.kind = request->kind;
     pending->job.count = request->name_length;
@@ -824,11 +837,13 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     uint64_t rights, struct directory_object *destination, uint64_t destination_rights,
     const struct directory_rename_request *request)
 {
-  if (destination->backing == DIRECTORY_NPFS && (destination_rights & ~DIRECTORY_RIGHTS)) {
+  if ((destination->backing == DIRECTORY_NPFS || destination->backing == DIRECTORY_FAT32) &&
+      (destination_rights & ~DIRECTORY_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  bool native = source->backing == DIRECTORY_NPFS || destination->backing == DIRECTORY_NPFS;
-  if (native && (source->backing != DIRECTORY_NPFS || destination->backing != DIRECTORY_NPFS)) {
+  bool native = source->backing == DIRECTORY_NPFS || source->backing == DIRECTORY_FAT32 ||
+      destination->backing == DIRECTORY_NPFS || destination->backing == DIRECTORY_FAT32;
+  if (native && source->backing != destination->backing) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (native && (request->source_length > NPFS_NAME_MAX ||
@@ -850,6 +865,11 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     struct npfs_request *pending = npfs_request_prepare(NPFS_RENAME);
     pending->job.node = source->npfs;
     pending->job.destination = destination->npfs;
+    pending->job.fat_node = source->fat32;
+    pending->job.fat_destination = destination->fat32;
+    if (source->backing == DIRECTORY_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.destination_rights = destination_rights;
     pending->job.count = request->source_length;
@@ -967,10 +987,11 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
   char *source_name = NULL, *destination_name = NULL;
   if (destination.object->type == OBJECT_DIRECTORY) {
     struct directory_object *target = (void *)destination.object;
-    bool native = source->backing == DIRECTORY_NPFS || target->backing == DIRECTORY_NPFS;
+    bool native = source->backing == DIRECTORY_NPFS || source->backing == DIRECTORY_FAT32 ||
+        target->backing == DIRECTORY_NPFS || target->backing == DIRECTORY_FAT32;
     bool host = source->backing == DIRECTORY_HOST || target->backing == DIRECTORY_HOST;
     enum call_status status = CALL_OK;
-    if ((native && (source->backing != DIRECTORY_NPFS || target->backing != DIRECTORY_NPFS)) ||
+    if ((native && source->backing != target->backing) ||
         (host && (source->backing != DIRECTORY_HOST || target->backing != DIRECTORY_HOST))) {
       status = CALL_BAD_OPERATION;
     } else if ((native && (request->source_length > NPFS_NAME_MAX ||
@@ -1030,6 +1051,9 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
     struct npfs_request *pending = npfs_request_prepare(NPFS_ENUMERATE);
     pending->job.node = directory->npfs;
     pending->job.fat_node = directory->fat32;
+    if (directory->backing == DIRECTORY_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.cursor = request->cursor;
     pending->job.count = request->capacity;
@@ -1141,6 +1165,9 @@ static struct syscall_result query_info(struct directory_object *directory, uint
     struct npfs_request *pending = npfs_request_prepare(NPFS_INFO);
     pending->job.node = directory->npfs;
     pending->job.fat_node = directory->fat32;
+    if (directory->backing == DIRECTORY_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
@@ -1193,9 +1220,13 @@ static struct syscall_result directory_operation(struct directory_object *direct
     return remove_child(directory, rights, &request.remove);
   }
   if (operation == DIRECTORY_SYNC) {
-    if (directory->backing == DIRECTORY_NPFS) {
+    if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
       struct npfs_request *pending = npfs_request_prepare(NPFS_SYNC);
       pending->job.node = directory->npfs;
+      pending->job.fat_node = directory->fat32;
+      if (directory->backing == DIRECTORY_FAT32) {
+        pending->job.fat_actor = process_current()->control;
+      }
       pending->job.rights = rights;
       npfs_request_submit_and_wait(pending);
       enum call_status status = pending->job.status;
@@ -1219,7 +1250,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (directory->backing == DIRECTORY_NPFS && (rights & ~DIRECTORY_RIGHTS)) {
+  if ((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
+      (rights & ~DIRECTORY_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (directory->backing == DIRECTORY_FAT32 && operation == DIRECTORY_FILESYSTEM_INFO) {
@@ -1270,7 +1302,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   size_t name_length = operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE ?
       request.lookup.name_length : operation == DIRECTORY_REMOVE ? request.remove.name_length : 0;
-  if ((directory->backing == DIRECTORY_NPFS && name_length > NPFS_NAME_MAX) ||
+  if (((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
+      name_length > NPFS_NAME_MAX) ||
       (directory->backing == DIRECTORY_HOST && name_length > VIRTIO_FS_NAME_MAX)) {
     return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
   }

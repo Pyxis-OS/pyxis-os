@@ -12,6 +12,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/image_capture.h>
@@ -364,6 +365,9 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     struct npfs_request *pending = npfs_request_prepare(NPFS_READ);
     pending->job.node = file->npfs;
     pending->job.fat_node = file->fat32;
+    if (file->backing == FILE_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.offset = request->offset;
     pending->job.count = request->capacity;
@@ -451,9 +455,13 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_WRITE);
     pending->job.node = file->npfs;
+    pending->job.fat_node = file->fat32;
+    if (file->backing == FILE_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     pending->job.offset = request->offset;
     pending->job.count = request->size;
@@ -774,6 +782,9 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
     struct npfs_request *pending = npfs_request_prepare(NPFS_INFO);
     pending->job.node = file->npfs;
     pending->job.fat_node = file->fat32;
+    if (file->backing == FILE_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
@@ -813,7 +824,8 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (file->backing == FILE_NPFS && (rights & ~FILE_RIGHTS)) {
+  if ((file->backing == FILE_NPFS || file->backing == FILE_FAT32) &&
+      (rights & ~FILE_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   uint64_t required;
@@ -868,9 +880,13 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (request_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    if (file->backing == FILE_NPFS) {
+    if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
       struct npfs_request *pending = npfs_request_prepare(NPFS_SYNC);
       pending->job.node = file->npfs;
+      pending->job.fat_node = file->fat32;
+      if (file->backing == FILE_FAT32) {
+        pending->job.fat_actor = process_current()->control;
+      }
       pending->job.rights = rights;
       npfs_request_submit_and_wait(pending);
       enum call_status status = pending->job.status;
@@ -895,9 +911,13 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (!copy_from_user(&request, request_address, sizeof(request))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (file->backing == FILE_NPFS) {
+    if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
       struct npfs_request *pending = npfs_request_prepare(NPFS_RESIZE);
       pending->job.node = file->npfs;
+      pending->job.fat_node = file->fat32;
+      if (file->backing == FILE_FAT32) {
+        pending->job.fat_actor = process_current()->control;
+      }
       pending->job.rights = rights;
       pending->job.offset = request.size;
       npfs_request_submit_and_wait(pending);
@@ -931,6 +951,9 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     struct npfs_request *pending = npfs_request_prepare(NPFS_SIZE);
     pending->job.node = file->npfs;
     pending->job.fat_node = file->fat32;
+    if (file->backing == FILE_FAT32) {
+      pending->job.fat_actor = process_current()->control;
+    }
     pending->job.rights = rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
