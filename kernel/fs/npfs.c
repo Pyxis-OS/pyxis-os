@@ -718,7 +718,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     }
     return status == CALL_OK ? npfs_store_rename(context, node->inode, job->name,
         job->count, destination->inode, job->destination_name, job->destination_length,
-        job->replace) : status;
+        job->replace, job->kind) : status;
   }
   case NPFS_SYNC:
     return npfs_store_sync(context, npfs_store_inode_pool(node->inode));

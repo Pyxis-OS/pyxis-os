@@ -63,8 +63,9 @@ The owner accepted these three defaults on 2026-10-09:
 3. **Storage and publication: one fresh private `tmp://` store and destination,
    discard on failure; no shared persistent cache or overwrite.** Preflight the
    tree before writing, with an explicit caller-selected resource budget, and let
-   the runner consume it only after successful verification/export. Do not
-   promise an atomic directory switch: native directory rename is absent.
+   the runner consume it only after successful verification/export. This export profile does not
+   publish a shared directory switch; native RAM/npfs rename is available, but
+   persistent publication still needs its own consumer contract.
    Persistent caching and publishing installed binaries remain later contracts.
 
 The current ports runner uses `os.execute`, `io.popen`, `git init`, `git apply`,
@@ -188,7 +189,7 @@ the authorities.
 | --- | --- |
 | stat ino/dev/ctime/mtime/mode | `struct stat` supplies type/size and independently valid `st_dev`, `st_ino`, `st_mtim` with `st_valid`. Identity comparison requires retained references; pathname stat releases its reference. No ctime, owners or permission bits are invented. Mtime can repeat or backtrack and is not a change counter. See [worktree, index and publication](#worktree-index-and-publication). |
 | Exclusive lock files | Native `path_create_file` and `mkstemp` create exclusively; public `O_CREAT\|O_EXCL` gives real EEXIST after authority checks. Grants, not mode bits, establish authority. |
-| Atomic file publication | Same-volume file rename replaces a file atomically, including across directories; held victim handles survive. Directory rename is unsupported; cross-volume failure maps to ENOTSUP, not EXDEV. |
+| Atomic file publication | Same-volume file rename replaces a file atomically, including across directories; held victim handles survive. RAM/npfs directory rename preserves the tree and replaces only empty directory victims; cross-volume failure maps to ENOTSUP, not EXDEV. |
 | Symlinks and executable bits | NPFS has regular files/directories only; host enumeration may report symlinks but lookup refuses them. No chmod/symlink interface or stored execute bit. Loading requires READ authority; Git tree mode and native launch authority are different concepts. |
 | File and directory fsync | Public `fsync` accepts only writable file descriptors. Native directory sync exists but no directory-fd bridge exposes it; Git/libgit2 open a directory read-only then fsync it, which cannot work today. Close is not durability. |
 | Object-store ordering | Lock/temp file data must complete and sync before durable namespace publication; rename to an absent name does not flush file contents. Do not infer Git-style crash recovery from atomic rename. Disposable RAM stores avoid persistent-cache durability, not creation/publication correctness. |
@@ -285,7 +286,7 @@ remain held. NPFS creation time is not POSIX metadata-change ctime.
 | Execute bit / [`entry.c:86`](https://github.com/git/git/blob/v2.53.0/entry.c#L86) opens executable entries with 0777 | Public file creation accepts 0666 only | Preserve tracked 100755 in Git metadata, create native regular files with 0666; new files default 100644 |
 | Symlink / lstat / [`entry.c:313`](https://github.com/git/git/blob/v2.53.0/entry.c#L313) | NPFS has no symlinks; host lookup refuses them with ELOOP | Refuse symlink checkout initially; `core.symlinks=false` text materialization is a possible separately accepted profile. Refuse gitlinks/recursive submodules initially |
 | index.lock / [`tempfile.c:137`](https://github.com/git/git/blob/v2.53.0/tempfile.c#L137) uses `O_RDWR\|O_CREAT\|O_EXCL`, 0666 | Real exclusive creation and EEXIST under parent authority | Use that exclusion with checked writes/close; preserve denial/outcome uncertainty. Private 0600 temp requests elsewhere need deliberate capability policy, not discarded privacy intent |
-| Lock/ref/object publication ([`tempfile.c:336`](https://github.com/git/git/blob/v2.53.0/tempfile.c#L336), [`object-file.c:626`](https://github.com/git/git/blob/v2.53.0/object-file.c#L626)) | Atomic same-volume file replacement. No hardlinks, directory rename or cross-backend fallback | Adapt object rename publication, retaining collision checks. No fake link/chmod or recursive directory move |
+| Lock/ref/object publication ([`tempfile.c:336`](https://github.com/git/git/blob/v2.53.0/tempfile.c#L336), [`object-file.c:626`](https://github.com/git/git/blob/v2.53.0/object-file.c#L626)) | Atomic same-volume file replacement. No hardlinks or cross-backend fallback; RAM/npfs directory moves are available | Adapt object rename publication, retaining collision checks. No fake link/chmod or recursive directory move |
 | Crash durability (`object-file.c:790`, `refs/files-backend.c:2022`) | Public `fsync` accepts writable files; no directory-fd bridge | Define checked file sync, atomic publication and native directory sync. After rename, a sync failure reports uncertainty; close/rename alone cannot promise crash safety |
 
 The [filesystem writer](../devices/filesystem-native-adapter.md) is the

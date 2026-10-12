@@ -255,11 +255,12 @@ parent pruning or wildcard expansion. Existing handles survive removal, and
 removing an empty directory makes it unavailable for new children even through
 an older handle. See [the directory contract](../interfaces/directories.md#removal).
 
-`mv [--] source... destination` renames files with libc `rename`: to the
-destination path, replacing an existing file, or, when the destination is a
+`mv [--] source... destination` renames files and RAM/npfs directories with
+libc `rename`: to the destination path, replacing a same-kind file or empty
+directory, or, when the destination is a
 directory, into it under each source's last name. Several sources need a
-destination directory. Directory moves and cross-filesystem copying are
-unsupported. It continues after a failed source and reports failure without
+destination directory. Directory moves preserve the subtree; cross-filesystem
+copying is unsupported. It continues after a failed source and reports failure without
 deleting the source or destination itself. See [mv](mv.md).
 
 [`cp [-r] [--] source... destination`](cp.md) copies files, and with `-r` directory trees, within or across roots.

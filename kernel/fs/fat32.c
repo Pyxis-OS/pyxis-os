@@ -1198,6 +1198,11 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
     } else if (!(job->destination_rights & DIRECTORY_RIGHT_CREATE) ||
         (job->replace && !(job->destination_rights & DIRECTORY_RIGHT_REMOVE))) {
       status = CALL_DENIED;
+    } else if (job->kind != DIRECTORY_KIND_ANY && job->kind !=
+        (selected->kind == OBJECT_DIRECTORY ? DIRECTORY_KIND_DIRECTORY : DIRECTORY_KIND_FILE)) {
+      status = CALL_WRONG_TYPE;
+    } else if (selected->kind == OBJECT_DIRECTORY) {
+      status = CALL_BAD_OPERATION;
     } else if (selected->kind != OBJECT_FILE) {
       status = CALL_WRONG_TYPE;
     } else {

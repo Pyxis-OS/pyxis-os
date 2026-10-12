@@ -71,7 +71,10 @@ void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply
 /* Namespace edits commit durably without flushing unrelated cached files.
  * Replacement rename first flushes the moved file. Remove and rename replacement
  * detach the last durable target record, retaining unpublished contents for open
- * handles and later writeback. */
+ * handles and later writeback. Directory rename preserves the inode/subtree and
+ * journals its cross-parent backlink with both names; replacement requires an
+ * empty same-kind victim. Ancestry validation is bounded and exposes no parent
+ * authority. Moves do not flush dirty descendants. */
 enum call_status npfs_store_create(struct npfs_store_context *context,
     struct npfs_store_inode *directory, const char *name, size_t length,
     uint64_t kind, struct npfs_store_inode **out);
@@ -80,7 +83,7 @@ enum call_status npfs_store_remove(struct npfs_store_context *context,
 enum call_status npfs_store_rename(struct npfs_store_context *context,
     struct npfs_store_inode *source, const char *source_name, size_t source_length,
     struct npfs_store_inode *destination, const char *destination_name,
-    size_t destination_length, bool replace);
+    size_t destination_length, bool replace, uint64_t kind);
 /* A later cache failure returns CALL_OK with the accepted prefix in written. */
 enum call_status npfs_store_write(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t offset, const void *bytes,

@@ -208,19 +208,19 @@ missing parent fails with ENOENT; parents are not created. The new directory's h
 
 ## Rename
 
-`rename(old_path, new_path)` performs atomic file rename/replacement through the
-native directory protocol. It returns zero on success or -1 with errno on
-failure, using current root bindings and directory chain just like fopen.
-The destination is an exact file path; an existing directory is not interpreted
-as a request to append the old basename. Directory moves, trailing separators,
-roots and final `.`/`..` are unsupported. No copy-and-delete fallback exists.
+`rename(old_path, new_path)` calls native replacement rename for files and
+RAM/npfs directories. Same-kind empty directory replacement is allowed;
+nonempty victims return ENOTEMPTY. A destination is the exact new name, including
+an existing directory; libc never treats it as a container. Trailing separators
+require directory operands atomically. Roots and final `.`/`..` refuse.
 
-Source-parent REMOVE and destination-parent CREATE are required, with destination
-REMOVE when replacing another file. Existing streams keep their original file
-objects even when a destination name is replaced. A failed operation does not
-remove either entry, and replacement exposes no missing-destination interval.
-Renaming an existing file to itself succeeds. These are namespace guarantees
-within the RAM filesystem, not disk durability or a whole-path snapshot.
+Open handles, delegated roots and cwd chains keep their identities and rights;
+`getcwd` spelling may become stale. Cycles return EINVAL. Cross-store/mount and
+FAT32/host directory moves return ENOTSUP; no copy/delete fallback is attempted.
+Read-only backing returns EROFS after capability checks. Generic native kind
+mismatch currently maps to EINVAL, not exact POSIX EISDIR/ENOTDIR; EXDEV is not
+claimed. IO or uncertain completion returns EIO without an automatic retry.
+See [native rename](../interfaces/directories.md#atomic-rename-and-directory-moves).
 
 ## Transfers and positions
 

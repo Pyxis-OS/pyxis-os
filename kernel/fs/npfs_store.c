@@ -37,6 +37,7 @@ static enum call_status completion_interruption(struct npfs_store_context *conte
 #define STORE_METADATA_CHUNKS 4u
 #define STORE_METADATA_CHUNK_PAGES 32u
 #define STORE_METADATA_PAGES (STORE_METADATA_CHUNKS * STORE_METADATA_CHUNK_PAGES)
+#define STORE_ANCESTRY_STEPS 1024u
 
 _Static_assert(STORE_IMAGES_MAX <= NPFS_DESCRIPTORS_PER_BLOCK,
   "native journal writes one descriptor block");
@@ -2385,14 +2386,76 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
   return CALL_OK;
 }
 
+static enum call_status directory_parent(struct npfs_store_context *context,
+  struct npfs_store_volume *volume, uint64_t number, uint64_t moved, uint64_t *parent)
+{
+  if (number == moved) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t count = volume->record.inode_bytes / NPFS_INODE_SIZE;
+  if (!number || number >= count) {
+    return corrupt(context);
+  }
+  struct npfs_inode record;
+  struct npfs_store_inode *cached = volume->inodes;
+  while (cached && cached->number != number) {
+    cached = cached->next;
+  }
+  if (cached) {
+    record = cached->record;
+  } else {
+    enum call_status status = inode_record_read(context, volume, number, &record);
+    if (status != CALL_OK) {
+      return status;
+    }
+  }
+  if (record.kind != NPFS_INODE_DIRECTORY || (record.cleanup & NPFS_CLEANUP_DETACHED) ||
+    !record.parent || record.parent >= count ||
+    (number == 1 ? record.parent != 1 : record.parent == number)) {
+    return corrupt(context);
+  }
+  *parent = record.parent;
+  return CALL_OK;
+}
+
+static enum call_status check_directory_ancestry(struct npfs_store_context *context,
+  struct npfs_store_inode *moved, struct npfs_store_inode *destination)
+{
+  uint64_t slow = destination->number, fast = slow;
+  /* Copied records avoid allocating ancestor views or borrowing them across I/O.
+   * The worker owns the entire walk/edit; two cursors detect corrupt cycles. */
+  for (unsigned step = 0; step < STORE_ANCESTRY_STEPS; step++) {
+    enum call_status status = directory_parent(context, moved->volume, slow, moved->number, &slow);
+    if (status == CALL_OK) {
+      status = directory_parent(context, moved->volume, fast, moved->number, &fast);
+    }
+    if (status == CALL_OK) {
+      status = directory_parent(context, moved->volume, fast, moved->number, &fast);
+    }
+    if (status != CALL_OK) {
+      return status;
+    }
+    if (fast == 1) {
+      return directory_parent(context, moved->volume, fast, moved->number, &fast);
+    }
+    if (slow == fast) {
+      return corrupt(context);
+    }
+  }
+  return CALL_LIMIT;
+}
+
 enum call_status npfs_store_rename(struct npfs_store_context *context, struct npfs_store_inode *source,
   const char *source_name, size_t source_length,
   struct npfs_store_inode *destination, const char *destination_name,
-  size_t destination_length, bool replace)
+  size_t destination_length, bool replace, uint64_t kind)
 {
   require_owner();
-  if (source->volume != destination->volume) {
+  if (kind != DIRECTORY_KIND_ANY && kind != DIRECTORY_KIND_FILE && kind != DIRECTORY_KIND_DIRECTORY) {
     return CALL_BAD_REQUEST;
+  }
+  if (source->volume != destination->volume) {
+    return CALL_BAD_OPERATION;
   }
   if (source->record.cleanup & NPFS_CLEANUP_DETACHED) {
     return CALL_NOT_FOUND;
@@ -2420,11 +2483,11 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
   if (status != CALL_OK) {
     return status;
   }
-  if (!valid_child(source, moved)) {
+  if (!valid_child(source, moved) || moved == source) {
     discard_idle_inode(moved, false);
     return corrupt(context);
   }
-  if (moved->record.kind != NPFS_INODE_FILE) {
+  if (kind != DIRECTORY_KIND_ANY && kind != npfs_store_kind(moved)) {
     discard_idle_inode(moved, false);
     return CALL_WRONG_TYPE;
   }
@@ -2432,6 +2495,14 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     !memcmp(source_name, destination_name, source_length)) {
     discard_idle_inode(moved, false);
     return CALL_OK;
+  }
+  bool directory = moved->record.kind == NPFS_INODE_DIRECTORY;
+  if (directory) {
+    status = check_directory_ancestry(context, moved, destination);
+    if (status != CALL_OK) {
+      discard_idle_inode(moved, false);
+      return status;
+    }
   }
   status = directory_find(context, destination, destination_name, destination_length,
     &destination_entry, &destination_position);
@@ -2453,19 +2524,27 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
       discard_idle_inode(moved, false);
       return corrupt(context);
     }
-    if (victim->record.kind != NPFS_INODE_FILE || victim == moved) {
+    if (victim->record.kind != moved->record.kind || victim == moved) {
       if (victim != moved) {
         discard_idle_inode(victim, false);
       }
       discard_idle_inode(moved, false);
       return CALL_WRONG_TYPE;
     }
+    if (directory) {
+      status = directory_empty(context, victim);
+      if (status != CALL_OK) {
+        discard_idle_inode(victim, false);
+        discard_idle_inode(moved, false);
+        return status;
+      }
+    }
   } else if (status != CALL_NOT_FOUND) {
     discard_idle_inode(moved, false);
     return status;
   }
-  /* Replacement must make the new contents durable before losing the old name. */
-  status = victim ? flush_inode(context, moved) : CALL_OK;
+  /* File replacement makes new contents durable before losing the old name. */
+  status = victim && !directory ? flush_inode(context, moved) : CALL_OK;
   if (status == CALL_OK) {
     status = begin_namespace(context, pool);
   }
@@ -2478,6 +2557,7 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
   }
   struct npfs_inode source_previous = source->record;
   struct npfs_inode destination_previous = destination->record;
+  struct npfs_inode moved_previous = moved->record;
   struct npfs_inode victim_previous = victim ? victim->record : (struct npfs_inode){0};
   struct npfs_inode detached = victim ? victim->durable : (struct npfs_inode){0};
   struct npfs_volume volume_previous = source->volume->record;
@@ -2488,8 +2568,7 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
       status = cleanup_link(context, victim, NPFS_CLEANUP_DETACHED);
     }
     if (status == CALL_OK) {
-      /* Detachment must not publish cached growth before its data is durable.
-       * The moved inode is unchanged by the directory transaction. */
+      /* Detachment must not publish cached file growth before its data is durable. */
       detached.cleanup = victim->record.cleanup;
       detached.cleanup_next = victim->record.cleanup_next;
       detached.parent = 0;
@@ -2512,11 +2591,16 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
   if (status == CALL_OK && destination != source) {
     status = stage_inode(context, destination);
   }
+  if (status == CALL_OK && directory && source != destination) {
+    moved->record.parent = destination->number;
+    status = stage_inode(context, moved);
+  }
   if (status == CALL_OK) {
     status = commit(context, pool);
   }
   if (status != CALL_OK) {
     if (!pool->failed) {
+      moved->record = moved_previous;
       source->record = source_previous;
       destination->record = destination_previous;
       source->volume->record = volume_previous;
@@ -2530,6 +2614,9 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
       discard_idle_inode(victim, false);
     }
     return status;
+  }
+  if (directory && source != destination) {
+    moved->durable = moved->record;
   }
   source->durable = source->record;
   destination->durable = destination->record;

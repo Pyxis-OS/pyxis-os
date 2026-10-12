@@ -40,7 +40,7 @@ With `-r` a directory source is copied as a new tree. File operands behave as ab
   destination is inside the source: cp removes the marker and the root and fails.
   `cp -r a a` is refused. A sibling destination is not a cycle.
 - **Failure:** each file is staged and renamed as below, into directories created before
-  their contents. Native directory rename is unsupported, so a tree is not published
+  their contents. This copier creates the destination incrementally rather than staging a tree, so it is not published
   atomically and other processes can see it partly copied. The first failure stops that
   operand, keeps what was copied and prints the path plus `Incomplete copy of SRC (N
   files, M directories created); nothing removed`. There is no rollback, and `rm` and
@@ -119,7 +119,7 @@ replaces the destination object. Older held handles retain the old object.
 Interruption or a crash can leave a temporary file, and cp performs no automatic
 stale-file removal. Its success does not promise crash durability. Use explicit
 file/parent synchronization, for example `sync home://note.txt home://`, when
-durability is needed; see the [filesystem contracts](../interfaces/directories.md#atomic-file-rename).
+durability is needed; see the [filesystem contracts](../interfaces/directories.md#atomic-rename-and-directory-moves).
 Provider FILE sources use the normal path resolver; copying a provider URI with
 no basename into a directory requires an explicit destination filename instead.
 

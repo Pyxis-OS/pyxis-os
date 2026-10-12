@@ -15,7 +15,7 @@ rights additionally require mount WRITE; observation independently requires OBSE
 Installer disk objects can also acquire read-only roots through the same mount
 path after releasing raw claims; see [installer authority](../devices/installer-authority.md).
 Returned directory/file grants can be attenuated and delegated independently of
-mount authority. Native create/remove/file rename, writes, resizing and sync run
+mount authority. Native create/remove/rename, writes, resizing and sync run
 on the sole kernel filesystem worker. Native FILE_SIZE accepts READ or WRITE.
 The tree internals below describe the archive/RAM backends.
 
@@ -247,59 +247,61 @@ references drain. An open detached directory rejects child creation. Reboot resu
 cleanup because pre-crash handles no longer survive. This does not revoke other
 capabilities. Roots have no removable parent entry and removal is nonrecursive.
 
-## Atomic file rename
+## Atomic rename and directory moves
 
-RENAME is sent to the source directory, with a source name, a destination
-capability from the caller's own table, destination name and explicit REPLACE
-or NO_REPLACE policy. Both names use the same counted-component rules as LOOKUP.
-The directory payload is 48 bytes (64 bytes including the protocol/operation
-header); all consumers are rebuilt together. Success returns no reply bytes.
+RENAME takes the source parent, counted source name, a caller-owned destination
+parent capability, counted destination name, REPLACE/NO_REPLACE and source kind
+ANY/FILE/DIRECTORY. Kind is checked inside the edit; it carries trailing-slash
+requirements without a racy child lookup. The payload is 56 bytes (72 including
+the header); every consumer, including reused independent bundles, must be
+rebuilt against this ABI. Success has no reply.
 
-Source REMOVE and destination CREATE are required. If a different destination
-entry exists, NO_REPLACE returns ALREADY_EXISTS; REPLACE additionally needs
-REMOVE on the destination. Neither file READ/WRITE nor parent ENUMERATE/LOOKUP
-is needed for the direct operation. Sources must be files, and replacement
-accepts only files. Directory moves/replacement return WRONG_TYPE. Missing
-sources and detached parents return NOT_FOUND. Native parents must be in the same
-volume, and mixed backends fail BAD_OPERATION. Native REPLACE requires destination
-REMOVE even if the destination name is absent. Native replacement records the old
-inode's detachment atomically and preserves its open handles. Initrd mutation
-returns READ_ONLY after capability checks. There is no implicit
-copy-and-delete fallback or cross-filesystem implementation.
+Source REMOVE and destination CREATE are required; REPLACE requires destination
+REMOVE even for an absent destination. File READ/WRITE and parent ENUMERATE/LOOKUP
+are unnecessary for the direct operation. RAM and writable npfs support files
+and directories within one store/mount instance. Different volumes or instances
+and mixed stores return BAD_OPERATION, without copying/deleting. FAT32/host
+retain file rename; directory moves there return BAD_OPERATION. Read-only backing
+returns READ_ONLY after capability checks. Providers have no directory rename.
 
-For RAM backing, renaming an existing file to the same entry, including through
-another handle to the same parent, succeeds without allocation or generation
-changes under either policy. Ordinary source REMOVE/destination CREATE checks
-still apply. Native same-entry rename also leaves the namespace generation
-unchanged, after authority checks and writer preparation; REPLACE still requires
-destination REMOVE. A missing source never becomes a successful no-op.
+Replacement requires matching kinds and an empty directory victim (NOT_EMPTY
+otherwise). Its retained empty-directory handle stays detached and refuses new
+creation; retained file victims keep their contents. Missing sources/detached
+parents return NOT_FOUND. NO_REPLACE refuses a distinct existing destination;
+the same existing entry succeeds under either policy without changing generations.
+Host files retain the documented external name/type races and same-name
+NO_REPLACE refusal. Type constraints do not turn host preflight into a snapshot.
 
-The native worker serializes the complete name operation and uses one metadata
-transaction for both parent edits and any replacement cleanup membership. The
-caller's two capability borrows survive the blocked call. There is no missing
-replacement interval. Success reaches durable COMMITTED before returning.
+A directory move keeps the same object/inode and every descendant. The cycle
+check refuses a destination equal to or below the moved directory with BAD_REQUEST,
+under the same topology owner as the edit. RAM walks borrowed parent links under
+the mutation lock; creation, removal, rename and final parent retirement share
+that boundary. Destruction clears immediate children's borrowed parent links
+before releasing references/freeing the parent. No parent capability is exposed.
+The allocation-free walk is bounded to 1024 links; incomplete checks return LIMIT.
+npfs validates copied parent records with cycle detection under its worker, bounded
+to 1024 iterations; corrupt ancestry returns IO and retires the failed pool.
 
-RAM rename first checks the operation under both parent locks. If work is needed,
-it releases all locks and submits a name-only RAMFS request for storage with a
-`NULL` child. The caller's private mappings and directory capabilities remain
-stable while waiting. After filling the name, it reacquires
-both parents and rechecks entries, rights, detached state and generation/count
-capacity. It never carries borrowed entry pointers across that wait.
+RAM prepares name storage outside locks, then rechecks names, kind, ancestry,
+victim emptiness, detach state and generation/count capacity under the topology
+and parent locks. Publication transfers the original reference, replaces the
+victim and installs the destination before unlocking. No fallible work remains.
+Disposal happens on BSP after unlocking. Each changed parent generation advances
+once; the moved directory's child generation is unchanged. Lookup/enumeration
+keep their directory locks. No allocation, BSP wait or scheduler lock occurs
+under the mutation locks.
 
-Publication transfers the source entry's owned file reference into the prepared
-entry, unlinks the source and any replaced entry, and publishes the destination
-before releasing either parent lock. No fallible work remains at that point.
-There is no observable missing-destination interval; failures make no namespace
-changes themselves. Existing file handles keep their objects, including handles
-to a replaced destination. Obsolete entries are disposed on BSP after unlocking.
-Each changed parent advances its generation once; same-parent rename advances it
-once total. Enumeration order remains unspecified.
+npfs journals both parent entries, a cross-parent moved directory's backlink and
+victim detachment in one namespace transaction, completing at durable COMMITTED.
+Known rollback restores the cached records. Directory moves do not flush dirty
+descendant files; existing file-replacement ordered flushing remains. IO and
+OUTCOME_UNKNOWN preserve the storage failure contract, not a rollback/retry promise.
 
-For RAM backing, a short shared mutation lock precedes directory locks for REMOVE
-and RENAME,
-preventing cycles between parent/child removal and arbitrary-parent rename.
-Lookup, enumeration and creation retain their per-directory locks. No allocation,
-BSP wait, scheduler lock or file-data operation occurs under these locks.
+Held directories/files and delegated roots retain identity and rights. Existing
+cwd chains retain their granted ancestors; `..` pops that chain, without finding
+a new physical parent or reopening paths. A delegated subtree root cannot escape
+upward. Descriptive `getcwd` may become stale; later explicit traversal can make
+a new chain using existing authority. See [working paths](../userland/process-state.md).
 
 ## Userspace example
 
