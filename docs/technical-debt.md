@@ -99,11 +99,13 @@ capacity, rather than invalidating escaped pointers.
 ## Threaded libc cost qualification
 
 Gate 8's [matched nested-QEMU comparison](development/experiments/threads-task8/README.md#final-matched-nested-qemu-comparison)
-records higher pages elapsed (one CPU about15%; four CPU64–72%) and four-CPU SEND completion medians (about17%), with changing
-unrelated host VM load. These are measured sample shifts, not accepted native costs or an attributed lock/retry overhead.
-The timed pages loop uses native MEMORY operations directly, outside libc allocation/stdio; creation also adds managed runtime
-grant/identity setup before work begins. Revisit at the owner-native gate 8 A/B before accepting steady costs or assigning a
-targeted correction. Preserve the guarded admission, lifetime and immediate native CLOSE contracts.
+records higher pages/SEND samples with changing host load. The [owner-native A/B](development/experiments/threads-task8/README.md#owner-native-ab-and-hot-loop-review)
+finds pages/launch unchanged, but small CALL/SEND batch medians higher in both B cycles (SEND64 completion about37% pooled).
+Linked benchmark/native-helper instructions match outside relocations; no new libc locks or descriptor operations execute per
+message. Retained CLOCK grants extend SEND receipt reservation scans by one entry; helpers/footprint and receiver setup also
+change. None is a measured attribution of the percentages. This remains a pre-merge investigation, not an accepted cost.
+Revisit with the bounded old-image crossed-kernel/initrd native pair before selecting a correction or accepting the shift;
+preserve retained-grant lifetime, guarded admission and immediate native CLOSE semantics.
 
 ## TLS bootstrap launch cost
 

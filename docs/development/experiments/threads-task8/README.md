@@ -146,7 +146,75 @@ actual `pipe_call` admission, not a ready flag or scheduling delay.
 
 Raw input hashes, commands, captures and debugger records remain under the
 isolated gate8 baseline and implementation worktrees' `build/gate8-*` directories.
-No native performance or hardware result is claimed.
+These functional runs are nested-QEMU evidence; owner-native timing is recorded below.
+
+## Owner-native A/B and hot-loop review
+
+2026-10-12, ThinkPad on AC/Ethernet/PXE, A/B/A/B: A main `36bcd7e9`, B
+`b350db24`; each uses its matching initrd (userland `3daa2461`/`486d80ef`),
+published `pyxis-llvm23.1.3-2d23443`. Raw JSONL is under
+`/shared/present/batch2/ab756/756{A1,B1,A2,B2}/`. All1600timed IPC passes and
+16FINAL0/complete records were independently checked, with100verified passes
+per mode/boot and no exclusions. Completion/admission cells below are the raw
+summaries' median ms per256-message pass, not single-message latency percentiles.
+
+| Workload | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 completion | 1.451 | 1.601 | 1.408 | 1.646 |
+| CALL4096 completion | 2.001 | 2.239 | 2.040 | 2.249 |
+| SEND64 completion | 0.578 | 0.738 | 0.505 | 0.742 |
+| SEND64 admission | 0.122 | 0.151 | 0.114 | 0.138 |
+| SEND4096 completion | 1.302 | 1.206 | 0.976 | 1.201 |
+| SEND4096 admission | 0.267 | 0.265 | 0.257 | 0.257 |
+| Pages ns/operation, all3samples | 26263.5 / 26134.4 / 26166.2 | 25712.4 / 26147.4 / 23759.2 | 26351.6 / 23769.0 / 26691.8 | 26169.4 / 24809.7 / 26077.2 |
+| 1024launches wall s, all3samples | 1.534 / 1.469 / 1.520 | 1.447 / 1.432 / 1.527 | 1.599 / 1.618 / 1.644 | 1.570 / 1.755 / 1.647 |
+
+The CALL64 floor is3851–3859ns/round trip and SEND64 admission floor306–307ns/send;
+CALL4096 reaches4611–4618ns apart from B1's5230ns minimum. These are minimum
+batch means. Pages/launch and SEND4096 admission are unchanged within variation;
+small-message batch medians are higher in both B cycles. The shift is not
+dismissed as noise or accepted as a steady cost.
+
+**Inspected hot paths:** linked ipcbench `.text` has all9411non-relocated bytes
+identical within its10383-byte instruction block at `0x400000`. Native
+endpoint/clock blocks match outside relocations; memcpy/memset's1063bytes match.
+CALL invokes native endpoints and copies; the receiver receives/copies/replies.
+SEND calls native sends, with a DRAIN control CALL per8messages (32per pass).
+Receipt release is native `syscall_close`, not libc descriptor close. No new
+lock, thread-self, descriptor or allocation call executes in these loops.
+All sample reporting happens **after every timed pass**, so FILE locking is
+neither inside timing nor between passes. Successful kernel syscall-entry
+instructions/spills match; its scheduler correction is only after rejected entry.
+
+**Changed state, not a percentage attribution:** B runtime retains one extra
+CLOCK READ handle in each receiver (no THREADS/SLEEP authority is supplied).
+During SEND, DRAIN's receipt occupies slot3; each data receipt selects A slot5
+versus B slot6. The existing guarded capability reservation scans from slot0:
+six versus seven entry tests per data delivery,256extra tests per pass. Standalone
+CALL receiver receipts still select slot3 in both; the sender's four-reply-slot
+reservation can scan farther depending on its startup grants. Indexed handle
+lookup is unchanged. This corrects the narrower earlier assertion that unchanged
+instructions imply no added timed work: retained grants can add scan work.
+
+B also adds27792executable bytes and7152writable-memory bytes to ipcbench,
+moving helpers (endpoint block `0x410420` to `0x4170b0`). Fresh receiver setup,
+allocation and cleanup occur outside each interval but can alter placement/cache
+state for the next pass. Scan, layout and background-userland contributions to
+the native percentages remain unmeasured; none is a proven cause. An unsupported
+borrowed-clock shortcut would weaken retained-grant lifetime, and a speculative
+reservation optimization is not applied to conceal the regression.
+
+The bounded next native diagnostic uses the **old ABI-compatible artifacts**:
+kernel A + initrd B, then kernel B + initrd A; run only CALL64/SEND64 with the
+existing256messages/100rounds commands. A shift following initrd B narrows the
+cause to userland/state/background activity; following kernel B narrows it to
+kernel effects; an interaction remains possible. Do not cross these old images
+with the subsequent completion ABI. No source probe or profiling is required.
+
+Userland #236 is now rebased onto `62da3399` (merged completion helpers), at
+`21cf935c`; #756 also includes current main's merged #758 completion ABI. The
+table above remains qualification of the original native A/B, not a measurement
+of those new inputs. Merge order remains userland #236 before Pyxis #756.
 
 Four-CPU qualification exposed two failures before delivery. GDB caught a worker
 returning from its first failed malloc with native MEMORY `CALL_BUSY` still in
