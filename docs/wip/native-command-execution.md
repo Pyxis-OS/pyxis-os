@@ -2,12 +2,11 @@
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
 and userland #228. Task 2 merged in #749 and userland #232. Task 3 assigned to
-Codex alpha 2026-10-12; its remaining choices below are proposed, not accepted.**
+Codex alpha 2026-10-12; its three defaults below are accepted 2026-10-12; implementation is authorized.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
 Lua/ports and libuv; no consumer must finish first. Each task needs a separate
-owner go. Task 3 has the owner go for implementation after its open choices are
-settled; task 4 remains unassigned. The trusted-caller delegation boundary below remains accepted.
+owner go. Task 3 has the owner go for implementation under the accepted defaults; task 4 remains unassigned. The trusted-caller delegation boundary below remains accepted.
 
 ## Deliverable and boundary
 
@@ -145,7 +144,7 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   deadlines and all stage/endpoint cleanup. No threads assumption.
   **After this task the owner can:** run a described pipeline with captured output
   without deadlocking on a full stdout/stderr pipe.
-  Assigned 2026-10-12. No task-3 implementation yet.
+  Assigned 2026-10-12; three defaults accepted that day. Implementation in progress.
 - [ ] **4. Lua/shell delivery and reusable port adapters.** Add native Lua argv/
   pipeline/capture options and shell capture/deadline/per-stage observation with
   existing launch authority. Preserve ordinary run/pipeline behavior. Carry
@@ -327,7 +326,7 @@ review covers unknown-without-observer quarantine and retained-group cleanup;
 no transport-failure injection or native run was performed. Raw screens, logs
 and local callers remain under `build/capture-baseline`/`build/capture-after`.
 
-## Task 3 checkpoint and open choices (2026-10-12)
+## Task 3 checkpoint and accepted choices (2026-10-12)
 
 Fresh branch `execution/native-pipeline` from main `ecdeb0f4`, userland main/pin
 `d6842f87`, fs `28386cc7`, ports `28b5a3bc`, lwIP `a1aadb91`. No production code
@@ -369,7 +368,7 @@ not the pipeline shape. Unknown batch admission follows task 2: retain owned
 cleanup-unconfirmed storage without replay; sole-CONTROL fresh-group cleanup
 never invents stage results. No kernel/ABI or consumer adapter is planned.
 
-**Three proposed defaults, awaiting owner answers:**
+**Three defaults accepted by the owner, 2026-10-12:**
 
 1. **Finite owned input snapshot.** Explicitly choose absent stdin or supplied
    finite bytes, copied into the job record before launch/effectful setup. An
