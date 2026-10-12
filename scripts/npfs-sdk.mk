@@ -1,20 +1,21 @@
-# Build the authoritative codecs for target applications. Each consumer
-# supplies its own two memory symbols; the archive owns no allocation or I/O.
+# Build filesystem codecs and FAT32 engines for target applications.
+# Allocation and backing I/O remain caller-owned.
 include $(SDK)/share/pyxis.mk
 export SDK CC PYXIS_COMPILER_ID PYXIS_CPPFLAGS PYXIS_CFLAGS
 
 NPFS_OBJECTS := $(addprefix build/npfs-sdk/,$(addsuffix .o,base header record journal))
 NPFS_ARCHIVE := build/npfs-sdk/libnpfs-format.a
 FAT32_ARCHIVE := build/fat32-sdk/libfat32-read.a
+FAT32_WRITE_ARCHIVE := build/fat32-sdk/libfat32-write.a
 .DEFAULT_GOAL := all
 
 .PHONY: all
-all: $(NPFS_ARCHIVE) $(FAT32_ARCHIVE)
+all: $(NPFS_ARCHIVE) $(FAT32_ARCHIVE) $(FAT32_WRITE_ARCHIVE)
 
 # The shared build owns dependency files, including exported SDK headers.
-$(FAT32_ARCHIVE): FORCE build/npfs-sdk/.config
+$(FAT32_ARCHIVE) $(FAT32_WRITE_ARCHIVE) &: FORCE build/npfs-sdk/.config
 	$(MAKE) -C fs SOURCE=$(abspath fs) BUILD=$(abspath build/fat32-sdk) \
-	  HOST_CC="$(CC)" HOST_AR="$(AR)" CPPFLAGS="$(PYXIS_CPPFLAGS)" CFLAGS="$(PYXIS_CFLAGS)" fat32-read
+	  HOST_CC="$(CC)" HOST_AR="$(AR)" CPPFLAGS="$(PYXIS_CPPFLAGS)" CFLAGS="$(PYXIS_CFLAGS)" fat32-write
 
 $(NPFS_ARCHIVE): $(NPFS_OBJECTS)
 	rm -f $@

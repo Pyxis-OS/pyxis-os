@@ -25,7 +25,8 @@ the exported SDK manifest records dirty userland and filesystem inputs.
 
 Kernel source builds require the pinned native filesystem format library.
 `make -j16 fs-tools` builds `build/fs-tools/libnpfs-format.a`,
-`mkfs.npfs`, `fsck.npfs`, `npfs-inspect`, `libfat32-read.a` and `fat32-inspect`.
+`mkfs.npfs`, `fsck.npfs`, `npfs-inspect`, the FAT32 reader/writer archives and
+`fat32-inspect` / `fat32-write`.
 The [FAT32 inspector](../../fs/docs/fat32-inspect.md) reads explicitly selected
 GPT media without mounting or changing it; the shared engine has no allocator or
 kernel dependencies.
@@ -77,7 +78,8 @@ the checked-out revision or dependency pins.
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
-linker support, the pinned target `libnpfs-format.a` and `libfat32-read.a`,
+linker support, the pinned target `libnpfs-format.a`, `libfat32-read.a` and
+`libfat32-write.a`,
 and their public headers and licenses
 into `build/sdk`. `make userspace` builds applications against that
 SDK and the Lua, HTTP-parser and TLS libraries exported by `make ports`. Ports consumes only the SDK,
@@ -122,9 +124,10 @@ history. They do not describe current interfaces or assign further writer work.
 The authoritative [format](../../fs/docs/npfs-format.md) and
 [host tools](../../fs/docs/npfs-host-tools.md) describe the codecs, source-importing
 formatter, journal replay and structural checker. Pyxis owns capabilities,
-namespace integration, the cache, writeback and kernel recovery. The library has
+namespace integration, the cache, writeback and kernel recovery. NPFS codecs have
 no allocator, I/O or callback tables; the host, Caelum and native installer
-provide its two memory symbols at link time. The SDK exports the target archive
+provide their two memory symbols at link time. FAT32 engines borrow bounded
+caller-owned workspace and backing callbacks. The SDK exports the target archives
 and records its filesystem revision/local state. Ports consumes that complete
 SDK without accessing filesystem sources.
 
