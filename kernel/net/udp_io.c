@@ -488,6 +488,9 @@ bool net_udp_service_io(void)
     bool active = call->state == IO_QUEUED || call->state == IO_WAITING;
     enum call_status cancellation = CALL_OK;
     if (active && call->completion) {
+      if (task_deadline_expired(call->deadline)) {
+        native_completion_request_cancel(call->completion, CALL_TIMED_OUT);
+      }
       cancellation = native_completion_cancel_reason(call->completion);
     } else if (active && (call->cancelled || task_deadline_expired(call->deadline))) {
       cancellation = call->cancelled ? CALL_ENDPOINT_CLOSED : CALL_TIMED_OUT;

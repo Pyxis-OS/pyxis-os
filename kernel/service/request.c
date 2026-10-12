@@ -1,4 +1,5 @@
 #include <kernel/object/clipboard.h>
+#include <kernel/completion.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
@@ -39,6 +40,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_COMPLETION] = {sizeof(struct completion_admit_request), alignof(struct completion_admit_request),
+    offsetof(struct completion_admit_request, request)},
   [BSP_SERVICE_THREAD] = {sizeof(struct thread_request), alignof(struct thread_request),
     offsetof(struct thread_request, request)},
   [BSP_SERVICE_CLIPBOARD] = {sizeof(struct clipboard_request), alignof(struct clipboard_request),
@@ -152,6 +155,7 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
 static bool requires_handoff(enum bsp_service service)
 {
   switch (service) {
+  case BSP_SERVICE_COMPLETION:
   case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_PIPE_CREATE:
   case BSP_SERVICE_CAPABILITY_GROW:
@@ -328,6 +332,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_NAMESPACE_CREATE:
     namespace_create_execute((struct namespace_create_request *)request);
+    break;
+  case BSP_SERVICE_COMPLETION:
+    completion_admit_execute((struct completion_admit_request *)request);
     break;
   case BSP_SERVICE_ENDPOINT_CREATE:
     endpoint_create_execute((struct endpoint_create_request *)request);

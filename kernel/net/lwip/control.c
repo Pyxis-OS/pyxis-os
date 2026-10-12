@@ -533,6 +533,11 @@ bool net_tcp_service(void)
       /* A finished handshake keeps its real result even when cancellation or
        * the deadline was latched before this worker pass collected it. */
       if (status == CALL_OK && !connection->connected) {
+        if (task_deadline_expired(call->deadline)) {
+          uint64_t flags = cpu_save_interrupts();
+          native_completion_request_cancel(call->completion, CALL_TIMED_OUT);
+          cpu_restore_interrupts(flags);
+        }
         status = native_completion_cancel_reason(call->completion);
         if (status == CALL_OK) {
           continue;

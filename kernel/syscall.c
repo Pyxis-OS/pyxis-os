@@ -1,4 +1,5 @@
 #include <kernel/object/clipboard.h>
+#include <kernel/completion.h>
 #include <kernel/object/namespace.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
@@ -150,6 +151,10 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
    * its fixed payload before any side effect; private mappings stay stable. */
   uintptr_t request_address = message_address + sizeof(header);
   size_t request_size = message_size - sizeof(header);
+  if (header.protocol == PROTOCOL_COMPLETION) {
+    return native_completion_call(object, rights, transport, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  }
   switch (object->type) {
   case OBJECT_PIPE_SERVICE:
     if (header.protocol != PROTOCOL_PIPE_SERVICE) {
