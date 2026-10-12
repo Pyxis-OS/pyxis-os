@@ -12,6 +12,7 @@ text tools may be ports.
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
 | Moving directories | 2026-10-10, owner, after `mv` learned to move into a directory | Native, with libc `rename` | `mv` moves files only; libc `rename` and the native rename are file-only. A directory move needs an agreed native contract first, with no copy-and-delete fallback. |
+| xfer inside a remote mux pane | 2026-10-12, owner, during JVM work | Native (remote client + mux) | Refused by design (`PYXIS_REMOTE_MUX=1`, see [remote-terminal.md](../userland/remote-terminal.md#remote-multiplexer)); workaround: a separate non-mux connection. Pane-aware transfer is the [initial remote multiplexer limits](../technical-debt.md#initial-remote-multiplexer-limits) debt item; owner: no rush. |
 
 The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
 `cp`, sorted/colorized `ls`, `tree`, `mv` and foreground shell-script launch authority.
