@@ -1,9 +1,9 @@
 # FAT32 volumes
 
-Status: **tasks 1–2 merged (#740, #747); task 3 assigned 2026-10-12.**
+Status: **tasks 1–2 merged (#740, #747); task 3 implemented for review.**
 The directory-validation fixes (#743 / fs #33) are merged. The owner accepted the
 raw-write contract below on 2026-10-12. The owner accepted task 3's binding on 2026-10-12 and assigned its implementation.
-Task 3 is not implemented yet; tasks 4–5 are unassigned.
+Task 3 has read-only native views and explicit retirement; tasks 4–5 are unassigned.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -217,17 +217,13 @@ Directory-tail and volume-label fixes are included; embedded short-name spaces
 remain read compatibility, never creation provenance. No mount/write adapter,
 formatting or native ESP qualification is added.
 
-## Task 3 binding — accepted 2026-10-12
+## Task 3 native read-only binding — accepted 2026-10-12
 
-[Baseline](../development/experiments/fat32-mount-baseline.md) records current
-main `173f1321` before changes. **Inspected:** [MOUNT](../../kernel/object/mount.c)
-is configured disk authority, not a mounted instance; npfs pools remain retained
-on the [filesystem worker](../../kernel/fs/npfs.c) after wrappers close. Raw claim
-checks use device/GPT-entry lists, not a cross-backend physical-extent registry.
-The [shared reader](../../fs/include/pyxis_fs/fat32.h) supplies path-based list/read,
-not retained native objects or offset reads. Limine supplies GPT disk/partition
-UUIDs, but the [boot adapter](../../boot/limine/entry.c) currently keeps neither.
-These are implementation gaps, not interfaces already available to applications.
+The [pre-task baseline](../development/experiments/fat32-mount-baseline.md)
+records main `173f1321`. The [native mount reference](../devices/fat32-mounts.md)
+defines the implementation's protocols, browsing profiles, limits and lifetime.
+Configured npfs MOUNT authority and boot-long pool retention remain unchanged.
+The following accepted contract governs task 3; tasks 4–5 remain unassigned.
 
 ### Three accepted owner decisions — 2026-10-12
 
@@ -268,7 +264,7 @@ These are implementation gaps, not interfaces already available to applications.
 2. **Admission and exclusion: one worker-owned physical-extent registry.**
    Key entries by inventoried device and checked half-open ranges in that device's
    logical blocks. Track pending admissions, FAT instances, retained npfs pools and
-   raw claims. Reserve before probing/allocating, validate both GPT copies and the
+   raw claims. Reserve before format probing and workspace/store backing allocation, validate both GPT copies and the
    complete FAT volume, then publish. Failed admission removes its reservation.
    Repeated exact FAT opens with matching media/geometry share state, independent
    of GUID/name spelling; another backend or an overlapping different extent is BUSY.
@@ -352,21 +348,20 @@ capability entry or held lock crosses disk waits. Worker cleanup returns backing
 identity records and admission charges before releasing exclusion. Admission and
 retirement must also unwind correctly during process/group stop and failed replies.
 
-### Task 3 qualification
+### Task 3 implementation and qualification
 
-Keep task 3 as one bounded implementation: dependency reader-locator APIs first,
-then the native adapter/registry/control and trusted bootstrap. Repeat the baseline
-npfs workload; compare FAT ordinary ls/cat/offset reads against the inspector on
-identical disposable files. Inspect same-name/alias/empty-file identity, readonly
-rights, two opens sharing one state, other-partition npfs coexistence, overlapping
-raw admission, and successful reacquisition only after retirement. Exercise BUSY
-with files, cwd, queued grants/operations and cleanup; closed/replied-failed data
-must drain. Repeated retire/remount gets a fresh domain, and closed control alone
-must retain state as specified. Corrupt/budget/deadline failures before publication
-leave no backing/reservation leak; failed replies preserve escaped/shared references
-and release only this opener's ownership. Check absent/ambiguous boot provenance
-without fallback. QEMU/GDB first; owner-routed native ESP checks later, read-only.
-No writes, new test harness, fault injection, generic mount CLI or task 4 work.
+The shared reader exports confined locators, single-component lookup/enumeration
+and staged offset reads. The BSP adapter, extent registry, bound control and
+trusted browsing profiles implement the accepted binding. See the
+[native reference](../devices/fat32-mounts.md) for use and interfaces.
+
+[Qualification](../development/experiments/fat32-native-mount.md) records matched
+npfs/host-reader costs, actual held identity and drainage, overlap/coexistence,
+controller reacquisition, process-stop cleanup, corrupt/budget refusal and
+boot-bound/absent/ambiguous ESP selection. It distinguishes source-reviewed
+failed-reply/group ordering from executed cases. This is QEMU/debugger evidence;
+owner-routed native ESP checks remain later, read-only. No writes, new test
+harness, fault injection, generic mount CLI or task 4 work.
 
 ## Parked cross-cutting directions
 
@@ -403,7 +398,7 @@ and mounted file I/O do not require its implementation.
   partition claims; qualify on disposable images, without whole-tree formatting.
   **After this task the owner can:** add and replace Pyxis-created files on a
   scratch FAT volume that Linux reads, without rebuilding that volume.
-- [ ] **3. Native read-only mount and release — assigned 2026-10-12; binding accepted, implementation assigned.** Kernel FILE/directory wrappers,
+- [x] **3. Native read-only mount and release — assigned 2026-10-12; implemented for review.** Kernel FILE/directory wrappers,
   shared extent registry, alias/object identity, claim exclusion, reference drainage
   and trusted ESP bootstrap/root delegation. Design the native mount/retire binding
   before code; no userspace scheme proxy or implicit mount authority.

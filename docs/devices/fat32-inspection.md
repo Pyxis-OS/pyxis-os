@@ -37,5 +37,5 @@ For Linux images or explicitly selected whole-disk devices, use the separate
 and its workspace/work budgets configured. Neither inspector's refusal permits
 an ESP rebuild: the installer's existing lenient recovery reader and foreign-file
 safeguards remain separate and unchanged. The [FAT32 milestone](../wip/fat32-volumes.md)
-tracks the separate [scratch writer](fat32-scratch-writing.md) and future
-mount/release support, each requiring its own assignment.
+tracks the separate [scratch writer](fat32-scratch-writing.md) and
+[native read-only mounts](fat32-mounts.md).

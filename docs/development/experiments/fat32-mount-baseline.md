@@ -2,7 +2,7 @@
 
 Captured 2026-10-12 before implementation: Pyxis main `173f132141e0`, fs
 `28386cc79ed3`, userland `5fa4f42291a9`, ports `28b5a3bce9aa` and lwIP
-`a1aadb91a503`. Task 3 remains a proposal; no native FAT mount exists yet.
+`a1aadb91a503`. At capture, task 3 was a proposal and no native FAT mount existed.
 
 Fresh host tools: `make -C fs -j16 BUILD="$PWD/build/fs-tools"`. Fresh kernel,
 userland and default image: `make -j16 image PREBUILT="sdk ports"

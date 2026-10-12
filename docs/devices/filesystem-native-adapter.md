@@ -42,8 +42,11 @@ Retirement transfers wrappers to the worker without allocating. It releases the
 process cleanup charge while dirty contents and errors remain pool-owned.
 Same-device, same-extent mounts share retained pools; another extent with the
 same pool ID is rejected. Closing all wrappers does not evict mounted pool state or synchronize it.
-Any retained pool also excludes raw-write claims on its device, including a
-read-only pool whose final handle has closed.
+A retained pool excludes overlapping raw-write claims, including when read-only
+or its final handle has closed. The shared worker-owned
+[extent registry](fat32-mounts.md#exclusion-and-retirement) also covers FAT mounts
+and pending admissions. Whole-disk claims overlap every extent; a claim on a
+disjoint partition remains subject to the existing device policy.
 
 ## Rights and ordinary calls
 
