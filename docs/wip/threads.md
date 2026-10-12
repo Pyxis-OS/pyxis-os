@@ -191,19 +191,27 @@ coverage remains with later delivery tasks.
 
 ## TLS and runtime synchronization
 
-Accepted TLS scope: static executable TLS with initialized template, zero tail and alignment,
-with an x86-64 local-exec layout and FS-addressed libc thread record. Establish
-the initial FS/errno record through allocation-free bootstrap before TLS-using C,
-malloc or constructors; siblings receive prepared FS before user entry. Kernel
-validates user addresses/lifetime; libc owns the TCB layout. Kernel GS remains
-CPU-local; user FSGSBASE stays disabled. errno becomes per thread.
+Gate 7 defaults accepted by the owner, 2026-10-12; implementation assigned:
 
-A focused compiler/LLD probe must settle template bounds, relocations and
-bootstrap order before implementation. Prefer template bytes/bounds in ordinary
-load segments if valid; do not assume a P1F change is necessary. Language TLS
-requires an owner-published LLVM fork/container. Dynamic TLS/modules are later.
-Runtime keys and bounded ordinary-exit destructor passes are separate from
-language TLS. Forced exit/fault promises no user destructor execution.
+- Executable-only local-exec TLS uses x86-64 variant II, with the libc TCB self
+  pointer at FS:0. The SDK linker exposes initialized template bytes, zero-tail
+  size and alignment. LLD validates the intermediate ELF PT_TLS and omits that
+  header from P1F; the template remains in ordinary load segments. Dynamic TLS
+  and modules remain out of scope. Qualify the compiler/linker contract before
+  adopting the matching owner-published compiler container.
+- Libc owns FS. A TLS-free bootstrap prepares guarded MEMORY backing and binds
+  it before stdio, malloc or constructors. Startup supplies narrow caller-only
+  SET_FS authority, without implicit MANAGE or CREATE authority. Binding is once;
+  bootstrap failure exits honestly. errno is a TCB field exposed by an accessor.
+  Kernel GS remains CPU-local and user FSGSBASE disabled; the kernel validates
+  addresses and pins backing, while libc owns its layout. Sibling contexts live
+  through native completion before their collector releases them.
+- Runtime keys are process-local and generational, initially 128 slots (tunable
+  policy, not ABI). Ordinary thread exit drains language destructors in reverse
+  registration order, then runs at most four key-destructor passes, clearing a
+  value before its callback and calling outside registry exclusion. FS stays
+  alive through atexit, .fini_array and stdio shutdown. Forced stop/fault executes
+  no user destructors. Full libc synchronization and C11/pthreads remain gate 8.
 
 Native WAIT compares an aligned word and enrolls atomically under wait-bucket
 exclusion; mismatch never sleeps. Keys include process, address and mapping
@@ -355,7 +363,7 @@ merely completion of task 2.
 6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is recorded (CALL64 fastest about +100 ns). See [qualification](../development/experiments/threads-task6/README.md).
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
-7. [ ] **Static TLS and errno.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.
+7. [ ] **Static TLS and errno — assigned 2026-10-12.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.
 
    Owner can inspect distinct language TLS/errno and ordinary thread destructors on native siblings.
 8. [ ] **Thread-safe libc and C11/pthread profile.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.

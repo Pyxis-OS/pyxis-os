@@ -18,7 +18,7 @@ target=x86_64-unknown-pyxis
 
 # Pyxis commits on top of llvmorg-23.1.3, from the pyxis-23.1.3 branch.
 llvm_repository=https://git.internal/PyxisOS/pyxis-llvm.git
-llvm_commit=49e2c1a1518b3e4687b52ceb6001069c1b6d261e
+llvm_commit=2d2344355c6825f3293e026aafe185c5632abfdb
 
 mkdir -p "$prefix" "$work"
 cd "$work"
