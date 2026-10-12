@@ -10,6 +10,7 @@
 #define COMPLETION_PAYLOAD_MAX 4096u
 #define COMPLETION_FLAG_NOT_STARTED (UINT64_C(1) << 0)
 #define COMPLETION_FLAG_CANCEL_REQUESTED (UINT64_C(1) << 1)
+#define COMPLETION_FLAG_PROGRESS_KNOWN (UINT64_C(1) << 2)
 
 /* Invoke SUBMIT on the native target. The bytes are copied before acceptance;
  * no output buffer is needed. One unacknowledged native completion per process:

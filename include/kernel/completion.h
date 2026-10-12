@@ -20,6 +20,8 @@ struct native_completion {
   struct execution_group *cleanup_group;
   uint64_t protocol, operation, deadline_ns, correlation_id;
   size_t input_size, output_size;
+  uint64_t progress;
+  bool progress_known;
   uint8_t input[COMPLETION_PAYLOAD_MAX], output[COMPLETION_PAYLOAD_MAX];
   struct capability_grant returned;
   enum call_status result;
