@@ -7,6 +7,8 @@
 
 /* Management always applies to the calling process, even after transfer. */
 #define THREAD_RIGHT_MANAGE (UINT64_C(1) << 0)
+/* Caller-only initial FS binding, without CREATE, EXIT or parking authority. */
+#define THREAD_RIGHT_SET_FS (UINT64_C(1) << 1)
 #define THREAD_CREATE UINT64_C(1)
 #define THREAD_EXIT UINT64_C(2)
 #define THREAD_SET_FS UINT64_C(3)

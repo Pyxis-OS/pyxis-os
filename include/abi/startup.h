@@ -58,6 +58,10 @@ struct startup_info {
   uint64_t argv;
   struct startup_stream streams[STARTUP_STREAM_COUNT];
   handle_t namespace_handle; /* Optional explicit namespace grant; zero means absent. */
+  /* Kernel-provisioned THREAD_RIGHT_SET_FS only. Owned, distinct from every
+   * launcher-selected grant; libc closes it after its caller-only initial bind.
+   * Ignoring or closing it never grants MANAGE/CREATE or affects other tasks. */
+  handle_t thread_fs;
 };
 
 _Static_assert(sizeof(struct startup_binding) == 16, "startup binding layout");
@@ -65,7 +69,8 @@ _Static_assert(sizeof(struct startup_variable) == 16, "startup variable layout")
 _Static_assert(sizeof(struct startup_stream) == 16, "startup stream layout");
 _Static_assert(offsetof(struct startup_info, streams) == 104, "startup streams offset");
 _Static_assert(offsetof(struct startup_info, namespace_handle) == 152, "startup namespace offset");
-_Static_assert(sizeof(struct startup_info) == 160, "startup record layout");
+_Static_assert(offsetof(struct startup_info, thread_fs) == 160, "startup FS grant offset");
+_Static_assert(sizeof(struct startup_info) == 168, "startup record layout");
 _Static_assert(offsetof(struct startup_info, resources) == 16, "startup resources offset");
 _Static_assert(offsetof(struct startup_info, argv) == 96, "startup argv offset");
 

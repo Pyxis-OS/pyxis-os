@@ -44,9 +44,11 @@ struct process_startup {
  * A display path requires a nonempty chain and never grants access. Bindings may
  * alias handles except for streams, whose handles are exclusively owned by libc
  * and carry exactly their direction right. Copying metadata acquires no references.
+ * Preparation also installs a distinct caller-only SET_FS grant for runtime
+ * bootstrap; it neither inherits nor adds optional thread-management authority.
  * The 64 KiB budget includes both mappings' page padding. MM_INVALID covers
  * malformed/oversized data; MM_NO_MEMORY covers allocation exhaustion.
- * Success publishes startup_address once; failure frees partial backing and
+ * Success publishes startup_address and its intrinsic grant once; failure frees partial backing and
  * changes neither startup_address nor capability ownership. */
 enum mm_result process_prepare_startup(struct process *process,
                                        const struct process_startup *source);

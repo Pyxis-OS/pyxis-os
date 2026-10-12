@@ -206,7 +206,8 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
       operation != THREAD_ADDRESS_WAIT && operation != THREAD_ADDRESS_WAKE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & THREAD_RIGHT_MANAGE)) {
+  if (!(rights & THREAD_RIGHT_MANAGE) &&
+      (operation != THREAD_SET_FS || !(rights & THREAD_RIGHT_SET_FS))) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct thread_message input = {0};

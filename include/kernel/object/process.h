@@ -36,8 +36,8 @@ void process_control_complete(struct process_control *control, struct process_re
 uint64_t process_control_ready(struct process_control *control);
 bool process_control_stopped(struct process_control *control);
 
-/* Current process, IF=0, with a live handle reference and checked protocol.
- * WAIT may sleep; one task per process keeps its handle and mappings stable. */
+/* Current process, IF=0, with an admitted storage reference and checked protocol.
+ * WAIT may sleep; revalidate output after resumption, before copying it. */
 struct syscall_result process_control_call(struct process_control *control,
     uint64_t rights, uint64_t operation, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
