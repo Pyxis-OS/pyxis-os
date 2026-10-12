@@ -30,7 +30,7 @@ END = struct.Struct("<4s4H2IH")
 P1F_MAGIC = b"PXE1FLAT"
 # Copied from the resource/right table in userland/lib/bundle.c.
 RIGHTS = {
-    "memory": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
+    "memory": {"manage"}, "threads": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
     "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
     "tcp": {"connect", "listen"}, "pipe": {"create"}, "udp": {"open"},
     "display": {"draw"}, "audio": {"create"}, "screen_capture": {"capture"},

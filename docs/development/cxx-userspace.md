@@ -41,7 +41,8 @@ in the [SDK's C++ section](sdk.md#c). The accepted
 - **The first consumer:** the [fmt port](ports.md#fmt-development-library), a
   development library under `build/ports-dev/fmt` and a DevilutionX
   prerequisite. The gate 7 manual threadprobe now includes a small C++
-  language-TLS helper; it does not deliver a thread-safe C++ application profile.
+  language-TLS helper. Gate 8 adds the managed
+  [C/C++ thread profile](../userland/threads.md) and manual runtime probes.
 
 ## Decisions
 
@@ -75,9 +76,12 @@ Choices made while implementing:
 
 The hosted-Clang [task 2](../wip/hosted-clang.md)
 extends the fork with a real C-only locale, streams, wide UTF-8/FILE facilities
-and grant-backed random_device. The installed `49e2c1a` profile remains the subset
-above until the owner publishes and adopts a matching container. See the
-[build/QEMU record](experiments/hosted-clang-cxx.md); thread settings are unchanged.
+and grant-backed random_device. The published gate 7 compiler (`2d234435`)
+adopts those changes and static local-exec TLS. Gate 8 enables external threading
+in the SDK using audited libc locks, exception state and checked unwinder
+synchronization; this configuration needs no new compiler container. The earlier
+[build/QEMU record](experiments/hosted-clang-cxx.md) retains its original inputs;
+current limits are in the [SDK](sdk.md#c).
 
 ## Measurements
 

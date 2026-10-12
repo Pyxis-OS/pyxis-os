@@ -276,6 +276,9 @@ void task_syscall_enter(void)
     }
     arch_user_save(&task->cpu);
     arch_context_switch(&task->saved_stack, scheduler->stack);
+    /* Before admission this task is still movable. Do not carry CPU-local
+     * scheduler stack ownership across a rejected-entry handoff. */
+    scheduler = local_scheduler();
   }
   task->in_syscall = true;
 }

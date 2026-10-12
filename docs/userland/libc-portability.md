@@ -28,8 +28,8 @@ stubs. Existing ports are not retroactively rewritten by this milestone.
 `errno` is per-thread through the libc FS-addressed record, established before
 ordinary C startup. This changes no error numbers or native status translations.
 The [SDK TLS contract](../development/sdk.md#static-tls-and-runtime-keys) covers
-bootstrap, context lifetime and runtime keys. Other mutable libc state still
-requires the gate 8 synchronization audit; per-thread errno alone is insufficient.
+bootstrap, context lifetime and runtime keys. The selected [thread profile](threads.md) also synchronizes shared allocator,
+descriptor, FILE and cache state, with explicit pointer/destruction exclusions.
 
 ## Which standard functions belong in libc
 

@@ -21,7 +21,8 @@ a process-owned cache retains its bytes until replacement or process exit.
 Changing the selected name replaces the cache only after a successful load.
 Invalid selections report errors on each conversion, never the previous zone or
 a silent UTC fallback. Files are not watched or reloaded while the name remains
-unchanged. The cache assumes the current one-thread-per-process runtime.
+unchanged. Concurrent conversions retain their selected snapshot across cache
+replacement; file loading and conversion run outside the publication guard.
 
 The shell forwards an explicit snapshot of its current environment to children. There is no new shell
 assignment command or timezone syscall. The default [session configuration](session-configuration.md)
@@ -36,12 +37,12 @@ or empty; libc's default has not changed.
 seconds east of UTC, and a borrowed `const char *tm_zone` designation.
 `tm_isdst` follows the database; daylight time need not mean
 a larger UTC offset. UTC conversion sets offset and DST to zero and names the
-zone `UTC`. Local designations point into the validated TZif cache and remain
-valid until a successful cache replacement or process exit.
+zone `UTC`. Local designations are interned from the validated TZif cache and remain
+valid until process exit, including across successful cache replacement.
 
 `localtime_r` returns the destination on success, preserving errno. It returns
 NULL on failure without changing the destination. `localtime` uses its own
-static result, overwritten by its next successful call. Existing `gmtime` and
+per-thread result, overwritten by its next successful call on that thread. Existing `gmtime` and
 `gmtime_r` remain allocation-free UTC conversions and ignore `TZ`.
 
 `mktime(struct tm *)` is the inverse of `localtime` in the zone `TZ` currently

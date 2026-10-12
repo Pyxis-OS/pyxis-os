@@ -93,6 +93,18 @@ preserves errno. Metadata belongs to the shared open object and is freed on its
 final descriptor close.
 Failed fopen exposes errno only. See the [redirect contract](http-fetch.md#redirect-chains).
 
+## Concurrent operations
+
+The [libc thread profile](threads.md) serializes each whole FILE operation and
+the cursor/read-ahead shared by descriptor aliases. Blocking pipe/console input
+and output use separate direction guards. An admitted operation holds stable
+libc storage across blocking calls, without copying native grants or delaying
+final native CLOSE. Raw close invalidates associations before number reuse.
+Callers exclude new use during FILE destruction; already admitted operations
+retain storage until return. `dup2` refuses an active or buffered associated FILE
+with EBUSY before replacement. Global fflush retains a registry snapshot and
+performs I/O after releasing registry exclusion.
+
 ## Descriptor I/O
 
 `fcntl.h` declares `open(path, flags, ...)` and defines `O_RDONLY` as zero.
