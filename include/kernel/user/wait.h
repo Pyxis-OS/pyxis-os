@@ -20,7 +20,7 @@ struct readiness_interest {
  * Results live in the task's shared request area, never a private user stack. */
 struct readiness_request {
   struct bsp_request request;
-  /* Borrowed until completion: the sole caller task cannot retire while its
+  /* Borrowed until completion: the admitted caller cannot retire while its
    * published request remains outstanding. Cleared before waking that task. */
   struct process *caller;
   size_t count;

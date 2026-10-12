@@ -38,8 +38,8 @@ Merged tasks, with qualification records:
 | [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Native siblings are implemented; libc join accounting remains task 8. |
 | [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c), [endpoint replies](../../kernel/object/endpoint.c) | Owned storage snapshots, reserved atomic delivery and scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
 | [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases, BSP mutation transactions and guarded-context pins are implemented; general sparse reservations remain a separate task. |
-| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Sibling FS/entry is implemented; ordinary startup remains FS=0 pending task 7. |
-| [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | No static TLS template contract; the current compiler rejects language TLS. |
+| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Sibling FS/entry and libc initial-thread TLS bootstrap are implemented; general runtime safety remains task 8. |
+| [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | Static local-exec TLS template/P1F contract is qualified in gate 7; dynamic TLS remains unsupported. |
 
 ## Native lifecycle
 
@@ -363,10 +363,10 @@ merely completion of task 2.
 6. [x] **Address WAIT/WAKE — assigned 2026-10-11.** Native word/deadline operations, mapping-incarnation keys and literal detach-before-notify on wake/timeout/stop/unmap are implemented and QEMU-qualified; owner-native A/B is recorded (CALL64 fastest about +100 ns). See [qualification](../development/experiments/threads-task6/README.md).
 
    Owner can run real contended native parking and inspect clean registrations after timeout or process stop.
-7. [ ] **Static TLS and errno — assigned 2026-10-12.** Qualify compiler/LLD template/bootstrap, publish the matching compiler if needed, then integrate SDK/startup/runtime keys.
+7. [x] **Static TLS and errno (#748).** Compiler/LLD template/bootstrap, SDK/startup, per-thread errno and runtime keys/destructors are implemented and build/QEMU qualified. The matching compiler is published and CI passed before the latest dependency rebase. Native launch cost (+6–9%, about +0.11 ms/launch) is accepted by the owner, 2026-10-12; IPC/pages are unchanged. Initial-thread static TLS is a much-later launch-heavy-workload follow-up, not gate 8 work; see [qualification](../development/experiments/threads-task7/README.md).
 
    Owner can inspect distinct language TLS/errno and ordinary thread destructors on native siblings.
-8. [ ] **Thread-safe libc and C11/pthread profile.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
+8. [ ] **Thread-safe libc and C11/pthread profile — assigned 2026-10-12; baseline and pre-code decisions next.** Allocator, descriptors, stdio/caches/shutdown and real mutex/condition/semaphore/once; C++ adapter after its runtime audit.
 
    Owner can use the documented thread profile and shared allocation/I/O, without unsupported detach/cancellation promises.
 9. [ ] **Separate consumer tasks.** SDL workers/timers then audio callbacks; libuv pool, Hax and Go each retain their own adapter/qualification scope.

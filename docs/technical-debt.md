@@ -85,8 +85,17 @@ non-power-of-two thread counts stay isolated until a supported target needs them
 Libc's TLSF allocator reuses freed blocks but keeps every backing pool (at least 64 KiB, no fixed pool-count registry) until process
 exit, so a short-lived peak leaves memory mapped for that process; shrinking `realloc` keeps the block capacity and growth may hold
 both blocks while copying to preserve 16-byte alignment. Process destruction reclaims everything. Revisit empty-pool release and
-in-place aligned growth when long-lived applications make retained capacity or copying material. The allocator and errno assume one
-thread per process: add synchronization and thread-local errno with userspace threads.
+in-place aligned growth when long-lived applications make retained capacity or copying material. errno is per-thread after gate 7;
+the allocator still needs the gate 8 synchronization audit before concurrent ordinary allocation is supported.
+
+## TLS bootstrap launch cost
+
+Gate 7 prepares guarded TCB backing and binds FS through separate BSP VM transactions on every libc process launch, including
+TLS-free C programs. The owner accepted the measured native launch cost of +6–9% (about +0.11 ms/launch) on 2026-10-12;
+IPC and pages were unchanged. See [qualification](development/experiments/threads-task7/README.md#owner-native-cost).
+Initial-thread static TLS could avoid its guarded reservation; siblings would remain guarded. This is a much-later follow-up,
+not gate 8 work: revisit when launch-heavy shell scripts or native builds make startup cost material, preserving caller-only
+FS authority, template alignment, destructor lifetime and context pins.
 
 ## Allocation measurement follow-ups
 
@@ -811,18 +820,18 @@ could then match the header.
 
 The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliberate subset (owner, 2026-10-08):
 
-- **No threads or thread-local storage:** `<thread>`, `<mutex>`, `thread_local` and non-lock-free atomics are absent and local statics
-  use single-threaded guards, so thread-starting programs cannot be ported yet.
-- **Installed localization/wide/random profile:** pin `49e2c1a` still disables these facilities.
-  [Hosted-Clang task 2](development/experiments/hosted-clang-cxx.md) supplies the real native C-only locale, wide FILE/UTF-8 and entropy
-  closure in libc and the fork; enabling it waits for the owner-published matching container. Full locale databases/wide scanning remain absent.
+- **No thread-safe C++ profile:** static local-exec language TLS is supported after gate 7, but `<thread>`, `<mutex>`, non-lock-free
+  atomics, exception bookkeeping and local-static guards still need the gate 8 runtime audit.
+- **C-only locale:** the matching gate 7 compiler adopts the native locale, wide FILE/UTF-8 and entropy closure; full locale databases
+  and wide scanning remain absent.
 - **Most of `<cmath>` is missing:** libc's math subset leaves 161 of the 186 imported names undefined, so first use fails to compile.
 - **Exceptions cannot cross C frames** (no unwind tables), so one thrown through a `qsort` comparator terminates the program; uncaught
   ones name mangled types (`St11logic_error`) because the 184 KB demangler is left out.
 - **No `<filesystem>` or time zones**, and fmt's license is not staged for the boot payload (a port shipping an fmt
   program must install it).
 
-Revisit threads/TLS with the Clang hosting milestone and the remaining math/locale facilities when a reached consumer needs them. Additions belong in libc or the runtime configuration, never in a port-local stub.
+Revisit synchronization at threads gate 8, and remaining math/locale facilities when a reached consumer needs them. Additions belong in
+libc or the runtime configuration, never in a port-local stub.
 
 ## HD Audio volume control
 

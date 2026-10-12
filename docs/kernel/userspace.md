@@ -19,7 +19,9 @@ initial C support routines.
 
 The Pyxis Clang driver links executables straight to P1F: LLD lays out the
 fixed-address image, then writes its loadable segments and entry point. It
-rejects an interpreter, dynamic linking, runtime relocations and TLS. The
+rejects an interpreter, dynamic linking and runtime relocations. Static local-exec
+TLS metadata is validated and omitted during P1F conversion; its initialized
+template remains in ordinary loads. The
 [linker script](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/linker.ld) separates segment permissions on page
 boundaries; writable executable mappings are rejected. The
 [P1F header](../../include/pxe/p1f.h) defines the image layout and constraints.
@@ -142,8 +144,13 @@ entry stacks, saved registers/FP state and guarded caller-owned stack/FS pins.
 They enter a caller trampoline, without rerunning startup or constructors.
 Completion WAIT/readiness is repeatable only after task retirement and pin
 release; closing an observer never kills its thread. Existing process EXIT,
-termination and user faults stop the whole task set. Ordinary libc startup still
-uses FS=0; language TLS and thread-safe libc remain later gates.
+termination and user faults stop the whole task set. Raw native entry starts
+with FS=0; libc establishes its static local-exec TLS/errno record before stdio,
+malloc or constructors. Startup separately supplies an owned caller-only
+`THREAD_RIGHT_SET_FS` handle, closed after binding; this grants no MANAGE, CREATE,
+EXIT or parking authority. Runtime keys and language destructors are described
+in the [SDK](../development/sdk.md#static-tls-and-runtime-keys). General
+thread-safe libc and C11/pthreads remain gate 8.
 
 
 ## cat
@@ -322,8 +329,9 @@ libm remains deferred.
 
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
-application handle close. A missing grant or failed copy leaves allocation
-unavailable (`ENOMEM`) but still permits a program that needs no heap to run.
+application handle close. The earlier TLS bootstrap requires MEMORY MANAGE and
+exits with failure if its context cannot be prepared or bound. A later failed
+allocator copy leaves heap allocation unavailable (`ENOMEM`).
 No backing is acquired until allocation needs it. Pools start at 64 KiB and grow
 to suit larger requests, without a fixed pool count. Allocations have at least
 16-byte alignment. Overflow/exhaustion return NULL; failed `realloc` preserves

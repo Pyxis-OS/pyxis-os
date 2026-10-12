@@ -241,7 +241,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_PROCESS_CONTROL:
     return !(rights & ~PROCESS_RIGHTS);
   case OBJECT_THREAD_SERVICE:
-    return !(rights & ~THREAD_RIGHT_MANAGE);
+    return !(rights & ~(THREAD_RIGHT_MANAGE | THREAD_RIGHT_SET_FS));
   case OBJECT_THREAD_COMPLETION:
     return !(rights & ~THREAD_COMPLETION_RIGHT_WAIT);
   case OBJECT_KEYBOARD:

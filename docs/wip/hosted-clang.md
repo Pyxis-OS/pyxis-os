@@ -96,7 +96,10 @@ PR must update `toolchain/build.sh`, `ci/Containerfile`, workflow image tag and
 [toolchain documentation](../development/llvm-toolchain.md#changing-the-pin)
 together. Ordinary SDK configuration or libc edits alone need no container
 rebuild. Coordinate the chosen fork head with delta's gate 7 TLS change to avoid
-publishing incompatible compiler/runtime pins. Do not change the container now.
+publishing incompatible compiler/runtime pins. Gate 7 adoption pins fork #6 at
+`2d2344355c6825f3293e026aafe185c5632abfdb`, including merged fork #5;
+its matching owner-published image is `pyxis-llvm23.1.3-2d23443`. It provides
+static TLS, not the remaining gate 8 synchronization/C++ audit.
 
 ## Resources and native limits
 

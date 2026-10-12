@@ -11,6 +11,7 @@
 #include <kernel/process.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/namespace.h>
+#include <kernel/object/thread.h>
 #include <kernel/string.h>
 #include <kernel/user/startup.h>
 
@@ -358,14 +359,31 @@ enum mm_result process_prepare_startup(struct process *process,
   }
   memset(buffer, 0, total);
 
+  /* This intrinsic service acts only on the calling thread/process. It carries
+   * no optional thread-management authority from the launcher. */
+  struct kernel_object *threads = thread_service_create();
+  handle_t thread_fs;
+  enum capability_result installed = threads ?
+      capability_install(&process->capabilities, threads, THREAD_RIGHT_SET_FS, 0,
+          &thread_fs) : CAP_NO_MEMORY;
+  if (threads) {
+    object_release(threads);
+  }
+  if (installed != CAP_OK) {
+    kfree(buffer);
+    return MM_NO_MEMORY;
+  }
+
   uintptr_t address;
   enum mm_result result = vm_alloc(process->address_space, total, PAGE_SIZE,
                                     PAGE_USER, &address);
   if (result != MM_OK) {
+    KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
     kfree(buffer);
     return result;
   }
   fill_startup(buffer, address, source, &sizes);
+  ((struct startup_info *)buffer)->thread_fs = thread_fs;
   result = copy_startup_pages(process->address_space, address, buffer, total);
   kfree(buffer);
 
@@ -379,6 +397,7 @@ enum mm_result process_prepare_startup(struct process *process,
   }
   if (result != MM_OK) {
     KASSERT(vm_free(process->address_space, address, total) == MM_OK);
+    KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
     return result;
   }
   process->startup_address = address;

@@ -17,7 +17,7 @@ in the [SDK's C++ section](sdk.md#c). The accepted
   - for C++, the Pyxis driver searches the sysroot's `usr/include/c++/v1`
     ahead of libc's headers and links libc++, libc++abi and libunwind;
   - every executable link passes `--eh-frame-hdr`;
-  - `thread_local` and `_Thread_local` fail when compiling;
+  - executable-only local-exec language TLS uses the gate 7 SDK template/bootstrap;
   - libc++ uses `timespec_get` for its clocks, skips the terminal check in
     `print` and needs no `ELAST` limit;
   - the toolchain installs `x86_64-unknown-pyxis-clang++`.
@@ -40,7 +40,8 @@ in the [SDK's C++ section](sdk.md#c). The accepted
     `ceilf` and `timespec_get(TIME_MONOTONIC)`.
 - **The first consumer:** the [fmt port](ports.md#fmt-development-library), a
   development library under `build/ports-dev/fmt` and a DevilutionX
-  prerequisite. No program in the image uses C++ yet.
+  prerequisite. The gate 7 manual threadprobe now includes a small C++
+  language-TLS helper; it does not deliver a thread-safe C++ application profile.
 
 ## Decisions
 

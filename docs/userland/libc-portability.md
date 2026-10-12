@@ -25,6 +25,12 @@ Application patches cover platform integration and explicitly restricted
 features; missing semantics are recorded as limitations rather than successful
 stubs. Existing ports are not retroactively rewritten by this milestone.
 
+`errno` is per-thread through the libc FS-addressed record, established before
+ordinary C startup. This changes no error numbers or native status translations.
+The [SDK TLS contract](../development/sdk.md#static-tls-and-runtime-keys) covers
+bootstrap, context lifetime and runtime keys. Other mutable libc state still
+requires the gate 8 synchronization audit; per-thread errno alone is insufficient.
+
 ## Which standard functions belong in libc
 
 Owner decision, 2026-10-04: libc provides ISO C plus extensions that have proven

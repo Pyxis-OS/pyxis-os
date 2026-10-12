@@ -47,7 +47,8 @@ struct syscall_result echo_call(uint64_t rights, uint64_t operation,
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  /* The sole user task kept its mappings and capability alive while blocked. */
+  /* The admitted reference keeps storage alive; revalidate output after the
+   * wait because a sibling may have withdrawn its mapping. */
   if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }

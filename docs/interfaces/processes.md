@@ -158,6 +158,13 @@ with the process's space. Launch selects a LOOKUP-authorized namespace through
 cannot also supply a standard stream. Known directory-root/name conflicts reject
 launch; runtime resolution checks again because bindings can change.
 
+The kernel separately installs an owned startup `thread_fs` grant with
+`THREAD_RIGHT_SET_FS` only. It applies to the caller, is distinct from all
+launcher-selected bindings, and adds no thread-management authority. Libc closes
+it after once-only FS bootstrap; the read-only startup snapshot then becomes stale.
+Native entries may ignore it. Startup-preparation failure releases this provisional
+grant along with partial backing.
+
 The launcher supplies argument strings, including argv[0] when present; neither
 the kernel nor startup parses a command line. Zero arguments are valid and still
 provide argv[0] == NULL. Environment names are nonempty, case-sensitive, unique
