@@ -434,6 +434,11 @@ flushes and explicit retirement above remain requirements.
    the mount's admission accounting. This avoids pinning execution storage until
    a deadline. Ownership requires shared-process cooperation and explicit expiry
    handling; it is not transferable.
+   Implementation admits at most 16 retained interval records per mount, including
+   pending/active intervals and expired-owner tombstones. New owners at capacity
+   get LIMIT; renewal reuses that owner's expired record. BEGIN reply delivery
+   retains the original storage admission through worker commit/rollback, so a
+   failed reply leaves no new interval and preserves any prior expired record.
 3. **Sync, uncertainty and clean power: durable calls, failed mount retained.**
    Each successful mutation completes its ordered barriers and final
    flush before returning. FILE/DIRECTORY sync may conservatively flush the whole

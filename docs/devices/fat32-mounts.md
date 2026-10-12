@@ -88,6 +88,16 @@ before another owner can begin. A live expired owner receives TIMED_OUT on furth
 mutations/sync until it acknowledges END or obtains a new interval, including
 while another owner holds the mount.
 
+BEGIN remains provisional until its identifier/deadline reply is delivered.
+The original storage admission and actor/node references cover an allocation-free
+worker finish; failed copy-out removes that exact new interval or restores the
+owner's prior expired record. Shutdown drainage includes this finish. Pending
+intervals block mutations and cannot be replaced by another BEGIN or END.
+Each mount admits at most 16 active, pending or expired-owner interval records,
+charged to the shared wrapper budget. A new owner at capacity gets LIMIT before
+allocation. An expired owner renews its existing record in place; live-owner
+tombstones are never evicted to admit another owner.
+
 ## Failure and clean power
 
 Capacity, budget and authority refusals before effects leave media unchanged.
@@ -182,6 +192,10 @@ Eight held-file slots support `hold SLOT ro|rw /PATH`, `hinfo SLOT`,
 without mounting, interval or write authority. This profile exercises native
 operations; configured writable bindings and an everyday mount command are
 task 5, not supplied by this bootstrap.
+In QEMU, attach scratch media writable with modern VirtIO block. After GPT
+discovery, focus **Mounted FAT32 Scratch Writer** with Super+Right from Caelum
+(HMP `sendkey meta_l-right`), then enter the displayed disk ID and one-based GPT
+entry. Selection requires focus; READ_ONLY media cannot support this writer.
 
 The [qualification record](../development/experiments/fat32-native-mount.md)
 separates QEMU/debugger evidence from later owner-routed native ESP checks.

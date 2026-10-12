@@ -191,6 +191,46 @@ in pair B. Attribution is unresolved: the rebased comparison includes managed
 libc/runtime and other main movement, rather than isolating FAT32 code alone.
 Overlapping ranges or the second pair do not erase the aggregate increase.
 
+## Review follow-up — 2026-10-12
+
+Daybreak's review of parent `260b36df` identified two availability defects.
+Code correction `82443674` retains a successful BEGIN's original storage
+admission/node/actor references through reply delivery and an allocation-free
+worker finish. Failed delivery removes that exact newly staged interval or
+restores the owner's prior expired identifier/deadline. Finish does not reserve
+another job, perform I/O or fail on storage drainage, sealing, deadline or owner
+stop. Pending intervals cannot be pruned, ended, renewed or used for mutation.
+Each mount caps active, pending and expired interval records at 16; renewal
+reuses an existing owner's record. New owners at capacity get LIMIT without
+evicting expired-owner tombstones or allocating another wrapper.
+
+The default image build passed with unchanged dependency pins. The same
+four-CPU scratch QEMU configuration above reached the writer prompt and performed
+native create/open/write/growth/sync and drained retirement. Use the explicit
+`init=boot://init-fat32-mount-write.pxe boot.install=1` configuration, attach scratch
+VirtIO media writable, focus the new writer space with Super+Right from Caelum
+(HMP `sendkey meta_l-right`), then select displayed disk 1 and GPT entry 1.
+No startup defect was reproduced; this does not identify the cause of Daybreak's
+setup, whose exact task-4 command was not found in the supplied evidence directory.
+
+At a hardware breakpoint after successful copy-out but before finish, GDB saw
+one pending interval, one admitted storage job and one admitted node reference.
+After finish, pending was false and admitted was zero; the identifier/deadline
+were unchanged. Repeated BEGIN returned BUSY without renewal. Expiry returned
+TIMED_OUT; another BEGIN issued identifier 3339 instead of 3338 and left the
+record count at one. END released it. Final native content independently read
+through mtools was `reviewed` plus eight zeros. After sync, closure, RETIRE and
+quit, GDB saw zero FAT instances/workspace, empty live/retired lists, zero storage
+admissions and zero shared wrappers. `fsck.fat -n` was clean (5 files, 6 clusters);
+the strict inspector also passed.
+
+Rollback after sibling unmap, renewal rollback, the 16-live-owner capacity branch
+and drainage/sealing races were source-reviewed, not forced or runtime-stressed.
+No new fault injection, test program or benchmark infrastructure was added.
+No matched throughput run was repeated for this control-only follow-up; it adds
+one worker round trip per successful BEGIN, outside the earlier read workloads.
+All task-owned QEMU/GDB processes are stopped.
+
 ## Qualification limits
 
 These are manual nested-VM, host-tool and source-inspection results. They do not
