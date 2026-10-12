@@ -1,7 +1,7 @@
 # Native command execution
 
 Status: **shared milestone contracts accepted 2026-10-11; task 1 merged in #745
-and userland #228. Task 2 assigned to Codex alpha 2026-10-12; the exceptional
+and userland #228. Task 2 delivered for review by Codex alpha 2026-10-12; the exceptional
 lifetime decision is accepted and implementation is authorized.**
 Extract common work from [Claude task 1e](claude-on-pyxis.md),
 [Git run-command](git-on-pyxis.md#process-model-and-a-first-cli-slice),
@@ -131,12 +131,15 @@ trusted fresh-group/sole-CONTROL backend, which ordinary direct jobs do not need
   Implemented in [userland #228](https://git.internal/PyxisOS/pyxis-userland/pulls/228),
   exact pin `20fb34f871beed7e25f6ac454e0d53f51dba5f3f`; merge dependency before parent.
   [Implemented contract](../userland/native-jobs.md). Merged; task 2 is now assigned.
-- [ ] **2. Private FILE capture and deadlines.** Implement the profile above for
+- [x] **2. Private FILE capture and deadlines.** Implement the profile above for
   direct callers and the trusted Claude group backend; retain storage/observers
   through actual stage retirement, with sizes, truncation and stop cause.
   **After this task the owner can:** capture separate stdout/stderr from silent,
   noisy and failing programs and distinguish timeout from actual termination.
-  Assigned 2026-10-12; no implementation yet.
+  Implemented in [userland #232](https://git.internal/PyxisOS/pyxis-userland/pulls/232),
+  exact pin `40f81eb2299d9eb0f06fc4d6440401d85437e352`; dependency merges first,
+  then [parent #749](https://git.internal/PyxisOS/pyxis-os/pulls/749).
+  [Implemented contract](../userland/native-jobs.md#private-capture-and-deadlines).
 - [ ] **3. Native pipeline and event pump.** Reuse batch launch and bounded pipes,
   concurrent input/output, per-stage results, early-reader-close handling,
   deadlines and all stage/endpoint cleanup. No threads assumption.
@@ -260,34 +263,65 @@ the public ABI and direct-job/runtime sources used for the checks are unchanged.
 The ordinary image is rebuilt for that integrated input set and exact-head CI
 qualifies the published dependency pin.
 
-## Task 2 checkpoint (2026-10-12)
+## Task 2 qualification (2026-10-12)
 
-Fresh branch `execution/private-capture`, main `1536d997`, userland main/pin
-`20fb34f8`, ports `28b5a3bc`, fs `9b4479e8`, lwIP `a1aadb91`. Before-code
-ordinary `make -j16 image LOG_LEVEL=info` passed using the existing LLVM builder;
-SDK/runtime and ports built from source. Baseline kernel/initrd are retained
-locally in `build/capture-baseline/`; no runtime samples or task-2 code yet.
+**Accepted exceptional lifetime (owner, 2026-10-12):** unknown admission without
+an observer retains captures in an owned cleanup-unconfirmed record until
+caller/session teardown. Normal release and launch replay refuse. A retained
+fresh group stops/waits cleanup, leaving the native process result unknown.
+Implemented; uncertain transport publication is source-reviewed, not injected.
 
-The existing accepted profile settles private storage and normal cleanup:
-trusted startup supplies the private RAM root; metadata cannot certify RAM or
-exclusive access. All final grants receive the stricter capture policy, while
-namespace/provider/credential reachability remains the trusted caller's audit.
-Cancellation/error retains captures and observers through actual process (and,
-for the trusted fresh-group backend, group) retirement.
+Baseline was sealed before production code: main `1536d997`, userland `20fb34f8`,
+fs `9b4479e8`, ports `28b5a3bc`, lwIP `a1aadb91`; ordinary info-level image build
+passed. A local native caller received a private RAM `work` volume exclusively
+from trusted boot init, then manually created/unlinked FILEs, selected WRITE-only
+streams and used existing job/clock/wait APIs. Silent/failing/noisy/20 s sleeping
+children exercised a 1 MiB trigger and 250 ms timeout (otherwise 5 s).
 
-**Exceptional lifetime, accepted by the owner 2026-10-12:** when direct launch
-returns OUTCOME_UNKNOWN without an observer, return an owned cleanup-unconfirmed
-record and retain the captures. Refuse normal release/replay: direct capture
-cannot prove retirement, so the quarantined record remains for the caller's
-lifetime/session teardown. The trusted fresh-group backend can request group
-stop and observe its retained group's completion before releasing captures,
-without inventing an actual process result. No kernel recovery mechanism or new
-group interface is added in task 2.
+Implementation was built from current main: `173f1321`, userland #232 above and
+fs `28386cc7`; ports/lwIP unchanged. The final source image build passed. The
+one-CPU implementation samples preceded the unrelated FAT32 integration rebase;
+the four-CPU samples use the published capture revision. Capture source is the
+same. Local qualification archives differ only in caller/config, with unchanged
+baseline payloads. No test program or framework is installed in normal images.
 
-The [single launcher wrapper](../../userspace/lib/launcher.c) clears the child
-handle on uncertainty, and [task 1's job record](../../userspace/libc/job.c) is
-not returned on failed launch. Both the no-replay rule and the capture owner's
-exceptional disposition above are accepted. Task 2 implementation is authorized.
+Matched interactive QEMU 10.2.2: q35, nested KVM/host CPU, 512 MiB, fresh OVMF
+variables, read-only FAT VirtIO boot disk, VirtIO RNG, no NIC/USB, PS/2 keyboard,
+1280x800 software GOP and LOG_LEVEL=info. Both 1 and 4 CPUs pass direct and fresh
+group silent/failing/noisy/timeout cases, cancellation, capped short reads/EOF,
+repeated waits, late cancellation, and once-only release. Silent is EXITED/0;
+failing is EXITED/3 with exact 16/15-byte stdout/stderr; noisy and timeout return
+actual TERMINATED with separate limit/deadline causes. Noisy reads return exactly
+1 MiB per stream with truncation, verified `O`/`E` bytes. Early close is BUSY.
+Already-expired deadlines return TIMED_OUT without a record. Unnamed private
+root, copied private cwd, and console bypass refuse with DENIED.
+
+End-to-end timings include preparation and retirement, exclude capped-output
+reading and debugger pauses. One-CPU ranges are three samples; four-CPU ranges
+two samples. These are nested-QEMU policy observations, not native speed claims.
+
+| CPUs / path | silent (ms) | failing (ms) | noisy stop (ms) | 250 ms timeout (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| 1 / existing primitives | 4.16–6.42 | 3.61–4.87 | 54.75–171.82 | 255.24–261.70 |
+| 1 / capture wrapper | 3.75–4.65 | 3.86–4.93 | 60.09–69.14 | 253.55–255.36 |
+| 4 / existing primitives | 4.54–5.36 | 3.46–5.34 | 48.11–54.16 | 254.42–255.87 |
+| 4 / capture wrapper | 4.48–7.81 | 3.75–5.61 | 60.87–62.05 | 254.38–254.41 |
+
+GDB separately inspected a live fresh-group timeout and confirmed retirement.
+The child holds WRITE-only output FILE grants and no private root, launcher or
+CONTROL grant. The private RAM directory is empty while both FILEs remain
+retained. Before release, the process control is complete with a NULL process
+link and no waiters; the group has one controller, zero members/launches/cleanup
+pending, and complete=true. The capture still owns both FILEs and its observer.
+Debugger pauses are excluded from the timing table.
+
+Polled backing overshoot is intentional and variable with scheduling. The
+one-CPU baseline retained 1,159,168–1,417,200 stdout bytes; the wrapper retained
+1,318,912–1,368,064, but returned only 1,048,576. Metadata/policy calls can park;
+no backing quota, admission or cleanup wall-time guarantee is implied. Source
+review covers unknown-without-observer quarantine and retained-group cleanup;
+no transport-failure injection or native run was performed. Raw screens, logs
+and local callers remain under `build/capture-baseline`/`build/capture-after`.
 
 ## Required descendant follow-up
 
