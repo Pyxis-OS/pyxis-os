@@ -52,10 +52,10 @@ and revision inventory). Later tasks need separate assignments.
 
 [Native command execution](native-command-execution.md): Codex alpha (2026-10-12),
 an accepted shared plan for direct native launch without descendants, selected
-streams, capture/deadlines and shell/Lua pipelines, extracted from Claude/Git/ports/
-libuv. Tasks 1–3 are merged. Task 4, Lua/shell delivery and reusable port
-adapters, is assigned for baseline and surface proposal first; code waits on
-the owner's surface decisions.
+streams, capture/deadlines and native pipelines, extracted from Claude/Git/ports/
+libuv. Tasks 1–3 are merged. Task 4, Lua/C delivery and reusable port adapters,
+is assigned; Lua/ownership are accepted and revised context delegation waits
+for the owner. Shell delivery is excluded from this task.
 
 [Native HTTP requests](native-http-requests.md): an
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
