@@ -61,7 +61,19 @@ static size_t wrapper_count, adapter_used;
  * so IF=0 serializes the handoff. Once sealed, pools take no further changes
  * until the request is cancelled. */
 static struct task_wait *shutdown_wait;
-static bool shutdown_requested, shutdown_done, sealed;
+static bool shutdown_requested, shutdown_done;
+enum storage_admission { STORAGE_RUNNING, STORAGE_DRAINING, STORAGE_SEALED };
+static atomic_int storage_admission;
+
+static bool storage_sealed(void)
+{
+  return atomic_load_explicit(&storage_admission, memory_order_acquire) == STORAGE_SEALED;
+}
+
+static bool storage_draining(void)
+{
+  return atomic_load_explicit(&storage_admission, memory_order_acquire) == STORAGE_DRAINING;
+}
 static enum call_status shutdown_status;
 
 static void npfs_worker(void *argument);
@@ -751,6 +763,7 @@ static void complete_job(struct npfs_job *job)
     job->admitted = false;
   }
   job->state = NPFS_JOB_COMPLETE;
+  wake_worker();
   if (request) {
     bsp_request_complete(&request->request);
   }
@@ -802,7 +815,6 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_FAT_STATE:
   case NPFS_RAW_INFO:
   case NPFS_RAW_READ:
-  case NPFS_RAW_RELEASE:
     return true;
   default:
     return false;
@@ -858,12 +870,12 @@ static void npfs_worker(void *argument)
   uint64_t next_flush = task_deadline_after_ms(CONFIG_NPFS_FLUSH_SECONDS * 1000u);
   uint64_t next_maintenance = task_deadline_after_ms(NPFS_MAINTENANCE_MS);
   for (;;) {
-    bool pending = !sealed && maintenance_pending();
+    bool pending = !storage_sealed() && !storage_draining() && maintenance_pending();
     uint64_t flags = cpu_save_interrupts();
     bool shutdown = shutdown_requested;
     bool pressure = mm_pressure_take();
-    struct disk_object *disks = disk_take_retired();
-    struct fat32_node *fat_nodes = sealed ? NULL : fat32_take_retired();
+    struct disk_object *disks = storage_sealed() ? NULL : disk_take_retired();
+    struct fat32_node *fat_nodes = storage_sealed() ? NULL : fat32_take_retired();
     struct npfs_node *nodes = retired_nodes;
     retired_nodes = NULL;
     struct npfs_job *job = first_job;
@@ -876,9 +888,10 @@ static void npfs_worker(void *argument)
       job->state = NPFS_JOB_ACTIVE;
     }
     bool flush = task_deadline_expired(next_flush);
-    bool maintenance = !sealed && (pressure || flush ||
+    bool maintenance = !storage_sealed() && !storage_draining() && (pressure || flush ||
         task_deadline_expired(next_maintenance) || pending);
-    if (!nodes && !fat_nodes && !disks && !job && !maintenance && !shutdown) {
+    if (!nodes && !fat_nodes && !disks && !job && !maintenance &&
+        (!shutdown || atomic_load_explicit(&admitted, memory_order_acquire))) {
       KASSERT(!worker_wait);
       struct task_wait *wait = task_wait_prepare();
       worker_wait = wait;
@@ -908,7 +921,7 @@ static void npfs_worker(void *argument)
           job->count = 0;
         }
       } else {
-        job->status = sealed && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
+        job->status = storage_sealed() && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
             perform(&context, job);
       }
       job->format_status = context.format_error;
@@ -931,9 +944,18 @@ static void npfs_worker(void *argument)
     }
     /* Queued requests drain first; held user tasks submit no more. */
     if (shutdown && !job) {
+      flags = cpu_save_interrupts();
+      bool drain_pending = atomic_load_explicit(&admitted, memory_order_acquire) ||
+          first_job || retired_nodes || fat32_retired_pending() || disk_retired_pending();
+      cpu_restore_interrupts(flags);
+      if (drain_pending) {
+        kernel_task_yield_if_runnable();
+        continue;
+      }
       enum call_status status = flush_for_shutdown();
       flags = cpu_save_interrupts();
-      sealed = status == CALL_OK;
+      atomic_store_explicit(&storage_admission, status == CALL_OK ? STORAGE_SEALED :
+          STORAGE_RUNNING, memory_order_release);
       shutdown_status = status;
       shutdown_requested = false;
       shutdown_done = true;
@@ -966,10 +988,17 @@ static void npfs_worker(void *argument)
 
 static bool reserve_job(void)
 {
+  if (storage_draining()) {
+    return false;
+  }
   size_t count = atomic_load_explicit(&admitted, memory_order_relaxed);
   while (count < NPFS_REQUEST_LIMIT) {
     if (atomic_compare_exchange_weak_explicit(&admitted, &count, count + 1,
         memory_order_relaxed, memory_order_relaxed)) {
+      if (storage_draining()) {
+        KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_release));
+        return false;
+      }
       return true;
     }
   }
@@ -1001,7 +1030,7 @@ enum call_status npfs_submit(struct npfs_job *job)
     return CALL_UNAVAILABLE;
   }
   if (!reserve_job()) {
-    return CALL_BUSY;
+    return storage_draining() ? CALL_UNAVAILABLE : CALL_BUSY;
   }
   job->admitted = true;
   if (job->fat_actor) {
@@ -1031,7 +1060,7 @@ enum call_status npfs_completion_reserve(struct native_completion *operation,
   }
   if (!reserve_job()) {
     kfree(job);
-    return CALL_BUSY;
+    return storage_draining() ? CALL_UNAVAILABLE : CALL_BUSY;
   }
   *job = (struct npfs_job){.operation = code, .node = node,
     .rights = operation->target.rights, .completion = operation,
@@ -1059,6 +1088,7 @@ void npfs_completion_discard(struct native_completion *operation)
   KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
   operation->backend = NULL;
   kfree(job);
+  wake_worker();
 }
 
 struct npfs_request *npfs_request_prepare(enum npfs_operation operation_code)
@@ -1090,6 +1120,8 @@ void npfs_request_published(struct npfs_request *request)
   KASSERT(request->request.state == BSP_REQUEST_PREPARED);
   request->job.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   request->job.admitted = reserve_job();
+  request->job.status = request->job.admitted ? CALL_OK :
+      storage_draining() ? CALL_UNAVAILABLE : CALL_BUSY;
   if (request->job.fat_actor) {
     object_retain(&request->job.fat_actor->object);
   }
@@ -1106,7 +1138,7 @@ void npfs_forward(struct npfs_request *request)
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_FORWARDED);
   if (!request->job.admitted || !available) {
-    request->job.status = available ? CALL_BUSY : CALL_UNAVAILABLE;
+    request->job.status = available ? request->job.status : CALL_UNAVAILABLE;
     complete_job(&request->job);
     return;
   }
@@ -1156,7 +1188,8 @@ enum call_status npfs_shutdown_flush(void)
     cpu_restore_interrupts(flags);
     return CALL_OK;
   }
-  KASSERT(!shutdown_requested && !sealed);
+  KASSERT(!shutdown_requested && !storage_sealed());
+  atomic_store_explicit(&storage_admission, STORAGE_DRAINING, memory_order_release);
   shutdown_requested = true;
   shutdown_done = false;
   wake_worker();
@@ -1174,7 +1207,7 @@ enum call_status npfs_shutdown_flush(void)
 void npfs_shutdown_cancel(void)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  sealed = false;
+  atomic_store_explicit(&storage_admission, STORAGE_RUNNING, memory_order_release);
   wake_worker();
 }
 

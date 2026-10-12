@@ -58,6 +58,8 @@ struct fat32_node {
   atomic_size_t admitted;
   atomic_bool returned;
   struct execution_group *cleanup_group;
+  enum call_status cleanup_status;
+  bool cleanup_pending;
   union {
     struct directory_object directory;
     struct file_object file;
@@ -175,6 +177,9 @@ static bool write_backing(struct fat32_mount *mount, enum block_operation operat
       struct block_completion completion;
       KASSERT(block_collect(&ticket, NULL, 0, &completion) == BLOCK_OK);
       result = completion.result;
+      if (result == BLOCK_OK && completion.bytes != count * FAT32_SECTOR_BYTES) {
+        result = BLOCK_IO_ERROR;
+      }
     }
     cpu_restore_interrupts(flags);
   }
@@ -295,6 +300,14 @@ static bool active_interval(struct fat32_mount *mount)
   return false;
 }
 
+static bool actor_stopped(struct process_control *actor)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool stopped = process_control_stopped(actor);
+  cpu_restore_interrupts(flags);
+  return stopped;
+}
+
 static enum call_status mutation_admission(struct fat32_mount *mount, struct npfs_job *job)
 {
   if (!mount->writable) {
@@ -305,6 +318,9 @@ static enum call_status mutation_admission(struct fat32_mount *mount, struct npf
   }
   if (!job->fat_actor) {
     return CALL_DENIED;
+  }
+  if (actor_stopped(job->fat_actor)) {
+    return CALL_ENDPOINT_CLOSED;
   }
   update_intervals(mount);
   for (struct fat32_interval *interval = mount->intervals; interval; interval = interval->next) {
@@ -325,6 +341,9 @@ static enum call_status interval_operation(struct fat32_mount *mount, struct npf
   }
   if (!job->fat_actor) {
     return CALL_DENIED;
+  }
+  if (actor_stopped(job->fat_actor)) {
+    return CALL_ENDPOINT_CLOSED;
   }
   update_intervals(mount);
   struct fat32_interval **owned = &mount->intervals;
@@ -525,15 +544,18 @@ void fat32_cleanup_nodes(struct fat32_node *nodes)
     struct execution_group *group = node->cleanup_group;
     node->cleanup_group = NULL;
     if (node->kind != OBJECT_MOUNT && mount->writable && node->record.mounted) {
+      struct npfs_store_context *previous = mount->context;
       struct npfs_store_context context = {.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS)};
-      mount->context = &context;
+      mount->context = previous ? previous : &context;
       enum call_status status = prepare_workspace(mount, 0);
       if (status == CALL_OK) {
         status = format_status(mount, fat32_mounted_object_forget(&node->record,
             &mount->workspace));
       }
-      mount->context = NULL;
+      mount->context = previous;
       if (status != CALL_OK) {
+        node->cleanup_pending = true;
+        node->cleanup_status = status;
         /* Retain the failed record/chain under mount accounting, not a dead
          * process or execution group's cleanup ownership. */
         if (group) {
@@ -573,6 +595,32 @@ void fat32_cleanup_nodes(struct fat32_node *nodes)
   }
 }
 
+static enum call_status retry_pending_cleanup(struct fat32_mount *mount)
+{
+  enum call_status status = CALL_OK;
+  struct fat32_node *node = mount->nodes;
+  while (node) {
+    struct fat32_node *next = node->next;
+    if (node->cleanup_pending && !mount->writer.stopped) {
+      node->retired_next = NULL;
+      fat32_cleanup_nodes(node);
+    }
+    node = next;
+  }
+  for (node = mount->nodes; node; node = node->next) {
+    if (node->cleanup_pending && status == CALL_OK) {
+      status = node->cleanup_status;
+    }
+  }
+  return status;
+}
+
+bool fat32_retired_pending(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  return retired_nodes != NULL;
+}
+
 static bool same_locator(const struct fat32_locator *a, const struct fat32_locator *b)
 {
   return a->parent_cluster == b->parent_cluster &&
@@ -607,6 +655,16 @@ static enum call_status wrap(struct fat32_mount *mount, uint64_t kind,
         if (retained) {
           *out = node_object(node);
           return CALL_OK;
+        }
+        if (mount->writable && node->record.mounted && node->record.attached) {
+          /* A zero-reference wrapper is never resurrected. Its attached record
+           * can be unbound allocation-free before a new canonical wrapper. */
+          enum call_status status = format_status(mount,
+              fat32_mounted_object_forget(&node->record, &mount->workspace));
+          if (status != CALL_OK) {
+            return status;
+          }
+          free_chain(node);
         }
       }
     }
@@ -1240,8 +1298,11 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
       return status;
     }
     struct byte_output output = {(void *)job->captured.address, 0, job->captured.size};
-    status = format_status(mount, fat32_read_range(&mount->volume, &node->locator,
-        0, job->captured.size, &mount->workspace, collect_bytes, &output));
+    status = format_status(mount, mount->writable ?
+        fat32_mounted_read_range(&node->record, 0, job->captured.size,
+            &mount->workspace, collect_bytes, &output) :
+        fat32_read_range(&mount->volume, &node->locator, 0, job->captured.size,
+            &mount->workspace, collect_bytes, &output));
     return status == CALL_OK && output.used != job->captured.size ? CALL_IO : status;
   }
   case NPFS_SIZE:
@@ -1283,6 +1344,14 @@ static void state(struct fat32_mount *mount, struct mount_state_reply *reply)
     memcpy(reply->destination_name, mount->writer.recovery.target_name,
         sizeof(reply->destination_name));
   }
+  for (struct fat32_node *node = mount->nodes; node; node = node->next) {
+    if (node->cleanup_pending) {
+      reply->flags |= MOUNT_STATE_CLEANUP_PENDING;
+      if (!mount->writer.stopped && reply->failure_status == CALL_OK) {
+        reply->failure_status = node->cleanup_status;
+      }
+    }
+  }
   for (struct fat32_mounted_object *object = mount->writer.objects; object; object = object->next) {
     if (!object->attached) {
       ++reply->detached_objects;
@@ -1311,7 +1380,11 @@ enum call_status fat32_shutdown_seal(struct npfs_store_context *context)
     if (!mount->writer.mutated) {
       continue;
     }
-    mount->context = context;
+    struct npfs_store_context seal_context = *context;
+    seal_context.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
+    mount->context = &seal_context;
+    /* Known preflight cleanup refusals remain explicit pending records. Their
+     * detached chains keep dirty set; power never retries or waits for views. */
     enum call_status status = format_status(mount, fat32_mounted_seal(&mount->writer,
         &mount->workspace));
     mount->context = NULL;
@@ -1356,6 +1429,10 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
     break;
   case NPFS_FAT_RETIRE:
     mount->published = true;
+    status = retry_pending_cleanup(mount);
+    if (status != CALL_OK && !mount->writer.stopped) {
+      break;
+    }
     if (mount->retired) {
       status = CALL_OK;
     } else if (mount->writable && mount->writer.stopped) {

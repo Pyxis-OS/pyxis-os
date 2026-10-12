@@ -37,6 +37,7 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
 void disk_cleanup_retired(struct disk_object *disks);
 /* BSP/IF=0: allocation-free retirement transfer to the owning worker. */
 struct disk_object *disk_take_retired(void);
+bool disk_retired_pending(void);
 void disk_retire(struct disk_object *disk);
 
 #endif

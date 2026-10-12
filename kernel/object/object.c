@@ -253,7 +253,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_TERMINAL_POINTER:
     return !(rights & ~TERMINAL_POINTER_RIGHT_CONTROL);
   case OBJECT_MOUNT:
-    return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE | MOUNT_RIGHT_RETIRE));
+    return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE | MOUNT_RIGHT_RETIRE | MOUNT_RIGHT_INTERVAL));
   case OBJECT_DISKS:
     return !(rights & ~(DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN));
   case OBJECT_DISK:

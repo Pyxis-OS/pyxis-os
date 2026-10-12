@@ -20,6 +20,7 @@ void fat32_request_complete(struct fat32_node *node);
 /* BSP/IF=0: allocation-free final destruction handoff. */
 void fat32_retire_node(struct fat32_node *node);
 struct fat32_node *fat32_take_retired(void);
+bool fat32_retired_pending(void);
 /* Sole worker, IF=1. */
 void fat32_cleanup_nodes(struct fat32_node *nodes);
 /* Sole worker: flush/seal retained views for clean power. */
