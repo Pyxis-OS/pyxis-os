@@ -222,6 +222,18 @@ while the pointer is pushed past the top edge and hides again when the pointer
 leaves. The motivation is recovering at least two text rows in the mux and
 Neovim workflow.
 
+## Test-run screen and idle blanking
+
+Owner idea, 2026-10-12; not scheduled. During automated or remote test runs, blank
+the display (black, or backlight or panel off if the display path supports it),
+mainly to prevent OLED burn-in on the Steam Deck from a static shell and space bar
+shown for hours, and to cut power and heat on the ThinkPad. There is no continuous
+animation, because compositing during benchmarks adds measurement noise. An
+optional marker is a very dark grey Pyxis logo moved rarely (about once a minute,
+colour may change per move), so its redraw cost stays negligible. Any key
+restores the real screen. The same mechanism could later become the general idle
+screen saver or blanker.
+
 ## Audio
 
 The [analog HDA engine](../devices/hda.md), [PCM sessions](../interfaces/audio.md)
