@@ -60,7 +60,7 @@ separate owner go.
 shared plan accepted by the owner, extracted from Claude/Git prerequisites:
 prepared POST, streamed GET/POST without an artificial response-size cap, and
 shell/Lua delivery.
-Task 1 (incremental libhttp GET) is assigned, 2026-10-12. Later tasks need their
+Task 1 (incremental libhttp GET) is delivered, 2026-10-12. Later tasks need their
 own go; the command-execution proposal is separate.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the

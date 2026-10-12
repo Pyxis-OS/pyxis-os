@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; task 1 assigned 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; task 1 delivered, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. All three
@@ -28,7 +28,7 @@ with no HTTP-shaped or POSIX-shaped kernel calls.
 
 ## Inspected starting point
 
-Main `34dfce9e`, userland `d560fbb0`: [httpfs/libhttp](../userland/http-fetch.md)
+Before task 1: main `088816ab`, userland `e878f4f`: [httpfs/libhttp](../userland/http-fetch.md)
 provide GET-only complete immutable snapshots, with a 16 MiB body allowance
 across redirects and 64 MiB shared body storage; OPEN fetches synchronously.
 [Verified TLS](../userland/https.md) has one active connection per process-local
@@ -138,11 +138,11 @@ All three defaults accepted 2026-10-11; not implemented.
 
 ## Ordered delivery tasks
 
-- [ ] **1. Small first task: incremental libhttp GET and final framing result.**
-  Factor body delivery from whole-body allocation; keep a snapshot collector for
-  existing callers during transition. Decode fixed/chunked/close-delimited
-  bodies in bounded chunks with explicit completion/failure and no total-body
-  allowance in the stream engine. Preserve TLS authenticated-EOF rules.
+- [x] **1. Incremental libhttp GET and final framing result.** Delivered
+  `http_get_open`/`http_stream_read` with bounded DATA, retained completion/failure,
+  no total-body allowance and authenticated TLS EOF. The snapshot collector
+  preserves existing callers. [Interface and limits](../userland/http-fetch.md#incremental-get);
+  [QEMU qualification and costs](../development/experiments/http-incremental-get.md).
   **After this task the owner can:** exercise the native engine against local
   slow/truncated and over-16-MiB GET fixtures and inspect chunks/final results.
 - [ ] **2. Fixed-body POST and overall deadlines.** Read a fixed-length staged
