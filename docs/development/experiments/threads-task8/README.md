@@ -182,15 +182,16 @@ CALL invokes native endpoints and copies; the receiver receives/copies/replies.
 SEND calls native sends, with a DRAIN control CALL per8messages (32per pass).
 Receipt release is native `syscall_close`, not libc descriptor close. No new
 lock, thread-self, descriptor or allocation call executes in these loops.
-All sample reporting happens **after every timed pass**, so FILE locking is
+All sample reporting happens **after all timed passes have finished**, so FILE locking is
 neither inside timing nor between passes. Successful kernel syscall-entry
 instructions/spills match; its scheduler correction is only after rejected entry.
 
 **Changed state, not a percentage attribution:** B runtime retains one extra
 CLOCK READ handle in each receiver (no THREADS/SLEEP authority is supplied).
-During SEND, DRAIN's receipt occupies slot3; each data receipt selects A slot5
-versus B slot6. The existing guarded capability reservation scans from slot0:
-six versus seven entry tests per data delivery,256extra tests per pass. Standalone
+Accounting for the common retained TLS and allocator MEMORY grants, source
+reconstruction predicts DRAIN's receipt at slot3 and data receipts at A slot7
+versus B slot8: eight versus nine entry tests in the guarded scan from slot0.
+This predicts256extra tests per pass; it is not a live table/count measurement. Standalone
 CALL receiver receipts still select slot3 in both; the sender's four-reply-slot
 reservation can scan farther depending on its startup grants. Indexed handle
 lookup is unchanged. This corrects the narrower earlier assertion that unchanged
@@ -214,7 +215,15 @@ with the subsequent completion ABI. No source probe or profiling is required.
 Userland #236 is now rebased onto `62da3399` (merged completion helpers), at
 `21cf935c`; #756 also includes current main's merged #758 completion ABI. The
 table above remains qualification of the original native A/B, not a measurement
-of those new inputs. Merge order remains userland #236 before Pyxis #756.
+of those new inputs. A new ordinary image build passed; fresh one/four-CPU2GiB
+boots passed the six managed modes (including63siblings/refusal/reuse), two
+runtime inspections and four-CPU IO inspection, with15FINAL0/complete records.
+Post-join GDB found task/storage counts1, FREE records with backing/observer0,
+VMborrowers0, empty condition/address waits and four-CPU global VMwaiters0.
+Both IO phases established actual parked `pipe_call` admissions and clean
+borrower state. Records are under `build/gate8-qualification/rebase-final/`;
+all owned VM/GDB/client jobs stopped. Merge order remains userland #236 before
+Pyxis #756.
 
 Four-CPU qualification exposed two failures before delivery. GDB caught a worker
 returning from its first failed malloc with native MEMORY `CALL_BUSY` still in
