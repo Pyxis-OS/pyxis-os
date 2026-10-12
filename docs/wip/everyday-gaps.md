@@ -11,7 +11,7 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
-| Moving directories | 2026-10-10, owner, after `mv` learned to move into a directory | Native, with libc `rename` | `mv` moves files only; libc `rename` and the native rename are file-only. The [directory move proposal](#directory-moves-proposal) is assigned to Codex alpha, 2026-10-12; owner decisions are pending. No copy-and-delete fallback. |
+| Moving directories | 2026-10-10, owner, after `mv` learned to move into a directory | Native, with libc `rename` | `mv` moves files only; libc `rename` and the native rename are file-only. The [directory move proposal](#directory-moves-proposal) is assigned to Codex alpha, 2026-10-12; contract accepted 2026-10-12; implementation authorized. No copy-and-delete fallback. |
 | xfer inside a remote mux pane | 2026-10-12, owner, during JVM work | Native (remote client + mux) | Refused by design (`PYXIS_REMOTE_MUX=1`, see [remote-terminal.md](../userland/remote-terminal.md#remote-multiplexer)); workaround: a separate non-mux connection. Pane-aware transfer is the [initial remote multiplexer limits](../technical-debt.md#initial-remote-multiplexer-limits) debt item; owner: no rush. |
 
 The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
@@ -25,7 +25,8 @@ Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump i
 
 ## Directory moves proposal
 
-Status: **proposal only, 2026-10-12; nothing below is accepted or implemented.**
+Status: **all three defaults accepted by the owner, 2026-10-12; implementation
+authorized, not yet delivered.**
 Scope is this gap. Inspection used Pyxis `8d8a1e39`, userland `5af803ef`
 and filesystem `414be0ac`; no runtime qualification is claimed.
 
@@ -49,7 +50,7 @@ merely changing the moved directory's entry is insufficient. The
 [host adapter](../../kernel/fs/hostfs.c) also admits only files, and its external
 name/type races differ from the kernel-owned stores.
 
-### Proposed native behavior
+### Accepted native behavior
 
 Extend the existing rename operation to directories; source kind comes from the
 entry under the mutation owner, not a caller's prior lookup. A same-parent rename
@@ -119,27 +120,22 @@ the existing native result cannot distinguish them. Successful same-store moves,
 empty-directory replacement and held identity follow the familiar rename behavior
 without inventing success or implementing copying.
 
-### Owner decisions — pending
+### Accepted decisions — 2026-10-12
 
-1. **Native edit default:** same-parent and cross-parent directory moves within
-   one instance, atomic with cycle refusal, same-kind empty replacement, existing
-   rights and refusal categories above. Alternative: initially forbid directory
-   replacement even when empty.
-2. **Held-authority default:** objects and delegated roots survive; existing cwd
-   chains keep their granted ancestors and may have stale descriptive text.
-   Alternative: refuse moves involving held cwd/root directories, which would
-   restrict ordinary use and require tracking holders.
-3. **First-slice default:** RAM and writable npfs only. FAT32 and host directory
-   moves return BAD_OPERATION; archive/read-only stores return READ_ONLY; provider
-   directories remain unsupported. Existing file rename remains available where
-   supported. Defer FAT32 directory moves until held-locator repair, `..`
-   publication and its ordered, non-journaled failure behavior are qualified. Alternative: include FAT32 in this
-   slice, enlarging the storage and failure contract.
+1. Atomic same-parent and cross-parent moves within one instance, with cycle
+   refusal, same-kind empty replacement and the rights/refusal categories above.
+2. Held objects, delegated roots and cwd chains survive; descriptive cwd text
+   may become stale. Moves do not grant the new parent or repair existing chains.
+3. RAM and writable npfs first. FAT32/host directory moves return BAD_OPERATION;
+   read-only stores return READ_ONLY. No cross-store copying. FAT32 directory
+   moves wait for held-locator repair, `..` publication and qualification of its
+   ordered, non-journaled failure behavior.
 
-After acceptance and separate implementation go, qualify same-parent and
-cross-parent moves, empty/nonempty replacement, self/descendant refusal,
-cross-store/mount refusal and trailing separators in QEMU. Keep directory/file
-handles, cwd chains and attenuated delegated roots live across moves; exercise
-relative lookup and bounded `..`. Reopen npfs after synchronization/reboot and
-check parent metadata and namespace consistency. No implementation is authorized
-by this proposal.
+### Authorized implementation and qualification
+
+- [ ] Native RAM/npfs directory moves and libc/`mv` delivery.
+- [ ] QEMU: same/cross-parent moves, empty/nonempty replacement, self/descendant
+  refusal, cross-store/mount refusal and trailing separators. Keep directory/file
+  handles, cwd chains and attenuated delegated roots live across moves; exercise
+  relative lookup and bounded `..`. Reopen npfs after synchronization/reboot and
+  check parent metadata and namespace consistency.
