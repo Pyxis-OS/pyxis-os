@@ -1,8 +1,9 @@
 # FAT32 volumes
 
-Status: **task 1 merged (#740); task 2 implemented and qualified for review.**
+Status: **tasks 1–2 merged (#740, #747); task 3 assigned 2026-10-12.**
 The directory-validation fixes (#743 / fs #33) are merged. The owner accepted the
-raw-write contract below on 2026-10-12. Later tasks still need their own go.
+raw-write contract below on 2026-10-12. The owner accepted task 3's binding on 2026-10-12 and assigned its implementation.
+Task 3 is not implemented yet; tasks 4–5 are unassigned.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -216,6 +217,157 @@ Directory-tail and volume-label fixes are included; embedded short-name spaces
 remain read compatibility, never creation provenance. No mount/write adapter,
 formatting or native ESP qualification is added.
 
+## Task 3 binding — accepted 2026-10-12
+
+[Baseline](../development/experiments/fat32-mount-baseline.md) records current
+main `173f1321` before changes. **Inspected:** [MOUNT](../../kernel/object/mount.c)
+is configured disk authority, not a mounted instance; npfs pools remain retained
+on the [filesystem worker](../../kernel/fs/npfs.c) after wrappers close. Raw claim
+checks use device/GPT-entry lists, not a cross-backend physical-extent registry.
+The [shared reader](../../fs/include/pyxis_fs/fat32.h) supplies path-based list/read,
+not retained native objects or offset reads. Limine supplies GPT disk/partition
+UUIDs, but the [boot adapter](../../boot/limine/entry.c) currently keeps neither.
+These are implementation gaps, not interfaces already available to applications.
+
+### Three accepted owner decisions — 2026-10-12
+
+1. **Binding and retirement: separate root and bound control.** Add
+   `DISK_OPEN_FAT32`, requiring the selected disk's existing MOUNT right, with
+   a one-based GPT entry and exact read-only directory rights. Successful admission
+   returns a root and a control for that mounted instance in one capability-table
+   batch; there is no half-installed pair. Reserve both slots before work. This is
+   not an atomic transaction with copying the reply into user memory. No new control
+   comes from ordinary FILE/lookup rights; READ alone cannot allocate a mount.
+   Configured npfs MOUNT remains unchanged.
+
+   Use a bound backend of the existing MOUNT protocol: OPEN_ROOT reopens only that
+   instance under its recorded read-only ceiling; OBSERVE supplies actual state;
+   a separate RETIRE right authorizes retirement. No caller-supplied raw range,
+   alternate device or writable upgrade is accepted. Actual data grants are LOOKUP,
+   ENUMERATE and READ_FILES, independently narrowed as today.
+
+   RETIRE does not wait for references: BUSY leaves the instance active when any data object,
+   admitted operation, unpublished returned grant or deferred cleanup remains.
+   Copied/delegated roots and files, cwd chains, queued transfers and launch grants
+   all count through their retained objects. Control aliases and this retirement
+   request do not themselves prevent retirement. Check and close new data admission
+   on the sole worker before destroying backing and removing exclusion; report OK
+   only after completion. Retired controls remain inert tombstones: observe/retire
+   is safe and idempotent, OPEN_ROOT fails, and remount creates a new instance/domain.
+   A completed failed read drains normally and cannot pin retirement forever.
+
+   Closing the final control does **not** implicitly retire or revoke data handles.
+   State/exclusion remains until an authorized opener reacquires control and retires,
+   or reboot. This preserves explicit retirement, at the cost of retained bounded
+   state if its controller dies; the trusted browser keeps selection authority/control
+   while children run. Failed admission releases this call's reserved slots, grants
+   and operation references. A failed reply copy closes its newly installed handles;
+   it cannot revoke references a sibling already copied/delegated. Release a new
+   provisional instance's backing/exclusion only after all its references drain.
+   Never discard a previously published or shared instance on another opener's failure.
+2. **Admission and exclusion: one worker-owned physical-extent registry.**
+   Key entries by inventoried device and checked half-open ranges in that device's
+   logical blocks. Track pending admissions, FAT instances, retained npfs pools and
+   raw claims. Reserve before probing/allocating, validate both GPT copies and the
+   complete FAT volume, then publish. Failed admission removes its reservation.
+   Repeated exact FAT opens with matching media/geometry share state, independent
+   of GUID/name spelling; another backend or an overlapping different extent is BUSY.
+
+   A whole-disk raw claim overlaps every registered extent. A partition claim
+   conflicts with that physical extent, not just its GPT ordinal. Preserve the
+   existing one-raw-claim-per-device restriction, NVMe blank/partition gates and
+   npfs retention/duplicate-pool policy. A retired FAT interval does not make
+   whole-disk RW OPEN possible while another npfs partition remains mounted;
+   partition publication still needs an already authorized eligible disk object.
+   Raw read handles do not become mount leases or immutable snapshots.
+
+   Read-only FAT admission can retain observed dirty/error flags when full structural
+   validation succeeds; it never clears them, repairs or replays anything. Corrupt,
+   unsupported or out-of-budget media refuses without weaker checks. No writes or
+   flush are issued by this read-only mount/retire path. External media mutation is
+   unsupported; device loss/I/O errors fail operations without permitting stale reuse.
+
+   Initial implementation budgets: four FAT instances, 32 MiB aggregate FAT
+   workspace/retained state, the existing shared 1 MiB/1024 native-wrapper budget,
+   depth 64, 67,108,864 work steps and 16,777,216 sectors per engine operation.
+   Reuse the serial worker's 32-job admission and cooperative 30-second deadline.
+   Charge pending and retained storage before allocation; LIMIT and NO_MEMORY are
+   distinct, with no partial root publication. These are implementation settings,
+   not FAT format limits or a total-kernel-memory guarantee.
+3. **Trusted ESP selection: boot provenance, explicit root delegation.**
+   Copy valid GPT disk/partition UUIDs and media kind from the executable's Limine
+   file into owned boot metadata; normalize UUID fields in the adapter and retain
+   no bootloader pointer. Match exactly one healthy inventoried GPT disk/ESP by both
+   identifiers. UUIDs select media, not authenticate contents. Missing/zero,
+   ambiguous, unsupported or inaccessible identity supplies no guessed ESP authority;
+   optical/PXE boot does not select an attached ESP merely because one exists.
+
+   The initial trusted bootstrap alone receives a boot-only MOUNT selection backend,
+   bound to that disk/partition. Its OPEN_FAT32 operation takes only read-only
+   root rights and uses the same admission path to return the first root/control pair;
+   it accepts no device/partition selector and grants no generic DISK MOUNT authority.
+   The returned control is the instance backend from decision 1, not this issuer.
+   A trusted inspection bootstrap retains issuer/control and delegates an `esp`
+   startup root to direct `ls`/`cat` readers, without disk, reacquisition, RETIRE or
+   descendant launch authority. Editable Lua, names and callers cannot change the
+   selected disk/partition. Ordinary URI reads never mount automatically.
+   For disposable-media qualification, a separate trusted install-mode selector
+   uses explicit disk/GPT selection and DISK MOUNT; it is not boot-ESP provenance.
+   A required unavailable root fails that request; it does not fall back to another
+   disk or a global `esp://`. Installed shell bindings/config loading/editor workflows
+   remain task 5; task 3 introduces no descendant-launch policy.
+
+### Adapter and lifetime details within task 3
+
+Extend the shared read engine with confined entry locators, single-component
+lookup/enumeration and offset reads. Intern canonical objects across long-name,
+short-alias and repeated capability paths. A locator is internal validation state,
+not identity: assign genuine native domain/object IDs using the existing
+[metadata allocator](../../include/kernel/fs/metadata.h). The domain lasts for
+this mounted instance; IDs do not wrap/recycle and comparison follows the existing
+[held-reference contract](../interfaces/file-metadata.md). Empty files remain distinct.
+No after-final-close or remount identity promise is added. Task 3 has no rename,
+unlink or replacement; the accepted held-victim semantics still gate task 4.
+
+FILE READ/SIZE/INFO and directory LOOKUP/ENUMERATE/INFO use ordinary native
+interfaces with actual rights and staged replies. Enumerate valid UTF-8 LFNs;
+lookup remains ASCII long name/alias with preserved spelling. Dot entries grant
+no parent authority. Cursors remain opaque, shared by canonical directory identity,
+with unchanged short-buffer/END rules. Report real SIZE/DOMAIN/OBJECT validity;
+FAT's local DOS timestamps have no known UTC offset, so MTIME remains invalid.
+DIRECTORY_FILESYSTEM_INFO stays BAD_OPERATION in this slice: its existing record
+is npfs-specific, and no pool UUID/journal generation is fabricated.
+
+Use the existing 128 MiB selected-image capture path; no whole-volume/file snapshot
+or eager file-buffer wrapper. Captured executable bytes cease to pin the volume
+once the input operation/FILE reference drains; actual delegated resources still
+pin it. FILE ranges publish no bytes on operational failure. No provider directory,
+service-namespace extension, POSIX unmount, new worker or allocator lock is introduced.
+Startup roots/cwd are directory grants; the endpoint service namespace is separate.
+
+The BSP filesystem worker owns mutable registry, mount, engine and identity state
+with IF=1. Existing BSP allocation/VM helpers and short IF=0 handoffs own allocation,
+publication and allocation-free destructor transfer. No user pointer/AP stack,
+capability entry or held lock crosses disk waits. Worker cleanup returns backing,
+identity records and admission charges before releasing exclusion. Admission and
+retirement must also unwind correctly during process/group stop and failed replies.
+
+### Task 3 qualification
+
+Keep task 3 as one bounded implementation: dependency reader-locator APIs first,
+then the native adapter/registry/control and trusted bootstrap. Repeat the baseline
+npfs workload; compare FAT ordinary ls/cat/offset reads against the inspector on
+identical disposable files. Inspect same-name/alias/empty-file identity, readonly
+rights, two opens sharing one state, other-partition npfs coexistence, overlapping
+raw admission, and successful reacquisition only after retirement. Exercise BUSY
+with files, cwd, queued grants/operations and cleanup; closed/replied-failed data
+must drain. Repeated retire/remount gets a fresh domain, and closed control alone
+must retain state as specified. Corrupt/budget/deadline failures before publication
+leave no backing/reservation leak; failed replies preserve escaped/shared references
+and release only this opener's ownership. Check absent/ambiguous boot provenance
+without fallback. QEMU/GDB first; owner-routed native ESP checks later, read-only.
+No writes, new test harness, fault injection, generic mount CLI or task 4 work.
+
 ## Parked cross-cutting directions
 
 [Nested execution groups](nested-execution-groups.md) are not a prerequisite for
@@ -251,7 +403,7 @@ and mounted file I/O do not require its implementation.
   partition claims; qualify on disposable images, without whole-tree formatting.
   **After this task the owner can:** add and replace Pyxis-created files on a
   scratch FAT volume that Linux reads, without rebuilding that volume.
-- [ ] **3. Native read-only mount and release.** Kernel FILE/directory wrappers,
+- [ ] **3. Native read-only mount and release — assigned 2026-10-12; binding accepted, implementation assigned.** Kernel FILE/directory wrappers,
   shared extent registry, alias/object identity, claim exclusion, reference drainage
   and trusted ESP bootstrap/root delegation. Design the native mount/retire binding
   before code; no userspace scheme proxy or implicit mount authority.
