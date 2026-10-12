@@ -14,16 +14,17 @@ profile is claimed; those remain gate 8.
   `2d2344355c6825f3293e026aafe185c5632abfdb`. Ordinary kernel, SDK, C++ runtime,
   ports, userland and image builds passed with locally rebuilt Clang/LLD;
   unchanged-source compiler-rt/tools reused the existing compiler installation.
-  The owner-built matching container and exact-head CI remain pending.
+  The owner-built matching container is published; exact-head CI is being rerun.
 - B ELF SHA256 `c3d2b1b3737eea96b6054eb6fb76a69c9a1a82c25b302a9919d1a6200a27d375`;
   initrd `38f9717f8ba077f98beb0aa0795e18e84a0c9b088f2a8ab407777684ea3ceba3`.
   Each A/B kernel used its matching initrd: the startup ABI and errno changed.
 
-Review rebase: integration now contains main `173f1321`; userland #231 is
-`3184f097`, containing main `5fa4f42`. Range-diff confirms all three TLS
+Review rebase: integration now contains main `dc4b1487`; userland #231 is
+`24f6b6bb`, containing main `40f81eb`. Range-diff confirms all three TLS
 runtime/probe commits are unchanged. Ports `fd1eb30` still contains current
 ports main `5ba172c`. The measurements above and below retain their original
-inputs; no static initial-thread storage change was made.
+inputs; no static initial-thread storage change was made. The published image
+digest is `sha256:01ed06d712567c7e242cf43a01fb558557623863c11d5645e6db198ba512d5d7`.
 
 Local compiler/linker probes passed mixed, empty, zero-only and over-aligned
 TLS, P1F/ELF ordinary-load equivalence and malformed/unsupported model refusal.
