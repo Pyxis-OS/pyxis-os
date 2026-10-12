@@ -16,6 +16,7 @@
 #include <kernel/object/capability.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/completion.h>
 #include <kernel-config.h>
 #include "npfs_store.h"
 
@@ -451,7 +452,7 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
     }
     return wrap_inode(inode, job->child_rights, &job->object);
   }
-  if (!job->reservation.table) {
+  if (!job->reservation.table && !job->completion) {
     return CALL_BAD_REQUEST;
   }
   struct npfs_node *node;
@@ -460,9 +461,11 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
     return status;
   }
   uint64_t flags = cpu_save_interrupts();
+  /* Completion CREATE retains returned authority independently; only the
+   * synchronous path owns a borrowed destination table and installs here. */
   enum capability_result prepared = capability_grant_retain(node_object(node),
       job->child_rights, 0, &job->grant);
-  if (prepared == CAP_OK) {
+  if (prepared == CAP_OK && !job->completion) {
     prepared = capability_validate_grants(job->reservation.table, &job->grant, 1);
   }
   cpu_restore_interrupts(flags);
@@ -471,17 +474,21 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
         job->kind, &inode);
     if (status == CALL_OK) {
       node->inode = inode;
-      flags = cpu_save_interrupts();
-      capability_install_reserved(&job->reservation, &job->slot, &job->grant,
-          1, &job->handle);
-      cpu_restore_interrupts(flags);
+      if (!job->completion) {
+        flags = cpu_save_interrupts();
+        capability_install_reserved(&job->reservation, &job->slot, &job->grant,
+            1, &job->handle);
+        cpu_restore_interrupts(flags);
+      }
     }
   } else {
     KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT);
     status = prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
   }
   flags = cpu_save_interrupts();
-  capability_grant_release(&job->grant);
+  if (status != CALL_OK || !job->completion) {
+    capability_grant_release(&job->grant);
+  }
   object_release(node_object(node));
   cpu_restore_interrupts(flags);
   return status;
@@ -640,10 +647,11 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     if (job->count > sizeof(job->data)) {
       return CALL_BAD_REQUEST;
     }
-    size_t count;
+    size_t count = 0;
     enum call_status status = npfs_store_read(context, node->inode, job->offset,
         job->data, job->count, &count);
-    if (status == CALL_OK) {
+    job->progress = count;
+    if (status == CALL_OK || job->completion) {
       job->count = count;
     }
     return status;
@@ -659,10 +667,11 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     if (job->count > FILE_WRITE_MAX_BYTES) {
       return CALL_BAD_REQUEST;
     }
-    size_t count;
+    size_t count = 0;
     enum call_status status = npfs_store_write(context, node->inode, job->offset,
         job->data, job->count, &count);
-    if (status == CALL_OK) {
+    job->progress = count;
+    if (status == CALL_OK || job->completion) {
       job->count = count;
     }
     return status;
@@ -713,6 +722,8 @@ static void complete_job(struct npfs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct npfs_request *request = job->user_request;
+  struct native_completion *completion = job->completion;
+  job->completion = NULL;
   job->user_request = NULL;
   job->node = NULL;
   job->destination = NULL;
@@ -721,7 +732,9 @@ static void complete_job(struct npfs_job *job)
     fat32_request_complete(job->fat_node);
   }
   job->fat_node = NULL;
-  capability_grant_release(&job->grant);
+  if (!completion) {
+    capability_grant_release(&job->grant);
+  }
   capability_reservation_release(&job->reservation, &job->slot);
   job->next = NULL;
   if (job->admitted) {
@@ -731,6 +744,38 @@ static void complete_job(struct npfs_job *job)
   job->state = NPFS_JOB_COMPLETE;
   if (request) {
     bsp_request_complete(&request->request);
+  }
+  if (completion) {
+    uint8_t output[FILE_PAYLOAD_MAX];
+    size_t size = 0;
+    enum call_status status = job->status;
+    if (job->operation == NPFS_READ) {
+      completion->progress = job->progress;
+      completion->progress_known = status != CALL_OUTCOME_UNKNOWN;
+      if (status == CALL_OK || job->progress) {
+        struct file_read_reply reply = {.read = job->progress};
+        memcpy(output, &reply, sizeof(reply));
+        memcpy(output + sizeof(reply), job->data, job->progress);
+        size = sizeof(reply) + job->progress;
+      }
+    } else if (job->operation == NPFS_WRITE) {
+      completion->progress = job->progress;
+      completion->progress_known = job->progress || status != CALL_OUTCOME_UNKNOWN;
+      if (status == CALL_OK || job->progress) {
+        struct file_write_reply reply = {.written = job->progress};
+        memcpy(output, &reply, sizeof(reply));
+        size = sizeof(reply);
+      }
+    } else if (job->operation == NPFS_SIZE && status == CALL_OK) {
+      struct file_size_reply reply = {.size = job->offset};
+      memcpy(output, &reply, sizeof(reply));
+      size = sizeof(reply);
+    }
+    struct capability_grant grant = job->grant;
+    job->grant = (struct capability_grant){0};
+    completion->backend = NULL;
+    kfree(job);
+    native_completion_finish(completion, status, output, size, &grant);
   }
 }
 
@@ -839,11 +884,21 @@ static void npfs_worker(void *argument)
     if (job) {
       flags = cpu_save_interrupts();
       struct execution_group *previous = object_cleanup_enter(job->user_request ?
-          job->user_request->request.cleanup_group : NULL);
+          job->user_request->request.cleanup_group : job->completion ?
+          job->completion->cleanup_group : NULL);
+      bool start = !job->completion || native_completion_mark_started(job->completion);
       cpu_restore_interrupts(flags);
       struct npfs_store_context context = context_for(job->deadline);
-      job->status = sealed && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
-          perform(&context, job);
+      context.completion = job->completion;
+      if (!start) {
+        job->status = native_completion_cancel_reason(job->completion);
+        if (job->operation == NPFS_READ || job->operation == NPFS_WRITE) {
+          job->count = 0;
+        }
+      } else {
+        job->status = sealed && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
+            perform(&context, job);
+      }
       job->format_status = context.format_error;
       job->backing_error = context.backing_error;
       flags = cpu_save_interrupts();
@@ -926,7 +981,8 @@ enum call_status npfs_submit(struct npfs_job *job)
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!job || job->state != NPFS_JOB_IDLE || job->object || job->captured.address ||
       job->captured.size || job->captured.backing_bytes || job->next ||
-      job->user_request || job->admitted || (unsigned)job->operation > NPFS_RAW_CLAIM) {
+      job->user_request || job->completion || job->admitted ||
+      (unsigned)job->operation > NPFS_RAW_CLAIM) {
     return CALL_BAD_REQUEST;
   }
   if (!available) {
@@ -942,6 +998,49 @@ enum call_status npfs_submit(struct npfs_job *job)
   job->deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
   enqueue_job(job);
   return CALL_OK;
+}
+
+enum call_status npfs_completion_reserve(struct native_completion *operation,
+    enum npfs_operation code, struct npfs_node *node)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!available) {
+    return CALL_UNAVAILABLE;
+  }
+  struct npfs_job *job = kmalloc(sizeof(*job));
+  if (!job) {
+    return CALL_NO_MEMORY;
+  }
+  if (!reserve_job()) {
+    kfree(job);
+    return CALL_BUSY;
+  }
+  *job = (struct npfs_job){.operation = code, .node = node,
+    .rights = operation->target.rights, .completion = operation,
+    .deadline = operation->deadline_ns, .admitted = true};
+  operation->backend = job;
+  return CALL_OK;
+}
+
+void npfs_completion_start(struct native_completion *operation)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct npfs_job *job = operation->backend;
+  KASSERT(job && job->state == NPFS_JOB_IDLE && job->admitted);
+  enqueue_job(job);
+}
+
+void npfs_completion_discard(struct native_completion *operation)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct npfs_job *job = operation->backend;
+  if (!job) {
+    return;
+  }
+  KASSERT(job->state == NPFS_JOB_IDLE && job->admitted);
+  KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
+  operation->backend = NULL;
+  kfree(job);
 }
 
 struct npfs_request *npfs_request_prepare(enum npfs_operation operation_code)

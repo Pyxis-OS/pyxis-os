@@ -8,6 +8,7 @@
 struct hostfs_node;
 struct npfs_node;
 struct fat32_node;
+struct native_completion;
 
 enum directory_backing {
   DIRECTORY_INITRD,
@@ -69,5 +70,11 @@ void directory_init_fat32(struct directory_object *directory, struct fat32_node 
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
+
+/* BSP/IF=0, inline copied names and retained parent. CREATE returns owned FILE
+ * authority; no destination table is lent to the filesystem worker. */
+enum call_status directory_completion_reserve(struct native_completion *operation);
+void directory_completion_start(struct native_completion *operation);
+void directory_completion_discard(struct native_completion *operation);
 
 #endif

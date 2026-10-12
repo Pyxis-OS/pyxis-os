@@ -28,6 +28,7 @@ struct npfs_node;
 struct fat32_node;
 struct kernel_object;
 struct npfs_request;
+struct native_completion;
 
 enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
@@ -65,6 +66,7 @@ struct npfs_job {
   struct boot_origin origin;
   uint64_t rights, child_rights, destination_rights, kind, offset;
   size_t count;
+  size_t progress; /* Completion profile: known copied/accepted byte prefix. */
   char name[NPFS_NAME_MAX + 1];
   char destination_name[NPFS_NAME_MAX + 1];
   size_t destination_length;
@@ -92,6 +94,7 @@ struct npfs_job {
   /* Internal queue/completion ownership. */
   struct npfs_job *next;
   struct npfs_request *user_request;
+  struct native_completion *completion; /* Owned independent completion record. */
   uint64_t deadline;
   bool admitted;
 };
@@ -119,6 +122,12 @@ void npfs_forward(struct npfs_request *request);
  * COMPLETE and can inspect completion only on BSP/IF=0. This does not submit a
  * synchronous executor request from a kernel worker. No automatic mount/probe. */
 enum call_status npfs_submit(struct npfs_job *job);
+/* BSP/IF=0. Owns a separate job and one of the same 32 admission slots before
+ * acceptance. Caller fills copied inputs before start; no table crosses over. */
+enum call_status npfs_completion_reserve(struct native_completion *operation,
+    enum npfs_operation code, struct npfs_node *node);
+void npfs_completion_start(struct native_completion *operation);
+void npfs_completion_discard(struct native_completion *operation);
 /* BSP/IF=0 once after task_init and gpt_start. */
 void npfs_start(void);
 /* Engine invariant: only the filesystem worker on BSP with IF=1 owns state. */
