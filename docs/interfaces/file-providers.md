@@ -149,3 +149,7 @@ See the [service overview](userspace-services.md) for authority and lifetime acr
 protocols. Format negotiation and writable providers remain
 [scheme-provider extensions](../wip/userspace-scheme-providers.md); shared-memory
 transfers need a separate ownership contract.
+
+[Prepared HTTP transactions](http-transactions.md) add a separate PREPARE and
+forward-only STREAM contract. Existing provider OPEN returns snapshots and keeps
+its redirect/budget semantics; it does not implicitly commit a POST.

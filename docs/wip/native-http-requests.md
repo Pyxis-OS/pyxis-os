@@ -210,41 +210,22 @@ integration and the HTTP fix below remain task 3 work.
 
 ### Task 3 receive contract — accepted 2026-10-12
 
-Source inspection during implementation, 2026-10-12: receiver READABLE reserves
-nothing. A queued CALL can expire between `wait_many` and `RECEIVE`; ordinary
-RECEIVE then waits indefinitely if the queue is empty. The provider cannot
-guarantee network/deadline/status/abort progress through that wait. This is a
-new interface decision, not part of the accepted native completion scope.
+Owner option A: header-only `ENDPOINT_TRY_RECEIVE` and libpyxis helper, with
+RECEIVE's owner/transport authority, packet, selection priority and retryable
+collection. An empty open receiver returns `CALL_WOULD_BLOCK`; service loops
+never block on stale readiness. Ordinary RECEIVE is unchanged. See
+[receiver readiness](../interfaces/endpoints.md#receiver-readiness).
 
-**Option A accepted by the owner, 2026-10-12: add `ENDPOINT_TRY_RECEIVE` and a libpyxis helper.** Header-only
-request and the existing endpoint packet. Same owning process and
-`HANDLE_TRANSPORT_RECEIVE` authority, selection/receipt/grant semantics,
-CANCEL/RETIRE priority and retryable native-completion collection as RECEIVE.
-An empty open receiver returns `CALL_WOULD_BLOCK` without parking or installing
-grants; a closed receiver returns `CALL_ENDPOINT_CLOSED`. Readiness still
-reserves nothing. The provider waits with `wait_many`, then collects with TRY
-and continues its other work if readiness became stale. Ordinary RECEIVE stays
-unchanged. Qualify empty/closed cases, queued-message expiry and a provider's
-receiver/TCP/deadline progress in QEMU. This needs a narrow kernel/ABI change.
+The provider uses cooperative native completion/TCP/TLS progress. Remaining
+synchronous phases: DNS ID/port randomness (**3 s**), TLS entropy (**5 s**), clock/
+UDP open/cleanup IPC, allocation and local cryptography. The request deadline
+also bounds entropy waits; STATUS/ABORT cannot run during these calls. Trust/PSA
+setup precedes publication. No fabricated entropy-WANT result is included.
+[Implemented facets and limits](../interfaces/http-transactions.md).
 
-The provider loop uses TRY after readiness, never ordinary blocking RECEIVE.
-This adds no threads, reservations or native completion operation. Implementation
-and QEMU qualification are assigned within task 3; deadline-bounded RECEIVE is
-not selected.
-
-Other synchronous phases retained by this first scope: DNS ID/port randomness
-(up to three seconds), TLS entropy callbacks (up to five seconds), clock and
-UDP open/cleanup service handoffs, allocation and local cryptographic work.
-Status/abort cannot run during those calls; no asynchronous RANDOM operation or
-fabricated entropy-WANT result is included. Trust/PSA setup occurs before service
-publication. The provider uses cooperative HTTP/TLS steps; the legacy blocking
-libhttp APIs remain for compatibility callers, not for its OPEN/COMMIT handlers.
-
-**Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
-fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
-204). Enforce zero decoded content and retain 205 on failure; qualify empty/nonempty
-fixed, chunked and close-delimited cases. This is distinct from 204 framing
-([RFC 9110 §15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6),
+The task 3 205 correction rejects nonempty decoded Reset Content while retaining
+HTTP status; empty fixed/chunked/close-delimited framing remains valid, distinct
+from 204 ([RFC 9110 §15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6),
 [RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3)).
 
 ## Accepted owner decisions

@@ -1428,10 +1428,12 @@ CPU-bound cryptography. Revisit with demonstrated endpoint or scheduling demand 
 
 ## HTTP provider responsiveness
 
-Each [HTTP/HTTPS provider](userland/http-fetch.md) task performs synchronous fetches, so while it fetches, existing snapshot reads and lifecycle processing wait
-behind it and retired bodies can keep occupying the storage budget. A fetch has a 30-second budget or earlier caller deadline, ordinary file helpers still submit
-unlimited IPC waits, queued work can compound the delay, and cancellation cannot interrupt a blocking network operation instantly. Revisit with asynchronous
-service work and wait sets; no worker-process or thread framework is included.
+The [prepared provider](interfaces/http-transactions.md#service-and-limits) uses
+native completions and cooperative TCP/TLS progress, but DNS ID/port randomness
+still waits synchronously up to **3 s**, and TLS entropy up to **5 s**, bounded by
+the request deadline. STATUS/ABORT cannot run during those waits or local
+cryptography/service handoffs. Revisit a bounded random-completion facility when
+consumer responsiveness requires it; never return fabricated entropy-WANT results.
 
 ## Native completion per-process admission
 
@@ -1446,12 +1448,11 @@ concurrency, with explicit per-process/receiver budgets and teardown ownership.
 
 ## HTTP shared-instance admission
 
-The planned [native HTTP first slice](wip/native-http-requests.md#ordered-delivery-tasks)
+The [native HTTP provider](interfaces/http-transactions.md#service-and-limits)
 admits one active exchange per provider process, shared by aliases/binding clients.
 A long download therefore denies Claude/Git/URI exchange admission on that instance.
 Per-consumer provisioning/concurrency is deferred; revisit isolation or admission
 before Git/Claude integrations run alongside downloads, without widening task 3.
-This limit is not implemented yet.
 
 ## Configured mount discovery latency
 

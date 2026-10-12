@@ -37,7 +37,8 @@ and CLOSE syscalls:
 | `endpoint_invoke()` / `endpoint_notify()` | Exported client | CALL / SEND a provider protocol operation |
 | `endpoint_request()` | Callable handle | Admit a request with an optional deadline, then wait for its result or transport failure |
 | `endpoint_send()` | Client handle | Admit a one-way message and return without waiting for completion |
-| `endpoint_receive()` | Receiver handle | Take a cancellation, retirement notice or oldest queued message |
+| `endpoint_receive()` | Receiver handle | Wait for and take a cancellation, retirement notice or oldest queued message |
+| `endpoint_try_receive()` | Receiver handle | Collect the same packet, or return `CALL_WOULD_BLOCK` without waiting for a message |
 | `endpoint_reply()` | CALL receipt handle | Complete that request and consume the receipt |
 | `endpoint_finish()` | Receipt handle | Finish a SEND or canceled CALL, or abandon an unanswered CALL |
 
@@ -106,8 +107,8 @@ ordinary client SEND continues to report admission only.
 
 ## Operation admission and user buffers
 
-One RECEIVE operation owns admission per receiving endpoint through capacity
-growth, sleep and collection. A competing RECEIVE returns BUSY before dequeuing;
+One RECEIVE or TRY_RECEIVE operation owns admission per receiving endpoint through capacity
+growth, sleep and collection. A competing receive returns BUSY before dequeuing;
 SEND/CALL and replies to other receipts remain available. REPLY owns a transaction
 per receipt, stages its bounded payload before completion, and refuses competing
 same-receipt replies before effects. CLOSE retains its logical cancellation rules.
@@ -134,7 +135,14 @@ and adds no ERROR. Export withdrawal or final-client closure does not close the
 receiver; retirement remains a receivable notice.
 
 Readiness consumes and reserves nothing. A queued CALL can expire between the
-scan and RECEIVE; RECEIVE retains its existing blocking semantics. Registration
+scan and collection. Ordinary RECEIVE retains its blocking semantics; service
+loops use header-only `ENDPOINT_TRY_RECEIVE` after readiness and continue other
+work on `CALL_WOULD_BLOCK`. TRY has the same owning-process and RECEIVE transport
+authority, priority, receipts and retryable completion collection. It reserves
+nothing on an empty receiver. Closure reports `CALL_ENDPOINT_CLOSED` if the
+receiver remains valid; using its closed local handle reports `CALL_BAD_HANDLE`.
+Collection of an available packet can still require the existing BSP capability
+table growth; TRY does not change allocation admission. Registration
 precedes the first locked scan and is removed before releasing the retained
 receiver. Producers notify the existing readiness workers after unlocking, only
 on a transition to readable or closed while interests are registered. An earlier

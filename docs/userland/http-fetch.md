@@ -1,6 +1,6 @@
 # Userspace HTTP and HTTPS fetching
 
-The `httpfs` userspace service connects the bounded fetch library to
+The `httpfs` userspace service connects the incremental fetch library to
 [provider OPEN and exported FILE snapshots](../interfaces/file-providers.md). Ordinary file
 consumers use `http://` and `https://` through their delegated namespace. Separate
 provider instances serve the two schemes. Publication performs no fetch; boot
@@ -8,6 +8,12 @@ and local files remain usable without networking. HTTPS verifies certificates
 against packaged public roots and any explicitly configured custom roots.
 The [TLS contract](https.md) describes the profile, trust updates, native hooks
 and TLS memory accounting.
+
+[Prepared native transactions](../interfaces/http-transactions.md) additionally
+return body/control/response/observation grants, serving bounded response chunks
+before completion. This does not yet change libc FILE opens or shell redirection.
+The stock JSON aliases preserve read-only authority; POST requires explicitly
+provisioned private staging and separate write authority.
 
 ## Use and startup
 
