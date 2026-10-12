@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–2 delivered; task 3 design review assigned, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. All three
@@ -28,13 +28,14 @@ with no HTTP-shaped or POSIX-shaped kernel calls.
 
 ## Inspected starting point
 
-Before task 1: main `088816ab`, userland `e878f4f`: [httpfs/libhttp](../userland/http-fetch.md)
-provide GET-only complete immutable snapshots, with a 16 MiB body allowance
-across redirects and 64 MiB shared body storage; OPEN fetches synchronously.
-[Verified TLS](../userland/https.md) has one active connection per process-local
-runtime. Native FILE uses explicit offsets and zero-length reads mean EOF;
-`pyxis_stdio_response` is copied open metadata, not live final status. These must
-not be reinterpreted as a growing seekable FILE or a successful truncated download.
+Main `ecdeb0f4`, userland `d6842f8`: [libhttp](../userland/http-fetch.md)
+now streams GET/fixed-file POST with retained framing results and explicit long
+deadlines. Its OPEN/upload path still waits through headers; the provider cannot
+call it synchronously from its service loop. Task 3 must expose cooperative
+progress between bounded network operations. [httpfs](../interfaces/file-providers.md#http-and-https-snapshots)
+still returns complete FILE snapshots, with a 16 MiB chain allowance and 64 MiB
+body storage. TLS has one active connection per runtime. Native FILE offsets/SIZE
+and copied `pyxis_stdio_response` metadata remain unsuitable for a live response.
 
 ## Carried-forward accepted contract
 
@@ -78,27 +79,123 @@ consumer policy, not limits imposed on Git, GET or downloads.
 
 ## Capability-valued variables and task 3 review
 
-A prepared request is a capability. Task 5's private shell bindings are the first
-form of capability-valued variables and must be designed to later become, or sit
-under, entries of the cross-cutting
-[capability-valued environment direction](capability-environment.md), not a
-separate shell-only mechanism. Never encoding a capability as an environment
-string or printed handle does not exclude that direction; the credential rule
-forbids secret bytes in argv/environment/history/logs, not request capabilities.
-Implementing the capability environment is outside this milestone unless
-separately assigned.
+**Proposal, 2026-10-12; owner decisions required before code.** This refines the
+accepted HTTP contract. Task 5 uses the same request value; the parked
+[capability environment](capability-environment.md) and
+[nested groups](nested-execution-groups.md) get no implementation here.
 
-**Before implementing task 3, the assigned agent must stop for owner review**
-with an object/rights/lifetime/inheritance proposal: what a prepared-request
-capability carries; how body/control/response/observation rights split; what
-copying, child inheritance or holding it past the shell means; and how it sits
-in a capability-valued variable. Accepted defaults do not waive this checkpoint.
-Motivating workflow: log in, extract a token with jq, and prepare another request
-with it, keeping credential bytes on the private preparation path.
+### 1. Facets and values — default: separate exports, typed values, explicit copies
+
+The prepared capability is an opaque control reference to one provider record:
+fixed method/endpoint/validated headers, trust context, deadline, resource admission
+and state. It grants no network/trust/backing-file or credential-read authority.
+
+| Facet | Rights and behaviour |
+| --- | --- |
+| Control | Independently attenuable COMMIT/ABORT; repeated COMMIT observes, never resubmits |
+| Body | Exported FILE WRITE, including SIZE/RESIZE; POST only; no READ; copies freeze together; SYNC unsupported |
+| Response | Generic exported STREAM READ: shared forward consumption, no offset/seek/SIZE; failure is an error, never successful EOF |
+| Observation | Separate STATUS-only export: phase, submission certainty, HTTP/framing status, counters and cleanup errors; no mutation/request headers |
+
+PREPARE atomically returns control/body/observation (GET omits body), without
+network activity. Existing read-only authority permits GET preparation; POST
+needs separate preparation authority, never granted by an alias. First COMMIT
+freezes and starts; its retained receipt owns opening work until its deferred
+reply hands off a reader after headers, before the whole body, with observation.
+That initial handoff is single-use; later readers copy a holder's grant. Later
+COMMIT returns status, not another reader. Cancel before REPLY commits aborts
+unfinished work and releases provisional readers; after successful REPLY, reader
+retirement governs, even if collection fails. Never replay submission/data.
+
+The native binding owns control and selected facets, adding response after handoff;
+a response-only value owns reader/observation. Copying retains the same request
+and cursor, not a new POST. Unset/replacement closes only that binding's references.
+Launch copies selected narrower grants as named resources: producer gets body,
+reader gets response/observation, monitor gets observation. Control inheritance is
+opt-in and may retain staging past shell exit; ordinary children inherit nothing
+merely because the binding exists. Move is the alternative, not the default.
+No handle serialization, credential strings or session-wide request publication.
+String getenv/startup stay unchanged; future typed lookup/configuration/revocation
+remain the parked direction's questions.
+
+Separate exports matter because [retirement](../interfaces/endpoints.md#exports-and-retirement)
+counts all references, not rights: observers must not retain control. Even a
+zero-right control copy retains its export. Providers authorize facets using
+invocation rights, not payload masks, and drop provisional client handles after
+handoff. A pipe plus observation is the alternative to STREAM, but pipe EOF also
+means provider failure and requires a paired completion adapter. Task 3 supplies
+native STREAM helpers; task 4 adds stdio/standard-stream support. Lost delivered
+READ replies may consume bytes and fail that reader; framing observation cannot
+turn its IPC failure into success. Ordinary FILE semantics stay unchanged.
+
+### 2. Lifetime and admission — default: one reservation, references, fixed deadline
+
+Reserve the instance's one transfer slot at PREPARE; other preparations refuse
+until terminal framing/abort, with no queue/automatic retry. Bounded unread bytes
+and observations may remain afterwards. Admission counts memory/storage and the
+existing 64 live/unacknowledged exports; terminal references can exhaust it.
+Alternative: admit several preparations and contend only at COMMIT. The default
+exposes shared-instance contention even while a large body is being staged.
+
+COMMIT closes mutation admission, rejects queued/new writes and drains mutations
+already admitted by the provider before pinning length. Provider-observed failed
+or uncertain mutations prevent submission. Lost client WRITE replies are not
+always visible to it; producer/coordinator failure must also prevent COMMIT.
+Private disk backing needs an explicitly delegated, isolated mounted directory:
+exclusive create, unlink before writer export, retain native READ|WRITE privately.
+Clients get no subtree access/writable alias. Missing provision refuses staging;
+shared home/tmp names are not privacy. RAM staging is explicit/countable. Erase
+owned credentials/scratch; unlink/close does not promise secure disk erasure.
+
+Control retirement before COMMIT abandons staging even with writers/observers.
+Closing one copy does not revoke others/admitted calls. After handoff, readers
+retain the exchange; their final retirement aborts unfinished reception. Observers
+retain small final state, not active work/backing storage. The original deadline
+bounds staging/network/framing; completed bytes/status remain readable afterwards.
+ABORT is idempotent local cancellation, not rollback; terminal framing is immutable.
+Native work retains storage until drain, even after a receipt is finished; no reply
+uses a finished receipt and ACK cannot precede safe reclamation. Provider death
+fails facets; missing final status fails, never completes.
+
+The provider is independently owned, not a caller's job descendant. Group stop
+closes member grants, but outside holders can retain authority. Job/subtree cleanup
+is not HTTP completion/rollback; the coordinator ABORTs and observes unfinished
+work. Later nesting contains execution/delegation, without implicit HTTP authority.
+The loop handles receiver work/retirement and TCP/deadlines under backpressure;
+bound deferred receipts and leave room for status/abort. Cleanup has no fixed bound.
+
+### 3. Cooperative I/O prerequisite — default: the native completion direction
+
+[CONNECT](../../include/abi/tcp.h) waits for handshake; [UDP](../../include/abi/udp.h),
+TLS setup and staging I/O also wait. TRY transfers alone do not make the provider
+responsive. Keep one provider process and take the generic kernel/ABI prerequisite
+from the owner's [endpoint completion direction](later-os-directions.md#completion-based-asynchronous-operations)
+before task 3 implementation, rather than assuming threads/helper processes.
+
+Its bounded first scope is TCP CONNECT, DNS UDP SEND/RECEIVE and the native
+FILE/DIRECTORY staging operations, plus userspace DNS/TLS steps. Copy bounded
+inputs/capture existing grants; one owned receiver collects each correlated final
+result, with completion admission reserved before submission. Start with one
+pending operation per instance under existing native bounds; TCP TRY/service IPC
+continue independently. Cancel/receiver closure/exit must drain ownership and
+cleanup, not drop a live receiver's completion or fabricate rollback.
+
+This selects a prerequisite; its submission/cancel/collection contract still needs
+owner review before kernel code. No per-operation-capability API or general async
+rewrite is settled. Alternative: a contained worker or completed thread gates,
+with their own authority/lifetime decisions. Any synchronous phase left must be
+reported; task 3 cannot claim responsive status/abort through that phase.
+
+**Task 3 implementation follow-up from [daybreak's #751 review](https://git.internal/PyxisOS/pyxis-os/pulls/751):**
+fix `libhttp/fetch.c` accepting nonempty 205 Reset Content (the check covers only
+204). Enforce zero decoded content and retain 205 on failure; qualify empty/nonempty
+fixed, chunked and close-delimited cases. This is distinct from 204 framing
+([RFC 9110 §15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6),
+[RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3)).
 
 ## Accepted owner decisions
 
-All three defaults accepted 2026-10-11; not implemented.
+All three provider/adapter defaults accepted 2026-10-11; delivery is tasks 3–5.
 
 1. **Forward-only response stream plus read-only final observation.** Make the
    reader available after response headers, before completion, with bounded RAM
