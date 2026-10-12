@@ -276,8 +276,10 @@ material; a snapshot or immutable backing could shorten file ownership at a memo
 
 [Private capture](userland/native-jobs.md#private-capture-and-deadlines) requires a trusted private RAM root and reachability audit.
 The 1 MiB per-stream polled trigger/cap is not a backing quota, and admission/retirement has no hard wall-time guarantee. Unknown
-direct admission retains captures until caller/session teardown. Revisit bounded backing or recovery when a consumer requires it;
-Lua/shell/pipeline delivery remains in the separately assigned [execution milestone](wip/native-command-execution.md).
+direct admission retains captures until caller/session teardown. Revisit bounded backing or recovery when a consumer requires it.
+[Native pipelines](userland/native-jobs.md#native-pipelines-and-the-event-pump) copy finite input before launch, capture final stdout
+and combined stderr, and have no live producer or stderr stage attribution. Revisit streaming producers when a consumer needs them;
+Lua/shell adapters remain in the separately assigned [execution milestone](wip/native-command-execution.md).
 
 ## Initial terminal editor
 
