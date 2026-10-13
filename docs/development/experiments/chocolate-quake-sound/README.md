@@ -88,14 +88,22 @@ bold. Starts that failed the HDA engine were rebooted and repeated (see below).
 
 ## Nested-QEMU engine failures
 
-The HDA engine's existing QEMU guards again failed some stream starts until
-reboot, logging either "output DMA commit exceeded clock limit" or "output
-completion notification expired". With sound, four-CPU timedemo starts failed
-5 of 10 times and one-CPU starts 2 of 7. The 30 s capture runs and the GDB run
-started cleanly. `-nosound` and plain runs open no audio. As in the
-[SDL audio record](../sdl-audio/README.md#nested-qemu-engine-failures), the
-native `pcm` tool trips as often. This is the recorded QEMU limit, counted
-separately from this change; the guard bounds are unchanged.
+The HDA engine's existing QEMU guards again disabled audio until reboot in
+some runs, logging either "output DMA commit exceeded clock limit" or "output
+completion notification expired". With sound, 5 of 10 four-CPU timedemo
+attempts and 2 of 7 one-CPU attempts were followed by a failed engine. Those
+runs were repeated after a reboot. `-nosound` and plain runs open no audio.
+The guard bounds are unchanged.
+
+- **When the guard tripped.** The runner checked the log only after quitting,
+  so these counts do not show whether the guard tripped at stream start or at
+  quit. A later recheck during the
+  [EDuke32 qualification](../eduke32-sound/README.md#nested-qemu-engine-failures)
+  logged before and after the quit in four fresh four-CPU boots. Three were
+  clean; one tripped during the quit and none earlier.
+- **Quit trips.** Trips during the quit come from process teardown stalling the
+  audio worker, which the EDuke32 record shows. They do not invalidate the
+  timedemo that ran before.
 
 ## Native run sheet
 

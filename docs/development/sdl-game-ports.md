@@ -1,9 +1,9 @@
 # SDL game ports
 
 Three games run through the [SDL2 port](sdl2.md), each compared with what
-Pyxis already had. Chocolate Quake ships as a program bundle with sound effects through the
-SDL2 port's [audio output](sdl2.md#audio). Chocolate Doom (built without SDL_mixer) and EDuke32
-(single-threaded, with sound startup failing) are silent; enabling their sound is separate port work.
+Pyxis already had. Chocolate Quake and EDuke32 ship as program bundles with sound through the
+SDL2 port's [audio output](sdl2.md#audio): Chocolate Quake's effects, and EDuke32's effects and
+OPL-emulated music. Chocolate Doom, built without SDL_mixer, is silent.
 
 | Game | Image | Pin | Licence | Reference | Measurements |
 | --- | --- | --- | --- | --- | --- |
@@ -23,7 +23,7 @@ it in `ports/`.
 - **Personal use:** the Build engine's licence and the retail data make
   EDuke32 a personal build, handled like
   [DevilutionX](../userland/devilutionx.md#personal-use-only). Images
-  containing it are not shared, and ordinary images, CI and bundles never
+  containing it are not shared, and ordinary images, CI and build bundles never
   contain it.
 - **Picture:** Chocolate Doom keeps upstream's 4:3 aspect correction with one
   nearest-neighbour stretch on the CPU (`force_software_renderer`). Chocolate
@@ -41,9 +41,10 @@ it in `ports/`.
 - **Libc:** missing standard functions were added to libc, with math copied
   from the musl pin. Functions whose behaviour needs a design decision first
   are worked around in the port and listed in its README.
-- **Threads:** EDuke32's threaded code (loguru, smmalloc's per-thread cache,
-  the audio library's tasks, minicoro) is patched to run in the process's one
-  thread.
+- **Threads:** SDL's audio callback thread mixes beside each game's thread.
+  EDuke32 keeps upstream's thread-local state and locks; its patch leaves out
+  only loguru's signal and stack-trace support and the audio library's async
+  tasks, which no built decoder uses.
 
 ## Cost of the SDL path
 
@@ -68,9 +69,9 @@ lists what was observed and what is still unchecked.
 
 Remaining work is in technical debt:
 - [SDL2 port limits](../technical-debt.md#sdl2-port-limits): Chocolate Doom
-  and EDuke32 are silent, and no refresh rate;
+  is silent, and no refresh rate;
 - [EDuke32 port limits](../technical-debt.md#eduke32-port-limits): the
-  single-thread patches and the port-side libc gaps;
+  port-side libc gaps;
 - [libc compatibility gaps](../technical-debt.md#libc-compatibility-gaps): short
   reads from files;
 - [Quake port limits](../technical-debt.md#quake-port-limits).

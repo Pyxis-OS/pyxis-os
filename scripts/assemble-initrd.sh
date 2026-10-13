@@ -43,7 +43,7 @@ if [ -n "${DUKE3D_DATA:-}" ]; then
     echo "DUKE3D_DATA=$DUKE3D_DATA has no duke3d.grp" >&2
     exit 1
   }
-  [ -f build/ports/eduke32/stage/bin/eduke32.pxe ] || {
+  [ -f build/ports/eduke32/stage/bin/eduke32.pxb/app/bin/eduke32.pxe ] || {
     echo "DUKE3D_DATA is set but EDuke32 is not built: run make ports with it." >&2
     exit 1
   }

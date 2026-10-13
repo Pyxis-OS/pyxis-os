@@ -2,8 +2,10 @@
 
 [EDuke32](https://voidpoint.io/terminx/eduke32) runs Duke Nukem 3D through the
 [SDL2 port](../development/ports.md#sdl2-development-library) with its classic
-software renderer: single player, keyboard and mouse, without sound or
-network play. It is an opt-in build that needs your own `duke3d.grp`.
+software renderer: single player, keyboard and mouse, with sound effects and
+music but without network play. It is an opt-in build that needs your own
+`duke3d.grp`, and runs as the program bundle `eduke32.pxb`; typing `eduke32`
+selects it.
 
 ## Personal use only
 
@@ -15,7 +17,7 @@ makes it a personal build, handled like [DevilutionX](devilutionx.md#personal-us
 - an image containing EDuke32 is for the person who built it and must not be
   shared, for example as a published PXE or installation image;
 - ordinary images and CI never contain it;
-- bundles never pack it.
+- [build bundles](../development/build-bundles.md) never pack it.
 
 The licences, `buildlic.txt` and a notice ship at
 `boot://share/licenses/eduke32/`.
@@ -33,7 +35,7 @@ make run CPUS=4 DUKE3D_DATA="/path/to/gameroot"
 The build then:
 
 - builds the [EDuke32 recipe](../../ports/eduke32/README.md);
-- stages the game as `eduke32.pxe`;
+- stages the game as the bundle `eduke32.pxb`;
 - stages only `duke3d.grp`, as `boot://share/duke3d/duke3d.grp`. Other files
   in the directory, such as the Megaton Edition's high-resolution packs, are
   for renderers this build leaves out.
@@ -59,8 +61,21 @@ The second form starts episode 1, level 1 at skill 2, skipping the menus.
   `.esv` saves, `eduke32.log`, the data checksum cache and `screenshots/`.
   That is RAM on live boots, so it lasts until reboot; installed systems keep
   it on the pool.
-- **Grants:** the space's display, keyboard and clock. With the pointer
-  grant, the mouse turns and fires.
+- **Grants:** the bundle [manifest](../../ports/eduke32/manifest.json)
+  declares them. Required: memory, clock, display and keyboard. Optional: the
+  pointer, so the mouse turns and fires, and for sound the space's audio
+  session, threads for SDL's audio callback thread, pipe creation for SDL's
+  event wakeup, and the local and shared clipboard for the console's
+  right-click paste, which on Pyxis also needs a fresh Ctrl+V.
+- **Sound:** upstream's SDL sound driver plays effects and music through the
+  SDL2 port's [audio](../development/sdl2.md#audio) at the native 48 kHz; music
+  is upstream's default AdLib OPL3 emulation. `-ns` turns sound off and `-nm`
+  music, while the device stays open. When the optional sound grants are absent, or the executable is
+  started directly by its `eduke32.pxb/app/bin` path, which launches it as a
+  plain program, the log reports "Failed initializing sound: SDL Audio: error
+  in OpenAudio" and the game runs silent. One process per space can own the
+  audio session. The [sound qualification](../development/experiments/eduke32-sound/README.md)
+  records nested-QEMU timings and the native run sheet.
 - **Controls:** upstream's defaults: W and S (or keypad 8 and 2) move, Left
   and Right turn, and the left mouse button fires. In menus, the item under the
   system pointer is selected, so move the pointer aside to use the keyboard.
@@ -97,8 +112,6 @@ on 2026-10-09:
 - **Left out of the build:** OpenGL and Polymer, the Vorbis, FLAC and XMP
   codecs, network play, libvpx and the startup window. Mapster32, the editor,
   isn't built.
-- **Sound:** SDL2 has no audio here, so sound startup fails and the game
-  plays silently.
 - **Gamepads:** the SDL2 port's joystick driver finds no devices.
 
 The [recipe README](../../ports/eduke32/README.md) lists the source pin,

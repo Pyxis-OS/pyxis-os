@@ -171,7 +171,8 @@ SDL gains callbacks, not real-time guarantees.
   open fails ("Couldn't create audio thread") and the session is released.
   Plain programs receive the space's `audio` grant but no threads grant, so
   they stay silent with that error; [Chocolate Quake](../userland/chocolate-quake.md)
-  ships as a bundle declaring both. No grant wrapper is added.
+  and [EDuke32](../userland/eduke32.md) ship as bundles declaring both. No
+  grant wrapper is added.
 - **Format and buffers.** The device runs at the native 48 kHz S16LE stereo,
   with 1,024-frame (21.3 ms) buffers, one maximum native write. SDL's own
   audio stream converts other rates, formats, channel counts and callback sizes.

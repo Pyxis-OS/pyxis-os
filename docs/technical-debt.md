@@ -937,6 +937,13 @@ QEMU guard trips during shorter input/start bursts; the accepted bounds are unch
 The [SDL audio qualification](development/experiments/sdl-audio/README.md) saw the 1 ms commit guard trip at single-session
 starts on many fresh nested boots, as often for the native `pcm` tool as for SDL, and the completion-notification guard twice;
 see its trip counts.
+**Process teardown can stall audio** (found in the [EDuke32 sound qualification](development/experiments/eduke32-sound/README.md#nested-qemu-engine-failures)):
+in nested QEMU, quitting a large game trips the 20 ms service-horizon guard and disables audio until reboot. Reproduction: four
+CPUs, play `pcm 1000 500 20` in the Read-only space, then quit EDuke32 started by its `app/bin` path (no audio session, about
+160 MiB of eager private memory) in Development; three of three valid boots tripped at the quit. By code inspection, process
+destruction and the audio worker both run on the BSP. **Native check:** in the owner's listening session, run `log` after
+quitting each game and look for `hda:` lines before starting the next. Revisit with that result, and before scheduling large
+teardown work beside audio.
 
 ## HD Audio fail-closed recovery
 
@@ -1006,8 +1013,8 @@ exiting with live threads skip orderly finalizers ([process exit](#process-exit-
 Missing: **audio capture** and output device selection, **windows** beyond one
 fullscreen window, and **text** beyond the shared US layout. Displays report no **refresh rate**, so SDL gives 0 (unknown); EDuke32's frame
 limiter divided by it and hung until its port assumed 60 Hz. Revisit when a display reports its mode timing. The
-[SDL game ports](development/sdl-game-ports.md) Chocolate Doom (built without SDL_mixer) and EDuke32 (single-threaded, sound startup
-failing) remain silent; Chocolate Quake ships as a bundle declaring the audio and threads grants and plays sound effects. Pointer position, program images, show/hide, bounded warp and relative lock use
+[SDL game ports](development/sdl-game-ports.md) Chocolate Doom (built without SDL_mixer) remains silent; Chocolate Quake and EDuke32
+ship as bundles declaring the audio and threads grants and play sound. Pointer position, program images, show/hide, bounded warp and relative lock use
 the [native pointer contract](interfaces/pointer.md). Key repeat is not covered by validation because QEMU's injected PS/2 input has no
 typematic repeat.
 
@@ -1037,11 +1044,10 @@ wants to play the retail data.
 
 ## EDuke32 port limits
 
-[EDuke32](userland/eduke32.md) is personal-use only, an opt-in build that images, CI and bundles never contain. It has no sound, network
-play, controllers or OpenGL renderers. Its [recipe](../ports/eduke32/README.md) patches threaded code to run in Pyxis's one thread:
-loguru without its flush thread or signal handlers, smmalloc's per-thread cache and the audio library's lock flag as globals, its async
-tasks left out, and minicoro without multithreading (see [SDL game ports](development/sdl-game-ports.md#behaviour)). Revisit with
-userspace threads, together with sound. The port also works around [libc gaps](../ports/eduke32/README.md#libc-gaps) that need decisions
+[EDuke32](userland/eduke32.md) is personal-use only, an opt-in build that images, CI and build bundles never contain. It has no network
+play, controllers or OpenGL renderers. Its sound runs as a bundle with SDL's audio callback thread; its
+[recipe](../ports/eduke32/README.md) still leaves out loguru's signal handlers and stack traces and the audio library's async tasks,
+used only by decoders the build omits. The port also works around [libc gaps](../ports/eduke32/README.md#libc-gaps) that need decisions
 first: it keeps its own working directory (no `chdir` or `getcwd`), loops reads because libc `read` returns one native transfer, under
 4 KiB, where POSIX code expects whole reads from files, and still matches its data cache on size;
 it has not adopted the new optional modification time. Revisit timestamp-aware caching when this port is next changed,
