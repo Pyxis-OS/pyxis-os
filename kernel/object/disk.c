@@ -50,6 +50,10 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == DISKS_OPEN_FAT32) {
+    return fat32_open_selected(rights, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   if (operation != DISKS_ENUMERATE && operation != DISKS_OPEN) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }

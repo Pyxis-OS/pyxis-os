@@ -107,6 +107,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *input_policy = NULL;
   struct kernel_object *log = NULL;
   struct kernel_object *disks = NULL;
+  struct kernel_object *fat_mounts = NULL;
   struct kernel_object *power = NULL;
   struct kernel_object *screen_capture = NULL;
   struct kernel_object *bluetooth_hci = NULL;
@@ -259,6 +260,15 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     mount = NULL;
   }
   handle_t disks_handle = HANDLE_INVALID;
+  handle_t fat_mounts_handle;
+  fat_mounts = disks_create();
+  if (!fat_mounts || capability_install(&process->capabilities, fat_mounts,
+        DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_MOUNT_READ_ONLY | DISKS_RIGHT_MOUNT_READ_WRITE,
+        0, &fat_mounts_handle) != CAP_OK) {
+    goto fail;
+  }
+  object_release(fat_mounts);
+  fat_mounts = NULL;
   handle_t kernel_handle = HANDLE_INVALID, archive_handle = HANDLE_INVALID;
   if (install) {
     disks = disks_create();
@@ -328,7 +338,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[29] = {
+  struct process_binding resources[30] = {
     {"memory", memory_handle},
     {"threads", threads_handle},
     {"launcher", launcher_handle},
@@ -348,8 +358,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"power", power_handle},
     {"screen_capture", screen_capture_handle},
     {"bluetooth_hci", bluetooth_hci_handle},
+    {"fat_mounts", fat_mounts_handle},
   };
-  size_t resource_count = 19;
+  size_t resource_count = 20;
   if (input_policy_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"input_policy", input_policy_handle};
   }
@@ -430,6 +441,9 @@ fail:
   }
   if (disks) {
     object_release(disks);
+  }
+  if (fat_mounts) {
+    object_release(fat_mounts);
   }
   if (boot_kernel) {
     object_release(&boot_kernel->object);

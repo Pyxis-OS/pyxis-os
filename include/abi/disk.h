@@ -6,8 +6,11 @@
 
 #define DISKS_RIGHT_ENUMERATE (UINT64_C(1) << 0)
 #define DISKS_RIGHT_OPEN (UINT64_C(1) << 1)
+#define DISKS_RIGHT_MOUNT_READ_ONLY (UINT64_C(1) << 2)
+#define DISKS_RIGHT_MOUNT_READ_WRITE (UINT64_C(1) << 3)
 #define DISKS_ENUMERATE UINT64_C(1)
 #define DISKS_OPEN UINT64_C(2)
+#define DISKS_OPEN_FAT32 UINT64_C(3)
 
 #define DISK_RIGHT_INFO (UINT64_C(1) << 0)
 #define DISK_RIGHT_READ (UINT64_C(1) << 1)
@@ -97,6 +100,20 @@ struct disk_create_volume_request { uint64_t partition, name, name_length; };
  * Both GPT copies/full structure validate under extent exclusion. */
 struct disk_fat32_request { uint64_t partition, access, rights; };
 _Static_assert(sizeof(struct disk_fat32_request) == 24, "FAT disk request");
+
+/* Mount-only inventory authority returns mount_fat32_reply without a raw DISK
+ * handle or claim. READ_ONLY accepts either mount right; READ_WRITE requires
+ * MOUNT_READ_WRITE even for an attenuated RO root. Selection uses a boot-scoped
+ * device ID and one-based GPT entry. A nonzero expected_disk_guid must match
+ * the current healthy GPT at worker admission, or the call returns NOT_FOUND;
+ * zero selects by ID alone. Root rights, instance mode, exclusion and
+ * publication match DISK_OPEN_FAT32 above.
+ * These rights confer no raw access, formatting or repair authority. */
+struct disks_fat32_request {
+  uint64_t id, partition, access, rights;
+  uint8_t expected_disk_guid[16];
+};
+_Static_assert(sizeof(struct disks_fat32_request) == 48, "FAT inventory request");
 
 /* CLAIM needs WRITE and re-establishes raw mutation authority on an object
  * whose claim was released. PARTITION zero claims the whole disk, under
