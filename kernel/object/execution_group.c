@@ -4,6 +4,8 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/execution_group.h>
+#include <kernel/object/capability.h>
+#include <kernel/space.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/process.h>
@@ -11,69 +13,193 @@
 #include <kernel/user/wait.h>
 #include <kernel/wait.h>
 
-/* IF=0; group -> process lifetime -> scheduler queues. Never allocate, copy user memory or switch
- * context while held. Final grant release may run on any CPU. */
-static void lock_group(struct execution_group *group)
+/* Tunable admission policy, not public ABI limits. Root depth is one. */
+#define EXECUTION_GROUP_DEPTH_LIMIT 16
+#define EXECUTION_GROUP_COUNT_LIMIT 256
+
+/* IF=0; space tree -> process lifetime/table -> scheduler queues. Never
+ * allocate, copy user memory or switch context while held. Final grant release may run on any CPU. */
+static void lock_tree(struct space *space)
 {
-  while (atomic_exchange_explicit(&group->locked, true, memory_order_acquire)) {
+  while (atomic_exchange_explicit(&space->execution_groups_locked, true, memory_order_acquire)) {
     __asm__ volatile("pause");
   }
 }
 
-static void unlock_group(struct execution_group *group)
+static void unlock_tree(struct space *space)
 {
-  atomic_store_explicit(&group->locked, false, memory_order_release);
+  atomic_store_explicit(&space->execution_groups_locked, false, memory_order_release);
 }
 
 static bool complete_locked(struct execution_group *group)
 {
-  if (group->complete || !group->sealed || group->members ||
-      group->launches || group->cleanup_pending) {
-    return false;
+  bool completed = false;
+  while (group && !group->complete && group->sealed && !group->members &&
+      !group->launches && !group->cleanup_pending && !group->children) {
+    group->complete = true;
+    completed = true;
+    while (group->waiters) {
+      struct task_wait_link *waiter = group->waiters;
+      group->waiters = waiter->next;
+      waiter->next = NULL;
+      struct task_wait *wait = waiter->wait;
+      waiter->wait = NULL;
+      task_wait_wake(wait);
+    }
+    struct execution_group *parent = group->parent;
+    if (parent) {
+      struct execution_group **link = &parent->first_child;
+      while (*link != group) {
+        KASSERT(*link);
+        link = &(*link)->next_sibling;
+      }
+      *link = group->next_sibling;
+      group->next_sibling = NULL;
+      KASSERT(parent->children);
+      --parent->children;
+      /* Only group storage is released here: its retirement does not acquire
+       * a cleanup token or execute destruction under this guard. */
+      object_release(&group->object);
+    }
+    group = parent;
   }
-  group->complete = true;
-  while (group->waiters) {
-    struct task_wait_link *waiter = group->waiters;
-    group->waiters = waiter->next;
-    waiter->next = NULL;
-    struct task_wait *wait = waiter->wait;
-    waiter->wait = NULL;
-    task_wait_wake(wait);
-  }
-  return true;
+  return completed;
 }
 
-static void stop_locked(struct execution_group *group)
+static void seal_locked(struct execution_group *group, bool stop)
 {
   group->sealed = true;
-  if (!group->stopping) {
+  if (stop && !group->stopping) {
     group->stopping = true;
     for (struct execution_group_member *member = group->first_member;
          member; member = member->next) {
       process_request_stop(member->process);
     }
   }
+  /* Completion can unlink the child, so capture the next live edge first.
+   * Depth and total allocated storage are bounded by creation admission. */
+  struct execution_group *child = group->first_child;
+  while (child) {
+    struct execution_group *next = child->next_sibling;
+    seal_locked(child, stop);
+    child = next;
+  }
   complete_locked(group);
+}
+
+static bool admission_closed_locked(struct execution_group *group)
+{
+  for (; group; group = group->parent) {
+    if (group->sealed) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static void destroy_group(struct kernel_object *object)
 {
   struct execution_group *group = (struct execution_group *)object;
+  KASSERT(arch_cpu_index() == 0);
   KASSERT(!group->controllers && !group->members && !group->launches &&
-      !group->cleanup_pending && !group->first_member && !group->waiters);
+      !group->cleanup_pending && !group->first_member && !group->waiters &&
+      !group->children && !group->first_child && !group->next_sibling);
+  struct execution_group *parent = group->parent;
+  lock_tree(group->space);
+  KASSERT(group->space->execution_group_count);
+  --group->space->execution_group_count;
+  unlock_tree(group->space);
   kfree(group);
+  if (parent) {
+    object_release(&parent->object);
+  }
 }
 
-struct execution_group *execution_group_create(struct space *space)
+enum call_status execution_group_create(struct space *space,
+    struct execution_group *parent, struct execution_group **result)
 {
-  KASSERT(arch_cpu_index() == 0 && space);
-  struct execution_group *group = kmalloc(sizeof(*group));
-  if (group) {
-    *group = (struct execution_group){.space = space};
-    atomic_init(&group->locked, false);
-    object_init(&group->object, OBJECT_EXECUTION_GROUP, destroy_group);
+  KASSERT(arch_cpu_index() == 0 && space && (!parent || parent->space == space));
+  *result = NULL;
+  lock_tree(space);
+  enum call_status status = CALL_OK;
+  if (admission_closed_locked(parent)) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (space->execution_group_count >= EXECUTION_GROUP_COUNT_LIMIT ||
+      (parent && parent->depth >= EXECUTION_GROUP_DEPTH_LIMIT)) {
+    status = CALL_LIMIT;
+  } else {
+    ++space->execution_group_count;
   }
-  return group;
+  unlock_tree(space);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct execution_group *group = kmalloc(sizeof(*group));
+  if (!group) {
+    lock_tree(space);
+    --space->execution_group_count;
+    unlock_tree(space);
+    return CALL_NO_MEMORY;
+  }
+  *group = (struct execution_group){.space = space,
+    .depth = parent ? parent->depth + 1 : 1};
+  object_init(&group->object, OBJECT_EXECUTION_GROUP, destroy_group);
+  lock_tree(group->space);
+  if (admission_closed_locked(parent)) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (parent && !object_retain(&parent->object)) {
+    status = CALL_LIMIT;
+  } else if (parent) {
+    group->parent = parent;
+    KASSERT(object_retain(&group->object));
+    group->next_sibling = parent->first_child;
+    parent->first_child = group;
+    ++parent->children;
+  }
+  unlock_tree(group->space);
+  if (status != CALL_OK) {
+    object_release(&group->object);
+  } else {
+    *result = group;
+  }
+  return status;
+}
+
+enum call_status execution_group_install(struct execution_group *group,
+    struct capability_reservation *reservation,
+    const struct capability_reserved_slot *slots, struct capability_grant *grants,
+    handle_t *handles)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_tree(group->space);
+  enum call_status status = admission_closed_locked(group) ? CALL_ENDPOINT_CLOSED : CALL_OK;
+  if (status == CALL_OK) {
+    capability_install_reserved(reservation, slots, grants, 2, handles);
+  }
+  unlock_tree(group->space);
+  return status;
+}
+
+void execution_group_abandon(struct execution_group *group)
+{
+  lock_tree(group->space);
+  seal_locked(group, true);
+  unlock_tree(group->space);
+  readiness_notify();
+}
+
+bool execution_group_contains(const struct execution_group *scope,
+    const struct execution_group *target)
+{
+  if (!scope) {
+    return true;
+  }
+  for (; target; target = target->parent) {
+    if (scope == target) {
+      return true;
+    }
+  }
+  return false;
 }
 
 enum call_status execution_group_check(struct execution_group *group, struct space *space)
@@ -84,9 +210,9 @@ enum call_status execution_group_check(struct execution_group *group, struct spa
   if (group->space != space) {
     return CALL_DENIED;
   }
-  lock_group(group);
-  bool sealed = group->sealed;
-  unlock_group(group);
+  lock_tree(group->space);
+  bool sealed = admission_closed_locked(group);
+  unlock_tree(group->space);
   return sealed ? CALL_ENDPOINT_CLOSED : CALL_OK;
 }
 
@@ -95,9 +221,9 @@ bool execution_group_thread_begin(struct execution_group *group)
   if (!group) {
     return true;
   }
-  lock_group(group);
+  lock_tree(group->space);
   if (group->stopping) {
-    unlock_group(group);
+    unlock_tree(group->space);
     return false;
   }
   return true;
@@ -106,7 +232,7 @@ bool execution_group_thread_begin(struct execution_group *group)
 void execution_group_thread_end(struct execution_group *group)
 {
   if (group) {
-    unlock_group(group);
+    unlock_tree(group->space);
   }
 }
 
@@ -119,16 +245,16 @@ enum call_status execution_group_launch_begin(struct execution_group *group,
   if (group->space != space) {
     return CALL_DENIED;
   }
-  lock_group(group);
+  lock_tree(group->space);
   enum call_status status = CALL_OK;
-  if (group->sealed) {
+  if (admission_closed_locked(group)) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (group->launches == SIZE_MAX || !object_retain(&group->object)) {
     status = CALL_LIMIT;
   } else {
     ++group->launches;
   }
-  unlock_group(group);
+  unlock_tree(group->space);
   return status;
 }
 
@@ -137,11 +263,11 @@ void execution_group_launch_end(struct execution_group *group)
   if (!group) {
     return;
   }
-  lock_group(group);
+  lock_tree(group->space);
   KASSERT(group->launches);
   --group->launches;
   bool completed = complete_locked(group);
-  unlock_group(group);
+  unlock_tree(group->space);
   if (completed) {
     readiness_notify();
   }
@@ -156,9 +282,9 @@ enum call_status execution_group_publish(struct execution_group *group,
     user_task_publish_group(tasks, count);
     return CALL_OK;
   }
-  lock_group(group);
+  lock_tree(group->space);
   enum call_status status = CALL_OK;
-  if (group->sealed) {
+  if (admission_closed_locked(group)) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (count > SIZE_MAX - group->members) {
     status = CALL_LIMIT;
@@ -173,7 +299,7 @@ enum call_status execution_group_publish(struct execution_group *group,
     group->members += count;
     user_task_publish_group(tasks, count);
   }
-  unlock_group(group);
+  unlock_tree(group->space);
   return status;
 }
 
@@ -181,7 +307,7 @@ void execution_group_member_detach(struct execution_group *group,
     struct execution_group_member *member)
 {
   KASSERT(arch_cpu_index() == 0);
-  lock_group(group);
+  lock_tree(group->space);
   struct execution_group_member **link = &group->first_member;
   while (*link != member) {
     KASSERT(*link);
@@ -189,17 +315,17 @@ void execution_group_member_detach(struct execution_group *group,
   }
   *link = member->next;
   member->next = NULL;
-  unlock_group(group);
+  unlock_tree(group->space);
 }
 
 void execution_group_member_complete(struct execution_group *group)
 {
   KASSERT(arch_cpu_index() == 0);
-  lock_group(group);
+  lock_tree(group->space);
   KASSERT(group->members);
   --group->members;
   bool completed = complete_locked(group);
-  unlock_group(group);
+  unlock_tree(group->space);
   if (completed) {
     readiness_notify();
   }
@@ -208,20 +334,20 @@ void execution_group_member_complete(struct execution_group *group)
 
 void execution_group_cleanup_begin(struct execution_group *group)
 {
-  lock_group(group);
+  lock_tree(group->space);
   KASSERT(!group->complete && group->cleanup_pending != SIZE_MAX);
   KASSERT(object_retain(&group->object));
   ++group->cleanup_pending;
-  unlock_group(group);
+  unlock_tree(group->space);
 }
 
 void execution_group_cleanup_end(struct execution_group *group)
 {
-  lock_group(group);
+  lock_tree(group->space);
   KASSERT(group->cleanup_pending);
   --group->cleanup_pending;
   bool completed = complete_locked(group);
-  unlock_group(group);
+  unlock_tree(group->space);
   if (completed) {
     readiness_notify();
   }
@@ -234,12 +360,12 @@ bool execution_group_authority_retain(struct kernel_object *object, uint64_t rig
     return true;
   }
   struct execution_group *group = (struct execution_group *)object;
-  lock_group(group);
+  lock_tree(group->space);
   bool retained = group->controllers != SIZE_MAX;
   if (retained) {
     ++group->controllers;
   }
-  unlock_group(group);
+  unlock_tree(group->space);
   return retained;
 }
 
@@ -249,13 +375,13 @@ void execution_group_authority_release(struct kernel_object *object, uint64_t ri
     return;
   }
   struct execution_group *group = (struct execution_group *)object;
-  lock_group(group);
+  lock_tree(group->space);
   KASSERT(group->controllers);
   bool last = --group->controllers == 0;
   if (last) {
-    stop_locked(group);
+    seal_locked(group, true);
   }
-  unlock_group(group);
+  unlock_tree(group->space);
   if (last) {
     clipboard_stop_notify();
     readiness_notify();
@@ -265,14 +391,14 @@ void execution_group_authority_release(struct kernel_object *object, uint64_t ri
 static struct syscall_result wait_group(struct execution_group *group)
 {
   struct task_wait_link *waiter = task_wait_link_prepare();
-  lock_group(group);
+  lock_tree(group->space);
   if (!group->complete && !task_stop_requested()) {
     waiter->next = group->waiters;
     group->waiters = waiter;
     struct task_wait *wait = waiter->wait;
-    unlock_group(group);
+    unlock_tree(group->space);
     task_wait_sleep_interruptible(wait);
-    lock_group(group);
+    lock_tree(group->space);
     if (waiter->wait) {
       struct task_wait_link **link = &group->waiters;
       while (*link != waiter) {
@@ -286,16 +412,16 @@ static struct syscall_result wait_group(struct execution_group *group)
   }
   enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : CALL_OK;
   KASSERT(status != CALL_OK || group->complete);
-  unlock_group(group);
+  unlock_tree(group->space);
   return (struct syscall_result){status, 0};
 }
 
 uint64_t execution_group_ready(struct execution_group *group)
 {
   uint64_t flags = cpu_save_interrupts();
-  lock_group(group);
+  lock_tree(group->space);
   bool complete = group->complete;
-  unlock_group(group);
+  unlock_tree(group->space);
   cpu_restore_interrupts(flags);
   return complete ? WAIT_COMPLETE : 0;
 }
@@ -318,14 +444,13 @@ struct syscall_result execution_group_call(struct execution_group *group,
   if (operation == EXECUTION_GROUP_WAIT) {
     return wait_group(group);
   }
-  lock_group(group);
+  lock_tree(group->space);
   if (operation == EXECUTION_GROUP_TERMINATE) {
-    stop_locked(group);
+    seal_locked(group, true);
   } else {
-    group->sealed = true;
-    complete_locked(group);
+    seal_locked(group, false);
   }
-  unlock_group(group);
+  unlock_tree(group->space);
   clipboard_stop_notify();
   readiness_notify();
   return (struct syscall_result){CALL_OK, 0};

@@ -224,7 +224,7 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
   if (operation != SPACE_FACTORY_CREATE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & SPACE_FACTORY_RIGHT_CREATE)) {
+  if (!(rights & SPACE_FACTORY_RIGHT_CREATE) || process_current()->execution_group) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct {

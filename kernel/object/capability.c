@@ -5,6 +5,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/object.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -216,7 +217,7 @@ enum capability_result capability_validate_grants(const struct capability_table 
       return CAP_INVALID;
     }
     if (table->execution_group && object->type == OBJECT_LAUNCHER &&
-        launcher_execution_group(object) != table->execution_group) {
+        !execution_group_contains(table->execution_group, launcher_execution_group(object))) {
       return CAP_DENIED;
     }
   }

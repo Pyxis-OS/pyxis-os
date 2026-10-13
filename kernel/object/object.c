@@ -287,8 +287,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_DISPLAY:
     return !(rights & ~DISPLAY_RIGHT_DRAW);
   case OBJECT_LAUNCHER:
-    return !(rights & ~(LAUNCHER_RIGHT_LAUNCH |
-        (launcher_execution_group(object) ? 0 : LAUNCHER_RIGHT_CREATE_GROUP)));
+    return !(rights & ~LAUNCHER_RIGHT_LAUNCH);
   case OBJECT_EXECUTION_GROUP:
     return !(rights & ~(EXECUTION_GROUP_RIGHT_CONTROL | EXECUTION_GROUP_RIGHT_WAIT));
   case OBJECT_ENDPOINT_SERVICE:

@@ -49,8 +49,8 @@ not private files. `boot://` stays read-only.
 The trusted `session --start-remote-services` handoff applies session/network
 configuration to the provider environment and starts the remote service script.
 The final `session --remote-server PORT` creates the listener and delegates it
-to `remote-terminal.pxe`. Only trusted init carries terminal CREATE and unbound
-launcher CREATE_GROUP. Remote shells receive their bound launcher, named terminal
+to `remote-terminal.pxe`. Trusted startup carries terminal CREATE and an unbound
+LAUNCH launcher. Remote shells receive their bound launcher, named terminal
 input/output, distinct standard streams, memory, clock, system-information READ,
 [kernel-log READ](../interfaces/kernel-log.md),
 pipe creation, the selected
@@ -108,12 +108,12 @@ The daemon loads `bin://mux.pxe` inside its outer remote group and creates each
 pane's independent terminal, group and stock root shell through a private
 SEND-only broker. Trusted init, shell and session preserve a distinct
 `remote_mux_terminal` CREATE grant for the daemon, which retains terminal CREATE
-and unbound launcher CREATE_GROUP. Mux receives its bound LAUNCH-only launcher,
+and an unbound LAUNCH launcher. Mux receives its bound LAUNCH-only launcher,
 attachment, process WAIT and group CONTROL|WAIT;
 the daemon retains supervision through cleanup. It freezes initial environment,
 roots, namespace and remote resource masks per connection. Split cwd snapshots
 preserve actual directory rights, with initial `tmp://` fallback before
-publication. Mux receives no CREATE_GROUP, terminal creation, physical input,
+publication. Mux receives scoped subgroup creation through LAUNCH, but no terminal creation, physical input,
 DRAW or clipboard-store grant. Pane shells receive neither broker nor group
 supervision. The live-only remote power and optional screen-capture policies
 remain unchanged.
@@ -598,7 +598,7 @@ Plain `ipcbench` and `iobench pipe` require the `session` handoff to obtain pipe
 creation.
 The parked shell lets these successors finish and report their results.
 Ordinary `allocbench` and non-pipe `iobench` modes use the configured remote grants.
-Ordinary children receive no group supervision or CREATE_GROUP authority.
+Ordinary children receive no group supervision. LAUNCH permits scoped subgroup creation.
 
 On the LAN host, this captures all four IPC workloads hands-free, one reverse
 connection per command. stdin EOF ends input while the client receives output;

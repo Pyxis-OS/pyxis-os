@@ -86,7 +86,8 @@ maintenance after native-wrapper release, are excluded. A stalled published HOST
 can delay completion indefinitely; no bounded cleanup deadline is promised. Ordinary
 process observers retain their earlier reclamation boundary.
 
-Nested groups, migration and space teardown are outside this implementation.
+Parent termination now covers the subgroup tree and parent completion waits
+subgroup completion. Migration and space teardown remain outside this implementation.
 Foreground Ctrl+C uses process TERMINATE on each stage, through the same stop
 path. Runtime evidence and unexercised paths are recorded in the
 [remote-terminal validation notes](../userland/remote-terminal.md#validation-evidence); this matrix records ownership

@@ -120,10 +120,11 @@ cap, without allocating backing-sized output or exposing its FILE capability.
 There is no chronology between stdout and stderr. `close` returns BUSY until
 retirement; source grants survive and owned releases are attempted once.
 
-`fresh_group` requires CREATE_GROUP on an unbound launcher. The wrapper creates
+`fresh_group` requires LAUNCH. The wrapper creates a root through an unbound
+launcher or a subgroup through a bound launcher,
 one group internally, retains sole CONTROL, seals it after launch and observes
-both process retirement and group completion. It does not retrofit nested groups
-or descendants. Direct capture retains the existing caller/session fallback;
+both process retirement and subtree completion. Its direct children still
+receive no descendant launcher. Direct capture retains the existing caller/session fallback;
 there is no new caller-death mechanism or hard cleanup wall-time guarantee.
 
 A failed start can return a non-NULL owned record. Never replay the launch.

@@ -230,6 +230,7 @@ static struct space *space_alloc(const char *name, const char *title,
     .setup_open = true,
   };
   atomic_init(&space->title_locked, false);
+  atomic_init(&space->execution_groups_locked, false);
   memcpy(space->name, name, strlen(name) + 1);
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);

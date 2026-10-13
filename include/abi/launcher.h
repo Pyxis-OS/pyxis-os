@@ -6,7 +6,6 @@
 #include <abi/startup.h>
 
 #define LAUNCHER_RIGHT_LAUNCH (UINT64_C(1) << 0)
-#define LAUNCHER_RIGHT_CREATE_GROUP (UINT64_C(1) << 1)
 #define LAUNCHER_LAUNCH UINT64_C(1)
 #define LAUNCHER_LAUNCH_BATCH UINT64_C(2)
 #define LAUNCHER_CREATE_GROUP UINT64_C(3)
@@ -20,12 +19,12 @@
  * loading or failure. Boot archive bytes need no copy. */
 #define LAUNCH_CAPTURED_IMAGE_MAX_SIZE (UINT64_C(128) * 1024 * 1024)
 
-/* CREATE_GROUP sends only a message_header and requires CREATE_GROUP on an
- * unbound launcher. The ungrouped caller remains outside the new group. Both
- * handles are returned atomically: CONTROL|WAIT supervision and a LAUNCH-only
- * launcher bound to the group, caller's space and assigned CPU. Copies retain
- * that binding. A member can receive only launchers bound to its own group;
- * membership is permanent and inherited by every child. */
+/* CREATE_GROUP requires LAUNCH. An unbound launcher creates a root in the
+ * ungrouped caller's space; a bound launcher creates a subgroup of its binding.
+ * A member may use only own-group/descendant launchers, within its fixed space.
+ * The creator stays outside the new group. Both owned handles return atomically:
+ * CONTROL|WAIT supervision and a LAUNCH-only group-bound launcher. Copies retain
+ * the binding; CPU placement remains a property of the space/scheduler. */
 struct execution_group_create_reply {
   handle_t supervision;
   handle_t launcher;

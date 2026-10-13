@@ -1040,7 +1040,8 @@ static enum call_status admit_message(struct endpoint *endpoint,
      * leave the receiver permanently unable to collect later valid messages. */
     for (size_t i = 0; i < message->grant_count; ++i) {
       if (state->execution_group && grants[i].object->type == OBJECT_LAUNCHER &&
-          launcher_execution_group(grants[i].object) != state->execution_group) {
+          !execution_group_contains(state->execution_group,
+              launcher_execution_group(grants[i].object))) {
         status = CALL_DENIED;
         break;
       }

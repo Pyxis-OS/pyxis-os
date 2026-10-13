@@ -1,13 +1,13 @@
 # Nested execution groups
 
-Status: **minimal Clang-driver prerequisite accepted and assigned, 2026-10-13**,
-a bounded planning-freeze exception
-([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788), implementation draft
-[#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)). No subgroup implementation
-is on main yet. Broader nesting, automatic group selection and Continuum remain
-parked. The [delivered command core](../userland/native-jobs.md) still supports
-direct launch without descendants; the accepted minimal slice supplies the
-contained lifetime required for Clang to launch LLD.
+Status: **minimum subgroup foundation implemented in this PR, 2026-10-13;
+broader REQUIRED direction remains parked.** The owner explicitly excepted native
+subgroup creation, ownership and subtree cleanup from the planning freeze as the
+prerequisite for Clang driver linking. Its native contracts are in
+[execution groups](../interfaces/execution-groups.md). Keep the first
+[native command milestone](../userland/native-jobs.md) on direct launch with no
+descendant launcher. This direction is required before descendant execution in
+the consumers below; it is not a prerequisite for their independent first slices.
 
 ## Required direction
 
@@ -24,12 +24,10 @@ Owner direction (2026-10-12): surviving private `job_work` cleanup belongs with 
   grant more directory, device, network, administrative or cross-space authority.
 
 This is Pyxis-native containment and grant delegation, not fork, POSIX process
-hierarchies or signals. Today's [execution groups](../interfaces/execution-groups.md)
-are flat: bound launchers cannot create groups and members cannot receive a
-launcher bound to another group. Stop/cleanup accounting has no subgroup tree.
-Launch installs only explicitly supplied grants; it does not add a launcher
-automatically. Those remain the implemented rules until a separately assigned
-native subgroup design replaces them. Required default launcher delegation does
+hierarchies or signals. [Execution groups](../interfaces/execution-groups.md) now have scoped subgroup
+creation, launcher ancestry checks and transitive stop/cleanup. Launch installs
+only explicitly supplied grants; it does not add a launcher automatically.
+Required default launcher delegation does
 not settle whether each launch creates a new subgroup. Ancestry containment and
 grant attenuation are separate protections. Tree cleanup must preserve honest
 safe-stop/deferred-cleanup boundaries, without promising bounded retirement or
@@ -63,20 +61,47 @@ implementation plan and terminal/provisioning ownership are unchanged here.
 - [Libuv/Neovim](neovim-libuv.md): descendant jobs and their contained cleanup,
   beyond existing ordinary direct `uv_spawn` and first editor behavior.
 
-## Open questions before design/implementation
+## Accepted minimum foundation (owner, 2026-10-13)
 
-The minimal slice is settled in #788; these broader questions remain parked:
+The [Clang driver contracts](hosted-clang.md#driver-invoked-lld-accepted-and-assigned-2026-10-13)
+authorize the minimum foundation first, with Daybreak's adversarial kernel review
+before merge, then a separate driver integration PR:
 
-- **Automatic group and launcher selection:** the minimal slice provides explicit
-  caller-scoped creation through LAUNCH, subtree containment/cleanup and bounded
-  fixed-space admission. Automatic per-launch groups and synthesized/default
-  launcher grants remain outside it.
-- **Spaces:** how does subgroup containment interact with fixed group spaces,
-  space creation and launch-capable administrative/service grants, without an
-  escape from the parent's lifetime or an implicit authority increase?
+- LAUNCH permits scoped CREATE_GROUP: a member creates within its own group and
+  fixed space; an ungrouped local caller creates an owned root in its own space.
+  Retire the redundant privileged CREATE_GROUP right. The creator stays outside
+  the subgroup and owns CONTROL|WAIT plus its bound LAUNCH handle atomically.
+- Launch/capability/COPY/IPC checks admit only own-group or descendant launchers;
+  ancestor, unbound and foreign escapes refuse. Grouped space creation refuses
+  before effects. Own-group launcher delegation remains explicitly declared,
+  with sandbox withholding; no implicit kernel grants or automatic per-launch
+  subgroup creation.
+- Parent stop and cleanup cover the whole subtree, including admitted creation
+  and deferred cleanup. Storage-only references do not prolong execution.
+  Tunable bounds are depth 16 and 256 allocated groups per space, including
+  retiring/retained storage; admission returns LIMIT before creation effects.
+- A contained job's creator retains sole non-forwarded CONTROL. Normal job wait
+  observes the process result and subgroup cleanup. PROCESS_WAIT remains
+  process-only, so caller fault observation may precede child deferred cleanup;
+  parent-group completion is transitive.
+
+After the foundation the owner can create and inspect a contained native job
+subtree without changing Clang. This assigns no broader Continuum, space teardown,
+capability-environment or default-grouping redesign.
+
+## Broader questions still parked
+
+The accepted fixed-space foundation does not settle the broader direction:
+
+- **Default grouping:** when/how should an ordinary launched program's group
+  be selected or created beyond explicit subgroup creation? The accepted slice
+  deliberately retains explicit grouping and declared launcher grants.
+- **Spaces:** how does the broader direction interact with space teardown and
+  cross-space services? The accepted slice fixes space and refuses grouped
+  space creation rather than assigning a new lifetime/authority family.
 - **Capability-valued environment:** how are bound launchers and supervision
   capabilities selected, attenuated, copied/inherited or withheld through
   [capability entries](capability-environment.md), configuration and namespaces?
 
-The minimal slice alone is assigned. Broader design and implementation still
-require a separate owner go; consumer links grant no additional scope.
+The minimum foundation is authorized above. Return for owner review before
+implementing the remaining direction; consumer links do not extend its scope.
