@@ -1,13 +1,12 @@
 # Hosted Clang task 5
 
-Status: implementation complete, 2026-10-13; matched `0e95af3a` QEMU qualification
-complete, current `6bc3a009` SDK refresh and native owner check/measurements pending.
-No native task 5
-performance or peak measurements yet; the earlier "instant" compile/extract
+Status: implementation and current `6bc3a009` SDK/1/4-CPU QEMU qualification
+complete, 2026-10-13; native owner check/measurements pending.
+No native task 5 performance or peak measurements yet; the earlier "instant" compile/extract
 observation is qualitative. Task 5 uses the accepted separate npfs toolchain
 volume and no-launcher bundles; owner/luna handle native staging and runs.
 
-## Before implementation
+## Before implementation (`0e95af3a`)
 
 Untouched baseline base `0e95af3a82afc2ea8f009c046fa96cb6c08ba1bc`; userland
 `c472de7d`, ports `f93becb9`, fs `414be0ac`, lwIP `a1aadb91`. Published compiler
@@ -52,7 +51,7 @@ roots and the accepted four runtime grants, without a launcher. All three
 PT_LOAD segments match the separately linked symbol ELF byte-for-byte. Both
 existing loader ceilings are satisfied; these sizes do not bound working memory.
 
-## Authorized measurement-only probe
+## Authorized measurement-only probe (`0e95af3a`)
 
 Separate local branch `probe/hosted-vm-peak`, base `0e95af3a82afc2ea8f009c046fa96cb6c08ba1bc`,
 commit `2b9f1d94ce71233d3472ecade1bcffb8cc529da3`. Never merge/cherry-pick this
@@ -127,7 +126,7 @@ interpretation are in `probe-qualification.txt` beside the patch. All owned
 probe QEMU/GDB/client/virtio-fs jobs are stopped. Native measurements and the
 production pool payload's native qualification remain pending.
 
-## Fresh production payload
+## First production payload (`0e95af3a`)
 
 Opt-in producer commit `e8eadc28` (integrated as `26b67bc6`) completes from fresh
 host generators and target objects with the existing published compiler. No
@@ -152,7 +151,7 @@ The unused `LLD_INCLUDE_TESTS` configure warning is harmless: effective
 Usage and the explicit authority/publication contract:
 [native hosted tools](../../hosted-tools.md).
 
-## Pool-volume qualification
+## First pool-volume qualification (`0e95af3a`)
 
 Actual untouched-main kernel `0e95af3a`, SHA-256
 `f537cafaf6d3cf5a959db6a91404e0a2f4f8082b71a52284abe2391a51c15d29`.
@@ -210,7 +209,7 @@ excluded; the inspected compile finishes normally.
 Trusted reboot/shutdown flushes before detached checks. Read-only reopens on
 both CPU counts preserve the raw image byte-for-byte. All owned jobs stopped.
 Exact configuration, commands, full samples, GDB and raw evidence are beside
-`/shared/present/batch2/hosted-clang-task5/native/qualification.txt`.
+`/shared/present/batch2/hosted-clang-task5/previous-0e95-native/qualification.txt`.
 
 ## Superseded owner/luna handoff (`0e95af3a` only)
 
@@ -240,17 +239,94 @@ Source ABI identity is now
 `startup_stream` grew 16 → 32 bytes and `startup_info` 168 → 216 bytes: old
 runtime binaries must not be used with this kernel. The historical matching
 kernel/SDK measurements above are not invalidated, but their native handoff is
-superseded and preserved. Current `native/README.md` explicitly says not to stage.
+superseded and preserved. The current handoff below replaces it.
 
 The new ordinary image/SDK build passes with the existing published compiler.
-Fresh generators and target objects are rebuilding against that SDK. No source
-adaptation, compatibility shim, fork/container rebuild or new task. Final
-current-SDK payload, QEMU checks and native image/run sheet follow before staging.
+Fresh generators and all target objects rebuild successfully against that SDK.
+No source adaptation, compatibility shim, fork/container rebuild or new task.
+The new revision is
+`hosted-5466bcbd5ec9ad9a8f20ea56f24a246d325ce8a93503b0fec94f876f1ed3c87f`,
+archive 206,878,720 bytes, SHA-256
+`8ace54c887082e22090410ff596ae5192a8d5b55e63628b91656398269998fea`.
+
+| Current-SDK artifact | Serialized bytes | Page-rounded image/span bytes |
+| --- | ---: | ---: |
+| Clang | 90,347,866 | 90,939,392 |
+| LLD | 55,743,570 | 56,352,768 |
+
+Both retain the 8 MiB eager stack and fit the existing image/span ceilings.
+The refreshed one-CPU read-only pool check passes compile/link/run and honest
+rejection. Its hello object retains SHA-256
+`1138fa33584bb475cb71100bc9216fd3b3e825f2e5da356b74de18b87576ce21`;
+the current-runtime PXE is
+`915e13319b74bf21140218acf23c16d91cfbbccbb94560ecc18a91bfc82e1834`.
+Both CPU configurations pass version, compile, standalone link and run;
+missing-semicolon input, denied Clang/LLD outputs and invalid LLD input exit 1.
+All sessions drain. Untimed GDB confirms integrated cc1, the current startup
+layout, live FS/TLS and declared runtime/root grants without a launcher.
+The fresh pool is host-seeded; native shell publication proof remains the
+earlier source-identical script check, not a new publication measurement.
+
+| Current ordinary npfs session seconds, median (range) | 1 CPU | 4 CPUs |
+| --- | --- | --- |
+| Clang version/startup | 10.80 (10.68–11.92) | 14.78 (10.91–18.11) |
+| Hello compile | 10.95 (10.91–10.97) | 11.35 (10.61–11.62) |
+| Missing-semicolon input | 10.58 (10.53–10.75) | 10.43 (10.42–10.45) |
+| Standalone LLD | 8.29 (8.17–9.36) | 7.91 (7.82–8.09) |
+
+Same Q35/nested-KVM, 2 GiB and timing definition as before; three samples each.
+No probe/GDB during timing; host load unisolated. The npfs/backend and SDK
+changes prevent treating historical HOST/npfs values as an isolated code A/B.
+Trusted reboot and shutdown followed by detached journal/GPT checks pass.
+Read-only runs preserve image SHA-256
+`3043ea0691af01b6be5faa6ec1e1a6b20d310f5f59cc62f2990eacfffeac4704`,
+GUID `ebd66076-a25f-4d92-8bfc-bcbd170ca9c2`.
+Current owner run sheet, prepared data image/configs/commands, checksums and
+full ordinary qualification evidence:
+`/shared/present/batch2/hosted-clang-task5/native/README.md`.
+Use this current revision/runtime, not `previous-0e95-native`. No physical
+media has been written or staged by delta; native checks remain pending.
 
 The identical authorized counter changes apply on the new base, in a separate
 local probe `8e2b5de9aaebfe92e57bc00932b203ac9476d051`, never merged. Current patch:
 `/shared/present/batch2/hosted-clang-task5/probe-current/probe-current.patch`,
 SHA-256 `f3f823054d2f0f6a214460f227b9209f94bf959765cffb8607a8e4706d9aa9f3`.
 Added/removed code is unchanged; patch context reflects base `6bc3a009`.
-Trace kernel build/ABI checks pass; current runtime counters remain unqualified
-until the refreshed tools run. Do not use trace/probe runs for wall timings.
+Trace kernel build/ABI checks pass. Current 1/4-CPU, 2 GiB npfs probe runs
+use the same consumer configuration/payload, changing only the kernel and
+visible probe labels. Matching object/PXE hashes and successful execution are
+retained. Do not use trace/probe runs for wall timings.
+
+| Current probe workload | Startup owned bytes | Lifetime peak bytes | After cleanup |
+| --- | ---: | ---: | ---: |
+| Clang hello compile | 99,336,192 | 101,851,136 | 0 |
+| Standalone LLD link | 64,749,568 | 70,234,112 | 0 |
+| Clang missing-semicolon input | 99,336,192 | 100,737,024 | 0 |
+| Clang missing source | 99,336,192 | 99,581,952 | 0 |
+| Clang denied output | 99,336,192 | 99,995,648 | 0 |
+| LLD invalid input | 64,749,568 | 64,995,328 | 0 |
+| LLD denied output | 64,749,568 | 68,472,832 | 0 |
+
+Identical observations on both CPU counts. Capture backing is separately
+90,349,568 / 55,746,560 bytes, returning to zero. GDB independently sums
+current backed ranges at startup/pre-cleanup/cleanup and confirms current
+startup layout, one task/storage record, one active root and zero borrowers.
+A fresh one-CPU 256 MiB npfs probe boots to a stable shell. Clang capture
+returns NO_MEMORY and zero current backing, with provisional capture peak
+89,505,792 bytes; no child VM exists. LLD capture succeeds, then image backing
+is refused, provisional VM peak 30,777,344 bytes and cleanup zero. Echo/ls and
+FINAL/drain still succeed, without panic. These are probe-only real low-memory
+launch failures, not started-tool malloc-exhaustion or native measurements.
+The differing HOST/npfs working sets prevent comparing their admission limits
+as an isolated source regression.
+
+Current trace kernel SHA-256:
+`9f0bc5103a54b4ce0efc6b34f48fd7e4b403b60d9b805dc7bcee1fbf094a6d73`.
+Actual npfs **PROBE** ISO SHA-256:
+`945ee92d3ce839cecc8ea099ea91e5596452bea15dd53c7989e196873ea623f4`;
+initrd `578f93d76f57b0cc17f5c3fda73f7c1da4726b9d9f921183e3c4c84959a009b4`.
+These supersede the never-run virtio-fs preparation ISO. Full artifacts/logs:
+`probe-current/probe-current-record.txt` beside the patch. All owned QEMU/GDB/client jobs are stopped; the read-only disk
+hash remains unchanged. Metric/exclusions remain those specified above.
+Native compile/link/run, uninstrumented wall samples and separately labelled
+peak measurements remain the owner/luna action before task 5 completion.

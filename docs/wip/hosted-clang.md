@@ -92,7 +92,9 @@ task 5 has its own owner go, with pre-implementation decisions below.
    - [x] Fresh producer, exclusive pool publication, read-only 1/4-CPU
      compile/separate-link/run, rejected input/output, clean reopen and GDB
      grant/TLS inspection. Existing ceilings preserved; separate local probe
-     qualifies backing accounting and real low-memory rollback.
+     qualifies backing accounting and real low-memory rollback. Refreshed
+     against SDK/main `6bc3a009` (216-byte startup/32-byte streams); older
+     runtime payloads are superseded.
    - [ ] Native owner compile/link/run, uninstrumented elapsed measurements and
      separately labelled peak probe. Data image/configs/commands are ready in
      `/shared/present/batch2/hosted-clang-task5/native/`; no physical staging yet.
@@ -164,7 +166,7 @@ existing fork already supplies the source closure; no new compiler image is
 currently required. If execution reaches a required fork change, publish its
 exact source/adoption branch and owner build/push commands before adopting it.
 
-**Baseline captured before implementation:** current main `0e95af3a`, current
+**Baseline captured before implementation:** then-main `0e95af3a`, matching
 SDK and freshly rebuilt temporary bundles pass repeated version/startup, hello
 `-c`, separate LLD link and resulting PXE launch in 1/4-CPU nested-KVM QEMU.
 Rejected input exits 1 without an object. Unprofiled remote-session elapsed
