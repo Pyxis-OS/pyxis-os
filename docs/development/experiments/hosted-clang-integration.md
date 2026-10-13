@@ -32,7 +32,7 @@ No exclusions. Median (minimum–maximum), milliseconds except launch wall:
 Clock calibration was 35,625–114,283 ns/read, not subtracted. Launch includes
 discovery/session setup; RAM writes grow without sync. This is an OS baseline,
 not compiler performance, physical-storage durability or native ThinkPad evidence.
-This baseline preceded the task 4 cross-build; compiler execution remains pending.
+This baseline preceded the task 4 cross-build and compiler execution recorded below.
 Raw commands, provenance/hashes and captures remain local in
 `build/hosted-clang-task4-baseline/`; owned VM/client jobs are stopped.
 
@@ -77,8 +77,11 @@ compiler/SDK C++ runtime source `2d234435`, LLVM workers off).
 
 Full configuration and build logs remain local in the fork worktree's `build/`.
 No new compiler pin was needed for local qualification; the current host
-compiler generates the required code. Production fork adoption requires its
-matching owner-published container under the single source-pin contract.
+compiler generates the required code. Production adoption uses the owner-published `pyxis-llvm23.1.3-4c23a20` image
+and merged source `4c23a208` under the single source-pin contract. The merged SHA
+is unchanged from qualification; no further image rebuild is required. Existing
+CI checks the integrated SDK/image with that compiler; the interactive results
+below retain their actual earlier compiler/runtime provenance.
 
 
 ## Native artifacts and interactive result (2026-10-12)

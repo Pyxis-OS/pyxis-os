@@ -54,7 +54,6 @@ task 5 still needs its own separate assignment.
    locale, wide FILE/UTF-8 closure and `getentropy`-backed `random_device`;
    see [C++ in userspace](../development/cxx-userspace.md) and
    [hosted-clang-cxx](../development/experiments/hosted-clang-cxx.md).
-   Ordinary SDK adoption waits for the owner-built container (below).
 3. [x] **Remaining reached libc operations** (2026-10-11): userland
    [#217](https://git.internal/PyxisOS/pyxis-userland/pulls/217), Pyxis #718.
    Disposition of absent names and the 155/170 Support compile inventory are in
@@ -68,7 +67,7 @@ task 5 still needs its own separate assignment.
    [#242](https://git.internal/PyxisOS/pyxis-userland/pulls/242), integration
    [#763](https://git.internal/PyxisOS/pyxis-os/pulls/763);
    [build and QEMU/GDB record](../development/experiments/hosted-clang-integration.md).
-   Production fork adoption waits for the matching owner-published container.
+   Production adopts the merged fork and its owner-published compiler image.
 5. [ ] **Installed tools and first completion.** Pool-volume bundles delegate
    explicit resource/sysroot roots, scratch/output authority and launcher rights
    only where needed. Measure native image/span/stack/peak memory before settling
@@ -79,7 +78,7 @@ task 5 still needs its own separate assignment.
 ### Qualified task 4 closure
 
 Source inspection of the current
-[pinned fork](https://git.internal/PyxisOS/pyxis-llvm/src/commit/2d2344355c6825f3293e026aafe185c5632abfdb).
+[pinned fork](https://git.internal/PyxisOS/pyxis-llvm/src/commit/4c23a208a023007024a1b4ff32e5d9cd8733cf1c).
 
 | Area | Boundary and work |
 | --- | --- |
@@ -124,25 +123,14 @@ and its matching C++ runtime source. It already generates the required code;
 math additions alone need no new container. Fork #7 supplies the remaining
 native source closure at `4c23a208a023007024a1b4ff32e5d9cd8733cf1c`.
 
-Before production adoption, the owner publishes its matching image under the
+The owner built and published `pyxis-llvm23.1.3-4c23a20` from the prepared
+adoption commit `efcc309a`. Fork #7 merged at the exact qualified source SHA,
+so no further image rebuild is needed. Integration adopts that pin, Containerfile
+revision check and workflow image tag together under the
 [single compiler/SDK source-pin contract](../development/llvm-toolchain.md#changing-the-pin).
-The prepared branch `toolchain/hosted-integration-container` at
-`efcc309ae465bdbca6224e2b31da9b0a9c73a136` updates `toolchain/build.sh`, the
-Containerfile revision check, workflow tag and toolchain documentation together.
-From that branch:
-
-```sh
-podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20 .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20
-```
-
-Then integration adopts that commit and checks exact-head CI. Skipping publication
-makes CI unable to pull the image; keeping the old source pin omits these native
-metadata/driver/host fixes and breaks URI header staging in the ordinary target
-build. This is source adoption, not a new codegen/TLS ABI requirement. Merge order:
-fork #7 and userland #242, owner image publication, then Pyxis #763 with the
-adoption commit. No LLVM rebuild belongs in ordinary CI. Task 5 still needs a go.
+This is source adoption, not a new codegen/TLS ABI requirement. Ordinary CI
+consumes the published image without rebuilding LLVM. Remaining merge order:
+userland #242, then Pyxis #763 after exact-head CI. Task 5 still needs a go.
 
 ## Resources and native limits
 
