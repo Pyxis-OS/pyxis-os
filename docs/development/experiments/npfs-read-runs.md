@@ -31,7 +31,8 @@ Commands through existing `pyxis-remote --machine --no-shell-echo`:
 
 These are **not interleaved acceptance measurements**. Small-read variation is
 wider/higher after; no absence-of-regression claim follows from the unchanged
-single-page code path. Native interleaved controls remain required. The first
+single-page code path. The native interleaved controls below resolve this concern
+for the measured workload. The first
 empty session in each boot included roughly six seconds of network setup and
 is excluded. A baseline Clang launch reached its 30 s guest deadline; it is a
 failure, not a successful timing. After-code version and hello compile each
@@ -66,13 +67,49 @@ that branch, cancellation and an actual failed USB block ticket are source-revie
 not runtime-qualified. No fault injection was added. Malformed mapping input is
 not evidence of device-error recovery. GDB scripts used no inferior function calls.
 
-## Native handoff
+## Native A/B, 2026-10-13
 
-The [native baseline](usb-read-throughput.md) identifies the original bottleneck.
-A separate matched ordinary before/after packet uses this exact implementation
-base, one shared qualification archive and the same stick/port. First post-boot
-Clang launches are separated from repetitions, with empty/small-read controls,
-output hashes and shared-worker responsiveness. Native runs are owner-operated
-and **pending**; no native speedup or merge recommendation is claimed yet.
-Private logs, raw fixtures, debugger scripts and operator-local selection remain
-outside the repository. See the [accepted scope](../../wip/usb-read-throughput.md).
+Owner/orchestrator hands-free qualification on the ThinkPad T14 Gen 1 AMD,
+PXE and AC power, with the same SanDisk USB 3.2 Gen1 toolchain stick/port.
+All four boots had 12 CPUs online. A1/B1/A2/B2 used ordinary `LOG_LEVEL=info`,
+identical boot options and the common
+qualification archive (SHA-256
+`4a481e76b484eae008cbab2e943e18990314d060ddf014f0193e639344bb5c98`).
+A was untouched `9c44ac0d`, kernel hash `a429ed92…` above; B was `2d8e3653`,
+kernel SHA-256 `e9e8add54c27bc6d62c10f129e4dbfc0cb93a645f09760c8be57a3785d903ce7`.
+There was no debugger/probe during these measurements. Source code is unchanged
+by this subsequent documentation update.
+
+The existing client used `--machine --no-shell-echo --listen <beacon name>
+0.0.0.0 2323`. Each boot ran three empty/version/hello-compile/hash/small-read
+rounds. The small-read command was `head -c 1048576 <Clang executable URI> |
+sha256sum`; source/object fixtures were unique RAM-backed `tmp://` files.
+
+| Boot | Version 1 / 2 / 3, seconds | Hello compile 1 / 2 / 3, seconds | 1 MiB small-read range, seconds |
+| --- | --- | --- | --- |
+| A1 | 4.550 / 4.283 / 4.288 | 4.297 / 4.296 / 4.300 | 0.0175–0.0186 |
+| B1 | 1.193 / 1.113 / 1.115 | 1.124 / 1.126 / 1.125 | 0.0176–0.0184 |
+| A2 | 4.564 / 4.296 / 4.296 | 4.311 / 4.308 / 4.311 | 0.0172–0.0205 |
+| B2 | 1.191 / 1.114 / 1.113 | 1.127 / 1.123 / 1.127 | 0.0174–0.0212 |
+
+Repeated versions improved from 4.283–4.296 to 1.113–1.115 s; hello compiles
+from 4.296–4.311 to 1.123–1.127 s, about **3.8× faster**. Version 1 is the first
+Clang launch after each boot and is kept separate, without claiming forced cold
+media. Empty-session ranges were 5.0–7.1 ms before and 5.1–6.2 ms after;
+small-read ranges overlap, with medians 18.19 and 18.24 ms. No material control
+regression was observed in this campaign.
+
+All required command results and FINAL/drain checks passed. Each boot's three
+object hashes matched; unique source names make cross-boot object hashes differ.
+Every small-read prefix matched independent host extraction. Optional inventory
+failed on both kernels because utilities were absent; hardware provenance comes
+from the owner. A Tailscale interruption and overlapping orphaned runner invalidated
+an earlier A2/B2 attempt; those captures are excluded. Clean A2/B2 used one runner.
+
+Native responsiveness is **not qualified**: the second beacon session on TCP
+2324 never received READY, so the wrapper could not run its concurrent check.
+The successful two-session QEMU observation is not a native substitute. Allocation
+fallback, cancellation and real failed-ticket qualification retain the limits above.
+The owner restored ordinary main `50e5411f` afterwards. Private clean and discarded
+captures remain in the staging packet; no real GUID or host account path is in
+repository records. See the [accepted scope](../../wip/usb-read-throughput.md).

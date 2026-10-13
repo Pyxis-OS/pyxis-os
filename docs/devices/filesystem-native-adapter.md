@@ -109,8 +109,9 @@ into the ordinary cache and consumed before reserving another slot.
 A failed block ticket publishes none of its run; earlier successful chunks retain
 their confirmed byte count. There is no failed-run retry. Executable capture
 requires complete success and discards its unpublished buffer otherwise. See the
-[qualification record](../development/experiments/npfs-read-runs.md); native
-before/after acceptance remains pending.
+[qualification record](../development/experiments/npfs-read-runs.md) for QEMU
+byte/cleanup and native A/B results, including unqualified failure and native
+responsiveness paths.
 
 The worker maintains dirty data and one pool-wide metadata redo transaction.
 File/directory synchronization commits the whole current pool transaction after
