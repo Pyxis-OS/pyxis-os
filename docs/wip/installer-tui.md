@@ -428,13 +428,13 @@ device, GPT-entry ordinal, first-block, block-count and lifecycle flags. Add:
 
 | Fact | Source at mount admission |
 | --- | --- |
-| GPT disk GUID, 16 raw GPT bytes | Validated `fat32_volume.disk_guid`, cross-checked against the kernel's healthy GPT snapshot and selected disk GUID. |
-| GPT partition unique GUID, 16 raw GPT bytes | Validated `fat32_volume.partition_guid`, cross-checked against the selected GPT entry and boot-origin UUID where applicable. |
-| GPT partition type GUID, 16 raw GPT bytes | Validated `fat32_volume.partition_type`; the config publisher verifies ESP type, rather than trusting a root name. |
-| GPT partition attributes, 64 bits | Validated `fat32_volume.partition_attributes`, already matched to the selected GPT entry. |
-| Device logical block size, bytes | Admitted `block_info.block_size` / `fat32_volume.source.sector_bytes`. |
-| Whole device block count | Admitted `block_info.block_count` / `fat32_volume.source.sectors`; distinct from the existing selected partition's block count. |
-| Identity-facts validity | Explicit validity in the OBSERVE contract/flags: zero, unavailable or unsupported facts must not be fabricated; clients refuse publication/replay without complete facts. |
+| `disk_guid[16]`, raw GPT bytes | Validated `fat32_volume.disk_guid`, cross-checked against the kernel's healthy GPT snapshot and selected disk GUID. |
+| `partition_guid[16]`, raw GPT bytes | Validated `fat32_volume.partition_guid`, cross-checked against the selected GPT entry and boot-origin UUID where applicable. |
+| `partition_type[16]`, raw GPT bytes | Validated `fat32_volume.partition_type`; the config publisher verifies ESP type, rather than trusting a root name. |
+| `partition_attributes`, 64 bits | Validated `fat32_volume.partition_attributes`, already matched to the selected GPT entry. |
+| `device_block_size`, bytes | Admitted `block_info.block_size` / `fat32_volume.source.sector_bytes`. |
+| `device_block_count` | Admitted `block_info.block_count` / `fat32_volume.source.sectors`; distinct from the existing selected partition's block count. |
+| `MOUNT_STATE_IDENTITY_VALID` flag | Explicit validity in the OBSERVE contract/flags: zero, unavailable or unsupported facts must not be fabricated; clients refuse publication/replay without complete facts. |
 
 The UUID byte order is the existing on-disk GPT convention; the client uses the
 shared GUID formatting rules for normalized plan text. Names, paths, configured
