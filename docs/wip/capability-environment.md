@@ -2,7 +2,7 @@
 
 Status: **parked direction, 2026-10-11.** Not a milestone. It authorizes no code,
 placeholder API or format change. Native HTTP task 3 has implemented transferred
-facets; task 5 proposes the bounded adapter below without implementing this
+facets; task 5 has an accepted bounded adapter below without implementing this
 direction. Revisit before session or space configuration changes the environment,
 [users and authority](users-and-authority.md) work, or another feature stores a
 capability in a variable.
@@ -35,11 +35,11 @@ configuration documents (session and space Lua). Examples:
   capabilities later.
 - [Prepared native HTTP requests](../interfaces/http-transactions.md) transfer real
   body/control/response/observation grants. Task 5's
-  [shell proposal](native-http-requests.md#task-5-shell-proposal--owner-review-required)
+  [accepted shell contract](native-http-requests.md#task-5-accepted-shell-contract--2026-10-13)
   uses one typed capability-entry table as an interim shell-local adapter beneath
   this direction, not printed handles or a separate HTTP registry. It explicitly
   leaves environment/configuration entries and automatic inheritance unimplemented;
-  the owner's three shell choices remain open.
+  the owner accepted its syntax, worker and declared RAM/NPFS provision on 2026-10-13.
 
 ## Invariants to keep
 

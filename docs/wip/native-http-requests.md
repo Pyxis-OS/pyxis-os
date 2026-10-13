@@ -354,16 +354,15 @@ Implemented interfaces and limits are in [stdio](../userland/stdio.md#http-strea
 [fetching](../userland/http-fetch.md#redirect-chains). Userland and ports precede
 the parent ABI/gitlink update. Task 5's assigned proposal below settles shell
 bindings and producer coordination;
-implementation awaits the owner's decisions.
+implementation is assigned under the accepted contract below.
 
-## Task 5 shell proposal — owner review required
+## Task 5 accepted shell contract — 2026-10-13
 
-Proposal only, 2026-10-13. No code or environment implementation is assigned by
-this proposal. Task 4 (#774, userland #244, ports #103) is merged. These three
-choices settle the user-visible surface and its required provisioning; defaults
-are recommendations, not accepted decisions.
+Owner decisions on #780, accepted 2026-10-13; task 5 implementation is assigned.
+Task 4 (#774, userland #244, ports #103) is merged. The capability environment
+itself remains separately assigned.
 
-### 1. Named typed results — default: `=> name`, `@name`, `request` operations
+### 1. Named typed results — accepted: `=> name`, `@name`, `request` operations
 
 A final stdout HTTP URI redirect requires `=> name`, reserving a fresh name
 before preparation/launch. Without one, refuse with a syntax hint. There is no
@@ -421,12 +420,10 @@ explicit selected facets through launch; scripts have their own table. The
 future environment must unify storage/lookup, not wrap a second request registry.
 
 Package the pinned BusyBox `printf` as an ordinary external applet; it is absent
-today. It receives stdout, not HTTP/control authority. **Alternative:**
-`request send name -- COMMAND ... > URI` as a prefix instead of `=>`; the same
-named values/rights apply, with more typing and
-no new suffix operator. Select this syntax before implementation.
+today. It receives stdout, not HTTP/control authority. The prefix form
+`request send` is not adopted.
 
-### 2. Coordinator — default: one bounded trusted staging worker
+### 2. Coordinator — accepted: one bounded trusted staging worker
 
 Refine the earlier direct body-stdout sketch: producer stdout is PIPE WRITE;
 an internal trusted worker owns PIPE READ and staging FILE WRITE. Its declared
@@ -466,16 +463,33 @@ Only one HTTP body sink, at the final stage, foreground only; no HTTP stderr,
 append, background transaction or concurrent body writer. `> @name` stages
 without automatic commit; URI `> ... => name` is the explicit automatic
 coordinator. `< http(s)://...` uses ordinary GET's STREAM/STATUS pair and redirect
-policy; `< @name` always uses the held response. **Alternative:** delegate body
-FILE WRITE directly and require a new reliable producer I/O-completion contract;
-less overhead, but existing exit status alone misses ignored/uncertain writes.
+policy; `< @name` always uses the held response.
 
-### 3. Declared private backing — default: opt-in trusted startup, private NPFS
+**To look into later:** direct body FILE WRITE plus a reliable producer I/O-
+completion contract could remove the worker and its copies. Revisit against the
+measured worker POST cost; existing exit status misses ignored/uncertain writes.
 
-Reuse [declared volume/source grants](../userland/init.md#fat32-volumes-and-selected-grants),
-now merged in #775; no second private-volume schema. A dedicated NPFS volume
-is selected as a DIRECTORY source, absent from all URI roots. For example
-(`volumes` is global; `grants` belongs to the chosen space):
+### 3. Declared backing — amended: bounded private RAM by default, NPFS opt-in
+
+Ordinary live and installed profiles declare a private RAM staging leaf through
+trusted startup, so the inline POST works without repartitioning or configuring
+a volume. The default body cap is **16 MiB, configurable**. Count admitted size
+before mutation; crossing the cap fails honestly, prevents submission and gives
+a hint to configure private NPFS backing. This is explicit RAM provisioning,
+not an automatic fallback. Resident protocol/copy buffers remain separately
+bounded. No fallback between selected RAM and NPFS backends.
+
+Reuse [declared volume/source grants](../userland/init.md#fat32-volumes-and-selected-grants)
+and their shared source budget, not a second private-volume schema. Trusted
+startup creates isolated per-service leaves, selects each through the provider's
+declared `staging` resource, publishes its OPEN_READ/OPEN_WRITE grants and aliases,
+then consumes the backing source before the interactive handoff. The provider
+requests CREATE/REMOVE/READ_FILES/WRITE_FILES/FILESYSTEM_INFO on its leaf. Setup
+drops ancestor/provisioning copies; shells/programs get no backing authority.
+Service selection, leaf provisioning and consumption still need implementation.
+
+Large uploads opt into a dedicated private NPFS volume outside **every** client
+root/cwd/alias. Example (`volumes` is global; `grants` belongs to the space):
 
 ```lua
 volumes = { ["http-work"] = { kind = "npfs", partition = 2, volume = "http-work" } }
@@ -483,28 +497,13 @@ grants = { http_staging = { volume = "http-work", kind = "directory",
                            access = "read-write", optional = true } }
 ```
 
-Trusted startup must consume this source before the interactive handoff: create
-isolated per-service leaves, select each leaf through a declared provider
-resource named `staging`, and publish the resulting OPEN_READ/OPEN_WRITE grants
-and aliases into that space's namespace. Use the common selected-source resolver
-and a provider bundle declaration, not a grant-adding launch wrapper. The provider
-requests CREATE/REMOVE/READ_FILES/WRITE_FILES/FILESYSTEM_INFO on its leaf; setup
-drops ancestor/provisioning copies and excludes this source from the session/
-interactive-shell inventory. Existing source mounting is implemented; service
-selection, leaf provisioning and consumption before handoff still need code.
-
-The backing is outside **every** client root/cwd/alias, including system/home:
-installed defaults expose both today. No inferred home/tmp directory, automatic
-RAM fallback, hidden-name privacy, manifest edit or removal of HTTPS's read-only
-trust-root policy. Selection only narrows declared grants. Missing/not-writable/
-non-NPFS backing leaves GET available and POST explicitly unavailable. Existing
-images require an explicit backing/configuration change; do not repartition or
-add a volume during an update. Qualify with a separately authored disposable
-installed image. This named-resource declaration is an interim current-ABI path,
-not capability-valued configuration; reconcile it in that separate assignment.
-**Alternative:** keep stock provisioning unchanged and require a custom trusted
-initializer; functionality can be qualified, but ordinary installations cannot
-use the example until separately provisioned.
+Use the common selected-source resolver and declared provider resources; no
+launch wrapper adds grants. system/home are public roots in installed defaults,
+so a hidden directory there is not private. Preserve HTTPS's read-only trust
+roots. Missing/refused selected backing leaves GET available and POST unavailable;
+it never silently selects another backend. No repartitioning or volume creation
+during updates. This current named-resource path is an interim provisioner,
+not capability-valued configuration; unify it in that separate assignment.
 
 ### Baseline and delivery checks
 
@@ -532,14 +531,15 @@ recorded pre-merge revisions, not this newer runtime. `cat URL | cksum` works;
 HTTP stdin/output redirects refuse,
 and `printf` is absent. Stock POST/coordinator has no measured zero-cost baseline.
 
-After acceptance, refresh the baseline on the chosen implementation base, repeat
+Refresh the baseline on the chosen implementation base, repeat
 matched GET/launch and measure the added worker's POST
 cost/storage/CPU. Qualify the example sessions, every producer's failure,
 uncertainty/no replay, Ctrl+C/expiry/early close, copied/reference lifetimes,
 4xx/5xx, malformed framing and TLS EOF, denied provisioning, and real private
 NPFS multi-GB GET/staged POST with bounded resident buffers. Track the native
 HTTP/TCP reference gap; the task 4 native result is not a worker POST measurement.
-Userland/ports first, parent pins their own heads. Stop here for the three choices.
+Userland/ports first, parent pins their own heads. Native timing/listening is an
+owner run; distinguish it from nested measurements and track the TCP reference gap.
 
 ## Task 2 accepted TLS policy
 
