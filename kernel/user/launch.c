@@ -389,8 +389,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
     .streams = {
-      [STARTUP_STDOUT] = {PROTOCOL_CONSOLE, standard_output},
-      [STARTUP_STDERR] = {PROTOCOL_CONSOLE, standard_error},
+      [STARTUP_STDOUT] = {.protocol = PROTOCOL_CONSOLE, .handle = standard_output},
+      [STARTUP_STDERR] = {.protocol = PROTOCOL_CONSOLE, .handle = standard_error},
     },
     .resources = resources,
     .resource_count = resource_count,

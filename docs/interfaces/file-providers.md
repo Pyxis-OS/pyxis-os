@@ -1,9 +1,11 @@
 # Userspace file providers
 
-A provider publishes an OPEN service through an explicitly delegated
+A generic provider publishes an OPEN service through an explicitly delegated
 [namespace](namespaces.md). Opening a provider URI returns an exported FILE
 capability. Ordinary libpyxis file helpers, libc, `cat`, `cksum`, `tee` and shell
-input redirection use it without provider-specific code.
+input redirection use it without provider-specific code. HTTP additionally offers
+[prepared transactions](http-transactions.md), used by libc URL reads for
+forward-only response streams.
 
 ```text
 cat text://welcome
@@ -53,9 +55,11 @@ transport or validation failure. Successful representation metadata is in
 with Location and consumed accounting in the result. The contextual helper is
 `provider_open_context()`; low-level `provider_open()` performs just one hop.
 `deadline_ns` is an absolute monotonic deadline; zero means unlimited. `path_resolve()` for
-files and `path_open_file()` use the same bridge; libc and shell redirects share
-the latter's open/create routing. Provider directory operations, cwd changes,
-removal and rename are unsupported.
+files and `path_open_file()` use generic provider OPEN; libc and shell redirects
+share the latter's open/create routing for ordinary files. These FILE-only path
+helpers refuse HTTP(S) URLs, including `json+` aliases, with BAD_OPERATION after
+binding discovery rather than collecting a response implicitly. Provider
+directory operations, cwd changes, removal and rename are unsupported.
 
 ## File dispatch and lifetime
 
@@ -78,10 +82,12 @@ Transport and operation failures remain distinct until the helper maps them to
 its native status. A delivered mutation whose transport fails reports
 OUTCOME_UNKNOWN. No automatic retry, reconnection or rebinding occurs. Existing
 FILE reads and generic path/libc opens still wait without a caller deadline.
-HTTP(S) open chains use one absolute 30-second/earlier-caller deadline, including
-OPEN queueing; their low-level callers supply bounded scratch and clock READ
-authority through `path_workspace`. Other native OPEN callers can supply a
-deadline explicitly; an unresponsive generic provider can block its client.
+Explicit legacy HTTP(S) OPEN chains use one absolute 30-second/earlier-caller
+deadline, including OPEN queueing; their low-level callers supply bounded scratch
+and clock READ authority. Libc URL GET uses PREPARE/COMMIT with a single deadline
+through response consumption and no total-body budget. Other native OPEN callers
+can supply a deadline explicitly; an unresponsive generic provider can block its
+client.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
 Each libc descriptor keeps its own offset. Namespace replacement affects future
@@ -135,8 +141,11 @@ Separate [HTTP and HTTPS services](../userland/http-fetch.md) publish OPEN_READ 
 `https` in configured interactive namespaces. Each performs one network hop.
 The shared bridge follows the [bounded redirect policy](../userland/http-fetch.md#redirect-chains);
 only a complete final response becomes a read-only FILE snapshot. Optional
-Content-Type, status and effective URL reach libc through copied metadata.
-Existing `cat`, `cksum`, `tee`, libc and input redirection share this bridge.
+Content-Type, status and effective URL are returned as copied metadata.
+This explicit provider OPEN route remains legacy; ordinary libc URL reads use
+PREPARE/COMMIT and STREAM, preserving the anonymous redirect/status policy.
+FILE-only consumers must explicitly materialize a response into caller-owned
+storage when they need SIZE or positioned reads.
 Each open fetches independently; copies retain the same immutable body.
 Retirement releases its allocation and shared storage reservation. The provider
 supports 63 live snapshots alongside its OPEN export, including empty snapshots.

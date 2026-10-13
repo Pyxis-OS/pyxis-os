@@ -1,11 +1,12 @@
-# Verified HTTPS snapshots
+# Verified HTTPS
 
 Ordinary file consumers open `https://` through the delegated namespace and
-receive a completely fetched, immutable FILE snapshot. TLS runs in userspace;
+receive a forward STREAM after verified response headers, with final framing
+observation. Explicit legacy provider OPEN still collects a FILE snapshot. TLS runs in userspace;
 the kernel supplies existing TCP, random, clock, file and capability interfaces.
-Clients receive snapshot authority without additional network or trust-management
+Clients receive response authority without additional network or trust-management
 grants. See [fetching and provider startup](http-fetch.md) for commands, URI
-handling, HTTP framing, status mapping and snapshot lifetime, and the
+handling, HTTP framing, status mapping and response lifetime, and the
 [fetch/inspect/compile/run walkthrough](../development/edit-build-run.md#fetch-source-over-https)
 for a development workflow.
 
@@ -182,8 +183,9 @@ origin chain, and HTTPS never downgrades. No runtime silently drops custom roots
 
 ## Accepted limits
 
-The provider still exposes read-only HTTPS snapshots; the native library also
-supports [fixed-body POST](http-fetch.md#fixed-body-requests). Cooperative TLS
+The provider exposes [prepared HTTPS responses](../interfaces/http-transactions.md)
+and legacy read-only snapshots. C/Lua adapters support explicit staged POST;
+the native library also supports [fixed-body POST](http-fetch.md#fixed-body-requests). Cooperative TLS
 steps retain identical plaintext across pending writes. A read-side send while
 an application write is pending refuses before native I/O; a read-owned alert
 must finish before another application write. Early response cleanup never

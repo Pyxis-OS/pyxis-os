@@ -1429,13 +1429,15 @@ CPU-bound cryptography. Revisit with demonstrated endpoint or scheduling demand 
 ## HTTP provider throughput
 
 **Pyxis must be able to hit good network targets overall in the future.**
-The cooperative provider adds about 10 µs per 4,088-byte buffered READ from
-readiness, BSP and timer work when the next READ is not queued at TRY time;
-the native 1 MiB GET is 18% slower (14.3 → 17.2 ms). The owner accepted this
-cost on 2026-10-12. Revisit before HTTP-heavy consumers (package fetching, Git,
-the Claude harness), and whenever end-to-end HTTP throughput falls measurably
-short of native TCP; track the gap with each relevant change.
-[Native A/B and nested results](development/experiments/http-prepared.md).
+Task 3's cooperative loop added about 10 µs per 4,088-byte buffered READ from
+readiness/BSP/timer work and 18% to a native 1 MiB GET (14.3 → 17.2 ms), accepted
+2026-10-12. Task 4's native A/B on 2026-10-13 recovered that whole-GET cost:
+16.6–18.0 → 12.1–12.4 ms, about 82 MiB/s, close to the 85 MiB/s TCP receive
+reference. This does not remove the measured per-READ work or qualify larger
+bodies/POST. Revisit before HTTP-heavy consumers (package fetching, Git, the
+Claude harness), and whenever HTTP falls measurably short of native TCP; track
+the gap with each relevant change. [Task 3 A/B](development/experiments/http-prepared.md)
+and [native/nested task 4 results](development/experiments/http-stream-adapters.md).
 
 ## HTTP provider responsiveness
 

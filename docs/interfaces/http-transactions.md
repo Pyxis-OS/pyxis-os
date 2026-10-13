@@ -3,10 +3,11 @@
 `httpfs` serves native prepared GET/fixed-body POST alongside the existing
 [complete FILE snapshots](file-providers.md#http-and-https-snapshots).
 The [ABI](../../include/abi/http_transaction.h) and SDK's `http_transaction.h`
-define PREPARE, COMMIT, ABORT and STATUS. HTTP/TLS remain userspace protocols;
+define PREPARE, COMMIT, ABORT, STATUS and METADATA. HTTP/TLS remain userspace
+protocols;
 [STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
-Libc/Lua streaming and shell transaction coordination remain later tasks of the
-[native HTTP milestone](../wip/native-http-requests.md).
+[Libc streaming](../userland/stdio.md) uses these facets; shell transaction
+coordination remains task 5 of the [native HTTP milestone](../wip/native-http-requests.md).
 
 ## Authority and preparation
 
@@ -15,16 +16,28 @@ for POST. A read-only provider or JSON alias cannot add submission authority.
 Stock services publish `json+http`/`json+https` aliases with the source's masks;
 those aliases select the JSON content-type default, not a different transaction.
 
-One copied endpoint payload contains the 40-byte prepare header, URI and bounded
-`name: value\r\n` fields, at most 4,096 bytes in total. The absolute monotonic
-deadline must be nonzero and future; it covers staging, submission and framing,
-including requests longer than 30 seconds. Wait slices remain natively bounded.
+One copied endpoint payload contains the 344-byte prepare header, URI and bounded
+`name: value\r\n` fields, at most 4,096 bytes in total (3,752 URI/header bytes).
+The header includes a 304-byte context: the normalized initial origin, sticky
+origin-crossing flag and remaining header-byte, field and informational-response
+allowances. This context grants
+no destination authority and has no total-body allowance. The 16-byte success
+reply reports the method and `HTTP_TRUST_ORIGIN_ONLY` restriction for a custom
+trust profile, followed by control, optional body and observation grants.
+The absolute monotonic deadline must be nonzero and future; it covers staging,
+submission and framing, including requests longer than 30 seconds. Wait slices
+remain natively bounded.
 The provider owns Host, length and transfer framing; conflicting, duplicate,
 malformed or CR/LF-bearing fields fail before networking. GET supports private
 request-scoped fields too. Mark credential-bearing requests explicitly; request
-fields never appear in STATUS, argv, environment or logs. POST and prepared GET
-return the first response without following redirects. Anonymous legacy snapshot
-GET retains its existing redirect/trust policy.
+fields never appear in STATUS, argv, environment or logs. POST and explicitly
+prepared GET return the first response without following redirects. Ordinary
+libc URL GET uses a typed PREPARE/COMMIT bridge with the
+[anonymous redirect policy](../userland/http-fetch.md#redirect-chains), one
+deadline and aggregate framing charges across hops. Custom-trust origin changes
+are refused by both the bridge and destination provider. The bridge retains each
+scheme's selected provider binding for the chain; namespace replacement affects
+future opens. Explicit provider OPEN retains the legacy FILE snapshot route.
 
 PREPARE performs no network submission. It returns independently exported
 control, optional body and observation grants. Native bindings own these handles;
@@ -47,10 +60,15 @@ RAM staging is not implemented. Unlink/close does not guarantee secure disk eras
 
 | Facet | Operations and ownership |
 | --- | --- |
-| Control | Attenuable COMMIT and ABORT rights; no credential/body read authority |
-| Body | FILE WRITE, SIZE and RESIZE; no READ; SYNC is unsupported and never submits |
-| Response | STREAM READ; copies share one forward cursor; no offsets, seek or SIZE |
-| Observation | STATUS only, independently retained from control/response |
+| Control | HTTP_TRANSACTION COMMIT (bit 0) and ABORT (bit 1), separately attenuable; no credential/body read authority |
+| Body | FILE WRITE right, permitting WRITE, SIZE and RESIZE; no READ; SYNC is unsupported and never submits |
+| Response | STREAM READ right; copies share one forward cursor; no offsets, seek or SIZE |
+| Observation | HTTP_TRANSACTION STATUS right (bit 2), authorizing STATUS and METADATA; independently retained from control/response |
+
+All facets are exported grants with CALL transport. GET preparation transfers
+two grants; POST transfers three. COMMIT handoff transfers response and a separate
+observation grant. A declared response stdin delegates only STREAM READ and its
+STATUS-only companion; see [startup streams](processes.md#startup-record).
 
 The first COMMIT freezes all writer copies before admitting another mutation,
 drains an already admitted mutation, pins the length and starts at most one
@@ -69,7 +87,10 @@ Retiring control before COMMIT abandons staging, even with a writer/observer
 held. After handoff, the last response reference aborts unfinished reception.
 Separate observation exports keep only final state, not staging or active work.
 ABORT is idempotent local cancellation, not remote rollback; completed framing
-stays immutable. Cancellation/expiry retains native storage until completion
+stays immutable. The first ABORT receipt waits for pending native operations to
+drain and cleanup to release active work, then reports cleanup status. Duplicates
+while that receipt is pending reply immediately and do not prove drain completion.
+Cancellation/expiry retains native storage until completion
 collection/drain and acknowledgement permit reclamation. Provider death fails
 held operations, without replacement/rebinding or automatic replay.
 
@@ -81,12 +102,15 @@ successful zero-byte EOF. A truncated body, deadline or provider failure returns
 an error after any readable prefix. A lost delivered READ reply may consume
 bytes; do not replay it or turn observation success into IPC success.
 
-STATUS separates transaction phase, submission certainty (not started, attempted,
-sent), HTTP status, framing (pending, complete, failed), native/source/cleanup
-errors, uploaded/received/consumed counters, TLS diagnostics and whether TLS
+The 2,328-byte STATUS reply separates transaction phase, submission certainty
+(not started, attempted, sent), HTTP status, framing (pending, complete, failed),
+native/source/cleanup errors, uploaded/received/consumed counters, TLS diagnostics and whether TLS
 cleanup was attempted. It includes bounded response Content-Type and Location,
-never request headers. A completed 4xx/5xx retains its body and HTTP status;
-framing success does not imply HTTP success. Missing final observation proves
+never request headers. The separate 2,177-byte METADATA reply uses the same STATUS
+right and returns this transaction's actual endpoint URI (without `json+`) and
+media type. It keeps URI and redirect Location from sharing an oversized reply.
+A completed 4xx/5xx retains its body and HTTP status; framing success does not
+imply HTTP success. Missing final observation proves
 nothing. Nonempty decoded 205 Reset Content fails while preserving status 205.
 
 ## Service and limits

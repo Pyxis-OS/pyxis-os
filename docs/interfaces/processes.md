@@ -114,8 +114,8 @@ Entry receives a pointer in `RDI` to a process-owned startup region. The
 [shared header](../../include/abi/startup.h) defines its layout; all embedded
 addresses refer to that child's virtual memory. The total budget is 64 KiB,
 including page padding. Only the required pages are allocated. Version remains
-1, with the old fixed-role layout replaced outright; rebuild in-tree programs
-together with the kernel.
+1, with the old layout replaced outright; rebuild in-tree programs together with
+the kernel. The fixed header is 216 bytes, including three 32-byte stream records.
 
 The read-only portion contains the header with three standard-stream bindings,
 named resource bindings, scheme-root
@@ -131,15 +131,19 @@ names may alias a handle; close each owned handle once. Missing resources are
 omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
 immutable snapshot, so a later lookup can return its stale value.
 
-Standard streams are fixed stdin/stdout/stderr slots with explicit console, file
-or [pipe](pipes.md) protocol tags. Absent slots use `STARTUP_STREAM_NONE` and an
-invalid handle.
-Each present slot owns a distinct handle, disjoint from all named resources,
-roots and working-directory bindings, with exactly its protocol's READ right
-for stdin or WRITE right for output. Libc adopts these handles directly before
-heap initialization; startup lookup borrows them and creates no extra reference.
-Closing a FILE releases that handle, leaving its startup entry stale. The kernel
-still reclaims remaining handles on exit or fault. See [stdio](../userland/stdio.md).
+Standard streams are fixed stdin/stdout/stderr slots with explicit console, file,
+[pipe](pipes.md) or response STREAM protocol tags. Response STREAM is stdin only:
+it pairs exactly STREAM READ with an HTTP_TRANSACTION STATUS-only observation,
+both with CALL transport. Other protocols have no observation companion. Absent
+slots use `STARTUP_STREAM_NONE` with every field zero.
+Each 32-byte slot records its stream protocol/handle and observation
+protocol/handle. The pair owns distinct handles, disjoint from other streams,
+named resources, roots, working directories and the namespace. Plain streams
+carry exactly their protocol's READ right for stdin or WRITE right for output.
+Libc adopts these handles directly before heap initialization; startup lookup
+borrows them and creates no extra reference. Closing a FILE releases its owned
+facets, leaving the startup entries stale. The kernel still reclaims remaining
+handles on exit or fault. See [stdio](../userland/stdio.md).
 
 Scheme roots have their own name/handle table. Preparation checks that each root
 is an installed directory capability and that root names are nonempty, unique
@@ -660,11 +664,18 @@ working-directory context. Source grants retain or reduce each authority mask. B
 indices; repeated references share one child handle, while separate grant-list
 entries produce separate handles. No resources, roots, environment or launcher
 are inherited implicitly. The image handle is not passed unless listed.
+The request is 224 bytes, including its three 32-byte stream records.
 
-Each present standard stream references an exclusive grant-list index. It cannot
-share that index with another stream, a named resource, a root, a working
-directory or the namespace. The existing grant installation creates exactly one child handle for
-that entry, and startup records it directly; there is no second retained copy.
+Each present standard stream references an exclusive grant-list index. Response
+stdin additionally selects a distinct HTTP_TRANSACTION observation index with
+exactly STATUS rights and CALL transport, alongside STREAM READ with CALL.
+Neither index can be shared with another stream or companion, a named resource,
+a root, a working directory or the namespace. The trusted caller declares the
+pair; the kernel validates types, masks and exclusivity, without inferring their
+transaction association or adding control/body/ABORT authority. Plain streams
+have zero observation fields; NONE requires all four fields zero.
+The existing grant installation creates exactly one child handle for each
+entry, and startup records it directly; there is no second retained copy.
 Separate entries may deliberately copy the same source object, as for console
 stdout/stderr and explicit terminal resources. No terminal grants are synthesized
 from stream metadata.

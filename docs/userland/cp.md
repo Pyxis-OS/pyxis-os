@@ -21,6 +21,16 @@ and a directory is never replaced as a file. Success is quiet. Options other tha
 `-r` and `--` are rejected before opening paths. No modes, owners or timestamps
 are copied.
 
+## HTTP sources
+
+HTTP(S), including `json+http(s)`, sources are forward-only streams. `cp`
+materializes them into its ordinary sibling staging file with bounded reads and
+no total-body cap. It requires validated EOF and final observation before
+publication; a prefix or failed framing preserves the old destination. This
+uses the caller's declared provider and destination authority, without an
+implicit snapshot or storage grant. Native file copies still use SIZE and
+positioned reads. See [HTTP streams](stdio.md#http-streams-and-explicit-submission).
+
 ## Recursive copy
 
 With `-r` a directory source is copied as a new tree. File operands behave as above.

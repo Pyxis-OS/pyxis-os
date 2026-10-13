@@ -3,6 +3,7 @@
 #include <abi/file.h>
 #include <abi/namespace.h>
 #include <abi/pipe.h>
+#include <abi/http_transaction.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -78,61 +79,80 @@ static bool measure_bindings(struct process *process,
   return true;
 }
 
+static bool stream_handle_distinct(const struct process_startup *source,
+    handle_t handle, size_t index)
+{
+  for (size_t i = 0; i < index; ++i) {
+    if (handle == source->streams[i].handle || handle == source->streams[i].observation) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < source->resource_count; ++i) {
+    if (handle == source->resources[i].handle) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < source->root_count; ++i) {
+    if (handle == source->roots[i].handle) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < source->working_directory_count; ++i) {
+    if (handle == source->working_directories[i]) {
+      return false;
+    }
+  }
+  return handle != HANDLE_INVALID && (!source->namespace || handle != source->namespace);
+}
+
+static bool validate_stream_handle(struct process *process, handle_t handle,
+    uint64_t protocol, uint64_t rights)
+{
+  struct capability_reference reference;
+  if (capability_acquire(&process->capabilities, handle, rights, 0, &reference) != CAP_OK) {
+    return false;
+  }
+  bool valid = object_stream_valid(reference.object, protocol, reference.transport) &&
+      reference.rights == rights;
+  capability_release(&reference);
+  return valid;
+}
+
 static bool validate_streams(struct process *process,
                              const struct process_startup *source)
 {
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
     const struct startup_stream *stream = &source->streams[i];
     if (stream->protocol == STARTUP_STREAM_NONE) {
-      if (stream->handle != HANDLE_INVALID) {
+      if (stream->handle || stream->observation_protocol || stream->observation) {
         return false;
       }
       continue;
     }
 
-    uint64_t expected_rights;
+    uint64_t rights;
     if (stream->protocol == PROTOCOL_CONSOLE) {
-      expected_rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
+      rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_FILE) {
-      expected_rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
+      rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_PIPE) {
-      expected_rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
+      rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
+    } else if (stream->protocol == PROTOCOL_STREAM && i == STARTUP_STDIN) {
+      rights = STREAM_RIGHT_READ;
     } else {
       return false;
     }
-
-    struct capability_reference reference;
-    if (capability_acquire(&process->capabilities, stream->handle, expected_rights,
-          0, &reference) != CAP_OK) {
+    bool response = stream->protocol == PROTOCOL_STREAM;
+    if ((response && stream->observation_protocol != PROTOCOL_HTTP_TRANSACTION) ||
+        (!response && (stream->observation_protocol || stream->observation)) ||
+        !stream_handle_distinct(source, stream->handle, i) ||
+        !validate_stream_handle(process, stream->handle, stream->protocol, rights)) {
       return false;
     }
-    bool valid = object_stream_valid(reference.object, stream->protocol,
-        reference.transport) && reference.rights == expected_rights;
-    capability_release(&reference);
-    if (!valid) {
-      return false;
-    }
-    for (size_t j = 0; j < i; ++j) {
-      if (stream->handle == source->streams[j].handle) {
-        return false;
-      }
-    }
-    for (size_t j = 0; j < source->resource_count; ++j) {
-      if (stream->handle == source->resources[j].handle) {
-        return false;
-      }
-    }
-    for (size_t j = 0; j < source->root_count; ++j) {
-      if (stream->handle == source->roots[j].handle) {
-        return false;
-      }
-    }
-    for (size_t j = 0; j < source->working_directory_count; ++j) {
-      if (stream->handle == source->working_directories[j]) {
-        return false;
-      }
-    }
-    if (source->namespace && stream->handle == source->namespace) {
+    if (response && (stream->observation == stream->handle ||
+        !stream_handle_distinct(source, stream->observation, i) ||
+        !validate_stream_handle(process, stream->observation,
+          stream->observation_protocol, HTTP_TRANSACTION_RIGHT_STATUS))) {
       return false;
     }
   }
