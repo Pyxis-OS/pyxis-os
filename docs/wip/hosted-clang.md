@@ -345,19 +345,30 @@ podman build -f ci/Containerfile \
 podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8c3b0fe
 ```
 
-The owner published and verified that image on 2026-10-13; #793 adopts the
-exact fork pin, Containerfile provenance and workflow tag together. LLVM #8
-must fast-forward first, preserving `8c3b0fe1`; that needs no further image
-rebuild. A changed merged SHA would require matching compiler/SDK provenance.
-Fresh ordinary image/SDK and exact-head CI pass at `b810b64e`. Full target
-links, driver QEMU/GDB and overlapping-memory qualification are in progress;
-the native run follows through owner/luna. No new native result is claimed.
+The owner published and verified the `8c3b0fe` image on 2026-10-13; #793 adopts
+its exact pin, Containerfile provenance and workflow tag. Both fresh target links
+pass, but QEMU qualification found two blockers: parent lookup-root collisions
+while opening leaf LLD, and inherited driver cleanup deleting a pre-existing
+requested output after a missing-launcher refusal. Userland #251 at `78372410`
+fixes private-root parsing without relaxing selected child-publication checks;
+LLVM #8 at `e0801c2660613d130abc66edc52a33875ee2e1f1` preserves requested outputs
+while retaining owned temporary cleanup. Neither corrected runtime loop is claimed
+qualified yet. See the [checkpoint record](../development/experiments/hosted-clang-driver/README.md#adopted-image-runtime-checkpoint-2026-10-13).
+
+Replacement container branch `toolchain/clang-driver-container` at `e982a12e`
+selects `pyxis-llvm23.1.3-e0801c2`, using the same build/push recipe above with
+the replacement tag. Publication remains an owner action; adopt it only after
+it exists. LLVM #8 must fast-forward first, preserving the final qualified SHA.
+A changed merge SHA requires matching compiler/SDK provenance. Merge order is
+LLVM #8, userland #251, then #793. The integration remains draft pending the
+corrected fresh closure, 1/4-CPU QEMU/GDB, ordinary timings, overlapping-memory
+qualification and the native handoff; no new native result is claimed.
 
 The foundation (#789 and userland #248) is merged into main `ad86d6e5`.
-Contained core #251 at `8c052506` includes userland main `39499b92`. The recorded
-baseline precedes code changes. The owner lifted the container-build timing
-hold after publication; ordinary timing runs remain separate from debugger
-and labelled, unmerged memory-probe runs.
+The baseline precedes code changes. The first container-build timing hold was
+lifted; pause timings during the replacement build and keep debugger/PROBE runs
+separate. The private native run-sheet inputs are prepared, with final artifact
+provenance pending; the initial `bb12b9a…` payload must not be staged as complete.
 
 Queued owner gallery request, after both this driver work and HTTP task 5c
 merge: a clean Pyxis QEMU screendump, Neovim on the left with a short C version

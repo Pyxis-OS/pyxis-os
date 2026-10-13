@@ -1,6 +1,6 @@
 # Clang driver execution qualification
 
-2026-10-13, before implementation. Proposal only; no fork/kernel/libc changes.
+Pre-code baseline, 2026-10-13. The following baseline precedes the driver changes.
 Fresh main `4a09711e5c6890588a4dfe3da12a1e4b32b01c14` contains merged #772.
 Userland `b38b0e09`, ports `c7e4bc35`, fs `414be0ac`, lwIP `a1aadb91`;
 published compiler/fork `pyxis-llvm23.1.3-4c23a20` / `4c23a208`.
@@ -181,3 +181,62 @@ Exact-fork container publication is an owner action from
 published old compiler pin until the new image exists. Full target closure,
 default driver compile/link/run and refusals, cleanup, overlapping-memory
 measurement and native owner check remain pending. No new native speedup claim.
+
+
+## Adopted-image runtime checkpoint (2026-10-13)
+
+Parent `b810b64e` (later docs-only `12111262`), userland `8c052506`, exact fork
+and published image `8c3b0fe1`. Fresh ordinary image/SDK and all four CI jobs
+pass; fresh workers-off Release X86 Clang/LLD links pass. Clean producer inputs
+stage `hosted-bb12b9a196bf486d48e03ac57ffc28e90b541bccc05fab720131eaca4fc0a450`.
+Archive 292,915,200 bytes, SHA-256 `d456eb973d2108bc57b5da78a80157dd10d9ec07808a28c31c6dbf51ed7dd9df`.
+
+| Image bytes / mapped span bytes | Clang | LLD |
+| --- | ---: | ---: |
+| P1F | 90,385,750 | 55,776,350 |
+| Page-rounded backing/span | 90,976,256 | 56,389,632 |
+
+Both retain 8 MiB stacks and existing ceilings. Imported files compare exactly;
+fsck/GPT pass. Ordinary read-only consumer ISO `0acb366f…`; isolated 1 GiB npfs
+pool/disk `e8f10160…`. Configuration is the frozen Q35/nested-KVM/2 GiB profile,
+separate network space and Remote with declared launch authority, no HOST/home.
+
+**Qualification blockers, not a completed driver loop:** 1 CPU: version,
+compile-only, standalone LLD and `hello 5` pass. Default driver refuses before
+job admission: `Pyxis tool bundle: Invalid argument`. Inspection finds the shared
+bundle parser rejects LLD's private `clang_resources`/`sysroot` names against
+Clang's parent lookup roots, before final child selection filters them. Userland
+`78372410` separates private manifest names from lookup context; actual selected
+child-publication collision checks and external grant-alias policy stay unchanged.
+Syntax, compile-only read-only output, requested statistics and oversized child
+capture reject honestly. Linker/read-only driver failures are masked by the
+bundle failure and are not qualified yet. No new timing or peak result.
+
+4 CPUs, `launch=false`: compile-only passes; link-only refuses the missing declared
+launcher, exit 1. A pre-existing `tmp://kept.pxe` containing `KEEP` disappears.
+Separate hardware-breakpoint GDB observes `Compilation::CleanupFile` with that
+exact filename, called by `CleanupFileMap` / `Driver::ExecuteCompilation`.
+Fork `e0801c26` removes native requested-name cleanup, retaining owned temporary
+cleanup and native writers' staged publication. This fixes the accepted old-output
+preservation boundary; host cleanup behavior stays unchanged. Replacement image
+`pyxis-llvm23.1.3-e0801c2` is an owner action from container branch `e982a12e`.
+Do not qualify or stage the initial `bb12b9a…` revision as the completed driver.
+
+The prepared native handoff is `/shared/present/batch2/hosted-clang-driver/native/`;
+its final revision/hashes and expected output remain pending the corrected fresh
+build. Final 1/4-CPU driver/refusal/owner-loss/cleanup checks, ordinary timings,
+separate memory-probe checks and the native owner run remain. Matching debugger
+ELFs were linked from the initial exact objects: all LOAD bytes/extents/flags,
+entry and zero tails match the P1Fs. Raw captures stay under
+`build/driver-qualification/` and shared handoff directories.
+
+Unmerged measurement branch `probe/clang-driver-vm-peak`, `694160f1`, base
+`b810b64e`: patch `/shared/present/batch2/hosted-clang-task5/probe-driver/driver-vm-peak.patch`,
+SHA-256 `bda42582195352cd3d000f5e0922b5cf0d7f6b882dda345e8126fa378822152a`.
+It records owned private data-frame backing per VM, tagged capture separately,
+and their actual simultaneous global sum including shell/services. It excludes
+page tables, kernel metadata/stacks, filesystem/cache, untagged allocations and
+shared/device/borrowed mappings. Lifetime/per-boot peaks are not subtree-only or
+whole physical RAM; independent peaks must not be added. Probe kernel
+`648821b4…` built, labelled PROBE ISO `63fe832d…`, not yet run; never merge or
+stage as ordinary PXE. All QEMU/GDB/client jobs for this checkpoint are stopped.
