@@ -48,6 +48,21 @@ to a regular `app/` file with the `PXE1FLAT` prefix; each resource path must
 resolve to a directory. Unknown resources/rights are rejected even for optional
 grants. No host permission or ZIP attribute grants native authority.
 
+Grant requests include the current native keyboard, pointer and private `job_work`
+classes, plus external `directory`, `mount` and mount-only `disks` classes. The
+external classes require a named `source`; ordinary classes reject that field.
+Only a directory request with `lookup` may add a distinct `root` alias. Aliases
+must not collide with `app`, bundle resource roots, grant names or another alias.
+Grant names beginning with the trusted `source.` prefix are reserved. The native
+19-request budget also applies here.
+
+The host can validate declarations and bundle-local collisions, but has no
+startup capability inventory. Source availability, actual protocol/rights,
+inherited root/resource collisions and the final launch-root budget remain native
+checks before publication. A manifest request never authorizes FAT admission or
+adds a trusted source. The `disks` table contains enumeration and mount-only
+rights, with no raw disk-open right.
+
 Prefix recognition is not full P1F validation. The native loader remains
 responsible for segments, the independent 256 MiB mapped span, stack collisions
 and eager-load cleanup. The shared 128 MiB selected-image capture limit and
@@ -117,3 +132,23 @@ sparse source, the host metadata/name ceiling and more than 16,384 source entrie
 after temporary-file creation and failed final replacement left the previous
 output intact and no temporary file behind. These are host checks; no QEMU,
 native launch or performance result is claimed.
+
+## Manifest alignment qualification, 2026-10-13
+
+The refreshed host validator follows native userland `1835b7a`'s grant table,
+source fields and alias rules. Python 3.14.8 packed and checked a small fixture
+using an existing built native `echo.pxe`, one resource directory and 19 requests,
+including keyboard, pointer, private work, external directory/controller and
+mount-only inventory declarations. With the directory alias, the archive had
+six records, 117,703 file bytes and 676 host metadata/name bytes. The same fixture
+without that optional alias also passed packing and checking.
+
+Python `zipfile.testzip()` independently verified every CRC, and its reader
+confirmed stored encoding, UTF-8 flags and every source payload byte. Nineteen
+literal invalid manifest variants rejected through both `pack` and `check`:
+missing or invalid sources, a source on an ordinary class, invalid alias types or
+placement, missing directory lookup, app/resource/grant/alias collisions,
+reserved source binding names, raw or unknown rights, duplicate rights and a
+twentieth request. Every failed pack preserved the existing output and removed
+its temporary file. These are host declaration/encoding checks; native startup
+grant delivery, FAT admission and ZIP launch remain outside this qualification.
