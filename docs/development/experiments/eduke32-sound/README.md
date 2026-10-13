@@ -80,8 +80,8 @@ whole-QEMU CPU at the 60 Hz cap. Two owner container builds on horse, other
 host load (VM steal up to about 54 s per 100 s run) and another agent's QEMU in
 the same VM made the runs unusable: with-sound starts tripped the audio guards
 in nearly every run. All of those numbers were discarded. The owner chose
-native timing on the ThinkPad instead; its run sheet is at the
-[end](#native-run-sheet).
+native timing on the ThinkPad instead; see
+[native results](#native-results).
 
 ## Nested-QEMU engine failures
 
@@ -106,24 +106,31 @@ DMA commit exceeded clock limit", "output completion notification expired" or
 
 The guard bounds are unchanged.
 
-## Native run sheet
+## Native results
 
-The owner times and listens to Chocolate Quake, EDuke32 and DevilutionX in one
-ThinkPad session with a matched PXE pair, unchanged main and this change with
-the DevilutionX bundle. The working sheet is in
-`/shared/present/game-sound-native/`. For EDuke32, on AC power:
+Owner session on the ThinkPad, 2026-10-13, AC power, PXE image `54a02657`
+(this change with the DevilutionX bundle) and the trace-logging diagnostic
+`diag/audio-horizon` (`e83ae1fc`, the same image plus three `ktrace` lines,
+not merged). Working files are in `/shared/present/game-sound-native/`.
 
-1. **Timing.** Fetch the recorded demo and `autoexec.cfg` (`r_maxfps 0`) into
-   `home://eduke32/`. Then run `eduke32 -d1:1 2> home://bench/FILE` three
-   times with sound, and `bin://eduke32.pxb/app/bin/eduke32.pxe -d1:1` three
-   times without. On the base image, run plain `eduke32` instead. Each run
-   exits by itself and prints frames and times. After each run with sound,
-   `log | grep hda:` must be empty; otherwise reboot before the next.
-2. **Listening.** Run `eduke32 -v1 -l1 -s2` and play a minute: effects,
-   music, and the volume bar while it plays.
-3. **Quit.** `quit` in the console (the key under Escape). The shell prompt
-   returns. Then check `log | grep hda:` for the teardown trip.
+- **Sound.** In the diagnostic boot, `eduke32 -v1 -l1 -s2` played effects and
+  OPL music at the default 60 Hz cap and uncapped (`r_maxfps 0`), about 20 s
+  each, with no guard trip during play.
+- **Quit.** The console `quit` tripped the 20 ms service horizon. The
+  diagnostic showed a **21.8 ms** process teardown, then a **28.8 ms**
+  observation gap, 41.5 s after the stream started. Teardown runs on CPU 0
+  with interrupts off in the BSP scheduler loop (`reap_completed()`;
+  `process_task_reclaimed()` asserts CPU 0), where the audio worker also
+  runs. The `CPU N` in the diagnostic and `userspace:` exit lines is the
+  task's last CPU, not the reaping CPU. Chocolate Quake's quit took 39.7 ms
+  and tripped the same way on the first timing boot.
+- **Timing.** One pair on the first timing boot only: `-d1:1` gave 166.3 fps
+  launched directly (silent) and 167.7 fps from the bundle (1,950 frames in
+  11.63 s). That boot's guard trip ended the timing series, and the owner
+  stopped it. The profile is silent by design, so these are not with-sound
+  numbers.
 
-Report frames per second (frames divided by the wall time between "E1L1" and
-the result lines), whether sound was clean, any felt latency and any `hda:`
-lines.
+Pyxis-os #807 replaces the fail-closed rule for timing faults with stream
+recovery. Bounded, interrupts-on teardown follows separately. The
+listening checks for DevilutionX and the bar's volume control remain with the
+owner's session notes.

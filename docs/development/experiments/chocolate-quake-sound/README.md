@@ -130,3 +130,15 @@ usual, from this PR's head or after merge, then in the Development space:
 Report the FPS values, whether sound was clean, any felt latency between
 action and sound (calculated worst case about 140–160 ms; tuning is
 [deferred](../../../technical-debt.md#sdl-audio-latency)), and any `hda:` lines.
+
+## Native results so far
+
+Owner session, 2026-10-13, ThinkPad on AC power, image `54a02657` (#803).
+Chocolate Quake played with sound. Its quit tripped "output observation
+exceeded service horizon" and disabled audio until reboot. In the
+trace-logging diagnostic boot (`e83ae1fc`, not merged), its quit's process
+teardown took **39.7 ms** on CPU 0 with interrupts off, where the audio worker
+runs; that boot's audio had already failed at codec setup, so it shows no trip.
+This is the teardown cause recorded for EDuke32. Pyxis-os #807 restarts the
+stream after such faults instead of failing; bounded teardown follows. The
+timedemo comparison and listening steps above were not run.

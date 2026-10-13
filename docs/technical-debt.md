@@ -940,10 +940,10 @@ see its trip counts.
 **Process teardown can stall audio** (found in the [EDuke32 sound qualification](development/experiments/eduke32-sound/README.md#nested-qemu-engine-failures)):
 in nested QEMU, quitting a large game trips the 20 ms service-horizon guard and disables audio until reboot. Reproduction: four
 CPUs, play `pcm 1000 500 20` in the Read-only space, then quit EDuke32 started by its `app/bin` path (no audio session, about
-160 MiB of eager private memory) in Development; three of three valid boots tripped at the quit. By code inspection, process
-destruction and the audio worker both run on the BSP. **Native check:** in the owner's listening session, run `log` after
-quitting each game and look for `hda:` lines before starting the next. Revisit with that result, and before scheduling large
-teardown work beside audio.
+160 MiB of eager private memory) in Development; three of three valid boots tripped at the quit. Process destruction runs on CPU 0 with interrupts off,
+where the audio worker also runs. **Native (2026-10-13):** EDuke32's quit took 21.8 ms of teardown and tripped the guard, as did
+Chocolate Quake's (39.7 ms); play did not trip. Stream recovery (#807) and bounded, interrupts-on teardown address it; revisit
+with native restart counts at quits once both land.
 
 ## HD Audio fail-closed recovery
 
