@@ -340,8 +340,74 @@ results; these missing facilities and validation boundaries are source findings.
    provenance is unknown and existing values are conservatively owner edits.
    Do not invent old defaults from the current archive or programs manifest.
 
-The next round must settle the standalone command/profile and stable target/replay
-binding, plus the publication/recovery record and old-catalog retention, using
-Epsilon's grant surface. Round one above is accepted and implementation is
-authorized; dependent code waits for the remaining material decisions. Existing accepted ownership,
-confirmation, no-wrapper authority and whole-set fallback rules are not reopened.
+### Task 4 round two — three delivery decisions, pending
+
+These settle the remaining command, authority/lifetime and recovery boundaries;
+round one is accepted and is not reopened.
+
+1. **Standalone surface default: normal `config` bundle invocation.**
+   `config validate` checks the supplied selection and reports static errors,
+   merged-entry provenance and unavailable machine-dependent checks.
+   `config plan` prints a data-only delta plan; `config edit` uses the existing
+   plain libterm review/prompt flow for each change and final Apply/Print/Cancel.
+   `config apply` consumes one framed plan on stdin, revalidates it and requires
+   final confirmation; `--confirm=config` supplies that consent non-interactively.
+   Human diagnostics/progress use stderr; printed plan bytes use stdout. All
+   surfaces share the existing installer planner/executor family; no current-plan
+   global slot, separate service, curses frontend or live Continuum application.
+   The declaring bundle requests read-only source/catalog views and optional
+   administrative writable config parents/bound control. Without writer authority
+   validation/planning still work; write modes refuse. Trusted administrative or
+   scratch startup provides grants where allowed. No call-site wrapper/prefix,
+   raw-disk/mount-acquisition grant or implicit forwarding to ordinary children.
+   Machine `config get/set/list` and its npfs writer remain their separately
+   assigned task, using the same machine validators rather than competing stores.
+   **Alternative:** initially expose validation/editor only through the installer,
+   delaying standalone day-to-day use.
+
+2. **Target/replay default: stable, issuer-bound ESP evidence.**
+   Reuse the accepted plan identity model: normalized GPT disk/ESP UUIDs,
+   sector geometry/partition extent and expected consumed bytes/hashes. Epsilon's
+   trusted selected-view issuer must supply read-only facts tied to its root and
+   bound FAT control; the editor checks current root/control domain/extent too.
+   UUIDs name a logical target, not authenticated physical hardware. No raw disk
+   access is given to the editor. Current MOUNT_OBSERVE has domain, device/GPT
+   ordinals and extent, but no UUIDs; ordinals and names do not fill that gap.
+   Missing/ambiguous evidence permits read-only validation/printed diagnostics,
+   but refuses publication/replay. A printed plan grants no authority: apply
+   needs the independently supplied matching writable view/control and refuses
+   stale source, target or file bytes without automatic replanning.
+   **Alternative:** first allow only in-process edits while retaining the original
+   mount instance, deferring stable printed replay until issuer evidence exists.
+
+3. **Publication/provenance default: complete-set record and one previous set.**
+   Retain the current catalog beside the committed configuration, with its exact
+   bytes/hash and source revision; later deltas can distinguish old defaults from
+   edits. Missing/corrupt history remains unknown. Keep one complete previous Lua
+   set/catalog and recovery copies of any changed Limine file. Stage new files,
+   sync and read-verify before switching, using the existing native FAT32 writer.
+   Under a bounded exclusive interval, recheck expected current bytes, flush a
+   prepared record before the first canonical-name swap, publish only approved
+   changes with retained recovery files, then flush a committed record naming the
+   exact selected triple/catalog hashes. This is completion detection, not a FAT
+   journal or cross-file atomicity. The loader requires a matching complete record;
+   absent, prepared, malformed or mismatching state selects the complete archive
+   defaults. Previous Limine recovery remains manual.
+   Failure/deadline/uncertainty stops writes, retains artifacts and prints the
+   reached phase/recovery names; no blind rollback, retry or resume. Cleanup of an
+   older previous set occurs only after committed publication, and only for
+   verified owned artifacts named in that record, never by filename prefix.
+   Scratch-only qualification until task 5 replaces destructive Update; no installed
+   loader activation or personal-pool deletion in task 4.
+   **Alternative:** keep catalogs outside the ESP and defer persistent delta history;
+   existing values then remain unknown owner edits and recovery needs manual inputs.
+
+### Coordination and checkpoint
+
+Requested through the orchestrator: Epsilon's read-only config/catalog view,
+scoped writable config parents plus bound control for OBSERVE/SYNC/BEGIN/END,
+and stable selected-target evidence. Grant names and issuance remain coordination,
+not an invented competing mount API. Decisions above are proposed, not accepted;
+no implementation code has changed. After answers, build with the published
+`pyxis-builder:pyxis-llvm23.1.3-4c23a20`, prefer `-j8`, and capture the relevant
+matched timing baseline now that the owner's LLVM rebuild is complete.
