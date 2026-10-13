@@ -86,7 +86,7 @@ no arguments, executable code or arbitrary handle numbers.
 | `entry` | Default native P1F path relative to `app/`. |
 | `commands` | Flat command-name to relative native-entry map; several aliases may select the same entry. |
 | `stack_bytes` | Optional integer, page-aligned, 1-8 MiB inclusive. Omission leaves the API parameter zero, which selects the kernel's 1 MiB default. Invalid requests reject without clamping. |
-| `resource_dirs` | Additional startup root-name to relative directory map, with read-only grants. Names must not collide with `app`, other manifest roots/grants or existing startup bindings. |
+| `resource_dirs` | Additional startup root-name to relative directory map, with read-only grants. Names must not collide with `app` or other manifest roots/grants. Lookup uses the caller's path context; final child preparation rejects collisions with explicitly selected child roots/resources, so a bundle may privately name roots also present in its parent. |
 | `grants` | Named ordinary resource requests with recognized rights and explicit required/optional status. |
 
 Entry and resource paths remain inside `app/`: absolute paths, schemes, empty
