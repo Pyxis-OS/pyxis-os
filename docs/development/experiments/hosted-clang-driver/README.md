@@ -147,3 +147,14 @@ worktree `build/subgroup-after/`, `build/subgroup-qualification/` and
 `build/subgroup-current-final/`: kernel SHA-256 `51e8469f…`, ISO `fb2443a4…`.
 Lua debugger ELF is relinked from current objects/SDK, rather than reusing its
 earlier debugger copy. Logs/ordered samples stay local.
+
+Linear rebuild after the `.pxs` rename: main `823a4101`, userland `39499b92`
+over `b199314d`. The subgroup code patch keeps stable ID
+`cd4025975b4e996d2f2ce79bb4f107b37bd671ea`; userland's patch keeps
+`9f4ba39f3f69cf27baf49ebb674af8816f65a01a`. Comparing the old `8052c41a`
+and rebuilt code trees finds exactly main's RAM FILESYSTEM_INFO additions in
+`directory.h`, `directory.c` and `user/launch.c`, with no subgroup-code change.
+The branch contains no merge commits beyond its main base. Earlier runtime
+evidence remains historical; the current rebuild/CI is reported on #789.
+Daybreak's independent source/exercised review found no confirmed serious issue;
+its bounded race/refill/escape coverage and limits are in that PR's review comment.
