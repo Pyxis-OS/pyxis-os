@@ -30,6 +30,10 @@ Chosen by the owner, each starting with a proposal.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
+[FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
+investigation (2026-10-13) before installed configuration publication; whole-volume
+read/workspace costs are proposed for reduction without extending the lease.
+
 [Hosted Clang and LLD](hosted-clang.md): tasks 1–5 delivered; installed bundles
 compile, separately link and run natively ([#772](https://git.internal/PyxisOS/pyxis-os/pulls/772)).
 Clang driving LLD is assigned to Codex delta, after the accepted minimal nested
