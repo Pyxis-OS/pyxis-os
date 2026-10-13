@@ -405,6 +405,7 @@ merely completion of task 2.
 
    Owner can use the documented thread profile and shared allocation/I/O, without unsupported detach/cancellation promises.
 9. [ ] **Separate consumer tasks.** SDL workers/timers then audio callbacks; libuv pool, Hax and Go each retain their own adapter/qualification scope.
+   SDL workers, timers and cross-thread wakeup are implemented under the owner-accepted contract of 2026-10-13: declared `threads`/`pipe` grants, a lazy timer thread joined by `SDL_Quit`, no detach collection or priorities, no new kernel ABI. See [SDL2](../development/sdl2.md#threads-and-timers) and the [qualification](../development/experiments/sdl-threads-timers/README.md). Exiting with live threads skips libc finalizers, recorded as [technical debt](../technical-debt.md#process-exit-with-live-threads). SDL audio callbacks are next.
 
    Owner can enable each qualified consumer independently; threads alone do not complete these ports.
 

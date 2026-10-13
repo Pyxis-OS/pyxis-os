@@ -27,6 +27,9 @@ calls `find_package(SDL2)`.
 
 A program needs the `display`, `keyboard` and `clock` grants. `pointer` is
 optional: without it, or without a mouse, the program runs from the keyboard.
+Threads and callback timers additionally need a [bundle](../userland/program-bundles.md)
+declaring `threads/manage`, and `pipe/create` for blocking event waits; see
+[threads and timers](#threads-and-timers).
 
 ## The backend
 
@@ -52,12 +55,12 @@ optional: without it, or without a mouse, the program runs from the keyboard.
   timeouts mean infinite, zero remains nonblocking, and finite deadlines survive
   re-arming at the native 30-second wait bound. No input session is acquired by
   waiting. The optional pointer is omitted until acquired.
-- **Wait fallback.** Unsupported/failing waits, native ownership/backend errors
-  or missing window/input sessions retain upstream polling with a 1 ms delay.
-  Initializing joysticks retains upstream's enumeration polling interval, even
-  with zero devices. The threadless build has no asynchronous SDL event producers
-  and needs no `SendWakeupEvent`; threads will require a real wakeup sender and
-  a review of the immediate-next-pump readiness cache.
+- **Wakeup.** Events pushed from other threads end a blocking wait through a
+  private pipe; see [threads and timers](#threads-and-timers).
+- **Wait fallback.** Unsupported/failing waits, native ownership/backend errors,
+  missing window/input sessions, or threads authority without a wakeup pipe
+  retain upstream polling with a 1 ms delay. Initializing joysticks retains
+  upstream's enumeration polling interval, even with zero devices.
 - **Keyboard.** Pyxis key positions map to SDL scancodes. Text input comes from
   the US layout shared with the kernel's terminal (`pxe/key_layout.h`). Control,
   Alt and Super suppress text.
@@ -98,9 +101,6 @@ optional: without it, or without a mouse, the program runs from the keyboard.
 
 Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 
-- `SDL_CreateThread` fails, and so does `SDL_INIT_TIMER`, whose callback timers
-  need a thread. Mutexes and semaphores succeed and do nothing, which is
-  correct with one thread.
 - `SDL_INIT_AUDIO` fails; conversion and WAV loading work.
 - Joysticks initialize with zero devices.
 - Haptics, sensors, HIDAPI, shared objects, power, OpenGL and Vulkan are not
@@ -108,11 +108,51 @@ Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 
 The ordered upstream patches disable the dynamic API, register the driver, skip
 the Steam virtual gamepad file because Pyxis `stat` has no modification time,
-respect native pointer position/lock authority, permit the threadless wait hook
-without a wakeup sender, carry private clipboard command identity, and preserve
+respect native pointer position/lock authority, start the timer thread at the
+first timer and stop it in `SDL_Quit`, carry private clipboard command identity, and preserve
 signed wheel fractions and unsigned button masks. The pointer
 patch prevents synthetic warp updates and relative-mode fallback after native
 refusal; it retains other video drivers' behavior.
+
+## Threads and timers
+
+SDL threads use libc's joinable [thread profile](../userland/threads.md); the
+contract was accepted by the owner on 2026-10-13 ([threads task 9](../wip/threads.md#delivery-gates)).
+
+- **Authority.** Creation needs the program's declared `threads/manage` grant
+  (plus `memory/manage`; timed waits use the `clock` grant). Without it libc
+  refuses and `SDL_CreateThread` returns NULL with libc's error. SDL adds no
+  wrapper around creation, and plain programs, which receive no threads grant,
+  are unchanged.
+- **Synchronization.** Mutexes are libc recursive mutexes, conditions wait on
+  the monotonic clock, semaphores are SDL's generic ones over those conditions,
+  and SDL TLS uses libc keys. All of them really block.
+- **Stacks, names and priorities.** SDL's default is libc's 1 MiB stack.
+  Requested sizes are minimums: smaller ones receive 1 MiB, others round up to a
+  page, and libc refuses more than 8 MiB. Names stay inside SDL
+  (`SDL_GetThreadName`); Pyxis threads have no native name. Only
+  `SDL_THREAD_PRIORITY_NORMAL` succeeds; other priorities report unsupported.
+- **Detach.** libc has no detached threads. `SDL_DetachThread` sets an SDL error
+  and the thread keeps running; libc's record, stack and TLS stay reserved until
+  exit, and that uncollected record makes exit skip orderly finalizers.
+- **Timers.** `SDL_INIT_TIMER` starts no thread, because ticks, delays and the
+  performance counter need none. The first `SDL_AddTimer` starts SDL's timer
+  thread, failing honestly without threads authority. `SDL_Quit` always stops
+  and joins it, including a thread started without `SDL_INIT_TIMER`, which
+  upstream leaves running.
+- **Wakeup.** With threads authority, video initialization creates one private
+  pipe from the declared `pipe/create` grant and keeps it until the process
+  exits, so a racing sender can never write to a reused handle number. SDL calls
+  the wakeup sender once per wait after queuing an event; it writes one byte
+  without blocking, and a full pipe already means a pending wakeup. Blocking
+  waits watch the read end, and the pump drains it. Before blocking, the wait
+  checks SDL's queue, so an event queued before SDL published the waiting window
+  is not missed. Without a `pipe` grant, threaded programs use upstream's 1 ms
+  polling fallback. Without threads authority no other thread exists and waits
+  block without a pipe.
+- **Exit.** Join threads and call `SDL_Quit` before returning from `main`.
+  A process exiting with live threads skips `atexit` handlers and stdio
+  flushing; see [technical debt](../technical-debt.md#process-exit-with-live-threads).
 
 ## Related development interfaces
 
@@ -194,6 +234,10 @@ idle CPU usage and keyboard/pointer delivery with the existing upstream
 `checkkeysthreads` consumer. Its optional thread is unsupported; its main event
 loop still runs. DevilutionX menus and Quake's SDL path poll events and do not
 exercise blocking waits.
+
+The [threads and timers qualification](experiments/sdl-threads-timers/README.md)
+records matched one/four-CPU frame timing, idle wait CPU, timer periods and
+cross-thread wake latency before and after threads, all nested QEMU.
 
 ## Limits
 
