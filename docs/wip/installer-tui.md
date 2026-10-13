@@ -225,7 +225,7 @@ kernel configuration model is proposed.
    **With this delivered dependency the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
 4. [ ] **Shared configuration validation and delta editor — assigned to Codex alpha,
-   2026-10-13; functional baseline captured, round one accepted, implementation authorized.** Under the accepted
+   2026-10-13; functional baseline captured, both decision rounds accepted, implementation authorized.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
    validation and coordinate its writer; no live Continuum application. Qualify
@@ -340,12 +340,12 @@ results; these missing facilities and validation boundaries are source findings.
    provenance is unknown and existing values are conservatively owner edits.
    Do not invent old defaults from the current archive or programs manifest.
 
-### Task 4 round two — three delivery decisions, pending
+### Task 4 round two — accepted 2026-10-13
 
-These settle the remaining command, authority/lifetime and recovery boundaries;
-round one is accepted and is not reopened.
+All three defaults are accepted. These settle the command, authority/lifetime
+and recovery boundaries; round one is not reopened.
 
-1. **Standalone surface default: normal `config` bundle invocation.**
+1. **Standalone surface accepted: normal `config` bundle invocation.**
    `config validate` checks the supplied selection and reports static errors,
    merged-entry provenance and unavailable machine-dependent checks.
    `config plan` prints a data-only delta plan; `config edit` uses the existing
@@ -362,10 +362,8 @@ round one is accepted and is not reopened.
    raw-disk/mount-acquisition grant or implicit forwarding to ordinary children.
    Machine `config get/set/list` and its npfs writer remain their separately
    assigned task, using the same machine validators rather than competing stores.
-   **Alternative:** initially expose validation/editor only through the installer,
-   delaying standalone day-to-day use.
 
-2. **Target/replay default: stable, issuer-bound ESP evidence.**
+2. **Target/replay accepted: stable, issuer-bound ESP evidence.**
    Reuse the accepted plan identity model: normalized GPT disk/ESP UUIDs,
    sector geometry/partition extent and expected consumed bytes/hashes. Epsilon's
    trusted selected-view issuer must supply read-only facts tied to its root and
@@ -377,10 +375,8 @@ round one is accepted and is not reopened.
    but refuses publication/replay. A printed plan grants no authority: apply
    needs the independently supplied matching writable view/control and refuses
    stale source, target or file bytes without automatic replanning.
-   **Alternative:** first allow only in-process edits while retaining the original
-   mount instance, deferring stable printed replay until issuer evidence exists.
 
-3. **Publication/provenance default: complete-set record and one previous set.**
+3. **Publication/provenance accepted: complete-set record and one previous set.**
    Retain the current catalog beside the committed configuration, with its exact
    bytes/hash and source revision; later deltas can distinguish old defaults from
    edits. Missing/corrupt history remains unknown. Keep one complete previous Lua
@@ -399,13 +395,68 @@ round one is accepted and is not reopened.
    verified owned artifacts named in that record, never by filename prefix.
    Scratch-only qualification until task 5 replaces destructive Update; no installed
    loader activation or personal-pool deletion in task 4.
-   **Alternative:** keep catalogs outside the ESP and defer persistent delta history;
-   existing values then remain unknown owner edits and recovery needs manual inputs.
+
+### Ordinary Install/Update remains the default path
+
+Owner requirement accepted 2026-10-13: "the installer will still work by default,
+and update by default, without having to configure with this".
+
+Install and Update require **no prior use of `config` and no manual configuration
+step**. Task 4 changes nothing in installed Install/Update: its new loader/editor
+is scratch-only. When task 5 integrates configuration publication, normal Update
+with no owner edits completes with the revision's defaults. Required changes
+are shown in its existing review, with the safe default pre-selected; accepting
+the review is the ordinary path, never a prerequisite `config` invocation.
+
+A missing/absent catalog or completion record does not block Update. The loader
+uses the complete archive-default triple; unsupported or unknown-provenance
+edits receive printed changes while their bytes remain protected. Task 5 may
+use that archive/printed-change path without asserting that an unrecorded value
+was an old default or silently adopting unowned spans. Lack of provenance still
+prevents the standalone editor from certifying an unsafe overwrite; it must
+never turn into "configure first" for ordinary Install/Update. The committed
+record gates selected ESP overrides, not the ability to install/update programs.
+This is consistent with whole-triple archive fallback and preserves rescue.
+
+### Epsilon's bound ESP facts
+
+The small FAT32-side addition should expose immutable selected-target facts
+through the already bound MOUNT control's OBSERVE reply, requiring its existing
+OBSERVE right. This keeps facts tied to the issuer's actual mounted instance,
+not a caller-authored sidecar or a raw-DISK grant. Reuse the current domain,
+device, GPT-entry ordinal, first-block, block-count and lifecycle flags. Add:
+
+| Fact | Source at mount admission |
+| --- | --- |
+| GPT disk GUID, 16 raw GPT bytes | Validated `fat32_volume.disk_guid`, cross-checked against the kernel's healthy GPT snapshot and selected disk GUID. |
+| GPT partition unique GUID, 16 raw GPT bytes | Validated `fat32_volume.partition_guid`, cross-checked against the selected GPT entry and boot-origin UUID where applicable. |
+| GPT partition type GUID, 16 raw GPT bytes | Validated `fat32_volume.partition_type`; the config publisher verifies ESP type, rather than trusting a root name. |
+| GPT partition attributes, 64 bits | Validated `fat32_volume.partition_attributes`, already matched to the selected GPT entry. |
+| Device logical block size, bytes | Admitted `block_info.block_size` / `fat32_volume.source.sector_bytes`. |
+| Whole device block count | Admitted `block_info.block_count` / `fat32_volume.source.sectors`; distinct from the existing selected partition's block count. |
+| Identity-facts validity | Explicit validity in the OBSERVE contract/flags: zero, unavailable or unsupported facts must not be fabricated; clients refuse publication/replay without complete facts. |
+
+The UUID byte order is the existing on-disk GPT convention; the client uses the
+shared GUID formatting rules for normalized plan text. Names, paths, configured
+selectors and ordinal numbers never substitute for these fields. Kernel
+`kernel/fs/fat32.c` already cross-checks the admitted library volume against the
+healthy snapshot before publication; OBSERVE can copy the retained immutable
+volume/source data, not re-read raw media on each query. Preserve retired/failed
+state reporting, and never certify a tombstone as an active publication target.
+Metadata from a held directory must match the control's live domain; stable
+UUIDs remain logical target identity, not physical-device authentication.
+
+Epsilon should update the native ABI size, libpyxis `mount_observe` validation,
+bound-state references and its scratch qualification together. No new factory,
+selector, grant class or writer right is requested. The client owns consumed
+file hashes/catalog/revision checks; those are not issuer facts. Until the
+addition arrives, validate-only/printed diagnostics work, while publication and
+printed replay refuse missing evidence as accepted.
 
 ### Coordination and checkpoint
 
 Resumed after the owner-qualified pointer follow-up, 2026-10-13; current main
-`bfd14785` includes FAT32 trusted workflow #775 and reference close-out #779.
+`0ba94e53` includes FAT32 trusted workflow #775 and reference close-out #779.
 The task branch incorporates that main without changing the accepted round-one
 configuration choices or scratch-only boundary. The original functional baseline
 remains a measurement of `2f2109fc`, not a rerun on this newer main.
@@ -425,8 +476,9 @@ Requested through the orchestrator: coordinate the stable selected-target facts
 and catalog view with the trusted issuer; the editor must not acquire raw disk
 authority to fill this gap.
 
-The three round-two defaults above remain proposed, not accepted. No
-implementation code has changed or unanswered choice been assumed. The owner
-answers are required before dependent delivery code. After answers, build with the published
+The owner accepted all three round-two defaults and ordinary default
+Install/Update on 2026-10-13. Implementation is proceeding; the issuer-facts
+addition is coordinated through the orchestrator with epsilon, not invented in
+the client. Build with the published
 `pyxis-builder:pyxis-llvm23.1.3-4c23a20`, prefer `-j8`, and capture the relevant
 matched timing baseline now that the owner's LLVM rebuild is complete.
