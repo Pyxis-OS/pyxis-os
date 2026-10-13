@@ -54,6 +54,8 @@ tasks 2–3 transport/firmware readiness, native cold/warm evidence and remainin
 radio/input qualification limits. Later tasks require
 explicit assignment.
 
+The [gallery](gallery/README.md) is the project's screenshot album.
+
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals, and [completed milestones](wip/completed.md) for finished ones. Files in [wip](wip/) describe unfinished work or design directions;
 they do not establish implemented behavior. Existing costs and revisit conditions
