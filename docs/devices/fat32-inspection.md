@@ -36,6 +36,6 @@ For Linux images or explicitly selected whole-disk devices, use the separate
 [host inspector](../../fs/docs/fat32-inspect.md). Its output can be redirected
 and its workspace/work budgets configured. Neither inspector's refusal permits
 an ESP rebuild: the installer's existing lenient recovery reader and foreign-file
-safeguards remain separate and unchanged. The [FAT32 milestone](../wip/fat32-volumes.md)
-tracks the separate [scratch writer](fat32-scratch-writing.md) and
-[native read-only mounts](fat32-mounts.md).
+safeguards remain separate and unchanged. [FAT32 volumes](fat32-volumes.md) also
+provide the separate [scratch writer](fat32-scratch-writing.md) and
+[native RO/RW mounts](fat32-mounts.md).

@@ -47,7 +47,7 @@ A **userspace personality**:
   [userspace services](../interfaces/userspace-services.md) and
   [scheme provider](userspace-scheme-providers.md) model, bound by name into the
   space's [namespace](../interfaces/namespaces.md).
-- **Volume claims.** The [FAT32 volumes](fat32-volumes.md) work introduces a
+- **Volume claims.** The [FAT32 volumes](../devices/fat32-volumes.md) backend provides a
   physical-extent registry with explicit mount authority. A subsystem filesystem
   server would claim an extent the way any mount does, and be excluded from
   conflicting users the same way.

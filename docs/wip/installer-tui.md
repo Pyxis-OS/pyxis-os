@@ -17,10 +17,10 @@ and [program bundles](../userland/program-bundles.md).
 - **Progress everywhere:** every I/O phase reports counters or a phase line,
   including inventory, reads, hashing, copy verification, sync and cleanup.
   Existing copy counters/phase lines are a starting point, not full coverage.
-- **Mounted read-write FAT32 remains required**, delivered independently by
-  [shared FAT32 volumes](fat32-volumes.md) after its engine. The accepted native
-  volume/directory backend is not deferred to a future scheme provider or owned
-  by this consumer; the move completes no task.
+- **Mounted read-write FAT32 is delivered independently** by
+  [shared FAT32 volumes](../devices/fat32-volumes.md), including trusted selection
+  and declared editor grants. The native backend is not a scheme provider or
+  owned by this consumer; configuration/editor integration remains here.
 - **Editable configuration lives on the ESP.** Selected Lua configs move out of
   the cpio archive into readable/editable FAT32 files beside the Limine editing
   workflow; archive defaults remain available for recovery. This does not depend on keeping `system://` as the configuration store.
@@ -213,12 +213,12 @@ kernel configuration model is proposed.
    and [QEMU qualification/costs](../development/experiments/installer-plan/README.md).
    **After this task the owner can:** review and replay an explicit install/update
    plan and see new/updated/removed/unchanged program sizes before any writes.
-3. **Shared dependency, former mounted FAT32 task (moved, not completed).**
-   Consume [FAT32 volumes](fat32-volumes.md) (native read-write files, trusted
+3. **Shared dependency delivered: mounted FAT32.**
+   Consume [FAT32 volumes](../devices/fat32-volumes.md) (native read-write files, trusted
    bootstrap ESP binding, scoped rights, sync/release, raw-writer exclusion); no
    duplicate engine/backend task here. The editor keeps its accepted config
    ownership/confirmation and ordinary-Update preservation obligations.
-   **After that shared milestone the owner can:** read/edit/sync authorized FAT32
+   **With this delivered dependency the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
 4. [ ] **Shared configuration validation and delta editor.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
@@ -228,7 +228,7 @@ kernel configuration model is proposed.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
 5. [ ] **Owned ESP configuration publication.** Depends on
-   the [shared FAT32 engine/backend](fat32-volumes.md) and
+   the [shared FAT32 engine/backend](../devices/fat32-volumes.md) and
    [coexistence task 3](nvme-coexistence.md#tasks), exclusive ESP write admission
    and the shared checker/editor. Integrate
    the accepted coexistence plan, conf swap/recovery and printed-entry fallback without

@@ -47,5 +47,6 @@ failure and unconfirmed durability. The device's existing write-failed latch
 continues to refuse mutation until reboot. Closing or process retirement also
 releases a retained claim, without converting a failed operation into success.
 
-The [FAT32 milestone](../wip/fat32-volumes.md) separates this raw development
-slice from future mounted read-write operations and authorized ESP workflows.
+[FAT32 volumes](fat32-volumes.md) also provide mounted read-write operations and
+declared editor grants. This raw development profile retains its separate receipt
+ownership and dirty-flag policy.

@@ -115,5 +115,5 @@ allocated-frame snapshots, not private RSS or a transient peak.
 QEMU/GDB jobs are stopped after each check. Raw logs/images/screenshots stay local;
 no benchmark infrastructure, fault hook or new klog line is introduced. Physical
 USB, native ESP, unplug, torn-sector and power-loss behaviour are unqualified.
-The [owner-present ESP run sheet](../../wip/fat32-volumes.md#owner-present-native-esp-run-sheet)
+The [owner-present ESP run sheet](../../devices/fat32-volumes.md#owner-present-native-esp-run-sheet)
 is RO-only; it requires approval and presence and authorizes no real ESP write.

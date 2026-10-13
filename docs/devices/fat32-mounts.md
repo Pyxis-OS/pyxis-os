@@ -29,6 +29,11 @@ RO requires either mount right; RW requires MOUNT_READ_WRITE. The separate raw
 installer inventory remains install-only. Operator delegation is opt-in through
 trusted configuration, never inferred from an executable or self-declared manifest.
 
+An authorized RW factory may deliberately admit the boot ESP partition RW
+(owner-accepted default, 2026-10-13), supporting explicitly declared ESP editor
+grants. The boot-origin issuer/view remains RO; fixed-mode drainage and extent
+exclusion still apply. Native ESP checks require owner approval and presence.
+
 A successful call installs a root and bound MOUNT control in one capability-table
 batch. Both slots are reserved before work;
 copying the reply into user memory is a separate operation. A failed reply closes
@@ -200,8 +205,8 @@ Eight held-file slots support `hold SLOT ro|rw /PATH`, `hinfo SLOT`,
 `hread SLOT OFFSET LENGTH`, `hwrite SLOT OFFSET = LITERAL`, `resize SLOT SIZE`,
 `hsync SLOT` and `drop SLOT`. `shell` receives RO roots and explicit streams,
 without mounting, interval or write authority. This profile exercises native
-operations; configured writable bindings and an everyday mount command are
-task 5, not supplied by this bootstrap.
+operations; configured bindings, selected editor grants and everyday mount
+commands use the [trusted workflow](#trusted-workflow).
 In QEMU, attach scratch media writable with modern VirtIO block. After GPT
 discovery, focus **Mounted FAT32 Scratch Writer** with Super+Right from Caelum
 (HMP `sendkey meta_l-right`), then enter the displayed disk ID and one-based GPT
@@ -248,7 +253,7 @@ rights and native errors. It cannot unbind its parent's roots; parent-held data
 makes retirement BUSY. The utility grants no authority by its command spelling.
 
 Native ESP checks require explicit owner approval and presence. The
-[milestone run sheet](../wip/fat32-volumes.md#owner-present-native-esp-run-sheet)
+[owner-present run sheet](fat32-volumes.md#owner-present-native-esp-run-sheet)
 is RO-only. Disk GUIDs/serials stay in owner-local configuration; repository
 examples use placeholders. QEMU scratch-image qualification is not native media,
 unplug, torn-sector or power-loss qualification.
