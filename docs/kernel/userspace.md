@@ -87,7 +87,9 @@ and [libterm](../userland/terminal.md) for input and editing behavior.
 
 The [console wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/console.h) reports bytes written and
 its helpers finish partial writes. The kernel renders bounded chunks under the
-output lock. Terminal input is blocking, with no EOF convention.
+output lock. Terminal input is blocking; the local framebuffer console has no
+input EOF operation, while remote END_INPUT drains queued bytes before EOF. See
+[stdin behavior](../userland/shell.md#file-redirection-and-stdin).
 
 CALL takes a handle, a tagged message and its size, then a reply buffer and
 capacity. Shared protocol headers define the tag and operation payloads. Rights are
@@ -149,17 +151,19 @@ with FS=0; libc establishes its static local-exec TLS/errno record before stdio,
 malloc or constructors. Startup separately supplies an owned caller-only
 `THREAD_RIGHT_SET_FS` handle, closed after binding; this grants no MANAGE, CREATE,
 EXIT or parking authority. Runtime keys and language destructors are described
-in the [SDK](../development/sdk.md#static-tls-and-runtime-keys). General
-thread-safe libc and C11/pthreads remain gate 8.
+in the [SDK](../development/sdk.md#static-tls-and-runtime-keys). The selected
+[libc thread profile](../userland/threads.md) provides joinable C11/pthread
+workers and synchronized shared runtime state. Detach, cancellation,
+process-shared synchronization and dynamic TLS remain unsupported.
 
 
 ## cat
 
-`cat path...` copies one or more named files through libc stdio with a fixed
+`cat [path...]` copies named files or stdin through libc stdio with a fixed
 transfer buffer. It accepts native scheme paths and relative paths when its
-caller supplies directory context. There are no options: every argument is a
-path, including `-`. With no paths it prints usage to stderr and exits with failure;
-implicit stdin is deferred until terminal input has an EOF convention.
+caller supplies directory context. There are no options: `-` reads stdin at
+that position among file operands, and no operands reads stdin to EOF. See
+[stdin behavior](../userland/shell.md#file-redirection-and-stdin) for terminal limits.
 
 Input errors are reported to stderr with the path, and copying continues with
 the remaining arguments. Any error makes the exit status unsuccessful; an output
@@ -214,8 +218,11 @@ operations (`fgetwc`, `fputwc`, `ungetwc`, `fwide`). `setlocale` knows only the
 `localeconv` returns static C-locale data with no grouping or currency
 information. There is no other locale state, so this is not complete POSIX
 wide-character or locale support.
-`errno` is process-global today; ordinary libc is not thread-safe. Native siblings
-must avoid shared libc state until the later TLS/runtime gates.
+`errno` is per-thread through the FS-addressed libc record. The
+[thread profile](../userland/threads.md#shared-libc-and-c-state) synchronizes
+allocator, descriptors, FILE and cache state; borrowed pointers and object
+destruction retain explicit caller exclusion requirements. Raw native tasks
+must enter with a prepared libc FS context before using these routines.
 Native libpyxis calls continue to return native statuses without setting it.
 
 `strtol`, `strtoul`, `strtoll` and `strtoull` accept ASCII whitespace/signs and

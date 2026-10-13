@@ -4,41 +4,27 @@ Owner-accepted defaults, 2026-10-10, subject to the
 [native-kernel condition](#accepted-owner-decisions-2026-10-10). The earlier accepted
 directions (merged #567) stand: parallel siblings, process-wide quiescence with
 BSP-owned VM mutation, thread-local ordinary exit but process-wide exit/fault, and
-process-private address wait/wake. Tasks 1–5 are merged. Gate 6 is merged (#731)
-and QEMU-qualified; owner-native A/B is recorded, with CALL64 fastest about 100 ns
-higher.
-Gates 7–9 remain later delivery work. Moving kernel services
+process-private address wait/wake. Gates 1–8 are merged: native lifecycle,
+address parking, static TLS/per-thread errno and the selected thread-safe
+C11/pthread runtime. Gate 9's SDL workers, timers and audio callbacks are merged
+(#778, #784), with the Chocolate Quake sound bundle (#787). Libuv pool, Hax and
+Go adapters still need separate assignments. Moving kernel services
 [off the BSP](scheduling-and-threads.md#serial-services-off-the-bsp) is independent.
 
-Merged tasks, with qualification records:
-
-- Task 1, process lifetime: [#612](https://git.internal/PyxisOS/pyxis-os/pulls/612),
-  [qualification](../development/experiments/threads-task1/README.md).
-- Task 2, admitted call references and CLOSE: [#671](https://git.internal/PyxisOS/pyxis-os/pulls/671),
-  [qualification](../development/experiments/threads-task2/README.md).
-- Task 3, shared-table delivery: [#684](https://git.internal/PyxisOS/pyxis-os/pulls/684),
-  [qualification](../development/experiments/threads-task3/README.md).
-- Task 4, VM activity and buffer leases: [#700](https://git.internal/PyxisOS/pyxis-os/pulls/700),
-  [qualification](../development/experiments/threads-task4/README.md); the BSP MEMORY
-  latency and string-capture follow-ups are complete, and the IPC copy-phase
-  follow-up is [#704](https://git.internal/PyxisOS/pyxis-os/pulls/704)
-  ([qualification](../development/experiments/ipc-copy-leases/README.md); the remaining
-  CALL cost is in [technical debt](../technical-debt.md), profiling parked until task 8).
-- Task 5, native sibling lifecycle: [#709](https://git.internal/PyxisOS/pyxis-os/pulls/709),
-  [qualification](../development/experiments/threads-task5/README.md). **Open:** the
-  native SEND4096 completion regression (about +26%) is under follow-up and the
-  owner's native rerun is pending; no improvement is claimed before it.
+The [delivery gates](#delivery-gates) link each qualification record. The native
+SEND4096 completion regression from task 5 remains under follow-up; the owner's
+rerun is pending in its [record](../development/experiments/threads-task5/README.md).
 
 [Stack qualification](../kernel/program-loading.md) remains separate evidence.
 
-## Current gaps
+## Implementation and remaining limits
 
-| Inspected source | Remaining gate |
+| Inspected source | Implemented contract / remaining limit |
 | --- | --- |
-| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Native siblings are implemented; libc join accounting remains task 8. |
-| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c), [endpoint replies](../../kernel/object/endpoint.c) | Owned storage snapshots, reserved atomic delivery and scoped RECEIVE/same-receipt REPLY claims are implemented; sibling races need qualification. |
+| [Process](../../include/kernel/process.h), [retirement](../../kernel/process.c) | Native siblings and managed libc join accounting are implemented; detach/cancellation remain unsupported. |
+| [Capabilities](../../kernel/object/capability.c), [syscalls](../../kernel/syscall.c), [endpoint replies](../../kernel/object/endpoint.c) | Owned storage snapshots, reserved atomic delivery and scoped RECEIVE/same-receipt REPLY claims are implemented. Recorded sibling qualification covers selected lifecycle/CLOSE interleavings, not every service race. |
 | [User copies](../../kernel/user_memory.c), [private memory](../../kernel/object/memory.c) | Short mapping leases, BSP mutation transactions and guarded-context pins are implemented; general sparse reservations remain a separate task. |
-| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Sibling FS/entry and libc initial-thread TLS bootstrap are implemented; general runtime safety remains task 8. |
+| [Architecture](../../arch/x86_64/user.c), [startup](../../userspace/libc/start.S) | Sibling FS/entry, libc TLS bootstrap and the synchronized runtime profile are implemented; raw tasks must supply a prepared libc context. |
 | [Linker](../../userspace/linker.ld), [P1F](../../include/pxe/p1f.h), [toolchain](../../toolchain/README.md) | Static local-exec TLS template/P1F contract is qualified in gate 7; dynamic TLS remains unsupported. |
 
 ## Native lifecycle
@@ -57,8 +43,8 @@ Merged tasks, with qualification records:
    without a competing reservation owner. Ordinary ALLOCATE/RELEASE stay intact;
    task 5 does not implement general COMMIT/DECOMMIT or sparse backing.
 2. The current thread may bind its registered FS context once; CREATE supplies
-   sibling FS before entry. Existing programs retain FS=0; rebinding returns
-   BUSY. Libc TLS layout/startup remains task 7, coordinated separately.
+   sibling FS before entry. Task 5 retained initial FS=0;
+   gate 7 now supplies libc TLS layout/startup. Rebinding remains BUSY.
 3. Native completion distinguishes ordinary EXIT's machine-word value from
    forced process stop. It is waitable and repeatable; closing the observer never
    kills the thread. Publish only after retirement and context-pin release.
@@ -66,10 +52,11 @@ Merged tasks, with qualification records:
 The [native ABI](../../include/abi/thread.h) exposes a `threads` MANAGE service
 and WAIT-only completion observers. Explicit `session` delegation carries this
 optional service; ordinary foreground/background applications do not receive it.
-No pthread/C11 kernel API, address parking or ordinary thread-safe libc is part
-of task 5. Bundle resource tables (`lib/bundle.c` in userland and `tools/pxa.py`)
-do not yet admit `threads`; update both together when the first bundle consumer
-needs it, such as libuv workers or SDL. This is deferred, not part of task 5.
+Task 5 added no pthread/C11 kernel API or libc runtime: gates 6–8 subsequently
+delivered parking, TLS and the selected thread-safe libc profile. Bundle resource
+tables (`lib/bundle.c` in userland and `tools/pxa.py`) now admit `threads/manage`
+and `pipe/create`, used by the SDL consumers. Ordinary plain-program delegation
+remains unchanged.
 
 | Operation | Implemented contract |
 | --- | --- |

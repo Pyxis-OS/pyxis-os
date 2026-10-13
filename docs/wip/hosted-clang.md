@@ -7,8 +7,10 @@ and running the [ports runner](source-builds.md) come later. Tasks 1–5 are
 qualified: installed pool-volume bundles compile, separately link and run the
 small C program in 1/4-CPU QEMU and on the ThinkPad (2026-10-13). Native wall
 proxies and the authorized unmerged peak probe inform the capacity profile.
-Driver-invoked linking remains queued after task 5 merges; this WIP records
-that pending process boundary.
+Driver-invoked linking is assigned to Codex delta, after the accepted minimal
+nested-group prerequisite ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788),
+draft [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)). This WIP records
+that remaining process boundary.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -32,9 +34,9 @@ integration; the Pyxis toolchain constructs an external LLD command rather than
 embedding LLD. The native fork already disables child crash helpers and recovery:
 a fatal compiler/library fault terminates the process. Task 4 keeps these policies.
 
-**Owner requirement (2026-10-12), not an assigned design:** Clang must eventually
-invoke LLD itself (`clang hello.c -o hello`). Task 5 or a follow-up must provide
-that through declared launch grants, the
+**Owner requirement (2026-10-12), assigned follow-up (2026-10-13):** Clang must
+invoke LLD itself (`clang hello.c -o hello`). The accepted follow-up uses declared
+launch grants, the
 [native command-execution core](../userland/native-jobs.md) and the
 [nested execution groups direction](nested-execution-groups.md), never a wrapper.
 Task 4 retains its no-launcher profile; first completion still permits separately
@@ -227,13 +229,13 @@ Use separate profiled runs for memory and untouched-main runs for elapsed
 baselines. No quota, public profiling ABI, compiler change or container rebuild.
 Native runs and publication go through the owner/luna.
 
-**Queued after task 5 merges:** the owner auto-assigns driver-invoked LLD. Its
-proposal must decide whether a single direct child can satisfy the REQUIRED
-[nested-group direction](nested-execution-groups.md), or those groups must land
-first. Today's groups are flat and the [native job core](../userland/native-jobs.md)
-rejects descendant launchers; same-group launch alone does not implement the
-required subgroup lifetime. Do not work around this with a broker/executor or
-authority wrapper, and do not start that task during task 5.
+**Assigned follow-up, 2026-10-13:** driver-invoked LLD follows the accepted
+minimal native subgroup foundation in [#788](https://git.internal/PyxisOS/pyxis-os/pulls/788)
+and draft [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789), a bounded
+planning-freeze exception. The native job core and declared bundle grants then
+support the thin Clang driver adapter. The first completion's separate LLD
+invocation remains usable; no subgroup or driver implementation is on main yet.
+Broader nesting remains [parked](nested-execution-groups.md).
 
 ## Resources and native limits
 

@@ -30,43 +30,32 @@ Chosen by the owner, each starting with a proposal.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
-[Git on Pyxis](git-on-pyxis.md): the libc prerequisites of the libgit2 source-fetch
-route are merged. The native Git CLI and HTTP transport investigation (#711) is
-merged and its tasks are proposed, not assigned; no Git port task is assigned.
+[Hosted Clang and LLD](hosted-clang.md): tasks 1–5 delivered; installed bundles
+compile, separately link and run natively ([#772](https://git.internal/PyxisOS/pyxis-os/pulls/772)).
+Clang driving LLD is assigned to Codex delta, after the accepted minimal nested
+groups prerequisite ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788),
+[#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)).
 
-[Hosted Clang and LLD](hosted-clang.md): Codex (2026-10-11), accepted first
-single-source compile and separate link. Tasks 1–3 are delivered (#708, #714,
-#718), without adopting the fork's pin; task 4 waits on threads gates 6–8. No
-runnable hosted compiler yet.
+[Installer TUI and configuration delta editor](installer-tui.md): tasks 1–2
+(progress, shared planner/executor and revision inventory) and task 3's shared
+FAT32 dependency are delivered.
+Task 4 is in draft review/qualification ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
+[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)); later tasks need separate go-aheads.
 
-[Installer TUI and configuration delta editor](installer-tui.md): Codex
-(2026-10-11), PDCurses pages over a shared plan/apply executor, revision
-inventories, mounted read-write FAT32 and owned ESP configuration reconciliation.
-The contract is accepted; tasks 1–2 are delivered (progress, shared planner/executor
-and revision inventory). Later tasks need separate assignments.
+[Native HTTP requests](native-http-requests.md): tasks 1–4 delivered, including
+prepared transactions, streaming and libc/Lua adapters. Task 5's accepted shell
+coordinator is in progress ([#780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
+draft [#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)).
 
-[Native HTTP requests](native-http-requests.md): an
-shared plan accepted by the owner, extracted from Claude/Git prerequisites:
-prepared POST, streamed GET/POST without an artificial response-size cap, and
-shell/Lua delivery.
-Task 1 (incremental libhttp GET) is delivered, 2026-10-12. Later tasks need their
-own go; the command-execution proposal is separate.
+[Nested execution groups](nested-execution-groups.md): the minimal Clang-driver
+prerequisite is accepted and assigned to Codex delta as a planning-freeze exception,
+2026-10-13 ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788)). Implementation
+is draft [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789); broader nesting remains parked.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
-
-[Steam Deck second hardware target](steam-deck.md): the owner (2026-10-11), plan
-accepted with a PXE development loop. The owner's firmware PXE check passed through
-the dock on 2026-10-11 (dock keyboard and mouse work; the internal xHCI `04:00.4`
-with the Steam Controller timed out). No task is assigned.
-
-[Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
-lifecycle, parking, TLS and libc delivery. Tasks 1–5 are merged (#612, #671, #684,
-#700, #709), and gates 6–8 are complete. Task 9's SDL consumers, workers and timers
-then audio callbacks, are implemented. Each later task retains its
-separate owner-assignment gate.
 
 ## Open
 
@@ -78,12 +67,18 @@ installed ThinkPad is open.
 [File transfer through the remote terminal](remote-file-transfer.md): drag-and-drop
 upload awaits the owner's GUI-drop check from Linux and macOS.
 
+[Threads and SDL consumers](threads.md#delivery-gates): gates 1–8 delivered;
+SDL workers/timers and audio callbacks merged (#778, #784), with the
+[Chocolate Quake sound bundle](../userland/chocolate-quake.md)
+([#787](https://git.internal/PyxisOS/pyxis-os/pulls/787)). Libuv pool, Hax and Go
+adapters await separate assignments.
+
 ## Candidates for the next milestone
 
 Other candidates; current assignments are listed above.
 
-[Audio consumers](later-os-directions.md#audio): SDL2 and Quake adapters after the
-completed analog playback milestone.
+[Audio follow-ups](later-os-directions.md#audio): analog playback and SDL2/Quake
+adapters are delivered; [SDL latency tuning](../technical-debt.md#sdl-audio-latency) remains deferred.
 
 [Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09 (prepared HTTPS
 files and shell API testing now depend on [native HTTP requests](native-http-requests.md);
@@ -92,6 +87,9 @@ needs a separate go-ahead.
 
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector
 and `top`.
+
+[Git on Pyxis](git-on-pyxis.md): libc source-fetch prerequisites and the native
+CLI/HTTP investigation (#711) are merged. Port tasks are proposed, not assigned.
 
 [Network kernel debugger](network-debugger.md): tasks 1–3 are implemented and
 natively qualified for read-only LAN attach on the RTL8111
@@ -115,6 +113,9 @@ prepares the hardware.
 first, then remote input after the system pointer.
 
 [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
+
+[Steam Deck second hardware target](steam-deck.md): accepted PXE development
+direction; the owner's dock firmware PXE check passed. No implementation task is assigned.
 
 System layout follow-ups: network configuration on the pool instead of the archive
 ([technical debt](../technical-debt.md#archive-only-network-configuration)) and the
@@ -161,11 +162,6 @@ display, pointer and keyboard interfaces as the kernel.
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,
 storage.
-
-[Nested execution groups](nested-execution-groups.md): parked REQUIRED direction
-(2026-10-11), contained subgroups and default child launchers before Git descendant
-helpers, driver-launched Clang tools, native make/ports builds and libuv/Neovim
-descendant jobs. No design/API or implementation is assigned.
 
 [Program bundles and ZIP archives](program-bundles.md): ZIP 2b/2c parked by the
 owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and

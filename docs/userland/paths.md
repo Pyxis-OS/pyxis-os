@@ -130,11 +130,18 @@ It never removes by a displayed path or by a child handle.
 ## Rename paths
 
 `path_rename()` resolves source and destination parents using separate caller-owned
-workspaces, then performs one native file rename. Both parents remain held until
-the call completes; no child is opened or probed first. Source and destination
-are exact file paths. Roots, final `.`/`..`, trailing separators and directory
-moves are rejected. Intermediate components retain normal ordered traversal and
-boundary checks. Every temporary handle is closed; the context is unchanged.
+workspaces, then performs one native file or directory rename. Both parents remain
+held until the call completes; no child is opened or probed first. Source and
+destination name exact entries; a destination directory does not imply moving
+inside it. A trailing separator on either path requires a directory source;
+otherwise the helper accepts either kind. Roots and final `.`/`..` are rejected.
+Intermediate components retain normal ordered traversal and boundary checks.
+Every temporary handle is closed; the context is unchanged.
+
+Directory moves require one RAM store or writable npfs mount. Replacement requires
+matching kinds and an empty directory victim; self/descendant moves refuse.
+FAT32 and host backing support file moves only. See
+[filesystem mutations](../interfaces/filesystem-mutations.md) and [mv](mv.md).
 
 Source traversal requests REMOVE. Destination traversal requests CREATE and,
 for replacement, REMOVE. If the latter traversal is denied it retries with

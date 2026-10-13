@@ -132,8 +132,11 @@ dependencies. No replacement declarations, SDK edits or host libc were used.
 [stdio](../userland/stdio.md) describe the delivered interfaces. A missing header
 in Git's broad Unix includes is not an instruction to add every POSIX API; many
 (`sys/time.h`, `signal.h`, `sys/wait.h`, `poll.h`, `sys/socket.h`, `netdb.h`,
-`pwd.h`, `sys/mman.h`, `pthread.h`, `termios.h` and others) remain absent, some
+`pwd.h`, `sys/mman.h`, `termios.h` and others) remain absent, some
 only as unconditional includes of disabled features.
+`pthread.h` is now delivered for the selected [joinable libc profile](../userland/threads.md),
+with detach, cancellation and process-shared synchronization outside its scope.
+This does not establish Git's threaded build or runtime qualification.
 
 | Area | Current evidence | Git consequence / classification |
 | --- | --- | --- |
@@ -324,9 +327,11 @@ adaptation can proceed without claiming pthread support. Parallel workers
 require all [thread gates](threads.md#delivery-gates): 5 lifecycle/join/guarded
 stacks; 6 real parking/wakeup; 7 static TLS/per-thread errno and compiler
 support; 8 synchronized libc allocator/descriptors/FILE/caches and a real
-pthread/C11 profile. Gate 5 alone is insufficient; all four were unchecked at the
-inspected main (#709's prototype is not a merged pthread runtime). Git's serial
-option should not expand hosted Clang's accepted real TLS/synchronization work.
+pthread/C11 profile. All four were unchecked at the October 11 investigation
+snapshot; they are now delivered for the selected [libc profile](../userland/threads.md).
+Git's actual pthread consumers still need adaptation and qualification before
+parallel pack/index workers can be enabled. The serial CLI proposal still
+disables worker overrides.
 
 ## HTTPS transport
 

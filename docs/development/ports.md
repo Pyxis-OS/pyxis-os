@@ -451,9 +451,9 @@ and the Pyxis ASCII logo, or `fastfetch --json` for structured output. See the
 
 ## Guest Lua
 
-The image includes `bin://lua.pxe` and the upstream MIT notice at
-`boot://share/licenses/lua/lua.h`. The first interpreter accepts one expression
-chunk through the shell:
+The image includes `bin://lua.pxb`, with its native interpreter under `app/bin/`,
+and the upstream MIT notice at `boot://share/licenses/lua/lua.h`.
+The interpreter accepts one expression chunk through the shell:
 
 ```text
 lua -e 'print("Hello from Lua", 2 ^ 0.5)'
@@ -474,9 +474,12 @@ Lua has no cooperative signal hook.
 Base, coroutine, table, string, UTF-8, io, bounded os and pure-Lua package
 libraries are available. Module lookup uses exact `LUA_PATH` when set, otherwise
 the script's directory and then `boot://share/lua/`. Native `pyxis` helpers run
-argv lists, enumerate directories and hash files through Mbed TLS PSA. Lua's
-recipe therefore requires an explicit `--mbedtls` development prefix in addition
-to the SDK; the embedding archive stays independent of crypto and the bridge.
+argv lists, enumerate directories and hash files through Mbed TLS PSA. Owned
+`pyxis.job` and `pyxis.pipeline` records capture native commands with explicit
+cleanup; `require "pyxis.commands"` supplies argv-based capture, pipeline and run
+wrappers. These need the bundle's optional job grants. Lua's recipe requires an
+explicit `--mbedtls` development prefix in addition to the SDK; the embedding
+archive stays independent of crypto and the bridge.
 Script and `-e` errors return a nonzero process status with runtime tracebacks.
 Stdin scripts, shebang handoff, debug, full math, process CPU time, buffer controls,
 shell execution and dynamic modules remain deferred.
