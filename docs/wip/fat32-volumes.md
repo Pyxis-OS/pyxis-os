@@ -1,13 +1,14 @@
 # FAT32 volumes
 
-Status: **tasks 1–4 merged (#740, #747, #755, #764); task 5 assigned 2026-10-13.**
+Status: **tasks 1–4 merged (#740, #747, #755, #764); task 5 implemented for review.**
 The directory-validation fixes (#743 / fs #33) and task 3's binding (#750) are
 merged. Task 4 implements the accepted seal-at-power contract below; its
 [qualification record](../development/experiments/fat32-mounted-writes.md) separates
 executed scratch-image checks from source review and remaining hardware limits.
-Task 5's workflow defaults below are accepted, 2026-10-13. The owner cleared
-timing capture after the LLVM rebuild; task 5 implementation is authorized. Native ESP steps require explicit owner approval and
-presence; this task does not write the real ESP.
+Task 5's workflow defaults below are accepted, 2026-10-13. Its
+[qualification record](../development/experiments/fat32-trusted-workflow.md) covers
+the declared-grant workflow on disposable VirtIO/USB media. Native ESP steps
+require explicit owner approval and presence; this task does not write the real ESP.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -547,7 +548,7 @@ and mounted file I/O do not require its implementation.
 
 ## Task 5 trusted workflow — accepted, 2026-10-13
 
-Inspected main `2f2109fc`, fs `414be0ac`, userland `9f781e94`, ports `f93becb9`.
+Before implementation, inspected main `2f2109fc`, fs `414be0ac`, userland `9f781e94`, ports `f93becb9`.
 Task 4 is merged. Its engine, fixed-mode admission, interval/retirement contracts,
 strict GPT/512-byte FAT profile and clean-power seal remain requirements.
 
@@ -604,8 +605,7 @@ or a userspace filesystem proxy.
    selected alias; reject collisions with inherited, app and resource roots.
    Preserve cwd and its actual rights unless the caller explicitly selects a new
    cwd. Configuration or trusted operator selection defines available source
-   grants; the program
-   declares requested names/rights in its manifest. Required unavailable grants
+   grants; the program declares requested names/rights in its manifest. Required unavailable grants
    fail before publication; startup reports actual received grants. No special
    case for Neovim or another executable name.
 
@@ -614,10 +614,10 @@ or a userspace filesystem proxy.
    declaration requests it. The editor receives data, not factory/raw/controller
    authority. Permitted descendants may inherit those data grants; this is not
    confinement beyond the selected directory. Trusted configuration/operator write
-   policy fixes the instance RW at first admission while ordinary views remain attenuated; otherwise admit RO. A manifest
-   cannot authorize admission. An existing RO instance requires drainage and a
+   policy fixes the instance RW at first admission while ordinary views remain
+   attenuated; otherwise admit RO. A manifest cannot authorize admission. An existing RO instance requires drainage and a
    successful explicit RETIRE, then fresh RW admission; launching an editor does
-   not change its mode. The boot ESP issuer stays RO, and this task does not enable/exercise RW real-ESP profiles.
+   not change its mode. The boot ESP issuer stays RO; RW real-ESP profiles are not enabled or exercised.
 
 CLI/schema names are implementation choices. Task 5 is owner-assigned; no next
 task is authorized. Disk GUIDs and serials belong only in owner-local configuration,
@@ -626,20 +626,21 @@ never repository documents or examples; use placeholders for selectors.
 ### Baseline and qualification boundary
 
 The [exact-main control record](../development/experiments/fat32-workflow-baseline.md)
-holds the baseline captured after the owner cleared timing work: fresh image/host
-builds, existing native open/read costs and accounted backing. Preserve its control
-artifacts for matched/interleaved after-runs. If implementation starts from changed
-inputs, refresh and record that control first. Disposable VirtIO RO and USB RW
-functional checks exercise existing bootstraps; they do not qualify the proposed
-workflow. No native ESP operation has run.
+was refreshed after main adopted the new builder, before task 5 code. The
+[workflow qualification](../development/experiments/fat32-trusted-workflow.md)
+records builds, declared/missing grants, RO and refused-RW media, editor saves,
+held views, release retry and clean power with files open. These use disposable
+GPT VirtIO before 512-byte, single-LUN USB BOT through QEMU xHCI, with independent
+mtools/fsck cross-reads. A scratch virtual disk also supplies actual GPT boot ESP
+provenance for RO checks. No native ESP operation has run. Native scratch-stick
+qualification remains owner-routed; QEMU is not physical-media or power-loss evidence.
 
-Implementation qualifies scratch VirtIO before supported 512-byte,
-single-LUN USB BOT via QEMU xHCI: declared/missing grants, editor save/replacement,
-RO/refused-RW media, held aliases, sync and reference drainage, retirement errors
-and clean power with open files. Cross-read with mtools, `fsck.fat -n`, untouched
-file comparisons and a fresh boot. No repair, forced unplug/fault hook or power-loss
-claim. A native scratch-stick run remains owner-routed evidence. Existing engine/
-backend limits are not relaxed for convenience.
+The [implemented workflow](../devices/fat32-mounts.md#trusted-workflow),
+[configuration](../userland/init.md#fat32-volumes-and-selected-grants),
+[shell commands](../userland/shell.md#fat32-mount-management) and
+[common selected grants](../userland/program-bundles.md#selected-external-grants)
+are the usage/interface references. No shipped profile opts in. Existing backend
+qualification, ASCII mutation, failure retention and clean-power rules remain.
 
 ### Owner-present native ESP run sheet
 
@@ -650,11 +651,17 @@ first proposed run is RO only:
    Confirm the actual GPT ESP boot provenance and selected disk/partition;
    optical/PXE must not guess a target. Keep other writers quiescent. Do not
    stage an image or change firmware variables as part of this check.
-2. Explicitly enable/select the RO ESP view. Verify mode, extent and actual
-   attenuated grants; list/read known files and refuse RW requests. No formatter,
+2. In owner-local boot configuration, opt in to `esp = {kind = "boot-esp"}`,
+   the space's `esp = "read-only"` root, and a selected `fat32_control` MOUNT
+   source with `access = "read-only"`. Keep `home://` on another authorized
+   volume. Run `fat32ctl state`, `ls esp://` and read/hash a known file chosen
+   by the owner. Verify RO mode/extent and actual controller rights (OBSERVE |
+   RETIRE); `fat32ctl sync` must report denied. No formatter,
    repair, dirty-bit clear or configuration-editor save is permitted.
-3. Leave the ESP cwd, close views/readers, release and report the result. BUSY or
-   validation/I/O failure causes no forced retirement or fallback. Disable the
+3. Close readers and run `release --control fat32_control esp://`. If cwd is
+   on ESP it reports moving to `home://`. BUSY retains the controller; close
+   other owners' views, then retry `release esp://`. Validation/I/O failure or
+   BUSY causes no forced retirement or fallback. Disable the
    opt-in profile afterwards unless the owner chooses to retain it.
 
 Real ESP writing needs separate explicit owner approval/presence and the consumer's
@@ -686,10 +693,11 @@ open files remains usable under the accepted seal contract.
   failed-state retention and the accepted dirty-bit/clean-retirement policy.
   **After this task the owner can:** edit authorized files, explicitly sync and
   retire a scratch FAT mount; simultaneous conflicting raw writers are refused.
-- [ ] **5. Trusted mount workflow and qualification — assigned 2026-10-13; workflow decisions accepted above.** Thin mount/sync/release
+- [x] **5. Trusted mount workflow — implemented for review; accepted 2026-10-13.** Thin mount/sync/release
   utility and configured binding integration; selected read-only normal ESP views
   and explicit writable editor grants. Qualify scratch VirtIO first, then supported
-  USB and owner-approved native ESP steps; SD depends on its block driver. Revalidate
+  USB. Owner-approved native ESP/scratch-stick checks remain pending the run sheet;
+  SD depends on its block driver. Revalidate
   consumer handoff/release and preserving unrelated files, not installer completion.
   **After this task the owner can:** mount a GPT-partitioned stick matching the
   first profile or a selected ESP view, read/edit/sync files through native

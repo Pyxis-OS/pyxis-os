@@ -794,3 +794,32 @@ Failed launch returns to the prompt; failed wait ends the shell because
 input ownership can no longer be assumed. Fatal user faults are reported through
 the existing completion kind, with details left in the kernel log. No descendant
 supervision or terminal ownership mechanism is added.
+
+## FAT32 mount management
+
+An explicitly configured mount-only inventory enables:
+
+```text
+mount --fat32 --list
+mount --fat32 --disk ID --partition N --read-write fat32://
+sync --mount fat32://
+release fat32://
+```
+
+Access is required (`--read-only` or `--read-write`). `ID` is a displayed
+boot-scoped identifier, not a persistent selector. Mounting publishes an RO root;
+RW data stays in the selected `fat32_write` source. Neovim's optional declaration
+binds that source as `edit://`, so `nvim edit://FILE` edits without granting disk
+or controller authority. Other bundle manifests may select another mount's
+`NAME_write` explicitly. Undeclared plain programs inherit only RO views.
+
+Configured controllers can be used with `sync --mount SOURCE` and `release
+--control SOURCE NAME://`. Release validates the actual native domain, moves a
+cwd on that volume to `home://` with a report, closes the caller's selected data
+and original cwd grants, then retires. BUSY leaves other owners intact and retains
+a controller; retry `release NAME://` after they drain. A missing/same-volume home
+refuses the cwd move. Controllers also appear as `NAME_mount` selected sources.
+
+The [thin utility and lifetime limits](../devices/fat32-mounts.md#trusted-workflow)
+apply. Neither final control close nor shell exit synchronizes/retires implicitly;
+normal clean power keeps its existing seal behavior with files open.

@@ -72,7 +72,7 @@ memory or transient peak measurement.
 Recreate the disjoint npfs fixture using current host tools and the fresh
 32768-byte `share/iobench-small.bin`; its configuration delegates read-only
 system/home roots to the shell. Boot with
-`init=boot://boot-init.pxe mount.disk=12345678-1234-4567-89ab-0123456789ab`.
+`init=boot://boot-init.pxe mount.disk=<DISK_GUID>`.
 Attach writable because current boot-init opens the pool RW before reading its
 configuration. Run the existing command, profiling off:
 
