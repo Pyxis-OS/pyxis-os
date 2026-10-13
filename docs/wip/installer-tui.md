@@ -5,8 +5,9 @@ Status: **direction and all three configuration choices accepted by the owner,
 Task 4 is merged and scratch-qualified
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)). Task 5 is
-assigned to Codex alpha for proposal only, 2026-10-13; its decisions below are
-unaccepted. Implementation and later tasks need separate owner go-aheads.
+assigned to Codex alpha: all three task-5 defaults accepted **2026-10-13**.
+Implementation is authorized for the buildable scratch scope only; installed
+activation and replacement of shipped Update remain blocked on the gates below.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -277,8 +278,9 @@ kernel configuration model is proposed.
    the new loading/editor on scratch ESPs until task 5 replaces destructive Update.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
-5. [ ] **Owned ESP configuration publication — task 5 proposal assigned to Codex alpha,
-   2026-10-13; no implementation authorization.** Depends on
+5. [ ] **Owned ESP configuration publication — task 5 assigned to Codex alpha,
+   2026-10-13; buildable scratch scope authorized.** Installed activation remains
+   blocked on the gates below. Depends on
    the [shared FAT32 engine/backend](../devices/fat32-volumes.md) and
    [coexistence task 3](nvme-coexistence.md#tasks), exclusive ESP write admission
    and the shared checker/editor. Integrate
@@ -513,10 +515,11 @@ No native media was touched. Installed startup, personal pool overrides and
 ordinary Install/Update remain unchanged; task 5 owns their activation. Normal
 Install/Update requires no prior `config` invocation or manual setup.
 
-## Task 5 proposal — pending owner decisions, 2026-10-13
+## Task 5 — accepted contract, 2026-10-13
 
-Proposal only: #786 and userland #247 are merged. No task-5 implementation or
-installed activation is authorized. The [current baseline](../development/experiments/installer-publication/README.md)
+#794 is merged. The owner accepted all three defaults on **2026-10-13**
+and authorized the buildable scratch scope below. Installed activation and the
+replacement of shipped destructive Update are not authorized. The [current baseline](../development/experiments/installer-publication/README.md)
 records the existing Install/Update paths before changes; native timing remains
 an owner-present measurement, not inferred from QEMU.
 
@@ -539,7 +542,7 @@ receives it; shared Fedora or Windows ESPs are never rebuilt.
 
 ### Buildable scope and activation gates
 
-After acceptance, task 5 can build the shared installer/editor plan integration,
+The authorized scope builds the shared installer/editor plan integration,
 read-only snapshots and migration review, frozen boot/session/network handoff,
 boot-compatible completion records, and incremental owned-file execution on
 **disposable scratch images**. It can qualify default/no-history planning,
@@ -598,11 +601,11 @@ simultaneous raw ESP claim/mount, RO-to-RW upgrade, or implicit global editor
 factory is introduced. Partition-first coexistence keeps its separately accepted
 admission/revalidation rules; it is not permission for an internal whole-disk claim.
 
-### Proposed owner decisions — at most three
+### Accepted owner decisions — 2026-10-13
 
-These are defaults to discuss, not accepted requirements.
+Accepted contracts; implementation and qualification status are recorded separately.
 
-1. **Default reconciliation and personal override migration. Recommended:**
+1. **Default reconciliation and personal override migration. Accepted:**
    with no complete usable ESP history, build a complete selected set from the
    revision's archive defaults, rendering only volumes/spaces into ESP `boot.lua`
    (hostname/input and protected system bootstrap stay archive-owned). If the
@@ -636,12 +639,7 @@ These are defaults to discuss, not accepted requirements.
    **explicitly revisitable**: the owner may later choose ESP versus pool after
    living with task 5; this proposal does not reopen that decision.
 
-   Alternative: refuse unsupported legacy import until the owner manually
-   rewrites it. That is safer for retaining its active semantics, but would add
-   a manual prerequisite for those edited installations. The recommended visible,
-   confirmed archive fallback avoids an implicit "configure first" requirement.
-
-2. **Boot-payload layout and legacy ownership admission. Recommended:** fresh
+2. **Boot-payload layout and legacy ownership admission. Accepted:** fresh
    Classic keeps its fixed boot paths through native FAT files in NVMe
    coexistence task 3 (owner, 2026-10-15). This task 5 introduces classic's
    immutable attempts together with committed boot-binding evidence; task 3
@@ -678,10 +676,10 @@ These are defaults to discuss, not accepted requirements.
    existing damaged/missing-ESP recovery route without granting it to coexistence;
    destructive whole-disk Install remains a distinct action.
    The layout alternative is to keep canonical boot payload paths with explicit
-   previous-file swaps, accepting a larger partial-boot-pair window. Recommended
+   previous-file swaps, accepting a larger partial-boot-pair window. Accepted
    revision-scoped payloads keep the last boot pair reachable until activation.
 
-3. **Activation, ordering and recovery. Recommended:** extend the existing
+3. **Activation, ordering and recovery. Accepted:** extend the existing
    complete-set record with the selected installed kernel/program revision and
    boot payload/catalog evidence and active source (ESP or archive), retaining
    one authority for readiness rather than an independent competing active
@@ -719,11 +717,6 @@ These are defaults to discuss, not accepted requirements.
    instance after freezing; missing/ambiguous provenance, unsupported input or
    any mismatch selects the entire archive set. Rescue always uses archive
    defaults, never a previous set or the pool override. No firmware-variable write.
-
-   Alternatives are in-place overwrites of the currently booted kernel/archive,
-   or independent best-effort activation of each Lua file. The recommended
-   staged boot paths and whole-set compatibility check avoid consuming a partly
-   updated boot pair or mixing configurations while retaining manual recovery.
 
 ### Recovery states to qualify before activation
 
