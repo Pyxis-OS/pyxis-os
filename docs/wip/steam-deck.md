@@ -96,8 +96,8 @@ CDC-ACM. The device is USB 2.0 on the internal controller. Steps:
    binding.
 2. Bind the keyboard interface with the existing support.
 3. Take the mouse interface through the descriptor-driven USB report mouse
-   support that the [pointer quality plan](pointer-input-quality.md) already
-   proposes, rather than a Deck-only path.
+   support in the [pointer quality reference](../devices/pointer-input-quality.md),
+   rather than a Deck-only path.
 
 Pyxis sends no vendor commands and switches no controller mode, per that plan.
 Which buttons produce which keys in lizard mode is not established; the task's
@@ -135,7 +135,7 @@ unconfirmed on hardware. Linux binds it with `hid-multitouch`. The DesignWare
 controller serves other devices too: the audio amplifiers sit behind I2C, and
 the DesignWare and GPIO pieces may serve I2C touchpads on laptops. Whether the
 ThinkPad's touchpad or TrackPoint uses them is unverified; the
-[pointer plan](pointer-input-quality.md) expects PS/2 there and keeps I2C-HID
+[pointer reference](../devices/pointer-input-quality.md) implements PS/2 there and keeps I2C-HID
 outside its scope.
 
 #### 4. DesignWare I2C controller and ACPI resources

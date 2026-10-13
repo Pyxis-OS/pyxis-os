@@ -67,14 +67,15 @@ so it remains directly editable without opening the menu.
 
 ## Boot menu timeout
 
-Synaptics task 2 is opt-in during native qualification: append
-`ps2.synaptics=1 ps2.synaptics.diagnose=1` to the selected PXE entry's kernel
-command line with `LOG_LEVEL=info`. These are boot options in the normal kernel,
-not build flags. Omission or `ps2.synaptics=0` preserves firmware-relative input;
-diagnosis alone does not enable absolute input. Query/contact summaries stop
+Synaptics absolute input defaults on only for a matching calibrated profile,
+currently the owner-qualified T14 Gen 1 AMD. Other Synaptics pads stay relative;
+`ps2.synaptics=1` cannot bypass the profile gate, and `ps2.synaptics=0` forces
+relative. For diagnosis append `ps2.synaptics.diagnose=1` to the selected PXE
+entry's kernel command line with `LOG_LEVEL=info`. These are normal boot options,
+not build flags; diagnosis observes the selected mode. Query/contact summaries stop
 after the bounded diagnostic schedule, omit serials/key identities and add no
 default output. No compiler container rebuild is needed. See
-[mouse input](../devices/mouse.md#synaptics-opt-in-absolute-input) and the
+[mouse input](../devices/mouse.md#synaptics-absolute-input) and the
 [qualification record](experiments/pointer-input-quality/README.md).
 
 For the native [Renoir qualification batch](experiments/renoir-presentation/README.md#native-thinkpad-batch),

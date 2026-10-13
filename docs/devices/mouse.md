@@ -82,13 +82,16 @@ is no inter-byte timeout. During setup, a packet byte from firmware-enabled
 reporting that equals an ACK or error reply can be mistaken for one; the result
 is at worst an unavailable mouse for that boot.
 
-## Synaptics opt-in absolute input
+## Synaptics absolute input
 
-`ps2.synaptics=1` requests basic six-byte absolute W at boot. Default omission
-or `ps2.synaptics=0` keeps firmware-relative input during qualification.
+Absolute input is default-on only for a matching calibrated profile, currently
+the owner-qualified T14 Gen 1 AMD fingerprint. Every other Synaptics pad stays
+relative, even with usable queried geometry. `ps2.synaptics=0` forces relative;
+`1` permits the qualified path but cannot bypass profile matching.
 `ps2.synaptics.diagnose=1` prints query results and a bounded contact summary at
 info level; without the option there is no new default-boot logging. Diagnosis
-alone queries then restores relative input. No runtime setter or public raw
+observes the selected mode; combine it with `ps2.synaptics=0` for relative
+diagnosis. No runtime setter or public raw
 contact interface is added.
 
 Setup in [the arch decoder](../../arch/x86_64/ps2/synaptics.c) disables reporting,
@@ -111,11 +114,11 @@ Geometry is queried, except for one owner-measured T14 Gen 1 AMD calibration
 matched to the complete non-serial query fingerprint and raw bounds/resolution.
 The owner measured 102x70 mm three times: X45 implies 98.04 mm usable width,
 and queried Y54 implies 65.41 mm height. The roughly 2 mm borders are an authored
-allowance pending native observed-extents qualification. Diagnostics retain raw
+allowance; native slides cover X1266..5678/Y1162..4686. Diagnostics retain raw
 resolution `0,54`, report effective `45,54` and label the calibration source.
 Query 01's live mode byte is excluded from matching. There is no square-unit
 guessing or generic geometry default; see the
-[accepted calibration](../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13).
+[accepted calibration](pointer-input-quality.md#calibrated-t14-geometry).
 Missing geometry without this match falls back to relative touch motion, with
 firmware tap-off when proven; the owner's geometry-only exception can retain legacy taps if that
 cannot be established. Such fallback does not qualify palm rejection, two-finger
@@ -193,7 +196,8 @@ relative bytes never reach an absolute decoder; keyboard and USB input continue.
 There are no runtime PS/2 commands. QEMU checks ordinary relative coexistence and
 unrecognized-device fallback, not pressure, width, clickpad or TrackPoint routing.
 See [task 2 qualification](../development/experiments/pointer-input-quality/README.md#task-2-before-code-baseline)
-for the owner's required native pass before default-on.
+for the owner's completed T14 native pass. Other pads need their own native
+profile qualification before absolute admission.
 
 ## Manual inspection
 

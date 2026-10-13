@@ -30,6 +30,8 @@ records runtime evidence and limits.
 
 The [display reference](kernel/display.md) covers driver selection, transactional
 local resizing, panic ownership and application adaptation.
+The [pointer input reference](devices/pointer-input-quality.md) covers report
+USB mice, shared scroll policy and calibrated Synaptics activation/filtering.
 [Screen capture](interfaces/screen-capture.md) describes whole-screen CAPTURE
 authority, the immutable FILE result and presenter handoff.
 The [screenshot command](userland/screenshot.md) covers staged PNG output and

@@ -678,7 +678,7 @@ geometry exception preserves relative touch motion; it does not qualify palms
 or two-finger scrolling. Code uses queried bounds/resolution or the accepted
 narrow owner-measured T14 profile. The first native boot recovered to relative
 mode; the contact pass remains pending. See the
-[accepted calibration](../../../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13).
+[accepted calibration](../../../devices/pointer-input-quality.md#calibrated-t14-geometry).
 QEMU cannot provide positive absolute-W/contact/TrackPoint evidence.
 
 The independent arch implementation follows the
@@ -755,7 +755,7 @@ relative recovery with tap-off succeeded. This is a failed absolute admission,
 not a palm/scroll result. Source log: horse's
 `~/shared/batch-2026-10-09/caelum-4.log`, starting at line 19128; raw logs are not
 committed. The owner measured visible width/height three times: 102x70 mm.
-The [accepted profile](../../../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13)
+The [accepted profile](../../../devices/pointer-input-quality.md#calibrated-t14-geometry)
 records the complete non-serial fingerprint, X45/Y54 scaling and inferred border
 allowance. Profile matching, calibration ordering and unchanged guest decoding
 were source-reviewed; positive native admission/contact evidence is pending.
@@ -965,3 +965,51 @@ its availability remains implementation evidence.
 Default activation is unchanged and opt-in while its closure gate is resolved.
 No dependency PR remains: userland #214 and ports #99 merged with task 1.
 Merge #773, then the reference close-out after the activation outcome is settled.
+
+### Calibrated-only default activation and closure — 2026-10-13
+
+Owner decision: enable absolute input by default only for a matching calibrated
+profile, currently the exact T14 non-serial fingerprint in the
+[reference](../../../devices/pointer-input-quality.md#calibrated-t14-geometry).
+Other Synaptics pads remain relative even with plausible queried geometry;
+`ps2.synaptics=1` cannot bypass the profile gate, and `0` forces relative.
+Pre-qualification inventory failure permits proven legacy relative recovery
+without requiring unavailable tap-off; post-absolute recovery guards remain.
+No contact/filter/guest algorithm changes. This settles the remaining activation
+step and closes the two-task milestone; the WIP becomes the device reference.
+
+Source implementation `96127e37`, fresh main `6fea298a`. Ordinary image build
+passes with the existing llvm23.1.3-4c23a20 container and `make -j8 image
+PREBUILT="sdk userspace ports" LOG_LEVEL=info`. Verified bundles come from main
+6fea298a's successful display run 2153 (API run ID 2235), with userland b38b0e09,
+ports 9f407742, fs 414be0ac and lwIP a1aadb91. Initial artifacts selected by the
+wrong display/API number were rejected by the ABI verifier before boot; only
+the matching bundles were used. No compiler rebuild or stale-artifact substitute.
+Final builds introduce no changed-source warning. Local checked ELF SHA256:
+`cc37a56277db3e2447adebafb6595532ca6d003c0ddda6875dc04da1680c54fb`.
+Current-main artifact ELF SHA256:
+`2d27eb918b01ea2b9e54b82dc2a2dd756e8d78597a9d7468a0370facbd03fc78`.
+Both use the same newly assembled initrd SHA256:
+`7568153a387b80c81af26c1dce6680a5cde602cfee0beb87eeaa5184987a3771`.
+
+Manual QEMU 10.2.2 Q35/nested KVM, host CPU, four CPUs/512 MiB, fresh OVMF,
+modern VirtIO boot volume/RNG, standard PS/2 and no NIC/USB. Baseline omitted
+options: Synaptics enable false, available relative ID3/four-byte input.
+Candidate omitted options: enable true but calibrated/absolute false; available
+four-byte relative input, zero loss/overflow and no Synaptics default output.
+Motion 50,-10 moves 640,400 -> 690,390; held/released left 1/0, wheel injection
+and `echo ok` pass. Final legacy-recovery guard build repeats automatic-default
+relative recovery and motion/held-button inspection. Explicit `ps2.synaptics=0`
+sets enable false, skips probing (identity remains zero), reaches the shell
+with available four-byte relative input. Explicit `1` plus diagnosis queries
+00=`00 00 64`, rejects the signature and restores the same relative path;
+calibrated/absolute false and zero loss. Read-only GDB inspected each state.
+All QEMU/GDB jobs stopped.
+
+QEMU has no Synaptics fingerprint/contacts: it proves ordinary non-matching
+mouse recovery, not positive automatic T14 admission or an unmatched Synaptics
+inventory. The full fingerprint gate and pre-qualification recovery were
+source-reviewed; the unchanged matching-pad path is supported by the owner's
+fef995a7 EW/AGM native pass. No injected contact self-test or new framework.
+Other profiles, USB horizontal/high-resolution devices and terminal application
+mouse reporting remain in technical debt. No dependency PR or repoint needed.
