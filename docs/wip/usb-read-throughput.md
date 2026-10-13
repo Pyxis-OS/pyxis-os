@@ -15,7 +15,7 @@ npfs capture issues 22,102 4-KiB READ commands on the first launch, taking 4.344
 warm launches still issue 21,035 and take 4.078–4.104 s. Eager image loading
 then takes about 128 ms. The dominant measured interval is npfs capture reads.
 
-`kernel/fs/npfs_store.c` reads one cache page per miss and waits for its block
+At the measured baseline, `kernel/fs/npfs_store.c` reads one cache page per miss and waits for its block
 request before the next. The file's misses form 45 contiguous logical/physical
 runs (43 warm); splitting these at the existing 16-page device cap gives
 1,379 data commands (1,316 warm), plus metadata reads. This is a grouping lower
@@ -95,5 +95,4 @@ earlier successful chunks retain their known progress. No failed-run retry.
 - [x] Implement bounded synchronous aggregation, with allocation fallback.
 - [ ] Complete QEMU byte/error/cleanup qualification and record its limits.
 - [ ] Native interleaved comparison on the same stick/port, separately from
-  debugger/probe attribution. Wait for the owner's container-build timing hold
-  to be lifted before collecting further performance data.
+  debugger/probe attribution. The owner runs the native packet before merge.

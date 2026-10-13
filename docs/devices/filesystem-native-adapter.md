@@ -66,8 +66,9 @@ mixed backends fail BAD_OPERATION. Directory sync requires CREATE or REMOVE.
 Archive, RAM and HOST behavior remains separate.
 
 Reads and enumeration stage output and publish no bytes/name on failure. Capture
-requires the full recorded file length, rejects empty executables and caps staging
-at 16 MiB. Its owned buffer remains outside adapter wrapper accounting.
+requires the full recorded file length, rejects empty executables and uses the
+shared 128 MiB serialized-image ceiling. Its owned buffer remains outside adapter
+wrapper accounting; the 256 MiB mapped image span is independent.
 Enumeration uses a shared directory generation, not wrapper identity or an immutable
 view. Mutation returns CHANGED for an acquired stale cursor. Short-buffer replies
 preserve input position; cursors are opaque and provide no snapshot.
@@ -95,6 +96,21 @@ lazily and best effort; pressure discards these clean pages. Journal overlays,
 checkpoint invalidation and allocation invalidation preserve coherence. The
 [matched warm-open measurements](../development/experiments/npfs-metadata-cache/README.md)
 record its observed effect and remaining qualification gaps.
+
+Internal multi-page reads aggregate consecutive uncached physical pages, up to
+64 KiB and the device transfer cap, using temporary BSP-worker-owned backing.
+Cached/dirty pages, journal overlays, holes, physical discontinuities and
+nonresident mapping metadata stop a run. Only requested aligned interiors are
+eligible; partial pages and ordinary bounded FILE calls keep single-page reads.
+Mandatory cache allocation precedes optional staging. Staging allocation failure
+uses the single-page path, and every exit releases it. Completed pages are copied
+into the ordinary cache and consumed before reserving another slot.
+
+A failed block ticket publishes none of its run; earlier successful chunks retain
+their confirmed byte count. There is no failed-run retry. Executable capture
+requires complete success and discards its unpublished buffer otherwise. See the
+[qualification record](../development/experiments/npfs-read-runs.md); native
+before/after acceptance remains pending.
 
 The worker maintains dirty data and one pool-wide metadata redo transaction.
 File/directory synchronization commits the whole current pool transaction after
