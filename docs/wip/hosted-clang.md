@@ -351,8 +351,22 @@ The integration remains draft: source compilation and SDK builds pass, but
 fresh target links, driver QEMU/GDB, overlapping-memory evidence and native
 qualification remain pending. Kernel #789 is ready for Daybreak's required
 adversarial review before merge; [#793](https://git.internal/PyxisOS/pyxis-os/pulls/793)
-keeps the core/fork/bundle integration separate. The recorded baseline precedes
-code changes.
+keeps the core/fork/bundle integration separate. The foundation (#789 and
+userland #248) merged into main `ad86d6e5`; the contained core is userland #251
+at `8c052506`, already based on current userland main `39499b92`. The recorded
+baseline precedes code changes. **Owner hold:** take no timing baselines or
+performance measurements while the container build runs on horse, until the
+owner confirms it is done. Functional work and builds remain permitted.
+
+Queued owner gallery request, after both this driver work and HTTP task 5c
+merge: a clean Pyxis QEMU screendump, Neovim on the left with a short C version
+of [`ci-jobs-server.py`](../../tools/demo/ci-jobs-server.py)'s existing
+[gallery workflow](../gallery/README.md), shell on the right running one
+`clang demo.c -o demo.pxe` and its output. Use plain stdio: `fopen(uri, "w+")`,
+`fputs`, `fflush` to commit, `fgets` for the reply; no `pyxis_http_commit`.
+The program posts a job, reads its reply, polls progress and lists jobs.
+Caption follows the gallery README. The owner coordinates readiness; this
+checkpoint implements neither the demo nor the HTTP adapter.
 
 ## Resources and native limits
 
