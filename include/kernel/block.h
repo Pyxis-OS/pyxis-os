@@ -68,7 +68,8 @@ struct block_completion {
   enum block_result result;
   size_t bytes;
   /* Publication happened: failed writes may have changed storage. A completed
-   * write still requires a successful later flush for persistence. */
+   * write still requires a later flush barrier. Persistence follows backend
+   * guarantees/assumptions; USB write-through flush may issue no command. */
   bool submitted;
 };
 

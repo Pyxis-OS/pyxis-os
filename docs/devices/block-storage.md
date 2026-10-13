@@ -90,9 +90,10 @@ ownership bookkeeping, DMA buffers and mappings are prepared before AP startup.
 
 USB instead reserves two captured 64 KiB I/O slots per supported device before
 AP startup and serializes BOT exchanges through its owning controller worker.
-Both writable and flush flags require known WP-clear media and a completed real
-blocking cache synchronization; unknown or unsupported capabilities retain
-read-only service when transport is healthy. See [USB storage](usb-storage.md).
+Both writable and flush flags require known WP-clear media and either completed
+real synchronization or the narrow unsupported-command write-through assumption.
+Other unknown/unsupported capabilities retain read-only service when transport
+is healthy. See [USB storage](usb-storage.md).
 
 The slot budget includes queued, device-owned and completed-but-uncollected
 requests. Exhaustion returns `BLOCK_FULL` immediately. Submission, collection,
@@ -137,10 +138,13 @@ the ticket; the client must collect or explicitly abandon it afterward.
 
 Independent requests may be outstanding and complete in a different order.
 Clients must wait between dependent or overlapping operations. Flush fences all
-I/O: earlier admitted requests complete before the device flush is published,
-and later requests remain queued until that flush completes. Earlier results
+I/O: earlier admitted requests complete before the flush executes, and later
+requests remain queued until that barrier completes. Earlier results
 need not have been collected to allow progress. A completed write alone does not
-promise persistence; a successful subsequent flush is required.
+promise persistence; callers require a successful subsequent flush barrier.
+Durability follows the backend/device contract. USB write-through-assumed media
+complete that barrier without a device command and trust completed writes;
+undisclosed volatile data can still be lost on power failure.
 
 `block_completion.submitted` records whether publication occurred. If a published
 write fails, storage may already have changed. Rejected or canceled queued work

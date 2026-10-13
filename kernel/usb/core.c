@@ -1603,9 +1603,15 @@ static void log_device(const struct usb_device_record *device)
   ktrace("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
          pci->bus, pci->device, pci->function, cursor, (unsigned long long)storage->blocks,
          storage->block_bytes, (unsigned long long)storage->read_bytes);
-  ktrace("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
+  if (storage->write_through) {
+    klog("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
          pci->bus, pci->device, pci->function, cursor, storage->writable,
          storage->flush_supported, storage->write_detail);
+  } else {
+    ktrace("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
+           pci->bus, pci->device, pci->function, cursor, storage->writable,
+           storage->flush_supported, storage->write_detail);
+  }
 }
 
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)

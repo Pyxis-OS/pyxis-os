@@ -6,7 +6,8 @@ checked-in default is `y`. Supported disks register with the kernel-only
 [block interface](block-storage.md) and receive [GPT snapshots](gpt.md). Trusted init can open USB-backed npfs volumes
 using configured GUID authority, then delegate ordinary directory/file grants.
 Explicit writable mounts require known clear write protection and successful
-cache-synchronization qualification; other readable disks remain read-only.
+cache synchronization or the narrowly qualified write-through assumption below;
+other readable disks remain read-only.
 The trusted Install init can delegate bounded [installer raw-disk
 authority](installer-authority.md) for retained USB candidates. USB registration
 alone grants applications no raw-disk access. [USB installation](usb-installation.md)
@@ -104,19 +105,37 @@ using an eight-byte header allocation. A validated header supplies the WP bit;
 mode pages need not fit the deliberately short allocation.
 
 Known write protection leaves both `writable` and `flush_supported` false.
-Known WP-clear media must complete a real SYNCHRONIZE CACHE (10) before either
-flag becomes true. IMMED is zero, so status waits for completion; zero LBA and
-block count synchronize the whole medium, including READ CAPACITY (16) media.
-Qualification changes no cache mode and performs no data write. A successful
-command establishes the device-reported capability, rather than independently
-proving physical persistence or power-loss durability.
+Known WP-clear media is probed with a real SYNCHRONIZE CACHE (10). IMMED is zero,
+so status waits for completion; zero LBA/count cover the whole medium, including
+READ CAPACITY (16) media. Success qualifies real device synchronization.
 
-A clean command rejection or unusable optional protection header preserves
-read-only service while transport remains healthy, with retained sense and a
-write-qualification diagnostic. Unknown protection never authorizes writes.
-Malformed BOT framing, failed sense, timeout or failed recovery still retires the
-candidate. Qualification uses the existing exchange and boot deadlines; there
-is no retry that turns unsupported synchronization into successful flush.
+Owner-approved compatibility policy, 2026-10-13: a clean rejection followed by
+valid **current** fixed/descriptor sense with ILLEGAL REQUEST and exactly
+invalid-opcode `20h/00h` or invalid-field `24h/00h` instead selects an immutable
+`write_through` profile. Both flags become true, and INFO reports once per device:
+`cache synchronization unsupported; write-through assumed`. Later FLUSH requests
+remain ordered barriers in the block worker but issue no SCSI command. Their
+`submitted` stays false; real command/flush counters do not increase. A device
+that qualified real synchronization keeps it; later failures never select this
+fallback or clear a write-failure latch.
+
+The MODE SENSE allocation obtains WP only, not the caching page/WCE. No volatile
+cache was reported by this probe, but absence of a cache is **assumed, not proved**.
+The device's completed writes are trusted under that assumption; no cache mode
+is changed. A no-op flush cannot force undisclosed volatile data to stable storage.
+Power loss can therefore lose data the device claimed written, as with Linux's
+write-through assumption. Linux [sd.c (v6.17)](https://github.com/torvalds/linux/blob/v6.17/drivers/scsi/sd.c)
+treats unsupported synchronization as nonfatal and has a write-through default
+when cache information is unavailable; Pyxis applies only the narrower predicate
+above, not Linux's other shutdown error exceptions.
+
+All other clean synchronization rejections preserve read-only service, including
+deferred sense, another sense key/ASC/ASCQ, or unusable optional protection
+headers. Unknown protection never authorizes writes. Malformed BOT framing,
+failed sense, transport/reset error or timeout still fails the media probe.
+Qualification uses the existing exchange/boot deadlines. No rejected command is
+retried; the selected no-op barrier is explicit backend policy, not a successful
+SYNCHRONIZE CACHE exchange or physical power-loss qualification.
 
 ## Block registration and queued I/O
 
@@ -141,7 +160,8 @@ not prevent progress. A completed write alone promises no persistence.
 
 The controller worker issues one BOT exchange at a time into a captured slot
 buffer. Reads and writes use READ/WRITE (10), or READ/WRITE (16) for wide media;
-flush uses blocking whole-medium SYNCHRONIZE CACHE (10). `submitted` becomes
+flush uses blocking whole-medium SYNCHRONIZE CACHE (10), or the ordered no-op
+for the admitted write-through profile. `submitted` becomes
 true at the original command's CBW TRB publication; subsequent sense/recovery
 commands do not change that fact. Collection copies read bytes only after
 successful whole-command completion. WRITE and FLUSH collect without a read
