@@ -24,6 +24,14 @@ Rules for entries:
 
 ## Highlights
 
+![A CI demo job submitted from Pyxis](images/2026-10-13-ci-jobs-qemu.png)
+
+**A CI job demo through native HTTP, 2026-10-13.** Pyxis `e46c51b7`
+([#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)), QEMU 10.2.2 Q35, four
+CPUs, standard VGA at 1280×1200. The interactive shell submits JSON with
+`=> job`, reads the retained reply with `cat < @job`, polls build/test progress
+and lists the passed job. The host-side in-memory demo fixture runs no builds.
+
 ![The Steam Deck's first boot into Pyxis](images/2026-10-09-steam-deck-first-boot.jpg)
 
 **The first Steam Deck boot into Pyxis, 2026-10-09.** Steam Deck OLED, photo of the
