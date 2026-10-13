@@ -1,12 +1,13 @@
 # FAT32 volumes
 
-Status: **tasks 1–3 merged (#740, #747, #755); task 4 implemented for review.**
+Status: **tasks 1–4 merged (#740, #747, #755, #764); task 5 assigned 2026-10-13.**
 The directory-validation fixes (#743 / fs #33) and task 3's binding (#750) are
 merged. Task 4 implements the accepted seal-at-power contract below; its
 [qualification record](../development/experiments/fat32-mounted-writes.md) separates
 executed scratch-image checks from source review and remaining hardware limits.
-Task 5 remains unassigned. Task 4 qualifies
-only disposable scratch VirtIO images, never writes the owner's real ESP.
+Task 5's workflow defaults below are accepted, 2026-10-13. The owner cleared
+timing capture after the LLVM rebuild; task 5 implementation is authorized. Native ESP steps require explicit owner approval and
+presence; this task does not write the real ESP.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
 
@@ -226,8 +227,8 @@ The [pre-task baseline](../development/experiments/fat32-mount-baseline.md)
 records main `173f1321`. The [native mount reference](../devices/fat32-mounts.md)
 defines the implementation's protocols, browsing profiles, limits and lifetime.
 Configured npfs MOUNT authority and boot-long pool retention remain unchanged.
-The following accepted contract governs task 3; task 4 is assigned below and
-task 5 remains unassigned.
+The following accepted contract governs the merged task 3 implementation;
+current task status is recorded above.
 
 ### Three accepted owner decisions — 2026-10-12
 
@@ -544,6 +545,122 @@ task 5 adds live shell bindings or configuration-selected capability entries,
 return to that parked design for owner review; early trusted `esp` delegation
 and mounted file I/O do not require its implementation.
 
+## Task 5 trusted workflow — accepted, 2026-10-13
+
+Inspected main `2f2109fc`, fs `414be0ac`, userland `9f781e94`, ports `f93becb9`.
+Task 4 is merged. Its engine, fixed-mode admission, interval/retirement contracts,
+strict GPT/512-byte FAT profile and clean-power seal remain requirements.
+
+The kernel already issues fixed-origin RO `esp_mount` to trusted boot init;
+[`boot-init`](../../userspace/boot-init/main.c) does not consume it and configured
+volume kinds are npfs, HOST and RAM. Normal boot issues no DISKS inventory. The
+installer RW opener first claims the whole device, so it cannot serve an editor
+on a disk with live npfs/FAT mounts. The shell can publish process-local roots
+through [`pyxis_working_bindings`](../../userspace/libc/working_path.c); an external
+utility cannot alter its parent. Session, shell and bundle launch preserve inherited
+root rights: putting RW FAT in that table grants every ordinary successor write
+authority. The shared manifest parser lacks MOUNT and external directory/root
+requests. These are inspected gaps, not justification for program-name exceptions
+or a userspace filesystem proxy.
+
+### Three accepted owner decisions — 2026-10-13
+
+1. **Mount-only authority separate from raw access.** Extend the existing disk
+   inventory interface with explicit mount-only RO/RW rights and an operation
+   returning the selected native root/control pair through existing worker
+   admission. No raw OPEN/READ/WRITE/CLAIM, formatting or repair authority comes
+   with these rights. Issue bootstrap authority to trusted init; operator-space
+   delegation must be explicitly configured and declared, disabled by default.
+   A recipient of RW factory authority can select any supported partition: a
+   self-declared manifest name is not an authorization boundary. Ordinary viewers
+   and editors receive selected grants rather than the factory. Preserve backend
+   write/flush qualification and extent exclusion.
+
+   Configuration gains opt-in RO `boot-esp` views through the unchanged provenance
+   issuer, and explicitly selected FAT volumes through mount-only authority.
+   Persistent selection uses an exact disk GUID/GPT entry and rejects ambiguity;
+   interactive selection uses displayed boot-scoped IDs. Missing optional views
+   stay unavailable, with no guessed disk or raw fallback. No installed/remote
+   space receives management authority implicitly. This needs a small native
+   front-door extension.
+2. **Shell-owned bindings and controllers; thin shared operations.** Extend the
+   existing shell mount path with FAT mount/sync/release, a bounded root/control
+   table and common native helpers. A thin standalone utility can inspect/sync/
+   retire an explicitly delivered bound controller through the shared declaration
+   path; it cannot publish a parent binding. Configuration supplies normal RO
+   roots and separately selected management grants. Do not add capability-valued
+   environment, a FAT-only capability-variable store or a global mount daemon.
+
+   Release unbinds the caller's root and closes its own data references before
+   RETIRE. If its cwd uses that root, move to home and report the move, or
+   refuse when no other authorized cwd exists. Retain the controller while BUSY/
+   failure is reported, allowing retry after external references/intervals drain.
+   Never revoke other processes' handles or equate process exit with drainage.
+   Final controller close keeps the existing published/failed-state rule. Clean
+   power still seals with files open, independent of release.
+3. **Explicit RW editor declarations, not launch wrappers.** Extend the common
+   typed grant resolver for selected MOUNT and external DIRECTORY capabilities,
+   including an explicit URI-root binding for a directory request. Use a distinct
+   selected alias; reject collisions with inherited, app and resource roots.
+   Preserve cwd and its actual rights unless the caller explicitly selects a new
+   cwd. Configuration or trusted operator selection defines available source
+   grants; the program
+   declares requested names/rights in its manifest. Required unavailable grants
+   fail before publication; startup reports actual received grants. No special
+   case for Neovim or another executable name.
+
+   Keep inherited FAT roots RO. A selected writable directory stays outside that
+   set and is offered only to a launch explicitly selecting that source and whose
+   declaration requests it. The editor receives data, not factory/raw/controller
+   authority. Permitted descendants may inherit those data grants; this is not
+   confinement beyond the selected directory. Trusted configuration/operator write
+   policy fixes the instance RW at first admission while ordinary views remain attenuated; otherwise admit RO. A manifest
+   cannot authorize admission. An existing RO instance requires drainage and a
+   successful explicit RETIRE, then fresh RW admission; launching an editor does
+   not change its mode. The boot ESP issuer stays RO, and this task does not enable/exercise RW real-ESP profiles.
+
+CLI/schema names are implementation choices. Task 5 is owner-assigned; no next
+task is authorized. Disk GUIDs and serials belong only in owner-local configuration,
+never repository documents or examples; use placeholders for selectors.
+
+### Baseline and qualification boundary
+
+The [exact-main control record](../development/experiments/fat32-workflow-baseline.md)
+holds the baseline captured after the owner cleared timing work: fresh image/host
+builds, existing native open/read costs and accounted backing. Preserve its control
+artifacts for matched/interleaved after-runs. If implementation starts from changed
+inputs, refresh and record that control first. Disposable VirtIO RO and USB RW
+functional checks exercise existing bootstraps; they do not qualify the proposed
+workflow. No native ESP operation has run.
+
+Implementation qualifies scratch VirtIO before supported 512-byte,
+single-LUN USB BOT via QEMU xHCI: declared/missing grants, editor save/replacement,
+RO/refused-RW media, held aliases, sync and reference drainage, retirement errors
+and clean power with open files. Cross-read with mtools, `fsck.fat -n`, untouched
+file comparisons and a fresh boot. No repair, forced unplug/fault hook or power-loss
+claim. A native scratch-stick run remains owner-routed evidence. Existing engine/
+backend limits are not relaxed for convenience.
+
+### Owner-present native ESP run sheet
+
+No native ESP step runs without explicit owner approval **and presence**. The
+first proposed run is RO only:
+
+1. Record merged kernel/dependency revisions and the intended boot profile.
+   Confirm the actual GPT ESP boot provenance and selected disk/partition;
+   optical/PXE must not guess a target. Keep other writers quiescent. Do not
+   stage an image or change firmware variables as part of this check.
+2. Explicitly enable/select the RO ESP view. Verify mode, extent and actual
+   attenuated grants; list/read known files and refuse RW requests. No formatter,
+   repair, dirty-bit clear or configuration-editor save is permitted.
+3. Leave the ESP cwd, close views/readers, release and report the result. BUSY or
+   validation/I/O failure causes no forced retirement or fallback. Disable the
+   opt-in profile afterwards unless the owner chooses to retain it.
+
+Real ESP writing needs separate explicit owner approval/presence and the consumer's
+ownership/adoption policy; this run sheet does not authorize it. Power-off with
+open files remains usable under the accepted seal contract.
+
 ## Ordered delivery tasks
 
 - [x] **1. Small first task: shared read-only engine/inspector — assigned 2026-10-11.** Extract/generalize
@@ -564,12 +681,12 @@ and mounted file I/O do not require its implementation.
   before code; no userspace scheme proxy or implicit mount authority.
   **After this task the owner can:** mount supported FAT32 and use ordinary `ls`/
   `cat`, then release all views so an authorized raw publisher can claim the extent.
-- [x] **4. Mounted read-write operations and sync — assigned 2026-10-12; implemented for review.** Deliver real native mutations,
+- [x] **4. Mounted read-write operations and sync — merged #764.** Deliver real native mutations,
   held-handle/zero-fill semantics, selected profile, exclusive publication interval,
   failed-state retention and the accepted dirty-bit/clean-retirement policy.
   **After this task the owner can:** edit authorized files, explicitly sync and
   retire a scratch FAT mount; simultaneous conflicting raw writers are refused.
-- [ ] **5. Trusted mount workflow and qualification.** Thin mount/sync/release
+- [ ] **5. Trusted mount workflow and qualification — assigned 2026-10-13; workflow decisions accepted above.** Thin mount/sync/release
   utility and configured binding integration; selected read-only normal ESP views
   and explicit writable editor grants. Qualify scratch VirtIO first, then supported
   USB and owner-approved native ESP steps; SD depends on its block driver. Revalidate
