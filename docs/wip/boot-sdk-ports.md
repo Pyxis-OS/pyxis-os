@@ -57,6 +57,10 @@ Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
+[USB storage read throughput](usb-read-throughput.md): owner-assigned scoped
+freeze exception (2026-10-13); native baseline complete, bounded npfs read
+aggregation proposed. Implementation awaits a separate go.
+
 ## Open
 
 [Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on the

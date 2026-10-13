@@ -855,11 +855,11 @@ Owner-native [task 5 measurements](development/experiments/hosted-clang-task5/RE
 on the ThinkPad USB toolchain volume qualify the first compile/link/run, with
 two deferred costs:
 
-- **USB image-loading throughput:** approximately 90/56 MB Clang/LLD images
-  and version/link wall proxies of about 4.29/2.97 s imply roughly 20 MB/s
-  effective loading. This is inferred from wall proxies, not an isolated device/driver
-  benchmark. Loading dominates small compiles; revisit when USB storage
-  throughput is profiled for native builds.
+- **USB image-loading throughput:** npfs captures currently issue single-page
+  reads; the [native baseline](development/experiments/usb-read-throughput.md)
+  measured 4.1–4.3 s for Clang capture despite 113–115 MB/s raw 64-KiB reads.
+  Bounded contiguous-read aggregation is [proposed](wip/usb-read-throughput.md),
+  not implemented; revisit after its native before/after qualification.
 - **No selected-image reuse across launches:** each compiler/linker invocation
   recaptures and loads its image, so warm repeated invocations still pay the
   launch cost. Revisit for launch-heavy native builds when image reuse, its
