@@ -684,7 +684,9 @@ QEMU cannot provide positive absolute-W/contact/TrackPoint evidence.
 The independent arch implementation follows the
 [manufacturer Rev. B guide](https://studylib.net/doc/18112502/synaptics-ps-2-touchpad-interfacing-guide)
 §§3.2/4.2–4.4/5.1.5. Mode bit 2 means DisGest in relative W=0 and EW in W=1;
-absolute mode `0xc1` does not enable EW or four-byte guest packets. Reporting
+absolute mode `0xc1` does not enable EW or four-byte guest packets. Queried
+image-sensor AGM is activated separately with sliced selector 03 and f3/c8;
+W2 position/count observations never publish switch or lift snapshots. Reporting
 stays disabled for mode readback and the §4.1 `EB` master-packet proof. The
 firmware extension/query/button facts are checked against
 [Linux v6.17 synaptics.c](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
@@ -694,9 +696,8 @@ query and 8.1/8.2 omitted extended-button snapshots are narrow protocol facts,
 not a guessed ThinkPad identity. Unhandled button layouts recover to relative
 instead of silently losing switches.
 
-Luna stages the owner-run image; do not stage or boot the laptop from this task.
-Build the published `pointer/t14-calibrated-geometry` correction head with the
-existing compiler container; #739 alone lacks this calibration:
+Luna stages the owner-run image; alpha does not stage or boot the laptop.
+Build the published #773 interaction head with the existing compiler:
 
 ```sh
 make -j8 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
@@ -704,67 +705,41 @@ make -j8 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
   POINTER_SYNTHETIC=0 USB_HID_DESCRIBE=0
 ```
 
-Duplicate the known flip-on PXE entry as **Synaptics absolute qualification**;
-keep its existing boot/initrd paths and options, then append
-`ps2.synaptics=1 ps2.synaptics.diagnose=1`. There is no new Make flag for these
-boot-only options. Keep a relative control entry with `ps2.synaptics=0` and no
-Synaptics diagnosis. Do not run `pointer.synthetic=schedule` during contact
-testing. On AC, built-in panel and normal Development terminal, the owner boots
-the opt-in entry and follows the named windows from the first
-`synaptics-contact: window=settle` line. Expect raw resolution `0,54`, effective `45,54`,
-`source=owner-measured-T14-102x70`, geometry 1 and qualified basic W. Pass-through
-should be 1 and extended stick buttons 0. If admission fails,
-record the query/fallback result; relative recovery is not a palm/scroll pass.
+Keep the known PXE paths/options and append
+`ps2.synaptics=1 ps2.synaptics.diagnose=1`; remove synthetic motion. No new
+Make flag is needed. Retain the relative control entry and a diagnosis-off
+`ps2.synaptics=1` entry. The short owner sheet is
+`/shared/present/batch2/pointer-task2-native/RUNSHEET.md`.
 
-| Elapsed, s | Window | Owner actions |
-| --- | --- | --- |
-| 0–10 | settle | Lift contacts and leave controls idle. |
-| 10–30 | normal-finger | First slide one finger edge-to-edge on X/Y (left/right, top/bottom), then centrally/diagonally; lift/reapply; confirm taps do not click. |
-| 30–50 | edge-entry | Start at each edge, move parallel, then deliberately inward; check exclusion and entry without a jump. |
-| 50–70 | resting-palms | Rest/move a palm, then reduce width/pressure without lifting; check rejection persists until full lift. |
-| 70–90 | typing | Type/repeat with an existing contact; add a contact while typing; check quiet-interval rebaseline versus required lift. |
-| 90–110 | finger-transitions-physical-drag | Add/remove second/third fingers, then hold/release a physical press during a drag; check fresh baselines and primary click. |
-| 110–130 | TrackPoint-with-palm | Rest a palm while moving the stick and using each physical L/M/R button; check touch rejection does not affect them. |
-| 130–150 | two-finger-scroll | Stable vertical/horizontal/diagonal strokes, small strokes, reversals and lifts; check natural direction and no residual scroll. |
+1. Confirm effective X45/Y54, calibrated absolute admission, mode c1/EW off and
+   image-sensor AGM=1; briefly slide edge-to-edge and use the TrackPoint.
+2. Keep an admitted finger moving during typing; land a new contact during
+   typing, stop and retry without lift. Check immediate post-mousetest response
+   and Enter repeat versus release.
+3. Move close pairs vertically/horizontally/diagonally, one finger at a time;
+   separate across the pad and rejoin. Expect centroid scroll only within the
+   accepted hysteresis; observe AGM position and usable-pair counters.
+4. Hold physical click with one finger and drag with the other, swap roles,
+   release and lift. Expect moving-finger pointer motion, zero scroll while
+   pressed, no jump/stuck switch.
+5. Recheck resting palms, typing with palms, TrackPoint L/M/R, and repeat core
+   interactions with diagnosis omitted. Record any unchecked item.
 
-After `done`, check modifier-only input, physical clicks during palm/typing
-rejection, independent held switches, local selection and mux scrolling, and
-fresh-click lock/unlock/relock in Quake. Repeat mouse/touchpad direction checks
-under separately authored natural/traditional machine settings (next boot),
-then repeat core finger/palm/typing/drag/stick/scroll checks with diagnosis off.
-The owner's full native pass precedes the accepted default-on change in this
-same task. Preserve a relative-mode control boot if geometry is unavailable.
-
-Initial authored tuning is documented in [mouse input](../../../devices/mouse.md#synaptics-opt-in-absolute-input).
-The first edge-to-edge slide checks observed X/Y against queried 1266..5678 /
-1162..4694; retain the normal-finger summaries, including contacts rejected by
-edge policy. Observed contact coordinates are collected before filtering. The
-98.04x65.41 mm sensing area and its border allowance remain estimates until this
-pass; do not widen bounds from isolated outliers. Five-second summaries contain
-valid Z/W distributions, observed X/Y,
-finger/rejection counts and packet gaps, with seven named twenty-second windows
-after ten seconds settle. `transport-resets` includes coordinator queue overflow;
-baseline-only samples count neither accepted nor rejected. Gaps are delivery
-spacing, **not filter CPU time**. Existing presenter/probe counters measure
-aggregate elapsed compose/copy cost including preemption. No typed text,
-key identities or serial-number queries/logs are used; raw contact packets
-are not dumped. The diagnostic schedule stops at 150 seconds. New `synaptics-transport:` lines
-contain cumulative touch/guest packet, overflow/framing/unsupported/reset counts.
-Guest count should increase during actual stick use; capability alone does not
-prove delivery. No guest protocol/initialization changes are made in this fix.
-
-Keep the masked UDP log and short owner observations at
-`/shared/present/batch2/pointer-task2-native/`. Useful extraction:
+Diagnostics start during boot, not program launch; old named windows remain
+labels, and summaries stop at 150 seconds. Record actual action order rather
+than assuming it matches those windows. Contact summaries report Z/W/observed
+X/Y, rejection and usable/stale/ambiguous/separated pair counts, plus drag
+samples and effective tuning. Transport counters are cumulative touch/guest
+and AGM position/count/unsupported observations. Packet gaps are delivery
+spacing, not filter CPU cost. No raw contacts, typed text, key identities or
+serial queries are logged. Retain masked UDP logs and observations under
+`/shared/present/batch2/pointer-task2-native/`; useful extraction:
 
 ```sh
-grep -E 'synaptics:|synaptics-contact:|synaptics-transport:|mouse:|display-cursor-probe:|display-flip-metrics:' masked.log
+grep -E 'synaptics:|synaptics-contact:|synaptics-transport:|mouse:' masked.log
 ```
 
-Record image hashes, head/pins, command line, actual window actions and any
-fallback. For a later hands-free pipeline A/B, use the baseline `df7ec8ab` and
-#739 kernels with the same matching initrd, `POINTER_SYNTHETIC=1
-DISPLAY_CURSOR_PROBE=1` and `pointer.synthetic=schedule`; repeat interleaved
-boots. This bypasses contact filtering and cannot replace the hands-on pass.
+The owner decides qualification/default-on separately after the native pass.
 
 ## T14 calibrated admission correction — 2026-10-13
 
@@ -833,8 +808,43 @@ malformed packets, zero transport resets. Owner also booted Synaptics-only and
 the standard entry. Log stays on horse at
 `~/shared/batch-2026-10-09/caelum-4.log`, from line 19278. No raw log committed.
 
-Qualification remains open: the owner reports overlong typing suppression and
-basic-W's one-position limitations for separated-finger scroll and clickpad
-trampoline drag. The milestone records accepted interaction requirements, the
-confirmed until-lift typing latch, image-sensor AGM evidence and three pending
-defaults. No follow-up interaction implementation or native pass is claimed.
+Qualification remains open: the owner reported overlong typing suppression and
+basic-W's one-position limits for separated-finger scroll and trampoline drag.
+The three follow-up tunables were accepted and explicitly revisitable on
+2026-10-13; the implementation and remaining native gate are recorded below.
+
+### AGM interaction correction checks — 2026-10-13
+
+Implementation `556f50e7` (final code built before commit) enables
+queried image-sensor AGM, timestamps absolute bytes at receipt, matches fresh
+paired positions, uses physical-click drag/centroid scroll and per-contact
+quiet retry. Source review confirms the old until-lift typing latch and global
+baseline reset on every key timestamp are removed; release never rearmed it.
+The owner-accepted Kconfig defaults are 75 ms quiet, 50 ms pair freshness,
+25/30 mm scroll entry/leave, all revisitable. Count/role changes still reset
+motion baselines while preserving contact admission. Available palm hints and
+until-lift transport-loss quarantine remain; AGM does not supply secondary width.
+
+Existing builder `pyxis-llvm23.1.3-4c23a20`, `make -j8 image
+PREBUILT="sdk userspace ports" LOG_LEVEL=info`, same verified main-run-2189
+bundles/pins/initrd and QEMU setup as the calibration comparison above.
+Local image build passes without warnings from changed sources. Interactive
+check ELF SHA256:
+`9b32d254e3ecd71f2af6ae4e724e2a0f4040f030915c2eac5b4c7694ae77b5e6`.
+The final unsupported-W2 guard retains invalid-contact baseline reset without
+applying a fabricated button snapshot. Final rebuilt ELF SHA256:
+`cbe29f51c0ce5c657c7275d10f6e25546eff9a9fefa53375eaf165cd4d2d8f45`.
+
+Interactive opt-in QEMU/GDB repeats non-Synaptics recovery: both options true,
+four-byte relative input available, absolute/guest/second-contact flags false,
+AGM counters and diagnostic scheduler inactive. Motion `50,-10` again yields
+`690,390` from `640,400`; physical left transitions 1/0, wheel injection and
+PS/2 `echo ok` complete with zero loss/overflow. An options-off boot reaches the
+shell, both options and second-contact flag false, four-byte input and no
+Synaptics output. No new test framework or injected contact self-tests.
+All QEMU/GDB jobs are stopped.
+
+QEMU cannot exercise this Synaptics AGM stream, physical proximity/identity,
+typing/pressure timing, palm behavior or trampoline motion. Those remain for
+the owner's short native re-run; no positive AGM/contact result or performance
+improvement is claimed from QEMU. Default activation remains off.

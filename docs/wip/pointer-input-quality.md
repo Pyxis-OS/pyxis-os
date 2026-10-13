@@ -394,17 +394,27 @@ hardware or architectural constants:
    no claim of distance-qualified scrolling or second-finger tracking there.
    Failed AGM activation on an advertising device recovers relative input.
 3. **Typing-gated contact lifetime.** Check typing at each newly identified
-   contact's onset, never reset or suspend a previously admitted contact for
-   later typing or an added finger. A gated contact retries after 75 ms without
+   contact's onset; typing never suspends or clears a previously admitted
+   contact, including when a finger is added. Count/role changes retain their
+   separate motion-baseline reset without a typing quiet wait. A gated contact retries after 75 ms without
    a nonmodifier press/repeat, establishing a fresh baseline; it does not require
    lift. Until admitted, genuine continued typing can extend that quiet interval.
    Once admitted it remains unaffected by subsequent typing. Palm/edge/loss
    quarantine retains its separate rules. Keep 75 ms authored/build-tunable in
    the owner's 50..100 ms range, with no new runtime authority.
 
-Interaction implementation is authorized on #773. Keep the backend opt-in;
-build/QEMU checks precede the short typing/scroll/trampoline native re-run
-through luna. Native qualification and default-on remain separate owner gates.
+Interaction correction is implemented on #773: query-gated image-sensor AGM,
+receipt-timed second observations, bounded matching, clickpad drag, centroid
+scroll and per-contact typing retry. Tuning uses the authored Kconfig settings
+TOUCHPAD_TYPING_MS, TOUCHPAD_PAIR_FRESH_MS and TOUCHPAD_SCROLL_ENTER_MM /
+TOUCHPAD_SCROLL_LEAVE_MM. No raw contact API, runtime setter or new authority.
+No secondary width is reported by AGM; keep existing available palm hints,
+edge policy and until-lift loss quarantine, rather than inventing width.
+
+- [x] Implement the accepted interaction correction and record tuning.
+- [ ] Owner/luna short re-run: AGM positions, typing response, close/separated
+  fingers, trampoline drag, palm/TrackPoint regression and diagnosis-off repeat.
+  Native qualification and default-on remain separate owner gates.
 
 ## Qualification and tuning
 
