@@ -55,13 +55,17 @@ Development and read-only init each create a namespace and request
 `session --start-services`. After reading configuration and applying any requested
 NIC settings, session launches `boot://init-services` with the configured
 `DNS_SERVER` and ordinary session grants. That trusted script publishes
-`service start http boot://httpfs.pxe`, followed by
-`service start --optional --read-only https boot://httpfs.pxe --https`, then hands
-off to the interactive shell. A reported HTTPS setup failure is logged and
+`service start http boot://httpfs.pxb`, followed by
+`service start --optional --read-only https boot://httpfs.pxb --https`, then consumes the private backing source before handing off to the interactive shell. A reported HTTPS setup failure is logged and
 leaves HTTPS unpublished while startup continues. The read-only profile
 restricts host-file writes, not HTTP or HTTPS reads. Idle spaces
 start no provider. Ordinary session invocation without the flag starts its shell
 directly, so handing off within an existing namespace does not republish services.
+
+The declared `httpfs.pxb` selects caller-held grants. Trusted startup supplies a
+private RAM staging leaf (16 MiB by default); large uploads opt into an isolated
+npfs source. Manual startup after that source is consumed has GET authority but
+no POST backing. See [staging and limits](../interfaces/http-transactions.md#authority-and-preparation).
 
 `httpfs` defaults to HTTP. `--https` selects HTTPS and optionally accepts
 `--ca-bundle URI` to augment public trust. It selects inherited DNS configuration
@@ -69,9 +73,9 @@ without DNS traffic. Publication uses the explicit grant handoff; providers
 receive neither the parent namespace nor namespace-creation authority.
 
 ```text
-service replace --read-only https boot://httpfs.pxe --https --ca-bundle home://custom-ca.pem
+service replace --read-only https boot://httpfs.pxb --https --ca-bundle home://custom-ca.pem
 namespace remove https
-service start --read-only https boot://httpfs.pxe --https
+service start --read-only https boot://httpfs.pxb --https
 ```
 
 The `--read-only` service option attenuates native directory roots and working

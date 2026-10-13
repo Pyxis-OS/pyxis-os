@@ -660,3 +660,22 @@ Boot init drops its own data references after handoff; published controls retain
 the accepted mount lifetime. A successful mount not handed to a
 space attempts explicit retirement after local data drains and reports refused
 cleanup; failed admission publishes no pair and rolls back in the kernel.
+
+## Declared private HTTP staging
+
+Ordinary profiles explicitly select optional `http_staging` DIRECTORY authority
+from the private `http-work` RAM volume. Boot init creates a per-space leaf;
+trusted service startup creates separate HTTP/HTTPS leaves and supplies only each
+provider's declared `staging` request. The bootstrap keeps its ancestor through
+service initialization and consumes it before local/mux/remote client handoff.
+It never becomes a URI root, cwd or interactive selected source.
+
+The default RAM body cap is 16 MiB, configurable with trusted provider startup
+`--staging-cap BYTES`. Large uploads opt into an explicitly provisioned NPFS
+volume through the same selected-source schema. Boot validation rejects any
+public/alternate alias of that backing, including equivalent NPFS volume tuples
+and the installed program volume. Runtime backing unavailability never switches to RAM, repartitions or creates a
+volume on update. Invalid installed boot overrides retain the existing reported
+archive-default policy. Missing optional backing keeps GET and refuses POST;
+required source declarations still refuse startup. See
+[prepared HTTP authority](../interfaces/http-transactions.md).

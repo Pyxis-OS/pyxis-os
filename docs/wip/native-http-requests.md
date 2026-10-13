@@ -3,6 +3,8 @@
 Status: **shared milestone accepted 2026-10-11; tasks 1–4 delivered; task 5 assigned,
 2026-10-13** ([accepted contract #780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
 implementation draft [#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)).
+Task 5a delivers the qualified interactive/trusted-bootstrap surface; standalone
+5b is deferred to scoped descendant cancellation in #789, with no console handoff.
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -419,8 +421,7 @@ Reject names already used by string environment entries. Children receive only
 explicit selected facets through launch; scripts have their own table. The
 future environment must unify storage/lookup, not wrap a second request registry.
 
-Package the pinned BusyBox `printf` as an ordinary external applet; it is absent
-today. It receives stdout, not HTTP/control authority. The prefix form
+The implementation packages pinned BusyBox `printf` as an ordinary external applet. It receives stdout, not HTTP/control authority. The prefix form
 `request send` is not adopted.
 
 ### 2. Coordinator — accepted: one bounded trusted staging worker
@@ -486,7 +487,7 @@ declared `staging` resource, publishes its OPEN_READ/OPEN_WRITE grants and alias
 then consumes the backing source before the interactive handoff. The provider
 requests CREATE/REMOVE/READ_FILES/WRITE_FILES/FILESYSTEM_INFO on its leaf. Setup
 drops ancestor/provisioning copies; shells/programs get no backing authority.
-Service selection, leaf provisioning and consumption still need implementation.
+The task 5 implementation supplies service selection, leaf provisioning and consumption.
 
 Large uploads opt into a dedicated private NPFS volume outside **every** client
 root/cwd/alias. Example (`volumes` is global; `grants` belongs to the space):
@@ -571,8 +572,7 @@ uncertainty/no replay, Ctrl+C/expiry/early close, copied/reference lifetimes,
 4xx/5xx, malformed framing and TLS EOF, denied provisioning, and real private
 NPFS multi-GB GET/staged POST with bounded resident buffers. Track the native
 HTTP/TCP reference gap; the task 4 native result is not a worker POST measurement.
-Userland/ports first, parent pins their own heads. Native timing/listening is an
-owner run; distinguish it from nested measurements and track the TCP reference gap.
+Userland/ports first, parent pins their own heads. Native timing is an owner run; distinguish it from nested measurements and track the TCP reference gap.
 
 ## Task 2 accepted TLS policy
 
@@ -635,17 +635,24 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   [QEMU qualification/cost limits](../development/experiments/http-stream-adapters.md).
   **After this task the owner can:** stage a POST and stream its response or a
   large GET using Lua file I/O, with explicit final-result/error checks.
-- [ ] **5. Shell bindings and end-to-end completion — assigned 2026-10-13.** Prepare directly in the
-  running shell, delegate body stdout and response stdin with observation,
-  coordinate all producers, and expose commit/status/abort and retained response
-  capability-valued bindings designed to become, or sit under, entries in the
-  [capability-valued environment direction](capability-environment.md).
-  Exact syntax is a userspace choice,
-  not an ABI; environment implementation needs a separate assignment. Demonstrate
-  `printf '{}' > json+https://…`, then `cat` on that response grant, never a fresh
-  URI GET. A failed response must make its reader/command report failure.
-  **After this task the owner can:** script web requests with ordinary writers
-  and readers, and stream a multi-GB download through shell pipelines or Lua.
+- [x] **5a. Interactive and trusted-bootstrap request bindings — delivered for review.**
+  `=> name`, redirection-only `@name` and explicit `request` operations retain
+  native facets beneath the future capability-valued environment. All producers
+  must succeed before commit; response readers report framing failure. A bounded
+  trusted worker stages into declared private RAM (16 MiB default) or explicitly
+  selected private NPFS. TLS remains in the provider. No ordinary standalone
+  script surface is delivered here.
+  **After this task the owner can:** interactively write an HTTP body, inspect
+  and read the retained response without a new GET, or use the existing trusted
+  bootstrap profile and Lua for scripted requests and multi-GB transfers.
+- [ ] **5b. Standalone positional scripts — deferred to #789.** Restore the
+  declared shell bundle/`shell home://post.pxs` in a separate follow-up, with an
+  owned subgroup for producers/worker. Qualify actual Ctrl+C, startup and nested
+  cancellation/retirement; stopping the script stops the whole subtree. No
+  console-interrupt handoff. Dependencies are 5a and delta's scoped subgroups,
+  coordinated through the owner.
+  **After this task the owner can:** invoke an ordinary native .pxs request
+  script and interrupt it without surviving producers or console readers.
 
 Qualify each assigned task with ordinary builds and manual local HTTP/HTTPS
 fixtures in QEMU/GDB. Record baseline/changed revisions and buffer/storage demand;

@@ -6,8 +6,10 @@ The [ABI](../../include/abi/http_transaction.h) and SDK's `http_transaction.h`
 define PREPARE, COMMIT, ABORT, STATUS and METADATA. HTTP/TLS remain userspace
 protocols;
 [STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
-[Libc streaming](../userland/stdio.md) uses these facets; shell transaction
-coordination remains task 5 of the [native HTTP milestone](../wip/native-http-requests.md).
+[Libc streaming](../userland/stdio.md) uses these facets; the [shell coordinator](../userland/shell.md#prepared-http-requests)
+uses the same facets for interactive and trusted-bootstrap requests.
+[Standalone scripts](../wip/native-http-requests.md#task-5-split--accepted-2026-10-13)
+wait for scoped descendant cancellation and are not delivered.
 
 ## Authority and preparation
 
@@ -48,13 +50,22 @@ inheritance is opt-in. Independent provider lifetime lets outside holders surviv
 shell/job exit; closing a binding releases its references, never submits it.
 
 POST requires a separately named `staging` native directory grant from the
-trusted launcher. This implementation admits a writable mounted npfs directory
-only. The launcher must isolate it from clients, including their other aliases;
-a shared home/tmp filename does not establish privacy. Without provisioning,
-POST is denied and GET remains available. The provider creates exclusively,
-unlinks before exporting a writer, and privately retains READ|WRITE backing.
-No total staged-body ceiling replaces actual storage/representability limits.
-RAM staging is not implemented. Unlink/close does not guarantee secure disk erase.
+trusted launcher. The provider admits writable native RAM or npfs directories, validated by their
+explicit filesystem type. Trusted startup isolates them from every client
+root/cwd/alias and drops ancestor grants before interactive handoff; a hidden
+home/tmp name is not private. Ordinary profiles explicitly declare RAM staging,
+with a default 16 MiB body cap. `httpfs --staging-cap BYTES` configures that RAM
+policy; oversized WRITE/RESIZE returns CALL_LIMIT before mutation and prevents
+commit. Native allocation failure remains a separate real error. Protocol,
+copy-buffer and RAM page-index metadata are additional bounded charges.
+
+Large uploads opt into dedicated private npfs backing through the named source
+`http_staging`; it has actual storage/representability limits rather than a
+transport cap. There is no automatic RAM/npfs fallback. Missing optional or
+provider-refused selected backing leaves GET available and POST denied; required
+boot sources retain their existing startup refusal. The provider creates
+exclusively, unlinks before exporting a writer and privately retains READ|WRITE
+backing. Unlink/close does not promise secure disk erase.
 
 ## Facets and lifetime
 

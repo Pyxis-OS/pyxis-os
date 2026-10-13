@@ -133,15 +133,17 @@ struct directory_enumerate_reply {
 };
 
 #define FILESYSTEM_TYPE_NPFS UINT64_C(1)
+#define FILESYSTEM_TYPE_RAM UINT64_C(2)
 #define FILESYSTEM_FLAG_READ_ONLY (UINT64_C(1) << 0)
 #define FILESYSTEM_FLAG_GPT_DEGRADED (UINT64_C(1) << 1)
 #define FILESYSTEM_FLAG_DEGRADED (UINT64_C(1) << 2)
 #define FILESYSTEM_VOLUME_NAME_MAX 255u
 
 /* FILESYSTEM_INFO uses a complete zeroed directory_message (body ignored).
- * Requires only FILESYSTEM_INFO on a native directory; other backends return
- * BAD_OPERATION. No traversal, new authority or whole-image check occurs.
- * All fields below are available on success. IDs are opaque bytes in filesystem
+ * Requires only FILESYSTEM_INFO on an npfs or RAM directory; other backends
+ * return BAD_OPERATION. RAM returns its type and zero flags; all remaining
+ * fields are inapplicable and zero, not capacity or identity measurements. No traversal, new authority or whole-image check occurs.
+ * On NPFS, all fields below are available on success. IDs are opaque bytes in filesystem
  * order; name is NUL-terminated with zero padding. No namespace binding is given.
  * Allocatable bytes are (pool blocks - 2) * 4096, excluding the two header blocks
  * but INCLUDING shared metadata/reserves. This is shared pool capacity, never a

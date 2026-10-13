@@ -31,6 +31,7 @@ P1F_MAGIC = b"PXE1FLAT"
 SOURCE_PREFIX = "source."
 # Copied from the resource/right table in userland/lib/bundle.c.
 RIGHTS = {
+    "service": {"create"}, "publication": {"call"},
     "memory": {"manage"}, "threads": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
     "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
     "tcp": {"connect", "listen"}, "pipe": {"create"}, "udp": {"open"},

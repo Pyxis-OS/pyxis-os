@@ -1207,6 +1207,13 @@ static struct syscall_result filesystem_info(struct directory_object *directory,
   if (!user_buffer_check(reply_address, sizeof(struct directory_filesystem_info), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
+  if (directory->backing == DIRECTORY_RAM) {
+    struct directory_filesystem_info reply = {.type = FILESYSTEM_TYPE_RAM};
+    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
+  }
   struct npfs_request *pending = npfs_request_prepare(NPFS_FILESYSTEM_INFO);
   pending->job.node = directory->npfs;
   pending->job.rights = rights;
@@ -1339,7 +1346,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     required = DIRECTORY_RIGHT_ENUMERATE;
     break;
   case DIRECTORY_FILESYSTEM_INFO:
-    if (directory->backing != DIRECTORY_NPFS) {
+    if (directory->backing != DIRECTORY_NPFS && directory->backing != DIRECTORY_RAM) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     required = DIRECTORY_RIGHT_FILESYSTEM_INFO;

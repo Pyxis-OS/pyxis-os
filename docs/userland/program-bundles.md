@@ -268,6 +268,11 @@ and the [bin placement record](../development/experiments/bundles-in-bin/README.
 (live and installed roots, updates, recursive cleanup). No physical-hardware
 result is claimed.
 
+Provider bundles can declare `service`/`create` and `publication`/`call`.
+The trusted launcher supplies only its held endpoint-service and private setup
+caller. Publication requests zero resource rights and CALL transport; the common
+resolver queries and narrows the real grant. Neither class creates authority.
+
 ## Selected external grants
 
 The common resolver accepts `directory`, `mount` and mount-only `disks` classes
