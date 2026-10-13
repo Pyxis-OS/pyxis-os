@@ -6,6 +6,7 @@
  * sections 3.2, 4.2-4.4 and 5.1.5. Newer capability layouts were checked
  * against Linux v6.17; no Linux implementation is incorporated here. */
 #define PS2_DISABLE_REPORTING 0xf5
+#define PS2_SET_SCALING_1_1 0xe6
 #define PS2_SET_RESOLUTION 0xe8
 #define PS2_SET_SAMPLE_RATE 0xf3
 #define PS2_GET_INFORMATION 0xe9
@@ -119,6 +120,10 @@ static void calibrate_geometry(void)
 
 static bool encoded_argument(struct ps2_setup *setup, uint8_t argument)
 {
+  /* Delimit the four resolution commands even after a preceding query. */
+  if (!mouse_ps2_command(setup, PS2_SET_SCALING_1_1)) {
+    return false;
+  }
   for (unsigned shift = 8; shift; shift -= 2) {
     if (!mouse_ps2_command(setup, PS2_SET_RESOLUTION) ||
         !mouse_ps2_command(setup, (argument >> (shift - 2)) & 3)) {
@@ -368,7 +373,7 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
   profile.absolute = true;
   profile.has_guest = (inventory.capabilities & CAP_GUEST) || inventory.stick_buttons;
   if (diagnostics) {
-    klog("synaptics: qualified six-byte basic W, mode=0x%x, EW off, image-sensor AGM=%u\n",
+    klog("synaptics: qualified six-byte W, mode=0x%x, image-sensor AGM-requested=%u\n",
          mode, profile.has_second);
   }
   return SYNAPTICS_ABSOLUTE;

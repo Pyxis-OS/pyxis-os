@@ -366,8 +366,10 @@ bit 19 clear. Pinned Linux v6.17, commit
 `e5f0a698b34ed76002dc5cff3804a61c80233a7a`, enables AGM for either capability.
 For this image sensor it decodes a second position/pressure from W2 gesture
 packets and a contact-count packet. Activation uses the sliced model selector
-03 followed by sample-rate parameter c8 after ordinary absolute-W setup; it is
-not EW mode bit 2 or four-byte guest negotiation. Evidence:
+03 followed by sample-rate parameter c8 after ordinary absolute-W setup. The
+initial conclusion that this worked without EW bit 2 was incorrect; the
+source correction and native failure are recorded below. Guest four-byte
+negotiation remains separate. Evidence:
 [mode/packet handling](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
 and [capability definitions](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.h).
 Independently implement protocol facts; do not incorporate Linux GPL code.
@@ -415,6 +417,51 @@ edge policy and until-lift loss quarantine, rather than inventing width.
 - [ ] Owner/luna short re-run: AGM positions, typing response, close/separated
   fingers, trampoline drag, palm/TrackPoint regression and diagnosis-off repeat.
   Native qualification and default-on remain separate owner gates.
+
+### Missing secondary packets — native failure, 2026-10-13
+
+Owner run of `1a07dcf4`: typing and movement feel good, but no scroll or
+trampoline drag. All AGM counters remain zero; the filter withheld every pair
+because an acknowledged AGM command was treated as proof of secondary data.
+Log stays on horse, `~/shared/batch-2026-10-09/caelum-4.log`, from line 19903.
+
+Pinned Linux v6.17's `synaptics_init_ps2` sets mode bit 2 for firmware major
+at least four, then `synaptics_set_mode` requests AGM with selector 03 / F3 C8.
+At the existing high rate that gives **c5**, rather than our **c1**. Rev. B
+sections 3.2.9 and 4.3 identify bit 2 as EW when W is set and require it for
+secondary packets. The decoder matches the referenced half-resolution format;
+the source evidence identifies a missing format gate, not a decoder failure.
+Linux's [sliced command helper](https://github.com/torvalds/linux/blob/v6.17/drivers/input/serio/libps2.c#L420-L448)
+also prefixes E6 before four E8 argument pairs. The guide allows an inert
+delimiter; our preceding EB already breaks the command run, so omission of E6
+is not independently proved to have caused this native failure. The helper
+now uses the explicit delimiter consistently. No Linux implementation is copied.
+
+Query 0c `12e800` also advertises InterTouch. Linux lists LEN2068 (T14 Gen 1)
+for an SMBus attempt when configured, but falls back to PS/2 if setup fails.
+The [checked-in Fedora 6.19.10 inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt)
+from 2026-10-02 actually names `SynPS/2 Synaptics TouchPad`. It does not prove
+today's binding or secondary delivery, but there is no evidence of SMBus-only
+operation or need to build RMI4 here.
+
+**Owner-requested recovery, implemented:** missing/stale secondary observations
+immediately retain basic-W count-based scroll while unpressed; pressed contacts
+move from the reported primary position and never scroll. This is independent
+of whether AGM was requested or ever delivered. Paired/basic-W transitions
+reset motion/scroll baselines and fractions, retaining known admission and
+typing/palm/edge lifetimes. No stale second position feeds motion. The missing
+secondary finger is not treated as lifted merely because its position is absent.
+Diagnostics distinguish `AGM-requested` from observed counters and count
+`basic-W-scroll`. Proximity, centroid and moving-secondary drag are unavailable
+in fallback; no secondary position is invented. The owner-approved typing
+rule is unchanged.
+
+**One decision pending:** enable bit 2 only for the queried image-sensor AGM
+path, using c5 with the existing bounded secondary decoder and basic-W fallback
+(recommended). Alternative: keep c1 and deliver only the basic-W recovery.
+This corrects the accepted "without EW" premise rather than introducing an
+SMBus driver. Default activation remains off; native positive EW delivery and
+the full interaction pass are still required.
 
 ## Qualification and tuning
 

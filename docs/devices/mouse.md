@@ -96,8 +96,10 @@ checks identity/model/capabilities, reads advertised query pages, validates
 usable min/max coordinates and counts/mm, and checks mode readback plus a forced
 master packet before publishing the absolute format. Serial-number queries are
 never sent. Basic W leaves extended-W and four-byte guest negotiation off. A queried
-image-sensor capability additionally enables AGM with the sliced model selector
-03 and sample-rate parameter c8, leaving mode 0xc1 unchanged. W2 AGM position
+image-sensor capability additionally requests AGM with the sliced model selector
+03 and sample-rate parameter c8. Sliced commands start with the E6 delimiter,
+then four E8 resolution pairs. An acknowledged request is not proof of secondary
+packet delivery. W2 AGM position
 and count packets update private decoder state, never physical switches or lift.
 Fresh second-contact data is attached to the next master snapshot; failed
 advertised AGM activation recovers proven relative mode.
@@ -124,11 +126,16 @@ Coordinates remain device counts. The [kernel filter](../../kernel/input/touchpa
 and converts one-finger displacement to pointer pixels. Image-sensor paired
 observations must both be within 50 ms of receipt; absolute bytes carry IRQ
 receipt timestamps, so a backlog cannot appear fresh at decode time. Associate
-positions by minimum total physical displacement; ambiguous, missing or stale
-pair data clears motion baselines while physical switches continue. Stable
+positions by minimum total physical displacement; ambiguous pair identity
+clears motion baselines while physical switches continue. Missing or stale
+secondary observations immediately use basic-W count/primary-position scrolling
+instead of withholding motion. Switching between paired and basic-W processing
+clears motion/scroll baselines and fractions, preserving contact admission. Stable
 nearby admitted pairs scroll from centroid displacement through the common
 touchpad direction setting: enter at <=25 mm separation, leave at >=30 mm.
-Basic-W-only pads retain their one-position/count scrolling limitation.
+Basic-W fallback cannot measure finger separation or use the centroid/moving
+secondary finger. Its two-contact hint scrolls while unpressed and moves the
+reported primary while pressed. No runtime protocol commands are needed.
 Three-or-more, ambiguous, invalid or unqualified extended contacts produce no
 motion. There is no inertia, tapping, tap drag or gesture synthesis.
 
@@ -170,7 +177,7 @@ Five-second `synaptics-transport:` lines report cumulative decoded touch/guest
 packets, guest overflows, malformed headers, unsupported packets and reset
 packets and AGM position/count/unsupported counters; reporting stops after 150
 seconds. Contact summaries also count usable/unusable/ambiguous/separated pairs and
-physical drag samples, and print effective tuning values. Unusable pairs include
+physical drag and basic-W scroll samples, and print effective tuning values. Unusable pairs include
 missing/stale data, invalid pressure/coordinates and inconsistent multi-contact
 lift hints; none of those retires a known contact as a new typing-gated finger. These are observations, not guest
 initialization or proof that every physical button has been exercised.
