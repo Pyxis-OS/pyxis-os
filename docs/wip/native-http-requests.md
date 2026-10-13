@@ -3,6 +3,8 @@
 Status: **shared milestone accepted 2026-10-11; tasks 1–4 delivered; task 5 assigned,
 2026-10-13** ([accepted contract #780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
 implementation draft [#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)).
+Positional script execution is implemented, but its confirmed foreground
+cancellation defect needs the owner decision below before task 5 is ready.
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
