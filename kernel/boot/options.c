@@ -261,7 +261,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   if (ps2_synaptics && !same_text(ps2_synaptics, "0") && !same_text(ps2_synaptics, "1")) {
     panic("kernel option ps2.synaptics accepts only 0 or 1");
   }
-  options.ps2_synaptics = ps2_synaptics && same_text(ps2_synaptics, "1");
+  options.ps2_synaptics = !ps2_synaptics || same_text(ps2_synaptics, "1");
   options.ps2_synaptics_diagnose = ps2_synaptics_diagnose &&
     flag_option("ps2.synaptics.diagnose", ps2_synaptics_diagnose);
   options.usb_hid_describe = usb_hid_describe && flag_option("usb.hid.describe", usb_hid_describe);
