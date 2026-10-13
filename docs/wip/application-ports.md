@@ -93,6 +93,28 @@ media-type aliases such as `json+http://` remains future work.
 - **Peanut-GB:** a single-header Game Boy emulator; parked (owner, 2026-10-07).
   A native display/keyboard backend can come first, converted to SDL2 later; its
   SDL2 example frontend shows what a backend needs.
+- **Emulators:** four candidates recorded on 2026-10-13. The owner's purpose is
+  that they "stress important systems like audio, graphics, timing". They are
+  candidates only: no work is authorized, and each needs its own owner go under
+  the planning freeze. The stress column is what the port is expected to
+  exercise, not something measured; licences are as read from each repository's
+  default branch on 2026-10-13 and must be re-read at the revision a probe pins.
+
+  | Candidate | Expected to stress | Build and likely dependencies | Licence in its repository |
+  | --- | --- | --- | --- |
+  | [mGBA](https://github.com/mgba-emu/mgba) (Game Boy Advance) | Audio callback timing and latency (the GBA sample rate resampled to the output), frame pacing against the display, input latency, CPU | CMake. No hard dependencies; the SDL frontend needs SDL (SDL2 recommended); zlib and libpng are optional and bundled; the Qt frontend is not a candidate. Built-in BIOS | Mozilla Public License 2.0 (`LICENSE`) |
+  | [LakeSnes](https://github.com/angelo-wf/lakesnes) (SNES) | Audio callback timing (SPC/DSP samples into an SDL audio buffer), frame pacing, CPU | Makefile. SDL2 for window, rendering, audio and input; the README names a bundled zip library (kuba--/zip, with Miniz) for zipped ROMs | MIT (`LICENSE.txt`) |
+  | [SameBoy](https://github.com/LIJI32/SameBoy) (Game Boy, Game Boy Color) | Input latency, audio latency, frame pacing, CPU | Makefile, C. The SDL frontend needs SDL2, plus libpng off Windows and macOS; the boot ROMs need rgbds unless `BOOTROMS_DIR` supplies built ones. Ships open DMG/CGB boot ROMs | Expat (MIT) for the project. Its `iOS` and `HexFiend` directories are excluded, and `iOS` adds a condition on app-store distribution; neither would be used |
+  | [NESEmu](https://github.com/johnmph/NESEmu) (NES) | CPU and the [C++ runtime in userspace](../development/cxx-userspace.md); frame pacing and audio through its sound-manager buffer | C++14, CMake. The core has no dependency; SDL2 is needed only by its `main.cpp` example frontend | MIT (`LICENSE`) |
+
+  Peanut-GB above is the smaller Game Boy alternative. The SDL2 backend already
+  has [audio output](../development/sdl2.md#audio) over the
+  [PCM audio sessions](../interfaces/audio.md); whether its callback timing and
+  latency suit these workloads has not been measured. ROMs and
+  BIOS images stay local and are never committed to any repository; a public
+  example uses homebrew or test ROMs only. Emulator bugs found in use are
+  natural entries for the gallery's
+  [glitches and failures](../gallery/README.md#glitches-and-failures) section.
 - **AbyssEngine / Diablo II:** a motivating longer-term target. Investigate the
   current C implementation, not the archived Go OpenDiablo2 tree. First build and
   run it on the host to establish actual gameplay completeness separately from
