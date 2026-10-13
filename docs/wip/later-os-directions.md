@@ -268,6 +268,16 @@ per chip. Both targets look SoftMAC-class: the ThinkPad's Intel AX200 (iwlwifi-c
 Deck OLED's Qualcomm QCA2066 (ath11k-class). The chip identification and the
 SoftMAC classification are from memory and need confirming against the inventories.
 
+## Beyond x86: aarch64
+
+Owner idea, 2026-10-13; not scheduled. QEMU's aarch64 `virt` machine would come
+first (edk2 UEFI, GIC, PL011, virtio; LLVM and Limine support aarch64), then an
+Apple M1 MacBook Air as hardware, probably 2027. It has no native UEFI, so it would
+boot through Asahi's m1n1 and U-Boot, with Apple's AIC and DART; the Asahi docs
+are the reference. The groundwork is the rule keeping hardware details in `arch/`
+and Limine in its adapter. Review lens for current work: no x86-isms outside
+`arch/`, and no ABI or format (P1F, syscalls) that bakes in x86.
+
 ## Clock source
 
 TSC with extended-HPET fallback is [implemented](../kernel/timekeeping.md#tsc-selection)
