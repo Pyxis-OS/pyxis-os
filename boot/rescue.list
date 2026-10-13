@@ -5,6 +5,7 @@ shell.pxe
 session.pxe
 textfs.pxe
 httpfs.pxe
+http-stage.pxe
 cat.pxe
 cp.pxe
 echo.pxe

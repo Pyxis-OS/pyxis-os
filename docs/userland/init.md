@@ -674,7 +674,8 @@ The default RAM body cap is 16 MiB, configurable with trusted provider startup
 `--staging-cap BYTES`. Large uploads opt into an explicitly provisioned NPFS
 volume through the same selected-source schema. Boot validation rejects any
 public/alternate alias of that backing, including equivalent NPFS volume tuples
-and the installed program volume. No automatic RAM fallback, repartitioning or
-new volume on update. Missing optional backing keeps GET and refuses POST;
+and the installed program volume. Runtime backing unavailability never switches to RAM, repartitions or creates a
+volume on update. Invalid installed boot overrides retain the existing reported
+archive-default policy. Missing optional backing keeps GET and refuses POST;
 required source declarations still refuse startup. See
 [prepared HTTP authority](../interfaces/http-transactions.md).
