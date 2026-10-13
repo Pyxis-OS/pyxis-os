@@ -224,7 +224,8 @@ kernel configuration model is proposed.
    ownership/confirmation and ordinary-Update preservation obligations.
    **With this delivered dependency the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
-4. [ ] **Shared configuration validation and delta editor.** Under the accepted
+4. [ ] **Shared configuration validation and delta editor — assigned to Codex alpha,
+   2026-10-13; functional baseline captured, decisions pending.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
    validation and coordinate its writer; no live Continuum application. Qualify
@@ -252,3 +253,96 @@ kernel configuration model is proposed.
    and existing inspection tools; a new hands-free harness needs separate go.
    **After this task the owner can:** use the qualified workflow with documented
    recovery limits. Fold this WIP into the installer/config references.
+
+## Task 4 baseline and decisions — 2026-10-13
+
+Task 4 only; no code yet. Native FAT32 read/write mounts and the raw writer are
+implemented. Epsilon owns the task-5 mount workflow/ESP views; this consumer must
+share its binding, exclusion and lifetime rather than create a second mount
+workflow. Grant names/provisioning have been requested through the orchestrator.
+Only scratch ESP loading/editing is qualified here; ordinary Update and installed
+ESP activation stay unchanged until installer task 5.
+
+### Functional baseline
+
+Current main `2f2109fc`, userland `9f781e94`, fs `414be0ac`, ports `f93becb9`.
+Used the successful current-main CI image (Forgejo run ID 2172), without rebuilding
+or measuring timing while the owner's LLVM build saturates horse. Kernel SHA-256
+`550306b410a9211ebaa2cb739d5d7e8af26f55807576aab1754b6cea8c6f5850`;
+initrd `87ffe577483ddd5fba107ea0ea296ecf711a9d3a90446cebce05c89a48e43441`.
+
+Manual QEMU 10.2.2, Q35/nested KVM, host CPU, four CPUs, 512 MiB, matching fresh
+OVMF, modern VirtIO block/RNG, PS/2, software GOP 1280x800, no NIC/USB. A disposable
+160 MiB GPT disk held a 128 MiB ESP with boot/session/network Lua, Limine text and
+synthetic foreign bytes. The existing trusted read-only scratch browser selected
+disk 1/entry 1 and read all five files through native FAT32. Reported no failure;
+QEMU showed zero scratch writes. Before/after whole-disk SHA-256 was identical
+(`8546e815826917b25bbe329acfcde4786502e730c009bda848733fa8438e0d46`), and the
+scratch FAT image passed `fsck.fat -n`. All QEMU jobs stopped. No owner media used.
+
+Source inspection: [libconfig](../../userspace/libconfig/config.c) runs restricted
+Lua and loses source spans; it permits computation and has no execution budget.
+Boot schema/merge are in [boot-init](../../userspace/boot-init/config.c), session
+schema in [session config](../../userspace/session/config.c), and network decoding
+is mixed with [runtime networking](../../userspace/session/network.c). There is
+no declaration catalog, delta/checker/editor or complete-set selection record.
+Existing Update still regenerates the ESP. Native mounting/reads above are runtime
+results; these missing facilities and validation boundaries are source findings.
+
+### Round one — three owner decisions, all pending
+
+1. **Input and validation default: declarative admission for the new ESP path.**
+   Parse literal `return { ... }` data: tables, explicit keys/array entries,
+   strings, numbers, booleans and comments, with duplicate-key/structure checks;
+   no calls, loops, functions, metatables or migration execution. Recognize
+   ownership markers as real comments, never marker-looking string bytes.
+   Unsupported handwritten Lua stays untouched and receives printed changes;
+   automatic validation/edit/apply refuses to certify it. Keep the existing
+   trusted archive evaluator for recovery/legacy inputs, but extract shared typed
+   schema/merge validation so boot, checker and editor use the same constraints.
+   Separate source validity from unavailable CPU/volume/zoneinfo checks, with
+   source/entry/reason diagnostics and merged-entry provenance. Include static
+   network address/subnet/gateway constraints without applying networking.
+   Reuse the existing machine hostname/scroll validators and paths; no separate
+   schema/store, machine-setting writer, Polaris or Continuum implementation.
+   **Alternative:** evaluate arbitrary handwritten Lua for checking, which would
+   need a separate bounded execution policy and still could not prove editable spans.
+
+2. **Boot meaning and selection default: preserve the current override model.**
+   ESP `boot.lua` replaces the current pool override input: volumes/spaces only,
+   by-name whole-entry merge with archive installed defaults; no editable `system`
+   bootstrap binding or competing hostname/input store. Display and confirm the
+   existing pool override's migration into that file. Session/network files are
+   complete inputs with their existing defaults, not per-file fallback chains.
+   Validate the whole Lua triple before effects and freeze the selected bytes;
+   later sessions receive explicitly declared READ snapshots, not independently
+   reopened ESP paths. Missing/corrupt/unsupported/incomplete selection uses the
+   complete archive-default triple, with rescue always selecting it. Task 4 builds
+   and scratch-qualifies the loader; installed activation waits for task 5.
+   **Alternative:** make ESP `boot.lua` a full replacement for the archive boot
+   configuration, requiring a separate choice about bootstrap/machine defaults.
+
+3. **Declarations and deltas default: a revision-owned data catalog.**
+   Ship one literal data catalog beside installer source assets, with stable ID,
+   file/schema target, required/optional disposition, default and optional explicit
+   migration per entry. Targets are complete volume/space/settings entries or
+   complete Limine entries. Marker syntax is `-- pyxis:begin ID` / `-- pyxis:end ID`
+   for Lua and `# pyxis:begin ID` / `# pyxis:end ID` for Limine; entry separators
+   belong inside the span. Missing/duplicate/overlapping/ambiguous markers offer
+   printed changes; unmarked adoption requires an explicit displayed choice.
+   Preserve outside bytes exactly. Migrations are declared entry/field moves or
+   explicit typed replacements reviewed individually, not executable scripts.
+   Plans record each choice, expected consumed bytes/hashes and source catalog;
+   declined required changes make the plan inapplicable. Optional changes may
+   be declined; changed owner values are never replaced just because a default
+   changed. Old defaults require a supplied/preserved old catalog: without one,
+   provenance is unknown and existing values are conservatively owner edits.
+   Do not invent old defaults from the current archive or programs manifest.
+   **Alternative:** manual-only reconciliation initially, without per-revision
+   default/migration provenance.
+
+The next round must settle the standalone command/profile and stable target/replay
+binding, plus the publication/recovery record and old-catalog retention, using
+Epsilon's grant surface. No proposed choice above is accepted; code waits for the
+owner and any remaining material decisions. Existing accepted ownership,
+confirmation, no-wrapper authority and whole-set fallback rules are not reopened.
