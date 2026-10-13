@@ -78,7 +78,7 @@ media-type aliases such as `json+http://` remains future work.
 - **Quake:** [implemented](../userland/quake.md); audio and multiplayer remain
   separate slices.
 - **DevilutionX:** [implemented](../userland/devilutionx.md) as an opt-in,
-  personal-use build: single player without sound or networking.
+  personal-use bundle: single player with sound, without networking.
 - **Chocolate Doom, Chocolate Quake and EDuke32:**
   [implemented](../development/sdl-game-ports.md); Chocolate Quake plays sound
   effects and EDuke32 effects and its default OPL-emulated music as bundles;

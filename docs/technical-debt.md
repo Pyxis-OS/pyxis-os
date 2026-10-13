@@ -1028,7 +1028,7 @@ audible gap. The owner deferred tuning on 2026-10-13: revisit after the native T
 ## DevilutionX port limits
 
 [DevilutionX](userland/devilutionx.md) is personal-use only because its non-commercial licence and libmpq's GPL cannot both be met by a
-distributor, so it is an opt-in build that images, CI and bundles never contain. It has no sound, multiplayer, controllers or translations
+distributor, so it is an opt-in build that images, CI and build bundles never contain. It has no multiplayer, controllers or translations
 (the build host has no gettext), and saves go to `home://devilution/`, which is RAM on live boots. Retail `DIABDAT.MPQ` (about 500 MB)
 cannot be staged in images, so on installed systems it arrives through [remote transfers](#remote-transfer-memory-and-staging-limits), today
 in 15 MiB pieces; revisit with streaming transfers.

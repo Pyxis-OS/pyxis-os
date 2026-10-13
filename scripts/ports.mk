@@ -100,7 +100,8 @@ EDUKE32_INPUTS := $(wildcard ports/eduke32/*.lua ports/eduke32/Makefile \
 
 # DevilutionX is built only when DIABLO_DATA asks for it; see its PORT-NOTICE.
 DEVILUTIONX_INPUTS := $(wildcard ports/devilutionx/*.lua ports/devilutionx/Makefile \
-                                ports/devilutionx/PORT-NOTICE ports/devilutionx/patches/*.patch) \
+                                ports/devilutionx/PORT-NOTICE ports/devilutionx/manifest.json \
+                                ports/devilutionx/patches/*.patch) \
                       ports/ports.lua ports/build.lua
 
 KILO_OUTPUTS := $(call port_outputs,kilo)

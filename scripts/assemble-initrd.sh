@@ -28,7 +28,7 @@ if [ -n "${DIABLO_DATA:-}" ]; then
     echo "DIABLO_DATA=$DIABLO_DATA has no spawn.mpq" >&2
     exit 1
   }
-  [ -f build/ports/devilutionx/stage/bin/devilutionx.pxe ] || {
+  [ -f build/ports/devilutionx/stage/bin/devilutionx.pxb/app/bin/devilutionx.pxe ] || {
     echo "DIABLO_DATA is set but DevilutionX is not built: run make ports with it." >&2
     exit 1
   }

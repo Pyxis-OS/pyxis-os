@@ -2,8 +2,9 @@
 
 [DevilutionX](https://github.com/diasurgical/DevilutionX) 1.5.5 runs Diablo on
 Pyxis through the [SDL2 port](../development/ports.md#sdl2-development-library):
-single player, keyboard and mouse, without sound or networking. It is an
-opt-in build that needs your own copy of the shareware data.
+single player, keyboard and mouse, with sound but without networking. It is an
+opt-in build that needs your own copy of the shareware data, and runs as the
+program bundle `devilutionx.pxb`; typing `devilutionx` selects it.
 
 ## Personal use only
 
@@ -14,7 +15,7 @@ can meet both licences. So:
 - an image containing DevilutionX is for the person who built it and must not
   be shared, for example as a published PXE or installation image;
 - ordinary images and CI never contain it;
-- bundles never pack it.
+- [build bundles](../development/build-bundles.md) never pack it.
 
 The licences of everything linked in ship at
 `boot://share/licenses/devilutionx/`, with a notice explaining this.
@@ -32,7 +33,7 @@ make run CPUS=4 DIABLO_DATA=/path/to/diablo-shareware
 The build then:
 
 - builds the [DevilutionX recipe](../../ports/devilutionx/README.md);
-- stages the game as `devilutionx.pxe` and its assets in
+- stages the game as the bundle `devilutionx.pxb` and its assets in
   `boot://share/devilutionx/`;
 - stages `spawn.mpq` as `boot://share/diablo/spawn.mpq`.
 
@@ -46,9 +47,20 @@ the archive to.
 
 ## Playing
 
-In an application space, run `devilutionx`. It needs the space's display,
-keyboard and clock grants; the pointer is optional, and without it the game
-plays from the keyboard.
+In an application space, run `devilutionx`. Its bundle
+[manifest](../../ports/devilutionx/manifest.json) requires memory, clock,
+display and keyboard. The pointer is optional; without it the game plays from
+the keyboard. Sound needs the optional audio, threads and pipe grants, and the
+text editor's Copy and Paste the optional local and shared clipboard.
+
+- **Sound** plays through SDL_audiolib and the SDL2 port's
+  [audio](../development/sdl2.md#audio). Without the sound grants, or when the
+  executable is started directly by its `devilutionx.pxb/app/bin` path, which
+  launches it as a plain program, the terminal shows "Failed to initialize
+  audio (Aulib::init): Couldn't create audio thread" and the game runs silent.
+  One process per space can own the audio session. The
+  [sound qualification](../development/experiments/devilutionx-sound/README.md)
+  records nested-QEMU results and the native run sheet.
 
 - **Data** is read from `boot://share/diablo/`.
 - **Saves and `diablo.ini`** go to `home://devilution/`. That is RAM on live
@@ -93,7 +105,7 @@ Build the port once with `DIABLO_DATA` as above. Then copy these files from
 
 | From the stage | Into the bundle |
 | --- | --- |
-| `bin/devilutionx.pxe` | `diablo/devilutionx.pxe` |
+| `bin/devilutionx.pxb/` | `diablo/devilutionx.pxb/`, the whole bundle |
 | `share/devilutionx/assets/` | `diablo/assets/` |
 | `share/licenses/devilutionx/` | `diablo/licenses/`, which must travel with the program |
 | `share/devilutionx/source.txt` | `diablo/source.txt` |
@@ -102,8 +114,11 @@ Add the game data, such as `DIABDAT.MPQ` or `spawn.mpq`, to the same
 directory, then run it with that directory as the data directory:
 
 ```text
-home://diablo/devilutionx.pxe --data-dir home://diablo
+home://diablo/devilutionx.pxb --data-dir home://diablo
 ```
+
+Naming the `.pxb` keeps the manifest's grants, including sound; starting the
+inner `app/bin/devilutionx.pxe` instead runs a silent plain program.
 
 Pyxis programs cannot find their own directory, so the game looks for its
 assets in `boot://share/devilutionx/assets/` first. When the image has none,
@@ -176,8 +191,8 @@ Keyboard, touchpad and TrackPoint worked, including key repeat in name entry.
 
 ## Limits
 
-- **Not supported:** sound, multiplayer, game controllers, translations (the
-  build host has no gettext) and Hellfire's music and voice.
+- **Not supported:** multiplayer, game controllers and translations (the
+  build host has no gettext). Hellfire's music and voice are unchecked.
 - **Text input** uses the US layout.
 - **Not yet checked natively:** a standalone bundle with retail data on an
   installed system.
