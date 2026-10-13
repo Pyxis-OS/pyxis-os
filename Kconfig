@@ -32,4 +32,36 @@ config XHCI
     Enable native xHCI controller preparation and USB enumeration.
     Enable boot-present device inventory and qualified USB storage access.
 
+config TOUCHPAD_TYPING_MS
+  int "Synaptics new-contact typing quiet interval (ms)"
+  range 50 100
+  default 75
+  help
+    New contacts that begin during typing retry after this quiet interval.
+    Already admitted contacts are unaffected. Owner-accepted, revisitable tuning.
+
+config TOUCHPAD_SCROLL_ENTER_MM
+  int "Synaptics two-finger scroll entry distance (mm)"
+  range 1 150
+  default 25
+  help
+    Scroll from the centroid when a fresh pair is this close or closer.
+    Owner-accepted, revisitable tuning; leave distance must be greater.
+
+config TOUCHPAD_SCROLL_LEAVE_MM
+  int "Synaptics two-finger scroll leave distance (mm)"
+  range 1 150
+  default 30
+  help
+    Stop scrolling when separation reaches this distance.
+    Owner-accepted, revisitable tuning; must exceed the entry distance.
+
+config TOUCHPAD_PAIR_FRESH_MS
+  int "Synaptics paired-position freshness (ms)"
+  range 1 1000
+  default 50
+  help
+    Both receipt timestamps must be within this age to use a pair.
+    Owner-accepted, revisitable tuning; stale input resets motion baselines.
+
 endmenu

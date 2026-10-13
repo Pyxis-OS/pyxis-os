@@ -636,7 +636,9 @@ void input_pointer_drain(void)
       input_pointer_report(&ps2_pointer, event.dx, event.dy, 0, event.wheel, event.buttons);
     } else if (event.kind == MOUSE_EVENT_TOUCHPAD) {
       struct touchpad_motion motion;
-      touchpad_report(&event.touch, input_last_typing_ns(), arch_monotonic_ns(), &motion);
+      touchpad_report(&event.touch, event.touch_buttons_valid ?
+          event.touch_buttons : ps2_touchpad.pending_buttons,
+          input_last_typing_ns(), arch_monotonic_ns(), &motion);
       if (motion.reset) {
         input_source_scroll_reset(&ps2_touchpad);
       }

@@ -1,3 +1,4 @@
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/ps2.h>
@@ -41,8 +42,10 @@ static const uint8_t wheel_probe_rates[] = {200, 100, 80};
 static bool available;
 static size_t packet_bytes = MOUSE_STANDARD_PACKET_BYTES;
 /* IRQ producer and one task consumer, both on the BSP. Consumer accesses to
- * this queue disable interrupts; decoding state belongs solely to the task. */
+ * this queue disable interrupts; decoding state belongs solely to the task.
+ * Absolute observations retain receipt time, including a backlog's age. */
 static uint8_t raw_queue[RAW_QUEUE_BYTES];
+static uint64_t raw_observed_at[RAW_QUEUE_BYTES];
 static size_t raw_read, raw_write, raw_count;
 static bool input_lost;
 static uint8_t packet[MOUSE_WHEEL_PACKET_BYTES];
@@ -178,6 +181,7 @@ void mouse_receive(uint8_t status, uint8_t data)
     return;
   }
   raw_queue[raw_write] = data;
+  raw_observed_at[raw_write] = synaptics_profile()->absolute ? arch_monotonic_ns() : 0;
   raw_write = (raw_write + 1) % RAW_QUEUE_BYTES;
   ++raw_count;
 }
@@ -203,7 +207,7 @@ enum raw_result {
   RAW_LOST,
 };
 
-static enum raw_result read_raw(uint8_t *data)
+static enum raw_result read_raw(uint8_t *data, uint64_t *observed_at)
 {
   uint64_t flags = cpu_save_interrupts();
   enum raw_result result = RAW_EMPTY;
@@ -213,6 +217,7 @@ static enum raw_result read_raw(uint8_t *data)
     result = RAW_LOST;
   } else if (raw_count) {
     *data = raw_queue[raw_read];
+    *observed_at = raw_observed_at[raw_read];
     raw_read = (raw_read + 1) % RAW_QUEUE_BYTES;
     --raw_count;
     result = RAW_BYTE;
@@ -273,7 +278,8 @@ bool mouse_read_event(struct mouse_event *event)
 
   for (;;) {
     uint8_t byte;
-    switch (read_raw(&byte)) {
+    uint64_t observed_at;
+    switch (read_raw(&byte, &observed_at)) {
     case RAW_EMPTY:
       return false;
     case RAW_LOST:
@@ -284,7 +290,7 @@ bool mouse_read_event(struct mouse_event *event)
       return true;
     case RAW_BYTE:
       if (mouse_profile()->absolute) {
-        enum synaptics_decode_result result = synaptics_decode(byte, event);
+        enum synaptics_decode_result result = synaptics_decode(byte, observed_at, event);
         if (result == SYNAPTICS_STOPPED) {
           available = false;
         }
