@@ -32,7 +32,9 @@ measurements of 2026-10-09 (70.5 MiB/s send, 85 MiB/s receive) are the current
 [reference measurement](../development/network-throughput.md), **not a contract**.
 Track the HTTP/TCP gap with each relevant change. The owner accepted task 3's
 native whole-GET cost (+18%, 14.3 → 17.2 ms) on 2026-10-12;
-[measurements](../development/experiments/http-prepared.md) and
+task 4 subsequently recovered that cost for a 1 MiB GET (about 28% faster,
+~82 MiB/s natively). [Task 3 measurements](../development/experiments/http-prepared.md),
+[task 4 A/B](../development/experiments/http-stream-adapters.md#native-ab--owner-2026-10-13) and
 [revisit points](../technical-debt.md#http-provider-throughput) remain explicit.
 
 ## Inspected starting point
@@ -339,11 +341,11 @@ Main `2f2109fc`, userland `9f781e94`, ports `f93becb9`; source inspection only.
 ### Qualification and measurement
 
 The owner released the timing hold after publishing builder `4c23a20` on
-2026-10-13. [Task 4 qualification and matched nested runs](../development/experiments/http-stream-adapters.md)
+2026-10-13. [Task 4 qualification and native/nested runs](../development/experiments/http-stream-adapters.md)
 record C/Lua reads, staged POST, final observation inheritance, truncation,
 authenticated TLS EOF, redirect policy and explicit 17 MiB materialization.
-Nested results do not establish native throughput; the next native A/B must
-track the HTTP/TCP gap above. No throughput optimization is assigned here.
+The owner's native A/B measured about 82 MiB/s, close to the TCP reference above;
+continue tracking the gap for relevant changes and HTTP-heavy workloads. No throughput optimization is assigned here.
 
 Implemented interfaces and limits are in [stdio](../userland/stdio.md#http-streams-and-explicit-submission),
 [HTTP transactions](../interfaces/http-transactions.md) and

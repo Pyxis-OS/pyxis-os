@@ -93,7 +93,9 @@ A zero-byte response read performs one final STATUS query: only COMPLETE phase,
 COMPLETE framing and CALL_OK establish EOF. Failure sets `ferror` and errno;
 the backend retains that terminal failure, so `clearerr` cannot turn it into EOF
 or restart the transfer. Delivered bytes remain a prefix until completion.
-Response seeking and positioned I/O fail with ESPIPE; SIZE is unavailable.
+Response seeking, positioned I/O and byte/wide pushback (`ungetc`/`ungetwc`)
+fail with ESPIPE; SIZE is unavailable. Refused pushback sets the error indicator
+without clearing EOF or changing consumption.
 
 `fopen(uri, "w")` and `fopen(uri, "w+")` prepare POST staging without network
 submission. They require the caller's delegated preparation/write authority and
@@ -452,8 +454,9 @@ guarantee, not portable behavior.
 
 ## Pushback and scanning
 
-`ungetc` keeps one byte per FILE, returned before any further input, including
-read-ahead. A second `ungetc` before a read fails, and `EOF` is never pushed.
+`ungetc` keeps one byte per console/file/pipe FILE, returned before further
+input, including read-ahead. HTTP response STREAMs reject byte and wide pushback
+with ESPIPE; this leaves EOF and consumption unchanged. A second `ungetc` before a read fails, and `EOF` is never pushed.
 It clears the EOF indicator, and `ftell` reports one less (not below zero).
 A successful `fseek` (a `SEEK_CUR` offset counts from the position before the
 pushback), input `fflush` and a stdio write discard it. Pushback belongs to the

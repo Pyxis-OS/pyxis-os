@@ -97,13 +97,39 @@ They exclude page tables, kernel TCP/IPC/filesystem buffers, external mappings
 and the client; they are neither live HTTP bytes, complete RSS nor true peaks.
 Source inspection separately explains removal of the body-sized snapshot below.
 
+## Native A/B — owner, 2026-10-13
+
+ThinkPad T14 Gen 1 AMD on AC, Ethernet LAN, PXE; A main `0e95af3a`, B parent
+`24faa688` with userland `ab7e00bc` and ports `d732dd4`, both built in `4c23a20`,
+each booting its own kernel/initrd. The owner ran A1/B1/A2/B2, five verified
+1 MiB samples per boot against the same horse fixture:
+
+```text
+iobench read http://192.168.0.213:18080/fixed --rounds 5
+```
+
+| Boot | OPEN median (range), ms | Payload median (range), ms | Whole GET median, ms | Whole MiB/s |
+| --- | --- | --- | --- | --- |
+| A1 | 12.803 (12.26–13.89) | 5.136 (4.98–5.27) | 17.976 | 55.6 |
+| B1 | 1.606 (1.53–1.70) | 10.423 (10.20–11.57) | 12.071 | 82.8 |
+| A2 | 11.980 (11.90–12.15) | 4.599 (4.57–4.64) | 16.615 | 60.2 |
+| B2 | 1.859 (1.61–1.92) | 10.382 (10.29–17.52) | 12.363 | 80.9 |
+
+Whole GET was about **28% faster natively**; the nested regression did not
+reproduce on this hardware/workload. OPEN now returns after headers, so payload
+reads include network time. Task 4 recovers task 3's whole-GET cost for this
+1 MiB fixture; this does not prove the per-READ cooperative overhead disappeared.
+The owner's [PR comment](https://git.internal/PyxisOS/pyxis-os/pulls/774) records
+the result; raw captures remain on horse under `~/xf/774{A1,A2,B1,B2}`.
+This A/B predates the pushback correction below; no post-fix native timing or
+native memory result is claimed.
+
 **Pyxis must be able to hit good network targets overall in the future.**
-The prior [native task 3 A/B](http-prepared.md) measured approximately 58 MiB/s
-HTTP versus the current ThinkPad TCP receive reference of 85 MiB/s (send
-70.5 MiB/s, 2026-10-09). Those are reference measurements, not contracts. The
-new nested figures cannot measure the native task 4 HTTP/TCP gap or its change.
-A matched native run remains required before an HTTP-heavy consumer; no native
-throughput or native memory result is claimed here.
+About 82 MiB/s HTTP is close to the current ThinkPad native TCP receive reference
+of 85 MiB/s (send 70.5 MiB/s, 2026-10-09). Those references are not contracts or
+a simultaneous TCP comparison. Track the HTTP/TCP gap on relevant changes and
+HTTP-heavy workloads, including larger bodies and POST; one 1 MiB GET does not
+qualify those workloads. Keep the [throughput revisit](../../technical-debt.md#http-provider-throughput).
 
 ## Functional checks
 
@@ -155,7 +181,18 @@ replace body-sized transport allocation. Lua `read("*a")` and Links' cache delib
 results. The retained-capacity measurement above is not a process-RSS/peak claim.
 Multi-GB qualification belongs to final task 5, not these 17 MiB checks.
 
-## Native follow-up
+### Pushback review correction — 2026-10-13
+
+Userland `da098fd` rejects `ungetc` and the equivalent `ungetwc` path for
+PROTOCOL_STREAM bindings with ESPIPE. Ordinary build and a manual equivalent of
+daybreak's probe passed in the same four-CPU QEMU setup: before data and after
+validated EOF, pushback failed with ferror, left feof unchanged and returned no
+injected byte. After clearerr, the byte pattern continued at its existing cursor;
+after terminal EOF the next read still returned EOF. Regular native-file ungetc
+still returned its pushed byte, and staged w+ retained precommit EBUSY. The
+probe remains local build output; no test program enters ordinary images.
+
+## Future native comparisons
 
 Use the same LAN fixture and compiler for alternating parent/implementation
 boots on the ThinkPad: five 1 MiB iobench reads and RAM controls after warmup,

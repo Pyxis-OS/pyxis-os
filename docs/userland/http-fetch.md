@@ -25,7 +25,9 @@ measurements of 2026-10-09 (70.5 MiB/s send, 85 MiB/s receive) are the current
 [reference measurement](../development/network-throughput.md), **not a contract**.
 Track the HTTP/TCP gap with each relevant change. The owner accepted task 3's
 native whole-GET cost (+18%, 14.3 → 17.2 ms) on 2026-10-12;
-[measurements](../development/experiments/http-prepared.md) and
+task 4's native stream A/B then recovered that whole-GET cost for a 1 MiB body
+(about 28% faster, ~82 MiB/s). [Task 3 measurements](../development/experiments/http-prepared.md),
+[task 4 A/B](../development/experiments/http-stream-adapters.md#native-ab--owner-2026-10-13) and
 [revisit points](../technical-debt.md#http-provider-throughput) remain explicit.
 
 ## Use and startup
