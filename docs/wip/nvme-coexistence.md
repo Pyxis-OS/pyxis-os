@@ -73,15 +73,13 @@ of 2026-10-02:
    The alternative, a whole-disk claim and an installer that is careful, is
    simpler and leaves one userland bug between Pyxis and the Fedora partition.
 
-The accepted FAT32 direction remains a freestanding engine used through a
-partition claim, then a mounted read-write volume/directory backend. The owner
-moved their delivery to [shared FAT32 volumes](fat32-volumes.md) on 2026-10-11 so
-the editor and removable media can use them without completing coexistence.
-Former task 2 is a dependency, not completed work. The earlier additive/raw-engine
-profile and no-dirty-bit-change rule stay intact; the shared proposal separately
-asks about mounted-RW policy. Editable ESP config ownership and publication remain
-in [the configuration editor](installer-tui.md), not the FAT engine. No FAT task
-is assigned by this move.
+[Shared FAT32 volumes](../devices/fat32-volumes.md) deliver the freestanding
+read/validation and raw-write engines, native RO/RW views and the trusted workflow.
+The editor and removable media can use them without completing coexistence.
+The raw creation-receipt profile preserves dirty flags; mounted RW has its own
+implemented dirty-mark, durable mutation and clean-power seal contract. Editable
+ESP config ownership and publication remain in [the configuration editor](installer-tui.md).
+This dependency completes no coexistence installation or native NVMe write check.
 
 ## Invariants
 
@@ -192,9 +190,9 @@ until task 3, and partition claims on NVMe stay refused until then.
 
 ### 2. FAT32 read and write for the ESP
 
-**Shared dependency, moved 2026-10-11; not completed.**
-[Shared FAT32 volumes](fat32-volumes.md) owns the read/validation and incremental
-raw-write engine, then native mounted read-write files and sync/release. No
+**Shared dependency delivered, 2026-10-13.**
+[Shared FAT32 volumes](../devices/fat32-volumes.md) provide read/validation and
+incremental raw-write engines, native RO/RW files and trusted sync/release. No
 duplicate FAT implementation task remains in coexistence. Keep partition claims,
 Pyxis-owned additive publication, no whole-ESP rewrite and no inferred adoption
 of externally created files. The editor separately admits confirmed owned spans
@@ -205,11 +203,13 @@ submission order. FAT copies and LFN/name changes can span sectors; no atomic
 rename, untorn-sector or corruption-free crash guarantee is claimed.
 Interrupted updates may need host FAT repair and the existing live-image recovery
 path. Multi-file publication remains non-atomic. The raw engine does not change
-the dirty bit; the shared proposal's mounted policy remains for owner decision.
+the dirty bit; mounted RW durably marks dirty before mutation and clears only
+its owned mark under the [retirement/seal contract](../devices/fat32-mounts.md#failure-and-clean-power).
 
-**After that shared milestone the owner can:** inspect a supported FAT32 volume
-or the real ESP, then edit/sync authorized files through native capabilities,
-without first delivering coexistence installation.
+**With this delivered dependency the owner can:** inspect supported FAT32 media,
+then edit/sync authorized files through native capabilities without first
+delivering coexistence installation. The [owner-present native ESP check](../devices/fat32-volumes.md#owner-present-native-esp-run-sheet)
+remains pending and authorizes no real ESP write.
 
 ### 3. Installer coexistence mode
 
@@ -321,8 +321,8 @@ needs none of this and stays first.
 - Resizing or moving Fedora's partitions from Pyxis, or any reuse of Fedora's
   space.
 - Mounting Fedora's data filesystems and Windows. Mounted FAT32 for ESP
-  configuration depends on the shared [FAT32 milestone](fat32-volumes.md); its
-  implementation still needs a separate assignment.
+  configuration uses the delivered [FAT32 backend](../devices/fat32-volumes.md);
+  consumer ownership/publication and native write qualification remain separate.
 - Secure Boot, a signed Limine or kernel and TPM measurement: it stays off.
 - Hibernate and suspend interaction with the shared disk.
 - Keeping Pyxis's pool partition number stable if Fedora tools renumber the table.

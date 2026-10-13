@@ -30,11 +30,6 @@ Chosen by the owner, each starting with a proposal.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
-[FAT32 volumes](fat32-volumes.md): Codex (2026-10-11), a shared engine and
-native mounted read-write milestone extracted from NVMe coexistence and the ESP
-editor, also serving removable media. Decisions are accepted; task 1 is submitted
-for review. Later tasks need separate owner go.
-
 [Git on Pyxis](git-on-pyxis.md): the libc prerequisites of the libgit2 source-fetch
 route are merged. The native Git CLI and HTTP transport investigation (#711) is
 merged and its tasks are proposed, not assigned; no Git port task is assigned.
@@ -108,8 +103,9 @@ natively qualified for read-only LAN attach on the RTL8111
 ([reference](../kernel/network-debugger.md)); task 4 is unassigned.
 
 [NVMe coexistence](nvme-coexistence.md): task 1's NVMe driver is merged (#710) and
-was qualified natively read-only on 2026-10-11; FAT32 depends on the separate
-[FAT32 volumes milestone](fat32-volumes.md), and coexistence tasks need assignment.
+was qualified natively read-only on 2026-10-11. The shared
+[FAT32 backend and workflow](../devices/fat32-volumes.md) are delivered; coexistence
+integration still needs assignment.
 
 [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm with one
 terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)

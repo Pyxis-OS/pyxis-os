@@ -27,6 +27,12 @@ LAPIC deadlines, [checked natively](../technical-debt.md#sleep-wake-granularity)
 
 [Everyday commands](../userland/everyday-commands.md), 2026-10-07.
 
+[FAT32 volumes](../devices/fat32-volumes.md), 2026-10-13: shared inspection/raw-write
+engine, native RO/RW mounts and declared trusted workflow (#740, #747, #755, #764,
+#775). [Experiment records](../devices/fat32-volumes.md#qualification-and-remaining-limits)
+remain; [hardware qualification](../technical-debt.md#fat32-geometry-and-hardware-qualification),
+including the owner-present RO ESP check, is pending.
+
 [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
 Super+Up/Down, [checked natively](../technical-debt.md#space-layer-qualification).
 

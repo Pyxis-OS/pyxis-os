@@ -1163,11 +1163,40 @@ The owner accepted kernel placement for [FAT32 mounts](devices/fat32-mounts.md)
 (2026-10-11), parsing user-supplied media in the kernel. Despite bounded validation,
 a malformed or malicious volume may hang or crash the kernel. Revisit before
 automatic mounting of arbitrary removable media, the server/public profile or
-multi-user work; a userspace provider is the alternative. Native mounts are
-read-only; mounted writes remain unassigned. Final-control close retains bounded
+multi-user work; a userspace provider is the alternative. Native RO/RW mounts
+and the trusted workflow are implemented. Final-control close retains bounded
 state/exclusion until authorized reacquisition and retirement or reboot, which
-can exhaust admission after controller failures. Revisit controller recovery in
-the accepted trusted-mount workflow.
+can exhaust admission after controller failures. Revisit controller recovery
+if retained instances exhaust mount admission in ordinary use.
+
+## FAT32 geometry and hardware qualification
+
+[FAT32 volumes](devices/fat32-volumes.md) accept healthy GPT with 512-byte sectors
+and the bounded mirrored-FAT profile. Legacy/hybrid MBR and bare FAT media refuse,
+so typical unpartitioned or MBR-formatted retail sticks need another layout.
+Revisit discovery with a concrete removable-media requirement. FAT12/16, exFAT,
+wider Unicode mutation, repair, resizing and hotplug are not supplied; native
+[file/directory move limits](#directory-moves-outside-ram-and-npfs) remain separate.
+
+SD cards work only behind a supported block transport. The ThinkPad RTS522A needs
+its own reader driver/SD stack; revisit with that hardware assignment, as recorded
+in [NVMe coexistence](wip/nvme-coexistence.md#alternative-the-microsd-card-reader).
+The FAT engine adds no storage driver.
+
+Qualification covers disposable VirtIO and USB BOT images in QEMU, including
+virtual boot ESP provenance, reference drainage and power sealing with files held
+open. Physical scratch-USB and native ESP checks remain pending; nested-VM evidence
+establishes neither native-media latency nor unplug, torn-sector or power-loss
+behaviour. The [workflow timing record](development/experiments/fat32-trusted-workflow.md#cost-and-backing)
+is inconclusive, so it supports no performance-neutrality claim. Revisit with
+owner-routed physical-media runs before extending hardware guarantees.
+
+The owner will schedule the pending [native read-only ESP run sheet](devices/fat32-volumes.md#owner-present-native-esp-run-sheet).
+Every native ESP step requires explicit owner approval and presence. The run sheet
+permits no real ESP write; any write qualification needs separate approval/presence
+and the consumer's ownership/adoption policy. An authorized RW mount factory may
+deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
+Milestone closure does not perform or authorize a native run.
 
 ## NVMe native qualification and temporary raw authority
 
