@@ -85,7 +85,7 @@ CHOCOLATE_DOOM_INPUTS := $(wildcard ports/chocolate-doom/*.lua ports/chocolate-d
                          ports/ports.lua ports/build.lua
 
 CHOCOLATE_QUAKE_INPUTS := $(wildcard ports/chocolate-quake/*.lua ports/chocolate-quake/Makefile \
-                                    ports/chocolate-quake/PORT-NOTICE \
+                                    ports/chocolate-quake/PORT-NOTICE ports/chocolate-quake/manifest.json \
                                     ports/chocolate-quake/patches/*.patch) \
                           ports/ports.lua ports/build.lua
 

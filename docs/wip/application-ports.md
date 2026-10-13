@@ -80,9 +80,10 @@ media-type aliases such as `json+http://` remains future work.
 - **DevilutionX:** [implemented](../userland/devilutionx.md) as an opt-in,
   personal-use build: single player without sound or networking.
 - **Chocolate Doom, Chocolate Quake and EDuke32:**
-  [implemented](../development/sdl-game-ports.md) without sound; EDuke32 is an
-  opt-in personal build. Deferred:
-  - **sound and music,** after SDL2 gains an audio backend. Music needs a
+  [implemented](../development/sdl-game-ports.md); Chocolate Quake plays sound
+  effects as a bundle, the others are silent. EDuke32 is an opt-in personal
+  build. Deferred:
+  - **sound for Chocolate Doom and EDuke32, and music.** Music needs a
     choice per game: built-in OPL synthesis for Chocolate Doom and EDuke32, CD
     tracks for Chocolate Quake, or none at first;
   - **network play;**

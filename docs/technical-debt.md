@@ -997,8 +997,8 @@ exiting with live threads skip orderly finalizers ([process exit](#process-exit-
 Missing: **audio capture** and output device selection, **windows** beyond one
 fullscreen window, and **text** beyond the shared US layout. Displays report no **refresh rate**, so SDL gives 0 (unknown); EDuke32's frame
 limiter divided by it and hung until its port assumed 60 Hz. Revisit when a display reports its mode timing. The
-[SDL game ports](development/sdl-game-ports.md) remain silent: they are plain programs without the threads grant SDL's audio callback
-thread needs, and some lack their own sound libraries. A Chocolate Quake bundle with sound is a separate later follow-up. Pointer position, program images, show/hide, bounded warp and relative lock use
+[SDL game ports](development/sdl-game-ports.md) Chocolate Doom (built without SDL_mixer) and EDuke32 (single-threaded, sound startup
+failing) remain silent; Chocolate Quake ships as a bundle declaring the audio and threads grants and plays sound effects. Pointer position, program images, show/hide, bounded warp and relative lock use
 the [native pointer contract](interfaces/pointer.md). Key repeat is not covered by validation because QEMU's injected PS/2 input has no
 typematic repeat.
 

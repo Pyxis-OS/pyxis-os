@@ -1,8 +1,9 @@
 # SDL game ports
 
 Three games run through the [SDL2 port](sdl2.md), each compared with what
-Pyxis already had. None has sound: the SDL2 port has [audio output](sdl2.md#audio), but these
-plain programs lack the threads grant its callback thread needs.
+Pyxis already had. Chocolate Quake ships as a program bundle with sound effects through the
+SDL2 port's [audio output](sdl2.md#audio). Chocolate Doom (built without SDL_mixer) and EDuke32
+(single-threaded, with sound startup failing) are silent; enabling their sound is separate port work.
 
 | Game | Image | Pin | Licence | Reference | Measurements |
 | --- | --- | --- | --- | --- | --- |
@@ -66,8 +67,8 @@ lists what was observed and what is still unchecked.
 ## Limits
 
 Remaining work is in technical debt:
-- [SDL2 port limits](../technical-debt.md#sdl2-port-limits): all three games
-  are silent, and no refresh rate;
+- [SDL2 port limits](../technical-debt.md#sdl2-port-limits): Chocolate Doom
+  and EDuke32 are silent, and no refresh rate;
 - [EDuke32 port limits](../technical-debt.md#eduke32-port-limits): the
   single-thread patches and the port-side libc gaps;
 - [libc compatibility gaps](../technical-debt.md#libc-compatibility-gaps): short
