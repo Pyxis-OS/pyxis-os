@@ -79,7 +79,10 @@ compare with libc's `strcoll`, in byte order.
 tables with `*t`, numeric offsets and actual timezone abbreviations. Local time
 uses the inherited `TZ` and packaged [TZif data](timezones.md). Clock or zone
 failures raise errors. `os.difftime`, `os.getenv`, `os.remove`, `os.rename` and
-`os.exit` are available. Native rename retains its no-replace policy.
+`os.exit` are available. `os.rename` uses libc's replacement policy where the
+filesystem and caller's authority permit it. Replacement requires matching
+kinds and an empty directory victim; directory moves require RAM or writable
+npfs. See [rename paths](paths.md#rename-paths).
 
 The following remain absent: `file:setvbuf`, `io.popen`, `os.execute`, `os.clock`,
 `os.setlocale`, `package.loadlib`, C-module searchers, debug and the full math

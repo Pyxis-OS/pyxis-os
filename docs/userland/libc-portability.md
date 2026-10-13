@@ -40,8 +40,10 @@ and libc's retained working directory like `fopen`, `remove` and `rename`. The p
 calls the standard function rather than its own capability code.
 
 The test is whether the function maps onto objects and operations that already
-exist. Creating a directory does; POSIX threads, `fork` and signals do not. Those
-need a native design first. No kernel mechanism is added only to satisfy a POSIX
+exist. At that decision, creating a directory did; threads, `fork` and signals
+needed a native design first. The native thread and parking operations now
+support the selected [C11/pthread profile](threads.md); `fork` and POSIX signals
+remain unsupported. No kernel mechanism is added only to satisfy a POSIX
 contract. Arguments with no native meaning are documented as such. For example,
 `mkdir`'s `mode` has no effect because npfs has no permissions. Missing authority
 or support returns a real error, never a successful stub.
