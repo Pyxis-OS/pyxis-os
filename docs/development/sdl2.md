@@ -29,7 +29,8 @@ A program needs the `display`, `keyboard` and `clock` grants. `pointer` is
 optional: without it, or without a mouse, the program runs from the keyboard.
 Threads and callback timers additionally need a [bundle](../userland/program-bundles.md)
 declaring `threads/manage`, and `pipe/create` for blocking event waits; see
-[threads and timers](#threads-and-timers).
+[threads and timers](#threads-and-timers). Audio output needs the `audio` grant
+and `threads/manage` for SDL's callback thread; see [audio](#audio).
 
 ## The backend
 
@@ -101,12 +102,12 @@ declaring `threads/manage`, and `pipe/create` for blocking event waits; see
 
 Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 
-- `SDL_INIT_AUDIO` fails; conversion and WAV loading work.
+- Audio capture and output device selection; there is one default output.
 - Joysticks initialize with zero devices.
 - Haptics, sensors, HIDAPI, shared objects, power, OpenGL and Vulkan are not
   built.
 
-The ordered upstream patches disable the dynamic API, register the driver, skip
+The ordered upstream patches disable the dynamic API, register the video and audio drivers, skip
 the Steam virtual gamepad file because Pyxis `stat` has no modification time,
 respect native pointer position/lock authority, start the timer thread at the
 first timer and stop it in `SDL_Quit`, carry private clipboard command identity, and preserve
@@ -153,6 +154,39 @@ contract was accepted by the owner on 2026-10-13 ([threads task 9](../wip/thread
 - **Exit.** Join threads and call `SDL_Quit` before returning from `main`.
   A process exiting with live threads skips `atexit` handlers and stdio
   flushing; see [technical debt](../technical-debt.md#process-exit-with-live-threads).
+
+## Audio
+
+SDL audio callbacks use the space's native [PCM session](../interfaces/audio.md).
+The contract was accepted by the owner on 2026-10-13 ([threads task 9](../wip/threads.md#delivery-gates)).
+SDL gains callbacks, not real-time guarantees.
+
+- **Ownership.** One SDL output device holds the space's one native session
+  from open to close. `SDL_INIT_AUDIO` acquires nothing. SDL refuses a second
+  open in the same process; another owner in the space makes the open fail.
+  `SDL_CloseAudioDevice` and `SDL_Quit` join SDL's callback thread, then release
+  the session, which discards PCM still queued.
+- **Authority.** `SDL_INIT_AUDIO` needs the `audio` grant (and `clock`).
+  Opening also needs `threads/manage` for SDL's callback thread; without it the
+  open fails ("Couldn't create audio thread") and the session is released.
+  Plain programs receive the space's `audio` grant but no threads grant, so
+  they stay silent with that error. No grant wrapper is added.
+- **Format and buffers.** The device runs at the native 48 kHz S16LE stereo,
+  with 1,024-frame (21.3 ms) buffers, one maximum native write. SDL's own
+  audio stream converts other rates, formats, channel counts and callback sizes.
+- **Queue and latency.** The callback thread waits until the session is
+  writable and writes one buffer, so the native 80 ms queue stays near full.
+  Calculated worst-case output latency, from the interface sizes and not
+  measured, is about 140–160 ms including the hardware ring; tuning is
+  [deferred](../technical-debt.md#sdl-audio-latency).
+- **Pause.** As upstream: the callback stops and SDL writes silence, so the
+  session stays held and the thread still wakes every buffer.
+- **Underruns and failure.** A late or slow callback becomes native silence:
+  an audible gap, counted by the session's starvation counter, with no
+  stretching or repetition. SDL has no underrun report and the backend logs
+  nothing. Engine failure disconnects the SDL device (`SDL_AUDIODEVICEREMOVED`);
+  the callback keeps its nominal rate into a discarded buffer, as upstream.
+  SDL's `TIME_CRITICAL` priority request is refused and ignored.
 
 ## Related development interfaces
 
@@ -237,7 +271,10 @@ exercise blocking waits.
 
 The [threads and timers qualification](experiments/sdl-threads-timers/README.md)
 records matched one/four-CPU frame timing, idle wait CPU, timer periods and
-cross-thread wake latency before and after threads, all nested QEMU.
+cross-thread wake latency before and after threads, all nested QEMU. The
+[audio qualification](experiments/sdl-audio/README.md) records callback timing,
+captured output, Chocolate Quake with and without sound, and the nested-QEMU
+HDA guard trips seen during those runs.
 
 ## Limits
 

@@ -172,5 +172,5 @@ eleven-minute eight-session silent run are
 [qualified](../devices/hda.md#qualification-and-remaining-scope). Volume controls
 have [native listening/mute/reboot evidence](../userland/audio-volume.md#native-qualification)
 and separate QEMU gain/UI qualification; the later eight-session native regression
-remains open. SDL2 and Quake
-sound are separate consumer work.
+remains open. SDL2 [audio output](../development/sdl2.md#audio) uses one
+session per open device; game sound remains separate consumer work.

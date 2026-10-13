@@ -3,7 +3,9 @@
 [Chocolate Quake](https://github.com/Henrique194/chocolate-quake) 2.1.0 runs
 Quake through the [SDL2 port](../development/sdl2.md), beside the native
 [Quake](quake.md). It plays the same staged data, without sound, music or
-network play. Ordinary images include it.
+network play. Ordinary images include it. Its SDL sound driver reports
+"Couldn't open SDL audio: Couldn't create audio thread": the plain program has
+no threads grant for SDL's [audio](../development/sdl2.md#audio) callback thread.
 
 In an application space:
 

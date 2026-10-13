@@ -901,6 +901,9 @@ silent sessions passed eleven minutes. See the [profiling report](development/ex
 revisit QEMU scheduling/guard evidence separately from native qualification.
 [Volume qualification](development/experiments/audio-volume/README.md) also saw
 QEMU guard trips during shorter input/start bursts; the accepted bounds are unchanged.
+The [SDL audio qualification](development/experiments/sdl-audio/README.md) saw the 1 ms commit guard trip at single-session
+starts on many fresh nested boots, as often for the native `pcm` tool as for SDL, and the completion-notification guard twice;
+see its trip counts.
 
 ## HD Audio fail-closed recovery
 
@@ -960,20 +963,27 @@ for behavior, measured/manual evidence and validation limits.
 
 ## SDL2 port limits
 
-The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing, threads, timers and preference paths. Video event waits
+The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing, threads, timers, audio output and preference paths. Video event waits
 block on keyboard, acquired pointer and display readiness ([qualification](development/sdl2-event-wait-qualification.md)); upstream
 polling remains for missing or nonwaitable sessions and failed waits, and for threaded programs without a declared `pipe/create` grant,
 which have no [wakeup sender](development/sdl2.md#threads-and-timers). SDL thread priorities other than normal are unsupported, and
 `SDL_DetachThread` leaves libc's record and stack reserved until exit, and that uncollected record also makes exit skip orderly
 finalizers; revisit with a bounded detached-collection contract. Programs
 exiting with live threads skip orderly finalizers ([process exit](#process-exit-with-live-threads)).
-Missing: **audio** (the [PCM grant](interfaces/audio.md) and [QEMU HDA engine](devices/hda.md) exist, but SDL2 has no backend; revisit with
-the audio callback task), **windows** beyond one
+Missing: **audio capture** and output device selection, **windows** beyond one
 fullscreen window, and **text** beyond the shared US layout. Displays report no **refresh rate**, so SDL gives 0 (unknown); EDuke32's frame
-limiter divided by it and hung until its port assumed 60 Hz. Revisit when a display reports its mode timing. Without audio, the
-[SDL game ports](development/sdl-game-ports.md) are silent; their sound and music need this backend first. Pointer position, program images, show/hide, bounded warp and relative lock use
+limiter divided by it and hung until its port assumed 60 Hz. Revisit when a display reports its mode timing. The
+[SDL game ports](development/sdl-game-ports.md) remain silent: they are plain programs without the threads grant SDL's audio callback
+thread needs, and some lack their own sound libraries. A Chocolate Quake bundle with sound is a separate later follow-up. Pointer position, program images, show/hide, bounded warp and relative lock use
 the [native pointer contract](interfaces/pointer.md). Key repeat is not covered by validation because QEMU's injected PS/2 input has no
 typematic repeat.
+
+## SDL audio latency
+
+The [SDL audio backend](development/sdl2.md#audio) keeps the native 80 ms PCM queue near full with fixed 1,024-frame buffers. Its
+worst-case output latency is **calculated, not measured**, at about 140–160 ms: 60–80 ms queued plus up to the 80 ms hardware ring.
+Capping the queue at two buffers with timed sleeps would remove about 40 ms, at the cost of more wakeups and less margin before an
+audible gap. The owner deferred tuning on 2026-10-13: revisit after the native ThinkPad measurement, not before.
 
 ## DevilutionX port limits
 
