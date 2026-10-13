@@ -257,9 +257,8 @@ kernel configuration model is proposed.
 ## Task 4 baseline and decisions — 2026-10-13
 
 Task 4 only; the functional baseline preceded implementation. Native FAT32 read/write mounts and the raw writer are
-implemented. Epsilon owns the task-5 mount workflow/ESP views; this consumer must
-share its binding, exclusion and lifetime rather than create a second mount
-workflow. Grant names/provisioning have been requested through the orchestrator.
+implemented. The editor consumes the delivered trusted mount workflow/ESP views
+and shares their binding, exclusion and lifetime.
 Only scratch ESP loading/editing is qualified here; ordinary Update and installed
 ESP activation stay unchanged until installer task 5.
 
@@ -280,14 +279,10 @@ QEMU showed zero scratch writes. Before/after whole-disk SHA-256 was identical
 (`8546e815826917b25bbe329acfcde4786502e730c009bda848733fa8438e0d46`), and the
 scratch FAT image passed `fsck.fat -n`. All QEMU jobs stopped. No owner media used.
 
-Source inspection: [libconfig](../../userspace/libconfig/config.c) runs restricted
-Lua and loses source spans; it permits computation and has no execution budget.
-Boot schema/merge are in [boot-init](../../userspace/boot-init/config.c), session
-schema in [session config](../../userspace/session/config.c), and network decoding
-is mixed with [runtime networking](../../userspace/session/network.c). There is
-no declaration catalog, delta/checker/editor or complete-set selection record.
-Existing Update still regenerates the ESP. Native mounting/reads above are runtime
-results; these missing facilities and validation boundaries are source findings.
+The baseline predates literal admission, shared schemas, ownership/catalog deltas
+and complete-set selection. Those now live in [libconfig](../../userspace/libconfig/)
+and the [editor](../userland/configuration-editor.md); existing Update still
+regenerates the ESP until task 5.
 
 ### Task 4 round one — accepted 2026-10-13
 
