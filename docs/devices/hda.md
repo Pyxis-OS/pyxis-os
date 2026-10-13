@@ -224,8 +224,8 @@ bound and progress reaching a period during its commit. On one, the worker:
 
 1. clears RUN and resets the stream through the normal bounded, checked stop;
 2. counts one discontinuity in each usable session, keeping its queued PCM;
-3. logs `audio: <fault>; output restarted (N since boot)`, at most once per
-   10 s;
+3. logs `audio: <fault>; output restarted (N since boot)` at info level, at
+   most once per 10 s (owner-accepted 2026-10-13);
 4. prepares the stream again, primes all eight periods from the sessions
    (silence where empty) and starts a new RUN epoch.
 
@@ -239,10 +239,10 @@ progress. A recovery needed before that is a failed recovery. Failed recoveries
 that keep recurring for **2 s** mean the cause is not transient: the next one
 fails the engine as `output kept missing service after repeated recovery`.
 Isolated restarts never fail it, however often they occur. These bounds are
-tuning, not ABI. **This repeat rule awaits owner acceptance** (#807): the
-accepted proposal said more than 3 recoveries within 10 s. In nested QEMU,
-that rule disabled audio after one EDuke32 startup burst (four restarts in
-about 130 ms), while three matching runs under this rule played through; see the
+tuning, not ABI. The owner accepted this repeat
+rule on **2026-10-13**, replacing the proposed "more than 3 recoveries within
+10 s", which in nested QEMU disabled audio after one EDuke32 startup burst (four
+restarts in about 130 ms); see the
 [record](../development/experiments/audio-recovery/README.md#nested-qemu-validation-of-recovery). The
 [recovery record](../development/experiments/audio-recovery/README.md) has the
 native evidence and nested validation.
