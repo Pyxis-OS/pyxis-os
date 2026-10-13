@@ -505,6 +505,36 @@ it never silently selects another backend. No repartitioning or volume creation
 during updates. This current named-resource path is an interim provisioner,
 not capability-valued configuration; unify it in that separate assignment.
 
+### Standalone HTTP scripts — owner decision required
+
+The ordinary outer shell has declared PIPE CREATE and its delegated child
+launcher. A standalone shebang shell script currently inherits the ordinary
+program profile, which omits PIPE CREATE; the interpreter cannot coordinate the
+HTTP worker. Adding grants when a command happens to mention HTTP would violate
+the declared-authority rule. Trusted bootstrap scripts have their own complete
+profile; their successful requests do not qualify ordinary script invocation.
+
+**Default:** package `shell.pxb` with explicit memory, clock, console, PIPE CREATE
+and LAUNCH requests, selecting only the caller's existing delegated authority.
+Add `shell --script PATH`: it opens a native FILE READ through its own roots,
+uses the existing bounded script reader and owns a separate typed table. No
+provider script loading, grant acquisition or hidden request state. Declared
+`launcher` and `child_launcher` bindings both narrow the supplied child launcher;
+neither receives CREATE_GROUP. Missing required grants refuse before launch.
+The body-producer profile still withholds LAUNCH, so this coordinator cannot be
+used as an escaping body producer. Existing bootstrap shebang scripts stay
+unchanged.
+
+```text
+# home://post.sh contains the already accepted printf/cat/request session.
+shell --script home://post.sh
+```
+
+**Alternative:** qualify only interactive/trusted-bootstrap shell requests now
+and defer standalone shell scripts. Lua's accepted explicit HTTP adapter remains
+usable, but the task's ordinary shell-scripting outcome would remain incomplete.
+Stop before implementing this additional launch/interface contract.
+
 ### Baseline and delivery checks
 
 Captured before proposal edits, main `26c9e9ca`, pins userland `da098fd`,
