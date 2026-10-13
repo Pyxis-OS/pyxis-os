@@ -24,7 +24,7 @@ struct usb_bot {
   uint64_t blocks, read_bytes, write_bytes;
   uint32_t commands, reads, writes, flushes, recoveries;
   bool wide, sense_valid, timed_out, writable, flush_supported;
-  bool write_protect_known, write_protected;
+  bool write_protect_known, write_protected, write_through;
   uint8_t sense_response, sense_key, sense_asc, sense_ascq;
   uint8_t first_sample[USB_BOT_SAMPLE_BYTES], last_sample[USB_BOT_SAMPLE_BYTES];
 };
@@ -41,7 +41,8 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t capacity, uint64_t
  * A clean rejection retains valid sense and leaves the channel usable; it never
  * retries I/O. Scratch is private captured storage and may change on error.
  * submitted becomes true exactly when the original I/O CBW is first published.
- * WRITE and FLUSH require the successfully qualified READY media profile. */
+ * WRITE and FLUSH require the qualified READY media profile. Write-through
+ * FLUSH is an ordered no-op; it publishes no CBW and leaves submitted unchanged. */
 enum usb_bot_io_result usb_bot_read(struct usb_bot *bot, uint64_t first_block, uint32_t block_count,
     void *scratch, size_t scratch_bytes, uint64_t deadline, bool *submitted);
 enum usb_bot_io_result usb_bot_write(struct usb_bot *bot, uint64_t first_block, uint32_t block_count,

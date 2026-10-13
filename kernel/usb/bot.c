@@ -555,10 +555,14 @@ enum usb_bot_io_result usb_bot_flush(struct usb_bot *bot, void *scratch, size_t 
       bot->state != USB_BOT_READY || !bot->writable || !bot->flush_supported) {
     return USB_BOT_IO_FAILED;
   }
+  /* The block worker still orders this barrier after earlier admitted I/O. */
+  if (bot->write_through) {
+    return USB_BOT_IO_OK;
+  }
   return synchronize_cache(bot, scratch, overall, submitted);
 }
 
-static bool mode_sense_unsupported(const struct usb_bot *bot)
+static bool command_unsupported(const struct usb_bot *bot)
 {
   return bot->sense_valid &&
     (bot->sense_response == SCSI_SENSE_FIXED_CURRENT ||
@@ -579,7 +583,7 @@ static bool qualify_writes(struct usb_bot *bot, void *scratch, uint64_t overall)
   enum bot_command_result result = command(bot, cdb, 6, BOT_DATA_IN,
       scratch, header, &bytes, overall, NULL);
   enum usb_bot_io_result outcome = io_outcome(bot, result, scratch, overall);
-  if (outcome == USB_BOT_IO_CLEAN_REJECTED && mode_sense_unsupported(bot)) {
+  if (outcome == USB_BOT_IO_CLEAN_REJECTED && command_unsupported(bot)) {
     memset(cdb, 0, sizeof(cdb));
     cdb[0] = SCSI_MODE_SENSE_10;
     cdb[1] = SCSI_MODE_DISABLE_BLOCK_DESCRIPTORS;
@@ -625,15 +629,19 @@ static bool qualify_writes(struct usb_bot *bot, void *scratch, uint64_t overall)
   }
   outcome = synchronize_cache(bot, scratch, overall, NULL);
   if (outcome == USB_BOT_IO_CLEAN_REJECTED) {
-    bot->write_detail = "cache synchronization rejected; read-only";
-    return true;
-  }
-  if (outcome != USB_BOT_IO_OK) {
+    if (!command_unsupported(bot)) {
+      bot->write_detail = "cache synchronization rejected; read-only";
+      return true;
+    }
+    bot->write_through = true;
+  } else if (outcome != USB_BOT_IO_OK) {
     return false;
   }
   bot->flush_supported = true;
   bot->writable = true;
-  bot->write_detail = "write protection clear and cache synchronization qualified";
+  bot->write_detail = bot->write_through ?
+      "cache synchronization unsupported; write-through assumed" :
+      "write protection clear and cache synchronization qualified";
   return true;
 }
 

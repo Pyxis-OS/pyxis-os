@@ -1800,16 +1800,19 @@ device evidence within the media deadline.
 
 ## USB writable-media qualification limits
 
-C.1 requires known WP-clear protection and a successful real blocking SYNCHRONIZE CACHE (10) before enabling writes and flushes. MODE SENSE (6) captures only its four-byte
-header, with fallback to the eight-byte MODE SENSE (10) header only on current ILLEGAL REQUEST invalid-opcode or invalid-field rejection; unknown protection, unusable
-optional headers and clean qualification rejection leave healthy media readable but not writable, and no MODE SELECT or write-cache change is attempted. Do not infer
-writable or flush support from vendor IDs or successful reads; revisit compatibility only with natural device responses needing a bounded extension.
+Known WP-clear BOT media qualifies either real synchronization or the owner-accepted
+[write-through assumption](devices/usb-storage.md#write-and-cache-qualification)
+for clean current ILLEGAL REQUEST `20/00` or `24/00` synchronization rejection.
+No caching page/WCE is queried. Its ordered FLUSH is a no-op, so power loss can
+lose data the device claimed written, as with Linux's write-through assumption.
+Revisit with actual cache-reporting/power-loss evidence; do not infer persistence
+from vendor identity or successful ordinary writes.
 
-Two compatibility watchpoints from merged [PR #395](https://git.internal/PyxisOS/pyxis-os/pulls/395) stay deferred (the first natively qualified stick, the C.4 install
-target, triggered neither). A device that cleanly rejects SYNCHRONIZE CACHE stays read-only even if its firmware has no volatile write cache; querying the caching mode
-page and Write Cache Enable state is a possible extension guided by device evidence, not an accepted alternative or proof of durability. And an optional MODE SENSE or
-qualification synchronization exchange that breaks transport fails the whole media probe even if earlier reads succeeded (returning to read-only after a successful reset
-is only a proposal needing a recovery policy and verified transfer ownership). Revisit both after observing an affected expendable device.
+Unknown protection, unusable MODE SENSE headers and other clean sync rejections
+stay read-only. Optional qualification exchanges that break transport still fail
+the whole probe even after successful reads. Recovery to readable service after a
+safe reset remains deferred; revisit only with natural device evidence and verified
+transfer ownership. No MODE SELECT/cache-mode change is attempted.
 
 The five-second exchange deadline and shared boot-media deadline also bound synchronization, so a slow genuine flush can retire a capable device; revisit with measured
 physical flush latency. QEMU completion and restart checks qualify no firmware, cache behavior or power loss, and only one physical stick has qualified. A failed runtime
