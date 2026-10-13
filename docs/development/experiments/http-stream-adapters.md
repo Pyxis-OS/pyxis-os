@@ -89,8 +89,18 @@ Manual C qualification observed:
   `47c5726efb41b54248182988e40ae5abd9ca50724eeb8f3d214e790917410adc`.
   A truncated copy failed before publication.
 
-Lua/Links and final-head integration checks are still being completed in this
-PR. Source inspection confirms no body-sized allocation in the stream adapter:
+Final functional image: parent `d6825b87`, userland `ab7e00bc` (rebased onto
+`c472de7`), ports `d732dd4`; ordinary and manual fixture builds passed in the
+same published builder. Lua consumed 17 MiB in 64 KiB chunks, rejected seek,
+reported truncated input as an error, committed w/w+ with separate/same FILE
+ownership, and retained complete 404 bodies. Precommit EBUSY followed by staging
+and commit succeeded. Close/abort before commit generated no POST, confirmed by
+server records. Links `-dump` consumed a redirected page and printed its final
+content with exit zero. A C explicit 120-second HTTPS deadline completed a
+35-second delayed body beyond the ordinary 30-second budget. Early reader close
+released the exchange; another GET then completed.
+
+Source inspection confirms no body-sized allocation in the stream adapter:
 fixed provider scratch/backpressure, bounded native reads, caller-selected FILE
 buffering. Lua `read("*a")` and Links' cache deliberately materialize their own
 results. This is not a measured process-RSS claim or multi-GB qualification.

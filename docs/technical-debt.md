@@ -1435,7 +1435,10 @@ the native 1 MiB GET is 18% slower (14.3 → 17.2 ms). The owner accepted this
 cost on 2026-10-12. Revisit before HTTP-heavy consumers (package fetching, Git,
 the Claude harness), and whenever end-to-end HTTP throughput falls measurably
 short of native TCP; track the gap with each relevant change.
-[Native A/B and nested results](development/experiments/http-prepared.md).
+[Native task 3 A/B](development/experiments/http-prepared.md) and
+[task 4 nested stream comparison](development/experiments/http-stream-adapters.md).
+Task 4 has no native A/B yet; its varying nested runs cannot establish the
+HTTP/TCP gap or close this debt.
 
 ## HTTP provider responsiveness
 
