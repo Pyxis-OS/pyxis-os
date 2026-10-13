@@ -26,7 +26,7 @@ grep -rn TODO home://src
 
 ## Shell scripts as commands
 
-A file starting with `#!boot://shell.pxe` can run as a foreground command in a
+A file starting with `#!boot://shell.pxb/app/bin/shell.pxe` can run as a foreground command in a
 space configured with `launch = true`. The packaged Development and installed
 `pyxis` profiles opt in; Read-only and Remote do not. The shell delegates
 LAUNCH alone, while the interpreter reads the held script file and uses its

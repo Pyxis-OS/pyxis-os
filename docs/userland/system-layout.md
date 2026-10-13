@@ -44,7 +44,7 @@ The installed archive keeps executable files and complete bundle roots named in
 packaged as `boot://share/installer/rescue.list`: boot init, the installer, the
 shell and session, the init providers and a few file commands, including
 `echo` and `cp` for writing configuration and copying recovery files. The
-HTTP provider bundle and its trusted staging worker stay in this archive so
+Declared shell bundle, HTTP provider bundle and trusted staging worker stay in this archive so
 service startup also works when the installed program revision is unavailable. Other
 root-level `.pxe` files and complete root-level `.pxb` directories live in
 `bin/REVISION`, one directory per kernel revision. Boot
@@ -52,12 +52,15 @@ init binds the running kernel's directory. When that directory is missing it
 binds the archive instead, which on an installed system holds only the rescue
 set, and says so. Shell and Lua share bare lookup: `bin://NAME.pxe`, then the
 default entry of `bin://NAME.pxb`, then an explicitly configured development
-catalog, then `boot://NAME.pxe`. Only an absent candidate permits fallback;
+catalog, then `boot://NAME.pxe` and the default of `boot://NAME.pxb`. Only an absent candidate permits fallback;
 a denied, malformed or incomplete candidate reports its error. Direct hits
 read no catalog and enumerate no installation directory. `bin://NAME` first
 tries a literal file, then the same bin candidates and catalog without rescue
 fallback. Explicit `.pxb` paths select the default entry. See
 [development bundle lookup](program-bundles.md#unpacked-development-lookup).
+
+`shell` selects the declared bundle; trusted startup opens its contained native
+executable directly with its explicit grants.
 
 `nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and
 `bin://lua5.1.pxb` on live and installed systems. Each contains its application

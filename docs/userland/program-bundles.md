@@ -20,7 +20,7 @@ receive no implicit `app://`.
 
 Shell and Lua share libpyxis `program_open`: bare `NAME` tries
 `bin://NAME.pxe`, then the default of `bin://NAME.pxb`, then an optional
-development catalog, then `boot://NAME.pxe`. Only candidate absence permits
+development catalog, then `boot://NAME.pxe`, then `boot://NAME.pxb`. Only candidate absence permits
 fallback; denied, wrong-type, malformed or incomplete selected candidates and
 failed admission fail visibly. A direct bin hit enumerates no directory and parses
 no unrelated manifest or catalog. The filename selects a bundle independently of

@@ -587,12 +587,24 @@ background during default boot.
 
 ## Script mode
 
-A named READ resource `script` selects script mode. `argv[1]` supplies the name
-used in diagnostics; the shell reads the granted handle from offset zero rather
-than reopening that name. Additional arguments are not expanded by the shell.
-It reads one command per line with the same parser, `cd`, `exit` and foreground
-execution as interactive mode, without prompts or command echo. Terminal input
-stays available to foreground children.
+`shell home://post.pxs` selects the public `shell.pxb` command and reads a native
+file through its held roots/cwd. It accepts exactly one script path, without a
+`--script` flag; provider script URLs are refused without OPEN. The bundle
+requires declared memory, clock, console, PIPE CREATE and delegated LAUNCH;
+missing authority refuses preparation before launch. `launcher` and
+`child_launcher` both receive LAUNCH alone, never CREATE_GROUP. Each invocation
+owns a separate typed request table. Nested `shell PATH` invocations use these
+same declarations; HTTP producer profiles withhold LAUNCH and cannot start the
+coordinator.
+
+A named READ resource `script` instead selects the existing granted-script mode.
+Here `argv[1]` supplies only its diagnostic name; the shell reads the held handle
+from offset zero and does not reopen that name. Additional arguments are not
+expanded. This takes precedence over positional file loading. Both modes read
+one command per line with the interactive parser, `cd`, `exit` and foreground
+execution, without prompts or command echo. Terminal input stays available to
+foreground children. New shell scripts use `.pxs`; existing bootstrap filenames
+have not been renamed.
 
 Blank lines and whole-line `#` comments are ignored, including the shebang.
 Spaces/tabs may precede the comment marker; embedded or quoted `#` is literal.
@@ -609,15 +621,12 @@ diagnostics include
 `script-name:line:` (lines start at one); child diagnostics retain their own
 format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
 
-Script mode needs the same startup resources as interactive mode, including an
-explicit launcher grant. In a space with `launch = true`, an ordinary foreground
-shell script receives LAUNCH as `launcher`; its other required startup resources
-must still be present. It does not receive `child_launcher`, so its own ordinary
-commands receive no launcher. This does not provide general nested shell-script
-execution. Without the opt-in, an ordinary shell script still fails its launcher
-resource check. Boot explicitly grants the init interpreter launch authority;
-the default init uses `session` to pass it to the configuration launcher, which
-then delegates it to the interactive shell.
+Trusted bootstrap opens `boot://shell.pxb/app/bin/shell.pxe` directly with its
+explicit startup profile and granted script. Ordinary shebang launches of that
+native executable still inherit the ordinary program profile: when `launch =
+true` they get `launcher` but no `child_launcher` or PIPE CREATE. Shebangs cannot
+yet select a bundle interpreter; standalone HTTP scripts use `shell PATH`.
+Boot's init passes its authority through `session` to the interactive shell.
 
 ## Mounting roots
 
@@ -671,7 +680,7 @@ when held; it cannot restore an omitted grant.
 `session program [arguments...]` launches a successor in the same space and on
 its assigned CPU. Local callers exit successfully without waiting; remote
 callers park until the successor completes, as described below.
-For example, an init script can finish with `session boot://shell.pxe`. The
+For example, an init script can finish with `session boot://shell.pxb/app/bin/shell.pxe`. The
 command also works interactively; failed launch returns to the prompt, while
 script mode reports the script name/line and exits with failure as usual.
 Program lookup and quoting use the ordinary command rules, including shebang
