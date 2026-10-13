@@ -101,9 +101,9 @@ return {
 programs run in this space can start commands; Kilo and TCC themselves start no
 programs and do not need it. With no `home` root, the space starts in `tmp://`.
 
-Save this trusted script as `/tmp/init-usb-development.sh`:
+Save this trusted script as `/tmp/init-usb-development.pxs`:
 
-```sh
+```text
 #!boot://shell.pxe
 namespace create
 service start text boot://textfs.pxe
@@ -113,7 +113,7 @@ session boot://session.pxe --configure-network --start-remote-services
 Build the separate ISO and existing remote client:
 
 ```sh
-make -j16 image INIT=/tmp/init-usb-development.sh MOUNT_DISK="$usb_guid"
+make -j16 image INIT=/tmp/init-usb-development.pxs MOUNT_DISK="$usb_guid"
 make -C tools remote
 ```
 

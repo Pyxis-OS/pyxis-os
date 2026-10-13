@@ -199,14 +199,14 @@ bytes to this utility; it contains no HTTP or TLS parser. See
 ## Concurrent echo server
 
 An opt-in trusted init can create a listener and hand it to the existing `tcp`
-utility. Save this native init script as `/tmp/tcp-init.sh`:
+utility. Save this native init script as `/tmp/tcp-init.pxs`:
 
 ```text
 #!boot://shell.pxe
 session boot://session.pxe --configure-network --tcp-server 10.0.2.15 5001 --tcp-count 3
 ```
 
-Build/boot with `make run INIT=/tmp/tcp-init.sh CPUS=4 VIRTIO_NET=1`, using the
+Build/boot with `make run INIT=/tmp/tcp-init.pxs CPUS=4 VIRTIO_NET=1`, using the
 [usual firmware/emulator overrides](../development/qemu.md) where required. This
 replaces the primary shell with the echo server; the default CPU 2 shell remains
 available. On a one-CPU boot the server uses the BSP's space.

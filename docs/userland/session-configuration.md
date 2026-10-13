@@ -9,7 +9,7 @@ opts into the [multiplexer](multiplexer.md). The optional
 configuration; it publishes HTTP with the configured resolver, then optionally
 publishes HTTPS with packaged trust before starting the interactive shell.
 Custom CA augmentation is selected by the trusted service command in
-`init/services.sh`; it is not a session Lua setting. Without it, session starts the shell directly. The development
+`init/services.pxs`; it is not a session Lua setting. Without it, session starts the shell directly. The development
 init script selects it:
 
 ```text
@@ -19,7 +19,7 @@ namespace create
 session boot://session.pxe --configure-network --start-services
 ```
 
-`make run` uses this path without overrides. `INIT=/path/to/init.sh` can still
+`make run` uses this path without overrides. `INIT=/path/to/init.pxs` can still
 select a different startup script. A direct native init selection also works.
 Interactive use must go through the shell's
 `session boot://session.pxe` handoff so the launcher receives launch authority

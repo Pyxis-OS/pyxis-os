@@ -594,6 +594,11 @@ It reads one command per line with the same parser, `cd`, `exit` and foreground
 execution as interactive mode, without prompts or command echo. Terminal input
 stays available to foreground children.
 
+Pyxis shell scripts are not sh-compatible (`namespace` and `service` commands,
+`=> name` and `@name` operands), so by convention they use the `.pxs` extension,
+not `.sh`; the packaged init scripts are `init/*.pxs` in the userland repository.
+The shell does not check the extension: a script runs through its shebang.
+
 Blank lines and whole-line `#` comments are ignored, including the shebang.
 Spaces/tabs may precede the comment marker; embedded or quoted `#` is literal.
 Each line allows 1024 bytes before LF, including CR in CRLF. Only CR immediately

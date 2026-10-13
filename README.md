@@ -30,7 +30,7 @@ make run CPUS=4 VIRTIO_NET=1
 make run CPUS=4 QEMU_VIDEO=virtio
 make run CPUS=4 QEMU_VIDEO=bochs DISPLAY_SIZE=800x600
 make run ACCEL=tcg        # software emulation when KVM is unavailable
-make image INIT=/tmp/init.sh  # optional native PXE or shebang init
+make image INIT=/tmp/init.pxs  # optional native PXE or shebang init
 make run LOG_LEVEL=trace  # include scheduler idle diagnostics
 make debug CPUS=4        # paused; see docs/development/gdb.md
 make clean
