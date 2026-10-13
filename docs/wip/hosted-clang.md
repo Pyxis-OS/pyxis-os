@@ -6,8 +6,8 @@ compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
 and running the [ports runner](source-builds.md) come later. Tasks 1–4 are qualified: both native target links complete and default
 single-source `-c` runs on Pyxis in 1/4-CPU QEMU and passed the native owner check.
 Task 5 is owner-assigned (2026-10-13); its installation, authority and capacity
-defaults below are accepted. Implementation is stopped at the native peak
-measurement gate; no task 5 source changes or baseline runs have started.
+defaults below are accepted. The owner authorized a separate measurement-only
+kernel probe; baseline capture precedes the task 5 build/publication changes.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -187,26 +187,23 @@ The owner accepted all three defaults:
    invalid inputs, denied output and constrained-memory refusal without allocator
    fault injection.
 
-### Native peak measurement gate — stopped
+### Authorized VM backing measurement (2026-10-13)
 
-**Inspected:** [allocation profiling](../development/allocation-profiling.md)
-retains operation totals, not a process high-water mark. VM statistics report
-current backing only; the [native debugger](../kernel/network-debugger.md)
-cannot break into a successful running compiler. LLVM's native allocator-usage
-query explicitly refuses. Retained libc pools are insufficient: LLVM also
-allocates/releases native regions outside them. No exact native peak can be
-reported from existing tools; this triggers accepted decision 3's stop.
+Existing tools retain totals/snapshots, not an exact native process peak. The
+owner authorized a separate, unmerged kernel probe accounting event-based
+current/peak owned data frames per process, including provisional frames rolled
+back on failure. Include image, eager stack, startup and private regions;
+explicitly exclude page tables, kernel metadata, filesystem/cache, borrowed/
+device mappings and kernel stacks. Tagged launch-capture payloads are separate
+per-boot current/peak accounting, not part of a child's process charge.
 
-**One proposed owner decision; default:** authorize a qualification-only kernel
-probe on an unmerged branch, counting event-based current/peak process-owned VM
-backing at existing BSP loader/mutation/retirement points. Include image, eager
-stack, startup and private allocations; report launch capture separately. Exclude
-page tables, kernel metadata and filesystem/cache backing explicitly. Retain the
-result before retirement and emit one diagnostic through the existing kernel log
-per measured process; ordinary production logs/code remain unchanged. Use separate
-profiled runs for memory and unmodified-main runs for elapsed baselines. No quota,
-public profiling ABI, compiler change or container rebuild. Task 5 remains stopped
-until this measurement support is authorized; no probe has been implemented.
+Output uses `ktrace` only; there are no ordinary `klog` diagnostics. Keep the
+probe patch/branch outside shipping code, label its images **probe builds** and
+never stage them as normal PXE builds. Record the patch path/SHA and actual
+inputs in the [task 5 experiment record](../development/experiments/hosted-clang-task5/README.md).
+Use separate profiled runs for memory and untouched-main runs for elapsed
+baselines. No quota, public profiling ABI, compiler change or container rebuild.
+Native runs and publication go through the owner/luna.
 
 **Queued after task 5 merges:** the owner auto-assigns driver-invoked LLD. Its
 proposal must decide whether a single direct child can satisfy the REQUIRED
