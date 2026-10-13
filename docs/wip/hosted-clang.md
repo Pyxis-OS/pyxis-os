@@ -345,17 +345,19 @@ podman build -f ci/Containerfile \
 podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8c3b0fe
 ```
 
-Do not adopt the tag until the owner publishes it. If merging the fork changes
-the SHA, update the pin and rebuild the image for that exact merged provenance.
-The integration remains draft: source compilation and SDK builds pass, but
-fresh target links, driver QEMU/GDB, overlapping-memory evidence and native
-qualification remain pending. [#793](https://git.internal/PyxisOS/pyxis-os/pulls/793)
-keeps the core/fork/bundle integration separate. The foundation (#789 and
-userland #248) merged into main `ad86d6e5`; the contained core is userland #251
-at `8c052506`, already based on current userland main `39499b92`. The recorded
-baseline precedes code changes. **Owner hold:** take no timing baselines or
-performance measurements while the container build runs on horse, until the
-owner confirms it is done. Functional work and builds remain permitted.
+The owner published and verified that image on 2026-10-13; #793 adopts the
+exact fork pin, Containerfile provenance and workflow tag together. LLVM #8
+must fast-forward first, preserving `8c3b0fe1`; that needs no further image
+rebuild. A changed merged SHA would require matching compiler/SDK provenance.
+Fresh ordinary image/SDK and exact-head CI pass at `b810b64e`. Full target
+links, driver QEMU/GDB and overlapping-memory qualification are in progress;
+the native run follows through owner/luna. No new native result is claimed.
+
+The foundation (#789 and userland #248) is merged into main `ad86d6e5`.
+Contained core #251 at `8c052506` includes userland main `39499b92`. The recorded
+baseline precedes code changes. The owner lifted the container-build timing
+hold after publication; ordinary timing runs remain separate from debugger
+and labelled, unmerged memory-probe runs.
 
 Queued owner gallery request, after both this driver work and HTTP task 5c
 merge: a clean Pyxis QEMU screendump, Neovim on the left with a short C version
