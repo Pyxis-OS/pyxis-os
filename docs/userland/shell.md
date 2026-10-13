@@ -823,3 +823,55 @@ refuses the cwd move. Controllers also appear as `NAME_mount` selected sources.
 The [thin utility and lifetime limits](../devices/fat32-mounts.md#trusted-workflow)
 apply. Neither final control close nor shell exit synchronizes/retires implicitly;
 normal clean power keeps its existing seal behavior with files open.
+
+## Prepared HTTP requests
+
+A final foreground HTTP stdout redirect needs an explicit retained name:
+
+```text
+printf '{}' > json+https://example.test/api => reply
+cat < @reply
+request status reply
+request drop reply
+```
+
+`@name` selects a typed value only as a whole unquoted redirection operand;
+`"@name"` and `./@name` are ordinary paths. Input selects the held forward reader
+and its read-only STATUS companion, never another GET. Copies share consumption;
+a second reader sees remaining bytes or EOF, and private read-ahead is not
+replayed. Failed framing or provider IPC is an error; HTTP reader pipelines
+propagate a failing stage even if their last command succeeds.
+
+`request prepare NAME GET|POST URI [--timeout SECONDS] [--headers-file PATH]`
+reserves one request without submitting. Headers come from a bounded native file,
+not secret argv/history text. Default 30 s covers staging, prompt time, submission
+and framing; an explicit longer deadline is fixed at preparation. `> @name`
+stages, while `request commit NAME` starts once and hands off after headers.
+Flush/close never commit. A non-2xx response makes commit fail but retains its
+readable error body; framing completion remains separate from HTTP status.
+
+`request copy [--response|--status] NEW SOURCE` retains exact narrower facets;
+`request abort NAME` needs control and is not remote rollback. `request list`
+shows named types/phases, and `drop` releases only that holder. Names are portable
+identifiers up to 63 bytes; the initial local policy is 16 entries. Existing string
+names/bindings and exhaustion refuse, without eviction. This is an interim typed
+table beneath the parked capability environment, with no automatic inheritance.
+Shell exit aborts unfinished controlled work and closes its references.
+
+The coordinator admits every producer and a trusted staging worker together,
+with one 64 KiB pipe and a 4 KiB copy buffer. It submits only after every stage and
+final writer close succeeds. Cancellation/failure stops and observes the direct
+batch; failed/uncertain writes cannot be manually committed or replayed. There
+are at most seven producer stages plus worker; producer descendants have no
+LAUNCH. HTTP stderr/append/background/concurrent-body writers are unsupported.
+PREPARE/COMMIT/ABORT remain synchronous caller waits; Ctrl+C/status is not serviced
+inside them, and safe native drain is not bounded by the caller's wait deadline.
+
+Stock profiles declare private RAM backing, default 16 MiB configurable in trusted
+provider startup. Exceeding it refuses with a private-NPFS hint. Large uploads
+explicitly select isolated NPFS; missing/refused backing never silently changes
+backend. No staging grant enters ordinary shells/programs. See
+[transaction authority/limits](../interfaces/http-transactions.md) and the
+[task 5 contract and qualification](../wip/native-http-requests.md#task-5-accepted-shell-contract--2026-10-13).
+Standalone shell script delivery is still the owner question in that contract;
+interactive/trusted-bootstrap qualification does not claim it is implemented.

@@ -1972,3 +1972,17 @@ Accepted 2026-10-13, explicitly revisitable: the owner's personal pool boot
 override migrates to ESP `boot.lua`, making ESP editing the configuration path.
 The owner may revisit ESP versus pool storage after living with installer task 5's
 installed activation. Until then follow the [accepted override/frozen-set contract](wip/installer-tui.md#task-4-round-one--accepted-2026-10-13); task 4 stays scratch-only.
+
+## HTTP staging worker
+
+Owner accepted 2026-10-13: shell body producers write a bounded pipe and a trusted
+worker checks every staging write and final close. **To look into later:** direct
+body FILE WRITE plus a reliable producer I/O-completion contract could remove
+this process/copy/IPC cost. Revisit against the task 5 measured worker cost; exit
+status alone currently misses ignored or uncertain writes. Capacity and declared
+isolation remain unchanged by that future comparison.
+
+Private NPFS provisioning leaves can remain as empty linked directories after
+startup/provider death; closing/unlinking payloads is not secure erasure.
+Revisit directory lifecycle cleanup before frequent service restarts or long-lived
+HTTP-heavy deployments. RAM leaves disappear with the boot's private tree.
