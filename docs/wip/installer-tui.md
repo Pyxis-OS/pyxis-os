@@ -2,7 +2,7 @@
 
 Status: **direction and all three configuration choices accepted by the owner,
 2026-10-11.** Tasks 1–2 and task 3's shared FAT32 dependency are delivered.
-Task 4 is assigned and in draft qualification
+Task 4 is implemented and scratch-qualified for review
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)); later tasks
 still need separate owner go-aheads.
@@ -369,8 +369,8 @@ and recovery boundaries; round one is not reopened.
    trusted selected-view issuer must supply read-only facts tied to its root and
    bound FAT control; the editor checks current root/control domain/extent too.
    UUIDs name a logical target, not authenticated physical hardware. No raw disk
-   access is given to the editor. MOUNT_OBSERVE supplies retained GPT UUID/type/attributes and device geometry
-   with explicit identity validity; ordinals and names alone do not fill that gap.
+   access is given to the editor. MOUNT_OBSERVE supplies retained GPT identity and
+   device geometry with explicit validity; ordinals and names alone do not fill that gap.
    Missing/ambiguous evidence permits read-only validation/printed diagnostics,
    but refuses publication/replay. A printed plan grants no authority: apply
    needs the independently supplied matching writable view/control and refuses
@@ -423,8 +423,8 @@ This is consistent with whole-triple archive fallback and preserves rescue.
 The native FAT32 issuer exposes immutable selected-target facts
 through the already bound MOUNT control's OBSERVE reply, requiring its existing
 OBSERVE right. This keeps facts tied to the issuer's actual mounted instance,
-not a caller-authored sidecar or a raw-DISK grant. It retains domain, device, GPT-entry ordinal, first-block, block-count and
-lifecycle flags alongside:
+not a caller-authored sidecar or a raw-DISK grant. It retains domain, device,
+GPT-entry ordinal, first-block, block-count and lifecycle flags alongside:
 
 | Fact | Source at mount admission |
 | --- | --- |
