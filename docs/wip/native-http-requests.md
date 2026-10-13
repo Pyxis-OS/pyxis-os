@@ -352,8 +352,227 @@ continue tracking the gap for relevant changes and HTTP-heavy workloads. No thro
 Implemented interfaces and limits are in [stdio](../userland/stdio.md#http-streams-and-explicit-submission),
 [HTTP transactions](../interfaces/http-transactions.md) and
 [fetching](../userland/http-fetch.md#redirect-chains). Userland and ports precede
-the parent ABI/gitlink update. Shell bindings and producer coordination remain
-assigned task 5.
+the parent ABI/gitlink update. Task 5's assigned proposal below settles shell
+bindings and producer coordination;
+implementation is assigned under the accepted contract below.
+
+## Task 5 accepted shell contract — 2026-10-13
+
+Owner decisions on #780, accepted 2026-10-13; task 5 implementation is assigned.
+Task 4 (#774, userland #244, ports #103) is merged. The capability environment
+itself remains separately assigned.
+
+### 1. Named typed results — accepted: `=> name`, `@name`, `request` operations
+
+A final stdout HTTP URI redirect requires `=> name`, reserving a fresh name
+before preparation/launch. Without one, refuse with a syntax hint. There is no
+implicit current/last request, numbered job, `job` builtin or printed handle.
+`@name` is a typed selector only as an unquoted whole
+redirection operand: output selects the prepared body, input selects the retained
+response plus STATUS-only observation. It never becomes an argv path or GET.
+Quoted `"@name"` or `./@name` means an ordinary filename. All ordinary commands
+use the same declared stream handoff; there is no special `cat` wrapper.
+
+```text
+printf '{}' > json+https://example.test/api => reply
+cat < @reply
+request status reply
+request drop reply
+```
+
+The inline form commits after successful production and returns after headers,
+not the whole response. Manual staging uses the same value and explicit commit:
+
+```text
+request prepare upload POST json+https://example.test/api --timeout 120
+cat home://payload.json > @upload
+request commit upload
+request copy --response kept upload
+request drop upload
+cat < @kept
+request status kept
+request drop kept
+```
+
+Prepare permits GET/POST; optional `--headers-file` reads a native file with the
+caller's existing authority, never a URL or credential string on the command
+line. Credential-bearing preparation keeps the native no-redirect policy.
+Timeout is seconds converted once to an absolute deadline; default 30 s includes
+staging, waiting at the prompt and framing. No renewal/retry.
+`request abort name` requires control; `request list` shows names/types/phases,
+not handles or headers.
+Copy defaults to retaining the same request; `--response`/`--status` attenuate.
+Copies share consumption and failure state, not replay. A second cat reads only
+what remains or EOF; prefix consumers' private read-ahead is not recovered.
+Existing names refuse replacement; explicit drop releases only that holder.
+Shell exit aborts unfinished controlled work and closes its references; outside
+holders can retain theirs, and cleanup/remote rollback is not promised.
+
+Use one typed capability-entry table (initial policy: 16 entries and 63-byte
+portable identifier names; refuse capacity/collisions, never evict).
+This is an **interim shell-local adapter** beneath the future
+[capability environment](capability-environment.md), not an HTTP-only global
+registry: payloads hold native facets with type/ownership/attenuation, while FILEs
+are I/O adapters. No text encoding of capabilities, writable environ, new startup
+environment ABI, config capability values or automatic name inheritance here.
+Reject names already used by string environment entries. Children receive only
+explicit selected facets through launch; scripts have their own table. The
+future environment must unify storage/lookup, not wrap a second request registry.
+
+Package the pinned BusyBox `printf` as an ordinary external applet; it is absent
+today. It receives stdout, not HTTP/control authority. The prefix form
+`request send` is not adopted.
+
+### 2. Coordinator — accepted: one bounded trusted staging worker
+
+Refine the earlier direct body-stdout sketch: producer stdout is PIPE WRITE;
+an internal trusted worker owns PIPE READ and staging FILE WRITE. Its declared
+profile permits these streams, memory and stderr, with no namespace,
+roots, network, control or descendant launcher. It latches failed/uncertain writes,
+handles confirmed short progress and checks final flush/close before EXITED/0.
+This avoids treating ignored exported WRITE errors as successful staging. No whole
+body RAM buffer: one additional 64 KiB pipe and a 4 KiB copy buffer; FILE writes
+split at 4,080 bytes. Measure the added copies/process against the baseline.
+
+Admit binding/pipe/worker and all images before publication. One atomic batch
+fits the existing eight-child limit: at most seven body-producing stages plus
+worker in this profile; ordinary pipelines stay at eight. The producer profile
+declares no descendant launch authority, through bundle/shebang adapters too.
+A program requiring it
+refuses admission; scripts needing child launch are outside this profile until
+[nested containment](nested-execution-groups.md). The foreground shell observes
+every producer,
+worker and Ctrl+C while staging. Commit requires all EXITED/0, drained pipe EOF,
+no uncertain staging and no unresolved cleanup; last-stage status is insufficient.
+A failed launch/stage/write or cancellation abandons without submission, stops
+and observes the direct batch, and latches failure/uncertainty in the named value:
+a later manual COMMIT cannot bypass that failure.
+
+PREPARE/COMMIT/ABORT remain synchronous IPC: Ctrl+C/status cannot be serviced
+while those control calls wait, even though the provider loop is cooperative.
+The deadline bounds caller waits, not native drain; worker safe-stop/cleanup can
+also wait for admitted work. No generic IPC-completion extension is assigned.
+A lost COMMIT reply stays uncertain and is never replayed. Fully framed non-2xx
+makes submit/inline completion fail but retains the error body; reading that
+body can succeed. A framing/IPC failure makes the reader fail, and HTTP-aware
+reader pipelines propagate any stage's failure rather than a successful final
+checksum hiding a truncated prefix. Deliberate prefix reads can succeed without
+claiming completed framing. Non-HTTP pipeline status stays unchanged.
+
+Only one HTTP body sink, at the final stage, foreground only; no HTTP stderr,
+append, background transaction or concurrent body writer. `> @name` stages
+without automatic commit; URI `> ... => name` is the explicit automatic
+coordinator. `< http(s)://...` uses ordinary GET's STREAM/STATUS pair and redirect
+policy; `< @name` always uses the held response.
+
+**To look into later:** direct body FILE WRITE plus a reliable producer I/O-
+completion contract could remove the worker and its copies. Revisit against the
+measured worker POST cost; existing exit status misses ignored/uncertain writes.
+
+### 3. Declared backing — amended: bounded private RAM by default, NPFS opt-in
+
+Ordinary live and installed profiles declare a private RAM staging leaf through
+trusted startup, so the inline POST works without repartitioning or configuring
+a volume. The default body cap is **16 MiB, configurable**. Count admitted size
+before mutation; crossing the cap fails honestly, prevents submission and gives
+a hint to configure private NPFS backing. This is explicit RAM provisioning,
+not an automatic fallback. Resident protocol/copy buffers remain separately
+bounded. No fallback between selected RAM and NPFS backends.
+
+Reuse [declared volume/source grants](../userland/init.md#fat32-volumes-and-selected-grants)
+and their shared source budget, not a second private-volume schema. Trusted
+startup creates isolated per-service leaves, selects each through the provider's
+declared `staging` resource, publishes its OPEN_READ/OPEN_WRITE grants and aliases,
+then consumes the backing source before the interactive handoff. The provider
+requests CREATE/REMOVE/READ_FILES/WRITE_FILES/FILESYSTEM_INFO on its leaf. Setup
+drops ancestor/provisioning copies; shells/programs get no backing authority.
+Service selection, leaf provisioning and consumption still need implementation.
+
+Large uploads opt into a dedicated private NPFS volume outside **every** client
+root/cwd/alias. Example (`volumes` is global; `grants` belongs to the space):
+
+```lua
+volumes = { ["http-work"] = { kind = "npfs", partition = 2, volume = "http-work" } }
+grants = { http_staging = { volume = "http-work", kind = "directory",
+                           access = "read-write", optional = true } }
+```
+
+Use the common selected-source resolver and declared provider resources; no
+launch wrapper adds grants. system/home are public roots in installed defaults,
+so a hidden directory there is not private. Preserve HTTPS's read-only trust
+roots. Missing/refused selected backing leaves GET available and POST unavailable;
+it never silently selects another backend. No repartitioning or volume creation
+during updates. This current named-resource path is an interim provisioner,
+not capability-valued configuration; unify it in that separate assignment.
+
+### Task 5 split — accepted 2026-10-13
+
+**5a delivers interactive and trusted-bootstrap requests now:** `=> name`,
+redirection-only `@name`, explicit `request` operations, checked staging worker,
+16 MiB default private RAM staging and isolated NPFS opt-in. Trusted bootstrap
+scripts keep their existing explicit grants and granted-script READ mode.
+Ordinary standalone scripts are not delivered; there is no positional script
+loader or public `shell.pxb` in this slice.
+
+**5b defers `shell home://post.pxs` to scoped descendant cancellation** in
+[#789](https://git.internal/PyxisOS/pyxis-os/pulls/789), coordinated through the
+owner. No console-interrupt handoff. QEMU proved that terminating the prototype
+script left its blocked producer and worker alive, with the producer retaining
+console input; no POST occurred. The positional code is removed from 5a and
+preserved in [draft userland #250](https://git.internal/PyxisOS/pyxis-userland/pulls/250)
+and [draft parent #792](https://git.internal/PyxisOS/pyxis-os/pulls/792), based on
+#789. Subgroup ownership integration and required qualification remain pending.
+
+In 5b, the script owns a subgroup containing its producers and worker; stopping
+the script must stop that whole subtree. Required declared memory, clock,
+console, PIPE CREATE and LAUNCH remain caller-held authority, with no global
+CREATE_GROUP grant or command-name wrapper. Qualification must cover actual
+Ctrl+C, startup interruption, nested ownership and descendant/reader retirement
+before delivery. A held `script` READ still takes precedence over positional
+loading, and argv[1] remains its diagnostic name. The desired form accepts one
+native path; it has no `--script` flag.
+
+The owner selected `.pxs` for new shell scripts. Existing init filenames are
+unchanged here; their rename is separate work after 5a merges. Direct
+bundle-interpreter shebangs are a [later direction](later-os-directions.md#lua-follow-ups),
+shared with Lua. The standalone follow-up waits on both 5a and #789; it does not
+hold the qualified interactive delivery open.
+
+### Baseline and delivery checks
+
+Captured before proposal edits, main `26c9e9ca`, pins userland `da098fd`,
+ports `d732dd4`, fs `414be0ac`, lwIP `a1aadb91`. Reused verified ordinary image
+built at `24faa688` with actual userland `da098fd`; only docs/pin bookkeeping
+changed since its inputs. All four bundle verifiers and ISO payload checks pass;
+this is not a fresh-main build. Builder `4c23a20`, nested KVM q35/max, four CPUs,
+2 GiB, HPET, VirtIO network/entropy, fresh OVMF, no HDA/disk; local fixture only.
+
+| Workload | Median (range) |
+| --- | --- |
+| 1 MiB GET OPEN, five samples after warmup | 7.879 ms (7.090–9.018) |
+| GET whole consumption, verified bytes/EOF | 201.982 ms (163.666–263.587), 4.951 MiB/s |
+| 1 MiB RAM whole read, five samples after warmup | 0.470 ms (0.441–0.521) |
+| Ordinary launch/wait, existing Lua helper, 20 samples | 4.164 ms (3.407–10.060) |
+
+Commands: `iobench read http://10.0.2.2:19085/fixed --rounds 5`, RAM control
+with `cp boot://share/iobench.bin tmp://http5-ram.bin`, and monotonic timing around
+`pyxis.run{"echo","-n"}`. Shared host guests limit interpretation; no clock cost
+subtracted, native gap or isolated kernel-spawn cost claimed. Raw captures and
+provenance stay local. The docs branch then refreshed to main `6bc3a009`
+(userland `b38b0e09`, ports `9f407742`); the measurements above remain at their
+recorded pre-merge revisions, not this newer runtime. `cat URL | cksum` works;
+HTTP stdin/output redirects refuse,
+and `printf` is absent. Stock POST/coordinator has no measured zero-cost baseline.
+
+Refresh the baseline on the chosen implementation base, repeat
+matched GET/launch and measure the added worker's POST
+cost/storage/CPU. Qualify the example sessions, every producer's failure,
+uncertainty/no replay, Ctrl+C/expiry/early close, copied/reference lifetimes,
+4xx/5xx, malformed framing and TLS EOF, denied provisioning, and real private
+NPFS multi-GB GET/staged POST with bounded resident buffers. Track the native
+HTTP/TCP reference gap; the task 4 native result is not a worker POST measurement.
+Userland/ports first, parent pins their own heads. Native timing/listening is an
+owner run; distinguish it from nested measurements and track the TCP reference gap.
 
 ## Task 2 accepted TLS policy
 

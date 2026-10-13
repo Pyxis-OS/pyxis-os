@@ -149,6 +149,10 @@ existing script capability for shebang launches; `file:setvbuf`; `os.clock`
 configuration reload and per-user/space settings policy also remain deferred.
 None depends on virtio-fs.
 
+Owner direction, 2026-10-13: allow bundle interpreters in shebangs (for example
+`#!bin://shell.pxb`), so `home://post.pxs` directly receives declared interpreter
+grants; Lua shares the gap. Today interpreters must be native executables.
+
 ## Networking and applications
 
 The priority is making Pyxis useful for simple daily tasks; website hosting is an
