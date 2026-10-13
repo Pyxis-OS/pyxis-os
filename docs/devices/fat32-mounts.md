@@ -61,7 +61,9 @@ The evidence remains valid on failed and retired controls, alongside their
 original domain and physical extent. The userland `mount_observe` helper checks
 the reply size and, when the flag is set, the identity and geometry invariants
 before returning it. Callers must still check lifecycle state and hold the
-appropriate selected-view authority for any operation.
+appropriate selected-view authority for any operation. The
+[qualification record](../development/experiments/fat32-mount-evidence.md) covers
+RO/RW and boot-origin views on disposable media.
 
 FILE READ/SIZE/INFO, directory LOOKUP/ENUMERATE/INFO and selected-executable
 capture use the existing native protocols. Capturing uses the common 128 MiB
