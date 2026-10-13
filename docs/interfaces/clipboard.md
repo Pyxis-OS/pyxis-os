@@ -51,6 +51,8 @@ Trusted space startup requests separate `SPACE_CREATE_CLIPBOARD_LOCAL` and
 Boot init explicitly requests both for stock local interactive spaces;
 session/shell and mux pane shells forward each separately on local foreground
 startup. [Configuration](../userland/init.md#boot-configuration) may withhold either.
+Program [bundles](../userland/program-bundles.md#app-views-grants-and-lifetime)
+receive them only by declaring them in their manifest, on the same launches.
 Background/service/remote launches receive neither. Pane shells receive no
 terminal CONTROL merely from these stores, and streams or receiver registration
 grant no clipboard access.
