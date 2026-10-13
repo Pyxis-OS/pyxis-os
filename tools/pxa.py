@@ -28,6 +28,7 @@ LOCAL = struct.Struct("<4s5H3I2H")
 CENTRAL = struct.Struct("<4s6H3I5H2I")
 END = struct.Struct("<4s4H2IH")
 P1F_MAGIC = b"PXE1FLAT"
+SOURCE_PREFIX = "source."
 # Copied from the resource/right table in userland/lib/bundle.c.
 RIGHTS = {
     "memory": {"manage"}, "threads": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
@@ -35,6 +36,12 @@ RIGHTS = {
     "tcp": {"connect", "listen"}, "pipe": {"create"}, "udp": {"open"},
     "display": {"draw"}, "audio": {"create"}, "screen_capture": {"capture"},
     "input": {"read"}, "output": {"write"}, "profile": {"memory", "host"},
+    "keyboard": {"input"}, "pointer": {"input"},
+    "job_work": {"create", "remove", "read-files", "write-files"},
+    "directory": {"lookup", "enumerate", "read-files", "write-files", "create", "remove",
+                  "filesystem-info"},
+    "mount": {"open-root", "observe", "write", "retire", "interval"},
+    "disks": {"enumerate", "mount-read-only", "mount-read-write"},
 }
 
 
@@ -141,7 +148,7 @@ def manifest_check(data, entries, tree):
     commands, roots, grants = value["commands"], value["resource_dirs"], value["grants"]
     require(type(commands) is dict and len(commands) <= 32, "invalid command map")
     require(type(roots) is dict and len(roots) <= 8, "invalid resource map")
-    require(type(grants) is list and len(grants) <= 16, "invalid grant list")
+    require(type(grants) is list and len(grants) <= 19, "invalid grant list")
     for name in commands:
         manifest_name(name)
     for name, path in roots.items():
@@ -151,9 +158,10 @@ def manifest_check(data, entries, tree):
         require(tree.nodes.get("app/" + path) is True, f"missing resource directory: {path!r}")
     seen = set(roots) | {"app"}
     for grant in grants:
-        fields(grant, ("name", "resource", "rights", "required"))
+        fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))
         name, resource, rights = grant["name"], grant["resource"], grant["rights"]
         manifest_name(name)
+        require(not name.startswith(SOURCE_PREFIX), f"reserved source binding name: {name!r}")
         require(name not in seen, f"duplicate startup binding: {name!r}")
         seen.add(name)
         require(type(resource) is str and resource in RIGHTS,
@@ -167,6 +175,23 @@ def manifest_check(data, entries, tree):
                     f"unknown grant right {right!r} for resource {resource!r}")
         require(len(set(rights)) == len(rights),
                 f"duplicate grant rights for {name!r}: {rights!r}")
+        external = resource in ("directory", "mount", "disks")
+        require(external == ("source" in grant),
+                f"grant {name!r}: only external directory/mount/disks require source")
+        if "source" in grant:
+            manifest_name(grant["source"])
+        if "root" in grant:
+            manifest_name(grant["root"])
+            require(resource == "directory" and "lookup" in rights,
+                    f"grant {name!r}: root requires a directory grant with lookup")
+    aliases = set()
+    for grant in grants:
+        if "root" not in grant:
+            continue
+        alias = grant["root"]
+        require(alias not in seen and alias not in aliases,
+                f"conflicting directory root alias: {alias!r}")
+        aliases.add(alias)
     for path in [value["entry"], *commands.values()]:
         manifest_path(path)
         entry = entries.get("app/" + path)

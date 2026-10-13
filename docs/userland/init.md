@@ -95,7 +95,8 @@ return {
 - **Roots.** Each root names a volume and its access, `read-only` or
   `read-write`, or a table that can also mark it `optional`. A volume is
   mounted once, read-write if any space needs that, and each space receives only
-  the access it asks for.
+  the access it asks for. FAT volumes instead use fixed configured admission access
+  and ordinary RO roots; see [selected FAT grants](#fat32-volumes-and-selected-grants).
 - **Start.** A space's working directory is `home://`. `start` names another of
   its roots, such as `tmp`, `boot`, `bin` or a configured one; naming a root
   the space does not have is an error. A space without the root it would start
@@ -184,8 +185,9 @@ Boot init reports which. The shell resolves bare names through `bin://`, then
 Space inits receive the bootstrap services, `boot://`, `tmp://`, `bin://`,
 their configured roots, the working directory their start selects and `OS_NAME`, plus their space's own
 console, keyboard, pointer, display and space handle from the kernel. They do
-not receive mount authority or the space factory, so `mount` and `sync --disk`
-are unavailable to them; `sync PATH...` still works on their roots.
+not receive raw mount authority or the space factory by default; `sync PATH...`
+still works on their roots. Explicit [FAT opt-ins](#fat32-volumes-and-selected-grants)
+may supply mount-only selection or selected MOUNT/data grants.
 
 A space whose required volume is missing or fails to mount, whose CPU set names
 an absent CPU, or whose init cannot be opened is created but not started. Its
@@ -295,11 +297,11 @@ spaces = {
 ```sh
 make run CPUS=4 INIT=/tmp/init-native.sh \
   VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw \
-  MOUNT_DISK=01234567-89ab-cdef-0123-456789abcdef
+  MOUNT_DISK="<GPT_GUID>"
 ```
 
-The GUID is illustrative, not a default. Do not change an attached image from the
-host. The space's init receives `data://` and can hand it to a session:
+Replace the GUID placeholder only in local configuration. Do not change an
+attached image from the host. The space's init receives `data://` and can hand it to a session:
 
 ```sh
 #!boot://shell.pxe
@@ -607,3 +609,54 @@ packaged live Remote entry enables this (owner accepted, 2026-10-11), allowing
 bundles such as Neovim to launch helpers. Installed defaults contain no Remote
 space; owner-added Remote entries use the same setting. Only LAUNCH is delegated,
 not CREATE_GROUP or group supervision.
+
+## FAT32 volumes and selected grants
+
+Two opt-in kinds extend the existing volume table. `boot-esp` has no selector and
+is always RO through the kernel's fixed boot-provenance issuer; optical/PXE boots
+without provenance do not guess a disk. A `fat32` volume requires local
+`disk_guid`, one-based `partition` and fixed `access = "read-only" | "read-write"`.
+Duplicate matching GUIDs refuse persistent selection; conflicting modes for two
+names of the same selector reject the plan before admission. All ordinary FAT
+roots must request RO, even when the instance is RW.
+
+```lua
+volumes = {
+  esp = { kind = "boot-esp" },
+  fat32 = { kind = "fat32", disk_guid = "<DISK_GUID>",
+            partition = <GPT_ENTRY>, access = "read-write" },
+}
+```
+
+Replace placeholders only in local configuration. Disk GUIDs and serials never
+belong in repository documents/examples. No shipped configuration opts in.
+
+A space's optional `fat32_mount = "read-only" | "read-write"` explicitly delegates
+a mount-only factory as `source.fat_mounts`; no raw OPEN/READ/WRITE/CLAIM authority
+comes with it. RW factory holders may select any supported partition. Programs
+receiving only selected data do not receive that factory.
+
+Separately named `grants` supply selected sources outside ambient URI roots:
+
+```lua
+grants = {
+  fat32_write = { volume = "fat32", kind = "directory", access = "read-write" },
+  fat32_control = { volume = "fat32", kind = "mount", access = "read-write" },
+}
+```
+
+Kinds are `directory` and `mount`; access is explicit and `optional` defaults to
+false. DIRECTORY sources get exact RO/content rights. MOUNT sources get
+OPEN_ROOT/OBSERVE/RETIRE, with WRITE/INTERVAL only for RW. Sources referring to
+RO admission cannot request RW; mount sources require a FAT volume. Sources-only
+volumes are admitted too. Up to eight named sources, including the factory opt-in,
+are permitted per space. Default startup still has no selected sources.
+
+Actual startup names are `source.NAME`. Only trusted local session/mux/shell
+handoff preserves these typed resources; remote-service startup omits them.
+Bundle launch resolves explicitly declared sources and reports actual received
+grants. It never adds source directories to inherited roots automatically.
+Boot init drops its own data references after handoff; published controls retain
+the accepted mount lifetime. A successful mount not handed to a
+space attempts explicit retirement after local data drains and reports refused
+cleanup; failed admission publishes no pair and rolls back in the kernel.

@@ -19,6 +19,16 @@ full structural preflight. An RO instance cannot upgrade: an RW open returns
 BUSY until it is retired. An RW instance may supply RO views to an opener with
 RW disk authority, sharing its domain, records and failure state.
 
+Trusted boot init also receives a separate mount-only DISKS inventory as
+`fat_mounts`: ENUMERATE plus MOUNT_READ_ONLY/MOUNT_READ_WRITE, independently of
+install mode. `DISKS_OPEN_FAT32` selects a boot-scoped device ID/GPT entry and
+returns the same native pair, with no raw DISK handle, claim or raw access.
+An optional expected disk GUID is captured and checked by the worker against
+its selected healthy GPT, then the fresh engine validation checks that identity.
+RO requires either mount right; RW requires MOUNT_READ_WRITE. The separate raw
+installer inventory remains install-only. Operator delegation is opt-in through
+trusted configuration, never inferred from an executable or self-declared manifest.
+
 A successful call installs a root and bound MOUNT control in one capability-table
 batch. Both slots are reserved before work;
 copying the reply into user memory is a separate operation. A failed reply closes
@@ -201,4 +211,44 @@ The [qualification record](../development/experiments/fat32-native-mount.md)
 separates QEMU/debugger evidence from later owner-routed native ESP checks.
 Mounted-write and clean-power evidence belongs to the
 [scratch RW qualification record](../development/experiments/fat32-mounted-writes.md).
-Writable installed bindings and native ESP writing remain outside this workflow.
+Ambient RW FAT roots and native ESP writing remain outside this workflow.
+
+## Trusted workflow
+
+[Boot configuration](../userland/init.md#fat32-volumes-and-selected-grants) may
+supply a provenance-bound RO boot ESP view or an explicitly selected FAT volume.
+Normal FAT roots are RO. Configured data/controller grants remain outside those
+roots and use the common [bundle declarations](../userland/program-bundles.md#selected-external-grants).
+A write profile fixes RW admission first; a later editor never upgrades an RO
+instance. No shipped profile enables FAT management or RW ESP access.
+
+The shell owns up to four FAT binding/controller records, within the shared
+eight-source launch budget. `mount --fat32 --list` shows boot-scoped selections;
+mounting uses explicit disk/partition/access arguments. RW mounting publishes an
+RO `NAME://` root and separately retains `NAME_write` data and `NAME_mount`
+controller sources. `sync --mount NAME://` synchronizes that instance. `release
+NAME://` moves cwd to `home://` with a report when needed, unbinds/closes the
+caller's selected data references (including original startup cwd grants), then
+requests retirement. Missing/unusable home refuses release before unbinding.
+Other owners are never revoked. BUSY/failure retains a controller for retry;
+closing a controller alone still does not retire. Trusted session successors
+preserve selected sources; ordinary children receive only declared grants.
+
+Configured bindings use `release --control SOURCE NAME://`; controller/root
+native domains must agree before closing data. Selected local source directories
+in that domain drain too. Another configured space or mux ancestor may retain a
+view, correctly keeping retirement BUSY until it closes its own references.
+A shell-created mount has no parent-mux data view unless explicitly inherited.
+Clean power sealing remains usable with held data, controls and intervals.
+
+`fat32ctl.pxb` is a thin native utility for `list`, `state`, `sync` and `retire`.
+Its manifest requests enumerating `fat_mounts`, observing/retiring `fat32_control`
+and a separate optional WRITE grant for sync. It reports the actual received
+rights and native errors. It cannot unbind its parent's roots; parent-held data
+makes retirement BUSY. The utility grants no authority by its command spelling.
+
+Native ESP checks require explicit owner approval and presence. The
+[milestone run sheet](../wip/fat32-volumes.md#owner-present-native-esp-run-sheet)
+is RO-only. Disk GUIDs/serials stay in owner-local configuration; repository
+examples use placeholders. QEMU scratch-image qualification is not native media,
+unplug, torn-sector or power-loss qualification.

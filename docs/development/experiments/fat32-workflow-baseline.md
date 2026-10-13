@@ -1,10 +1,10 @@
 # FAT32 trusted-workflow baseline
 
 Captured 2026-10-13 before task 5 code, after the owner cleared timing work:
-Pyxis main `2f2109fc41d5`, fs `414be0ac0b06`, userland `9f781e94bf63`, ports
+Pyxis main `d3bc9b5aaa14`, fs `414be0ac0b06`, userland `c472de7d5d9a`, ports
 `f93becb9e545`, lwIP `a1aadb91a503`. Fresh `make -j8 image BOOT_MENU_TIMEOUT=5`
-uses the repository-pinned `pyxis-llvm23.1.3-2d23443` builder; the newly published
-builder does not change these inputs. Host tools build with
+uses the repository-pinned `pyxis-llvm23.1.3-4c23a20` builder. The earlier proposal control was refreshed
+after main adopted this builder, before mutation code. Host tools build with
 `make -C fs -j8 BUILD="$PWD/build/fs-tools"`. Preserve control artifacts for
 matched/interleaved comparison after integration; no new benchmark infrastructure.
 
@@ -18,13 +18,14 @@ each with no build running, use the same `fat32-inspect` commands and Python
 
 | Host operation | Median ms | Min–max ms |
 | --- | ---: | ---: |
-| Whole-volume check | 1.585 | 1.379–4.029 |
-| Root list | 0.859 | 0.503–0.960 |
-| Small file read | 0.498 | 0.465–0.847 |
+| Whole-volume check | 1.553 | 1.402–3.531 |
+| Root list | 0.518 | 0.477–1.000 |
+| Small file read | 0.500 | 0.477–0.558 |
 
 For the existing native npfs path, recreate the disjoint 134 MiB fixture using
 current `mkfs.npfs` and the fresh 32768-byte `share/iobench-small.bin`. Keep the
-same two RO shell roots/configuration and boot disk GUID as the linked record.
+same two RO shell roots/configuration and locally recorded boot disk selector
+as the linked record. Disk identifiers are never copied into repository records.
 QEMU 10.2.2, q35/KVM, host CPU, four CPUs, 1 GiB RAM, OVMF, modern VirtIO block,
 VirtIO SCSI CD, unused audio disabled. Run interactively with profiling off and
 GDB detached:
@@ -38,9 +39,9 @@ Clock-call overhead is not subtracted. Nested-VM elapsed times:
 
 | Phase | Median ms | Min–max ms |
 | --- | ---: | ---: |
-| Open | 0.464 | 0.427–0.661 |
-| Payload read | 4.282 | 3.869–5.095 |
-| Complete pass | 5.632 | 5.298–6.579 |
+| Open | 0.436 | 0.372–0.564 |
+| Payload read | 3.738 | 3.553–5.122 |
+| Complete pass | 5.077 | 4.768–6.543 |
 
 The npfs partition is byte-identical to the freshly formatted source after shell
 exit. GDB PMM allocation snapshots are 4616 frames with the shell, 4251 after exit
@@ -49,7 +50,8 @@ allocated-frame counts, including kernel and caches, not private session RSS.
 
 ## Existing FAT backing and functional controls
 
-On the same four-CPU VirtIO setup, the existing explicit scratch RW bootstrap
+The earlier proposal control at main `2f2109fc41d5` used the same four-CPU
+VirtIO setup and existing explicit scratch RW bootstrap
 (`init=boot://init-fat32-mount-write.pxe boot.install=1`, disk 1/entry 1) holds one
 published RW instance, one data node/control and 2706908 workspace bytes. PMM
 allocated frames: 4479 before selection, 5566 with the admitted view, 4599 after

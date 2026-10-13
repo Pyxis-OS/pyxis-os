@@ -36,7 +36,7 @@ native adapter timings or physical-storage performance.
 
 ## Existing native npfs path
 
-Disposable 134 MiB GPT disk, disk GUID `12345678-1234-4567-89ab-0123456789ab`:
+Disposable 134 MiB GPT disk, disk GUID `<DISK_GUID>`:
 copy the same FAT partition into entry 1 (first sector 2048, 131072 sectors);
 entry 2 is a 64 MiB npfs pool (first 133120, 131072 sectors). Format the pool with
 `mkfs.npfs --image pool.raw --size 64MiB --journal 1MiB --volume system

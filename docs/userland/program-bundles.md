@@ -137,8 +137,9 @@ omitted.
 Programs using libc allocation request `memory/manage` under its documented
 `memory` startup name; declaring an alias does not rewrite libc service lookups.
 
-Unknown classes/rights and system-only mount/setup, space-factory or raw-device
-requests reject even when optional. Under the accepted temporary policy, every
+Unknown classes/rights, system-only setup, space-factory and raw-device requests
+reject even when optional. Selected external native grants use the bounded
+source contract below; they confer no implicit admission authority. Under the accepted temporary policy, every
 requested grant available within the launcher's selected delegated authority is
 delivered, including optional ones. An unavailable optional request is absent; an
 unsatisfied required request fails the whole admission. Preparation failures
@@ -266,3 +267,38 @@ plain launches show no observed regression: see the
 and the [bin placement record](../development/experiments/bundles-in-bin/README.md)
 (live and installed roots, updates, recursive cleanup). No physical-hardware
 result is claimed.
+
+## Selected external grants
+
+The common resolver accepts `directory`, `mount` and mount-only `disks` classes
+with an explicit `source` key. Trusted configuration or shell mount ownership
+makes a named source available; a manifest cannot create it. The launcher queries
+its actual protocol/rights before preparing exact attenuation. Ordinary programs
+receive no `source.*` inventory automatically. Trusted local successors preserve
+that inventory under the shared eight-source budget.
+
+A DIRECTORY request may additionally specify a distinct `root` alias. LOOKUP is
+required for a URI root; alias collisions with inherited roots, app/resource
+roots and declared resource names reject preparation. Cwd and its actual rights
+remain unchanged. Reserved `source.*` resource names cannot be produced by an
+ordinary manifest, and sources stay out of cwd/roots unless explicitly declared.
+
+```json
+{"name":"fat32_data","resource":"directory","source":"fat32_write","root":"edit",
+ "rights":["lookup","enumerate","read-files","create","write-files","remove"],"required":false}
+```
+
+Neovim ships this optional declaration. Without the selected source, ordinary
+startup is unchanged; with it, `edit://` is writable while ambient FAT roots stay
+RO. The program enumerates/query its actual received set from startup. Required
+missing grants fail before child publication; unavailable optional grants are
+absent. A selected root may be inherited by permitted descendants; this is no
+additional confinement beyond directory authority.
+
+DIRECTORY rights are the native lookup/enumerate/read-files/write-files/create/
+remove/filesystem-info names. MOUNT rights are open-root/observe/write/retire/
+interval. DISKS supports enumerate/mount-read-only/mount-read-write, never raw
+open. Authority comes only from selected actual capabilities; current
+[deliver-all-available debt](../technical-debt.md#temporary-bundle-grant-policy)
+remains. The native parser in `lib/bundle.c` remains authoritative; the host packer
+validates the same declaration fields without claiming runtime availability.

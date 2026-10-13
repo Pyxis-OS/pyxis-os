@@ -256,7 +256,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_MOUNT:
     return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE | MOUNT_RIGHT_RETIRE | MOUNT_RIGHT_INTERVAL));
   case OBJECT_DISKS:
-    return !(rights & ~(DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN));
+    return !(rights & ~(DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN |
+        DISKS_RIGHT_MOUNT_READ_ONLY | DISKS_RIGHT_MOUNT_READ_WRITE));
   case OBJECT_DISK:
     return !(rights & ~DISK_RIGHTS);
   case OBJECT_RANDOM:
