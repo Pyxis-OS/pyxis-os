@@ -63,9 +63,11 @@ the dock on 2026-10-11 (dock keyboard and mouse work; the internal xHCI `04:00.4
 with the Steam Controller timed out). No task is assigned.
 
 [ThinkPad pointer input quality](pointer-input-quality.md): Codex alpha
-(2026-10-11), accepted USB report mice and Synaptics absolute mode and
-palm-rejection plan. Task 1 is implemented (#716). Task 2 is assigned and starts
-after #716 merges, with a baseline and owner decisions before code.
+(2026-10-11), task 1 is merged (#716, userland #214, ports #99).
+Task 2's calibrated EW/AGM implementation and native qualification are in #773:
+the owner reports the trackpad feels great at `fef995a7` (2026-10-13).
+Default activation remains opt-in pending its closure gate; reference close-out
+follows #773 and that gate.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
 lifecycle, parking, TLS and libc delivery. Tasks 1–5 are merged (#612, #671, #684,

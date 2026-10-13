@@ -2,7 +2,9 @@
 
 Plan accepted 2026-10-10. Task 1 is merged (#716, userland #214, ports #99).
 Task 2 is assigned to Codex alpha (2026-10-11); baseline captured from fresh
-main `df7ec8ab`, decisions below accepted; opt-in implementation is assigned. Scope:
+main `df7ec8ab`, decisions below accepted. The owner qualified the calibrated
+EW/AGM interaction on 2026-10-13 at #773 `fef995a7`; activation remains opt-in
+pending resolution of the default-on gate before milestone close-out. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -230,8 +232,8 @@ unqualified, not claimed by closure.
 fresh main after #716, with the before-code baseline recorded. Default boots
 remain firmware-relative and mouse-class during qualification. Absolute touch
 and guest input use separate logical sources; physical holds/loss still follow
-the common coordinator. Native qualification and the accepted default-on change
-remain outstanding.
+the common coordinator. Native qualification is recorded below; the default-on
+gate remains outstanding before milestone closure.
 
 ## Task 2 accepted decisions (2026-10-11)
 
@@ -281,19 +283,216 @@ separate touchpad and guest sources; no public contact or raw-input interface.
 The first native record must establish identity/query bytes, physical switch
 routing and usable geometry, then qualify finger, palm, typing, lift/count
 transitions, physical drag and guest behavior. Luna stages owner-run builds;
-no native hardware was touched in the baseline. Native qualification is still
-pending.
+no native hardware was touched in the baseline. The owner's native qualification
+is recorded below.
 
 Implementation uses `ps2.synaptics=1` to qualify basic W and
 `ps2.synaptics.diagnose=1` for bounded info-level query/contact summaries.
-Neither option is present by default. The first implements queried geometry
-only; no calibrated identity profile is invented. Physical-button layouts
+Neither option is present by default. Geometry comes from validated queries or
+the narrowly matched owner-measured profile below. Physical-button layouts
 outside standard switches, single-switch clickpad and the advertised three
 TrackPoint switches recover to proven relative input rather than silently lose
 buttons. [Mouse input](../devices/mouse.md#synaptics-opt-in-absolute-input)
 describes the filtering, loss and fallback behaviour. The existing
 [qualification record](../development/experiments/pointer-input-quality/README.md)
 contains the QEMU limits and exact owner/luna native steps.
+
+### T14 geometry correction — accepted 2026-10-13
+
+The first owner-run native boot, main `d3bc9b5a`, stopped at admission. Query 08
+returned `00 80 36`: valid flag, X resolution zero, Y 54 units/mm. Queried bounds
+were X 1266..5678 and Y 1162..4694. Relative recovery and tap-off succeeded;
+this is not a palm/scroll pass. The owner measured the T14 Gen 1 AMD touchpad's
+visible surface three times, each **102 x 70 mm**.
+
+The owner rejected square-unit inference and accepted a narrow calibrated
+profile. Its authored X resolution is **45 units/mm**: the 4412-unit usable
+span becomes 98.04 mm, leaving about 1.98 mm per side within the measured width.
+Firmware Y **54 units/mm** gives 65.41 mm of usable height, about 2.30 mm per
+side within the measured 70 mm. The border allowance is inferred, not a measured
+sensor edge, and awaits the native edge-to-edge slide. Raw query responses are
+retained; diagnostics label effective `45,54` as owner-measured calibration.
+
+Match this complete non-serial query fingerprint; query 01 excludes its live
+mode byte. Any mismatch retains the existing queried-geometry/fallback rules,
+so a zero-X pad without this profile stays relative. No square-unit guessing.
+
+| Query | Response |
+| --- | --- |
+| 00 identity | `20 47 1a` |
+| 01 board/more-query flags | `37 8f` (last byte ignored) |
+| 02 capabilities | `f0 14 a3` |
+| 03 model | `01 e2 a1` |
+| 08 raw resolution | `00 80 36` |
+| 09 extended capabilities | `94 03 00` |
+| 0a firmware | `3c 9c fd` |
+| 0c continued capabilities | `12 e8 00` |
+| 0d maximum | `b1 b7 92` |
+| 0f minimum | `27 59 24` |
+| 10 more capabilities | `50 00 00` |
+
+Query 02 advertises the pass-through port; query 10 does not advertise extended
+buttons belonging to the stick. Diagnose those separately and report cumulative
+guest packet/overflow/framing/reset counts during the existing 150-second run.
+The second query 01 response `37 8f 04` is intentional relative-mode readback
+after recovery writes gesture-disable, rather than a print defect. Guest decode,
+commands and button routing are unchanged until a re-run establishes a need.
+
+- [x] Record owner measurement, accepted calibration and opt-in correction.
+- [x] Owner re-run `b4b4f594`, 2026-10-13: calibrated absolute admission; observed
+  X 1266..5678, Y 1162..4686; palm rejection reported "solid"; scroll and
+  TrackPoint pass-through work, guest packets 2..384, no overflows/malformed
+  packets and zero transport resets. The owner also booted Synaptics-only and
+  the standard entry. The eight-unit Y endpoint difference does not justify
+  changing queried bounds or the authored calibration.
+- [x] Qualify the owner-requested typing, close-finger scroll and trampoline
+  corrections: owner run `fef995a7`, 2026-10-13, recorded below.
+- [ ] Resolve default activation before milestone close-out; current activation
+  stays opt-in. The original accepted contract enables the qualified profile
+  after the complete pass; later follow-up records retain a separate owner gate.
+
+### Native interaction corrections — owner requirements 2026-10-13
+
+The owner requests a tunable 50..100 ms typing gate, initially 75 ms, applying
+only to contacts begun during typing; an already established finger must not
+freeze. Scroll requires nearby fingers and uses both positions. A physical
+clickpad press always prevents scrolling; with two contacts, the moving finger
+drives the drag. Keep TrackPoint delivery and the qualified palm/edge/loss rules.
+
+Inspection found two current suppression mechanisms: a global typing window
+freezes existing contacts and resets their baselines on every typing timestamp;
+`typing_quarantine` then rejects a newly arriving/count-changed contact until
+lift, even after 500 ms. Physical nonmodifier press/repeat rearms the timestamp;
+release, including Enter release, does not. This explains how the filter can
+reject for much longer than 500 ms, but does not prove the exact launch episode.
+
+The captured query 0c `12 e8 00` has image-sensor bit 11 set and advanced-gesture
+bit 19 clear. Pinned Linux v6.17, commit
+`e5f0a698b34ed76002dc5cff3804a61c80233a7a`, enables AGM for either capability.
+For this image sensor it decodes a second position/pressure from W2 gesture
+packets and a contact-count packet. Activation uses the sliced model selector
+03 followed by sample-rate parameter c8 after ordinary absolute-W setup. The
+initial conclusion that this worked without EW bit 2 was incorrect; the
+source correction and native failure are recorded below. Guest four-byte
+negotiation remains separate. Evidence:
+[mode/packet handling](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
+and [capability definitions](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.h).
+Independently implement protocol facts; do not incorporate Linux GPL code.
+
+All three defaults are **accepted 2026-10-13 and explicitly revisitable**.
+The distances, freshness and quiet interval are authored tuning, not permanent
+hardware or architectural constants:
+
+1. **Close-finger threshold.** Enter scrolling at at most 25 mm centre-to-centre
+   physical distance, leave at 30 mm; keep both authored tunables. Use calibrated
+   X/Y scaling and the pair's centroid displacement, with existing direction,
+   dead zone and detent scale. This hysteresis avoids mode chatter. Separated
+   fingers do not produce wheel events.
+2. **Paired contact freshness and moving-finger drag.** Admit two-position input
+   only from a queried image-sensor AGM layout, with both observations no older
+   than 50 ms and consistent contact count/valid coordinates. Associate the two
+   positions with the prior pair by minimum total physical displacement; reset
+   baselines on ambiguity, contact loss/count change or stale/missing data.
+   While physically pressed, always emit zero scroll; choose the larger physical
+   per-sample displacement for the drag, retaining the previous choice on ties.
+   Skip uncertain pair motion while still delivering physical switches, rather
+   than inventing a second position. Basic-W-only pads keep the owner's minimum:
+   pressed two-contact input drags from the available position, never scrolls;
+   no claim of distance-qualified scrolling or second-finger tracking there.
+   Failed AGM activation on an advertising device recovers relative input.
+3. **Typing-gated contact lifetime.** Check typing at each newly identified
+   contact's onset; typing never suspends or clears a previously admitted
+   contact, including when a finger is added. Count/role changes retain their
+   separate motion-baseline reset without a typing quiet wait. A gated contact retries after 75 ms without
+   a nonmodifier press/repeat, establishing a fresh baseline; it does not require
+   lift. Until admitted, genuine continued typing can extend that quiet interval.
+   Once admitted it remains unaffected by subsequent typing. Palm/edge/loss
+   quarantine retains its separate rules. Keep 75 ms authored/build-tunable in
+   the owner's 50..100 ms range, with no new runtime authority.
+
+Interaction correction is implemented on #773: query-gated image-sensor AGM,
+receipt-timed second observations, bounded matching, clickpad drag, centroid
+scroll and per-contact typing retry. Tuning uses the authored Kconfig settings
+TOUCHPAD_TYPING_MS, TOUCHPAD_PAIR_FRESH_MS and TOUCHPAD_SCROLL_ENTER_MM /
+TOUCHPAD_SCROLL_LEAVE_MM. No raw contact API, runtime setter or new authority.
+No secondary width is reported by AGM; keep existing available palm hints,
+edge policy and until-lift loss quarantine, rather than inventing width.
+
+- [x] Implement the accepted interaction correction and record tuning.
+- [x] Owner/luna short native re-run `fef995a7`, 2026-10-13: mode c5/EW on,
+  arriving secondary packets, usable/separated pairs and trampoline drag; owner
+  reports "trackpad feels great now". Earlier calibrated native runs established
+  palms/TrackPoint, and the preceding run established good typing/motion.
+  The diagnosis-off (`ps2.synaptics=1` only) repeat is optional, not performed
+  in this latest run and not claimed. Diagnostics are observational and gated;
+  source inspection and options-off QEMU checks establish that boundary.
+  Default activation remains a separate unresolved closure step.
+
+### Missing secondary packets — native failure, 2026-10-13
+
+Owner run of `1a07dcf4`: typing and movement feel good, but no scroll or
+trampoline drag. All AGM counters remain zero; the filter withheld every pair
+because an acknowledged AGM command was treated as proof of secondary data.
+Log stays on horse, `~/shared/batch-2026-10-09/caelum-4.log`, from line 19903.
+
+Pinned Linux v6.17's `synaptics_init_ps2` sets mode bit 2 for firmware major
+at least four, then `synaptics_set_mode` requests AGM with selector 03 / F3 C8.
+At the existing high rate that gives **c5**, rather than our **c1**. Rev. B
+sections 3.2.9 and 4.3 identify bit 2 as EW when W is set and require it for
+secondary packets. The decoder matches the referenced half-resolution format;
+the source evidence identifies a missing format gate, not a decoder failure.
+Linux's [sliced command helper](https://github.com/torvalds/linux/blob/v6.17/drivers/input/serio/libps2.c#L420-L448)
+also prefixes E6 before four E8 argument pairs. The guide allows an inert
+delimiter; our preceding EB already breaks the command run, so omission of E6
+is not independently proved to have caused this native failure. The helper
+now uses the explicit delimiter consistently. No Linux implementation is copied.
+
+Query 0c `12e800` also advertises InterTouch. Linux lists LEN2068 (T14 Gen 1)
+for an SMBus attempt when configured, but falls back to PS/2 if setup fails.
+The [checked-in Fedora 6.19.10 inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt)
+from 2026-10-02 actually names `SynPS/2 Synaptics TouchPad`. It does not prove
+today's binding or secondary delivery, but there is no evidence of SMBus-only
+operation or need to build RMI4 here.
+
+**Owner-requested recovery, implemented:** missing/stale secondary observations
+immediately retain basic-W count-based scroll while unpressed; pressed contacts
+move from the reported primary position and never scroll. This is independent
+of whether AGM was requested or ever delivered. Paired/basic-W transitions
+reset motion/scroll baselines and fractions, retaining known admission and
+typing/palm/edge lifetimes. No stale second position feeds motion. The missing
+secondary finger is not treated as lifted merely because its position is absent.
+Diagnostics distinguish `AGM-requested` from observed counters and count
+`basic-W-scroll`. Proximity, centroid and moving-secondary drag are unavailable
+in fallback; no secondary position is invented. The owner-approved typing
+rule is unchanged.
+
+**Correction accepted 2026-10-13, implemented:** enable bit 2 only for the queried
+image-sensor AGM path, using c5 with the existing bounded secondary decoder and
+immediate basic-W fallback. This explicitly supersedes the earlier accepted
+"EW off" / "without EW" note: Rev. B sections 3.2.9 and 4.3 require EW for
+secondary packets, and pinned Linux enables bit 2 on this firmware before AGM.
+The initial no-EW interpretation was wrong. Other basic-W devices retain c1;
+guest negotiation/decoding and the approved typing policy are unchanged. No
+SMBus driver is introduced. Default activation remains off. The owner confirmed
+native EW delivery and the interaction pass below.
+
+### Native EW/AGM qualification — 2026-10-13
+
+Owner run on the ThinkPad, #773 `fef995a7`: "trackpad feels great now".
+The owner reports the UDP log confirms mode `0xc5`, EW=1 and arriving AGM
+positions, increasing 324..629 across reported windows. One interval's
+usable/unusable/ambiguous/separated pairs are `125/2/0/34`; separated pairs and
+trampoline drag are active, and basic-W fallback is unused. This establishes
+real secondary delivery and pair processing, rather than only acknowledged
+activation. Log stays on horse at `~/shared/batch-2026-10-09/caelum-4.log`,
+from line 20193; no raw logs or serials are committed.
+
+Together with the earlier calibrated/palm/TrackPoint and typing/motion runs,
+this completes task 2's native check. A diagnosis-off repeat is optional and
+not claimed for this head. Merge #773 directly; it changes no dependency pins.
+Task 1's userland #214 and ports #99 are already merged. WIP-to-reference
+close-out follows #773 and resolution of default activation, not an unreviewed
+activation change in this qualification record.
 
 ## Qualification and tuning
 

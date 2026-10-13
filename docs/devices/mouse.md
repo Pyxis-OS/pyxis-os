@@ -95,20 +95,51 @@ Setup in [the arch decoder](../../arch/x86_64/ps2/synaptics.c) disables reportin
 checks identity/model/capabilities, reads advertised query pages, validates
 usable min/max coordinates and counts/mm, and checks mode readback plus a forced
 master packet before publishing the absolute format. Serial-number queries are
-never sent. Basic W leaves extended-W/AGM and four-byte guest negotiation off.
-No nominal panel dimensions or device identity substitutes for queried geometry.
-Missing geometry falls back to relative touch motion, with firmware tap-off
-when proven; the owner's geometry-only exception can retain legacy taps if that
+never sent. Basic W leaves extended-W off except on the queried image-sensor
+path; four-byte guest negotiation remains off. A queried
+image-sensor capability additionally requests AGM with the sliced model selector
+03 and sample-rate parameter c8, after setting mode c5 (absolute/high-rate/W/EW).
+With W set, mode bit 2 is EW and admits the secondary packet format; the owner
+accepted this correction on 2026-10-13, superseding the earlier EW-off choice.
+Non-image-sensor basic W retains c1. Sliced commands start with the E6 delimiter,
+then four E8 resolution pairs. An acknowledged request is not proof of secondary
+packet delivery. W2 AGM position
+and count packets update private decoder state, never physical switches or lift.
+Fresh second-contact data is attached to the next master snapshot; failed
+advertised AGM activation recovers proven relative mode.
+Geometry is queried, except for one owner-measured T14 Gen 1 AMD calibration
+matched to the complete non-serial query fingerprint and raw bounds/resolution.
+The owner measured 102x70 mm three times: X45 implies 98.04 mm usable width,
+and queried Y54 implies 65.41 mm height. The roughly 2 mm borders are an authored
+allowance pending native observed-extents qualification. Diagnostics retain raw
+resolution `0,54`, report effective `45,54` and label the calibration source.
+Query 01's live mode byte is excluded from matching. There is no square-unit
+guessing or generic geometry default; see the
+[accepted calibration](../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13).
+Missing geometry without this match falls back to relative touch motion, with
+firmware tap-off when proven; the owner's geometry-only exception can retain legacy taps if that
 cannot be established. Such fallback does not qualify palm rejection, two-finger
 scrolling or touch/TrackPoint separation. Other unsupported layouts or failed
 mode negotiation recover only a proven relative format with tap-off; failure
 leaves auxiliary input unavailable without affecting keyboard setup.
 
 W hints distinguish one, two and three-or-more fingers only where advertised.
-One-finger width is qualified by the width capability. Coordinates remain device
-counts. The [kernel filter](../../kernel/input/touchpad.c) owns contact admission
-and converts one-finger displacement to pointer pixels, and two stable fingers
-to horizontal/vertical scroll through the common touchpad direction setting.
+One-finger width is qualified by the width capability. AGM second position and
+pressure are doubled from half-resolution, with no invented second-finger width.
+Coordinates remain device counts. The [kernel filter](../../kernel/input/touchpad.c) owns contact admission
+and converts one-finger displacement to pointer pixels. Image-sensor paired
+observations must both be within 50 ms of receipt; absolute bytes carry IRQ
+receipt timestamps, so a backlog cannot appear fresh at decode time. Associate
+positions by minimum total physical displacement; ambiguous pair identity
+clears motion baselines while physical switches continue. Missing or stale
+secondary observations immediately use basic-W count/primary-position scrolling
+instead of withholding motion. Switching between paired and basic-W processing
+clears motion/scroll baselines and fractions, preserving contact admission. Stable
+nearby admitted pairs scroll from centroid displacement through the common
+touchpad direction setting: enter at <=25 mm separation, leave at >=30 mm.
+Basic-W fallback cannot measure finger separation or use the centroid/moving
+secondary finger. Its two-contact hint scrolls while unpressed and moves the
+reported primary while pressed. No runtime protocol commands are needed.
 Three-or-more, ambiguous, invalid or unqualified extended contacts produce no
 motion. There is no inertia, tapping, tap drag or gesture synthesis.
 
@@ -117,19 +148,43 @@ Initial tuning is Z-on 30/Z-off 25, strong palm at qualified W >=12 or Z >=220,
 6 pointer pixels/mm, a 0.5 mm scroll dead zone and 8 mm/detent. These are authored
 starting values, not universal pressure/width scales; native contact evidence
 must qualify and tune them. Strong palms remain rejected until a valid lift.
-Typing from either physical keyboard suppresses touch motion and scrolling
-during nonmodifier press/repeat and for 500 ms afterwards. A contact begun or
-count-changed during suppression requires lift; an existing contact resumes with
-a fresh baseline after the quiet interval. Lift, count change, rejection and
-loss clear motion/scroll fractions; transport/queue loss requires confirmed lift.
+Typing from either physical keyboard gates only newly identified contacts that
+begin within the quiet interval after a nonmodifier press/repeat. A gated contact
+retries after 75 ms quiet without requiring lift, with a fresh baseline; an
+already admitted contact remains usable during subsequent typing, including
+when another finger arrives. Key release does not rearm typing. Count/role
+changes still reset motion baselines for safety while preserving admission.
+Lift, count change, rejection and loss clear motion/scroll fractions;
+transport/queue loss still requires confirmed lift.
+
+These settings are accepted-and-revisitable authored Kconfig tunables:
+TOUCHPAD_TYPING_MS (75, range 50..100), TOUCHPAD_PAIR_FRESH_MS (50),
+TOUCHPAD_SCROLL_ENTER_MM (25), TOUCHPAD_SCROLL_LEAVE_MM (30). Entry must be below
+leave distance. No runtime setter or new authority is added.
 
 Physical switches bypass contact rejection. A single-switch clickpad press maps
-to primary click, with no zones or finger-count synthesis. Advertised guest
+to primary click, with no zones or finger-count synthesis. While it is physically
+pressed, scrolling is always zero. With a fresh pair, the larger physical
+per-sample displacement drives the pointer (previous choice on ties), permitting
+one finger to hold the click and the other to drag. Without AGM, the minimum is
+a two-contact drag from the available primary position, never scrolling while
+pressed. Advertised guest
 motion and TrackPoint L/M/R snapshots use a separate mouse-class source with
 retained holds. A guest source exists only after an actual packet/switch snapshot;
 initial holds are quarantined until release. The forced boot master snapshot is
 consumed once and is never replayed after loss. Unsupported physical-button
 layouts recover to relative input rather than silently discard switches.
+
+Diagnosis reports pass-through capability separately from extended stick-button
+capability: the latter can be absent even when a TrackPoint uses the guest port.
+Five-second `synaptics-transport:` lines report cumulative decoded touch/guest
+packets, guest overflows, malformed headers, unsupported packets and reset
+packets and AGM position/count/unsupported counters; reporting stops after 150
+seconds. Contact summaries also count usable/unusable/ambiguous/separated pairs and
+physical drag and basic-W scroll samples, and print effective tuning values. Unusable pairs include
+missing/stale data, invalid pressure/coordinates and inconsistent multi-contact
+lift hints; none of those retires a known contact as a new typing-gated finger. These are observations, not guest
+initialization or proof that every physical button has been exercised.
 
 Malformed absolute framing, raw queue loss and controller errors reset both
 logical sources, retaining the existing OR/lock-revocation/held-click rules.

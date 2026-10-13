@@ -675,14 +675,18 @@ in local `build/synaptics-baseline/`, `build/synaptics-after/` and
 
 Owner decisions 1/2 accepted and 3 changed/accepted 2026-10-11 on #739. The
 geometry exception preserves relative touch motion; it does not qualify palms
-or two-finger scrolling. Code uses queried bounds/resolution only, with no
-invented calibrated profile. No native hardware has been run for this task.
+or two-finger scrolling. Code uses queried bounds/resolution or the accepted
+narrow owner-measured T14 profile. The first native boot recovered to relative
+mode; the contact pass remains pending. See the
+[accepted calibration](../../../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13).
 QEMU cannot provide positive absolute-W/contact/TrackPoint evidence.
 
 The independent arch implementation follows the
 [manufacturer Rev. B guide](https://studylib.net/doc/18112502/synaptics-ps-2-touchpad-interfacing-guide)
 §§3.2/4.2–4.4/5.1.5. Mode bit 2 means DisGest in relative W=0 and EW in W=1;
-absolute mode `0xc1` does not enable EW or four-byte guest packets. Reporting
+basic-W mode c1 keeps EW off; queried image sensors use c5/EW plus the separate
+AGM request with sliced selector 03 and f3/c8. Four-byte guest mode stays off;
+W2 position/count observations never publish switch or lift snapshots. Reporting
 stays disabled for mode readback and the §4.1 `EB` master-packet proof. The
 firmware extension/query/button facts are checked against
 [Linux v6.17 synaptics.c](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
@@ -692,63 +696,272 @@ query and 8.1/8.2 omitted extended-button snapshots are narrow protocol facts,
 not a guessed ThinkPad identity. Unhandled button layouts recover to relative
 instead of silently losing switches.
 
-Luna stages the owner-run image; do not stage or boot the laptop from this task.
-Build #739's published head with the existing compiler container:
+Luna stages the owner-run image; alpha does not stage or boot the laptop.
+Build the published #773 interaction head with the existing compiler:
 
 ```sh
-make -j16 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
+make -j8 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP=1 \
   DISPLAY_FLIP_METRICS=1 DISPLAY_TIMING=off DISPLAY_CURSOR_PROBE=1 \
   POINTER_SYNTHETIC=0 USB_HID_DESCRIBE=0
 ```
 
-Duplicate the known flip-on PXE entry as **Synaptics absolute qualification**;
-keep its existing boot/initrd paths and options, then append
-`ps2.synaptics=1 ps2.synaptics.diagnose=1`. There is no new Make flag for these
-boot-only options. Keep a relative control entry with `ps2.synaptics=0` and no
-Synaptics diagnosis. Do not run `pointer.synthetic=schedule` during contact
-testing. On AC, built-in panel and normal Development terminal, the owner boots
-the opt-in entry and follows the named windows from the first
-`synaptics-contact: window=settle` line. If no qualified basic-W summary appears,
-record the query/fallback result; relative recovery is not a palm/scroll pass.
+Keep the known PXE paths/options and append
+`ps2.synaptics=1 ps2.synaptics.diagnose=1`; remove synthetic motion. No new
+Make flag is needed. Retain the relative control entry and a diagnosis-off
+`ps2.synaptics=1` entry. The short owner sheet is
+`/shared/present/batch2/pointer-task2-native/RUNSHEET.md`.
 
-| Elapsed, s | Window | Owner actions |
-| --- | --- | --- |
-| 0–10 | settle | Lift contacts and leave controls idle. |
-| 10–30 | normal-finger | Move centrally on both axes/diagonally; lift/reapply; confirm taps do not click. |
-| 30–50 | edge-entry | Start at each edge, move parallel, then deliberately inward; check exclusion and entry without a jump. |
-| 50–70 | resting-palms | Rest/move a palm, then reduce width/pressure without lifting; check rejection persists until full lift. |
-| 70–90 | typing | Type/repeat with an existing contact; add a contact while typing; check quiet-interval rebaseline versus required lift. |
-| 90–110 | finger-transitions-physical-drag | Add/remove second/third fingers, then hold/release a physical press during a drag; check fresh baselines and primary click. |
-| 110–130 | TrackPoint-with-palm | Rest a palm while moving the stick and using each physical L/M/R button; check touch rejection does not affect them. |
-| 130–150 | two-finger-scroll | Stable vertical/horizontal/diagonal strokes, small strokes, reversals and lifts; check natural direction and no residual scroll. |
+1. Confirm effective X45/Y54, calibrated absolute admission, mode c5/EW on and
+   image-sensor AGM-requested=1; briefly slide edge-to-edge and use the TrackPoint.
+2. Keep an admitted finger moving during typing; land a new contact during
+   typing, stop and retry without lift. Check immediate post-mousetest response
+   and Enter repeat versus release.
+3. Move close pairs vertically/horizontally/diagonally, one finger at a time;
+   separate across the pad and rejoin. Expect centroid scroll only within the
+   accepted hysteresis; observe AGM position and usable-pair counters.
+   If secondary positions are absent/stale, basic-W-scroll must increase and
+   two-contact scrolling must still work from the reported primary position.
+   Report fallback distinctly: separation and centroid behavior are unavailable.
+4. Hold physical click with one finger and drag with the other, swap roles,
+   release and lift. Expect moving-finger pointer motion, zero scroll while
+   pressed, no jump/stuck switch.
+   With unavailable secondary positions, reported-primary movement is the
+   minimum; confirm zero wheel while pressed and report which finger moves it.
+5. Recheck resting palms, typing with palms, TrackPoint L/M/R, and repeat core
+   interactions with diagnosis omitted. Record any unchecked item.
 
-After `done`, check modifier-only input, physical clicks during palm/typing
-rejection, independent held switches, local selection and mux scrolling, and
-fresh-click lock/unlock/relock in Quake. Repeat mouse/touchpad direction checks
-under separately authored natural/traditional machine settings (next boot),
-then repeat core finger/palm/typing/drag/stick/scroll checks with diagnosis off.
-The owner's full native pass precedes the accepted default-on change in this
-same task. Preserve a relative-mode control boot if geometry is unavailable.
-
-Initial authored tuning is documented in [mouse input](../../../devices/mouse.md#synaptics-opt-in-absolute-input).
-Five-second summaries contain valid Z/W distributions, observed usable X/Y,
-finger/rejection counts and packet gaps, with seven named twenty-second windows
-after ten seconds settle. `transport-resets` includes coordinator queue overflow;
-baseline-only samples count neither accepted nor rejected. Gaps are delivery
-spacing, **not filter CPU time**. Existing presenter/probe counters measure
-aggregate elapsed compose/copy cost including preemption. No typed text,
-key identities or serial-number queries/logs are used; raw contact packets
-are not dumped. The diagnostic schedule stops at 150 seconds.
-
-Keep the masked UDP log and short owner observations at
-`/shared/present/batch2/pointer739/`. Useful extraction:
+Diagnostics start during boot, not program launch; old named windows remain
+labels, and summaries stop at 150 seconds. Record actual action order rather
+than assuming it matches those windows. Contact summaries report Z/W/observed
+X/Y, rejection and usable/unusable/ambiguous/separated pair counts, plus drag
+samples and effective tuning. Transport counters are cumulative touch/guest
+and AGM position/count/unsupported observations. Packet gaps are delivery
+spacing, not filter CPU cost. No raw contacts, typed text, key identities or
+serial queries are logged. Retain masked UDP logs and observations under
+`/shared/present/batch2/pointer-task2-native/`; useful extraction:
 
 ```sh
-grep -E 'synaptics:|synaptics-contact:|mouse:|display-cursor-probe:|display-flip-metrics:' masked.log
+grep -E 'synaptics:|synaptics-contact:|synaptics-transport:|mouse:' masked.log
 ```
 
-Record image hashes, head/pins, command line, actual window actions and any
-fallback. For a later hands-free pipeline A/B, use the baseline `df7ec8ab` and
-#739 kernels with the same matching initrd, `POINTER_SYNTHETIC=1
-DISPLAY_CURSOR_PROBE=1` and `pointer.synthetic=schedule`; repeat interleaved
-boots. This bypasses contact filtering and cannot replace the hands-on pass.
+The owner decides qualification/default-on separately after the native pass.
+
+## T14 calibrated admission correction — 2026-10-13
+
+Owner native baseline: main `d3bc9b5a`, T14 Gen 1 AMD, explicit
+`ps2.synaptics=1 ps2.synaptics.diagnose=1`. The session stopped at step 1: valid
+resolution query `00 80 36` supplied X0/Y54, making geometry unavailable, and
+relative recovery with tap-off succeeded. This is a failed absolute admission,
+not a palm/scroll result. Source log: horse's
+`~/shared/batch-2026-10-09/caelum-4.log`, starting at line 19128; raw logs are not
+committed. The owner measured visible width/height three times: 102x70 mm.
+The [accepted profile](../../../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13)
+records the complete non-serial fingerprint, X45/Y54 scaling and inferred border
+allowance. Profile matching, calibration ordering and unchanged guest decoding
+were source-reviewed; positive native admission/contact evidence is pending.
+
+Local comparison: current main `0e95af3a82afc2ea8f009c046fa96cb6c08ba1bc`
+versus implementation `542bae7197cd213ae68a53f92c6ee3e8b182fe0e` (compiled from
+its identical implementation diff before commit). Both use successful main CI
+run 2189's SDK, userland and ports bundles; the verifier admits their unchanged
+inputs. Dependency pins: userland `c472de7d`, ports `f93becb9`, fs `414be0ac`,
+lwIP `a1aadb91`. Builder: `pyxis-llvm23.1.3-4c23a20`.
+
+```sh
+make -j8 image PREBUILT="sdk userspace ports" LOG_LEVEL=info
+```
+
+The ordinary source image build passed in the existing container (SELinux
+labeling disabled for the workspace mount; pure-Python host kconfiglib/genconfig
+made available to its Python). One pre-existing lwIP shadow warning remains;
+changed sources introduce no warning. Main artifact ELF SHA256:
+`699b022141c18292f862148a8673bd5eccc4349b332810b4f72155a9b59bc07b`.
+Compiled candidate ELF SHA256:
+`6e544c3bef573afdb2fb50ff88b2c3cd115fc7bb7d9ce5d0ce82e3ab9aa674a7`.
+Both retained boots use the same main initrd SHA256:
+`d50e05d5c89c96d246ff4a8002c5baa0f5c215cfa50b80709eeb43674739ce81`.
+These are local qualification artifacts, not hashes of luna's later build.
+
+Interactive QEMU 10.2.2, Q35/nested KVM, host CPU, four vCPUs/512 MiB, fresh OVMF
+variables, standard VGA/software cursor at 1280x800, modern VirtIO block boot
+volume and RNG; no NIC/USB. Both opt-in boots use the same cmdline, firmware,
+initrd and boot disk contents except the kernel. Neither recognizes the emulated
+PS/2 device: query 00 is `00 00 64`, and reset recovers ID3/four-byte wheel mode.
+Read-only GDB inspection confirms both options true, available relative input,
+no absolute/guest profile and zero input-loss/overflow counts; candidate
+calibration and diagnostic scheduler are inactive. Monitor motion `50,-10`
+moves the pointer from `640,400` to `690,390`; left press/release changes held
+buttons 1/0. A wheel report was injected on the recovered four-byte path. PS/2
+keyboard runs `echo ok` in both shells. No performance measurement is claimed.
+An additional candidate boot omitting both options reaches the shell; GDB
+confirms both false, relative four-byte mode and no diagnostic scheduling, and
+serial contains no Synaptics lines. All QEMU/GDB jobs are stopped.
+
+QEMU cannot reproduce this fingerprint, validate the physical border allowance,
+exercise actual basic-W palms/scroll or prove guest delivery. The owner/luna
+re-run must show raw/effective geometry, edge-to-edge extents, actual TrackPoint
+packet increments and switches, then the contact phases above. The shared short
+sheet is `/shared/present/batch2/pointer-task2-native/RUNSHEET.md`. No default
+activation, guest commands, guest decode changes or dependency repoints are made.
+
+### Owner calibrated re-run, 2026-10-13
+
+Owner on the ThinkPad, correction `b4b4f594`: absolute admission; edge-to-edge
+observed X 1266..5678 and Y 1162..4686; palm rejection "solid"; scroll works;
+TrackPoint guest packets increase 2..384 during its window, no overflows or
+malformed packets, zero transport resets. Owner also booted Synaptics-only and
+the standard entry. Log stays on horse at
+`~/shared/batch-2026-10-09/caelum-4.log`, from line 19278. No raw log committed.
+
+Qualification remains open: the owner reported overlong typing suppression and
+basic-W's one-position limits for separated-finger scroll and trampoline drag.
+The three follow-up tunables were accepted and explicitly revisitable on
+2026-10-13; the implementation and remaining native gate are recorded below.
+
+### AGM interaction correction checks — 2026-10-13
+
+Implementation `556f50e7` (final code built before commit) enables
+queried image-sensor AGM, timestamps absolute bytes at receipt, matches fresh
+paired positions, uses physical-click drag/centroid scroll and per-contact
+quiet retry. Source review confirms the old until-lift typing latch and global
+baseline reset on every key timestamp are removed; release never rearmed it.
+The owner-accepted Kconfig defaults are 75 ms quiet, 50 ms pair freshness,
+25/30 mm scroll entry/leave, all revisitable. Count/role changes still reset
+motion baselines while preserving contact admission. Available palm hints and
+until-lift transport-loss quarantine remain; AGM does not supply secondary width.
+
+Existing builder `pyxis-llvm23.1.3-4c23a20`, `make -j8 image
+PREBUILT="sdk userspace ports" LOG_LEVEL=info`, same verified main-run-2189
+bundles/pins/initrd and QEMU setup as the calibration comparison above.
+Local image build passes without warnings from changed sources. Interactive
+check ELF SHA256:
+`9b32d254e3ecd71f2af6ae4e724e2a0f4040f030915c2eac5b4c7694ae77b5e6`.
+The final unsupported-W2 guard retains invalid-contact baseline reset without
+applying a fabricated button snapshot. Final rebuilt ELF SHA256:
+`cbe29f51c0ce5c657c7275d10f6e25546eff9a9fefa53375eaf165cd4d2d8f45`.
+
+Interactive opt-in QEMU/GDB repeats non-Synaptics recovery: both options true,
+four-byte relative input available, absolute/guest/second-contact flags false,
+AGM counters and diagnostic scheduler inactive. Motion `50,-10` again yields
+`690,390` from `640,400`; physical left transitions 1/0, wheel injection and
+PS/2 `echo ok` complete with zero loss/overflow. An options-off boot reaches the
+shell, both options and second-contact flag false, four-byte input and no
+Synaptics output. No new test framework or injected contact self-tests.
+All QEMU/GDB jobs are stopped.
+
+QEMU cannot exercise this Synaptics AGM stream, physical proximity/identity,
+typing/pressure timing, palm behavior or trampoline motion. Those remain for
+the owner's short native re-run; no positive AGM/contact result or performance
+improvement is claimed from QEMU. Default activation remains off.
+
+### Missing AGM recovery — 2026-10-13
+
+Owner native run `1a07dcf4`, horse log from line 19903: typing and movement feel
+right, but two-finger scroll and trampoline fail. All three AGM counters remain
+zero throughout; pair rejection prevents basic-W scrolling despite two-contact
+master reports. This is a native failure, not a successful AGM qualification.
+
+Pinned Linux v6.17 (`e5f0a698b34ed76002dc5cff3804a61c80233a7a`):
+[synaptics_init_ps2 / synaptics_set_mode](https://github.com/torvalds/linux/blob/e5f0a698b34ed76002dc5cff3804a61c80233a7a/drivers/input/mouse/synaptics.c)
+set bit 2 on firmware major >=4, then send model selector 03 and F3 C8 for AGM.
+At our rate this means c5, whereas the failing build used c1. Vendor Rev. B
+sections 3.2.9 / 4.3 require EW bit 2 for the decoded secondary format.
+The prior "AGM without EW" conclusion was incorrect. The decoder's type/X/Y/Z
+extraction matches the pinned reference. This is a source-supported explanation
+for absent W2 packets; corrected native delivery is not yet measured.
+
+Linux's [sliced helper](https://github.com/torvalds/linux/blob/e5f0a698b34ed76002dc5cff3804a61c80233a7a/drivers/input/serio/libps2.c#L420-L448)
+starts with E6; our helper now does too. The guide allows other inert delimiters,
+and our preceding EB already delimited AGM setup, so missing E6 is not proved
+to be the failure's cause. No reference implementation is copied.
+
+InterTouch bit 14 is set in query 0c `12e800`; Linux includes T14 LEN2068 in
+its configured SMBus-attempt list, with PS/2 fallback on unsuccessful setup.
+The repository's Fedora 6.19.10 inventory from 2026-10-02 identifies this pad
+as `SynPS/2 Synaptics TouchPad`. Today's binding/secondary Linux delivery was
+not measured; there is no evidence requiring an SMBus/RMI4 driver for this fix.
+
+Recovery implementation `3cc1daf6`: absent, invalid or stale secondary positions
+immediately use the basic-W count and primary position. Unpressed two-contact
+input scrolls; a physical press always prevents scroll and moves from that
+reported position. Paired/fallback transitions clear baselines and fractions;
+missing secondary positions preserve the known finger's admission/rejection
+lifetime instead of treating it as a new typing-gated contact on recovery.
+No stale secondary position contributes motion. The approved 75 ms typing
+behavior is unchanged. Fallback cannot qualify separation, centroid motion or
+selection of an unreported moving finger. `AGM-requested` labels command
+admission; observed AGM counters and `basic-W-scroll` identify actual behavior.
+
+Same builder, verified bundles/pins/initrd and QEMU configuration as above:
+`make -j8 image PREBUILT="sdk userspace ports" LOG_LEVEL=info` passes without
+changed-source warnings. Local checked ELF SHA256:
+`3456ce4f7c6c5c26afc290507f6ce5d296a06732f56270c3c22ed2ef9736d13c`.
+Interactive opt-in QEMU and read-only GDB confirm relative ID3/four-byte recovery,
+options true, no absolute/guest/second profile, motion 640,400 -> 690,390,
+left held/released 1/0, wheel injection, `echo ok`, zero input loss/overflow.
+Options-off reaches the shell, both options false, relative input available and
+no Synaptics output. QEMU/GDB stopped. Actual fallback scroll/drag and positive
+secondary data still require the native run; no simulated contact test added.
+
+The owner accepted the EW/c5 correction on 2026-10-13, explicitly superseding
+the earlier EW-off premise. The queried image-sensor path now sets bit 2 before
+mode readback/master verification and the AGM request. Other basic-W devices
+keep c1. Immediate basic-W fallback and approved typing recovery remain; no
+guest or SMBus changes. Default activation remains off. Positive secondary
+delivery and physical interaction still need the short native re-run.
+
+### Accepted EW correction checks — 2026-10-13
+
+Implementation `11372dfc` uses c5 only with queried image-sensor capability,
+with mode readback/master-format proof before AGM activation. The existing
+secondary decoder, immediate primary/count fallback and approved typing rule
+remain. Diagnosis explicitly reports EW=1 / AGM-requested=1; only received
+packet counters establish secondary delivery. No guest commands/decoding,
+dependency repoints or default activation change.
+
+The ordinary image build passes in the same llvm23.1.3-4c23a20 container and
+verified bundle setup (`make -j8 image PREBUILT="sdk userspace ports"
+LOG_LEVEL=info`), without changed-source warnings. Local checked ELF SHA256:
+`522e38f21aaf9c01707d29a2a06f391d050e982b26127b31419446d86295078c`;
+initrd remains `d50e05d5c89c96d246ff4a8002c5baa0f5c215cfa50b80709eeb43674739ce81`.
+Interactive QEMU 10.2.2 Q35/nested KVM, four CPUs/512 MiB, fresh OVMF, same
+VirtIO boot volume/RNG and no NIC/USB: query 00 again fails the Synaptics
+signature and safely recovers ordinary ID3/four-byte relative input. Read-only
+GDB confirms both options true, no absolute/guest/secondary profile, available
+input and zero loss/overflow. Motion 50,-10 moves 640,400 -> 690,390; left
+held/released is 1/0, a wheel event is delivered, and PS/2 `echo ok` completes.
+A separate options-off boot reaches the shell with both options false, relative
+input available, no diagnostic scheduling and no Synaptics serial output.
+All QEMU/GDB jobs are stopped. No injected contact test or new test framework.
+QEMU cannot prove c5 admission or actual secondary positions on this firmware.
+
+Luna should build the reported PR head with the existing native flags; no extra
+Synaptics Make flag. Keep info/UDP logging and append
+`ps2.synaptics=1 ps2.synaptics.diagnose=1`, removing synthetic pointer motion.
+The short sheet at `/shared/present/batch2/pointer-task2-native/RUNSHEET.md`
+checks c5/EW admission, received AGM positions, typing, two-contact scroll,
+physical-click drag and palm/TrackPoint regressions. If AGM remains silent,
+confirm functional basic-W recovery and report its limitations separately.
+The owner still decides complete native qualification and default-on.
+
+### Owner EW/AGM native qualification — 2026-10-13
+
+Owner re-run of #773 `fef995a7`: "trackpad feels great now". The owner reports
+mode=0xc5, EW=1 and actual secondary packets: cumulative AGM positions climb
+324..629 across reported windows; an interval's usable/unusable/ambiguous/
+separated pairs are 125/2/0/34. Separated pairs and trampoline drag are active;
+basic-W fallback is unused. This confirms the corrected PS/2 format gate
+without requiring an SMBus/RMI4 driver. Log remains on horse at
+`~/shared/batch-2026-10-09/caelum-4.log`, from line 20193. These are owner-run
+observations, not local QEMU measurements or independent raw-log analysis.
+
+Combined with b4b4f594's calibrated extents, solid palms and working TrackPoint,
+and 1a07dcf4's good typing/movement, the native interaction check is complete.
+The latest diagnosis-off/Synaptics-only repeat is optional and not performed
+or claimed; bounded diagnostics are observational, with source and QEMU
+options-off checks recorded above. No fallback use is claimed from this run;
+its availability remains implementation evidence.
+
+Default activation is unchanged and opt-in while its closure gate is resolved.
+No dependency PR remains: userland #214 and ports #99 merged with task 1.
+Merge #773, then the reference close-out after the activation outcome is settled.

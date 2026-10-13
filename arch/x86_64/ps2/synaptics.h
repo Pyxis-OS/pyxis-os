@@ -27,7 +27,10 @@ enum synaptics_decode_result {
 enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool activate,
                                                bool diagnose);
 const struct mouse_profile *synaptics_profile(void);
+void synaptics_diagnose(uint64_t now);
 void synaptics_reset_decoder(void);
-enum synaptics_decode_result synaptics_decode(uint8_t byte, struct mouse_event *event);
+/* Receipt time of this byte; a complete packet uses its final byte's time. */
+enum synaptics_decode_result synaptics_decode(uint8_t byte, uint64_t observed_at,
+                                             struct mouse_event *event);
 
 #endif

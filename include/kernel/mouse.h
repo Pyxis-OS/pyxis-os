@@ -16,12 +16,15 @@ enum mouse_event_kind {
 
 struct touchpad_sample {
   int32_t x, y;
+  int32_t second_x, second_y;
+  uint64_t observed_at, second_at;
   uint8_t pressure, width, fingers;
-  bool valid, width_valid;
+  uint8_t second_pressure;
+  bool valid, width_valid, second_valid;
 };
 
 struct mouse_profile {
-  bool absolute, has_guest;
+  bool absolute, has_guest, has_second;
   unsigned initial_touch_buttons;
   int32_t x_min, x_max, y_min, y_max;
   uint32_t x_resolution, y_resolution; /* Device counts per mm. */
@@ -41,6 +44,8 @@ struct mouse_event {
 
 bool mouse_available(void);
 const struct mouse_profile *mouse_profile(void);
+/* Bounded opt-in transport diagnostics, one BSP consumer. No device commands. */
+void mouse_diagnose(uint64_t now);
 
 /* One BSP consumer outside interrupt entry. Nonblocking and preserves IF.
  * RESET loses both logical sources on the shared transport. Contact rejection

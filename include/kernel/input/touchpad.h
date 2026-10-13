@@ -15,12 +15,14 @@ struct touchpad_motion {
 
 /* BSP, IF=0, retained state; no physical-button ownership. Geometry is copied
  * at initialization. Scroll deltas are device counts toward right/down;
- * movement is display pixels. reset discards caller scroll fractions only. */
+ * movement is display pixels. Buttons select drag policy but are never owned
+ * here. reset discards caller scroll fractions only. */
 void touchpad_init(const struct mouse_profile *profile);
 /* Transport loss preserves rejection latches and requires a confirmed lift. */
 void touchpad_reset(void);
 void touchpad_report(const struct touchpad_sample *sample,
-    uint64_t last_typing_ns, uint64_t now, struct touchpad_motion *motion);
+    unsigned buttons, uint64_t last_typing_ns, uint64_t now,
+    struct touchpad_motion *motion);
 void touchpad_service(uint64_t now);
 
 #endif
