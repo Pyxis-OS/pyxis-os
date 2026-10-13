@@ -32,7 +32,7 @@ a fatal compiler/library fault terminates the process. Task 4 keeps these polici
 **Owner requirement (2026-10-12), not an assigned design:** Clang must eventually
 invoke LLD itself (`clang hello.c -o hello`). Task 5 or a follow-up must provide
 that through declared launch grants, the
-[native command-execution core](native-command-execution.md) and the
+[native command-execution core](../userland/native-jobs.md) and the
 [nested execution groups direction](nested-execution-groups.md), never a wrapper.
 Task 4 retains its no-launcher profile; first completion still permits separately
 launching LLD. General multi-job execution and reusable embedded compilation
@@ -58,7 +58,8 @@ task 5 still needs its own separate assignment.
    [#217](https://git.internal/PyxisOS/pyxis-userland/pulls/217), Pyxis #718.
    Disposition of absent names and the 155/170 Support compile inventory are in
    [hosted-clang-libc](../development/experiments/hosted-clang-libc.md).
-4. [x] **Thread-gated compiler/linker integration — qualified 2026-10-12.** Threads
+4. [x] **Thread-gated compiler/linker integration — QEMU 2026-10-12,
+   native owner check 2026-10-13.** Threads
    gates 5–8 and the audited C++ adapter are merged. Build the real Clang/LLD closure with LLVM workers
    off, static TLS and real runtime primitives. **Owner check:** both target links
    complete; compile one default single-source `-c`, with diagnostics/failure exit
@@ -66,8 +67,16 @@ task 5 still needs its own separate assignment.
    [#7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7), userland
    [#242](https://git.internal/PyxisOS/pyxis-userland/pulls/242), integration
    [#763](https://git.internal/PyxisOS/pyxis-os/pulls/763);
-   [build and QEMU/GDB record](../development/experiments/hosted-clang-integration.md).
+   [build, QEMU/GDB and native record](../development/experiments/hosted-clang-integration.md).
    Production adopts the merged fork and its owner-published compiler image.
+
+   - [x] **Native owner check:** ThinkPad PXE build `8d8a1e39`, temporary bundle
+     uploaded via `xfer` into `home://clang-task4`. `hello.c -c` produced a
+     non-empty object; `bad.c` reported the expected-`;` diagnostic with caret
+     fix-it, exited 1 and left no object. No faults or panic; shell remained usable
+     ([owner evidence](https://git.internal/PyxisOS/pyxis-os/pulls/763#issuecomment-9557)).
+     Native compile time and peak memory were not measured; task 5 owns those.
+
 5. [ ] **Installed tools and first completion.** Pool-volume bundles delegate
    explicit resource/sysroot roots, scratch/output authority and launcher rights
    only where needed. Measure native image/span/stack/peak memory before settling
@@ -129,8 +138,8 @@ so no further image rebuild is needed. Integration adopts that pin, Containerfil
 revision check and workflow image tag together under the
 [single compiler/SDK source-pin contract](../development/llvm-toolchain.md#changing-the-pin).
 This is source adoption, not a new codegen/TLS ABI requirement. Ordinary CI
-consumes the published image without rebuilding LLVM. Remaining merge order:
-userland #242, then Pyxis #763 after exact-head CI. Task 5 still needs a go.
+consumes the published image without rebuilding LLVM. Userland #242 and Pyxis
+#763 are merged; the adopted head passed exact-head CI. Task 5 still needs a go.
 
 ## Resources and native limits
 

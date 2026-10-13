@@ -138,3 +138,25 @@ pure math additions introduce no new always-on libc work. Direct special-value
 math testing was not performed. Raw configuration, hashes, GDB/remote/serial logs
 remain in local `build/hosted-clang-task4-qualification/`; all owned VM/debugger
 and filesystem-daemon jobs are stopped.
+
+## Native owner check (2026-10-13)
+
+[Owner-reported evidence](https://git.internal/PyxisOS/pyxis-os/pulls/763#issuecomment-9557):
+ThinkPad T14 Gen 1 AMD, PXE build `8d8a1e39`, live Remote space, interactive
+`pyxis-remote` from horse. `xfer receive` SHA-256 verified the 119,685,120-byte
+temporary bundle archive into `home://clang-task4`; `tar xf` unpacked it there.
+This reused the qualified compiler/resources/sysroot above, without installation
+or a native virtio-fs export.
+
+```text
+clang.pxb -c hello.c -o hello.o
+clang.pxb -c bad.c -o bad.o
+```
+
+The first command completed silently with a non-empty `hello.o`. The second
+reported `bad.c:3:11: error: expected ';' after return statement`, with a caret
+and semicolon fix-it; the shell reported exit status 1 and no `bad.o` remained.
+No fault or panic occurred, and the shell kept working. Task 4's native owner
+check passed. Object header/hash, compile time and peak memory were not measured;
+performance/resource measurements, standalone LLD execution and installation
+remain task 5, which still needs a separate owner go.
