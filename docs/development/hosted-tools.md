@@ -1,13 +1,16 @@
-# Native Clang and standalone LLD
+# Native Clang and LLD
 
 The opt-in [payload producer](../../toolchain/README.md#native-hosted-payloads)
 builds Clang and LLD against a complete current SDK using the installed Pyxis
 compiler. LLVM workers stay off; the real SDK TLS and C++ runtime remain linked.
 SDK changes require fresh target objects, not a compiler-container rebuild.
 Each bundle contains its own resource/sysroot roots, notices and provenance.
-Neither receives a launcher. Driver-invoked linking is a separate task.
-The native first compile, standalone link and PXE run passed on the ThinkPad
-on 2026-10-13, including rejected inputs/outputs and matching object/PXE hashes.
+The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
+root. Clang's manifest requests optional `launcher/launch`; withholding it keeps
+compile-only available and linking refuses. LLD never receives a launcher.
+The first compile, standalone link and PXE run passed on the ThinkPad on
+2026-10-13. Driver-invoked linking is qualified in 1/4-CPU QEMU; its native
+run is pending. Both retain honest diagnostics and failure results.
 
 ## Pool and authority
 
@@ -28,7 +31,7 @@ return {
   spaces = {
     { name = "network", title = "Network", init = "boot://init", network = true },
     { name = "remote", title = "Toolchain", init = "boot://init-remote",
-      launch = false, remote_power = true,
+      launch = true, remote_power = true,
       roots = { toolchain = "read-only" }, start = "tmp" },
   },
 }
@@ -46,8 +49,10 @@ The consumer has read-only `toolchain://`, ordinary writable `tmp://` and
 inherited diagnostics. The manifest declares an 8 MiB guarded stack and
 `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`.
 `app://`, `clang_resources://` and `sysroot://` are delegated read-only from the
-selected bundle. Caller-selected roots remain available; this is not confinement
-of inherited roots. No raw disk authority or launcher is granted to either tool.
+selected bundle. Clang additionally receives read-only `linker://`; its optional
+launcher is supplied only when the space delegates launch. Caller-selected roots
+remain available; this is not confinement of inherited roots. Neither tool
+receives raw disk authority. Set `launch = false` for a compile-only consumer.
 
 ## Manual immutable publication
 
@@ -55,7 +60,8 @@ The producer writes `OUTPUT/hosted-SHA256/payload.tar` and its checksum. Verify
 the checksum on the host and upload the archive using existing `xfer receive`.
 For publication only, give the publisher `toolchain = "read-write"` and
 `launch = true` so a shell script can start tar/sync/mv. The tools' manifests
-still withhold the launcher. Consumer spaces remain read-only.
+declare only optional launch for Clang; LLD stays a leaf. Consumer volume roots
+remain read-only.
 
 Replace `REV` below with the producer's full `hosted-SHA256` directory name.
 Run these as a shell script: its first failed command stops publication.
@@ -96,18 +102,36 @@ toolchain://REV/payload/lld.pxb -flavor gnu --sysroot=sysroot:// -m elf_x86_64 -
 tmp://hello.pxe
 ```
 
+With the driver-profile revision and declared launch authority, the ordinary
+single-source command is:
+
+```text
+toolchain://REV/payload/clang.pxb tmp://hello.c -o tmp://hello.pxe
+tmp://hello.pxe
+```
+
+Clang runs cc1 in-process, then prepares its declared `linker://lld.pxb` through
+the shared bundle loader and contained native job core. It owns the subgroup's
+CONTROL until the real child result and subtree cleanup complete. Closing Clang
+on exit/fault stops its surviving job subtree; no wrapper, broker or executor
+supplies authority. LLD inherits diagnostics and explicitly selected content
+roots/cwd/environment, its own manifest runtime grants and 8 MiB stack, and no
+launcher. An uncertain admission is never retried. Multiple-source/external-cc1
+execution and unsupported statistics/timeouts are outside this profile.
+
 ## Qualified capacity
 
 The bundles retain the existing 128 MiB selected-image and 256 MiB mapped-span
-ceilings. Current artifacts and the native small-C qualification give:
+ceilings. Current driver-profile artifacts and the separately identified task5
+native baseline give:
 
 | Per tool | Clang | LLD |
 | --- | ---: | ---: |
-| Serialized image bytes | 90,347,866 | 55,743,570 |
-| Page-rounded image backing/span bytes | 90,939,392 | 56,352,768 |
+| Current serialized image bytes | 90,385,074 | 55,776,366 |
+| Current page-rounded image backing/span bytes | 90,976,256 | 56,389,632 |
 | Eager guarded stack | 8 MiB | 8 MiB |
-| Temporary image-capture backing bytes | 90,349,568 | 55,746,560 |
-| Native peak owned VM backing, reported decimal MB | 101.85 | 70.23 |
+| Current image-capture backing bytes | 90,386,432 | 55,779,328 |
+| Task5 native peak owned VM backing, historical decimal MB | 101.85 | 70.23 |
 | Provisional owned-data planning allowance | 128 MiB | 96 MiB |
 
 Planning allowances include headroom above the qualified peaks; they are tunable
@@ -125,3 +149,11 @@ C++ templates. Native wall proxies were about 4.29 s for Clang version,
 loading. [Loading/reuse debt](../technical-debt.md#hosted-tool-launch-loading)
 is deferred. Samples, probe exclusions, failure checks and native evidence are
 in the [task 5 record](experiments/hosted-clang-task5/README.md).
+
+The current driver [qualification](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13)
+measures 101,888,000/70,451,200 bytes per compiler/linker VM in QEMU, and an
+actual simultaneous VM+capture peak of 238,833,664 bytes including other guest
+processes. Cleanup returns each VM and capture to zero. Its native measurements
+are pending; this total excludes kernel/cache and is not a minimum-RAM claim.
+A failed ordinary link preserves pre-existing requested output and leaves no
+partial output; the driver cleans its owned temporary files.

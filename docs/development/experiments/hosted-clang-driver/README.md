@@ -1,6 +1,6 @@
-# Clang driver execution baseline
+# Clang driver execution qualification
 
-2026-10-13, before implementation. Proposal only; no fork/kernel/libc changes.
+Pre-code baseline, 2026-10-13. The following baseline precedes the driver changes.
 Fresh main `4a09711e5c6890588a4dfe3da12a1e4b32b01c14` contains merged #772.
 Userland `b38b0e09`, ports `c7e4bc35`, fs `414be0ac`, lwIP `a1aadb91`;
 published compiler/fork `pyxis-llvm23.1.3-4c23a20` / `4c23a208`.
@@ -158,3 +158,111 @@ The branch contains no merge commits beyond its main base. Earlier runtime
 evidence remains historical; the current rebuild/CI is reported on #789.
 Daybreak's independent source/exercised review found no confirmed serious issue;
 its bounded race/refill/escape coverage and limits are in that PR's review comment.
+
+## Qualified driver integration (2026-10-13)
+
+Fresh source/SDK `da89bcf5`, userland `19df7341` (rebased on merged libc
+#256), ports `7d698eeb` (merged jq), fs `414be0ac`, exact fork
+`e0801c2660613d130abc66edc52a33875ee2e1f1` and published
+`pyxis-llvm23.1.3-e0801c2`. Ordinary image/SDK, fresh workers-off Release X86
+Clang/LLD links and staging pass. No serial-only source adaptation. Existing
+platform warnings remain; no build error. Matching debugger ELFs compare every
+LOAD byte, extent, flag, entry and zero tail against the actual P1Fs.
+
+Revision `hosted-e0d776324e241b611495059eb7691d5901c35a0ba35b998bee2c93fd9dc0d7fc`;
+archive 293,416,960 bytes, SHA-256
+`a94062826a98b2f099f0839f078938396ad3857243cae6487ff98c8d0c901787`.
+All 6,487 imported files compare exactly; fsck/GPT pass. Clang image/span
+90,385,074/90,976,256 bytes, LLD 55,776,366/56,389,632; both 8 MiB stacks,
+existing 128/256 MiB image/span ceilings. Read-only toolchain pool, writable
+tmp, separate network space, Remote launch=true; no HOST/home or boot payload.
+
+### Runtime and ownership
+
+QEMU 10.2.2, Q35/nested KVM/host CPU, 2 GiB, UTC, fresh OVMF, VirtIO
+SCSI/net/RNG/read-only npfs block; 1 then 4 CPUs. Each 31-command machine
+session returns all expected typed results and FINAL exited0/complete drain.
+The plain relative command is `toolchain://REV/payload/clang.pxb hello.c -o hello.pxe`.
+Driver and separate link/run print `hello 5`, exit0; their PXEs match
+`acb72969…`, object `68ba3eeb…` (1,160 bytes). The reference object was generated
+and downloaded from this guest, rather than reused from an earlier revision.
+
+Syntax, genuine default undefined-symbol link, invalid linker option, read-only
+compile/link output, statistics and oversized child capture all exit1 with the
+correct diagnostic. Both invalid-option and default undefined-symbol links
+preserve the five-byte KEEP file, hash `c7cde802…`; final listings contain only
+fixtures and successful outputs, no failed requested files or owned temporaries.
+A fresh 4-CPU launch=false boot still compiles, refuses linking with exit1,
+preserves KEEP and leaves no partial file.
+
+Separate interactive GDB: successful close on 1/4 CPUs has actual EXITED/0,
+process+group complete, exact handle generations and zero members/launches/
+pending cleanup/children before close. On 4 CPUs, a new real LLD entry is
+identified by argv/process/CR3, not overlapping symbol addresses. Foreground
+Ctrl+C stops Clang; kernel table cleanup releases its sole CONTROL, stopping
+LLD. Actual child TERMINATED precedes subgroup completion (pending cleanup 4);
+NPFS retirement then completes the subgroup with all four counts zero. No
+injected calls, target writes, program delays or stale-pointer inspection.
+
+Initial `8c3b0fe` qualification exposed two genuine blockers: the bundle parser
+compared private child roots with parent lookup roots, and inherited driver
+cleanup deleted pre-existing requested output. Userland #251 separates private
+manifest validation from final selected-publication collision checks; fork
+`e0801c2` skips native requested-name cleanup while retaining owned TempFiles.
+Initial `bb12…` and intermediate `5f09…` payloads are historical, not current.
+
+### Ordinary wall proxies
+
+No debugger/probe/own builds during timing; host remains unisolated. Three serial
+samples after functional preparation, warm caches without forced eviction.
+Times include remote connection, image loading, command and cleanup/FINAL;
+host CPU time is the client, not compiler CPU time. Every timed command exits0.
+Old baseline/native task5 numbers are references, not matched current-SDK A/B.
+
+| Session seconds | 1 CPU ordered; median | 4 CPUs ordered; median |
+| --- | --- | --- |
+| Empty | .02 / .02 / .02; .02 | .02 / .02 / .01; .02 |
+| Clang version | 10.36 / 10.34 / 10.35; 10.35 | 10.41 / 10.47 / 10.36; 10.41 |
+| Compile-only | 10.55 / 10.58 / 10.57; 10.57 | 10.65 / 10.53 / 10.52; 10.53 |
+| Separate LLD | 8.15 / 8.10 / 8.09; 8.10 | 7.82 / 7.99 / 8.04; 7.99 |
+| Driver compile/link | 18.06 / 18.06 / 17.99; 18.06 | 18.36 / 18.24 / 18.06; 18.24 |
+
+### Separate memory probe and limits
+
+Authorized **unmerged** branch `probe/clang-driver-vm-peak`,
+`694160f160139b0f5fa9d4df05edad000ac2fc54`, base `b810b64e` (kernel/ABI/arch
+code equals current source before the probe). Patch
+`/shared/present/batch2/hosted-clang-task5/probe-driver/driver-vm-peak.patch`,
+SHA-256 `bda42582195352cd3d000f5e0922b5cf0d7f6b882dda345e8126fa378822152a`.
+Trace kernel `8749ae05…`, labelled PROBE ISO `6b32c75f…`; ktrace only, never
+shipping code or ordinary PXE. Fresh 4-CPU/2-GiB boot for each case, same inputs;
+standalone link uses the new reference object without compiling first.
+
+| Tracked peak bytes | Clang VM | LLD VM | Actual per-boot VM+capture total |
+| --- | ---: | ---: | ---: |
+| Version | 99,618,816 | — | 206,139,392 |
+| Compile-only | 101,888,000 | — | 206,139,392 |
+| Separate LLD | — | 70,451,200 | 136,945,664 |
+| Driver compile/link | 101,888,000 | 70,451,200 | 238,833,664 |
+
+Capture backing is 90,386,432/55,779,328 bytes and returns0 after release.
+Every retired VM has after_cleanup0; global current returns to the live-services
+baseline 14,970,880 after shell exit. The global peak includes other tracked
+VMs/services and actual overlapping capture, not a sum of independent peaks or
+a compiler-subtree-only total. Excluded: page tables, kernel metadata/stacks,
+filesystem/cache, untagged allocations, borrowed/shared/device mappings and
+unbacked guards/reservations. This is not total RAM or a stack high-water bound.
+Existing planning allowances remain provisional; native driver peaks are pending.
+
+Real 1-CPU/256-MiB PROBE boot: nine Clang capture attempts refuse before program
+entry with launch_failed/Out of memory. Partial backing returns0, every retired
+VM cleans to0, shell remains usable, KEEP unchanged, no failed outputs and
+FINAL0/complete. This qualifies admission rollback, not started-tool malloc
+exhaustion or native low-RAM behavior.
+
+All owned build/QEMU/GDB/client jobs stopped. Raw records, inputs, exact hashes,
+ordinary samples and debugger proofs remain under the integration worktree's
+`build/driver-qualification/`; final native packet is
+`/shared/present/batch2/hosted-clang-driver/native-final/README.md`.
+**Native driver execution/timing/peak and physical publication are NOT RUN**;
+the ready sheet specifies owner/luna ordinary and separately labelled PROBE runs.

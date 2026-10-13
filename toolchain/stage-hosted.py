@@ -98,7 +98,8 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     payload = staging / "payload"
     payload.mkdir(parents=True)
     sizes = {}
-    for tool in ("clang", "lld"):
+    # Clang's declared linker root embeds the same qualified leaf LLD bundle.
+    for tool in ("lld", "clang"):
         bundle = payload / f"{tool}.pxb"
         app = bundle / "app"
         (app / "bin").mkdir(parents=True)
@@ -110,14 +111,21 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         copy_tree(sdk / "share/licenses", app / "share/licenses")
         copy_tree(sdk / "share/toolchain", app / "share/toolchain")
         shutil.copyfile(sdk / "manifest.txt", app / "share/sdk-manifest.txt")
+        resource_dirs = {"clang_resources": "clang_resources", "sysroot": "sysroot"}
+        grants = [
+            {"name": name, "resource": name, "rights": rights, "required": True}
+            for name, rights in (("memory", ["manage"]), ("threads", ["manage"]),
+                                 ("clock", ["read", "sleep"]), ("random", ["read"]))]
+        if tool == "clang":
+            (app / "linker").mkdir()
+            copy_tree(payload / "lld.pxb", app / "linker/lld.pxb")
+            resource_dirs["linker"] = "linker"
+            grants.append({"name": "launcher", "resource": "launcher",
+                           "rights": ["launch"], "required": False})
         write_json(bundle / "manifest.json", {
             "format": 1, "id": f"org.pyxis.{tool}", "entry": f"bin/{tool}.pxe",
             "commands": {tool: f"bin/{tool}.pxe"}, "stack_bytes": STACK_BYTES,
-            "resource_dirs": {"clang_resources": "clang_resources", "sysroot": "sysroot"},
-            "grants": [
-                {"name": name, "resource": name, "rights": rights, "required": True}
-                for name, rights in (("memory", ["manage"]), ("threads", ["manage"]),
-                                     ("clock", ["read", "sleep"]), ("random", ["read"]))]})
+            "resource_dirs": resource_dirs, "grants": grants})
 
     metadata = payload / "metadata"
     metadata.mkdir()
@@ -149,7 +157,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
                            for name in ("build-hosted.sh", "stage-hosted.py")},
         "image_limit_bytes": IMAGE_LIMIT, "mapped_span_limit_bytes": SPAN_LIMIT,
         "runtime_profile": "workers-off; real SDK libc++/libc++abi/libunwind",
-        "publication": "manual immutable revision; no launch grant"})
+        "publication": "manual immutable revision; Clang optional declared launcher; LLD leaf"})
     # Archive modes and timestamps do not depend on umask or source checkout dates.
     for path in [payload, *payload.rglob("*")]:
         if path.is_symlink() or not (path.is_file() or path.is_dir()):

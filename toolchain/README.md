@@ -30,7 +30,7 @@ A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
 `ci/Containerfile` runs the same build script. The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20` before merging
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-e0801c2` before merging
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
@@ -41,8 +41,8 @@ rebuild; a new fork commit does:
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20 .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-e0801c2 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-e0801c2
 ```
 
 ## Native hosted payloads
@@ -73,9 +73,12 @@ LLD and resource-header closure. Both `.pxb` bundles include the full installed
 compiler resource directory, matching SDK sysroot and notices, with host
 symlinks expanded into regular files. They request an 8 MiB stack and required
 `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read` grants.
-`app`, `clang_resources` and `sysroot` are read-only roots; neither tool requests
-a launcher. Source and output use separately selected ordinary roots. Compile
-with Clang `-c`, then invoke standalone LLD for linking.
+`app`, `clang_resources` and `sysroot` are read-only roots. Clang embeds the same
+leaf LLD bundle in a declared read-only `linker` root and requests optional
+`launcher/launch`; LLD requests no launcher. Source and output use separately
+selected ordinary roots. With launch delegated, the single-source driver runs
+integrated cc1 then LLD through the contained native job core. With launch
+withheld, use Clang `-c` and invoke standalone LLD separately.
 
 Output is `OUTPUT/hosted-SHA256/payload/` plus `payload.tar` and its checksum.
 The content identity covers files and directories before the identity inventory
