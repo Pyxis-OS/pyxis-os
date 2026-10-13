@@ -22,12 +22,12 @@ return {
   hostname = "pyxis",
   volumes = {
     toolchain = { kind = "npfs", partition = 1, volume = "toolchain" },
-    home = { kind = "ram" },
   },
   spaces = {
+    { name = "network", title = "Network", init = "boot://init", network = true },
     { name = "remote", title = "Toolchain", init = "boot://init-remote",
       launch = false, remote_power = true,
-      roots = { toolchain = "read-only", home = "read-write" }, start = "tmp" },
+      roots = { toolchain = "read-only" }, start = "tmp" },
   },
 }
 ```
@@ -40,7 +40,7 @@ Preparing volumes or writing physical media remains an owner action.
 Attach the selected qualified USB storage before boot; storage hotplug is not
 part of this profile. Never modify a mounted/attached pool externally.
 
-The consumer has read-only `toolchain://`, writable `home://`/`tmp://` and
+The consumer has read-only `toolchain://`, ordinary writable `tmp://` and
 inherited diagnostics. The manifest declares an 8 MiB guarded stack and
 `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`.
 `app://`, `clang_resources://` and `sysroot://` are delegated read-only from the

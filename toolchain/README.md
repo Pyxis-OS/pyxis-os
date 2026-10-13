@@ -63,6 +63,9 @@ must match the SDK. `CROSS_COMPILE` selects the installed compiler prefix;
 `HOSTCC`/`HOSTCXX` select Linux compilers for the two TableGen tools. Target
 objects are always built afresh against the selected SDK. No compiler-container rebuild is needed for SDK
 changes; a changed fork still requires the owner-published compiler image.
+Keep the SDK, source checkout and installed resources unchanged through build
+and export. Before/after inventories detect changes; they are not atomic
+snapshots or protection against another builder modifying these inputs.
 
 The Release X86 build uses real SDK C++ runtimes, with LLVM workers, compiler
 project EH/RTTI and optional host libraries disabled. It builds only the Clang,

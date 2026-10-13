@@ -89,6 +89,14 @@ task 5 has its own owner go, with pre-implementation decisions below.
    [native hosted tools](../development/hosted-tools.md).
    [Task 5 baseline, artifact and separate probe record](../development/experiments/hosted-clang-task5/README.md).
 
+   - [x] Fresh producer, exclusive pool publication, read-only 1/4-CPU
+     compile/separate-link/run, rejected input/output, clean reopen and GDB
+     grant/TLS inspection. Existing ceilings preserved; separate local probe
+     qualifies backing accounting and real low-memory rollback.
+   - [ ] Native owner compile/link/run, uninstrumented elapsed measurements and
+     separately labelled peak probe. Data image/configs/commands are ready in
+     `/shared/present/batch2/hosted-clang-task5/native/`; no physical staging yet.
+
 ### Qualified task 4 closure
 
 Source inspection of the current

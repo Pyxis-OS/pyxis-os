@@ -1,6 +1,7 @@
 # Hosted Clang task 5
 
-Status: baseline/qualification in progress, 2026-10-13. No native task 5
+Status: implementation and QEMU qualification complete, 2026-10-13; native
+owner check/measurements pending. No native task 5
 performance or peak measurements yet; the earlier "instant" compile/extract
 observation is qualitative. Task 5 uses the accepted separate npfs toolchain
 volume and no-launcher bundles; owner/luna handle native staging and runs.
@@ -123,7 +124,7 @@ that loader failure is excluded from kernel qualification.
 Exact probe configuration, GDB observations, raw logs and native field
 interpretation are in `probe-qualification.txt` beside the patch. All owned
 probe QEMU/GDB/client/virtio-fs jobs are stopped. Native measurements and the
-production pool payload's qualification remain pending.
+production pool payload's native qualification remain pending.
 
 ## Fresh production payload
 
@@ -149,3 +150,81 @@ The unused `LLD_INCLUDE_TESTS` configure warning is harmless: effective
 
 Usage and the explicit authority/publication contract:
 [native hosted tools](../../hosted-tools.md).
+
+## Pool-volume qualification
+
+Actual untouched-main kernel `0e95af3a`, SHA-256
+`f537cafaf6d3cf5a959db6a91404e0a2f4f8082b71a52284abe2391a51c15d29`.
+Normal full archive with private installed configuration and small inputs;
+compiler payload stays outside it. Disposable 1 GiB npfs pool, 16 MiB journal,
+one toolchain volume in GPT entry 1; these are qualification parameters.
+
+The original producer archive's guest checksum matches before publication.
+The documented exclusive mkdir/extract/sync/rename/sync script exits 0, exposes
+only the payload child and preserves both native binary hashes. Clean poweroff
+flushes the pool; detached fsck passes without replay and both GPT copies verify.
+Two excluded setup attempts remain preserved: publication begun before archive
+copy completion stopped at missing-file; a later host SIGTERM interrupted the
+client with no final result (sender unknown). Both left unpublished staging.
+Neither failed revision was reused. A fresh pool and foreground client completed.
+Whole publication-script elapsed time is bounded at 7m12s–8m37s from host
+observations, not a pure tar or physical-media measurement.
+
+Fresh 1/4-CPU QEMU uses the baseline CPU/RAM/firmware/network/display parameters,
+with a read-only VirtIO block image instead of virtio-fs; no probe or debugger
+during timing. Clang version/hello compile, separate LLD and runnable PXE exit 0.
+Missing-semicolon input diagnoses expected-`;` with caret/fix-it and exits 1;
+Clang and LLD read-only outputs and LLD text-as-object input exit 1. Failed
+outputs are absent. Ordinary sessions drain completely. Successful object/PXE
+hashes remain identical to baseline:
+
+- Object: 1,160 bytes,
+  `1138fa33584bb475cb71100bc9216fd3b3e825f2e5da356b74de18b87576ce21`
+- PXE: `b9acc581cb9d211f536820ddd4738e2a0a2e28b3c7e23190f8f64e5ffe45788b`
+
+| End-to-end seconds, median (range), three samples | 1 CPU | 4 CPUs |
+| --- | --- | --- |
+| Clang version/startup | 11.75 (11.10–16.52) | 11.01 (10.42–16.31) |
+| Hello compile | 13.09 (12.13–21.20) | 10.53 (10.52–10.54) |
+| Missing-semicolon rejection | 13.40 (12.77–15.36) | 10.40 (10.36–10.41) |
+| Standalone LLD | 8.07 (8.05–8.11) | 7.77 (7.70–7.79) |
+
+This deployment is markedly slower than the temporary virtio-fs baseline.
+The binaries/runtime are identical; storage backend and placement differ, so
+this is not an isolated producer/source performance A/B. Version alone is slow;
+launch/storage costs need native measurement before compiler-cost attribution.
+The existing [npfs cache/I/O limits](../../../technical-debt.md#native-mount-design-limits)
+remain; no storage optimization or throughput claim is part of this task.
+Keep first/cold samples and variation. The two negative-input tables use
+different inputs and must not be compared as matched diagnostics workloads.
+
+Untimed GDB stops in cc1 through `CC1Command::Execute`/`ExecuteCC1Tool`: integrated
+in-process, one task/storage record, one active VM root, zero borrowers.
+FS `0x4010` points to its own libc record; errno is at offset 16. Four runtime
+resources have rights memory=1, threads=1, clock=3, random=1; no launcher.
+Toolchain root `0x47` and app/resource/sysroot roots `0x7` are read-only; tmp
+`0x3f` is writable. Matching ELF load bytes were verified. Debugger timing is
+excluded; the inspected compile finishes normally.
+
+Trusted reboot/shutdown flushes before detached checks. Read-only reopens on
+both CPU counts preserve the raw image byte-for-byte. All owned jobs stopped.
+Exact configuration, commands, full samples, GDB and raw evidence are beside
+`/shared/present/batch2/hosted-clang-task5/native/qualification.txt`.
+
+## Owner/luna native handoff
+
+Prepared data-only GPT image, exact consumer/publisher configurations, sources,
+commands and run sheet: `/shared/present/batch2/hosted-clang-task5/native/`.
+`toolchain-disk.raw` is 1,077,936,128 bytes, GUID
+`12b45896-c898-48e3-99b1-0671c19ac078`, SHA-256
+`fbdcf053e355f4bd4cd95ef20ba536a60c4be4504dcef3af76f8c88f74ce7ac0`.
+Physical-media selection/publication remains the owner's action; this image has
+512-byte sectors, no ESP and no OS installation. A larger medium needs GPT
+geometry adjusted/verified for its real last LBA. No compiler-container rebuild.
+
+The run sheet separates ordinary main/PR PXE timing/checks from a clearly
+labelled patch-based probe build, with paired VM-ID peak/cleanup and separate
+capture records. Nothing has been staged or run on physical hardware by delta.
+Task 5 stays unchecked until the owner returns native compile/link/run and
+properly labelled time/peak evidence. Arbitrary C/C++/LTO, started-tool malloc
+exhaustion and actual stack high-water bounds remain unqualified.
