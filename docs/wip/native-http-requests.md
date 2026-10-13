@@ -505,58 +505,36 @@ it never silently selects another backend. No repartitioning or volume creation
 during updates. This current named-resource path is an interim provisioner,
 not capability-valued configuration; unify it in that separate assignment.
 
-### Standalone HTTP scripts — accepted 2026-10-13
+### Task 5 split — accepted 2026-10-13
 
-Package `shell.pxb` with required memory, clock, console, PIPE CREATE and LAUNCH
-requests, selecting only the caller's existing delegated authority. Both
-`launcher` and `child_launcher` bindings narrow that launcher to LAUNCH alone;
-neither receives CREATE_GROUP. Missing required grants refuse before launch.
-Body-producer profiles withhold LAUNCH, so the coordinator cannot be used to
-escape producer attenuation.
+**5a delivers interactive and trusted-bootstrap requests now:** `=> name`,
+redirection-only `@name`, explicit `request` operations, checked staging worker,
+16 MiB default private RAM staging and isolated NPFS opt-in. Trusted bootstrap
+scripts keep their existing explicit grants and granted-script READ mode.
+Ordinary standalone scripts are not delivered; there is no positional script
+loader or public `shell.pxb` in this slice.
 
-`shell home://post.pxs` opens a native FILE READ through the shell's held roots,
-uses the existing bounded script reader and owns a separate typed table. No
-provider script loading or hidden request state. When startup already supplies
-`script` READ, argv[1] remains its diagnostic name; the positional loader is
-selected only without that resource. Existing interactive flags keep their
-meaning, and there is no `--script` flag.
+**5b defers `shell home://post.pxs` to scoped descendant cancellation** in
+[#789](https://git.internal/PyxisOS/pyxis-os/pulls/789), coordinated through the
+owner. No console-interrupt handoff. QEMU proved that terminating the prototype
+script left its blocked producer and worker alive, with the producer retaining
+console input; no POST occurred. The positional code is removed from 5a and
+preserved in a separate draft follow-up.
 
-```text
-# home://post.pxs contains the accepted printf/cat/request session.
-shell home://post.pxs
-```
+In 5b, the script owns a subgroup containing its producers and worker; stopping
+the script must stop that whole subtree. Required declared memory, clock,
+console, PIPE CREATE and LAUNCH remain caller-held authority, with no global
+CREATE_GROUP grant or command-name wrapper. Qualification must cover actual
+Ctrl+C, startup interruption, nested ownership and descendant/reader retirement
+before delivery. A held `script` READ still takes precedence over positional
+loading, and argv[1] remains its diagnostic name. The desired form accepts one
+native path; it has no `--script` flag.
 
-The owner selected `.pxs` for shell scripts. New examples use it; renaming the
-existing init scripts is separate work after task 5 merges. Trusted bootstrap
-scripts retain their existing granted-script behavior. Bundle-interpreter
-shebangs are a [later direction](later-os-directions.md#lua-follow-ups).
-
-### Foreground script cancellation — owner decision required
-
-QEMU at parent `8cba734d` / userland `cef30297` confirmed that Ctrl+C kills the
-positional script but leaves its blocked `cat` and staging worker alive. The
-parent owns the armed console interval and supervises only its direct child;
-the script has READ alone. No POST occurred, but a surviving reader can consume
-later terminal input. Standalone delivery is not ready with this behavior.
-
-**Default:** a declared console-interrupt handoff for one foreground coordinator.
-The manifest requests input READ|INTERRUPT and a separately named initial armed
-interval. Preparation derives that interval from the caller's held console
-INTERRUPT authority before launch; no grant-adding command-name wrapper. After
-admission the parent transfers the interval without an unarmed startup gap and
-waits for the coordinator without terminating it independently. The script
-owns cancellation, terminates/collects every producer and worker, then propagates
-failure. Nested coordinators transfer ownership in the same way. Outside an
-active delegated job, ordinary interval handling resumes. Missing authority or
-an unsupported multi-stage handoff refuses before launch; no CREATE_GROUP,
-recursive kernel termination or new kernel ABI. Existing synchronous
-PREPARE/COMMIT waits keep their documented cancellation latency.
-
-**Alternative:** defer standalone delivery until scoped descendant cancellation
-is available; interactive requests remain usable, but task 5 stays incomplete.
-No implementation of this additional authority/lifetime change yet. Qualify
-actual Ctrl+C, surviving-task absence, nested handoff and startup interruption
-before declaring readiness.
+The owner selected `.pxs` for new shell scripts. Existing init filenames are
+unchanged here; their rename is separate work after 5a merges. Direct
+bundle-interpreter shebangs are a [later direction](later-os-directions.md#lua-follow-ups),
+shared with Lua. The standalone follow-up waits on both 5a and #789; it does not
+hold the qualified interactive delivery open.
 
 ### Baseline and delivery checks
 
