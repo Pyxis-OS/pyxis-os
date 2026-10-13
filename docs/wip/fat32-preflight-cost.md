@@ -44,69 +44,99 @@ is then refused at admission, before any flush. A separate expired-interval
 check confirmed zero block admissions for refused sync; it included operator
 idle and is not a reproduction of work alone consuming the lease.
 
-## Smallest recommended change
+## Revised recommendation (proposal, 2026-10-13)
 
-Retain a fresh whole-volume preflight for every mutation. Collect required free
-candidates during the checker's existing final consistency sweep. Store only the
-operation's bounded allocation demand, but continue the entire sweep for the
-exact free count and global validation; consume candidates only after all
-namespace, orphan, mirror and held-object checks succeed. Remove the redundant
-second FAT sweep. Preserve ascending allocation order. Do not replace the preflight with a persistent validation proof
-or trust FSInfo's free count as authority.
+Per-mutation whole-volume validation is an implementation inherited from the
+raw writer, not a requirement to preserve. The owner asks for one validated RW
+admission, allocation state maintained for the mount lifetime, local mutation
+checks, and an explicit full check at publication start. These changes remain
+**proposed; no FAT32 implementation is authorized**.
 
-Add an operation-local FAT window: initially up to eight sectors per copy,
-bounded by callback transfer limits, FAT-copy bounds and remaining valid entry
-span. Read primary/mirror windows in bounded runs and compare the same valid
-low-28-bit entries, including reserved entries. Invalidate on context reset and
-revalidation. Preserve per-entry work charges and actual-sector accounting.
-Two 4-KiB windows add bounded scratch, not retained mount cache or new authority.
+Consolidate RW admission's existing checks into one full mounted-volume check.
+Read FAT copies through bounded windows, initially up to eight sectors per copy
+when the backing callback permits it. Compare the same valid entries/mirrors;
+keep chain, namespace, orphan and detached-root validation. Build an exact free
+bitmap/count from the successful sweep; FSInfo remains a hint. Charge this
+retained state to the existing shared 32-MiB backing cap. A dense 1-GiB fixture's
+2,064,848 clusters need about 252 KiB for the free bitmap, rather than an
+8-MiB vector of every cluster.
 
-Also size allocation candidates and prepared sector images for the operation's
-actual growth/touched chains rather than reserving every FAT sector. Allocation
-bounds include new-directory allocation and up to two parent-growth clusters;
-detached victim chains remain allocated until durable final-reference reclamation.
-Prepared capacity counts sector-and-phase images, since one sector can retain
-different versions across phases. Include shrink/reclamation chains, namespace,
-dirty marking, FSInfo and sealing, not just payload growth. Determine
-and validate bounds before effects; retain all prepared images and recovery
-backing after uncertainty. Preserve successful workspace on failed growth and
-charge replacement overlap within the existing global cap. This must address
-the tiny-write growth refusal, rather than hiding it with larger clusters or
-raising the cap. It requires explicit engine/adapter sizing work, not just a
-larger cache constant. Dense admission and tiny operations should avoid
-volume-sized candidate/image reservations; large actual mutations may still
-legitimately return LIMIT under the unchanged cap.
+The retained RW extent excludes other writers while mounted. Maintain the free
+map/count through successful Pyxis transitions; bound candidate searches and
+check selected candidates against their FAT entries before effects. Detached
+held chains stay allocated until durable final-reference reclamation. Each
+mutation checks affected chains, parent directories and introduced/removed
+names, and revalidates affected held objects. It does not traverse unrelated
+objects or clear a volume-sized bitmap once per held object. Local checks must
+still reject loops, invalid entries, stale locators and detected inconsistency.
 
-For mirrored media with S valid FAT sectors, the dominant sweep request count
-could fall from about 4S to 2*ceil(S/8) when the callback accepts eight-sector
-transfers, plus namespace/held-object/preparation reads. CPU validation remains O(cluster count + namespace/chain work), and
-mutation effects/barriers depend on changed data. This is roughly a 16-fold
-reduction of the volume-sized request term, not a measured speedup. For the
-small 128-MiB operation, several hundred milliseconds rather than several
-seconds is an estimate to validate; complete editor publication must still fit
-the unchanged 30-second interval with read-back and cleanup included.
+Any backing I/O error, detected structural inconsistency or uncertain outcome
+invalidates the allocation proof. Record this separately from the existing
+uncertain, permanently stopped writer. Refusals before effects for authority,
+capacity, existing/missing names or no space do not themselves invalidate proof.
+An invalid proof permits no mutation/reclamation or clean-mark clearing. A
+known pre-effect invalidation may be recovered only by an explicit successful
+full mounted check/rebuild; an uncertain mutation keeps its stopped writer and
+recovery backing and cannot be cleared by CHECK. No automatic repair, retry or
+reopen-as-reset. Use the owned dirty snapshot and detached roots in revalidation.
 
-## Decisions (proposed defaults)
+Expose that explicit full check on the bound RW mount control. Proposed default:
+require both WRITE and INTERVAL, plus the calling process's active delivered
+interval. The installer/config publisher calls it once immediately after its
+existing BEGIN, before publication effects, inside the same non-extending
+30-second lease. A successful check publishes replacement allocation state
+atomically; failure preserves recovery and leaves proof invalid. Neither BEGIN
+nor SYNC silently becomes a check or renews the lease. The engine already has
+`fat32_mounted_check`; the native control operation/helper and publisher call
+are new work, coordinated with alpha through the owner.
 
-1. **Validation strategy. Default:** retain full per-mutation validation; merge
-   free collection into its sweep and use operation-local bounded FAT windows.
-   A persistent mount allocation/validation proof could remove volume-sized work,
-   but changes when unrelated corruption is detected; park it for this fix.
-2. **Workspace scope. Default:** include work-sized candidate/prepared-image
-   capacity and growth in this first fix, keeping the shared 32-MiB ceiling and
-   failed-state retention. A latency-only slice would leave measured large-volume
-   RW refusals; explicitly document those if the owner chooses that narrower scope.
+Keep operation-sized candidates and sector-and-phase images under 32 MiB:
+new-directory allocation, parent growth, touched/shrunk/reclaimed chains,
+namespace images, dirty marking, FSInfo and sealing all count. Preserve old
+workspace on failed replacement allocation and charge old/new overlap. Large
+actual mutations may legitimately return LIMIT; dense admission and tiny writes
+must not reserve every FAT sector. Preserve durable phase ordering, dirty marking,
+failed-state retention, held handles, clean-power sealing and retirement rules.
 
-Publication authority, same-process ownership, non-extending lease, durable
-phase barriers, admission/drain ordering, held-handle semantics and clean-power
-sealing stay as accepted. No publication-semantic change is proposed. Route any
-later semantic finding through the owner to alpha; do not silently change the
-editor or extend its lease.
+## Residual risk and expected cost
 
-After this task the owner can: review the measured bottleneck and choose the
-bounded fix before installed publication. Implementation needs a separate go:
-fs dependency first, then the kernel/SDK integration. Qualification must include
-all four capacities, geometry contrasts, dense tiny writes, malformed metadata,
-allocation/uncertain-outcome preservation and the actual editor's complete
-128-MiB publication under the original lease. No real ESP is written; native
-scratch qualification is owner-scheduled if needed.
+This relies on exclusive ownership and correct Pyxis transitions between full
+checks. A free bitmap proves availability, not every object's allocation owner.
+A Pyxis bug causing silent in-session corruption, including a coherent cross-link
+to an unrelated allocated chain, may be detected only at explicit full check or
+remount. Local checks do not reprove whole-volume consistency. Foreign changes
+between boots are examined at admission; external concurrent modification while
+mounted is unsupported.
+
+Ordinary mutation work should follow touched chains, parent directories and
+changed sector-and-phase images, plus free-map searches, rather than two full
+FAT sweeps. Explicit check/admission still costs O(volume + namespace/chain work).
+With mirrored FATs and S valid FAT sectors, eight-sector windows reduce the FAT
+sweep's backing requests toward 2*ceil(S/8), plus namespace reads; this is a
+projection, not a speedup measurement. Complete 128-MiB editor publication must
+fit the original lease, including its explicit check, read-back and cleanup.
+
+## Decisions (three proposed defaults)
+
+1. **Validation lifetime. Default:** one full RW-admission check, bounded FAT
+   windows, retained free bitmap/count maintained by Pyxis, and local touched
+   checks thereafter. Accept the delayed detection of unrelated silent corruption.
+2. **Invalidation and publication check. Default:** observable proof-invalid state;
+   explicit bound-control CHECK requiring WRITE|INTERVAL and its active owner;
+   publisher invokes it after BEGIN once per publication. CHECK may rebuild after
+   known pre-effect invalidation, but never resets an uncertain stopped writer.
+3. **Backing budget. Default:** retained allocation map and operation-sized
+   candidates/prepared images share the unchanged 32-MiB ceiling, including
+   replacement overlap and complete uncertainty retention. No volume-size-driven
+   prepared capacity for tiny writes and no larger lease.
+
+After this task the owner can: choose the bounded fix before installed
+publication. A separate implementation go and alpha coordination are required:
+fs, kernel/ABI/helper, then publisher integration. Qualification uses disposable
+40/128/512-MiB/1-GiB media, both cluster geometries, dense 1-GiB tiny writes,
+fragmented/near-full allocation, held/detached objects, touched corruption, stale
+locators, allocation/I/O/uncertain failures and proof rebuild/refusal. Check
+corruption outside touched structures at explicit check/remount. Run the actual
+128-MiB editor publication within its original lease, verify ordered durability,
+power seal/resume and fsck, then owner-scheduled native scratch checks if useful.
+No real ESP writes are authorized.
