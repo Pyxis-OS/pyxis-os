@@ -111,6 +111,18 @@ and raw captures remain in local build output, outside the repository.
   an explicit 60-second deadline pass. The private volume is absent from every
   client root; normal bootstrap creates provider leaves without a test wrapper.
 
+## Installed packaging check
+
+Parent `b6ece128`, userland `17035fd`, ports `bcacac6`: ordinary image and all
+four bundles built/verified; complete provider bundle and trusted worker are
+rescue roots. Host-shaped filtered archives exercised normal NPFS bin/REVISION
+and missing-bin fallback with stock installed startup/default RAM staging.
+Normal printf JSON POST and rescue echo equivalent both uploaded exactly `{}`,
+retained the 13-byte response with complete framing and caused no GET/replay.
+Read-only inspection confirmed private RAM leaves and no client ancestor grant.
+The native installer filter was compiled/inspected, not executed: the shaped
+archive is a runtime packaging check, not a claimed install/update run.
+
 The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES to avoid
 16-byte trailing WRITE calls; its allocated buffer stays 4 KiB. Final-source
 2049 MiB HTTPS GET verified every byte/count, independent SHA-256 and final
