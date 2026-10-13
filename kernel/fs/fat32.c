@@ -1385,18 +1385,26 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
 
 static void state(struct fat32_mount *mount, struct mount_state_reply *reply)
 {
+  const struct fat32_volume *admitted = &mount->volume;
   const struct fat32_volume *volume = mount->writable ? &mount->writer.volume : &mount->volume;
   *reply = (struct mount_state_reply){
     .domain = mount->domain, .device = mount->device,
     .partition = volume->gpt_entry, .first_block = volume->partition_first,
     .block_count = volume->partition_sectors,
-    .flags = (mount->retired ? MOUNT_STATE_RETIRED : 0) |
+    .flags = MOUNT_STATE_IDENTITY_VALID |
+        (mount->retired ? MOUNT_STATE_RETIRED : 0) |
         (volume->clean_shutdown ? MOUNT_STATE_CLEAN_SHUTDOWN : 0) |
         (volume->no_hard_error ? MOUNT_STATE_NO_HARD_ERROR : 0) |
         (mount->writable ? MOUNT_STATE_READ_WRITE : 0) |
         (mount->writer.dirty_owned ? MOUNT_STATE_DIRTY_OWNED : 0) |
         (mount->writer.stopped ? MOUNT_STATE_FAILED : 0),
+    .partition_attributes = admitted->partition_attributes,
+    .device_block_size = admitted->source.sector_bytes,
+    .device_block_count = admitted->source.sectors,
   };
+  memcpy(reply->disk_guid, admitted->disk_guid, sizeof(reply->disk_guid));
+  memcpy(reply->partition_guid, admitted->partition_guid, sizeof(reply->partition_guid));
+  memcpy(reply->partition_type, admitted->partition_type, sizeof(reply->partition_type));
   if (mount->writer.stopped) {
     reply->failure_status = mount->first_failure;
     reply->failure_phase = mount->writer.recovery.phase;

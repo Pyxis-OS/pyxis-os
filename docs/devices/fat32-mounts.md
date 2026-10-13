@@ -49,6 +49,20 @@ mode, dirty ownership, retirement, active interval and retained failure/cleanup
 state. Clean/error flags are observations, not integrity or durability promises.
 Closing a control never retires a mount or ends its process's interval.
 
+The 680-byte `mount_state_reply` also carries `disk_guid`, `partition_guid`,
+`partition_type`, `partition_attributes`, `device_block_size` and
+`device_block_count` when `MOUNT_STATE_IDENTITY_VALID` is set. These are the
+retained admission facts: both GPT copies were validated, the selected entry
+was checked against the inventoried GPT, and device geometry came from the
+admitted whole device, not just the partition. GUID arrays use GPT/EFI on-disk
+byte encoding. They name a logical target; they authenticate no hardware and
+grant no authority. OBSERVE does not re-read media or attest current contents.
+The evidence remains valid on failed and retired controls, alongside their
+original domain and physical extent. The userland `mount_observe` helper checks
+the reply size and, when the flag is set, the identity and geometry invariants
+before returning it. Callers must still check lifecycle state and hold the
+appropriate selected-view authority for any operation.
+
 FILE READ/SIZE/INFO, directory LOOKUP/ENUMERATE/INFO and selected-executable
 capture use the existing native protocols. Capturing uses the common 128 MiB
 serialized-image ceiling; capture backing ceases to pin the mount when its FILE

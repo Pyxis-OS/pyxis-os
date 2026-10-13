@@ -70,7 +70,7 @@ struct mount_reply {
   handle_t root;
 };
 
-/* Boot ESP remains RO. Bound FAT OPEN_ROOT requests exact ceiling rights;
+/* The boot-origin ESP issuer remains RO. Bound FAT OPEN_ROOT requests exact ceiling rights;
  * mutation-capable roots additionally require control WRITE. RO admission
  * returns OPEN_ROOT|OBSERVE|RETIRE; RW also returns WRITE|INTERVAL. Final control
  * close does not retire. RETIRE is BUSY until data/operations/intervals drain.
@@ -91,21 +91,28 @@ struct mount_interval_request { uint64_t id; };
 #define MOUNT_STATE_FAILED (UINT64_C(1) << 5)
 #define MOUNT_STATE_INTERVAL (UINT64_C(1) << 6)
 #define MOUNT_STATE_CLEANUP_PENDING (UINT64_C(1) << 7)
+#define MOUNT_STATE_IDENTITY_VALID (UINT64_C(1) << 8)
 /* failure_phase is the shared FAT engine's fat32_mounted_phase when FAILED;
  * failed_sector is the absolute backing sector, or UINT64_MAX for a flush.
  * Names are diagnostic components,
- * never authority or paths to automatically replay. */
+ * never authority or paths to automatically replay.
+ * IDENTITY_VALID covers the retained GPT GUIDs/type/attributes and whole-device
+ * geometry checked at admission. GUID bytes use GPT/EFI on-disk encoding.
+ * This evidence survives failure/retirement; OBSERVE does not re-read media.
+ * It names a logical target, not authenticated hardware or mutation authority. */
 struct mount_state_reply {
   uint64_t domain, device, partition, first_block, block_count, flags;
   uint64_t failure_status, failure_phase, failed_sector;
   uint64_t interval_id, interval_deadline_ns, detached_objects;
   char source_name[256], destination_name[256];
+  uint8_t disk_guid[16], partition_guid[16], partition_type[16];
+  uint64_t partition_attributes, device_block_size, device_block_count;
 };
 _Static_assert(sizeof(struct mount_fat32_root_request) == 8, "FAT root request");
 _Static_assert(sizeof(struct mount_fat32_reply) == 16, "FAT mount pair");
 _Static_assert(sizeof(struct mount_interval_reply) == 16, "mount interval reply");
 _Static_assert(sizeof(struct mount_interval_request) == 8, "mount interval request");
-_Static_assert(sizeof(struct mount_state_reply) == 608, "mount state");
+_Static_assert(sizeof(struct mount_state_reply) == 680, "mount state");
 
 _Static_assert(sizeof(struct mount_open_request) == 8, "mount request layout");
 _Static_assert(sizeof(struct mount_message) == 24, "mount message layout");
