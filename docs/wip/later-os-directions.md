@@ -274,7 +274,10 @@ Owner idea, 2026-10-13; not scheduled. QEMU's aarch64 `virt` machine would come
 first (edk2 UEFI, GIC, PL011, virtio; LLVM and Limine support aarch64), then an
 Apple M1 MacBook Air as hardware, probably 2027. It has no native UEFI, so it would
 boot through Asahi's m1n1 and U-Boot, with Apple's AIC and DART; the Asahi docs
-are the reference. The groundwork is the rule keeping hardware details in `arch/`
+are the reference. The owner's second candidate is a Lenovo Chromebook Duet
+(MediaTek MT8183, mainline Linux device tree, USI stylus); its firmware is coreboot
+plus depthcharge with no UEFI, so it would need U-Boot as a UEFI layer or a
+depthcharge payload path. The groundwork is the rule keeping hardware details in `arch/`
 and Limine in its adapter. Review lens for current work: no x86-isms outside
 `arch/`, and no ABI or format (P1F, syscalls) that bakes in x86.
 
