@@ -684,8 +684,8 @@ QEMU cannot provide positive absolute-W/contact/TrackPoint evidence.
 The independent arch implementation follows the
 [manufacturer Rev. B guide](https://studylib.net/doc/18112502/synaptics-ps-2-touchpad-interfacing-guide)
 §§3.2/4.2–4.4/5.1.5. Mode bit 2 means DisGest in relative W=0 and EW in W=1;
-absolute mode `0xc1` does not enable EW or four-byte guest packets. Queried
-image-sensor AGM is activated separately with sliced selector 03 and f3/c8;
+basic-W mode c1 keeps EW off; queried image sensors use c5/EW plus the separate
+AGM request with sliced selector 03 and f3/c8. Four-byte guest mode stays off;
 W2 position/count observations never publish switch or lift snapshots. Reporting
 stays disabled for mode readback and the §4.1 `EB` master-packet proof. The
 firmware extension/query/button facts are checked against
@@ -712,16 +712,21 @@ Make flag is needed. Retain the relative control entry and a diagnosis-off
 `/shared/present/batch2/pointer-task2-native/RUNSHEET.md`.
 
 1. Confirm effective X45/Y54, calibrated absolute admission, mode c5/EW on and
-   image-sensor AGM=1; briefly slide edge-to-edge and use the TrackPoint.
+   image-sensor AGM-requested=1; briefly slide edge-to-edge and use the TrackPoint.
 2. Keep an admitted finger moving during typing; land a new contact during
    typing, stop and retry without lift. Check immediate post-mousetest response
    and Enter repeat versus release.
 3. Move close pairs vertically/horizontally/diagonally, one finger at a time;
    separate across the pad and rejoin. Expect centroid scroll only within the
    accepted hysteresis; observe AGM position and usable-pair counters.
+   If secondary positions are absent/stale, basic-W-scroll must increase and
+   two-contact scrolling must still work from the reported primary position.
+   Report fallback distinctly: separation and centroid behavior are unavailable.
 4. Hold physical click with one finger and drag with the other, swap roles,
    release and lift. Expect moving-finger pointer motion, zero scroll while
    pressed, no jump/stuck switch.
+   With unavailable secondary positions, reported-primary movement is the
+   minimum; confirm zero wheel while pressed and report which finger moves it.
 5. Recheck resting palms, typing with palms, TrackPoint L/M/R, and repeat core
    interactions with diagnosis omitted. Record any unchecked item.
 
@@ -904,3 +909,37 @@ mode readback/master verification and the AGM request. Other basic-W devices
 keep c1. Immediate basic-W fallback and approved typing recovery remain; no
 guest or SMBus changes. Default activation remains off. Positive secondary
 delivery and physical interaction still need the short native re-run.
+
+### Accepted EW correction checks — 2026-10-13
+
+Implementation `11372dfc` uses c5 only with queried image-sensor capability,
+with mode readback/master-format proof before AGM activation. The existing
+secondary decoder, immediate primary/count fallback and approved typing rule
+remain. Diagnosis explicitly reports EW=1 / AGM-requested=1; only received
+packet counters establish secondary delivery. No guest commands/decoding,
+dependency repoints or default activation change.
+
+The ordinary image build passes in the same llvm23.1.3-4c23a20 container and
+verified bundle setup (`make -j8 image PREBUILT="sdk userspace ports"
+LOG_LEVEL=info`), without changed-source warnings. Local checked ELF SHA256:
+`522e38f21aaf9c01707d29a2a06f391d050e982b26127b31419446d86295078c`;
+initrd remains `d50e05d5c89c96d246ff4a8002c5baa0f5c215cfa50b80709eeb43674739ce81`.
+Interactive QEMU 10.2.2 Q35/nested KVM, four CPUs/512 MiB, fresh OVMF, same
+VirtIO boot volume/RNG and no NIC/USB: query 00 again fails the Synaptics
+signature and safely recovers ordinary ID3/four-byte relative input. Read-only
+GDB confirms both options true, no absolute/guest/secondary profile, available
+input and zero loss/overflow. Motion 50,-10 moves 640,400 -> 690,390; left
+held/released is 1/0, a wheel event is delivered, and PS/2 `echo ok` completes.
+A separate options-off boot reaches the shell with both options false, relative
+input available, no diagnostic scheduling and no Synaptics serial output.
+All QEMU/GDB jobs are stopped. No injected contact test or new test framework.
+QEMU cannot prove c5 admission or actual secondary positions on this firmware.
+
+Luna should build the reported PR head with the existing native flags; no extra
+Synaptics Make flag. Keep info/UDP logging and append
+`ps2.synaptics=1 ps2.synaptics.diagnose=1`, removing synthetic pointer motion.
+The short sheet at `/shared/present/batch2/pointer-task2-native/RUNSHEET.md`
+checks c5/EW admission, received AGM positions, typing, two-contact scroll,
+physical-click drag and palm/TrackPoint regressions. If AGM remains silent,
+confirm functional basic-W recovery and report its limitations separately.
+The owner still decides complete native qualification and default-on.
