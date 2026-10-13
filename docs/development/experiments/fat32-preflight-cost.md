@@ -36,15 +36,16 @@ throughput. Host load was unisolated; keep the large observed ranges.
 | 512 MiB / 512 | 1,032,408 | 8,066 | 14.826 / 14.774 / 14.837 | 32,269 | CREATE OK; 3-byte write LIMIT, zero admissions |
 | 1 GiB / 512 | 2,064,848 | 16,132 | RW admission LIMIT after 14.946 s | — | 32,314 admission requests, no writes |
 | 512 MiB / 4,096 | 130,811 | 1,024 | 2.068 / 2.041 / 4.120 | 4,116 | CREATE/write/resize/sync/retire OK |
-| 1 GiB / 4,096 | 261,627 | 2,048 | **Pending** | — | Contended functional create TIMED_OUT; no successful write |
+| 1 GiB / 4,096 | 261,627 | 2,048 | 6.256 / 6.218 / 4.033 | 8,204 | CREATE/write/resize/sync/retire OK after hold lifted |
 
 First mutations have additional dirty-mark preparation; held-object/directory
 reads also change counts. At 40 MiB the checker uses 1,259 reads, its plan
 2,525–2,527, and CREATE 2,540–2,545 total admissions: almost all work precedes
 effects. At 128 MiB the analogous check uses 4,033 and plan 8,073–8,075.
 WRITE samples: 40 MiB 1.211–1.239 s, 128 MiB 3.436–6.854 s,
-512 MiB/4-KiB clusters 1.971–1.983 s. Successful explicit sync admits one flush
-and takes 4–6 ms (debugger overhead included), independently of those sweeps.
+512 MiB/4-KiB clusters 1.971–1.983 s; 1 GiB/4-KiB clusters
+4.147 / 5.821 / 8.164 s. Successful explicit sync admits one flush
+and takes 4–9 ms (debugger overhead included), independently of those sweeps.
 
 A 128-MiB BEGIN/rename check, followed by operator delay beyond expiry, reports
 TIMED_OUT for later rename and sync, zero block admissions on those mutation
@@ -57,17 +58,19 @@ mutation workspace is about 1.63 / 5.12 / 20.35 / 40.66 MiB for dense
 40/128/512/1024 MiB; replacement growth temporarily charges both old and new.
 Dense 512 MiB therefore cannot grow even for the small write, while dense
 1 GiB exceeds the shared 32-MiB cap at admission. Its whole disk hash is
-unchanged. `fsck.fat -n` is clean after normal retirement on the four completed
+unchanged. `fsck.fat -n` is clean after normal retirement on the five completed
 mutable fixtures. No repair, uncertain-write injection or native ESP run.
 
 Timing stopped immediately on the owner's container-build notice. The entire
 in-progress 1-GiB/4-KiB-cluster timing capture is excluded; functional-only
 commands subsequently hit the ordinary request deadline under contention; the
 whole scratch disk remained byte-for-byte unchanged.
-Repeat that family from a fresh fixture only after the owner declares the build
-finished. Earlier samples predate the notice, not necessarily all shared-host
-contention. Native scratch timing is not collected; source/count evidence is
-stronger than an extrapolation to physical media.
+After the owner lifted the hold, a fresh fixture completed the full matched
+sequence: all operations OK, one-flush sync and clean retirement/fsck. Only that
+new capture supplies the final table row. Earlier samples predate the notice,
+not necessarily all shared-host contention; the resumed run also varies widely.
+Native scratch timing is not collected; source/count evidence is stronger than
+an extrapolation to physical media.
 
 Raw images, commands, debugger scripts/captures and excluded records stay local.
 See the [proposal](../../wip/fat32-preflight-cost.md); no performance fix exists yet.

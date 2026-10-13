@@ -3,8 +3,8 @@
 Owner-assigned investigation, 2026-10-13, before installer task 5 activates
 installed configuration publication. **Proposal only; no optimization is
 accepted or implemented.** The [baseline](../development/experiments/fat32-preflight-cost.md)
-records current-main measurements and the owner-build timing pause. Final
-1-GiB/4-KiB-cluster timing remains pending; keep this PR draft until it is resumed.
+records the exact-main measurements, including the final geometry run after
+the owner lifted the container-build timing hold. No native FAT32 timing is claimed.
 
 ## Evidence
 
@@ -24,10 +24,12 @@ nested-QEMU observations, with shared-host variation; they are not native rates.
 
 The volume term follows cluster count, not MiB alone. A 512-MiB volume with
 4-KiB clusters has 130,811 clusters and about 4,116 preflight requests, much
-closer to the small volumes than to its 512-byte-cluster twin. Namespace collision
-validation can also be quadratic in directory entries, and each held-object
-revalidation clears a volume-sized reachability bitmap. They remain real costs, but
-the tiny fixtures isolate the dominant repeated FAT-sweep term.
+closer to the small volumes than to its 512-byte-cluster twin. At 1 GiB with
+4-KiB clusters, create/write/resize/sync/retire succeed; CREATE is 4.03–6.26 s
+with about 8,204 preflight requests. Namespace collision validation can also be
+quadratic in directory entries, and each held-object revalidation clears a
+volume-sized reachability bitmap. They remain real costs, but the tiny fixtures
+isolate the dominant repeated FAT-sweep term.
 
 Workspace also scales with geometry: the complete free vector and conservative
 full-FAT prepared-image capacity use about 20.35 MiB at dense 512 MiB. A tiny
@@ -48,8 +50,8 @@ Retain a fresh whole-volume preflight for every mutation. Collect required free
 candidates during the checker's existing final consistency sweep. Store only the
 operation's bounded allocation demand, but continue the entire sweep for the
 exact free count and global validation; consume candidates only after all
-namespace, orphan, mirror and held-object checks succeed. Remove the redundant second FAT sweep. Preserve ascending
-allocation order. Do not replace the preflight with a persistent validation proof
+namespace, orphan, mirror and held-object checks succeed. Remove the redundant
+second FAT sweep. Preserve ascending allocation order. Do not replace the preflight with a persistent validation proof
 or trust FSInfo's free count as authority.
 
 Add an operation-local FAT window: initially up to eight sectors per copy,
@@ -77,8 +79,7 @@ legitimately return LIMIT under the unchanged cap.
 
 For mirrored media with S valid FAT sectors, the dominant sweep request count
 could fall from about 4S to 2*ceil(S/8) when the callback accepts eight-sector
-transfers, plus namespace/held-object/preparation
-reads. CPU validation remains O(cluster count + namespace/chain work), and
+transfers, plus namespace/held-object/preparation reads. CPU validation remains O(cluster count + namespace/chain work), and
 mutation effects/barriers depend on changed data. This is roughly a 16-fold
 reduction of the volume-sized request term, not a measured speedup. For the
 small 128-MiB operation, several hundred milliseconds rather than several
