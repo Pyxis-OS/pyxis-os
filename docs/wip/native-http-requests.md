@@ -1,6 +1,6 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–3 delivered; adapters/coordinator tasks 4–5 remain; native completion prerequisite merged, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–4 delivered; shell coordinator task 5 remains; native completion prerequisite merged, 2026-10-12.**
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -37,14 +37,10 @@ native whole-GET cost (+18%, 14.3 → 17.2 ms) on 2026-10-12;
 
 ## Inspected starting point
 
-Inspected main `7db4cb31`, userland `2bc56bf4`: [libhttp](../userland/http-fetch.md)
-now streams GET/fixed-file POST with retained framing results and explicit long
-deadlines. Its OPEN/upload path still waits through headers; the provider cannot
-call it synchronously from its service loop. Task 3 must expose cooperative
-progress between bounded network operations. [httpfs](../interfaces/file-providers.md#http-and-https-snapshots)
-still returns complete FILE snapshots, with a 16 MiB chain allowance and 64 MiB
-body storage. TLS has one active connection per runtime. Native FILE offsets/SIZE
-and copied `pyxis_stdio_response` metadata remain unsuitable for a live response.
+Task 4 started from main `2f2109fc`, userland `9f781e94`, ports `f93becb9`.
+The provider already delivered prepared response streams; ordinary libc URL opens
+still used complete FILE snapshots. Task 4 connects those streams to stdio and
+explicit child handoff; shell transaction coordination remains task 5.
 
 ## Carried-forward accepted contract
 
@@ -286,7 +282,7 @@ no launch-site wrapper may add grants, widen a bundle request or provision a
 provider behind the caller's back. Missing POST preparation/private staging
 remains a refusal. Shell transaction coordination is task 5.
 
-1. **Explicit commit for staged stdio .** `"r"` opens a forward response;
+1. **Explicit commit for staged stdio.** `"r"` opens a forward response;
    `"w"` and `"w+"` prepare a POST and expose only its staged writer initially.
    Native libc and Lua helpers expose prepare/commit/status/abort. Commit flushes
    this FILE's pending output and refuses a failed/uncertain producer; it never
@@ -299,7 +295,7 @@ remains a refusal. Shell transaction coordination is task 5.
    The ordinary URL-open deadline is one 30-second budget including staging and
    response consumption; explicit preparation accepts a longer absolute deadline.
    Slow/manual staging needs an explicit longer deadline.
-2. **Paired declared standard-stream facets .** Extend launch/startup
+2. **Paired declared standard-stream facets.** Extend launch/startup
    stream records with an optional, typed read-only observation companion, selected
    from the caller's declared grant list. HTTP response stdin carries STREAM READ
    plus HTTP STATUS-only observation, both with CALL transport; kernel/startup
@@ -311,7 +307,7 @@ remains a refusal. Shell transaction coordination is task 5.
    handle. Missing/failing final observation cannot establish successful completion.
    The pair keeps its lifetime/association with the selected stream; replacing
    stdin never infers a companion or creates authority.
-3. **Stream URL GET, preserve URL policy, explicitly materialize .**
+3. **Stream URL GET, preserve URL policy, explicitly materialize.**
    Switch libc `fopen`/`open` HTTP reads to prepared streams. Keep the existing
    anonymous redirect rules, final URL/media type and errno mapping for ordinary
    URL opens; explicit prepared APIs retain complete HTTP error bodies/status.
@@ -341,21 +337,18 @@ Main `2f2109fc`, userland `9f781e94`, ports `f93becb9`; source inspection only.
 
 ### Qualification and measurement
 
-Before any read-path implementation, capture repeated GET/OPEN/payload and
-RAM controls with existing iobench; repeat matched runs afterward at the same
-CPU/devices/revisions. **Timing is held until the owner confirms the LLVM host
-rebuild finished**, 2026-10-13; nested results cannot establish native throughput.
-Compare the eventual native HTTP/TCP gap with the reference above, including
-per-READ cost; request the owner's native A/B rather than claiming a nested result
-meets the network target. No throughput optimization is implicitly assigned.
+The owner released the timing hold after publishing builder `4c23a20` on
+2026-10-13. [Task 4 qualification and matched nested runs](../development/experiments/http-stream-adapters.md)
+record C/Lua reads, staged POST, final observation inheritance, truncation,
+authenticated TLS EOF, redirect policy and explicit 17 MiB materialization.
+Nested results do not establish native throughput; the next native A/B must
+track the HTTP/TCP gap above. No throughput optimization is assigned here.
 
-Functional QEMU checks cover C/Lua chunk reads, staged w/w+ and explicit commit,
-error responses, authenticated/truncated EOF, unsupported seek/SIZE, early close,
-redirect/trust policy, streamed cp, and a child receiving only reader/observation
-through declared startup streams. Include a body above 16 MiB without whole-body
-buffering. Record ferror/final status independently of HTTP success; never invent
-EOF, successful size, metadata or mutation. Userland/ports dependencies precede
-the parent ABI/gitlink PR; rebase dependency mains before reporting.
+Implemented interfaces and limits are in [stdio](../userland/stdio.md#http-streams-and-explicit-submission),
+[HTTP transactions](../interfaces/http-transactions.md) and
+[fetching](../userland/http-fetch.md#redirect-chains). Userland and ports precede
+the parent ABI/gitlink update. Shell bindings and producer coordination remain
+unassigned task 5.
 
 ## Task 2 accepted TLS policy
 
@@ -409,13 +402,13 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   and local cryptography remain synchronous; STATUS/ABORT cannot run during them.
   **After this task the owner can:** use native prepared grants to submit once,
   read a prefix and distinguish complete, failed and unknown outcomes.
-- [ ] **4. Generic libc/Lua adapters and stream propagation.** Implement `"r"`,
-  staged `"w"` and commit-then-response `"w+"`, plus preparation/status/abort
-  helpers, with TLS solely in the provider. Carry read-only final-observation
-  authority with inherited response streams; copied OPEN metadata alone cannot
-  do this. `ferror`/EOF, unavailable seek/size and early-close cleanup must be
-  honest. Audit current seek-dependent HTTP consumers before switching GET;
-  explicitly materialize where needed, without restoring the 16 MiB transport cap.
+- [x] **4. Generic libc/Lua adapters and stream propagation.** Delivered
+  streamed `"r"`, staged `"w"` and explicit commit-then-response `"w+"`, with
+  preparation/status/abort helpers and TLS solely in the provider. Child stdin
+  receives declared reader/STATUS-only facets; final observation validates EOF.
+  Seeking/SIZE refuse; `cp` materializes explicitly without a transport body cap.
+  [Interfaces](../userland/stdio.md#http-streams-and-explicit-submission) and
+  [QEMU qualification/cost limits](../development/experiments/http-stream-adapters.md).
   **After this task the owner can:** stage a POST and stream its response or a
   large GET using Lua file I/O, with explicit final-result/error checks.
 - [ ] **5. Shell bindings and end-to-end completion.** Prepare directly in the

@@ -1,19 +1,23 @@
 # Userspace HTTP and HTTPS fetching
 
 The `httpfs` userspace service connects the incremental fetch library to
-[provider OPEN and exported FILE snapshots](../interfaces/file-providers.md). Ordinary file
-consumers use `http://` and `https://` through their delegated namespace. Separate
+[prepared HTTP transactions](../interfaces/http-transactions.md). Ordinary C/Lua
+FILE consumers and HTTP stdin use forward response streams through `http://`
+and `https://` in their delegated namespace. Separate
 provider instances serve the two schemes. Publication performs no fetch; boot
 and local files remain usable without networking. HTTPS verifies certificates
 against packaged public roots and any explicitly configured custom roots.
 The [TLS contract](https.md) describes the profile, trust updates, native hooks
 and TLS memory accounting.
 
-[Prepared native transactions](../interfaces/http-transactions.md) additionally
-return body/control/response/observation grants, serving bounded response chunks
-before completion. This does not yet change libc FILE opens or shell redirection.
-The stock JSON aliases preserve read-only authority; POST requires explicitly
-provisioned private staging and separate write authority.
+Transactions separate body/control/response/observation grants and serve bounded
+response chunks before completion. The [stdio adapter](stdio.md#http-streams-and-explicit-submission)
+supports ordinary GET and explicit POST preparation/commit/status/abort;
+[Lua](lua.md) uses the same libc adapter. The HTTP adapters leave TLS to the
+provider; libc does not link TLS. The stock JSON aliases preserve read-only
+authority; POST requires explicitly provisioned private staging and separate
+write authority. Explicit legacy [provider OPEN](../interfaces/file-providers.md)
+still returns complete immutable FILE snapshots.
 
 **Pyxis must be able to hit good network targets overall in the future.**
 End-to-end HTTP throughput should track the native TCP path. The ThinkPad xfer
@@ -73,9 +77,10 @@ directories for that provider launch. Trust loading uses native read-only files,
 never a remote provider. See
 [trust configuration](https.md#trust-configuration-and-updates) for packaged roots,
 native trust loading, bounded setup failure and the restart/update contract.
-Each instance owns independent trust, snapshots and storage;
-existing snapshots survive removal/replacement until their final handles close.
-Clients receive FILE authority, not trust-management or additional TCP grants.
+Each instance owns independent trust, transactions, snapshots and storage;
+retained exports survive removal/replacement until their final handles close.
+Clients receive delegated I/O/observation/control authority, not trust-management
+or additional TCP grants.
 
 ## Library and authority
 
@@ -149,10 +154,9 @@ HTTPS requires authenticated TLS EOF. Native handle-close failure invalidates
 completion; a TLS close-notification failure after valid framing is diagnostic.
 These are the [HTTP framing rules](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3),
 with the existing identity-only representation and trailer restrictions.
-The snapshot collector keeps the existing HTTP status, redirect and storage
-policy. `httpfs` still publishes complete immutable FILE snapshots; this API does
-does not turn those FILE opens into live streams. The provider now progresses
-OPEN cooperatively; PREPARE exposes the separate live STREAM interface.
+The snapshot collector keeps its existing HTTP status and storage policy.
+`httpfs` progresses both legacy OPEN and typed PREPARE cooperatively; ordinary
+libc opens use the latter and consume the live STREAM interface.
 
 Qualification, configuration and measured allocation demand are recorded in the
 [task 1 experiment](../development/experiments/http-incremental-get.md).
@@ -188,12 +192,13 @@ write is pending fails explicitly under the
 [accepted TLS policy](../wip/native-http-requests.md#task-2-accepted-tls-policy).
 
 [Task 2 qualification and costs](../development/experiments/http-fixed-post.md)
-cover local HTTP/HTTPS fixtures in nested QEMU. Provider FILE opens, libc and Lua
-still expose GET snapshots; they do not submit POST yet.
+cover local HTTP/HTTPS fixtures in nested QEMU. The provider and libc/Lua
+transaction adapters add private staging, freezing and explicit submission; they
+do not require the application to link libhttp or TLS.
 
 ## Request and response policy
 
-Each provider hop sends one HTTP/1.1 GET with Host, Connection: close and
+Each ordinary GET hop sends one HTTP/1.1 GET with Host, Connection: close and
 Accept-Encoding: identity. The request is framed by its header terminator;
 TCP write shutdown waits until the response is complete. URI syntax accepts ASCII DNS names or numeric IPv4,
 an optional decimal port, path and query. It rejects credentials, IPv6 literals,
@@ -209,7 +214,9 @@ chain, name and validity checks complete before the GET is sent.
 
 Responses use HTTP/1.0 or HTTP/1.1. Status 200 returns bytes; 204 returns an empty
 body without waiting for connection close. Other final statuses are retained and
-rejected. The shared open bridge follows the selected redirects below. There is no
+rejected by ordinary GET opens. Explicit transactions retain other final HTTP
+statuses and their bodies separately from framing success. The shared typed
+GET helper follows the selected redirects below. There is no
 decompression, connection reuse, cache or whole-request replay. An HTTPS failure
 never triggers a plaintext request.
 
@@ -227,8 +234,8 @@ chunked body completes is still incomplete HTTP input. Complete fixed-length,
 chunked and 204 responses do not wait for peer shutdown. On success, the client
 attempts its own TLS close notification using at most 100 ms of the remaining
 original deadline. Its failure is diagnostic; handle-close failure still fails
-the fetch. Failed fetches free partial bodies and abort the stream, preserving
-their first failure.
+the fetch. Failed streams retain their delivered prefix and first failure;
+snapshot collection instead discards partial body storage.
 
 The deliberately strict subset requires CRLF and rejects folded fields, duplicate
 or comma-list Content-Length (even identical values), conflicting length/transfer
@@ -254,15 +261,19 @@ including relative/query-only/scheme-relative forms and inherited fragments.
 Only HTTP(S) provider targets are allowed; native roots and ambiguous bindings
 are refused. Invalid Location/outcomes are CALL_BAD_REQUEST, size excess is
 CALL_FILE_TOO_LARGE. Final statuses remain 200/204; unselected 3xx remain errors.
-301/302/303 choose GET without a body; 307/308 preserve method/body and would
-require safe replay. Delivery is GET-only; POST/body replay is not implemented.
+Ordinary opens are GET-only throughout the chain. Explicit preparation returns
+the raw response without automatic redirects, including for POST; it never
+replays a body.
 
-The caller's shared libpyxis path bridge owns the chain and retains each delegated
+The caller's shared libpyxis typed GET helper owns the chain and retains each delegated
 scheme binding on first use until completion/failure. HTTP providers have no
-TLS runtime or caller namespace; they do not acquire cross-scheme authority.
-Each validated REDIRECT reply has no FILE grant. The provider closes the stream
-without draining its intermediate body and releases TLS/staging before replying;
-only final BYTES success owns a snapshot. Malformed replies close received grants.
+caller namespace or cross-scheme authority; each owns its TLS runtime. The helper
+validates final headers and observation, then explicitly ABORTs an intermediate
+response without draining its body. The provider holds the first ABORT receipt
+until pending I/O cancellation and stream cleanup finish; the next hop starts
+only after that acknowledgment and facet release. The final response owns a
+forward STREAM, not body-sized storage. Legacy OPEN instead exchanges
+REDIRECT/BYTES outcomes and publishes only a complete snapshot.
 
 HTTP→HTTPS and public-root cross-origin following are allowed. HTTPS→HTTP is
 CALL_DENIED with no target contact or TLS-failure fallback. Custom-CA providers
@@ -273,24 +284,25 @@ instance are refused; HTTP upgrades into it are refused too. This continuity
 policy does not restrict independent direct opens. Rebuild Host/Connection/Accept-Encoding
 per hop; no custom headers, credentials, cookies or Referer are supplied.
 
-One absolute **30 s** deadline (or earlier caller cap), **16 MiB body allowance**,
-**32 KiB headers/trailers**, **256 fields** and **eight informational responses**
-cover the chain. Bound decoded reads and storage inside each provider. HTTP
-header reads can include body read-ahead, which is charged conservatively for
-redirects and refused if it exceeds the remaining allowance; unread
-redirect bodies are neither allocated nor drained. Final decoded bytes use the
-remainder; the existing framing-overhead bound and 64 MiB per-instance storage
-quota still apply. An exact-limit close-delimited body needs a bounded one-byte
-EOF probe; excess fails without retaining/publishing it. No budget refresh or
-transport-error replay occurs. Caller-owned scratch is bounded independently of
-initial path length; libc supplies it, native helpers remain allocation-free.
+One original absolute **30 s** deadline, **32 KiB headers/trailers**, **256 fields**
+and **eight informational responses** cover the ordinary typed GET chain and
+final body consumption. There is no cumulative body cap or deadline refresh.
+Unread redirect bodies are neither materialized nor drained. Explicit preparation
+may select a longer absolute deadline; it does not use the automatic chain.
+Legacy OPEN retains a **16 MiB body allowance** across redirects, conservative
+body read-ahead charging and the **64 MiB** snapshot storage quota; an exact-limit
+close-delimited snapshot needs a bounded one-byte EOF probe. Neither path retries
+a transport failure.
 
 `pyxis_stdio_response()` in `<pyxis/stdio.h>` copies final URL (with fragment),
 redirect count, HTTP status and media type from an open FILE without changing
-position/indicators or granting authority. Local/inherited handles have absent
-metadata; close frees it. Native path callers can request the same data. Failed
+position/indicators or granting authority. Local handles can have absent
+metadata; inherited HTTP streams query METADATA+STATUS for the actual final URI,
+HTTP status and media type, without recovering the parent's redirect count.
+Close frees owned metadata. Native path callers can request the same data. Failed
 fopen still reports errno; the native bridge retains diagnostic HTTP status.
-[Links](links.md) adopts the final URL and cached bytes without another fetch.
+[Links](links.md) adopts the final URL, materializes the forward response into
+its own cache and requires final completion before publishing cached bytes.
 
 The [qualification record](../development/experiments/http-redirects/README.md)
 separates controlled QEMU results from source inspection. Protocol references:
@@ -307,9 +319,10 @@ separates controlled QEMU results from source inspection. Protocol references:
 | Aggregate fields | 256 |
 | Informational responses | 8 |
 | Each chunk size/extension line | 8 KiB |
-| Body allowance across an open chain | 16 MiB |
-| Shared body-storage reservations | 64 MiB |
-| Snapshot/redirect fetch time | 30 seconds, capped by an earlier caller deadline |
+| Legacy OPEN/collector body allowance | 16 MiB; shared across a legacy redirect chain |
+| Shared snapshot body-storage reservations | 64 MiB |
+| Ordinary typed GET chain and consumption | One original 30-second deadline |
+| Legacy OPEN/collector time | 30 seconds, capped by an earlier caller deadline |
 | Incremental request time | 30 seconds by default; caller absolute deadline may be longer |
 | Request headers, including request line and terminator | 32 KiB; 256 fields including generated fields |
 
@@ -326,8 +339,8 @@ at most two attempts, capped by this same absolute deadline. No retry,
 informational response or successful short transfer refreshes it. CPU-side work
 is checked before returning success as well.
 
-The caller zero-initializes a `http_storage` account and keeps it alive until all
-associated bodies are released. A successful result owns its bytes and capacity;
+For snapshot collection, the caller zero-initializes a `http_storage` account and
+keeps it alive until all associated bodies are released. A successful result owns its bytes and capacity;
 `http_body_release` frees them and returns the reservation. The account is for
 single-task use. Copies of the C structure do not create additional ownership.
 Release an existing successful result before reusing its output structure.
@@ -338,13 +351,16 @@ exists and the bytes are copied. The 64 MiB ceiling counts that temporary overla
 as well as previously returned bodies. Allocation can fail below the ceiling;
 there is no eviction. An empty body requires no body allocation. Every failed
 fetch discards staging, returns its reservation and aborts/closes network state.
-No body is exposed before success.
+No snapshot body is exposed before success. Typed streams expose a prefix while
+pending and require final STATUS to establish complete framing; the
+[stdio contract](stdio.md#http-streams-and-explicit-submission) covers bounded
+reads, terminal failures and inherited response authority.
 
 ## Snapshot lifetime and scheduling
 
 The provider shares 63 transaction/snapshot export slots, including empty
 snapshots, plus one OPEN service export. A slot is reserved through retirement
-acknowledgment; prepared requests reserve multiple slots. Returned
+acknowledgment; prepared requests reserve multiple slots. Legacy OPEN's returned
 FILE grants carry READ and CALL authority. Copies/attachments retain the same
 body; READ uses explicit offsets and SIZE remains stable. Every OPEN fetches
 independently, with no shared cache or eviction.
@@ -370,20 +386,21 @@ Ordinary FILE helpers still supply no IPC deadline.
 
 ## Operation errors
 
-Native OPEN returns transport/validation failure separately from a valid provider
-operation error. Only success transfers a FILE grant. The provider maps errors to
-existing native statuses; libc uses its ordinary translation, without HTTP logic.
+Native calls return transport/validation failure separately from a valid provider
+operation error. Only success transfers the promised grants. The provider maps
+errors to existing native statuses; libc translates them into errno and validates
+typed response completion.
 
 | Condition | Native result | libc errno |
 | --- | --- | --- |
 | HTTP 404/410 or DNS NXDOMAIN | NOT_FOUND | ENOENT |
 | HTTP 401/403 or missing OPEN authority | DENIED | EACCES |
-| Writable open through the OPEN_READ-only binding | DENIED | EACCES |
+| POST preparation through a read-only binding | DENIED | EACCES |
 | Redirect, unsupported success status, unsupported HTTP feature | BAD_OPERATION | ENOTSUP |
 | Other rejected HTTP status, malformed/truncated response or other DNS answer failure | IO | EIO |
 | Invalid URI syntax | BAD_REQUEST | EINVAL |
 | Fetch/call deadline expiry | TIMED_OUT | ETIMEDOUT |
-| URI/header/body limit | FILE_TOO_LARGE | EFBIG |
+| URI/header limit or legacy snapshot body limit | FILE_TOO_LARGE | EFBIG |
 | Aggregate body storage limit | QUOTA | EDQUOT |
 | Snapshot slots or IPC admission full | QUEUE_FULL | EAGAIN |
 | Allocation failure | NO_MEMORY | ENOMEM |

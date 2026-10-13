@@ -9,8 +9,8 @@ Libpyxis still returns native statuses. Libc translates failures into `errno`.
 
 ## Opening and ownership
 
-`fopen` accepts `r`, `w`, `a` and their `+` forms. Optional `b` is accepted before
-or after `+` and has no effect. Other extensions and duplicated mode letters are
+For local files, `fopen` accepts `r`, `w`, `a` and their `+` forms. Optional `b`
+is accepted before or after `+` and has no effect. Other extensions and duplicated mode letters are
 rejected. `r` requires an existing readable file; `w` creates or truncates a
 writable file; `a` creates if absent and chooses the current end before each
 write. `+` requests both read and write access through the caller's existing
@@ -82,13 +82,59 @@ Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
 atomic append guarantee; see [technical debt](../technical-debt.md#non-atomic-stdio-append).
 
+## HTTP streams and explicit submission
+
+`fopen(uri, "r")` for HTTP(S), including `json+http(s)`, prepares and commits GET
+through the shared typed transaction helper and follows its
+[redirect policy](http-fetch.md#redirect-chains). It returns after final headers;
+the body is a forward-only response STREAM. There is no 16 MiB body cap. Reads
+use at most 4,088 bytes per native call, with ordinary FILE loops and read-ahead.
+A zero-byte response read performs one final STATUS query: only COMPLETE phase,
+COMPLETE framing and CALL_OK establish EOF. Failure sets `ferror` and errno;
+the backend retains that terminal failure, so `clearerr` cannot turn it into EOF
+or restart the transfer. Delivered bytes remain a prefix until completion.
+Response seeking and positioned I/O fail with ESPIPE; SIZE is unavailable.
+
+`fopen(uri, "w")` and `fopen(uri, "w+")` prepare POST staging without network
+submission. They require the caller's delegated preparation/write authority and
+provider-private staging. Append and `r+` are unsupported. `<pyxis/http.h>` adds
+the explicit transaction operations:
+
+| Operation | Behavior |
+| --- | --- |
+| `pyxis_http_prepare(uri, mode, options)` | Prepare `r` GET or `w`/`w+` POST without DNS/connect/send. Options supply copied header lines, flags and an absolute monotonic deadline. |
+| `pyxis_http_commit(request)` | Flush this FILE's successful staged output, freeze and submit once. `r`/`w+` return the same FILE as a response reader; `w` returns a distinct read FILE. |
+| `pyxis_http_status(stream, status)` | Copy phase, submission, HTTP status, framing, native failure and progress from the observation facet. |
+| `pyxis_http_abort(request)` | Explicitly abort through the control facet; leave the FILE open for status/close. |
+
+Zero/omitted deadline selects one 30-second budget starting at preparation,
+including staging and response consumption. Supply a later absolute deadline
+for slow producers. Explicit preparation does not follow redirects or replay
+POST; a fully framed 4xx/5xx response can complete, with its HTTP code separate
+from transfer success. Header/credential flags retain the
+[native transaction policy](../interfaces/http-transactions.md).
+
+Reading a readable prepared request before commit fails with EBUSY and sets the
+FILE error indicator; it neither reads staging nor submits. A pure precommit
+read refusal does not poison the producer or prevent commit, although the error
+indicator still needs `clearerr`. Producer failures or uncertain writes prevent
+commit even after `clearerr`. Flush, close and exit never submit a request.
+After a submission attempt the object cannot submit again, including after a
+lost reply; failure can leave the remote outcome unknown. For `w`, close both
+the request and the distinct response when finished. Libc implements this
+adapter with native grants and does not link TLS; the provider owns transport
+and certificate verification.
+
 ## Provider response metadata
 
 `pyxis_stdio_response(FILE *, struct pyxis_response_info *)` in `<pyxis/stdio.h>`
 copies presence flags, status, redirect count, final URL and media type without
-changing cursor, indicators or native authority. It returns zero for a valid
-stream, including local/inherited streams with absent metadata; NULL arguments
-use EINVAL and closed/invalid streams EBADF. Failure clears the output; success
+changing cursor, indicators or native authority. Local streams can have absent
+metadata. An inherited HTTP response queries METADATA and STATUS through its
+declared observation grant to recover the actual final URI, HTTP status and
+media type; it does not recover the parent's redirect count. Query failures
+retain their errno. NULL arguments use EINVAL and closed/invalid streams EBADF.
+Failure clears the output; success
 preserves errno. Metadata belongs to the shared open object and is freed on its
 final descriptor close.
 Failed fopen exposes errno only. See the [redirect contract](http-fetch.md#redirect-chains).
@@ -434,8 +480,12 @@ Startup supplies independent stdin, stdout and stderr bindings. Each declares
 `PROTOCOL_CONSOLE`, `PROTOCOL_FILE` or `PROTOCOL_PIPE` and owns a distinct child
 handle with only READ authority for stdin or WRITE authority for stdout/stderr.
 An exported FILE additionally retains CALL transport; native streams retain zero.
-The shared [provider bridge](../interfaces/file-providers.md) supports ordinary opens and stdin
-redirection without changing stdio operations or per-descriptor positions.
+HTTP stdin instead declares a callable `PROTOCOL_STREAM` READ grant and a
+distinct `PROTOCOL_HTTP_TRANSACTION` STATUS-only observation grant. The trusted
+launch adapter delegates the validated pair together; no mutation, COMMIT or
+ABORT authority reaches the child. STATUS also permits read-only METADATA.
+The shared [provider bridge](../interfaces/file-providers.md) supports ordinary
+opens; HTTP redirection uses the typed transaction helper before delegation.
 Runtime adopts these handles into descriptors 0, 1 and 2 before heap
 initialization, using static storage. It retains no hidden startup copy.
 Closing stdout cannot close stderr or a named terminal grant. Normal boot binds
@@ -457,8 +507,9 @@ File-backed standard streams start at offset zero, with independent per-descript
 positions. Adoption does not open, truncate or append
 to the file. Two output streams backed by the same object can overwrite one
 another because their positions are independent. Console and pipe streams remain
-sequential and cannot seek. [Pipes](../interfaces/pipes.md) use reference-based EOF and report
-EPIPE when their last reader closes.
+sequential and cannot seek, as do HTTP response streams.
+[Pipes](../interfaces/pipes.md) use reference-based EOF and report EPIPE when
+their last reader closes.
 
 `startup_stream(index)` borrows the handle owned by the corresponding descriptor;
 the immutable snapshot retains no reference, and native code must not close its
@@ -468,14 +519,16 @@ Descriptor-number reuse does not refresh it. Before owner close, native code may
 when it needs a separately owned reference, but must close that copy itself.
 For native launch adapters, `<pyxis/stdio.h>` provides
 `pyxis_stdio_stream(FILE *, struct startup_stream *)`. It checks the current FILE
-registry and descriptor association, returning a borrowed protocol/handle.
+registry and descriptor association, returning a borrowed protocol/handle and,
+for HTTP responses, the declared observation protocol/handle.
 Closed or absent standard wrappers return NONE; descriptor-number reuse never
 reconnects them. Success preserves errno, indicators, cursor, pushback and
-read-ahead, and acquires no reference. The caller must not close the handle or
+read-ahead, and acquires no reference. The caller must not close either handle or
 use it after owner close or descriptor replacement. Flush queued output before
 delegating. This lets [Lua](lua.md) delegate live C streams without reusing the
-stale startup snapshot. Child files begin at offset zero; buffered pipe bytes,
-queued output and append state are not transferred.
+stale startup snapshot. HTTP children consume the same forward response and
+validate EOF with their observation grant. Child files begin at offset zero;
+buffered stream bytes, queued output and append state are not transferred.
 
 Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
 resources; libc never uses them to fill a missing standard-stream binding.
