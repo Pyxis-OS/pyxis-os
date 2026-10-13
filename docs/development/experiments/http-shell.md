@@ -1,6 +1,6 @@
 # HTTP shell transaction checkpoint — 2026-10-13
 
-Task 5 is in review; standalone script delivery awaits the owner contract in
+Task 5 is in review; the standalone-script contract was accepted on 2026-10-13 in
 [#780](https://git.internal/PyxisOS/pyxis-os/pulls/780). No native measurements are
 claimed. **Pyxis must be able to hit good network targets overall in the future.**
 The ThinkPad task 4 1 MiB GET measured about 81–83 MiB/s, versus the historical
@@ -42,7 +42,8 @@ Frozen current image: clean parent `72e13880`, userland `22fcade`, ports
 `bcacac6`; later userland `fc22dc5` changes README only. Same builder and VM
 settings; private NPFS disk, local fixture, no debugger attached during timed
 work. An existing manual probe explicitly declares the shell script's held
-PIPE CREATE/LAUNCH grants; it does not qualify ordinary standalone scripts.
+PIPE CREATE/LAUNCH grants; these timings precede the public shell bundle and do
+not measure its manifest/positional-script startup.
 
 Five alternating direct/worker POST pairs after warmups use the same 1 MiB z
 payload (128×8192-byte writes), headers, backing and 120-second deadline. The
@@ -144,8 +145,35 @@ sampled capacities, not peak RSS or filesystem/network-cache accounting.
 
 The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES, avoiding
 16-byte trailing WRITE calls; its allocated buffer stays 4 KiB. All owned
-qualification jobs are stopped. Standalone-script delivery still awaits its
-owner contract; these results do not close the milestone.
+qualification jobs are stopped. The large transfers use the existing Lua adapter; standalone-script checks are
+recorded separately below.
+
+## Positional scripts — affected qualification
+
+Clean parent `8cba734d`, userland `cef30297`, ports `1800e285`: ordinary image
+and all four bundles built/verified. Same nested VM configuration, local HTTP
+fixture, no timings. Stock live, normal native-bin and missing-bin rescue boots
+passed bare `shell home://post.pxs`; existing init filenames stayed unchanged.
+Installed archives were host-shaped from inspected policy, not produced by an
+executed native installer. Five JSON POSTs carried exactly `{}`; three deliberate
+GETs checked retained/nested reads and truncation, with no replay or failed POST.
+
+Nested scripts kept independent same-name tables. An unfinished parent POST
+correctly caused provider BUSY before child submission; a completed parent GET
+allowed independent nested transactions. Positional argv/flag, missing/nonfile
+and provider-path refusals, unchanged granted-script diagnostic precedence,
+missing LAUNCH and body-producer attenuation all passed. Failed producers and
+malformed response readers/pipelines stopped the script before later markers.
+
+**Confirmed blocker:** physical Ctrl+C terminated the positional coordinator,
+but read-only before/after snapshots showed the same blocked `cat` and staging
+worker still submitted/parked and not stopping. The surviving cat retained
+native console-reader ownership. No POST occurred. The parent owns interrupt
+arming but terminates only its direct child; the script receives READ alone.
+The [cancellation handoff decision](../../wip/native-http-requests.md#foreground-script-cancellation--owner-decision-required)
+needs the owner before any fix. All owned VMs/server/debuggers are stopped;
+this failure prevents task 5 readiness. No native or final bundle-startup timing
+claim follows from these functional checks.
 
 ## Owner native recheck
 
@@ -162,5 +190,6 @@ known 1 MiB iobench pattern; repeat the native RAM control. Record medians,
 ranges, NIC/CPU configuration and whole-consumption throughput. Compare the
 current HTTP result with the ThinkPad TCP reference above; do not treat 85 MiB/s
 as a promised rate or reuse nested figures as native evidence. Worker POST
-timing uses the same explicit manual profile/direct versus worker workloads as
-the recorded comparison until the standalone-script contract is accepted.
+timing should repeat matched direct versus worker workloads with the declared
+`shell home://post.pxs` entry point; its final startup cost was not timed in the
+recorded comparison.
