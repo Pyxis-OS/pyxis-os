@@ -1,6 +1,6 @@
 # HTTP shell transaction checkpoint — 2026-10-13
 
-Task 5 is in review; the standalone-script contract was accepted on 2026-10-13 in
+Task 5a is in review; the owner deferred standalone scripts to #789 on 2026-10-13 in
 [#780](https://git.internal/PyxisOS/pyxis-os/pulls/780). No native measurements are
 claimed. **Pyxis must be able to hit good network targets overall in the future.**
 The ThinkPad task 4 1 MiB GET measured about 81–83 MiB/s, versus the historical
@@ -148,7 +148,7 @@ The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES, avoiding
 qualification jobs are stopped. The large transfers use the existing Lua adapter; standalone-script checks are
 recorded separately below.
 
-## Positional scripts — affected qualification
+## Withdrawn positional prototype — qualification and split
 
 Clean parent `8cba734d`, userland `cef30297`, ports `1800e285`: ordinary image
 and all four bundles built/verified. Same nested VM configuration, local HTTP
@@ -170,9 +170,10 @@ but read-only before/after snapshots showed the same blocked `cat` and staging
 worker still submitted/parked and not stopping. The surviving cat retained
 native console-reader ownership. No POST occurred. The parent owns interrupt
 arming but terminates only its direct child; the script receives READ alone.
-The [cancellation handoff decision](../../wip/native-http-requests.md#foreground-script-cancellation--owner-decision-required)
-needs the owner before any fix. All owned VMs/server/debuggers are stopped;
-this failure prevents task 5 readiness. No native or final bundle-startup timing
+The owner accepted [deferral to scoped subgroups](../../wip/native-http-requests.md#task-5-split--accepted-2026-10-13),
+without a console-interrupt handoff. The positional implementation is removed
+from 5a and preserved in a blocked draft follow-up. All owned VMs/server/debuggers are stopped;
+this failure gates standalone 5b, not the qualified interactive 5a delivery. No native or final bundle-startup timing
 claim follows from these functional checks.
 
 ## Owner native recheck
@@ -190,6 +191,6 @@ known 1 MiB iobench pattern; repeat the native RAM control. Record medians,
 ranges, NIC/CPU configuration and whole-consumption throughput. Compare the
 current HTTP result with the ThinkPad TCP reference above; do not treat 85 MiB/s
 as a promised rate or reuse nested figures as native evidence. Worker POST
-timing should repeat matched direct versus worker workloads with the declared
-`shell home://post.pxs` entry point; its final startup cost was not timed in the
-recorded comparison.
+timing uses the explicit trusted manual profile for the recorded direct/worker
+comparison. Public positional script startup belongs to deferred 5b and was not
+timed here.

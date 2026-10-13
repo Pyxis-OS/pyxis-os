@@ -7,9 +7,9 @@ define PREPARE, COMMIT, ABORT, STATUS and METADATA. HTTP/TLS remain userspace
 protocols;
 [STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
 [Libc streaming](../userland/stdio.md) uses these facets; the [shell coordinator](../userland/shell.md#prepared-http-requests)
-uses the same facets. Positional script execution is implemented; its
-[cancellation handoff](../wip/native-http-requests.md#foreground-script-cancellation--owner-decision-required)
-needs an owner decision before delivery.
+uses the same facets for interactive and trusted-bootstrap requests.
+[Standalone scripts](../wip/native-http-requests.md#task-5-split--accepted-2026-10-13)
+wait for scoped descendant cancellation and are not delivered.
 
 ## Authority and preparation
 
