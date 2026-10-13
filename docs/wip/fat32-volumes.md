@@ -617,7 +617,24 @@ or a userspace filesystem proxy.
    policy fixes the instance RW at first admission while ordinary views remain
    attenuated; otherwise admit RO. A manifest cannot authorize admission. An existing RO instance requires drainage and a
    successful explicit RETIRE, then fresh RW admission; launching an editor does
-   not change its mode. The boot ESP issuer stays RO; RW real-ESP profiles are not enabled or exercised.
+   not change its mode. The boot ESP issuer stays RO. No shipped profile enables
+   RW ESP access, and no native ESP write has been exercised.
+
+### Boot ESP write policy — accepted default, 2026-10-13
+
+An authorized RW mount factory **may mount the boot ESP partition read-write**.
+This is a deliberate allowance: the accepted [installer task 4 configuration
+contract](installer-tui.md#accepted-configuration-contract--2026-10-11) moves
+`boot.lua` onto the ESP, and task 5 supports explicitly declared writable ESP
+editor grants. Boot provenance does not impose a write prohibition on a separately
+authorized RW factory. The boot-origin issuer/view remains RO; its grant alone
+authorizes no RW admission or editor write access.
+
+Existing fixed-mode admission, drainage before RO-to-RW re-admission, extent
+exclusion, validation and backend write qualification still apply. Factory
+authority and selected editor grants must be explicitly delegated. This policy
+does not enable a shipped RW ESP profile or authorize a native ESP run: real ESP
+steps still require explicit owner approval and presence.
 
 CLI/schema names are implementation choices. Task 5 is owner-assigned; no next
 task is authorized. Disk GUIDs and serials belong only in owner-local configuration,
