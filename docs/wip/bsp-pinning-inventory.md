@@ -2,8 +2,9 @@
 
 Owner-requested planning-freeze exception, **2026-10-13**. Read-only inventory
 at main `50e5411f4173122aeac27838eefaae0f84cadfe2`; no code, ABI, placement,
-interrupt-routing or allocator contract changes. Decisions below are **proposed,
-not accepted**. Installer task 5 stays parked on its FAT32 dependency.
+interrupt-routing or allocator contract changes. All three defaults below are
+**accepted by the owner, 2026-10-13; not implemented**. The owner's pause on
+new tasks remains in force. Installer task 5 stays parked on its FAT32 dependency.
 
 The immediate problem is not a lack of allocator locks. Heap/PMM/scratch access
 already works on other CPUs. Final process reclamation still runs to completion
@@ -176,7 +177,7 @@ per-worker CPU savings, so they are not summed into an invented BSP budget.
 ## Small first slice and coordination
 
 Claude owns HDA recovery, codec-setup retry and then bounded teardown; this
-inventory must not duplicate that implementation. Proposed first slice:
+inventory must not duplicate that implementation. Accepted first-slice direction:
 
 1. Move final reclamation out of the scheduler's uninterrupted drain into a
    **BSP, IF=1 reaper**. Scheduler handoff is allocation-free and retains the
@@ -200,31 +201,29 @@ inventory must not duplicate that implementation. Proposed first slice:
 
 **After the first slice the owner can:** quit or terminate a large game while
 CPU0 continues taking device interrupts and scheduling between reclaim chunks,
-with unchanged native retirement results. This is a proposed outcome, not
+with unchanged native retirement results. This is the planned outcome, not
 qualified delivery or a promise that all remaining audio misses disappear.
 
-## Owner decisions — pending
+## Owner decisions — accepted 2026-10-13
+
+All three defaults are **accepted, not implemented**:
 
 1. **First slice: retain BSP ownership, make reclamation preemptible and bounded.**
-   Recommended default: coordinate with Claude's bounded-teardown work as above,
-   preserving VM, process/thread/group and callback lifetime contracts; disclose
-   remaining IF=0 tails. Defer off-BSP destruction and broad allocator/VM changes.
-   Alternative: start a general off-BSP lifetime/mutation redesign first.
-2. **Held CPU0 worker-precedence rule.** Recommended default: apply it only as a
-   separate, measured follow-up after bounded teardown; keep the existing queue
-   policy for that first qualification. If assigned, prefer FIFO worker selection
-   rather than LIFO head insertion, with explicit bounded user-progress policy
-   proposed before code. The inventory does not settle that fairness bound.
-   Alternative: add blanket worker-first scheduling now, accepting that it cannot
-   fix IF=0 spans and still needs a starvation decision. This recommendation
-   leaves the independently observed uncapped-load queue-delay risk open.
-3. **Worker placement direction.** Recommended default: fixed owner CPU, never
-   work-stealing/migration of live kernel workers; start a separately authorized
-   AP-placement pilot with entropy/identity after its backend/IRQ ownership is
-   proved. Keep VM/object mutation, GPE and firmware actions on BSP; audio is the
-   first substantial candidate after that foundation. Alternative: move HDA
-   first with its complete request/IRQ/cleanup transfer, a larger high-risk slice.
+   Coordinate with Claude's bounded-teardown work as above, preserving VM,
+   process/thread/group and callback lifetime contracts; disclose remaining IF=0
+   tails. Defer off-BSP destruction and allocator/VM ownership changes.
+2. **CPU0 worker precedence follows bounded teardown.** Only as a separate,
+   measured follow-up after bounded teardown; keep the existing queue policy
+   for that first qualification. Propose a fairness bound before code. The
+   accepted direction prefers FIFO worker selection rather than LIFO head
+   insertion; this inventory does not settle the user-progress bound or remove
+   the independently observed uncapped-load queue-delay risk.
+3. **Fixed worker owner CPUs.** Never migrate or work-steal live kernel workers.
+   Start a separately authorized AP-placement pilot with entropy/identity after
+   its backend/IRQ ownership is proved. Audio is the first substantial candidate
+   after that foundation. VM/object mutation, GPE and firmware actions stay BSP.
 
-No implementation is authorized by this proposal. Each later move needs its
-own accepted ownership/baseline/native-qualification scope; this is an inventory
-and first-slice choice, not a new task backlog.
+Acceptance does not authorize implementation. The owner's pause on new tasks
+still holds. Each later move needs its own accepted ownership/baseline/native-
+qualification scope; this is an inventory and first-slice choice, not a new task
+backlog.
