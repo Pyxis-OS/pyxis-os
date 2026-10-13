@@ -1,7 +1,8 @@
 # USB storage read throughput
 
-Owner-assigned scoped freeze exception, 2026-10-13. Investigation is complete;
-the changes below are **proposed, not accepted or implemented**. The
+Owner-assigned scoped freeze exception, 2026-10-13. All three defaults below
+were **accepted on 2026-10-13**, with implementation authorized. The bounded npfs
+change is being qualified; native comparison remains pending. The
 [native baseline](../development/experiments/usb-read-throughput.md) separates
 ordinary launch timings, instrumented attribution and QEMU functional checks.
 
@@ -57,17 +58,17 @@ ordinary baseline's 4.30–4.56 s version and 4.30–4.31 s hello compile as the
 end-to-end comparison. Native decides whether the gain and other-path costs
 justify merging.
 
-## Owner decisions (at most three)
+## Owner decisions (accepted 2026-10-13)
 
-1. **First path. Default:** aggregate misses in the existing multi-page npfs read
+1. **First path. Accepted:** aggregate misses in the existing multi-page npfs read
    path, retaining ordinary cache semantics. A capture-only direct-read path
    would avoid cache scatter/copies, but creates a second read/coherency path and
    does less for later bulk consumers; defer it unless measured costs justify it.
-2. **Bound and lifetime. Default:** at most 64 KiB of reclaimable worker-owned
+2. **Bound and lifetime. Accepted:** at most 64 KiB of reclaimable worker-owned
    staging for one read, bounded also by the device cap; fall back to single-page
    reads if staging cannot be allocated. No new read-ahead, retained image cache,
    cache-size change or asynchronous requests in flight.
-3. **Qualification. Default:** keep BOT/xHCI unchanged and qualify the npfs change
+3. **Qualification. Accepted:** keep BOT/xHCI unchanged and qualify the npfs change
    first in QEMU, then on the same native stick/port with interleaved ordinary
    before/after version/compile samples, separating the first post-boot launch
    from repetitions rather than claiming forced cold media. Use an unmerged probe only for command
@@ -77,6 +78,22 @@ justify merging.
    reference remains optional; it is not required to establish this bottleneck.
 
 After this first task the owner can: launch existing USB-backed Clang/LLD bundles
-through the same authority and loader path with fewer storage commands. An
-implementation go is still required. Image reuse, UAS and device classes remain
-out of scope.
+through the same authority and loader path with fewer storage commands. Implementation is authorized; native qualification is
+required before merging. Image reuse, UAS and device classes remain out of scope.
+
+## Implementation qualification
+
+Aggregation covers aligned interiors containing at least two full requested
+pages; partial heads/tails and ordinary FILE reads keep the original path. Runs
+stop before metadata that is not resident, without speculative backing I/O or
+publishing a future error. Cache slots retain their existing selection policy;
+mandatory cache storage precedes optional staging, and each page is consumed
+before another reservation can evict it. Staging is released on every exit.
+A failed aggregated ticket contributes no confirmed bytes within that ticket;
+earlier successful chunks retain their known progress. No failed-run retry.
+
+- [x] Implement bounded synchronous aggregation, with allocation fallback.
+- [ ] Complete QEMU byte/error/cleanup qualification and record its limits.
+- [ ] Native interleaved comparison on the same stick/port, separately from
+  debugger/probe attribution. Wait for the owner's container-build timing hold
+  to be lifted before collecting further performance data.

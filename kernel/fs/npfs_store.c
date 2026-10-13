@@ -34,6 +34,7 @@ static enum call_status completion_interruption(struct npfs_store_context *conte
 #define STORE_CLEANUP_MAPPINGS 64u
 #define STORE_BITMAP_READ_BLOCKS 128u
 #define STORE_WRITE_RUN_BLOCKS 32u
+#define STORE_READ_RUN_BLOCKS 16u
 #define STORE_METADATA_CHUNKS 4u
 #define STORE_METADATA_CHUNK_PAGES 32u
 #define STORE_METADATA_PAGES (STORE_METADATA_CHUNKS * STORE_METADATA_CHUNK_PAGES)
@@ -292,14 +293,23 @@ static const uint8_t *bitmap_page(struct npfs_store_pool *pool, uint64_t page)
   return (const uint8_t *)pool->bitmap + (size_t)page * NPFS_BLOCK_SIZE;
 }
 
-static enum call_status read_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
-  uint64_t home, void *bytes)
+static const uint8_t *image_find(struct npfs_store_pool *pool, uint64_t home)
 {
   for (unsigned i = 0; i < pool->image_count; i++) {
     if (pool->images[i].home == home) {
-      memcpy(bytes, image_bytes(pool, i), NPFS_BLOCK_SIZE);
-      return CALL_OK;
+      return image_bytes(pool, i);
     }
+  }
+  return NULL;
+}
+
+static enum call_status read_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  uint64_t home, void *bytes)
+{
+  const uint8_t *image = image_find(pool, home);
+  if (image) {
+    memcpy(bytes, image, NPFS_BLOCK_SIZE);
+    return CALL_OK;
   }
   if (pool->bitmap_loaded && home >= pool->header.bitmap_start &&
     home - pool->header.bitmap_start < pool->header.bitmap_blocks) {
@@ -352,17 +362,17 @@ static void metadata_cache_store(struct npfs_store_pool *pool, uint64_t home, co
   }
 }
 
+static const uint8_t *metadata_resident(struct npfs_store_pool *pool, uint64_t home)
+{
+  const uint8_t *image = image_find(pool, home);
+  return image ? image : metadata_cache_find(pool, home);
+}
+
 static enum call_status read_metadata_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t home, void *bytes)
 {
   /* Cache only the durable base; transaction images always take precedence. */
-  for (unsigned i = 0; i < pool->image_count; i++) {
-    if (pool->images[i].home == home) {
-      memcpy(bytes, image_bytes(pool, i), NPFS_BLOCK_SIZE);
-      return CALL_OK;
-    }
-  }
-  const uint8_t *cached = metadata_cache_find(pool, home);
+  const uint8_t *cached = metadata_resident(pool, home);
   if (cached) {
     memcpy(bytes, cached, NPFS_BLOCK_SIZE);
     return CALL_OK;
@@ -429,14 +439,19 @@ static void bit_set(uint8_t *bytes, uint64_t bit, bool value)
   }
 }
 
+static bool block_allocated(struct npfs_store_pool *pool, uint64_t block)
+{
+  if (!npfs_data_block_valid(&pool->header, block)) {
+    return false;
+  }
+  const uint8_t *bytes = bitmap_page(pool, block / NPFS_BITMAP_BITS);
+  return bit_get(bytes, block % NPFS_BITMAP_BITS);
+}
+
 static enum call_status allocated_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t block)
 {
-  if (!npfs_data_block_valid(&pool->header, block)) {
-    return corrupt(context);
-  }
-  const uint8_t *bytes = bitmap_page(pool, block / NPFS_BITMAP_BITS);
-  return bit_get(bytes, block % NPFS_BITMAP_BITS) ? CALL_OK : corrupt(context);
+  return block_allocated(pool, block) ? CALL_OK : corrupt(context);
 }
 
 static enum call_status map_read(struct npfs_store_context *context, struct npfs_store_pool *pool,
@@ -467,6 +482,32 @@ static enum call_status map_read(struct npfs_store_context *context, struct npfs
   }
   *physical = block;
   return CALL_OK;
+}
+
+/* Lookahead never issues metadata I/O or reports a future mapping error. */
+static bool map_read_resident(struct npfs_store_pool *pool,
+  const uint64_t pointers[NPFS_POINTER_COUNT], uint64_t logical, uint64_t *physical)
+{
+  struct npfs_map_path path;
+  if (npfs_map_path(logical, &path) != NPFS_OK) {
+    return false;
+  }
+  uint64_t block = pointers[path.slot];
+  for (unsigned level = 0; block && level < path.depth; level++) {
+    if (!block_allocated(pool, block)) {
+      return false;
+    }
+    const uint8_t *bytes = metadata_resident(pool, block);
+    if (!bytes) {
+      return false;
+    }
+    block = npfs_get_u64(bytes + path.index[level] * 8);
+  }
+  if (!block || !block_allocated(pool, block)) {
+    return false;
+  }
+  *physical = block;
+  return true;
 }
 
 static enum call_status bitmap_change(struct npfs_store_context *context, struct npfs_store_pool *pool,
@@ -1565,13 +1606,9 @@ static struct store_cache_entry *cache_find(struct npfs_store_inode *inode, uint
   return NULL;
 }
 
-static enum call_status cache_get(struct npfs_store_context *context, struct npfs_store_inode *inode,
-  uint64_t logical, struct store_cache_entry **out)
+static enum call_status cache_reserve(struct npfs_store_context *context,
+  struct npfs_store_inode *inode, struct store_cache_entry **out)
 {
-  *out = cache_find(inode, logical);
-  if (*out) {
-    return CALL_OK;
-  }
   struct npfs_store_pool *pool = inode->volume->pool;
   struct store_cache_entry *slot = NULL;
   for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS && !slot; chunk++) {
@@ -1629,6 +1666,14 @@ static enum call_status cache_get(struct npfs_store_context *context, struct npf
   if (previous_owner && previous_owner != inode) {
     discard_idle_inode(previous_owner, false);
   }
+  *out = slot;
+  return CALL_OK;
+}
+
+static enum call_status cache_fill(struct npfs_store_context *context,
+  struct npfs_store_inode *inode, uint64_t logical, struct store_cache_entry *slot)
+{
+  struct npfs_store_pool *pool = inode->volume->pool;
   uint64_t physical;
   enum call_status status = map_read(context, pool, inode->record.pointers, logical, &physical);
   if (status != CALL_OK) {
@@ -1646,8 +1691,57 @@ static enum call_status cache_get(struct npfs_store_context *context, struct npf
   slot->inode = inode;
   slot->logical = logical;
   slot->dirty = false;
-  *out = slot;
   return CALL_OK;
+}
+
+static enum call_status cache_get(struct npfs_store_context *context, struct npfs_store_inode *inode,
+  uint64_t logical, struct store_cache_entry **out)
+{
+  *out = cache_find(inode, logical);
+  if (*out) {
+    return CALL_OK;
+  }
+  struct store_cache_entry *slot;
+  enum call_status status = cache_reserve(context, inode, &slot);
+  if (status == CALL_OK) {
+    status = cache_fill(context, inode, logical, slot);
+  }
+  if (status == CALL_OK) {
+    *out = slot;
+  }
+  return status;
+}
+
+static enum call_status cache_read_run(struct npfs_store_context *context,
+  struct npfs_store_inode *inode, uint64_t logical, uint32_t *count, void *bytes)
+{
+  struct npfs_store_pool *pool = inode->volume->pool;
+  uint64_t physical;
+  enum call_status status = map_read(context, pool, inode->record.pointers, logical, &physical);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (!physical) {
+    *count = 1;
+    memset(bytes, 0, NPFS_BLOCK_SIZE);
+    return CALL_OK;
+  }
+  if (image_find(pool, physical)) {
+    *count = 1;
+    return read_block(context, pool, physical, bytes);
+  }
+  uint32_t run = 1;
+  while (run < *count) {
+    uint64_t next;
+    if (cache_find(inode, logical + run) ||
+      !map_read_resident(pool, inode->record.pointers, logical + run, &next) ||
+      next < physical || next - physical != run || image_find(pool, next)) {
+      break;
+    }
+    run++;
+  }
+  *count = run;
+  return transport(context, pool, BLOCK_READ, physical, run, bytes);
 }
 
 enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs_store_inode *inode,
@@ -1664,20 +1758,88 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
   uint64_t remaining = inode->record.size - offset;
   size_t length = remaining < capacity ? (size_t)remaining : capacity;
   uint8_t *destination = bytes;
+  struct npfs_store_pool *pool = inode->volume->pool;
+  uint32_t run_limit = pool->device.max_transfer / NPFS_BLOCK_SIZE;
+  if (run_limit > STORE_READ_RUN_BLOCKS) {
+    run_limit = STORE_READ_RUN_BLOCKS;
+  }
+  size_t staging_bytes = (size_t)run_limit * NPFS_BLOCK_SIZE;
+  uintptr_t staging = 0;
+  bool staging_attempted = false;
+  enum call_status status = CALL_OK;
   while (length) {
     enum call_status interrupted = completion_interruption(context);
     if (interrupted != CALL_OK) {
-      return *read ? CALL_OK : interrupted;
+      status = *read ? CALL_OK : interrupted;
+      break;
     }
     unsigned within = (unsigned)(offset % NPFS_BLOCK_SIZE);
     size_t count = NPFS_BLOCK_SIZE - within;
     if (count > length) {
       count = length;
     }
-    struct store_cache_entry *entry;
-    enum call_status status = cache_get(context, inode, offset / NPFS_BLOCK_SIZE, &entry);
-    if (status != CALL_OK) {
-      return status;
+    struct store_cache_entry *entry = NULL;
+    uint64_t logical = offset / NPFS_BLOCK_SIZE;
+    /* Partial pages and ordinary FILE calls keep the original single-page path. */
+    if (!within && length >= 2 * NPFS_BLOCK_SIZE && run_limit >= 2) {
+      entry = cache_find(inode, logical);
+      if (!entry) {
+        /* Mandatory cache storage must precede optional staging. */
+        status = cache_reserve(context, inode, &entry);
+        if (status != CALL_OK) {
+          goto out;
+        }
+        if (!staging_attempted) {
+          staging_attempted = true;
+          uintptr_t address;
+          if (store_vm_allocate(staging_bytes, &address) == CALL_OK) {
+            staging = address;
+          }
+        }
+        if (staging) {
+          size_t available = length / NPFS_BLOCK_SIZE;
+          uint32_t pages = available < run_limit ? (uint32_t)available : run_limit;
+          status = cache_read_run(context, inode, logical, &pages, (void *)staging);
+          if (status != CALL_OK) {
+            goto out;
+          }
+          for (uint32_t page = 0; page < pages; page++) {
+            interrupted = completion_interruption(context);
+            if (interrupted != CALL_OK) {
+              status = *read ? CALL_OK : interrupted;
+              goto out;
+            }
+            if (page) {
+              status = cache_reserve(context, inode, &entry);
+              if (status != CALL_OK) {
+                goto out;
+              }
+            }
+            memcpy(entry->bytes, (const uint8_t *)staging + (size_t)page * NPFS_BLOCK_SIZE,
+              NPFS_BLOCK_SIZE);
+            entry->inode = inode;
+            entry->logical = logical + page;
+            entry->dirty = false;
+            /* Consume before the next reservation can evict this clean slot. */
+            memcpy(destination, entry->bytes, NPFS_BLOCK_SIZE);
+            destination += NPFS_BLOCK_SIZE;
+            offset += NPFS_BLOCK_SIZE;
+            length -= NPFS_BLOCK_SIZE;
+            *read += NPFS_BLOCK_SIZE;
+          }
+          continue;
+        }
+        status = cache_fill(context, inode, logical, entry);
+        if (status != CALL_OK) {
+          goto out;
+        }
+      }
+    }
+    if (!entry) {
+      status = cache_get(context, inode, logical, &entry);
+      if (status != CALL_OK) {
+        break;
+      }
     }
     memcpy(destination, entry->bytes + within, count);
     destination += count;
@@ -1685,7 +1847,9 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
     length -= count;
     *read += count;
   }
-  return CALL_OK;
+out:
+  store_vm_free(staging, staging_bytes);
+  return status;
 }
 
 static struct store_cache_entry *next_dirty(struct npfs_store_inode *inode)
