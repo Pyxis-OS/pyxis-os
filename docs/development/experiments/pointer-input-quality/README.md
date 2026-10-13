@@ -848,3 +848,56 @@ QEMU cannot exercise this Synaptics AGM stream, physical proximity/identity,
 typing/pressure timing, palm behavior or trampoline motion. Those remain for
 the owner's short native re-run; no positive AGM/contact result or performance
 improvement is claimed from QEMU. Default activation remains off.
+
+### Missing AGM recovery — 2026-10-13
+
+Owner native run `1a07dcf4`, horse log from line 19903: typing and movement feel
+right, but two-finger scroll and trampoline fail. All three AGM counters remain
+zero throughout; pair rejection prevents basic-W scrolling despite two-contact
+master reports. This is a native failure, not a successful AGM qualification.
+
+Pinned Linux v6.17 (`e5f0a698b34ed76002dc5cff3804a61c80233a7a`):
+[synaptics_init_ps2 / synaptics_set_mode](https://github.com/torvalds/linux/blob/e5f0a698b34ed76002dc5cff3804a61c80233a7a/drivers/input/mouse/synaptics.c)
+set bit 2 on firmware major >=4, then send model selector 03 and F3 C8 for AGM.
+At our rate this means c5, whereas the failing build used c1. Vendor Rev. B
+sections 3.2.9 / 4.3 require EW bit 2 for the decoded secondary format.
+The prior "AGM without EW" conclusion was incorrect. The decoder's type/X/Y/Z
+extraction matches the pinned reference. This is a source-supported explanation
+for absent W2 packets; corrected native delivery is not yet measured.
+
+Linux's [sliced helper](https://github.com/torvalds/linux/blob/e5f0a698b34ed76002dc5cff3804a61c80233a7a/drivers/input/serio/libps2.c#L420-L448)
+starts with E6; our helper now does too. The guide allows other inert delimiters,
+and our preceding EB already delimited AGM setup, so missing E6 is not proved
+to be the failure's cause. No reference implementation is copied.
+
+InterTouch bit 14 is set in query 0c `12e800`; Linux includes T14 LEN2068 in
+its configured SMBus-attempt list, with PS/2 fallback on unsuccessful setup.
+The repository's Fedora 6.19.10 inventory from 2026-10-02 identifies this pad
+as `SynPS/2 Synaptics TouchPad`. Today's binding/secondary Linux delivery was
+not measured; there is no evidence requiring an SMBus/RMI4 driver for this fix.
+
+Recovery implementation `3cc1daf6`: absent, invalid or stale secondary positions
+immediately use the basic-W count and primary position. Unpressed two-contact
+input scrolls; a physical press always prevents scroll and moves from that
+reported position. Paired/fallback transitions clear baselines and fractions;
+missing secondary positions preserve the known finger's admission/rejection
+lifetime instead of treating it as a new typing-gated contact on recovery.
+No stale secondary position contributes motion. The approved 75 ms typing
+behavior is unchanged. Fallback cannot qualify separation, centroid motion or
+selection of an unreported moving finger. `AGM-requested` labels command
+admission; observed AGM counters and `basic-W-scroll` identify actual behavior.
+
+Same builder, verified bundles/pins/initrd and QEMU configuration as above:
+`make -j8 image PREBUILT="sdk userspace ports" LOG_LEVEL=info` passes without
+changed-source warnings. Local checked ELF SHA256:
+`3456ce4f7c6c5c26afc290507f6ce5d296a06732f56270c3c22ed2ef9736d13c`.
+Interactive opt-in QEMU and read-only GDB confirm relative ID3/four-byte recovery,
+options true, no absolute/guest/second profile, motion 640,400 -> 690,390,
+left held/released 1/0, wheel injection, `echo ok`, zero input loss/overflow.
+Options-off reaches the shell, both options false, relative input available and
+no Synaptics output. QEMU/GDB stopped. Actual fallback scroll/drag and positive
+secondary data still require the native run; no simulated contact test added.
+
+The EW/c5 correction is proposed to the owner as one decision in the milestone,
+because it changes the earlier accepted EW-off premise. No EW or SMBus change
+is made pending that answer. Default activation remains off.
