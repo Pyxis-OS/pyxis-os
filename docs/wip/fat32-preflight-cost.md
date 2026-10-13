@@ -8,41 +8,26 @@ the owner lifted the container-build timing hold. No native FAT32 timing is clai
 
 ## Evidence
 
-Mounted mutations perform two full FAT sweeps: `full_check` validates every
-chain/directory, detached root and retained object, then `begin_plan` scans all
-clusters again to build its free vector (`fs/fat32/mounted.c`). Each FAT cache
-miss reads one 512-byte sector and its mirror separately (`volume.c`). The
-context/cache is reset for every operation (`base.c`). Native backing callbacks
-submit, wait and collect each request serially (`kernel/fs/fat32.c`).
+`full_check` validates every chain/directory and retained object; `begin_plan`
+then scans all clusters again for its free vector (`fs/fat32/mounted.c`). Each
+miss reads one 512-byte FAT sector and its mirror separately (`volume.c`);
+operation contexts reset the cache. Native callbacks submit/wait serially.
 
-On nearly empty scratch volumes, an empty-file CREATE's preflight admits about
-2,525 / 8,073 / 32,269 reads for 40 / 128 / 512 MiB with 512-byte clusters.
-Debugger-observed CREATE ranges are 1.20–1.21 / 3.99–7.55 / 14.77–14.84 s.
-Only about 15–18 additional requests implement ordinary empty creation. Explicit
-sync admits one flush and takes milliseconds in those runs. These are profiled
-nested-QEMU observations, with shared-host variation; they are not native rates.
+An empty CREATE's preflight admits about 2,525 / 8,073 / 32,269 reads on dense
+40 / 128 / 512 MiB. Profiled nested-QEMU CREATE ranges are 1.20–1.21 /
+3.99–7.55 / 14.77–14.84 s; only about 15–18 further requests implement creation.
+Explicit sync admits one flush. With 4-KiB clusters, 1-GiB operations succeed
+with about 8,204 preflight requests. Cost follows cluster count, not MiB alone.
+These ranges include debugger/shared-host variation; they are not native rates.
 
-The volume term follows cluster count, not MiB alone. A 512-MiB volume with
-4-KiB clusters has 130,811 clusters and about 4,116 preflight requests, much
-closer to the small volumes than to its 512-byte-cluster twin. At 1 GiB with
-4-KiB clusters, create/write/resize/sync/retire succeed; CREATE is 4.03–6.26 s
-with about 8,204 preflight requests. Namespace collision validation can also be
-quadratic in directory entries, and each held-object revalidation clears a
-volume-sized reachability bitmap. They remain real costs, but the tiny fixtures
-isolate the dominant repeated FAT-sweep term.
-
-Workspace also scales with geometry: the complete free vector and conservative
-full-FAT prepared-image capacity use about 20.35 MiB at dense 512 MiB. A tiny
-write then returns LIMIT because old/new workspace overlap exceeds the shared
-32-MiB budget. Dense 1 GiB requests about 40.66 MiB and RW admission refuses
-LIMIT after validation. Increasing the lease cannot fix either capacity refusal.
-
+The full free vector and conservative prepared capacity use about 20.35 MiB
+at dense 512 MiB. A tiny write returns LIMIT because old/new overlap exceeds
+32 MiB; dense 1-GiB RW admission requests about 40.66 MiB and refuses LIMIT.
 The editor's [128-MiB qualification](../../userspace/config-editor/qualification/README.md)
-reported timeout at committed-record sync. Source inspection explains how an
-admitted rename can drain past the fixed interval deadline; the following sync
-is then refused at admission, before any flush. A separate expired-interval
-check confirmed zero block admissions for refused sync; it included operator
-idle and is not a reproduction of work alone consuming the lease.
+stopped at committed-record sync: admitted work can finish beyond the lease,
+then sync is refused before I/O. The baseline's separate expiry check included
+operator idle and is not a complete editor reproduction. A longer lease fixes
+neither repeated work nor capacity refusals.
 
 ## Revised recommendation (proposal, 2026-10-13)
 
@@ -62,7 +47,7 @@ retained state to the existing shared 32-MiB backing cap. A dense 1-GiB fixture'
 8-MiB vector of every cluster.
 
 The retained RW extent excludes other writers while mounted. Maintain the free
-map/count through successful Pyxis transitions; bound candidate searches and
+map/count only after confirmed Pyxis transitions; bound candidate searches and
 check selected candidates against their FAT entries before effects. Detached
 held chains stay allocated until durable final-reference reclamation. Each
 mutation checks affected chains, parent directories and introduced/removed
@@ -77,7 +62,9 @@ capacity, existing/missing names or no space do not themselves invalidate proof.
 An invalid proof permits no mutation/reclamation or clean-mark clearing. A
 known pre-effect invalidation may be recovered only by an explicit successful
 full mounted check/rebuild; an uncertain mutation keeps its stopped writer and
-recovery backing and cannot be cleared by CHECK. No automatic repair, retry or
+recovery backing and cannot be cleared by CHECK. At power seal, invalid proof
+leaves the dirty mark set after flush; it alone does not refuse clean power.
+Unresolved mutation failure still does. No automatic repair, retry or
 reopen-as-reset. Use the owned dirty snapshot and detached roots in revalidation.
 
 Expose that explicit full check on the bound RW mount control. Proposed default:
