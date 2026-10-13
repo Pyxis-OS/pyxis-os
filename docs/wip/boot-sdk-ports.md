@@ -27,6 +27,10 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
+[BSP pinning inventory](bsp-pinning-inventory.md): owner-requested freeze exception,
+assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
+first-slice proposal, coordinated with Claude's bounded audio/teardown work.
+
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
