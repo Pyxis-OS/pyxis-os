@@ -1,4 +1,4 @@
-# Clang driver execution baseline
+# Clang driver execution qualification
 
 2026-10-13, before implementation. Proposal only; no fork/kernel/libc changes.
 Fresh main `4a09711e5c6890588a4dfe3da12a1e4b32b01c14` contains merged #772.
@@ -158,3 +158,26 @@ The branch contains no merge commits beyond its main base. Earlier runtime
 evidence remains historical; the current rebuild/CI is reported on #789.
 Daybreak's independent source/exercised review found no confirmed serious issue;
 its bounded race/refill/escape coverage and limits are in that PR's review comment.
+
+## Driver source checkpoint (2026-10-13)
+
+Contained core `68cf967e` (userland #251), integration SDK `0a00512c`, clean
+inputs, published compiler `4c23a20`. Fresh ordinary SDK/runtime builds pass;
+the existing C++ runtime emits its known missing-prototype and unsupported
+`hardware_concurrency` warnings. Producer syntax and document/diff checks pass.
+The producer declares Clang's optional launcher and embeds the same leaf LLD
+bundle under read-only `linker://`; no launch authority is added to LLD.
+
+Fork `8c3b0fe1` (LLVM #8): compile the five changed translation units (Support
+Program, Clang Job/Driver/Pyxis toolchain/driver main) for Pyxis and Linux using
+existing generated commands/configuration. Native uses the current SDK/core;
+Linux selects `x86_64-unknown-linux-gnu` without stale precompiled headers.
+All ten compile checks pass without warnings/errors. Objects/commands/logs stay
+local in the fork worktree's `build/reached/`. This is source-compilation evidence,
+not target links, tool runtime or installed compiler adoption.
+
+Exact-fork container publication is an owner action from
+`toolchain/clang-driver-container` at `e05d8673`. Current integration retains the
+published old compiler pin until the new image exists. Full target closure,
+default driver compile/link/run and refusals, cleanup, overlapping-memory
+measurement and native owner check remain pending. No new native speedup claim.

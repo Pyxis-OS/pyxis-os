@@ -1,11 +1,13 @@
-# Native Clang and standalone LLD
+# Native Clang and LLD
 
 The opt-in [payload producer](../../toolchain/README.md#native-hosted-payloads)
 builds Clang and LLD against a complete current SDK using the installed Pyxis
 compiler. LLVM workers stay off; the real SDK TLS and C++ runtime remain linked.
 SDK changes require fresh target objects, not a compiler-container rebuild.
 Each bundle contains its own resource/sysroot roots, notices and provenance.
-Neither receives a launcher. Driver-invoked linking is a separate task.
+The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
+root. Clang's manifest requests optional `launcher/launch`; withholding it keeps
+compile-only available and linking refuses. LLD never receives a launcher.
 The native first compile, standalone link and PXE run passed on the ThinkPad
 on 2026-10-13, including rejected inputs/outputs and matching object/PXE hashes.
 
@@ -28,7 +30,7 @@ return {
   spaces = {
     { name = "network", title = "Network", init = "boot://init", network = true },
     { name = "remote", title = "Toolchain", init = "boot://init-remote",
-      launch = false, remote_power = true,
+      launch = true, remote_power = true,
       roots = { toolchain = "read-only" }, start = "tmp" },
   },
 }
@@ -46,8 +48,10 @@ The consumer has read-only `toolchain://`, ordinary writable `tmp://` and
 inherited diagnostics. The manifest declares an 8 MiB guarded stack and
 `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`.
 `app://`, `clang_resources://` and `sysroot://` are delegated read-only from the
-selected bundle. Caller-selected roots remain available; this is not confinement
-of inherited roots. No raw disk authority or launcher is granted to either tool.
+selected bundle. Clang additionally receives read-only `linker://`; its optional
+launcher is supplied only when the space delegates launch. Caller-selected roots
+remain available; this is not confinement of inherited roots. Neither tool
+receives raw disk authority. Set `launch = false` for a compile-only consumer.
 
 ## Manual immutable publication
 
@@ -55,7 +59,8 @@ The producer writes `OUTPUT/hosted-SHA256/payload.tar` and its checksum. Verify
 the checksum on the host and upload the archive using existing `xfer receive`.
 For publication only, give the publisher `toolchain = "read-write"` and
 `launch = true` so a shell script can start tar/sync/mv. The tools' manifests
-still withhold the launcher. Consumer spaces remain read-only.
+declare only optional launch for Clang; LLD stays a leaf. Consumer volume roots
+remain read-only.
 
 Replace `REV` below with the producer's full `hosted-SHA256` directory name.
 Run these as a shell script: its first failed command stops publication.
@@ -95,6 +100,23 @@ toolchain://REV/payload/clang.pxb -c tmp://hello.c -o tmp://hello.o
 toolchain://REV/payload/lld.pxb -flavor gnu --sysroot=sysroot:// -m elf_x86_64 -static --build-id=none -z max-page-size=0x1000 --oformat=p1f --eh-frame-hdr sysroot://usr/lib/crt0.o -T sysroot://usr/lib/pyxis.ld -Lsysroot://usr/lib tmp://hello.o --start-group -lclang_rt.builtins -lc -lpyxis --end-group -o tmp://hello.pxe
 tmp://hello.pxe
 ```
+
+With the driver-profile revision and declared launch authority, the ordinary
+single-source command is:
+
+```text
+toolchain://REV/payload/clang.pxb tmp://hello.c -o tmp://hello.pxe
+tmp://hello.pxe
+```
+
+Clang runs cc1 in-process, then prepares its declared `linker://lld.pxb` through
+the shared bundle loader and contained native job core. It owns the subgroup's
+CONTROL until the real child result and subtree cleanup complete. Closing Clang
+on exit/fault stops its surviving job subtree; no wrapper, broker or executor
+supplies authority. LLD inherits diagnostics and explicitly selected content
+roots/cwd/environment, its own manifest runtime grants and 8 MiB stack, and no
+launcher. An uncertain admission is never retried. Multiple-source/external-cc1
+execution and unsupported statistics/timeouts are outside this profile.
 
 ## Qualified capacity
 

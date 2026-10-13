@@ -331,13 +331,28 @@ foreign syscalls, fork or a per-space Clang execution setting. This preserves
 [aarch64 review lens](later-os-directions.md#beyond-x86-aarch64), without assigning
 another personality or target architecture.
 
-The foundation/core alone need no compiler-container rebuild. Driver fork
-changes do: after approval and a qualified exact fork commit, prepare adoption
-and give the owner its exact `podman build -f ci/Containerfile -t
- git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-SHA .` / `podman push` commands
-before adoption. No new fork SHA/image exists or is requested for the foundation. Deliver the
-kernel subgroup PR first for Daybreak's adversarial review before merge, then
-the separate Clang integration PR. The recorded baseline precedes code changes.
+The foundation/core alone need no compiler-container rebuild. The driver fork
+changes do, under the existing compiler/SDK source-pin contract. Source checkpoint:
+[LLVM #8](https://git.internal/PyxisOS/pyxis-llvm/pulls/8),
+`8c3b0fe13b1a63caff2ea82faaae9fe2ead2e9de`; contained runtime
+[userland #251](https://git.internal/PyxisOS/pyxis-userland/pulls/251), `68cf967e`.
+The owner build branch `toolchain/clang-driver-container` at `e05d8673` prepares
+that exact fork and image `pyxis-llvm23.1.3-8c3b0fe`:
+
+```sh
+podman build -f ci/Containerfile \
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8c3b0fe .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8c3b0fe
+```
+
+Do not adopt the tag until the owner publishes it. If merging the fork changes
+the SHA, update the pin and rebuild the image for that exact merged provenance.
+The integration remains draft: source compilation and SDK builds pass, but
+fresh target links, driver QEMU/GDB, overlapping-memory evidence and native
+qualification remain pending. Kernel #789 is ready for Daybreak's required
+adversarial review before merge; [#793](https://git.internal/PyxisOS/pyxis-os/pulls/793)
+keeps the core/fork/bundle integration separate. The recorded baseline precedes
+code changes.
 
 ## Resources and native limits
 

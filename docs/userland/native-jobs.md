@@ -1,9 +1,11 @@
-# Direct native jobs
+# Native leaf jobs
 
 Libc's [`pyxis/job.h`](../../userspace/libc/include/pyxis/job.h) launches one
 known native executable through the caller's existing LAUNCH-authorized launcher.
-The child stays in that launcher's space, CPU and execution group. The core
-does not resolve images, expand bundles, interpret scripts or create groups.
+The ordinary direct child stays in that launcher's space and execution group;
+placement follows the existing space policy. The core does not resolve images,
+expand bundles or interpret scripts. An explicit contained profile creates an
+owned subgroup through the same launcher.
 Lua exposes owned capture/pipeline records, and libuv has an exact-inventory
 opt-in alongside its ordinary spawn path. The shell retains its existing syntax.
 
@@ -80,10 +82,35 @@ of refusal. Missing batch observers have the same conservative rule. Never repla
 
 The API is single-owner. WAIT observes execution-resource retirement, including
 the process/task/VM/grant table, rather than all deferred object destruction.
-There is no per-job group completion or caller-death stop guarantee. A surviving
-session can retain a child after caller death; an ungrouped caller has no group
+The direct profile has no per-job group completion or caller-death stop guarantee.
+A surviving session can retain a child after caller death; an ungrouped caller has no group
 fallback. Published HOST work can delay retirement indefinitely. Descendant
-launch authority is refused; the parked nested-group direction is separate.
+launch authority is refused, including by the contained leaf profile below.
+
+## Contained leaf ownership
+
+`pyxis_job_launch_contained` uses the same explicit options, authority checks,
+short synchronous capture and selected-output flushing. It then creates a root
+or subgroup through the selected launcher, retaining sole non-forwarded CONTROL;
+the creator remains outside the group. One admission attempt is followed by
+subtree SEAL. No launcher is installed in the child. Image, source roots and
+namespace/provider reachability remain the caller's responsibility.
+
+`terminate` requests stop of the owned subtree. Normal `wait` caches the actual
+process result and additionally confirms group cleanup. Its borrowed process
+observer/readiness stays process-only; PROCESS_WAIT's meaning is unchanged.
+Caller exit/fault releases CONTROL and requests stop; the parent group's
+completion covers descendant retirement and deferred cleanup. Published host
+work can still delay cleanup indefinitely.
+
+A failed start can return an owned record. Never replay or discard it: request
+stop, wait, then close after confirmed cleanup. Known-group cleanup can succeed
+without a trustworthy process result; `wait` then returns the original admission
+or result-observation error and a zero result, while allowing `close`. Unknown
+group construction without usable CONTROL quarantines the record until caller
+teardown: stop/wait report OUTCOME_UNKNOWN and close reports BUSY. No command
+success is inferred from cleanup. Releases are attempted once, even when their
+outcome is uncertain. Direct/observer/capture/pipeline defaults are unchanged.
 
 ## Private capture and deadlines
 
