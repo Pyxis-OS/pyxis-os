@@ -295,9 +295,15 @@ The `<math.h>` subset provides `floor`, `floorf`, `ceil`, `ceilf`, `round`, `rou
 `sinf`, `cos`, `cosf`, `tan`, `tanf`, `asin`, `acos`, `acosf`, `atan`, `atanf`,
 `atan2`, `atan2f`, `sinh`, `cosh`, `tanh`, `frexp`, `ldexp`, `scalbn`, `fabs`, `fabsf`, `scalbnl`, `ldexpl`,
 `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources,
-and POSIX's `M_*` constants with musl's values. The `isnan` and `isinf` macros
-classify any real floating type through compiler builtins; the other C
-classification macros are not provided. The `rint` family rounds in the
+and POSIX's `M_*` constants with musl's values. The double forms of the rest of
+ISO C `<math.h>` are also present: `copysign`, `fdim`, `fma`, `fmax`, `fmin`,
+`hypot`, `cbrt`, `acosh`, `asinh`, `atanh`, `nearbyint`, `nextafter`,
+`nexttoward`, `remainder`, `remquo`, `scalbln`, `lgamma` and `tgamma`. `lgamma`
+returns ln |gamma(x)| without the sign: there is no `signgam` or `lgamma_r`. The
+`fpclassify`, `isfinite`, `isinf`, `isnan`, `isnormal` and `signbit` macros
+classify any real floating type through compiler builtins, so they need Clang:
+the guest TCC has no such builtins and fails to link a program that uses them; the comparison macros (`isgreater` and the
+like) are not provided. The `rint` family rounds in the
 current rounding mode. `round` and `roundf`
 round halfway cases away from zero; `lround` follows the same rounding and may
 raise inexact for fractional input. Its integer result is unspecified for NaN,
@@ -314,8 +320,11 @@ flags of both in MXCSR. Only `feholdexcept`, which masks every exception, and
 `fesetenv`/`feupdateenv`, which install the masks of the environment passed in,
 change the masks. `<math.h>` also supplies `INFINITY`, `NAN`
 and the `HUGE_VAL`/`HUGE_VALF`/`HUGE_VALL` constants. The SDK carries musl's license
-and the subset's provenance under `share/licenses`. Signaling NaN support and a
-full math library remain outside this subset.
+and the subset's provenance under `share/licenses`. Signaling NaN support is
+outside this subset, as are the float and long double forms of the functions
+added for jq, the `lround`/`llround` families beyond those listed and the
+non-ISO functions (`j0` to `yn`, `gamma`, `drem`, `significand`, `scalb`,
+`exp10`, `pow10`). A complete libm remains deferred.
 
 `strtof`, `strtod` and `strtold` use the same pinned musl subset with a direct
 string reader. They accept ASCII whitespace/signs, decimal and hexadecimal

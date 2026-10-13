@@ -35,7 +35,7 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | grep | [Implemented sbase port](../userland/grep.md) with `-r` over the native directory listing, packaged in the normal image and validated against host upstream and GNU output. |
 | hexdump | Still undecided: port or implement natively. A pure byte filter can be a port; this is not a commitment to a complete Unix utility suite. |
 | Everyday gaps | Small missing commands and options noticed in use are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. Implemented native commands are covered in [everyday commands](../userland/everyday-commands.md). |
-| jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
+| jq | [Implemented jq 1.7.1 port](../userland/jq.md), packaged in the normal image, without Oniguruma (regular-expression builtins fail with jq's own message). It reads files, scheme paths and stdin, and needed libc math, `signal.h`, `dirname` and `strptime` additions. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 
 Vi, Links and less (queued by the owner on 2026-10-04) are complete; they serve
@@ -56,8 +56,8 @@ successful no-op locking/sync is not a substitute. WAL and shared-memory support
 are separate decisions. SQLite's VFS is its userspace OS adapter, distinct from
 Pyxis namespace routing or the proposed `sqlite://` provider.
 
-Once jq and pup are ported, this illustrative command could select HTML links
-and pass their JSON representation to jq:
+Now that jq is ported, once pup is too, this illustrative command could select
+HTML links and pass their JSON representation to jq:
 
 ```sh
 cat http://example.com/ | pup 'a json{}' | jq '.[].href'

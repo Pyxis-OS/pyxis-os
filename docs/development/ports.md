@@ -217,6 +217,16 @@ Custom bundles augment these roots per instance under the same verification
 rules; configuration, platform integration and limits are described in
 [HTTPS trust](../userland/https.md), with launch commands in [fetching](../userland/http-fetch.md).
 
+## JSON with jq
+
+The image includes `bin://jq.pxe`, resolved as `jq` by the shell. The
+[jq recipe](../../ports/jq/README.md) builds the 1.7.1 release archive, pinned by
+SHA-256 and fetched through the `raw-github` mirror, with decNumber and without
+Oniguruma. It reads files, scheme paths and stdin and needs only ordinary
+grants. Its libc prerequisites (ISO math functions, `signal.h`, `dirname`,
+`strptime`) are in libc, not the recipe; see [jq](../userland/jq.md) for
+behavior, the regular-expression and math builtins it lacks, and qualification.
+
 ## Checksums with sbase cksum
 
 The image includes `bin://cksum.pxe`, resolved as `cksum` by the shell. The
