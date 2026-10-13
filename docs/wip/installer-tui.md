@@ -288,6 +288,14 @@ kernel configuration model is proposed.
    firmware-variable edits or changes to Fedora's block. Replace ordinary Update's
    ESP reformat as described under plan and apply; enable installed ESP config
    loading only with this path.
+   **Buildable checkpoint:** [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253)
+   and [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) implement frozen
+   reconciliation, private READ-only RAM FILE handoff, boot-bound records and
+   build-gated incremental publication. Cancel/stale/unsupported-input checks
+   pass; a 40 MiB ESP run times out during interval revalidation before readiness
+   commits. Positive publication remains blocked on FAT32 cost; both PRs stay
+   draft, task 5 remains unchecked, and Daybreak's adversarial review precedes
+   release. [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
    **After this task the owner can:** plan an ordinary or coexistence update and
    apply only approved configuration changes without losing existing edits.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then
