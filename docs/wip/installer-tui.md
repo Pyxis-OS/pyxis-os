@@ -224,8 +224,8 @@ kernel configuration model is proposed.
    ownership/confirmation and ordinary-Update preservation obligations.
    **With this delivered dependency the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
-4. [ ] **Shared configuration validation and delta editor — assigned to Codex alpha,
-   2026-10-13; functional baseline captured, both decision rounds accepted, implementation authorized.** Under the accepted
+4. [x] **Shared configuration validation and delta editor — delivered by Codex alpha,
+   2026-10-13; scratch publication/replay qualified.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
    validation and coordinate its writer; no live Continuum application. Qualify
@@ -369,8 +369,8 @@ and recovery boundaries; round one is not reopened.
    trusted selected-view issuer must supply read-only facts tied to its root and
    bound FAT control; the editor checks current root/control domain/extent too.
    UUIDs name a logical target, not authenticated physical hardware. No raw disk
-   access is given to the editor. Current MOUNT_OBSERVE has domain, device/GPT
-   ordinals and extent, but no UUIDs; ordinals and names do not fill that gap.
+   access is given to the editor. MOUNT_OBSERVE supplies retained GPT UUID/type/attributes and device geometry
+   with explicit identity validity; ordinals and names alone do not fill that gap.
    Missing/ambiguous evidence permits read-only validation/printed diagnostics,
    but refuses publication/replay. A printed plan grants no authority: apply
    needs the independently supplied matching writable view/control and refuses
@@ -418,13 +418,13 @@ never turn into "configure first" for ordinary Install/Update. The committed
 record gates selected ESP overrides, not the ability to install/update programs.
 This is consistent with whole-triple archive fallback and preserves rescue.
 
-### Epsilon's bound ESP facts
+### Bound ESP evidence — delivered by #790 / userland #249
 
-The small FAT32-side addition should expose immutable selected-target facts
+The native FAT32 issuer exposes immutable selected-target facts
 through the already bound MOUNT control's OBSERVE reply, requiring its existing
 OBSERVE right. This keeps facts tied to the issuer's actual mounted instance,
-not a caller-authored sidecar or a raw-DISK grant. Reuse the current domain,
-device, GPT-entry ordinal, first-block, block-count and lifecycle flags. Add:
+not a caller-authored sidecar or a raw-DISK grant. It retains domain, device, GPT-entry ordinal, first-block, block-count and
+lifecycle flags alongside:
 
 | Fact | Source at mount admission |
 | --- | --- |
@@ -446,63 +446,28 @@ state reporting, and never certify a tombstone as an active publication target.
 Metadata from a held directory must match the control's live domain; stable
 UUIDs remain logical target identity, not physical-device authentication.
 
-Epsilon should update the native ABI size, libpyxis `mount_observe` validation,
-bound-state references and its scratch qualification together. No new factory,
-selector, grant class or writer right is requested. The client owns consumed
-file hashes/catalog/revision checks; those are not issuer facts. Until the
-addition arrives, validate-only/printed diagnostics work, while publication and
-printed replay refuse missing evidence as accepted.
+The public ABI and libpyxis helper validate the reply together. The client owns
+consumed file/catalog hashes and revision checks; those are not issuer facts.
+There is no new factory, selector, grant class or writer right.
 
-### Coordination and checkpoint
+### Task 4 delivery — 2026-10-13
 
-Resumed after the owner-qualified pointer follow-up, 2026-10-13; current main
-`0ba94e53` includes FAT32 trusted workflow #775 and reference close-out #779.
-The task branch incorporates that main without changing the accepted round-one
-configuration choices or scratch-only boundary. The original functional baseline
-remains a measurement of `2f2109fc`, not a rerun on this newer main.
+[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247) and
+[parent #786](https://git.internal/PyxisOS/pyxis-os/pulls/786) deliver shared typed
+validation/literal admission, catalog/marker deltas, declared scoped sources,
+frozen selection, replay and native FAT32 complete-set publication. They consume
+the merged bound identity ABI/helper (#790 / userland #249).
+The [reference](../userland/configuration-editor.md) describes the contract;
+the [scratch record](../../userspace/config-editor/qualification/README.md)
+distinguishes builds, source inspection, QEMU/GDB and remaining native limits.
 
-The [trusted FAT32 workflow](../devices/fat32-mounts.md#trusted-workflow) now
-provides separate selected DIRECTORY and MOUNT sources resolved through bundle
-declarations. Configured RW admission precedes editing; normal roots stay RO.
-An authorized RW factory may deliberately admit the boot ESP, while its
-boot-origin view stays RO. Reuse those sources for scoped config parents and
-bound OBSERVE/SYNC/BEGIN/END control rather than add a competing mount surface.
+Confirmed edit/adoption, committed loading, replay, stale target/source/catalog
+refusal, required decline, explicit migrations, foreign-byte preservation and
+previous-set cleanup are scratch-qualified. A larger scratch volume exhausted
+the native publication lease and stopped with retained recovery; this cost is
+[debt](../technical-debt.md#configuration-publication-lease-cost), not permission
+to extend the lease or activate installed publication.
 
-One evidence gap remains: `disks_fat32_request.expected_disk_guid` guards
-admission, but the editor receives no disk/ESP UUIDs through MOUNT_OBSERVE.
-Its state still reports live domain/device/GPT ordinal/extent. A selector guard
-is not a stable issuer-bound target record for later printed-plan replay.
-Requested through the orchestrator: coordinate the stable selected-target facts
-and catalog view with the trusted issuer; the editor must not acquire raw disk
-authority to fill this gap.
-
-The owner accepted all three round-two defaults and ordinary default
-Install/Update on 2026-10-13. Implementation is proceeding; the issuer-facts
-addition is coordinated through the orchestrator with epsilon, not invented in
-the client. Build with the published
-`pyxis-builder:pyxis-llvm23.1.3-4c23a20`, prefer `-j8`, and capture the relevant
-matched timing baseline now that the owner's LLVM rebuild is complete.
-
-### Task 4 implementation checkpoint — 2026-10-13
-
-Implementation is published as [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)
-and [parent #786](https://git.internal/PyxisOS/pyxis-os/pulls/786), both draft until
-the bound issuer facts and positive scratch writer checks are complete. Shared
-validators/literal admission, catalog/marker deltas, scoped selected sources,
-frozen loader/replay and native mounted publication are implemented. The
-[editor reference](../userland/configuration-editor.md) and
-[scratch record](../../userspace/config-editor/qualification/README.md) distinguish
-source inspection, local builds, QEMU/GDB and remaining write qualification.
-
-The full default image built and booted at parent `5c3dfe3f` / published userland
-`3c5fa88`, with all four exact-head CI jobs passing in #2174. Bare `config validate`
-works without setup in the ordinary Development tab, validating archive defaults.
-RW missing-history and RO committed-record scratch reads/plans preserve owner
-values and leave whole-disk hashes unchanged; no native media was touched.
-
-The current ABI lacks epsilon's identity facts, so publication/replay refuse as
-accepted. Consume its published ABI/helper, rebase the userland dependency onto
-its current main and repin, then qualify actual scratch publication, stale replay
-and recovery before ticking task 4. No bypass/fabricated proof, new owner question,
-installed activation, personal-override deletion or ordinary Update change. All
-owned QEMU/GDB jobs are stopped.
+No native media was touched. Installed startup, personal pool overrides and
+ordinary Install/Update remain unchanged; task 5 owns their activation. Normal
+Install/Update requires no prior `config` invocation or manual setup.

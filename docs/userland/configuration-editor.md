@@ -1,9 +1,8 @@
 # Configuration validation and delta editor
 
-Installer task 4 implementation is in draft. The current SDK lacks stable bound
-ESP identity facts, so the native command validates/prints changes but refuses
-publication and replay. Scratch read qualification is recorded below; actual
-write-path qualification and installed activation are not claimed.
+Installer task 4 supplies the shared static checker, declared-grant editor and
+complete-set publisher/replay on scratch ESPs. Installed startup and ordinary
+Install/Update are unchanged until task 5.
 
 Run the ordinary `config` bundle:
 
@@ -96,8 +95,8 @@ entries and 256 deltas; completion records at most 4 KiB; one 30-second native
 exclusive interval. Configured FAT selection awaits pending GPT identities for
 at most ten seconds and refuses ambiguity, never selecting by ordinal.
 
-[Scratch evidence and remaining checks](../../userspace/config-editor/qualification/README.md)
-distinguish object builds, source review and interactive QEMU/GDB from pending
-publication qualification. No native media or installed ESP edits are authorized
+[Scratch qualification](../../userspace/config-editor/qualification/README.md)
+records source builds, interactive QEMU/GDB, committed publication, replay and
+recovery checks. No native media or installed ESP edits are authorized
 by this record. The [installer milestone](../wip/installer-tui.md) carries accepted
 choices and remaining delivery tasks.
