@@ -19,7 +19,8 @@ Add `multiplexer = true` to a local space in `userspace/config/live.lua` or
 Trusted init receives a distinct `mux_terminal` creation grant. The trusted
 shell/session handoff preserves it; after any configured service setup the
 session launcher selects mux instead of the shell, forwarding it as `terminal`
-and retaining CREATE_GROUP on mux's launcher. Ordinary shells receive neither.
+and forwarding LAUNCH on mux's launcher, which permits scoped group creation.
+Ordinary shells receive no terminal creation grant.
 Remote startup uses a separate `remote_multiplexer = true` opt-in and
 `pyxis-remote --mux`, with pane creation brokered by the trusted daemon. Packaged
 live Remote enables it (owner accepted, 2026-10-11); plain remote clients still

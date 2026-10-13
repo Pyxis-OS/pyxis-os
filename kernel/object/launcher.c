@@ -64,12 +64,14 @@ struct kernel_object *launcher_create(void)
 static void create_execution_group(struct launcher_request *request)
 {
   struct process *parent = request->parent;
-  KASSERT(parent && !parent->execution_group);
+  KASSERT(parent);
   request->result = CALL_NO_MEMORY;
-  struct execution_group *group = execution_group_create(parent->space);
-  if (!group) {
+  struct execution_group *group;
+  request->result = execution_group_create(parent->space, request->execution_group, &group);
+  if (request->result != CALL_OK) {
     return;
   }
+  request->result = CALL_NO_MEMORY;
   struct kernel_object *launcher = create_launcher(group);
   if (launcher) {
     struct capability_grant grants[2] = {0};
@@ -83,9 +85,11 @@ static void create_execution_group(struct launcher_request *request)
     }
     if (result == CAP_OK) {
       handle_t handles[2];
-      capability_install_reserved(&request->reservation, request->slots, grants, 2, handles);
-      request->execution_reply = (struct execution_group_create_reply){handles[0], handles[1]};
-      request->result = CALL_OK;
+      request->result = execution_group_install(group, &request->reservation,
+          request->slots, grants, handles);
+      if (request->result == CALL_OK) {
+        request->execution_reply = (struct execution_group_create_reply){handles[0], handles[1]};
+      }
     } else {
       request->result = result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
     }
@@ -93,6 +97,9 @@ static void create_execution_group(struct launcher_request *request)
       capability_grant_release(&grants[i]);
     }
     object_release(launcher);
+  }
+  if (request->result != CALL_OK) {
+    execution_group_abandon(group);
   }
   object_release(&group->object);
 }
@@ -788,7 +795,7 @@ static struct syscall_result launch_batch(struct execution_group *execution_grou
   return batch_reply(reply_address, &reply, status);
 }
 
-static struct syscall_result create_group(size_t request_size,
+static struct syscall_result create_group(struct execution_group *parent_group, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
   if (request_size || reply_capacity < sizeof(struct execution_group_create_reply)) {
@@ -808,7 +815,7 @@ static struct syscall_result create_group(size_t request_size,
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   struct launcher_request *request = request_launch_service_reserved(
-      LAUNCH_CREATE_EXECUTION_GROUP, NULL, NULL, NULL, 0, &reservation, slots);
+      LAUNCH_CREATE_EXECUTION_GROUP, NULL, NULL, parent_group, 0, &reservation, slots);
   enum call_status status = request->result;
   struct execution_group_create_reply reply = request->execution_reply;
   bsp_request_release(&request->request);
@@ -828,27 +835,27 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
 {
   struct process *parent = process_current();
   struct execution_group *group = launcher_execution_group(object);
-  if (operation == LAUNCHER_CREATE_GROUP) {
-    if (!(rights & LAUNCHER_RIGHT_CREATE_GROUP) || group || parent->execution_group) {
-      return (struct syscall_result){CALL_DENIED, 0};
-    }
-    return create_group(request_size, reply_address, reply_capacity);
-  }
-  if (operation != LAUNCHER_LAUNCH && operation != LAUNCHER_LAUNCH_BATCH) {
+  if (operation != LAUNCHER_CREATE_GROUP && operation != LAUNCHER_LAUNCH &&
+      operation != LAUNCHER_LAUNCH_BATCH) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & LAUNCHER_RIGHT_LAUNCH) ||
-      (parent->execution_group && parent->execution_group != group)) {
+      !execution_group_contains(parent->execution_group, group)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  /* A process never changes space. Sealing can change while capture sleeps:
-   * the BSP checks again at preparation and under the group lock at publication. */
+  /* The launcher selects the fixed scope. Constructor and launch preparation
+   * own an admission token across waits; final publication rechecks the tree. */
   if (group && group->space != parent->space) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   enum call_status status = execution_group_launch_begin(group, parent->space);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
+  }
+  if (operation == LAUNCHER_CREATE_GROUP) {
+    struct syscall_result result = create_group(group, request_size, reply_address, reply_capacity);
+    execution_group_launch_end(group);
+    return result;
   }
   struct syscall_result result = operation == LAUNCHER_LAUNCH_BATCH ?
       launch_batch(group, request_address, request_size, reply_address, reply_capacity) :

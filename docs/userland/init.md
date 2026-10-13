@@ -111,8 +111,8 @@ return {
   resource with LAUNCH alone. Trusted init and session handoff preserve it;
   the shell delegates it as `launcher` to ordinary foreground commands,
   including every foreground pipeline stage. Background commands and services
-  do not receive it. This does not delegate the trusted launcher's CREATE_GROUP
-  authority or add terminal input rights.
+  do not receive it. LAUNCH includes scoped subgroup creation; it does not delegate group
+  supervision or add terminal input rights.
 - **Declared native jobs.** `jobs` is an optional boolean, defaulting to false.
   It makes a private RAM provisioning tree available to trusted startup and
   explicit successor handoff. A bundle must request `job_work`, plus usable
@@ -124,7 +124,7 @@ return {
 - **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
   It supplies a distinct trusted `mux_terminal` grant. After configuration and
   service setup, the session launcher selects `bin://mux.pxe`, giving it
-  terminal CREATE and launcher CREATE_GROUP. It does not grant either resource
+  terminal CREATE and launcher LAUNCH. It does not grant either resource
   to ordinary shell commands. See the [multiplexer guide](multiplexer.md).
 - **Clipboard.** `clipboard_local` and `clipboard_shared` independently request
   the [store grants](../interfaces/clipboard.md). Stock local interactive spaces
@@ -595,11 +595,10 @@ namespace roots survive exit. A space whose init is `boot://shell.pxe` opens a
 shell directly, as the `rescue` space does. See [later lifecycle work](../wip/later-os-directions.md#execution-lifecycle)
 for deferred supervision and process replacement.
 
-Trusted init also holds CREATE_GROUP on its ordinary launcher. The default session
-program attenuates this to LAUNCH when starting the shell. An explicitly authorized
+LAUNCH on the ordinary launcher includes caller-scoped group creation. A
 supervisor can create an [execution group](../interfaces/execution-groups.md) and
 use its bound launcher while remaining outside that group. The trusted shell
-`session` handoff preserves the actual launcher LAUNCH/CREATE_GROUP rights and
+`session` handoff preserves the actual launcher LAUNCH rights and
 terminal CREATE grant; the remote supervisor then delegates only a group-bound
 LAUNCH grant to each shell.
 With Remote `launch = true`, the supervisor also supplies
@@ -608,7 +607,7 @@ their launched descendants then remain in the remote execution group. The
 packaged live Remote entry enables this (owner accepted, 2026-10-11), allowing
 bundles such as Neovim to launch helpers. Installed defaults contain no Remote
 space; owner-added Remote entries use the same setting. Only LAUNCH is delegated,
-not CREATE_GROUP or group supervision.
+not group supervision.
 
 ## FAT32 volumes and selected grants
 

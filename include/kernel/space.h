@@ -22,6 +22,9 @@ struct space
   char name[SPACE_NAME_MAX + 1]; /* Fixed identity for logs; never a title. */
   char title[SPACE_TITLE_MAX + 1]; /* Access under title_locked after boot. */
   atomic_bool title_locked;
+  /* IF=0; execution tree guard precedes process lifetime/table/ready queues. */
+  atomic_bool execution_groups_locked;
+  size_t execution_group_count; /* Includes completed and retiring storage. */
   struct framebuffer *fb;
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */

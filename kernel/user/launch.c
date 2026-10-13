@@ -208,7 +208,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, system_info, system_info_rights, 0, &system_info_handle) != CAP_OK ||
       capability_install(&process->capabilities, log, LOG_RIGHT_READ, 0, &log_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher,
-          LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK) {
+          LAUNCHER_RIGHT_LAUNCH, 0, &launcher_handle) != CAP_OK) {
     goto fail;
   }
   handle_t factory_handle;

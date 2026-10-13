@@ -79,7 +79,7 @@ no keyboard, pointer or interrupt-arming right is added. Programs such as
 reading the console, as in `cat | less`, is unsupported because they share one
 input queue. In a space with `launch = true`, every ordinary foreground stage
 receives LAUNCH from the shell's separate `child_launcher` resource. No
-CREATE_GROUP or pipe-creation authority is added, and background commands and
+group supervision or implicit pipe-creation authority is added, and background commands and
 services gain no launcher. Shebang adaptation does not add authority. See
 [startup and child authority](shell.md#startup-and-child-authority).
 

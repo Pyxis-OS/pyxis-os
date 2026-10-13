@@ -2,6 +2,7 @@
 #define KERNEL_EXECUTION_GROUP_H
 
 #include <abi/execution_group.h>
+#include <abi/handle.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 
@@ -9,19 +10,26 @@ struct space;
 struct task;
 struct process;
 struct task_wait_link;
+struct capability_reservation;
+struct capability_reserved_slot;
+struct capability_grant;
 
 struct execution_group_member {
   struct execution_group_member *next;
   struct process *process;
 };
 
-/* Immutable space. Lock protects admission, controlling grants, member links
- * and completion counters. A process owns one storage reference from preparation
+/* Immutable space/parent/depth. The space tree guard protects admission, active
+ * child links, controlling grants, member links and completion counters. A process owns one storage reference from preparation
  * through final reclamation; only published members contribute to members. */
 struct execution_group {
   struct kernel_object object;
   struct space *space;
-  atomic_bool locked;
+  struct execution_group *parent; /* Owned until final storage destruction. */
+  size_t depth;
+  struct execution_group *first_child;
+  struct execution_group *next_sibling;
+  size_t children; /* Active child edges own storage, not controlling authority. */
   bool sealed;
   bool stopping;
   bool complete;
@@ -34,7 +42,20 @@ struct execution_group {
 };
 
 /* BSP, IF=0. Returns one storage reference, no controlling authority. */
-struct execution_group *execution_group_create(struct space *space);
+enum call_status execution_group_create(struct space *space,
+    struct execution_group *parent, struct execution_group **result);
+/* BSP, IF=0. Publish the owned pair under final tree admission exclusion.
+ * All grants/slots exist and are validated; no allocation or user access. */
+enum call_status execution_group_install(struct execution_group *group,
+    struct capability_reservation *reservation,
+    const struct capability_reserved_slot *slots, struct capability_grant *grants,
+    handle_t *handles);
+/* Failure before controlling authority exists must still release an active edge. */
+void execution_group_abandon(struct execution_group *group);
+/* Immutable ancestry; callers retain descendant storage. NULL scope permits
+ * ordinary ungrouped authority; a member rejects NULL/foreign/ancestor targets. */
+bool execution_group_contains(const struct execution_group *scope,
+    const struct execution_group *target);
 
 /* IF=0, caller retains storage. No allocation. Another space is DENIED;
  * sealed admission is ENDPOINT_CLOSED. Publication rechecks under the lock. */
@@ -42,7 +63,7 @@ enum call_status execution_group_check(struct execution_group *group, struct spa
 
 /* Internal sibling publication, BSP/IF=0, retained process group. Success owns
  * the group guard until end; stopping refuses, SEAL still permits siblings.
- * Lock order: group -> process lifetime -> table/ready queues. NULL is allowed. */
+ * Lock order: space tree -> process lifetime -> table/ready queues. NULL is allowed. */
 bool execution_group_thread_begin(struct execution_group *group);
 void execution_group_thread_end(struct execution_group *group);
 

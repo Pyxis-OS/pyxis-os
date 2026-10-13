@@ -229,13 +229,115 @@ Use separate profiled runs for memory and untouched-main runs for elapsed
 baselines. No quota, public profiling ABI, compiler change or container rebuild.
 Native runs and publication go through the owner/luna.
 
-**Assigned follow-up, 2026-10-13:** driver-invoked LLD follows the accepted
-minimal native subgroup foundation in [#788](https://git.internal/PyxisOS/pyxis-os/pulls/788)
-and draft [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789), a bounded
-planning-freeze exception. The native job core and declared bundle grants then
-support the thin Clang driver adapter. The first completion's separate LLD
-invocation remains usable; no subgroup or driver implementation is on main yet.
-Broader nesting remains [parked](nested-execution-groups.md).
+## Driver-invoked LLD: accepted and assigned (2026-10-13)
+
+Task 5 merged as #772. The owner accepted all three defaults and assigned this
+follow-up on 2026-10-13. **Scoped planning-freeze exception:** implement only the
+minimum native subgroup creation, ownership and subtree cleanup prerequisite,
+then driver integration; broader nested-group work stays parked. The target is normal
+`clang hello.c -o hello.pxe`: integrated cc1, then one native LLD job, declared
+bundle authority and the [native job core](../userland/native-jobs.md).
+No shell wrapper, executor or broker. The [pre-code baseline](../development/experiments/hosted-clang-driver/README.md)
+is captured at fresh main `4a09711e` with the existing installed toolchain.
+
+**Accepted prerequisite: nested groups land first.** One leaf LLD fits today's
+job grant profile; it needs no descendant launcher. That only solves normal
+launch/wait while Clang lives. Clang's process stop/fault does not terminate
+other group members; closing an observer does not kill its process. Foreground
+Ctrl+C targets Clang, while a surviving session can retain LLD. A direct leaf
+therefore cannot supply the [required subtree lifetime](nested-execution-groups.md)
+by itself. Killing/waiting Clang's whole session group would also stop the shell,
+and Clang cannot wait for a group that still contains itself.
+
+| Inspected gap | Evidence at the current pins |
+| --- | --- |
+| Process stop and group retirement affect only that process/member | `kernel/process.c:171`, `kernel/object/execution_group.c:195`; shell `launch.c:833`; native jobs explicitly have no caller-death guarantee. |
+| Scoped creation/binding unavailable | `kernel/object/launcher.c:831` denies CREATE_GROUP to bound/grouped callers; `capability.c:218` and endpoint admission require exact group equality. Groups have no parent/child accounting. |
+| Default linker invocation stops before launch | Fork `4c23a208` `Program.cpp:51` refuses non-null statistics; `Job.cpp:385` always supplies them. Baseline exit 1/no executable has this diagnostic, not a measured missing-launcher failure. |
+| The later launch path is not the native job core | Fork `Support/Pyxis/Program.inc:155` requires explicit launch selection; `:349` makes a raw launcher CALL. Driver supplies no selection; path lookup accepts a native FILE, not a bundle. `libpyxis` already exports common bundle preparation. |
+
+### Accepted contracts (owner, 2026-10-13)
+
+1. **Containment and completion — accepted: native subgroups first, with a
+   caller-owned job scope.** Extend the existing job record with a contained
+   profile. Clang owns sole, non-forwarded CONTROL of a private LLD subgroup;
+   release on Clang exit/fault requests subtree stop. Normal completion waits
+   actual process retirement and subgroup cleanup; unknown admission is never
+   replayed. Parent-group stop/cleanup covers every subgroup even if outside
+   references retain storage. Keep PROCESS_WAIT's existing process-only meaning:
+   on Clang fault, its observer can complete before LLD's deferred cleanup;
+   parent-group completion is the transitive observation. A stronger process-
+   to-scope completion coupling would be a separate contract, not implied here.
+
+2. **Native creation/authority — accepted: scoped group construction from LAUNCH,
+   with bounded trees.** A bound member derives inside its current group/space;
+   an ordinary ungrouped local caller creates an owned root in its own space.
+   This covers both local and Remote shells without a privileged helper.
+   Reuse CREATE_GROUP's atomic CONTROL|WAIT + bound-LAUNCH reply, replacing its
+   privileged CREATE_GROUP-right gate with LAUNCH; update in-tree callers and
+   retire that redundant right. The creator stays outside its new job group;
+   ordinary launches do not automatically create new groups. Accept only own-
+   group/descendant launchers, never ancestor/unbound/foreign escapes. Keep
+   default own-group launcher delegation where declared by launch policy, with
+   explicit sandbox withholding and no synthesized kernel grant; the LLD leaf deliberately receives none. Grouped space
+   creation refuses before effects in this fixed-space slice; trusted ungrouped
+   space creation remains available. Accepted tunable bounds: depth 16 and
+   256 allocated group objects per space, including retiring/retained storage,
+   with LIMIT before creation effects. These are policy, not ABI constants.
+
+3. **Driver/bundle profile — accepted: one self-contained Clang bundle with a
+   declared read-only `linker://` root containing `lld.pxb`.** Clang requests
+   optional `launcher/launch`: compile-only remains usable when withheld, while
+   linking refuses honestly. Normal launch-enabled spaces supply it without a
+   command wrapper. Embedded LLD keeps its declared four runtime grants, read-
+   only app/resource/sysroot roots, 8 MiB stack and no launcher. Use shared SDK
+   bundle preparation and the job core, selecting only held declared authority,
+   explicit cwd/environment snapshots and inherited descriptors. The LLVM
+   adapter becomes a thin core client; ordinary Command execution stops asking
+   for unavailable process statistics. Requested statistics/other unsupported
+   policies remain explicit refusals. Preserve integrated cc1, temporary-file
+   cleanup, honest exit/fault/termination results and no child crash helper.
+   Keep current image/span ceilings and stacks; measure overlapping Clang/LLD
+   and capture backing rather than adding independent peaks as a measured total.
+
+### Assigned delivery scope
+
+- [x] **First unit: native subgroup foundation**, kernel/ABI plus SDK helpers only.
+  Parent/child storage and cleanup references, constructor reservations, ancestry
+  checks in launch/capability/COPY/IPC delivery, ancestor seal/stop versus creation
+  and publication, and subtree stop/cleanup. Preserve BSP allocation preflight,
+  no allocation under group/scheduler guards, safe-stop and deferred ownership.
+  Qualify local-root and Remote-member creation, refusal/stop races and retained
+  WAIT storage in 1/4-CPU QEMU/GDB. **After this unit the owner can:** create and
+  inspect a genuinely contained native job subtree without changing Clang. The
+  [qualification record](../development/experiments/hosted-clang-driver/README.md#native-subgroup-foundation-2026-10-13)
+  covers builds, matched workloads and 1/4-CPU QEMU/GDB; kernel #789 awaits
+  Daybreak's adversarial review before merge.
+- [ ] **Core and declared bundles:** implement the contained job profile using that
+  foundation and shared manifest preparation, packaging the linker root. No
+  second executor, implicit authority inventory or default grouping overhaul.
+  **After this unit the owner can:** run a declared leaf job with normal
+  observation and caller-loss stop ownership in either shell profile.
+- [ ] **Fork/integration:** wire native Command execution through the core, resolve
+  the declared linker bundle and GNU LLD flavor, then build fresh target closure
+  and qualify default compile/link/run plus failures and stop cleanup. **After
+  this unit the owner can:** use `clang hello.c -o hello.pxe` and run its output.
+
+Generic groups, jobs and manifests carry no x86 register/APIC/ELF-machine policy;
+CPU placement stays with the existing space/scheduler contract. Executable
+selection still uses the common launcher and userspace bundle/loader path, not
+foreign syscalls, fork or a per-space Clang execution setting. This preserves
+[the subsystem boundary](subsystems-per-space.md) and the
+[aarch64 review lens](later-os-directions.md#beyond-x86-aarch64), without assigning
+another personality or target architecture.
+
+The foundation/core alone need no compiler-container rebuild. Driver fork
+changes do: after approval and a qualified exact fork commit, prepare adoption
+and give the owner its exact `podman build -f ci/Containerfile -t
+ git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-SHA .` / `podman push` commands
+before adoption. No new fork SHA/image exists or is requested for the foundation. Deliver the
+kernel subgroup PR first for Daybreak's adversarial review before merge, then
+the separate Clang integration PR. The recorded baseline precedes code changes.
 
 ## Resources and native limits
 

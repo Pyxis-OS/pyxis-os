@@ -465,7 +465,7 @@ ordinary child policy. Programs explicitly using those capabilities can still
 write to or draw on the terminal. In spaces that opt into
 [ordinary child launch](init.md#boot-configuration), each foreground stage
 receives LAUNCH through the shell's separate `child_launcher` grant. It receives
-no CREATE_GROUP or pipe-creation authority; shebang adaptation does not add
+no group supervision or implicit pipe-creation authority; shebang adaptation does not add
 authority.
 
 The shell parses and validates the entire pipeline, then opens all executable
@@ -685,7 +685,7 @@ launch. The `session` word is removed from the child's arguments.
 The successor receives copies of the usual terminal and memory grants, the
 explicit selected root list and working-directory grants, current working-path
 metadata and current environment, plus an explicit `launcher` resource preserving
-the caller's LAUNCH and any CREATE_GROUP authority. An optional `child_launcher`
+the caller's LAUNCH authority (including scoped group creation). An optional `child_launcher`
 is forwarded separately with LAUNCH alone. Other startup
 resources, including the caller's `script`, `host_mount` and `native_mount`, are
 not forwarded. Launching another script supplies that target's own READ script
@@ -756,7 +756,7 @@ An optional `child_launcher` resource controls delegation to ordinary foreground
 commands, including every pipeline stage. The packaged Development and installed
 `pyxis` profiles provide it; Read-only and Remote do not. When present, the shell
 passes this grant as `launcher` with LAUNCH alone. It never substitutes its own
-launcher or adds CREATE_GROUP, and background commands and services gain no
+launcher, and background commands and services gain no
 launcher through this policy. Trusted `session` handoff preserves
 `child_launcher` as a distinct resource. If Remote explicitly opts in, that grant
 is bound to the remote session's execution group.
