@@ -71,8 +71,8 @@ follows #773 and that gate.
 
 [Threads gates 5–8](threads.md#delivery-gates): Codex delta (2026-10-11), native
 lifecycle, parking, TLS and libc delivery. Tasks 1–5 are merged (#612, #671, #684,
-#700, #709), and gates 6–8 are complete. Task 9's first consumer, SDL workers and
-timers, is implemented; SDL audio callbacks follow. Each later task retains its
+#700, #709), and gates 6–8 are complete. Task 9's SDL consumers, workers and timers
+then audio callbacks, are implemented. Each later task retains its
 separate owner-assignment gate.
 
 ## Open
