@@ -105,6 +105,54 @@ private stdio state. Closed standard streams are NONE even after descriptor
 reuse; allocated invalid streams fail with EBADF. See
 [live stream delegation](stdio.md).
 
+## Path splitting, signals and time parsing
+
+Added 2026-10-13 for the [jq port](jq.md), by owner decision, with no kernel
+change.
+
+`<libgen.h>` provides `dirname` and `basename` as textual operations on the
+caller's modifiable string. Neither resolves the path or touches a capability.
+A leading `scheme://` root, recognized by the same parser as the working
+directory, acts as `/` does in POSIX and is never removed; a leading `/` is also
+a root. Repeated and trailing `/` are ignored, and `.` and `..` are ordinary
+names. `dirname` truncates the argument, `basename` removes trailing `/`, and the
+result points into the argument, or to a static `"."` for NULL or an empty path.
+
+| Path | `dirname` | `basename` |
+| --- | --- | --- |
+| `tmp://dir/file` | `tmp://dir` | `file` |
+| `tmp://file` | `tmp://` | `file` |
+| `tmp://` | `tmp://` | `tmp://` |
+| `tmp://dir/` | `tmp://` | `dir` |
+| `dir/file` | `dir` | `file` |
+| `file` | `.` | `file` |
+| `dir/` | `.` | `dir` |
+| (empty) | `.` | `.` |
+
+`<signal.h>` exists so ISO C programs compile. It defines `sig_atomic_t`,
+`SIG_DFL`, `SIG_IGN`, `SIG_ERR` and the six ISO numbers (`SIGINT`, `SIGILL`,
+`SIGABRT`, `SIGFPE`, `SIGSEGV`, `SIGTERM`). `signal` returns `SIG_ERR` and
+`raise` returns -1, both without installing or delivering anything, with errno
+`ENOTSUP` (`EINVAL` for another number). There is no signal emulation, and
+`abort` does not call `raise`. A program that depends on delivery fails at
+run time instead of silently continuing.
+
+`<sys/time.h>` declares only `struct timeval`. `gettimeofday`, `select` and the
+interval timers are not provided; use `timespec_get` or `clock_gettime`.
+
+`strptime` is English C-locale only, with no locale selection and no
+`<langinfo.h>`. It accepts `%a %A %b %B %h %c %C %d %D %e %H %I %j %m %M %n %p
+%r %R %S %t %T %u %U %w %W %x %X %y %Y %z %%` and the `E` and `O` forms, which
+equal the ordinary ones. `%z` reads `Z`, `+-hh`, `+-hhmm` or `+-hh:mm` into
+`tm_gmtoff`; `%Z` and any other conversion fail, because a zone name cannot be
+mapped without zone rules and ignoring it would read the time in the wrong zone.
+Only the fields read are stored: `tm_wday` and `tm_yday` are not derived from a
+date, nothing is normalized, and a failed parse leaves the `tm` unchanged.
+
+`malloc`, `calloc` and `realloc` return NULL for a zero size, which ISO C
+allows. Programs that read NULL as out of memory need a one-byte request; see the
+[jq patch](../../ports/jq/README.md#patches).
+
 ## Regular expressions and UTF-8 conversion
 
 The SDK exports `regex.h` with `regcomp`, `regexec`, `regerror` and `regfree`,

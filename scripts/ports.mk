@@ -20,6 +20,9 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
                           ports/links/include/*.h ports/links/include/*/*.h ports/links/patches/*.patch) \
                 ports/ports.lua ports/build.lua
 
+JQ_INPUTS := $(wildcard ports/jq/*.lua ports/jq/Makefile ports/jq/PORT-NOTICE ports/jq/patches/*.patch) \
+             ports/ports.lua ports/build.lua
+
 TCC_INPUTS := $(wildcard ports/*.lua ports/tcc/*.lua ports/tcc/Makefile ports/tcc/patches/*.patch)
 SDK_INPUTS := $(shell find build/sdk -type f)
 FASTFETCH_INPUTS := $(wildcard ports/fastfetch/*.lua ports/fastfetch/*.cmake \
@@ -105,6 +108,7 @@ QUAKE_OUTPUTS := $(call port_outputs,quake)
 BUSYBOX_OUTPUTS := $(call port_outputs,busybox)
 LINKS_OUTPUTS := $(call port_outputs,links)
 LUA_OUTPUTS := $(call port_outputs,lua)
+JQ_OUTPUTS := $(call port_outputs,jq)
 FASTFETCH_OUTPUTS := $(call port_outputs,fastfetch)
 TCC_OUTPUTS := $(call port_outputs,tcc)
 TZDATA_OUTPUTS := $(call port_outputs,tzdata)
@@ -130,7 +134,7 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
-     $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
+     $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
@@ -198,6 +202,12 @@ $(LINKS_OUTPUTS) &: $(LINKS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/links
 	$(LUA) ports/build.lua links --sdk $(abspath build/sdk) --work $(abspath build/ports/links)
+
+$(JQ_OUTPUTS) &: $(JQ_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	@command -v $(LUA) >/dev/null 2>&1 || { \
+	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
+	rm -rf build/ports/jq
+	$(LUA) ports/build.lua jq --sdk $(abspath build/sdk) --work $(abspath build/ports/jq)
 
 # The pinned PCI ID text is independent of target SDK contents.
 $(PCIIDS_OUTPUTS) &: $(PCIIDS_INPUTS) scripts/ports.mk

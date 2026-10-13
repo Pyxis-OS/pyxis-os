@@ -5,7 +5,8 @@ rescue archive retains `echo`, `cp`, `ls` and `mv`, so configuration text can be
 written, files copied or moved and directories inspected while repairing the
 system. See
 [system layout](system-layout.md#programs) for `bin://` and rescue fallback.
-The text filters `grep`, `wc`, `tail`, `sort` and `uniq` are sbase ports in the normal image.
+The text filters `grep`, `wc`, `tail`, `sort` and `uniq` are sbase ports in the normal image,
+and [jq](jq.md) is a ported JSON processor.
 
 | Command | Behavior | Reference |
 | --- | --- | --- |
