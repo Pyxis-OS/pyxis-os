@@ -123,16 +123,29 @@ Read-only inspection confirmed private RAM leaves and no client ancestor grant.
 The native installer filter was compiled/inspected, not executed: the shaped
 archive is a runtime packaging check, not a claimed install/update run.
 
-The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES to avoid
-16-byte trailing WRITE calls; its allocated buffer stays 4 KiB. Final-source
-2049 MiB HTTPS GET verified every byte/count, independent SHA-256 and final
-HTTP 200/complete framing/native/source/cleanup zero. At one read-only live
-checkpoint the provider owned 2,318,336 backed bytes (606,208 allocator backing)
-and Lua 2,306,048 (462,848); these are capacities, not peak RSS or filesystem
-cache accounting. The same provider snapshot matched the 32 MiB run. The
-matching multi-GB POST remains pending. Matched measurement jobs are
-stopped and disk/ISO checkpoints retained. This is a recoverable checkpoint,
-not milestone closure or completion evidence for the pending script surface.
+## Large streaming check
+
+Frozen parent `72e13880`, userland `22fcade`, ports `bcacac6`, the same ordinary
+image/configuration, local TLS/private NPFS and existing explicit Lua adapters
+with one 7200-second deadline per request:
+
+| Operation | Exact bytes | Final result |
+| --- | --- | --- |
+| HTTPS GET | 2,148,532,224 (2049 MiB) | HTTP 200, complete framing; native/source/cleanup zero |
+| Staged HTTPS POST, 64 KiB repeated-buffer writes | 2,148,532,224 | Same; 13-byte response and successful close |
+
+GET checked every byte/count; POST staged/flushed the full body and the server
+independently matched decoded length and SHA-256. Both hashes matched the
+expected repeated-z payload. These exercise the existing adapter beyond signed
+32-bit size, not a multi-GB shell-worker timing result. At live checkpoints the
+provider owned 2,318,336 backed bytes (606,208 allocator backing), unchanged from
+32 MiB; Lua GET owned 2,306,048 (462,848), POST 1,990,656 (147,456). These are
+sampled capacities, not peak RSS or filesystem/network-cache accounting.
+
+The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES, avoiding
+16-byte trailing WRITE calls; its allocated buffer stays 4 KiB. All owned
+qualification jobs are stopped. Standalone-script delivery still awaits its
+owner contract; these results do not close the milestone.
 
 ## Owner native recheck
 
