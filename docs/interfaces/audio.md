@@ -62,8 +62,10 @@ hardware consumes those frames. The two counters saturate at `UINT64_MAX`:
 - `starvations` counts an empty episode when a requested mixer period has
   insufficient queued PCM. Repeated empty periods do not increment it again;
   a nonempty accepted WRITE allows the next empty episode to be counted.
-- `discontinuities` counts terminal engine failure affecting the session. It
-  does not count lost or repeated audible frames.
+- `discontinuities` counts engine events that broke the session's output: each
+  [timing recovery](../devices/hda.md#timing-recovery) (the stream restarted;
+  queued PCM is kept) and terminal engine failure. It does not count lost or
+  repeated audible frames.
 
 `state` is `AUDIO_STATE_READY` or `AUDIO_STATE_FAILED`. READY describes a usable
 session; it does not imply active hardware, a primed queue or continuous sound.

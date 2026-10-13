@@ -11,7 +11,10 @@
 
 #define AUDIO_WATCHDOG_MS 5
 #define AUDIO_HEADPHONE_SETTLE_MS 75
-#define AUDIO_SERVICE_LIMIT_NS UINT64_C(20000000)
+#define QEMU_SERVICE_LIMIT_NS UINT64_C(20000000)
+#define AUDIO_RECOVERY_STREAK_NS UINT64_C(2000000000)
+#define AUDIO_RECOVERY_LOG_NS UINT64_C(10000000000)
+#define HDA_BYTES_PER_SECOND (HDA_RATE * HDA_FRAME_BYTES)
 #define QEMU_COMMIT_LIMIT_NS UINT64_C(1000000)
 #define NATIVE_COMMIT_MS 20
 #define NATIVE_COMMIT_LIMIT_NS (UINT64_C(1000000) * NATIVE_COMMIT_MS)
@@ -43,9 +46,19 @@ static uint64_t observed_time, progress_time;
 static uint32_t observed_position, observed_wallclock;
 static uint64_t starts, stops, interrupts, refills, max_commit_ns;
 static const char *refill_fault;
+/* Set with refill_fault when the stream is intact but the worker was late:
+ * a stop, a fresh primed ring and a new RUN epoch recover from it. */
+static bool refill_late;
+/* Observation, progress and notification-age bound for the current model. */
+static uint64_t service_limit_ns = QEMU_SERVICE_LIMIT_NS;
+/* A restarted epoch is unproven until it observes one healthy ring lap.
+ * Recoveries that keep failing before that form a streak. */
+static uint64_t recoveries, streak_start, recovery_logged;
+static bool recovery_unproven;
 
 static void audio_worker(void *argument);
 static bool stop_output(void);
+static bool run_output(void);
 static bool observe_progress(const struct hda_stream_position *position,
     const struct hda_irq_event *event, uint64_t now);
 
@@ -147,21 +160,34 @@ static bool start_output(void)
       !hda_commands_stop(&controller) || !hda_stream_prepare(&controller)) {
     return false;
   }
-  if (controller.model == HDA_MODEL_AMD) {
-    uint32_t reserve = controller.fifo_bytes + HDA_FRAME_BYTES + NATIVE_COMMIT_PROGRESS_BYTES;
-    if (!controller.fifo_bytes || reserve >= HDA_BUFFER_BYTES) {
-      hda_fail(&controller, "native output commit reserve does not fit PCM ring");
-      return false;
-    }
-    ktrace("audio: native FIFO-bytes=%u reserve-bytes=%u commit-ns=%lu commit-WALCLK=%u\n",
-        controller.fifo_bytes, reserve, NATIVE_COMMIT_LIMIT_NS,
-        HDA_WALLCLOCK_TICKS_PER_MS * NATIVE_COMMIT_MS);
-  }
   audio_sessions_cleanup();
   audio_volume_apply();
   if (!audio_sessions_pending()) {
     /* Exit can discard all PCM after activation. Settle that output too. */
     return stop_output();
+  }
+  recovery_unproven = false;
+  return run_output();
+}
+
+/* Prepared stream: check the native reserve, prime every period and RUN. */
+static bool run_output(void)
+{
+  if (controller.model == HDA_MODEL_AMD) {
+    uint32_t reserve = controller.fifo_bytes + HDA_FRAME_BYTES + NATIVE_COMMIT_PROGRESS_BYTES;
+    if (!controller.fifo_bytes || reserve + HDA_PERIOD_BYTES >= HDA_BUFFER_BYTES) {
+      hda_fail(&controller, "native output commit reserve does not fit PCM ring");
+      return false;
+    }
+    /* After a refill the ring holds at least all but one period ahead of the
+     * position. Allow observation gaps only while the next reclaimed period
+     * can still keep the commit reserve, so a late worker is detected before
+     * DMA reaches PCM it has not replaced. */
+    uint32_t horizon_bytes = HDA_BUFFER_BYTES - HDA_PERIOD_BYTES - reserve;
+    service_limit_ns = UINT64_C(1000000000) * horizon_bytes / HDA_BYTES_PER_SECOND;
+    ktrace("audio: native FIFO-bytes=%u reserve-bytes=%u commit-ns=%lu commit-WALCLK=%u horizon-ns=%lu\n",
+        controller.fifo_bytes, reserve, NATIVE_COMMIT_LIMIT_NS,
+        HDA_WALLCLOCK_TICKS_PER_MS * NATIVE_COMMIT_MS, service_limit_ns);
   }
   uint64_t flags = cpu_save_interrupts();
   observed_bytes = refilled_periods = data_end_bytes = 0;
@@ -192,8 +218,8 @@ static void park_output(void)
 {
   stop_phase = AUDIO_STOP_NONE;
   ++stops;
-  ktrace("audio: parked starts=%lu stops=%lu IRQs=%lu refills=%lu max-commit-ns=%lu\n",
-      starts, stops, interrupts, refills, max_commit_ns);
+  ktrace("audio: parked starts=%lu stops=%lu IRQs=%lu refills=%lu recoveries=%lu max-commit-ns=%lu\n",
+      starts, stops, interrupts, refills, recoveries, max_commit_ns);
 }
 
 static bool stop_output(void)
@@ -252,13 +278,15 @@ static bool observe_progress(const struct hda_stream_position *position,
     refill_fault = "output FIFO/descriptor error";
     return false;
   }
-  if (now - observed_time >= AUDIO_SERVICE_LIMIT_NS ||
-      wall_ticks >= HDA_WALLCLOCK_TICKS_PER_MS * (AUDIO_SERVICE_LIMIT_NS / 1000000)) {
+  if (now - observed_time >= service_limit_ns ||
+      wall_ticks >= HDA_WALLCLOCK_TICKS_PER_MS * service_limit_ns / 1000000) {
     refill_fault = "output observation exceeded service horizon";
+    refill_late = true;
     return false;
   }
-  if (event->first_time && now - event->first_time >= AUDIO_SERVICE_LIMIT_NS) {
+  if (event->first_time && now - event->first_time >= service_limit_ns) {
     refill_fault = "output completion notification expired";
+    refill_late = true;
     return false;
   }
   uint32_t step = (position->bytes + HDA_BUFFER_BYTES - observed_position) % HDA_BUFFER_BYTES;
@@ -288,8 +316,9 @@ static bool observe_progress(const struct hda_stream_position *position,
   if (!controller.irq.errors) {
     controller.irq.first_time = 0;
   }
-  if (now - progress_time >= AUDIO_SERVICE_LIMIT_NS) {
+  if (now - progress_time >= service_limit_ns) {
     refill_fault = "output progress stalled";
+    refill_late = true;
     return false;
   }
   return true;
@@ -300,6 +329,7 @@ static bool refill_output(void)
   struct hda_stream_position position;
   struct hda_irq_event event;
   refill_fault = "output position observation unstable";
+  refill_late = false;
   uint64_t flags = cpu_save_interrupts();
   bool safe = hda_stream_position_locked(&controller, &position, &event) &&
       observe_progress(&position, &event, arch_monotonic_ns());
@@ -324,6 +354,7 @@ static bool refill_output(void)
     if (safe && (target <= observed_bytes ||
         target - observed_bytes <= margin)) {
       refill_fault = "output refill safety margin exhausted";
+      refill_late = true;
       safe = false;
     }
     if (!safe) {
@@ -355,12 +386,14 @@ static bool refill_output(void)
     uint32_t wall_limit = HDA_WALLCLOCK_TICKS_PER_MS * (native ? NATIVE_COMMIT_MS : 1);
     if (safe && (after - before >= commit_limit || wall_ticks >= wall_limit)) {
       refill_fault = "output DMA commit exceeded clock limit";
+      refill_late = true;
       safe = false;
     }
     safe = safe && observe_progress(&position, &event, after);
     uint32_t final_margin = native ? controller.fifo_bytes + HDA_FRAME_BYTES : 0;
     if (safe && (observed_bytes >= target || target - observed_bytes <= final_margin)) {
       refill_fault = "output reached period during DMA commit";
+      refill_late = true;
       safe = false;
     }
     if (frames) {
@@ -373,6 +406,9 @@ static bool refill_output(void)
       return false;
     }
   }
+  if (recovery_unproven && observed_bytes >= HDA_BUFFER_BYTES) {
+    recovery_unproven = false;
+  }
   /* Let a ring of zeros follow the last queued PCM. This bounds the internal
    * tail for the QEMU backend; it is deliberately not an audible drain API. */
   if (!audio_sessions_pending() && observed_bytes >= data_end_bytes &&
@@ -381,6 +417,40 @@ static bool refill_output(void)
     return stop_output();
   }
   return true;
+}
+
+/* A late worker is not a device fault. Stop and reset the stream (a refused
+ * reset or a FIFO/descriptor error fails the controller there), then prime the
+ * whole ring afresh and start a new RUN epoch: priming overwrites every
+ * period, so PCM from before the stop never plays again. Sessions keep their
+ * queues and count one discontinuity. Restarts that keep failing before a
+ * healthy lap mean the cause is not transient, so they fail the engine. */
+static bool recover_output(void)
+{
+  uint64_t now = arch_monotonic_ns();
+  if (!recovery_unproven) {
+    streak_start = now;
+  } else if (now - streak_start >= AUDIO_RECOVERY_STREAK_NS) {
+    refill_fault = "output kept missing service after repeated recovery";
+    return false;
+  }
+  if (!hda_stream_stop(&controller)) {
+    return false;
+  }
+  ++recoveries;
+  audio_sessions_discontinuity();
+  if (recoveries == 1 || now - recovery_logged >= AUDIO_RECOVERY_LOG_NS) {
+    recovery_logged = now;
+    klog("audio: %s; output restarted (%lu since boot)\n", refill_fault, recoveries);
+  }
+  audio_sessions_cleanup();
+  if (!audio_sessions_pending()) {
+    refill_fault = "output stop failed";
+    return stop_output();
+  }
+  refill_fault = "output restart failed";
+  recovery_unproven = true;
+  return hda_stream_prepare(&controller) && run_output();
 }
 
 static void audio_worker(void *argument)
@@ -412,7 +482,8 @@ static void audio_worker(void *argument)
     cpu_restore_interrupts(flags);
     audio_sessions_cleanup();
     audio_volume_apply();
-    if (available && controller.stream_running && !refill_output()) {
+    if (available && controller.stream_running && !refill_output() &&
+        !(refill_late && recover_output())) {
       fail_engine(refill_fault);
     }
     struct audio_request *request = take_request();

@@ -52,6 +52,9 @@ bool audio_sessions_pending(void);
  * Exit invalidation cannot interleave with generation checks, queue consumption
  * and direct output publication. Consumes at most AUDIO_PERIOD_FRAMES per source. */
 size_t audio_sessions_mix(int16_t *output, size_t frames);
+/* Sole BSP audio worker, IF=1. The engine restarted its stream after a timing
+ * fault: count one discontinuity in each usable session, keeping its queue. */
+void audio_sessions_discontinuity(void);
 void audio_sessions_fail(void);
 
 #endif
