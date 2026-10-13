@@ -4,7 +4,8 @@ Status: parked ideas, not an implementation milestone or worklist. Promote one
 to a focused milestone when its prerequisites and intended result are clear.
 See the [planning index](boot-sdk-ports.md) for the current sequence.
 
-Parked elsewhere: [capability-valued environment variables](capability-environment.md).
+Parked elsewhere: [capability-valued environment variables](capability-environment.md)
+and [subsystems per space](subsystems-per-space.md).
 
 Owner direction (2026-10-11): extend negotiated remote resize to plain interactive sessions after the mux-only slice.
 

@@ -188,6 +188,9 @@ The merged host packer/checker (2a, #706) stays; bin placement is merged
 [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
 [filesystems and namespaces](vfs.md): working drafts.
 
+[Subsystems per space](subsystems-per-space.md): parked (2026-10-13), a userspace
+personality such as NT per space; revisit before a second loader or format.
+
 [Users and authority](users-and-authority.md), a cross-cutting design checkpoint,
 and [credentials and biometric unlock](credentials-and-biometrics.md), parked after
 local users.
