@@ -278,6 +278,90 @@ All three provider/adapter defaults accepted 2026-10-11; delivery is tasks 3–5
    `"w+"` adopts the response reader at its start rather than reading the body
    or issuing GET. Ordinary `fclose` and editor saves remain non-submitting.
 
+## Task 4 adapter decisions — proposed 2026-10-13
+
+Task 4 is assigned; implementation waits for these choices. TLS stays solely in
+the provider. Authority comes from declared namespace/resource/stream grants:
+no launch-site wrapper may add grants, widen a bundle request or provision a
+provider behind the caller's back. Missing POST preparation/private staging
+remains a refusal. Shell transaction coordination is task 5.
+
+1. **Explicit commit for staged stdio (default).** `"r"` opens a forward response;
+   `"w"` and `"w+"` prepare a POST and expose only its staged writer initially.
+   Native libc and Lua helpers expose prepare/commit/status/abort. Commit flushes
+   this FILE's pending output and refuses a failed/uncertain producer; it never
+   retries a lost submission. `"w"` commit returns a separate response FILE;
+   `"w+"` adopts the response at its start. Reading `"w+"` before commit fails
+   `EBUSY`, rather than submitting or reading staging. Staging may use its real
+   FILE position/size; the response cannot seek, stat a size or replay bytes.
+   Read, flush and close never commit. Close releases this holder's facets;
+   other explicitly retained copies remain governed by the accepted lifetime.
+   The ordinary URL-open deadline is one 30-second budget including staging and
+   response consumption; explicit preparation accepts a longer absolute deadline.
+   **Alternative:** reject URL `"w+"` and require a separate request/response
+   object for every POST. The default delivers the accepted mode without hidden
+   submission; slow/manual staging needs an explicit longer deadline.
+2. **Paired declared standard-stream facets (default).** Extend launch/startup
+   stream records with an optional, typed read-only observation companion, selected
+   from the caller's declared grant list. HTTP response stdin carries STREAM READ
+   plus HTTP STATUS-only observation, both with CALL transport; kernel/startup
+   validation rejects malformed protocols/rights/aliases. Plain streams carry no
+   companion. Libc owns the pair, descriptor aliases share it, and explicit child
+   stream selection copies both narrowed facets. Control/body/ABORT never accompany
+   a response implicitly. Update all launch, bundle and job adapters together;
+   pairing is supplied by the trusted handoff, not inferred from a name or numeric
+   handle. Missing/failing final observation cannot establish successful completion.
+   **Alternative:** a separately declared named resource for stdin observation.
+   The default keeps its lifetime/association with the selected stream and avoids
+   accidental rebinding when stdin is replaced; neither option creates authority.
+3. **Stream URL GET, preserve URL policy, explicitly materialize (default).**
+   Switch libc `fopen`/`open` HTTP reads to prepared streams. Keep the existing
+   anonymous redirect rules, final URL/media type and errno mapping for ordinary
+   URL opens; explicit prepared APIs retain complete HTTP error bodies/status.
+   Carry initial-origin/sticky-crossing and bounded header/framing context into
+   PREPARE; the provider reports its trust-profile redirect restriction, so both
+   outgoing and incoming custom-trust origin changes refuse.
+   One deadline spans the chain, with ten hops, visited-URL detection, no downgrade
+   and no redirect of credential-bearing requests or POST. There is no total-body
+   allowance in the stream path. `cp` explicitly consumes HTTP into its existing
+   caller-owned destination staging file and publishes only after validated EOF
+   and final status. Keep native FILE-only APIs honest: a URL needing seek/SIZE
+   requires explicit caller-owned materialization; no universal legacy snapshot
+   fallback or implicit RAM/disk authority. **Alternative:** make every URL open
+   require the explicit prepared API for now. The default enables existing
+   sequential consumers while preserving grant and redirect policy.
+
+### Inspected consumer audit
+
+Main `2f2109fc`, userland `9f781e94`, ports `f93becb9`; source inspection only.
+
+| Consumer | Reached dependency and task 4 treatment |
+| --- | --- |
+| Links | `ports/links/pyxis.c` `provider_func`: sequential fread into its own cache; validate final result before cache publication and preserve final URL/status/media type. No temporary native file needed. |
+| Lua I/O/loadfile | Upstream liolib/lauxlib read sequentially and check ferror; chunk reads stream, `read("*a")` explicitly allocates the whole result. Seek fails; failed input cannot yield executable code. |
+| Native cp | `userspace/cp/copy.c` `cp_copy_file_handle`: SIZE and positioned reads; add explicit streamed HTTP copy into destination staging, without changing native-file copying. |
+| libuv/Neovim | `ports/libuv/pyxis/fs.c`: offset -1 can stream; pread/stat need a real file. Neovim editor selection already proves native parents; download then edit, without adding remote editing. |
+| Program loading | `userspace/lib/program.c` prefix/interpreter reads and kernel launcher require FILE; materialize explicitly before loading, never feed STREAM to the launcher. |
+| Lua native SHA-256 | `ports/lua/pyxis.c` omits HTTP workspace and uses positioned FILE reads; HTTP hashing is not established support and is not added here. |
+
+### Qualification and measurement
+
+Before any read-path implementation, capture repeated GET/OPEN/payload and
+RAM controls with existing iobench; repeat matched runs afterward at the same
+CPU/devices/revisions. **Timing is held until the owner confirms the LLVM host
+rebuild finished**, 2026-10-13; nested results cannot establish native throughput.
+Compare the eventual native HTTP/TCP gap with the reference above, including
+per-READ cost; request the owner's native A/B rather than claiming a nested result
+meets the network target. No throughput optimization is implicitly assigned.
+
+Functional QEMU checks cover C/Lua chunk reads, staged w/w+ and explicit commit,
+error responses, authenticated/truncated EOF, unsupported seek/SIZE, early close,
+redirect/trust policy, streamed cp, and a child receiving only reader/observation
+through declared startup streams. Include a body above 16 MiB without whole-body
+buffering. Record ferror/final status independently of HTTP success; never invent
+EOF, successful size, metadata or mutation. Userland/ports dependencies precede
+the parent ABI/gitlink PR; rebase dependency mains before reporting.
+
 ## Task 2 accepted TLS policy
 
 **Option A accepted by the owner, 2026-10-12.** Allow ordinary early HTTP
