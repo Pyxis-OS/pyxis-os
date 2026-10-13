@@ -5,9 +5,8 @@ The directory-validation fixes (#743 / fs #33) and task 3's binding (#750) are
 merged. Task 4 implements the accepted seal-at-power contract below; its
 [qualification record](../development/experiments/fat32-mounted-writes.md) separates
 executed scratch-image checks from source review and remaining hardware limits.
-Task 5's workflow choices below are proposed, not accepted. The owner cleared
-timing capture after the LLVM rebuild; implementation waits for the material
-decisions. Native ESP steps require explicit owner approval and
+Task 5's workflow defaults below are accepted, 2026-10-13. The owner cleared
+timing capture after the LLVM rebuild; task 5 implementation is authorized. Native ESP steps require explicit owner approval and
 presence; this task does not write the real ESP.
 This shared milestone extracts [NVMe task 2](nvme-coexistence.md#2-fat32-read-and-write-for-the-esp)
 and [installer task 3](installer-tui.md#dependencies-and-ordered-delivery).
@@ -546,7 +545,7 @@ task 5 adds live shell bindings or configuration-selected capability entries,
 return to that parked design for owner review; early trusted `esp` delegation
 and mounted file I/O do not require its implementation.
 
-## Task 5 trusted workflow — proposal, 2026-10-13
+## Task 5 trusted workflow — accepted, 2026-10-13
 
 Inspected main `2f2109fc`, fs `414be0ac`, userland `9f781e94`, ports `f93becb9`.
 Task 4 is merged. Its engine, fixed-mode admission, interval/retirement contracts,
@@ -564,7 +563,7 @@ authority. The shared manifest parser lacks MOUNT and external directory/root
 requests. These are inspected gaps, not justification for program-name exceptions
 or a userspace filesystem proxy.
 
-### Three owner decisions — proposed defaults
+### Three accepted owner decisions — 2026-10-13
 
 1. **Mount-only authority separate from raw access.** Extend the existing disk
    inventory interface with explicit mount-only RO/RW rights and an operation
@@ -583,8 +582,7 @@ or a userspace filesystem proxy.
    interactive selection uses displayed boot-scoped IDs. Missing optional views
    stay unavailable, with no guessed disk or raw fallback. No installed/remote
    space receives management authority implicitly. This needs a small native
-   front-door extension; reusing raw claims is smaller but prevents ordinary
-   mounted-disk use and grants excessive authority.
+   front-door extension.
 2. **Shell-owned bindings and controllers; thin shared operations.** Extend the
    existing shell mount path with FAT mount/sync/release, a bounded root/control
    table and common native helpers. A thin standalone utility can inspect/sync/
@@ -594,13 +592,12 @@ or a userspace filesystem proxy.
    environment, a FAT-only capability-variable store or a global mount daemon.
 
    Release unbinds the caller's root and closes its own data references before
-   RETIRE. If its cwd uses that root, move to home/tmp and report the move, or
+   RETIRE. If its cwd uses that root, move to home and report the move, or
    refuse when no other authorized cwd exists. Retain the controller while BUSY/
    failure is reported, allowing retry after external references/intervals drain.
    Never revoke other processes' handles or equate process exit with drainage.
    Final controller close keeps the existing published/failed-state rule. Clean
-   power still seals with files open, independent of release. A helper-owned child
-   session is simpler but cannot provide persistent parent-shell bindings.
+   power still seals with files open, independent of release.
 3. **Explicit RW editor declarations, not launch wrappers.** Extend the common
    typed grant resolver for selected MOUNT and external DIRECTORY capabilities,
    including an explicit URI-root binding for a directory request. Use a distinct
@@ -621,10 +618,10 @@ or a userspace filesystem proxy.
    cannot authorize admission. An existing RO instance requires drainage and a
    successful explicit RETIRE, then fresh RW admission; launching an editor does
    not change its mode. The boot ESP issuer stays RO, and this task does not enable/exercise RW real-ESP profiles.
-   A dedicated RW space avoids resolver work but grants all successors write access.
 
-CLI/schema names are implementation choices; these defaults are not accepted until
-the owner answers. This is task 5 only, not a new milestone or task list.
+CLI/schema names are implementation choices. Task 5 is owner-assigned; no next
+task is authorized. Disk GUIDs and serials belong only in owner-local configuration,
+never repository documents or examples; use placeholders for selectors.
 
 ### Baseline and qualification boundary
 
@@ -636,7 +633,7 @@ inputs, refresh and record that control first. Disposable VirtIO RO and USB RW
 functional checks exercise existing bootstraps; they do not qualify the proposed
 workflow. No native ESP operation has run.
 
-After decisions/baseline, qualify scratch VirtIO before supported 512-byte,
+Implementation qualifies scratch VirtIO before supported 512-byte,
 single-LUN USB BOT via QEMU xHCI: declared/missing grants, editor save/replacement,
 RO/refused-RW media, held aliases, sync and reference drainage, retirement errors
 and clean power with open files. Cross-read with mtools, `fsck.fat -n`, untouched
@@ -689,7 +686,7 @@ open files remains usable under the accepted seal contract.
   failed-state retention and the accepted dirty-bit/clean-retirement policy.
   **After this task the owner can:** edit authorized files, explicitly sync and
   retire a scratch FAT mount; simultaneous conflicting raw writers are refused.
-- [ ] **5. Trusted mount workflow and qualification — assigned 2026-10-13; workflow decisions proposed above.** Thin mount/sync/release
+- [ ] **5. Trusted mount workflow and qualification — assigned 2026-10-13; workflow decisions accepted above.** Thin mount/sync/release
   utility and configured binding integration; selected read-only normal ESP views
   and explicit writable editor grants. Qualify scratch VirtIO first, then supported
   USB and owner-approved native ESP steps; SD depends on its block driver. Revalidate
