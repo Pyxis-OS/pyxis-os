@@ -823,3 +823,18 @@ re-run must show raw/effective geometry, edge-to-edge extents, actual TrackPoint
 packet increments and switches, then the contact phases above. The shared short
 sheet is `/shared/present/batch2/pointer-task2-native/RUNSHEET.md`. No default
 activation, guest commands, guest decode changes or dependency repoints are made.
+
+### Owner calibrated re-run, 2026-10-13
+
+Owner on the ThinkPad, correction `b4b4f594`: absolute admission; edge-to-edge
+observed X 1266..5678 and Y 1162..4686; palm rejection "solid"; scroll works;
+TrackPoint guest packets increase 2..384 during its window, no overflows or
+malformed packets, zero transport resets. Owner also booted Synaptics-only and
+the standard entry. Log stays on horse at
+`~/shared/batch-2026-10-09/caelum-4.log`, from line 19278. No raw log committed.
+
+Qualification remains open: the owner reports overlong typing suppression and
+basic-W's one-position limitations for separated-finger scroll and clickpad
+trampoline drag. The milestone records accepted interaction requirements, the
+confirmed until-lift typing latch, image-sensor AGM evidence and three pending
+defaults. No follow-up interaction implementation or native pass is claimed.

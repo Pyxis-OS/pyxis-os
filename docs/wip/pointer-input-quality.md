@@ -337,9 +337,75 @@ after recovery writes gesture-disable, rather than a print defect. Guest decode,
 commands and button routing are unchanged until a re-run establishes a need.
 
 - [x] Record owner measurement, accepted calibration and opt-in correction.
-- [ ] Owner/luna re-run: absolute admission, edge-to-edge observed X/Y extents,
-  TrackPoint motion/L/M/R and the full palm/scroll run, then diagnosis-off repeat.
-  Default-on remains gated on the owner's complete native pass.
+- [x] Owner re-run `b4b4f594`, 2026-10-13: calibrated absolute admission; observed
+  X 1266..5678, Y 1162..4686; palm rejection reported "solid"; scroll and
+  TrackPoint pass-through work, guest packets 2..384, no overflows/malformed
+  packets and zero transport resets. The owner also booted Synaptics-only and
+  the standard entry. The eight-unit Y endpoint difference does not justify
+  changing queried bounds or the authored calibration.
+- [ ] Qualify the owner-requested typing, close-finger scroll and trampoline
+  corrections below. Default-on remains gated on the complete native pass.
+
+### Native interaction corrections — owner requirements 2026-10-13
+
+The owner requests a tunable 50..100 ms typing gate, initially 75 ms, applying
+only to contacts begun during typing; an already established finger must not
+freeze. Scroll requires nearby fingers and uses both positions. A physical
+clickpad press always prevents scrolling; with two contacts, the moving finger
+drives the drag. Keep TrackPoint delivery and the qualified palm/edge/loss rules.
+
+Inspection found two current suppression mechanisms: a global typing window
+freezes existing contacts and resets their baselines on every typing timestamp;
+`typing_quarantine` then rejects a newly arriving/count-changed contact until
+lift, even after 500 ms. Physical nonmodifier press/repeat rearms the timestamp;
+release, including Enter release, does not. This explains how the filter can
+reject for much longer than 500 ms, but does not prove the exact launch episode.
+
+The captured query 0c `12 e8 00` has image-sensor bit 11 set and advanced-gesture
+bit 19 clear. Pinned Linux v6.17, commit
+`e5f0a698b34ed76002dc5cff3804a61c80233a7a`, enables AGM for either capability.
+For this image sensor it decodes a second position/pressure from W2 gesture
+packets and a contact-count packet. Activation uses the sliced model selector
+03 followed by sample-rate parameter c8 after ordinary absolute-W setup; it is
+not EW mode bit 2 or four-byte guest negotiation. Evidence:
+[mode/packet handling](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.c)
+and [capability definitions](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.h).
+Independently implement protocol facts; do not incorporate Linux GPL code.
+
+Three remaining defaults are **proposed, not accepted**:
+
+1. **Close-finger threshold.** Enter scrolling at at most 25 mm centre-to-centre
+   physical distance, leave at 30 mm; keep both authored tunables. Use calibrated
+   X/Y scaling and the pair's centroid displacement, with existing direction,
+   dead zone and detent scale. This hysteresis avoids mode chatter. Separated
+   fingers do not produce wheel events. Alternative: a different owner-selected
+   separation, without hysteresis.
+2. **Paired contact freshness and moving-finger drag.** Admit two-position input
+   only from a queried image-sensor AGM layout, with both observations no older
+   than 50 ms and consistent contact count/valid coordinates. Associate the two
+   positions with the prior pair by minimum total physical displacement; reset
+   baselines on ambiguity, contact loss/count change or stale/missing data.
+   While physically pressed, always emit zero scroll; choose the larger physical
+   per-sample displacement for the drag, retaining the previous choice on ties.
+   Skip uncertain pair motion while still delivering physical switches, rather
+   than inventing a second position. Basic-W-only pads keep the owner's minimum:
+   pressed two-contact input drags from the available position, never scrolls;
+   no claim of distance-qualified scrolling or second-finger tracking there.
+   Failed AGM activation on an advertising device recovers relative input.
+   Alternative: withhold all two-contact drag until a stronger identity rule.
+3. **Typing-gated contact lifetime.** Check typing at each newly identified
+   contact's onset, never reset or suspend a previously admitted contact for
+   later typing or an added finger. A gated contact retries after 75 ms without
+   a nonmodifier press/repeat, establishing a fresh baseline; it does not require
+   lift. Until admitted, genuine continued typing can extend that quiet interval.
+   Once admitted it remains unaffected by subsequent typing. Palm/edge/loss
+   quarantine retains its separate rules. Keep 75 ms authored/build-tunable in
+   the owner's 50..100 ms range, with no new runtime authority. Alternative:
+   keep until-lift typing quarantine, which can still feel indefinitely dead.
+
+No interaction code is changed in this decision checkpoint. Implement after
+the owner answers these three lifetime/tuning defaults, then build/QEMU check
+and request a short typing/scroll/trampoline native re-run through luna.
 
 ## Qualification and tuning
 
