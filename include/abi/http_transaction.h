@@ -81,6 +81,8 @@ enum http_framing_state {
   HTTP_FRAMING_FAILED,
 };
 
+#define HTTP_STATUS_INVALID_LOCATION (UINT64_C(1) << 0)
+
 /* STATUS is observation-only. Native failure, HTTP status, framing, known
  * counters and cleanup diagnostics are separate. A missing final observation
  * never establishes completion. No credentials/request headers are returned. */
@@ -89,7 +91,7 @@ struct http_transaction_status {
   uint64_t status, source_status, cleanup_status;
   uint64_t uploaded, received, consumed, deadline_ns;
   uint64_t tls_error, tls_native_status;
-  uint64_t tls_cleanup_attempted;
+  uint64_t tls_cleanup_attempted, response_flags;
   struct http_framing_budget charged;
   char media_type[PROVIDER_MEDIA_TYPE_MAX_BYTES + 1];
   char location[PROVIDER_HTTP_URI_MAX_BYTES + 1];
@@ -104,7 +106,7 @@ struct http_response_metadata {
 };
 
 _Static_assert(sizeof(struct http_prepare_request) == 344, "HTTP prepare layout");
-_Static_assert(sizeof(struct http_transaction_status) == 2320, "HTTP status layout");
+_Static_assert(sizeof(struct http_transaction_status) == 2328, "HTTP status layout");
 _Static_assert(sizeof(struct http_transaction_status) <= ENDPOINT_DATA_MAX, "HTTP status fits reply");
 _Static_assert(sizeof(struct http_response_metadata) <= ENDPOINT_DATA_MAX, "HTTP metadata fits reply");
 
