@@ -105,6 +105,16 @@ Initial-thread static TLS could avoid its guarded reservation; siblings would re
 not gate 8 work: revisit when launch-heavy shell scripts or native builds make startup cost material, preserving caller-only
 FS authority, template alignment, destructor lifetime and context pins.
 
+## Process exit with live threads
+
+Libc runs `atexit` handlers, `.fini_array` and stdio shutdown only from the initial thread after every libc worker has been
+collected ([gate 8 exit behaviour](userland/threads.md#creation-and-collection)). Returning from `main` or calling `exit` while
+a sibling is still alive forces process teardown instead: no exit handlers run and buffered output is not flushed. SDL and other
+threaded programs that exit without joining their threads therefore lose `atexit` work and unflushed output. The
+[SDL2 port](development/sdl2.md#threads-and-timers) stops its own timer thread in `SDL_Quit`, but cannot join application threads.
+Revisit (direction, not a design): find a Pyxis-native primitive for process-exit handlers, an `atexit`-like hook that is safe
+with live sibling threads, and build libc's `atexit` on top of it.
+
 ## Allocation measurement follow-ups
 
 The [allocation benchmark and caller-scoped profile](development/allocation-profiling.md) separate warm heap throughput, heap
@@ -950,11 +960,15 @@ for behavior, measured/manual evidence and validation limits.
 
 ## SDL2 port limits
 
-The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing and preference paths. Video event waits block on keyboard,
-acquired pointer and display readiness ([qualification](development/sdl2-event-wait-qualification.md)); upstream polling remains for
-missing or nonwaitable sessions and failed waits, and enabling threads needs a real wakeup sender and a revisit of the readiness cache.
-Missing: **audio** (the [PCM grant](interfaces/audio.md) and [QEMU HDA engine](devices/hda.md) exist, but SDL2 has no backend; revisit with a
-playback consumer task), **threads** (`SDL_INIT_TIMER` timers and `SDL_CreateThread` fail until userspace threads), **windows** beyond one
+The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing, threads, timers and preference paths. Video event waits
+block on keyboard, acquired pointer and display readiness ([qualification](development/sdl2-event-wait-qualification.md)); upstream
+polling remains for missing or nonwaitable sessions and failed waits, and for threaded programs without a declared `pipe/create` grant,
+which have no [wakeup sender](development/sdl2.md#threads-and-timers). SDL thread priorities other than normal are unsupported, and
+`SDL_DetachThread` leaves libc's record and stack reserved until exit, and that uncollected record also makes exit skip orderly
+finalizers; revisit with a bounded detached-collection contract. Programs
+exiting with live threads skip orderly finalizers ([process exit](#process-exit-with-live-threads)).
+Missing: **audio** (the [PCM grant](interfaces/audio.md) and [QEMU HDA engine](devices/hda.md) exist, but SDL2 has no backend; revisit with
+the audio callback task), **windows** beyond one
 fullscreen window, and **text** beyond the shared US layout. Displays report no **refresh rate**, so SDL gives 0 (unknown); EDuke32's frame
 limiter divided by it and hung until its port assumed 60 Hz. Revisit when a display reports its mode timing. Without audio, the
 [SDL game ports](development/sdl-game-ports.md) are silent; their sound and music need this backend first. Pointer position, program images, show/hide, bounded warp and relative lock use

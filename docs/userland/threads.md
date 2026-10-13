@@ -39,7 +39,8 @@ normal completion after abandoning remaining callbacks.
 Join workers before returning from main or invoking orderly process `exit`.
 Libc runs process exit handlers, `.fini_array` and stdio shutdown only from the
 initial thread after collection; otherwise exit forces process teardown without
-user callbacks. FS remains valid throughout orderly finalizers. Native forced
+user callbacks or stdio flushing; a native exit-handler primitive is recorded as
+[technical debt](../technical-debt.md#process-exit-with-live-threads). FS remains valid throughout orderly finalizers. Native forced
 stop/fault never runs user destructors. Last native THREAD_EXIT without an earlier
 process result remains PROCESS_EXITED/status 0, as specified by the native ABI.
 
