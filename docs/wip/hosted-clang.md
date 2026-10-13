@@ -153,12 +153,14 @@ existing fork already supplies the source closure; no new compiler image is
 currently required. If execution reaches a required fork change, publish its
 exact source/adoption branch and owner build/push commands before adopting it.
 
-**Baseline pending, before implementation:** current main `0e95af3a`, current
-SDK and temporary bundles; repeated version/startup, hello `-c`, separate LLD
-link and resulting PXE launch, plus diagnostics and memory accounting. Keep
-unprofiled elapsed timings separate from debugger observations. Repeat matched
-1/4-CPU QEMU configurations; native samples come through the owner. The owner's
-"instant" compile/extraction observation is qualitative, not a timed baseline.
+**Baseline captured before implementation:** current main `0e95af3a`, current
+SDK and freshly rebuilt temporary bundles pass repeated version/startup, hello
+`-c`, separate LLD link and resulting PXE launch in 1/4-CPU nested-KVM QEMU.
+Rejected input exits 1 without an object. Unprofiled remote-session elapsed
+times and separate probe memory observations are in the
+[task 5 record](../development/experiments/hosted-clang-task5/README.md);
+native samples come through the owner. The owner's earlier "instant"
+compile/extraction observation is qualitative, not a timed baseline.
 
 The owner accepted all three defaults:
 
