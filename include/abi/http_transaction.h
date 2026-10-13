@@ -7,6 +7,7 @@
 #define HTTP_TRANSACTION_COMMIT UINT64_C(1)
 #define HTTP_TRANSACTION_ABORT UINT64_C(2)
 #define HTTP_TRANSACTION_STATUS UINT64_C(3)
+#define HTTP_TRANSACTION_METADATA UINT64_C(4)
 #define HTTP_TRANSACTION_RIGHT_COMMIT (UINT64_C(1) << 0)
 #define HTTP_TRANSACTION_RIGHT_ABORT (UINT64_C(1) << 1)
 #define HTTP_TRANSACTION_RIGHT_STATUS (UINT64_C(1) << 2)
@@ -24,14 +25,31 @@
  * OPEN_READ, POST needs separately delegated OPEN_WRITE. The original absolute
  * deadline includes preparation/staging and may exceed one native wait bound.
  * Credential-bearing fields stay in this private call, never startup or argv. */
+#define HTTP_PREPARE_ORIGIN_CROSSED (UINT64_C(1) << 0)
+#define HTTP_PREPARE_CONTEXT_FLAGS HTTP_PREPARE_ORIGIN_CROSSED
+#define HTTP_TRUST_ORIGIN_ONLY (UINT64_C(1) << 0)
+
+/* Body counters are diagnostic only. The aggregate allowance applies solely
+ * to headers/framing and is carried across anonymous GET redirects. */
+struct http_framing_budget {
+  uint64_t header_bytes, fields, informational;
+};
+
+struct http_prepare_context {
+  uint64_t flags;
+  struct provider_http_origin origin;
+  struct http_framing_budget remaining;
+};
+
 struct http_prepare_request {
   uint64_t method, flags, deadline_ns, uri_size, headers_size;
+  struct http_prepare_context context;
 };
 
 /* PREPARE success transfers control, optional body, observation in that order.
  * These are separate exports. Observation does not retain control lifetime. */
 struct http_prepare_reply {
-  uint64_t method;
+  uint64_t method, trust_flags;
 };
 
 #define HTTP_COMMIT_RESPONSE (UINT64_C(1) << 0)
@@ -72,11 +90,22 @@ struct http_transaction_status {
   uint64_t uploaded, received, consumed, deadline_ns;
   uint64_t tls_error, tls_native_status;
   uint64_t tls_cleanup_attempted;
+  struct http_framing_budget charged;
   char media_type[PROVIDER_MEDIA_TYPE_MAX_BYTES + 1];
   char location[PROVIDER_HTTP_URI_MAX_BYTES + 1];
 };
 
-_Static_assert(sizeof(struct http_prepare_request) == 40, "HTTP prepare layout");
-_Static_assert(sizeof(struct http_transaction_status) == 2296, "HTTP status layout");
+/* METADATA has the same STATUS-only right as observation. URI is the actual
+ * endpoint of this transaction, with no synthetic json+ prefix. Separate from
+ * STATUS so URI and redirect Location never overflow one endpoint packet. */
+struct http_response_metadata {
+  char uri[PROVIDER_HTTP_URI_MAX_BYTES + 1];
+  char media_type[PROVIDER_MEDIA_TYPE_MAX_BYTES + 1];
+};
+
+_Static_assert(sizeof(struct http_prepare_request) == 344, "HTTP prepare layout");
+_Static_assert(sizeof(struct http_transaction_status) == 2320, "HTTP status layout");
+_Static_assert(sizeof(struct http_transaction_status) <= ENDPOINT_DATA_MAX, "HTTP status fits reply");
+_Static_assert(sizeof(struct http_response_metadata) <= ENDPOINT_DATA_MAX, "HTTP metadata fits reply");
 
 #endif
