@@ -711,7 +711,7 @@ Make flag is needed. Retain the relative control entry and a diagnosis-off
 `ps2.synaptics=1` entry. The short owner sheet is
 `/shared/present/batch2/pointer-task2-native/RUNSHEET.md`.
 
-1. Confirm effective X45/Y54, calibrated absolute admission, mode c1/EW off and
+1. Confirm effective X45/Y54, calibrated absolute admission, mode c5/EW on and
    image-sensor AGM=1; briefly slide edge-to-edge and use the TrackPoint.
 2. Keep an admitted finger moving during typing; land a new contact during
    typing, stop and retry without lift. Check immediate post-mousetest response
@@ -898,6 +898,9 @@ Options-off reaches the shell, both options false, relative input available and
 no Synaptics output. QEMU/GDB stopped. Actual fallback scroll/drag and positive
 secondary data still require the native run; no simulated contact test added.
 
-The EW/c5 correction is proposed to the owner as one decision in the milestone,
-because it changes the earlier accepted EW-off premise. No EW or SMBus change
-is made pending that answer. Default activation remains off.
+The owner accepted the EW/c5 correction on 2026-10-13, explicitly superseding
+the earlier EW-off premise. The queried image-sensor path now sets bit 2 before
+mode readback/master verification and the AGM request. Other basic-W devices
+keep c1. Immediate basic-W fallback and approved typing recovery remain; no
+guest or SMBus changes. Default activation remains off. Positive secondary
+delivery and physical interaction still need the short native re-run.

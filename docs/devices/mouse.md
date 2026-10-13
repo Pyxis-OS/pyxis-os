@@ -95,9 +95,13 @@ Setup in [the arch decoder](../../arch/x86_64/ps2/synaptics.c) disables reportin
 checks identity/model/capabilities, reads advertised query pages, validates
 usable min/max coordinates and counts/mm, and checks mode readback plus a forced
 master packet before publishing the absolute format. Serial-number queries are
-never sent. Basic W leaves extended-W and four-byte guest negotiation off. A queried
+never sent. Basic W leaves extended-W off except on the queried image-sensor
+path; four-byte guest negotiation remains off. A queried
 image-sensor capability additionally requests AGM with the sliced model selector
-03 and sample-rate parameter c8. Sliced commands start with the E6 delimiter,
+03 and sample-rate parameter c8, after setting mode c5 (absolute/high-rate/W/EW).
+With W set, mode bit 2 is EW and admits the secondary packet format; the owner
+accepted this correction on 2026-10-13, superseding the earlier EW-off choice.
+Non-image-sensor basic W retains c1. Sliced commands start with the E6 delimiter,
 then four E8 resolution pairs. An acknowledged request is not proof of secondary
 packet delivery. W2 AGM position
 and count packets update private decoder state, never physical switches or lift.

@@ -456,12 +456,15 @@ Diagnostics distinguish `AGM-requested` from observed counters and count
 in fallback; no secondary position is invented. The owner-approved typing
 rule is unchanged.
 
-**One decision pending:** enable bit 2 only for the queried image-sensor AGM
-path, using c5 with the existing bounded secondary decoder and basic-W fallback
-(recommended). Alternative: keep c1 and deliver only the basic-W recovery.
-This corrects the accepted "without EW" premise rather than introducing an
-SMBus driver. Default activation remains off; native positive EW delivery and
-the full interaction pass are still required.
+**Correction accepted 2026-10-13, implemented:** enable bit 2 only for the queried
+image-sensor AGM path, using c5 with the existing bounded secondary decoder and
+immediate basic-W fallback. This explicitly supersedes the earlier accepted
+"EW off" / "without EW" note: Rev. B sections 3.2.9 and 4.3 require EW for
+secondary packets, and pinned Linux enables bit 2 on this firmware before AGM.
+The initial no-EW interpretation was wrong. Other basic-W devices retain c1;
+guest negotiation/decoding and the approved typing policy are unchanged. No
+SMBus driver is introduced. Default activation remains off; native positive
+EW delivery and the full interaction pass are still required.
 
 ## Qualification and tuning
 

@@ -50,6 +50,7 @@
 #define MODE_ABSOLUTE (1u << 7)
 #define MODE_HIGH_RATE (1u << 6)
 #define MODE_DISABLE_GESTURES (1u << 2)
+#define MODE_EXTENDED_WIDTH (1u << 2)
 #define MODE_WIDTH (1u << 0)
 #define PACKET_BYTES 6
 #define PACKET_HEADER_MASK 0xc8
@@ -360,10 +361,15 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
   }
   setup->step = "Synaptics basic absolute W";
   uint8_t mode = MODE_ABSOLUTE | MODE_HIGH_RATE | MODE_WIDTH;
+  bool image_sensor = inventory.continued & CAP_IMAGE_SENSOR;
+  if (image_sensor) {
+    /* With W enabled, bit 2 admits the secondary-position packet format. */
+    mode |= MODE_EXTENDED_WIDTH;
+  }
   if (!set_mode(setup, mode) || !prove_format(setup, true)) {
     return recover_relative(setup, false, "absolute mode/packet verification failed");
   }
-  if (inventory.continued & CAP_IMAGE_SENSOR) {
+  if (image_sensor) {
     setup->step = "Synaptics image-sensor AGM";
     if (!enable_agm(setup)) {
       return recover_relative(setup, false, "image-sensor AGM activation failed");
@@ -373,8 +379,8 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
   profile.absolute = true;
   profile.has_guest = (inventory.capabilities & CAP_GUEST) || inventory.stick_buttons;
   if (diagnostics) {
-    klog("synaptics: qualified six-byte W, mode=0x%x, image-sensor AGM-requested=%u\n",
-         mode, profile.has_second);
+    klog("synaptics: qualified six-byte W, mode=0x%x, EW=%u, image-sensor AGM-requested=%u\n",
+         mode, !!(mode & MODE_EXTENDED_WIDTH), profile.has_second);
   }
   return SYNAPTICS_ABSOLUTE;
 }
