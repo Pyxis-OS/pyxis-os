@@ -2,7 +2,7 @@
 
 The normal image includes jq 1.7.1 at `bin://jq.pxe`; the shell resolves the bare
 command. It is the upstream release built by the
-[jq recipe](../../ports/jq/README.md), with three small patches, decNumber and no
+[jq recipe](../../ports/jq/README.md), with two small patches, decNumber and no
 Oniguruma. jq's MIT license and the dtoa and decNumber notices are installed under
 `boot://share/licenses/jq`. Ported by owner request on 2026-10-13, as the one
 planning-freeze exception for a port.
@@ -44,10 +44,10 @@ Unavailable, by design or because libc lacks them:
 
 libc stdout starts unbuffered, so a patch makes jq's line buffered on a terminal
 and fully buffered otherwise, as on Unix. A pipe or file then receives output when
-the buffer fills or jq exits, unless `--unbuffered` is given. The other patches
-build `$ENV` from the environment snapshot (libc has no `environ`) and ask for one
-byte where jq would request zero, because libc returns NULL for a zero-size
-allocation and jq reads that as out of memory.
+the buffer fills or jq exits, unless `--unbuffered` is given. The other patch
+builds `$ENV` from the environment snapshot, because libc has no `environ`.
+jq also relies on libc returning a non-NULL pointer for `malloc(0)`, which it
+does (see [libc portability](libc-portability.md#zero-size-allocation)).
 
 ## Qualification
 

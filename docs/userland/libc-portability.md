@@ -149,9 +149,16 @@ mapped without zone rules and ignoring it would read the time in the wrong zone.
 Only the fields read are stored: `tm_wday` and `tm_yday` are not derived from a
 date, nothing is normalized, and a failed parse leaves the `tm` unchanged.
 
-`malloc`, `calloc` and `realloc` return NULL for a zero size, which ISO C
-allows. Programs that read NULL as out of memory need a one-byte request; see the
-[jq patch](../../ports/jq/README.md#patches).
+## Zero-size allocation
+
+Owner decision, 2026-10-13. A zero-size `malloc`, `aligned_alloc`, `calloc` (zero total) or `realloc` returns
+a unique minimal allocation, not NULL, and `free` accepts it. ISO C allows NULL,
+but programs written against glibc and musl read NULL as out of memory, as jq did
+for every non-trivial input. `realloc(p, 0)` follows musl: it keeps a minimal
+allocation, returns `p` and does not free it, so the caller still owns the result;
+glibc frees `p` and returns NULL. `realloc(NULL, 0)` equals `malloc(0)`. No code
+in the userland repository or in the port sources fetched for the earlier builds
+relied on the old NULL result.
 
 ## Regular expressions and UTF-8 conversion
 
