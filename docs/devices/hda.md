@@ -161,11 +161,20 @@ begins with monotonic time and WALCLK captured immediately before RUN, allowing
 legitimate progress before the first observation. The selected kernel clock
 and wrapping WALCLK bound
 observation and progress gaps. While running, a **5 ms watchdog** supplements
-IRQ wakeups; it is absent while parked. A gap reaching **20 ms**, lack of observed
-progress for that interval, stale completion notification, alignment error or
-FIFO/descriptor fault fails the engine rather than guessing missing laps. The
+IRQ wakeups; it is absent while parked. An observation gap reaching the
+**service horizon**, lack of observed progress for that interval or a stale
+completion notification is a [timing fault](#timing-recovery): the worker
+restarts the stream rather than guessing missing laps. An alignment error,
+FIFO/descriptor fault or position that cannot be read stably fails the engine. The
 notification age begins when the CPU first observes status, not at hardware
 completion. A bounded retry can conservatively refuse healthy moving progress.
+
+The horizon is **20 ms** for QEMU. Natively it follows the ring: after a refill
+the ring holds at least seven of its eight periods ahead of the position, and
+the horizon is that span minus the native commit reserve below, so a late
+worker is detected while the next reclaimed period can still keep the reserve.
+With the reserve's 20 ms of commit progress it is about 50 ms less the FIFO
+(trace logs print `horizon-ns` at each native start).
 
 Before a reclaimed period is mixed directly into DMA, the worker takes a fresh
 position/time observation with IF=0. QEMU requires more than **8,192 bytes plus
@@ -184,7 +193,7 @@ The owner accepted a separate native profile on **2026-10-09**. After stopped
 format programming, `F = round_up(FIFOS + 1, 4)` overestimates both literal-byte
 and size-minus-one FIFO encodings; zero, all-ones and unusable sizes are refused.
 HDA 1.0a §3.3.40 bounds fetch/untransmitted bytes and LPIB advance by FIFOS.
-Before RUN, check that **F + 4 + 3840 bytes** fits the ring. Before overwriting
+Before RUN, check that **F + 4 + 3840 bytes** plus one period fits the ring. Before overwriting
 a reclaimed period, require more than that reserve: one frame plus FIFO advance
 and 20 ms of playback at 192,000 bytes/s. Pre/post position scans and DMA
 publication share the checked commit interval, bounded below **20,000,000 ns**
@@ -205,20 +214,50 @@ reduce the exposure for the qualified workload; they do not establish strict
 progress proof or guarantee that stale cyclic PCM never replays before detection.
 See the [source assessment and qualification](../development/experiments/audio-task2/README.md).
 
+## Timing recovery
+
+Accepted by the owner on **2026-10-13**, replacing the earlier rule that any
+guard trip disabled audio until reboot. A late worker is not a device fault.
+Timing faults are a reached service horizon, stalled progress, an expired
+completion notification, an exhausted refill margin, a commit over its clock
+bound and progress reaching a period during its commit. On one, the worker:
+
+1. clears RUN and resets the stream through the normal bounded, checked stop;
+2. counts one discontinuity in each usable session, keeping its queued PCM;
+3. logs `audio: <fault>; output restarted (N since boot)`, at most once per
+   10 s;
+4. prepares the stream again, primes all eight periods from the sessions
+   (silence where empty) and starts a new RUN epoch.
+
+Priming overwrites the whole ring, so PCM from before the stop never plays
+again. A miss longer than the PCM queued ahead (about 70–80 ms after a refill)
+can still replay the excess once before the stop; the horizon is chosen to
+detect earlier. With no PCM pending, recovery takes the normal stop instead.
+
+A restarted stream is proven once it observes one full ring lap of healthy
+progress. A recovery needed before that is a failed recovery. Failed recoveries
+that keep recurring for **2 s** mean the cause is not transient: the next one
+fails the engine as `output kept missing service after repeated recovery`.
+Isolated restarts never fail it, however often they occur. These bounds are
+tuning, not ABI. The
+[recovery record](../development/experiments/audio-recovery/README.md) has the
+native evidence and nested validation.
+
 ## Failure and retained ownership
 
-Unsafe/ambiguous progress, transport failure and stream errors stop admission
-until reboot. Existing sessions report FAILED, writable waits report WAIT_ERROR
-and writes/acquisition of an unowned session report UNAVAILABLE; owner STATUS,
-RELEASE and exit cleanup remain serviceable. Ordinary producer starvation is
-separate and does not quarantine the engine. The live worker continues servicing
-requests and cleanup even if the controller is absent or initialization fails.
+Transport failure, stream errors, a refused stream reset or stop, unaligned or
+unstable positions and repeated recovery stop admission until reboot. Existing
+sessions report FAILED, writable waits report WAIT_ERROR and writes/acquisition
+of an unowned session report UNAVAILABLE; owner STATUS, RELEASE and exit cleanup
+remain serviceable. Ordinary producer starvation is separate and does not
+quarantine the engine. The live worker continues servicing requests and cleanup
+even if the controller is absent or initialization fails.
 
 Shutdown masks MSI/HDA delivery, clears RUN and resets the stream, stops command
 rings, asserts link reset and disables PCI bus mastering. Each step is bounded
 and checked. All claims and backing remain retained until reboot; uncertain
-ownership quarantines DMA without reuse. There is no automatic restart or hot
-removal. Session release never exposes or frees engine DMA.
+ownership quarantines DMA without reuse. There is no controller reset after
+failure or hot removal. Session release never exposes or frees engine DMA.
 
 ## Qualification and remaining scope
 

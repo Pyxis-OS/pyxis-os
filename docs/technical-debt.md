@@ -938,12 +938,25 @@ The [SDL audio qualification](development/experiments/sdl-audio/README.md) saw t
 starts on many fresh nested boots, as often for the native `pcm` tool as for SDL, and the completion-notification guard twice;
 see its trip counts.
 
-## HD Audio fail-closed recovery
+## HD Audio timing recovery and worker starvation
 
-One unsafe-progress or hardware guard trip disables audio until reboot, as
-accepted 2026-10-09. STATUS/RELEASE and cleanup remain usable; DMA stays retained.
-A controller-reset recovery path needs a separate decision supported by failure
-and ownership evidence; the successful native sitting does not remove this limit.
+Since 2026-10-13 a timing fault restarts the stream with a counted discontinuity
+instead of disabling audio ([timing recovery](devices/hda.md#timing-recovery)).
+Each recovery is still an audible gap, and restarts that keep failing for 2 s
+fail the engine until reboot. Hardware faults keep that fail-closed rule, with no
+controller reset.
+
+The faults come from the BSP audio worker missing service. Final process
+teardown runs in the BSP scheduler loop with interrupts off, so the worker
+waits for all of it: natively 21.8 ms for EDuke32 and 39.7 ms for Chocolate
+Quake, nested 51–95 ms ([record](development/experiments/audio-recovery/README.md)).
+Natively both quits tripped the old 20 ms guard; play did not. In nested QEMU,
+EDuke32's startup also caused restarts. Bounded, interrupts-on teardown is the
+next change. A woken
+BSP kernel worker still waits behind user tasks in round-robin; precedence for
+it is held until the BSP-pinning inventory decides whether the worker should
+leave the BSP. Revisit with native `audio:` restart counts during play and at
+quits once both land.
 
 ## HD Audio request batching
 

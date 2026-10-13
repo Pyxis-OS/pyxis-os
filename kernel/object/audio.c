@@ -592,6 +592,23 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
   return consumed;
 }
 
+void audio_sessions_discontinuity(void)
+{
+  require_worker();
+  uint64_t flags = cpu_save_interrupts();
+  for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
+    struct audio_object *audio = sessions[i];
+    if (audio) {
+      lock_audio(audio);
+      if (audio->owner && !audio->failed && audio->discontinuities != UINT64_MAX) {
+        ++audio->discontinuities;
+      }
+      unlock_audio(audio);
+    }
+  }
+  cpu_restore_interrupts(flags);
+}
+
 void audio_sessions_fail(void)
 {
   require_worker();
