@@ -1,7 +1,11 @@
 # TUI installer/updater and configuration delta editor
 
 Status: **direction and all three configuration choices accepted by the owner,
-2026-10-11.** Tasks 1–2 are delivered; later tasks still need separate owner go-aheads.
+2026-10-11.** Tasks 1–2 and task 3's shared FAT32 dependency are delivered.
+Task 4 is assigned and in draft qualification
+([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
+[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)); later tasks
+still need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).

@@ -1,10 +1,13 @@
 # Nested execution groups
 
-Status: **parked REQUIRED direction, owner decision 2026-10-11.** Not implemented,
-not a code assignment, and not a settled API or accounting design. Keep the first
-[native command milestone](../userland/native-jobs.md) on direct launch with no
-descendant launcher. This direction is required before descendant execution in
-the consumers below; it is not a prerequisite for their independent first slices.
+Status: **minimal Clang-driver prerequisite accepted and assigned, 2026-10-13**,
+a bounded planning-freeze exception
+([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788), implementation draft
+[#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)). No subgroup implementation
+is on main yet. Broader nesting, automatic group selection and Continuum remain
+parked. The [delivered command core](../userland/native-jobs.md) still supports
+direct launch without descendants; the accepted minimal slice supplies the
+contained lifetime required for Clang to launch LLD.
 
 ## Required direction
 
@@ -62,17 +65,12 @@ implementation plan and terminal/provisioning ownership are unchanged here.
 
 ## Open questions before design/implementation
 
-No answers are selected by this direction:
+The minimal slice is settled in #788; these broader questions remain parked:
 
-- **Tree lifetime and cleanup accounting:** how are members, admitted launches,
-  subgroup creation, sealing/stop races, observers, controlling grants and
-  deferred/transitive cleanup counted? When is subtree completion published,
-  and which references can retain storage without prolonging execution?
-- **Depth/count bounds:** what limits and admission failures keep nesting and
-  subtree operations bounded, and who owns/configures those limits?
-- **CREATE_GROUP's remaining role:** how does creation by any member coexist
-  with today's privileged top-level creation, CONTROL/WAIT and copied launchers?
-  When/how is a launched program's own group selected or created?
+- **Automatic group and launcher selection:** the minimal slice provides explicit
+  caller-scoped creation through LAUNCH, subtree containment/cleanup and bounded
+  fixed-space admission. Automatic per-launch groups and synthesized/default
+  launcher grants remain outside it.
 - **Spaces:** how does subgroup containment interact with fixed group spaces,
   space creation and launch-capable administrative/service grants, without an
   escape from the parent's lifetime or an implicit authority increase?
@@ -80,6 +78,5 @@ No answers are selected by this direction:
   capabilities selected, attenuated, copied/inherited or withheld through
   [capability entries](capability-environment.md), configuration and namespaces?
 
-Return with a concrete native authority/lifetime/accounting proposal for owner
-review before implementation. Neither this direction nor a consumer dependency
-link authorizes code or placeholder interfaces.
+The minimal slice alone is assigned. Broader design and implementation still
+require a separate owner go; consumer links grant no additional scope.

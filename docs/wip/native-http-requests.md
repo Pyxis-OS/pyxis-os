@@ -1,6 +1,8 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–4 delivered; shell coordinator task 5 remains; native completion prerequisite merged, 2026-10-12.**
+Status: **shared milestone accepted 2026-10-11; tasks 1–4 delivered; task 5 assigned,
+2026-10-13** ([accepted contract #780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
+implementation draft [#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)).
 Extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
 and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
 Their accepted one-shot transaction and credential rules carry forward. The
@@ -351,7 +353,7 @@ Implemented interfaces and limits are in [stdio](../userland/stdio.md#http-strea
 [HTTP transactions](../interfaces/http-transactions.md) and
 [fetching](../userland/http-fetch.md#redirect-chains). Userland and ports precede
 the parent ABI/gitlink update. Shell bindings and producer coordination remain
-unassigned task 5.
+assigned task 5.
 
 ## Task 2 accepted TLS policy
 
@@ -414,7 +416,7 @@ CONNECT remains one bounded attempt; there is no reconnect or POST replay.
   [QEMU qualification/cost limits](../development/experiments/http-stream-adapters.md).
   **After this task the owner can:** stage a POST and stream its response or a
   large GET using Lua file I/O, with explicit final-result/error checks.
-- [ ] **5. Shell bindings and end-to-end completion.** Prepare directly in the
+- [ ] **5. Shell bindings and end-to-end completion — assigned 2026-10-13.** Prepare directly in the
   running shell, delegate body stdout and response stdin with observation,
   coordinate all producers, and expose commit/status/abort and retained response
   capability-valued bindings designed to become, or sit under, entries in the
