@@ -17,12 +17,16 @@ enum startup_stream_index {
 
 #define STARTUP_STREAM_NONE UINT64_C(0)
 
-/* NONE requires HANDLE_INVALID. Present streams own distinct handles, never
- * aliased by resources, roots or working directories. Libc adopts each handle
- * directly; native access borrows it, and fclose leaves this snapshot stale. */
+/* NONE requires all fields zero. Present streams and their optional observation
+ * own distinct handles, never aliased by resources, roots or working directories.
+ * STREAM is response stdin only and requires an HTTP_TRANSACTION STATUS-only
+ * observation; both use CALL transport. Other streams have no observation.
+ * Libc adopts the pair; native access borrows it, and fclose leaves this snapshot stale. */
 struct startup_stream {
-  uint64_t protocol; /* STARTUP_STREAM_NONE, PROTOCOL_CONSOLE, PROTOCOL_FILE or PROTOCOL_PIPE. */
+  uint64_t protocol; /* STARTUP_STREAM_NONE, PROTOCOL_CONSOLE, PROTOCOL_FILE, PROTOCOL_PIPE or PROTOCOL_STREAM. */
   handle_t handle;
+  uint64_t observation_protocol; /* Zero when absent, otherwise PROTOCOL_HTTP_TRANSACTION. */
+  handle_t observation;
 };
 
 struct startup_binding {
@@ -66,11 +70,11 @@ struct startup_info {
 
 _Static_assert(sizeof(struct startup_binding) == 16, "startup binding layout");
 _Static_assert(sizeof(struct startup_variable) == 16, "startup variable layout");
-_Static_assert(sizeof(struct startup_stream) == 16, "startup stream layout");
+_Static_assert(sizeof(struct startup_stream) == 32, "startup stream layout");
 _Static_assert(offsetof(struct startup_info, streams) == 104, "startup streams offset");
-_Static_assert(offsetof(struct startup_info, namespace_handle) == 152, "startup namespace offset");
-_Static_assert(offsetof(struct startup_info, thread_fs) == 160, "startup FS grant offset");
-_Static_assert(sizeof(struct startup_info) == 168, "startup record layout");
+_Static_assert(offsetof(struct startup_info, namespace_handle) == 200, "startup namespace offset");
+_Static_assert(offsetof(struct startup_info, thread_fs) == 208, "startup FS grant offset");
+_Static_assert(sizeof(struct startup_info) == 216, "startup record layout");
 _Static_assert(offsetof(struct startup_info, resources) == 16, "startup resources offset");
 _Static_assert(offsetof(struct startup_info, argv) == 96, "startup argv offset");
 

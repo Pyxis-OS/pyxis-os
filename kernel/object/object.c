@@ -156,7 +156,8 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
                          uint64_t transport)
 {
   if (object->type == OBJECT_ENDPOINT_EXPORT) {
-    return protocol == PROTOCOL_FILE && object_protocol(object) == PROTOCOL_FILE &&
+    return (protocol == PROTOCOL_FILE || protocol == PROTOCOL_STREAM ||
+        protocol == PROTOCOL_HTTP_TRANSACTION) && object_protocol(object) == protocol &&
         transport == HANDLE_TRANSPORT_CALL;
   }
   if (transport) {

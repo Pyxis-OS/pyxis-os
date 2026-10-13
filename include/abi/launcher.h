@@ -44,12 +44,17 @@ struct launch_binding {
 
 struct launch_stream {
   uint64_t protocol; /* Same protocol tags as startup_stream. */
-  uint64_t grant; /* Grant-list index; NONE requires zero and installs nothing. */
+  uint64_t grant; /* Grant-list index; NONE requires all fields zero. */
+  uint64_t observation_protocol; /* Same observation tag as startup_stream. */
+  uint64_t observation_grant; /* Grant-list index, zero when absent. */
 };
 
-/* Each present stream selects a distinct grant entry, referenced by no resource,
- * root or working-directory binding. That entry installs exactly one handle,
- * adopted by child libc, with only the protocol's READ (stdin) or WRITE rights.
+/* Each stream facet selects a distinct grant entry, referenced by no resource,
+ * root or working-directory binding. Child libc adopts each installed handle.
+ * Plain streams select only the protocol's READ (stdin) or WRITE rights.
+ * Response STREAM stdin requires READ plus a declared HTTP_TRANSACTION STATUS-only
+ * observation entry, both with CALL transport; other streams have no companion.
+ * Pairing is supplied by the trusted caller, never inferred from source handles.
  * Repeated source handles in separate entries deliberately create separate
  * grants, including any explicitly delegated terminal resources.
  *
@@ -117,9 +122,9 @@ struct launch_batch_reply {
 _Static_assert(sizeof(struct launch_grant) == 24, "launch grant layout");
 _Static_assert(sizeof(struct execution_group_create_reply) == 16, "group creation reply layout");
 _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
-_Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
-_Static_assert(sizeof(struct launch_request) == 176, "launch request layout");
-_Static_assert(sizeof(struct launch_message) == 192, "launch message layout");
+_Static_assert(sizeof(struct launch_stream) == 32, "launch stream layout");
+_Static_assert(sizeof(struct launch_request) == 224, "launch request layout");
+_Static_assert(sizeof(struct launch_message) == 240, "launch message layout");
 _Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
 _Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
 _Static_assert(sizeof(struct launch_batch_reply) == 72, "launch batch reply layout");

@@ -2,6 +2,7 @@
 #include <abi/console.h>
 #include <abi/namespace.h>
 #include <abi/pipe.h>
+#include <abi/http_transaction.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
@@ -367,6 +368,34 @@ static struct process_binding *capture_bindings(struct launch_capture *capture,
   return bindings;
 }
 
+static bool stream_grant_distinct(const struct process_startup *startup,
+    uint64_t grant, size_t index)
+{
+  for (size_t i = 0; i < index; ++i) {
+    const struct startup_stream *stream = &startup->streams[i];
+    if ((stream->protocol && grant == stream->handle) ||
+        (stream->observation_protocol && grant == stream->observation)) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < startup->resource_count; ++i) {
+    if (grant == startup->resources[i].handle) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < startup->root_count; ++i) {
+    if (grant == startup->roots[i].handle) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < startup->working_directory_count; ++i) {
+    if (grant == startup->working_directories[i]) {
+      return false;
+    }
+  }
+  return !startup->namespace || grant != startup->namespace - 1;
+}
+
 static void capture_streams(struct launch_capture *capture,
                             const struct launch_request *source)
 {
@@ -377,7 +406,7 @@ static void capture_streams(struct launch_capture *capture,
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
     const struct launch_stream *stream = &source->streams[i];
     if (stream->protocol == STARTUP_STREAM_NONE) {
-      if (stream->grant != 0) {
+      if (stream->grant || stream->observation_protocol || stream->observation_grant) {
         capture->error = CALL_BAD_REQUEST;
         return;
       }
@@ -391,53 +420,46 @@ static void capture_streams(struct launch_capture *capture,
       rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_PIPE) {
       rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
+    } else if (stream->protocol == PROTOCOL_STREAM && i == STARTUP_STDIN) {
+      rights = STREAM_RIGHT_READ;
     } else {
       capture->error = CALL_BAD_REQUEST;
       return;
     }
-
-    if (stream->grant >= capture->grant_count ||
-        capture->grants[stream->grant].rights != rights) {
+    bool response = stream->protocol == PROTOCOL_STREAM;
+    if ((response && stream->observation_protocol != PROTOCOL_HTTP_TRANSACTION) ||
+        (!response && (stream->observation_protocol || stream->observation_grant)) ||
+        stream->grant >= capture->grant_count ||
+        capture->grants[stream->grant].rights != rights ||
+        !stream_grant_distinct(startup, stream->grant, i)) {
       capture->error = CALL_BAD_REQUEST;
       return;
     }
-    for (size_t j = 0; j < i; ++j) {
-      if (startup->streams[j].protocol != STARTUP_STREAM_NONE &&
-          stream->grant == startup->streams[j].handle) {
-        capture->error = CALL_BAD_REQUEST;
-        return;
-      }
-    }
-    for (size_t j = 0; j < startup->resource_count; ++j) {
-      if (stream->grant == startup->resources[j].handle) {
-        capture->error = CALL_BAD_REQUEST;
-        return;
-      }
-    }
-    for (size_t j = 0; j < startup->root_count; ++j) {
-      if (stream->grant == startup->roots[j].handle) {
-        capture->error = CALL_BAD_REQUEST;
-        return;
-      }
-    }
-    for (size_t j = 0; j < startup->working_directory_count; ++j) {
-      if (stream->grant == startup->working_directories[j]) {
-        capture->error = CALL_BAD_REQUEST;
-        return;
-      }
-    }
-    if (startup->namespace && stream->grant == startup->namespace - 1) {
-      capture->error = CALL_BAD_REQUEST;
-      return;
-    }
-
-    bool valid = object_stream_valid(capture->owned_grants[stream->grant].object,
-        stream->protocol, capture->grants[stream->grant].transport);
-    if (!valid) {
+    if (!object_stream_valid(capture->owned_grants[stream->grant].object,
+          stream->protocol, capture->grants[stream->grant].transport)) {
       capture->error = CALL_WRONG_TYPE;
       return;
     }
-    startup->streams[i] = (struct startup_stream){stream->protocol, stream->grant};
+    if (response) {
+      uint64_t observation = stream->observation_grant;
+      if (observation >= capture->grant_count || observation == stream->grant ||
+          capture->grants[observation].rights != HTTP_TRANSACTION_RIGHT_STATUS ||
+          !stream_grant_distinct(startup, observation, i)) {
+        capture->error = CALL_BAD_REQUEST;
+        return;
+      }
+      if (!object_stream_valid(capture->owned_grants[observation].object,
+            stream->observation_protocol, capture->grants[observation].transport)) {
+        capture->error = CALL_WRONG_TYPE;
+        return;
+      }
+    }
+    startup->streams[i] = (struct startup_stream){
+      .protocol = stream->protocol,
+      .handle = stream->grant,
+      .observation_protocol = stream->observation_protocol,
+      .observation = stream->observation_grant,
+    };
   }
 }
 

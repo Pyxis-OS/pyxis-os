@@ -101,6 +101,9 @@ static enum call_status install_grants(struct launch_capture *capture, struct pr
     struct startup_stream *stream = &capture->startup.streams[i];
     if (stream->protocol != STARTUP_STREAM_NONE) {
       stream->handle = capture->grants[stream->handle].source;
+      if (stream->observation_protocol) {
+        stream->observation = capture->grants[stream->observation].source;
+      }
     }
   }
   return CALL_OK;
@@ -236,7 +239,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
   startup->resources = resources;
   startup->resource_count = count;
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
-    startup->streams[i] = (struct startup_stream){PROTOCOL_CONSOLE, streams[i]};
+    startup->streams[i] = (struct startup_stream){.protocol = PROTOCOL_CONSOLE, .handle = streams[i]};
   }
   *owned = resources;
   return CALL_OK;
