@@ -603,7 +603,8 @@ the same bounds. A trailing backslash is an error, not line continuation.
 
 The first malformed command, failed `cd` or launch, nonzero foreground-command
 exit, foreground-command fault or read failure stops the script with failure.
-For pipelines, the last stage determines success as described above. Shell
+For ordinary pipelines, the last stage determines success as described above;
+HTTP body producers and response-reader pipelines check every stage. Shell
 diagnostics include
 `script-name:line:` (lines start at one); child diagnostics retain their own
 format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.

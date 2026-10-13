@@ -99,6 +99,12 @@ and raw captures remain in local build output, outside the repository.
   16 MiB+1 refuses CALL_LIMIT before mutation, prints the NPFS hint and leaves
   submission not started. Read-only debugger inspection confirms DIRECTORY_RAM
   staging and no backing leaf/ancestor/source in the interactive shell.
+- Final runtime `22fcade`: a 5-second original deadline expired with no
+  submission or renewal; real foreground Ctrl+C stopped producer/worker and
+  refused later commit. A response-only copy retained the exact remaining
+  1,048,575 bytes after prefix close/original drop; final drop released backing.
+  Explicit optional NPFS unavailable kept GET working and refused POST without
+  selecting RAM.
 - Stock declared private NPFS with local TLS: 17/32 MiB POST exact server lengths/
   hashes, 32 MiB GET incremental equality/count, truncation and unauthenticated
   TLS EOF failures, readable early 413/500 bodies, and a 35-second response with
@@ -107,6 +113,11 @@ and raw captures remain in local build output, outside the repository.
 
 The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES to avoid
 16-byte trailing WRITE calls; its allocated buffer stays 4 KiB. Final-source
-multi-GB GET/POST qualification remains pending. Matched measurement jobs are
+2049 MiB HTTPS GET verified every byte/count, independent SHA-256 and final
+HTTP 200/complete framing/native/source/cleanup zero. At one read-only live
+checkpoint the provider owned 2,318,336 backed bytes (606,208 allocator backing)
+and Lua 2,306,048 (462,848); these are capacities, not peak RSS or filesystem
+cache accounting. The same provider snapshot matched the 32 MiB run. The
+matching multi-GB POST remains pending. Matched measurement jobs are
 stopped and disk/ISO checkpoints retained. This is a recoverable checkpoint,
 not milestone closure or completion evidence for the pending script surface.
