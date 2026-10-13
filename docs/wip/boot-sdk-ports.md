@@ -36,11 +36,11 @@ Clang driving LLD is assigned to Codex delta, after the accepted minimal nested
 groups prerequisite ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788),
 [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)).
 
-[Installer TUI and configuration delta editor](installer-tui.md): tasks 1–2
-(progress, shared planner/executor and revision inventory) and task 3's shared
-FAT32 dependency are delivered.
-Task 4 is in draft review/qualification ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
-[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)); later tasks need separate go-aheads.
+[Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
+are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
+publication/installed-activation proposal is assigned to Codex alpha; owner
+decisions are pending. Activation waits for FAT32 preflight cost, and internal
+coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 
 [Native HTTP requests](native-http-requests.md): tasks 1–4 delivered, including
 prepared transactions, streaming and libc/Lua adapters. Task 5's accepted shell
