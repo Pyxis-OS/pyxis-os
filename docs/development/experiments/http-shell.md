@@ -133,3 +133,21 @@ cache accounting. The same provider snapshot matched the 32 MiB run. The
 matching multi-GB POST remains pending. Matched measurement jobs are
 stopped and disk/ISO checkpoints retained. This is a recoverable checkpoint,
 not milestone closure or completion evidence for the pending script surface.
+
+## Owner native recheck
+
+Use the same local fixtures and image configuration for main/PR comparisons;
+no credentials or paid service. In an ordinary installed space, repeat the
+printf JSON session and retained cat/status/drop, producer failure, foreground
+Ctrl+C and RAM-cap refusal; confirm fixture counts exclude any new GET or
+failed POST. With explicitly selected private NPFS backing, repeat a larger
+upload and inspect final uploaded/framing/native/source/cleanup status.
+
+For the network reference gap, run `iobench read FIXTURE/fixed --rounds 5` on
+main and the PR, alternating boots in one quiet window, using the fixture's
+known 1 MiB iobench pattern; repeat the native RAM control. Record medians,
+ranges, NIC/CPU configuration and whole-consumption throughput. Compare the
+current HTTP result with the ThinkPad TCP reference above; do not treat 85 MiB/s
+as a promised rate or reuse nested figures as native evidence. Worker POST
+timing uses the same explicit manual profile/direct versus worker workloads as
+the recorded comparison until the standalone-script contract is accepted.

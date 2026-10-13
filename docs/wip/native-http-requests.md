@@ -570,8 +570,7 @@ uncertainty/no replay, Ctrl+C/expiry/early close, copied/reference lifetimes,
 4xx/5xx, malformed framing and TLS EOF, denied provisioning, and real private
 NPFS multi-GB GET/staged POST with bounded resident buffers. Track the native
 HTTP/TCP reference gap; the task 4 native result is not a worker POST measurement.
-Userland/ports first, parent pins their own heads. Native timing/listening is an
-owner run; distinguish it from nested measurements and track the TCP reference gap.
+Userland/ports first, parent pins their own heads. Native timing is an owner run; distinguish it from nested measurements and track the TCP reference gap.
 
 ## Task 2 accepted TLS policy
 
