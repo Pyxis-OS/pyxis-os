@@ -1,10 +1,11 @@
 # Capability-valued environment variables
 
 Status: **parked direction, 2026-10-11.** Not a milestone. It authorizes no code,
-placeholder API or format change. Revisit it before any of these lands: native
-HTTP prepared request objects (task 3) or their shell bindings (task 5), session
-or space configuration changing the environment, [users and authority](users-and-authority.md)
-work, or any other feature that stores a capability in a variable.
+placeholder API or format change. Native HTTP task 3 has implemented transferred
+facets; task 5 proposes the bounded adapter below without implementing this
+direction. Revisit before session or space configuration changes the environment,
+[users and authority](users-and-authority.md) work, or another feature stores a
+capability in a variable.
 
 ## The idea
 
@@ -32,11 +33,13 @@ configuration documents (session and space Lua). Examples:
 - [Session configuration](../userland/session-configuration.md) already says its
   values are strings for now and that variables are expected to carry
   capabilities later.
-- Prepared requests are proposed to reach the shell as a real grant through an
-  authorized transfer, never a printed handle
-  ([prepared requests and shell handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)).
-  The native HTTP milestone (#720, still open) proposes private shell bindings as
-  the first form, not environment entries.
+- [Prepared native HTTP requests](../interfaces/http-transactions.md) transfer real
+  body/control/response/observation grants. Task 5's
+  [shell proposal](native-http-requests.md#task-5-shell-proposal--owner-review-required)
+  uses one typed capability-entry table as an interim shell-local adapter beneath
+  this direction, not printed handles or a separate HTTP registry. It explicitly
+  leaves environment/configuration entries and automatic inheritance unimplemented;
+  the owner's three shell choices remain open.
 
 ## Invariants to keep
 

@@ -352,8 +352,194 @@ continue tracking the gap for relevant changes and HTTP-heavy workloads. No thro
 Implemented interfaces and limits are in [stdio](../userland/stdio.md#http-streams-and-explicit-submission),
 [HTTP transactions](../interfaces/http-transactions.md) and
 [fetching](../userland/http-fetch.md#redirect-chains). Userland and ports precede
-the parent ABI/gitlink update. Shell bindings and producer coordination remain
-assigned task 5.
+the parent ABI/gitlink update. Task 5's assigned proposal below settles shell
+bindings and producer coordination;
+implementation awaits the owner's decisions.
+
+## Task 5 shell proposal — owner review required
+
+Proposal only, 2026-10-13. No code or environment implementation is assigned by
+this proposal. Task 4 (#774, userland #244, ports #103) is merged. These three
+choices settle the user-visible surface and its required provisioning; defaults
+are recommendations, not accepted decisions.
+
+### 1. Named typed results — default: `=> name`, `@name`, `request` operations
+
+A final stdout HTTP URI redirect requires `=> name`, reserving a fresh name
+before preparation/launch. Without one, refuse with a syntax hint. There is no
+implicit current/last request, numbered job, `job` builtin or printed handle.
+`@name` is a typed selector only as an unquoted whole
+redirection operand: output selects the prepared body, input selects the retained
+response plus STATUS-only observation. It never becomes an argv path or GET.
+Quoted `"@name"` or `./@name` means an ordinary filename. All ordinary commands
+use the same declared stream handoff; there is no special `cat` wrapper.
+
+```text
+printf '{}' > json+https://example.test/api => reply
+cat < @reply
+request status reply
+request drop reply
+```
+
+The inline form commits after successful production and returns after headers,
+not the whole response. Manual staging uses the same value and explicit commit:
+
+```text
+request prepare upload POST json+https://example.test/api --timeout 120
+cat home://payload.json > @upload
+request commit upload
+request copy --response kept upload
+request drop upload
+cat < @kept
+request status kept
+request drop kept
+```
+
+Prepare permits GET/POST; optional `--headers-file` reads a native file with the
+caller's existing authority, never a URL or credential string on the command
+line. Credential-bearing preparation keeps the native no-redirect policy.
+Timeout is seconds converted once to an absolute deadline; default 30 s includes
+staging, waiting at the prompt and framing. No renewal/retry.
+`request abort name` requires control; `request list` shows names/types/phases,
+not handles or headers.
+Copy defaults to retaining the same request; `--response`/`--status` attenuate.
+Copies share consumption and failure state, not replay. A second cat reads only
+what remains or EOF; prefix consumers' private read-ahead is not recovered.
+Existing names refuse replacement; explicit drop releases only that holder.
+Shell exit aborts unfinished controlled work and closes its references; outside
+holders can retain theirs, and cleanup/remote rollback is not promised.
+
+Use one typed capability-entry table (initial policy: 16 entries and 63-byte
+portable identifier names; refuse capacity/collisions, never evict).
+This is an **interim shell-local adapter** beneath the future
+[capability environment](capability-environment.md), not an HTTP-only global
+registry: payloads hold native facets with type/ownership/attenuation, while FILEs
+are I/O adapters. No text encoding of capabilities, writable environ, new startup
+environment ABI, config capability values or automatic name inheritance here.
+Reject names already used by string environment entries. Children receive only
+explicit selected facets through launch; scripts have their own table. The
+future environment must unify storage/lookup, not wrap a second request registry.
+
+Package the pinned BusyBox `printf` as an ordinary external applet; it is absent
+today. It receives stdout, not HTTP/control authority. **Alternative:**
+`request send name -- COMMAND ... > URI` as a prefix instead of `=>`; the same
+named values/rights apply, with more typing and
+no new suffix operator. Select this syntax before implementation.
+
+### 2. Coordinator — default: one bounded trusted staging worker
+
+Refine the earlier direct body-stdout sketch: producer stdout is PIPE WRITE;
+an internal trusted worker owns PIPE READ and staging FILE WRITE. Its declared
+profile permits these streams, memory and stderr, with no namespace,
+roots, network, control or descendant launcher. It latches failed/uncertain writes,
+handles confirmed short progress and checks final flush/close before EXITED/0.
+This avoids treating ignored exported WRITE errors as successful staging. No whole
+body RAM buffer: one additional 64 KiB pipe and a 4 KiB copy buffer; FILE writes
+split at 4,080 bytes. Measure the added copies/process against the baseline.
+
+Admit binding/pipe/worker and all images before publication. One atomic batch
+fits the existing eight-child limit: at most seven body-producing stages plus
+worker in this profile; ordinary pipelines stay at eight. The producer profile
+declares no descendant launch authority, through bundle/shebang adapters too.
+A program requiring it
+refuses admission; scripts needing child launch are outside this profile until
+[nested containment](nested-execution-groups.md). The foreground shell observes
+every producer,
+worker and Ctrl+C while staging. Commit requires all EXITED/0, drained pipe EOF,
+no uncertain staging and no unresolved cleanup; last-stage status is insufficient.
+A failed launch/stage/write or cancellation abandons without submission, stops
+and observes the direct batch, and latches failure/uncertainty in the named value:
+a later manual COMMIT cannot bypass that failure.
+
+PREPARE/COMMIT/ABORT remain synchronous IPC: Ctrl+C/status cannot be serviced
+while those control calls wait, even though the provider loop is cooperative.
+The deadline bounds caller waits, not native drain; worker safe-stop/cleanup can
+also wait for admitted work. No generic IPC-completion extension is assigned.
+A lost COMMIT reply stays uncertain and is never replayed. Fully framed non-2xx
+makes submit/inline completion fail but retains the error body; reading that
+body can succeed. A framing/IPC failure makes the reader fail, and HTTP-aware
+reader pipelines propagate any stage's failure rather than a successful final
+checksum hiding a truncated prefix. Deliberate prefix reads can succeed without
+claiming completed framing. Non-HTTP pipeline status stays unchanged.
+
+Only one HTTP body sink, at the final stage, foreground only; no HTTP stderr,
+append, background transaction or concurrent body writer. `> @name` stages
+without automatic commit; URI `> ... => name` is the explicit automatic
+coordinator. `< http(s)://...` uses ordinary GET's STREAM/STATUS pair and redirect
+policy; `< @name` always uses the held response. **Alternative:** delegate body
+FILE WRITE directly and require a new reliable producer I/O-completion contract;
+less overhead, but existing exit status alone misses ignored/uncertain writes.
+
+### 3. Declared private backing — default: opt-in trusted startup, private NPFS
+
+Reuse [declared volume/source grants](../userland/init.md#fat32-volumes-and-selected-grants),
+now merged in #775; no second private-volume schema. A dedicated NPFS volume
+is selected as a DIRECTORY source, absent from all URI roots. For example
+(`volumes` is global; `grants` belongs to the chosen space):
+
+```lua
+volumes = { ["http-work"] = { kind = "npfs", partition = 2, volume = "http-work" } }
+grants = { http_staging = { volume = "http-work", kind = "directory",
+                           access = "read-write", optional = true } }
+```
+
+Trusted startup must consume this source before the interactive handoff: create
+isolated per-service leaves, select each leaf through a declared provider
+resource named `staging`, and publish the resulting OPEN_READ/OPEN_WRITE grants
+and aliases into that space's namespace. Use the common selected-source resolver
+and a provider bundle declaration, not a grant-adding launch wrapper. The provider
+requests CREATE/REMOVE/READ_FILES/WRITE_FILES/FILESYSTEM_INFO on its leaf; setup
+drops ancestor/provisioning copies and excludes this source from the session/
+interactive-shell inventory. Existing source mounting is implemented; service
+selection, leaf provisioning and consumption before handoff still need code.
+
+The backing is outside **every** client root/cwd/alias, including system/home:
+installed defaults expose both today. No inferred home/tmp directory, automatic
+RAM fallback, hidden-name privacy, manifest edit or removal of HTTPS's read-only
+trust-root policy. Selection only narrows declared grants. Missing/not-writable/
+non-NPFS backing leaves GET available and POST explicitly unavailable. Existing
+images require an explicit backing/configuration change; do not repartition or
+add a volume during an update. Qualify with a separately authored disposable
+installed image. This named-resource declaration is an interim current-ABI path,
+not capability-valued configuration; reconcile it in that separate assignment.
+**Alternative:** keep stock provisioning unchanged and require a custom trusted
+initializer; functionality can be qualified, but ordinary installations cannot
+use the example until separately provisioned.
+
+### Baseline and delivery checks
+
+Captured before proposal edits, main `26c9e9ca`, pins userland `da098fd`,
+ports `d732dd4`, fs `414be0ac`, lwIP `a1aadb91`. Reused verified ordinary image
+built at `24faa688` with actual userland `da098fd`; only docs/pin bookkeeping
+changed since its inputs. All four bundle verifiers and ISO payload checks pass;
+this is not a fresh-main build. Builder `4c23a20`, nested KVM q35/max, four CPUs,
+2 GiB, HPET, VirtIO network/entropy, fresh OVMF, no HDA/disk; local fixture only.
+
+| Workload | Median (range) |
+| --- | --- |
+| 1 MiB GET OPEN, five samples after warmup | 7.879 ms (7.090–9.018) |
+| GET whole consumption, verified bytes/EOF | 201.982 ms (163.666–263.587), 4.951 MiB/s |
+| 1 MiB RAM whole read, five samples after warmup | 0.470 ms (0.441–0.521) |
+| Ordinary launch/wait, existing Lua helper, 20 samples | 4.164 ms (3.407–10.060) |
+
+Commands: `iobench read http://10.0.2.2:19085/fixed --rounds 5`, RAM control
+with `cp boot://share/iobench.bin tmp://http5-ram.bin`, and monotonic timing around
+`pyxis.run{"echo","-n"}`. Shared host guests limit interpretation; no clock cost
+subtracted, native gap or isolated kernel-spawn cost claimed. Raw captures and
+provenance stay local. The docs branch then refreshed to main `6bc3a009`
+(userland `b38b0e09`, ports `9f407742`); the measurements above remain at their
+recorded pre-merge revisions, not this newer runtime. `cat URL | cksum` works;
+HTTP stdin/output redirects refuse,
+and `printf` is absent. Stock POST/coordinator has no measured zero-cost baseline.
+
+After acceptance, refresh the baseline on the chosen implementation base, repeat
+matched GET/launch and measure the added worker's POST
+cost/storage/CPU. Qualify the example sessions, every producer's failure,
+uncertainty/no replay, Ctrl+C/expiry/early close, copied/reference lifetimes,
+4xx/5xx, malformed framing and TLS EOF, denied provisioning, and real private
+NPFS multi-GB GET/staged POST with bounded resident buffers. Track the native
+HTTP/TCP reference gap; the task 4 native result is not a worker POST measurement.
+Userland/ports first, parent pins their own heads. Stop here for the three choices.
 
 ## Task 2 accepted TLS policy
 
