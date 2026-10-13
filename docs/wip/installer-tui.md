@@ -2,10 +2,11 @@
 
 Status: **direction and all three configuration choices accepted by the owner,
 2026-10-11.** Tasks 1–2 and task 3's shared FAT32 dependency are delivered.
-Task 4 is implemented and scratch-qualified for review
+Task 4 is merged and scratch-qualified
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
-[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)); later tasks
-still need separate owner go-aheads.
+[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)). Task 5 is
+assigned to Codex alpha for proposal only, 2026-10-13; its decisions below are
+unaccepted. Implementation and later tasks need separate owner go-aheads.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -232,7 +233,8 @@ kernel configuration model is proposed.
    the new loading/editor on scratch ESPs until task 5 replaces destructive Update.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
-5. [ ] **Owned ESP configuration publication.** Depends on
+5. [ ] **Owned ESP configuration publication — task 5 proposal assigned to Codex alpha,
+   2026-10-13; no implementation authorization.** Depends on
    the [shared FAT32 engine/backend](../devices/fat32-volumes.md) and
    [coexistence task 3](nvme-coexistence.md#tasks), exclusive ESP write admission
    and the shared checker/editor. Integrate
@@ -466,3 +468,255 @@ to extend the lease or activate installed publication.
 No native media was touched. Installed startup, personal pool overrides and
 ordinary Install/Update remain unchanged; task 5 owns their activation. Normal
 Install/Update requires no prior `config` invocation or manual setup.
+
+## Task 5 proposal — pending owner decisions, 2026-10-13
+
+Proposal only: #786 and userland #247 are merged. No task-5 implementation or
+installed activation is authorized. The [current baseline](../development/experiments/installer-publication/README.md)
+records the existing Install/Update paths before changes; native timing remains
+an owner-present measurement, not inferred from QEMU.
+
+The owner's requirement is binding, verbatim:
+
+> "the installer will still work by default, and update by default without having to configure with this"
+
+Install and Update require neither prior `config` use nor a separate editing
+step. With no owner edits, normal Update completes with the selected revision's
+defaults. Review shows required deltas with their safe default pre-selected;
+accepting Review is the ordinary path. Missing catalog/record means unknown
+history and archive defaults, never "configure first". Unknown history does not
+certify overwriting owner edits or unowned boot-manager entries. A damaged FAT
+filesystem or unavailable writer is a storage refusal, not a demand to configure.
+
+### Buildable scope and activation gates
+
+After acceptance, task 5 can build the shared installer/editor plan integration,
+read-only snapshots and migration review, frozen boot/session/network handoff,
+boot-compatible completion records, and incremental owned-file execution on
+**disposable scratch images**. It can qualify default/no-history planning,
+unsupported Lua, stale/cancel refusal, recovery-state selection and small-volume
+functional publication before epsilon's cost fix. These checks must not be used
+as proof that the real installer ESP is ready.
+
+Installed activation and the shipped replacement for destructive Update are
+blocked on [Configuration publication lease cost](../technical-debt.md#configuration-publication-lease-cost).
+Epsilon investigates after the USB read-speed work. Requalify the complete path
+on the installer's actual 512 MiB mirrored-FAT profile, representative larger and
+occupied ESPs, and the owner's native target. Include cold admission, staging,
+exclusive revalidation, prepared/swap/commit and older-recovery cleanup. All must
+fit existing operation bounds and the non-extending 30-second interval with
+measured headroom. Do not lengthen deadlines, renew the interval in a loop,
+remove validation or silently retry to make the gate pass.
+
+[NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
+second real gate for internal-disk/coexistence installation: partition-first
+write authority and the narrow GPT append operation are not implemented today.
+A FAT mount alone does not supply them. Classic VirtIO/qualified USB scratch
+integration can proceed independently; the internal ThinkPad path and its
+Fedora preservation qualification wait for that authority. Native writes still
+require the owner's separate presence/approval and explicit NVMe write option.
+
+Before release, offer Daybreak an adversarial pass over publication order,
+compatibility checks, stale-plan refusal and every recovery state below. Review
+is additional evidence, not a substitute for scratch or native qualification.
+
+### One plan and the native lifetime boundary
+
+Extend the existing installer plan with the config editor's choices and consumed
+bytes/hashes, source catalog, selected GPT facts, legacy-import provenance,
+boot-file ownership and expected published state. No second current-plan slot,
+service, shell wrapper or live Continuum operation. The ordinary installer
+Review/confirmation covers programs, migration and configuration together.
+Printed replay carries those data, no new authority; any changed input needs a
+new plan/Review rather than automatic amendments.
+
+Use native FAT32 RO views for preparation. Freeze every consumed FILE and its
+identity before releasing references. Close files/directories/cwd/delegated
+roots, explicitly retire the drained planning instance, then request the existing
+classic whole-disk write admission. Closing a control does not retire it; BUSY
+retirement stops before writes and never revokes another owner. Use the shared
+FAT reader under the initial raw claim to revalidate the same consumed bytes
+before **any program write**; no new ad-hoc FAT parser. Checking only later at
+ESP publication would weaken the accepted stale-plan refusal guarantee.
+
+Preserve offline/live-image Update, npfs admission, program sync/verification,
+manifest publication and current/previous program retention. After releasing the
+initial claim and staging programs, the classic released writable DISK can admit
+its selected ESP through existing native FAT32 RW admission. Replace the ESP raw
+claim/formatter with scoped parents, bound control and the task-4 publisher.
+Repeat GPT/geometry/domain and byte checks under the final ESP interval. No
+simultaneous raw ESP claim/mount, RO-to-RW upgrade, or implicit global editor
+factory is introduced. Partition-first coexistence keeps its separately accepted
+admission/revalidation rules; it is not permission for an internal whole-disk claim.
+
+### Proposed owner decisions — at most three
+
+These are defaults to discuss, not accepted requirements.
+
+1. **Default reconciliation and personal override migration. Recommended:**
+   with no complete usable ESP history, build a complete selected set from the
+   revision's archive defaults, rendering only volumes/spaces into ESP `boot.lua`
+   (hostname/input and protected system bootstrap stay archive-owned). If the
+   existing pool `system://config/boot.lua` is literal and validates under the shared merge/schema, offer its named
+   volume/space entries as the pre-selected migration, preserving owner values
+   and showing the exact source/hash in Update Review. A complete compatible
+   ESP set takes precedence; conflicting pool edits are displayed, never merged
+   silently. Required migrations/default additions are visible and pre-selected;
+   existing valid owner values stay Keep unless an explicit migration requires
+   another choice. Declining a genuinely required change keeps the plan
+   inapplicable; optional edits may stay unchanged.
+
+   Unsupported handwritten Lua is never executed or rewritten. Show printed
+   changes and a separately visible choice to activate archive defaults while
+   retaining the original override unchanged as inert recovery; that fallback
+   requires the final Review consent. Do not silently erase or deactivate an
+   override. Unrecorded nonempty ESP files remain owner edits: Keep/Adopt or
+   replacement is reviewed explicitly, never inferred from missing history. Where
+   those files cannot safely be managed, Update may select complete archive defaults
+   and leave them untouched with printed changes. It reports archive selection,
+   not a committed ESP set. Review states the active source and the retained
+   inactive bytes separately; Keep never silently activates or deactivates a
+   source. That source change receives the same final Review consent. Missing
+   history alone never demands prior `config` use.
+
+   Keep the original pool override at its existing path, byte-identical, as
+   **inactive recovery** after successful migration; record its source hash and
+   disposition in the reviewed publication. No automatic deletion or reuse as a
+   boot fallback. Once activated, ESP `boot.lua` is the sole editable boot source,
+   with whole-archive fallback/rescue on failure. The accepted decision 2 remains
+   **explicitly revisitable**: the owner may later choose ESP versus pool after
+   living with task 5; this proposal does not reopen that decision.
+
+   Alternative: refuse unsupported legacy import until the owner manually
+   rewrites it. That is safer for retaining its active semantics, but would add
+   a manual prerequisite for those edited installations. The recommended visible,
+   confirmed archive fallback avoids an implicit "configure first" requirement.
+
+2. **Boot-payload layout and legacy ownership admission. Recommended:** fresh
+   Install retains explicit whole-target consent and may format only that target; after formatting
+   it establishes Pyxis ownership and a complete default configuration in the
+   same reviewed operation. Normal and coexistence Update **never format the ESP**.
+   Stage kernel/archive/revision payloads at fresh revision-scoped paths under
+   `EFI/pyxis`, with a fresh attempt identity inside the revision so same-revision
+   updates never overwrite the last boot pair. Colliding staging paths refuse.
+   Retain the current and one known previous boot payload pair.
+   Unknown previous ownership skips cleanup. Remove older payloads only after
+   verified activation and exact owned-manifest/hash checks, never by prefix.
+   Editable configs remain at stable `EFI/pyxis/config/` paths, independent of
+   `bin/REVISION`; program rollback does not roll back configuration. Plan capacity
+   includes new staging, retained boot/config recovery and program reserve. Boot
+   payloads use bounded native FILE copies/hashes; the config publisher's 1 MiB
+   input bound is not widened to fit an archive.
+
+   Update preserves the installed boot manager and firmware entries. Change only
+   confirmed Pyxis-owned Limine spans, with previous-file recovery. A missing
+   catalog may offer explicit, pre-selected adoption of an exactly recognized
+   legacy Pyxis entry bound to this disk and the verified Pyxis boot paths;
+   display that adoption in Review. Names alone prove nothing. If ownership or
+   the existing Limine layout is ambiguous, preserve it and print/save a new
+   Pyxis entry for manual adoption; report **staged, boot activation pending**,
+   not an ordinary completed Update. The no-owner-edits legacy/default case must
+   be recognized and complete through the normal Review path.
+
+   Unsupported/damaged FAT refuses preservation Update and directs the owner to
+   explicit recovery/host repair; it must not become permission to rebuild a
+   possibly shared ESP. A destructive fallback inside Update is excluded by the
+   accepted preservation direction; destructive Install remains a distinct action.
+   The layout alternative is to keep canonical boot payload paths with explicit
+   previous-file swaps, accepting a larger partial-boot-pair window. Recommended
+   revision-scoped payloads keep the last boot pair reachable until activation.
+
+3. **Activation, ordering and recovery. Recommended:** extend the existing
+   complete-set record with the selected installed kernel/program revision and
+   boot payload/catalog evidence and active source (ESP or archive), retaining
+   one authority for readiness rather than an independent competing active
+   pointer. Standalone editing preserves the boot binding; changing archive to
+   ESP requires a newly validated complete publication. Stage/sync/read-verify
+   new boot payloads and programs first. For ESP selection, prepare/publish the
+   complete canonical config/catalog and commit/read-verify its record. For
+   reviewed archive selection, publish only its boot/archive-bound readiness
+   record: leave unowned Lua bytes untouched, certify no ESP set/default
+   provenance, and make the loader explicitly select the complete archive triple.
+   An existing prepared/malformed recovery record still requires manual
+   disposition; it is not equivalent to absent history and is never repaired by
+   blind retry. Then switch only the owned normal/rescue Limine entry last and
+   sync/read-verify it. A committed readiness record alone is **not completed
+   Update**: success additionally requires the reported source mode and matching
+   owned boot-entry publication, with no cross-file atomicity claim.
+
+   Fresh boot payloads retain immutable ownership/hash evidence, not another
+   active pointer. Recheck their identities/content at the final publication
+   boundary as well as consumed config bytes; include that cost in lease
+   qualification. Retained previous files are recovery evidence, not selected
+   defaults or permission to silently restore a source.
+
+   On installed normal boot, the trusted RO boot-provenance issuer supplies the
+   early ESP read, before editable config can affect selection. Archive mode
+   explicitly selects the archive; ESP mode requires a complete
+   matching record/triple/catalog and compatibility with the actually loaded
+   kernel revision and archive declarations. Package the single generated catalog
+   with trusted archive defaults for this early check, before `bin` binding; its
+   bytes also supply the editor bundle, not another mutable configuration store.
+   Freeze the **whole** selected set
+   before effects; pass selected session/network as read-only owned snapshots
+   through declared resources. Do not delegate live ESP handles or administrative
+   writer authority to ordinary children. Drain/retire the early boot-reader
+   instance after freezing; missing/ambiguous provenance, unsupported input or
+   any mismatch selects the entire archive set. Rescue always uses archive
+   defaults, never a previous set or the pool override. No firmware-variable write.
+
+   Alternatives are in-place overwrites of the currently booted kernel/archive,
+   or independent best-effort activation of each Lua file. The recommended
+   staged boot paths and whole-set compatibility check avoid consuming a partly
+   updated boot pair or mixing configurations while retaining manual recovery.
+
+### Recovery states to qualify before activation
+
+| Last confirmed point | Result and recovery |
+| --- | --- |
+| Plan/cancel/stale initial inputs | No target mutation; no automatic replanning. |
+| New program or boot payload stage incomplete | Old boot entry remains. Report retained partial revision; existing same/unknown-revision program-stage limits still apply. |
+| Prepared record or partial canonical config swap | Whole-archive fallback, retained previous files and prepared artifacts; stop without rollback/retry. |
+| Committed readiness, old or partly switched boot entry | Old kernel rejects incompatible selection and uses its archive; new compatible kernel may select the complete set. Retain old boot pair and previous configuration for explicit recovery. |
+| New entry confirmed, cleanup incomplete | Report committed update plus retained recovery/cleanup failure; never delete by prefix or claim cleanup succeeded. |
+| Unknown write/flush completion | Stop writes, report the exact reached phase/uncertainty, retain artifacts; no automatic retry, repair, reboot offer or rollback. |
+
+A program rollback keeps configuration separate: review that revision's catalog,
+restore/reconcile compatible previous files explicitly, then publish a compatible
+record and owned boot entry. Do not auto-restore settings merely by selecting an
+old program directory. Retaining files is not a promise that arbitrary old/new
+kernel/archive/config combinations boot.
+
+### Native qualification — owner-present ThinkPad
+
+1. Before candidate writes, take an **owner-approved spare USB** current-main
+   Install/Update baseline: matched image, devices and journal; record preparation,
+   confirmed apply, program stage, ESP stage, verification and total elapsed time.
+   Keep raw logs and exact kernel/initrd hashes. Never measure today's destructive
+   Update on the Fedora coexistence ESP. Current internal NVMe policy cannot do
+   that Update anyway. An unavailable native baseline stays marked pending.
+2. Luna stages the approved candidate after the FAT cost gate and scratch
+   tests. Internal/coexistence targets additionally require coexistence task 3.
+   The owner selects the exact target, approves writes and remains present.
+   On the spare target, fresh Install then normal Update require no `config`
+   invocation; with no owner edits the safe pre-selected revision defaults complete.
+   Repeat with a real pool override, owner ESP edits, missing catalog/record,
+   rescue boot and the printed-change case; compare recovered source bytes and
+   selected provenance. Record actual full-profile lease headroom, not only totals.
+3. Internal Fedora coexistence testing waits for coexistence task 3 and the
+   owner's separate native write go. The owner backs up GPT/ESP and verifies host
+   FAT health, the Fedora boot fallback and recovery medium first. Inventory every
+   foreign file/path/metadata, the Fedora/plugin Limine block and foreign occupied
+   extents. Rehearse the exact layout/tree on disposable QEMU media before the
+   native install and Update. Compare all foreign file bytes and config spans
+   byte-for-byte afterwards; check existing foreign chains/directory records and
+   non-owned disk extents. Shared FAT/allocation/dirty metadata may change only
+   as required for owned additions/publication; do not claim whole-ESP hash equality.
+   Preserve `EFI/fedora`, the existing boot manager and firmware variables; boot
+   Fedora and Pyxis after clean power/restart. Any unexplained foreign change fails
+   qualification and blocks activation.
+4. Exercise bounded failure, prepared/mismatching record and manual recovery on
+   scratch copies first; no induced power loss or uncertain-write experiment on
+   the owner's internal ESP. Stop/recover rather than extend the lease if the
+   native path cannot complete. Record the owner-visible outcome and limits before
+   proposing installed-default activation or removing the current Update path.
