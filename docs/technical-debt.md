@@ -833,6 +833,13 @@ upstream parser trusts saves matching the loaded game data, with no malformed-fi
 can leave temporary files for manual removal. Configuration persistence is disabled in the pinned generic engine; re-enabling it needs a
 writable configuration location and review of its parser and formatting.
 
+## Manual toolchain publication
+
+The owner accepted opt-in [toolchain-volume publication](wip/hosted-clang.md#accepted-task-5-profile-2026-10-13)
+by hand: every native toolchain revision must be staged and published manually.
+The [package manager](wip/later-os-directions.md#package-manager) is parked with
+multiple dependencies; revisit this annoyance when it is unparked.
+
 ## Clang code generation and predefines
 
 Pyxis builds with Clang since the [LLVM toolchain milestone](development/llvm-toolchain.md). Matched nested-KVM measurements on 2026-10-07

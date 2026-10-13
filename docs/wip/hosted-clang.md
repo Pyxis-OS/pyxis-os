@@ -6,7 +6,8 @@ compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
 and running the [ports runner](source-builds.md) come later. Tasks 1–4 are qualified: both native target links complete and default
 single-source `-c` runs on Pyxis in 1/4-CPU QEMU and passed the native owner check.
 Task 5 is owner-assigned (2026-10-13); its installation, authority and capacity
-choices below remain proposed. No task 5 implementation has started.
+defaults below are accepted. Implementation is stopped at the native peak
+measurement gate; no task 5 source changes or baseline runs have started.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -141,9 +142,9 @@ revision check and workflow image tag together under the
 This is source adoption, not a new codegen/TLS ABI requirement. Ordinary CI
 consumes the published image without rebuilding LLVM. Userland #242 and Pyxis
 #763 are merged; the adopted head passed exact-head CI. Task 5 is assigned;
-its implementation waits for the decisions below.
+its implementation follows the accepted profile and measurement gate below.
 
-### Task 5 pre-implementation proposal (2026-10-13)
+### Accepted task 5 profile (2026-10-13)
 
 Build repeatable native Clang/LLD bundle payloads against the current SDK, publish
 them on a pool volume, and qualify compile, separate link and execution of the
@@ -152,14 +153,14 @@ existing fork already supplies the source closure; no new compiler image is
 currently required. If execution reaches a required fork change, publish its
 exact source/adoption branch and owner build/push commands before adopting it.
 
-**Baseline pending, before implementation:** current main `d3bc9b5a`, current
+**Baseline pending, before implementation:** current main `0e95af3a`, current
 SDK and temporary bundles; repeated version/startup, hello `-c`, separate LLD
 link and resulting PXE launch, plus diagnostics and memory accounting. Keep
 unprofiled elapsed timings separate from debugger observations. Repeat matched
 1/4-CPU QEMU configurations; native samples come through the owner. The owner's
 "instant" compile/extraction observation is qualitative, not a timed baseline.
 
-Three decisions, **proposed defaults; stop for owner review**:
+The owner accepted all three defaults:
 
 1. **Publication:** opt-in host-built bundle payloads on a separately prepared
    npfs `toolchain` volume, under immutable revision directories, using existing
@@ -167,15 +168,15 @@ Three decisions, **proposed defaults; stop for owner review**:
    first. Do not add these large payloads to ordinary image/boot-archive staging,
    a package manager or a generic installer/updater in this task. Qualification
    uses a disposable pool; native storage selection/publication stays an owner
-   action. Alternative: assign a narrow installer import action now, using its
-   existing volume-create and mount authority without reformatting the pool.
+   action. This manual publication per revision is an accepted annoyance that
+   the [parked package manager](later-os-directions.md#package-manager) will resolve;
+   it has multiple dependencies and is not assigned.
 2. **Tool profile:** two self-contained bundles, Clang and standalone LLD, each
    with the current matching SDK resources, an 8 MiB guarded stack and declared
    `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`. Source
    and output use selected ordinary roots; app/resource roots are read-only.
    Neither tool receives a launcher. Preserve real workers-off runtime code,
-   default integrated cc1 and inherited diagnostics. Alternative: share one SDK
-   root through explicit space configuration instead of self-contained bundles.
+   default integrated cc1 and inherited diagnostics.
 3. **Capacity/qualification:** preserve the 128 MiB image/256 MiB span ceilings
    and existing honest allocation refusal; no new heap quota or profiling ABI.
    Record actual images, eager stacks, staging coexistence and process-backed
@@ -184,8 +185,28 @@ Three decisions, **proposed defaults; stop for owner review**:
    without a native bound. If native peak is not observable with existing tools,
    stop with that limitation and a bounded measurement proposal. Exercise
    invalid inputs, denied output and constrained-memory refusal without allocator
-   fault injection. Alternative: authorize narrowly scoped measurement support
-   first if exact native peak requires it.
+   fault injection.
+
+### Native peak measurement gate — stopped
+
+**Inspected:** [allocation profiling](../development/allocation-profiling.md)
+retains operation totals, not a process high-water mark. VM statistics report
+current backing only; the [native debugger](../kernel/network-debugger.md)
+cannot break into a successful running compiler. LLVM's native allocator-usage
+query explicitly refuses. Retained libc pools are insufficient: LLVM also
+allocates/releases native regions outside them. No exact native peak can be
+reported from existing tools; this triggers accepted decision 3's stop.
+
+**One proposed owner decision; default:** authorize a qualification-only kernel
+probe on an unmerged branch, counting event-based current/peak process-owned VM
+backing at existing BSP loader/mutation/retirement points. Include image, eager
+stack, startup and private allocations; report launch capture separately. Exclude
+page tables, kernel metadata and filesystem/cache backing explicitly. Retain the
+result before retirement and emit one diagnostic through the existing kernel log
+per measured process; ordinary production logs/code remain unchanged. Use separate
+profiled runs for memory and unmodified-main runs for elapsed baselines. No quota,
+public profiling ABI, compiler change or container rebuild. Task 5 remains stopped
+until this measurement support is authorized; no probe has been implemented.
 
 **Queued after task 5 merges:** the owner auto-assigns driver-invoked LLD. Its
 proposal must decide whether a single direct child can satisfy the REQUIRED
