@@ -127,7 +127,7 @@ cat https://example.com/
 cat http://example.com/ | tee home://example.html | cksum
 service replace text boot://textfs.pxe --welcome "Replacement service"
 namespace remove http
-service start http boot://httpfs.pxe
+service start http boot://httpfs.pxb
 ```
 
 The publication command receives an exported grant through IPC and binds it before

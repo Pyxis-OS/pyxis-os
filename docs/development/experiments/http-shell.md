@@ -36,6 +36,53 @@ samples do not establish worker overhead/savings. The matched worker comparison
 still needs interleaved runs in one window, identical producer/backing/data/CPU
 configuration; Lua w+ remains direct and must not be labelled a worker path.
 
+## Matched worker costs and GET control
+
+Frozen current image: clean parent `72e13880`, userland `22fcade`, ports
+`bcacac6`; later userland `fc22dc5` changes README only. Same builder and VM
+settings; private NPFS disk, local fixture, no debugger attached during timed
+work. An existing manual probe explicitly declares the shell script's held
+PIPE CREATE/LAUNCH grants; it does not qualify ordinary standalone scripts.
+
+Five alternating direct/worker POST pairs after warmups use the same 1 MiB z
+payload (128×8192-byte writes), headers, backing and 120-second deadline. The
+server independently matched every length/hash; each child exited zero and
+validated its retained 13-byte response. Full time includes script and child
+launches, coordinator, response validation and cleanup, not isolated worker CPU.
+
+| Workload | Median ms (range) |
+| --- | --- |
+| Direct Lua w+ POST | 1520.807 (1479.042–2369.700) |
+| Shell worker POST | 1418.610 (1335.966–3157.490) |
+| Paired worker minus direct | -60.432 (-169.788–1509.402) |
+| Empty ordinary producer, per launch | 6.140 (5.458–7.242) |
+| Empty producer through worker, per launch | 10.407 (10.086–10.511) |
+| Paired extra empty coordinator cost | 4.371 (2.977–4.949) |
+
+Whole-POST differences cross zero; no reliable overall speedup or slowdown is
+established. Five empty pairs each contain 20 identical printf launches, with
+PREPARE/ABORT outside the marked interval; the repeatable added 3–5 ms motivates
+[revisiting direct WRITE plus reliable producer completion](../../technical-debt.md#http-staging-worker).
+Direct phase medians: prepare 52.630 ms, stage/flush 591.538 ms, commit 867.129 ms,
+response 4.480 ms, final status/close 0.910 ms. One separately marked worker run
+measured about 60/443/845/21 ms for prepare/stage/commit/response+drop; those
+intervals include marker launches/waits and are not directly comparable.
+
+GET control brackets the frozen baseline with current/baseline/current boots,
+five verified samples per boot, identical devices, fixture and pristine disk:
+
+| 1 MiB complete GET | Median ms (range) | MiB/s at median |
+| --- | --- | --- |
+| Current first | 185.454 (166.809–196.213) | 5.392 |
+| Baseline `bfd14785` | 175.818 (152.110–180.601) | 5.688 |
+| Current repeat | 185.943 (149.769–195.951) | 5.378 |
+
+Current medians are about 5.5–5.8% higher with overlapping ranges. This is a
+nested control, not a native HTTP/TCP-gap result. Commands use the existing
+probe's `run .../direct.sh`, `run .../worker.sh`, empty controls and
+`child iobench read http://10.0.2.2:19085/fixed --rounds 5`. Raw sample rows,
+fixture scripts, hashes and launch/VM provenance remain local or on the PR.
+
 ## QEMU functional evidence
 
 Userland `f317f09` broad RAM suite, `61ed1fa` corrected JSON example/NPFS/TLS;
@@ -60,6 +107,6 @@ and raw captures remain in local build output, outside the repository.
 
 The final worker `22fcade` aligns pipe reads to FILE_WRITE_MAX_BYTES to avoid
 16-byte trailing WRITE calls; its allocated buffer stays 4 KiB. Final-source
-multi-GB GET/POST and worker-cost runs remain unrun. Owned qualification jobs are
+multi-GB GET/POST qualification remains pending. Matched measurement jobs are
 stopped and disk/ISO checkpoints retained. This is a recoverable checkpoint,
 not milestone closure or completion evidence for the pending script surface.

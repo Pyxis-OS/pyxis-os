@@ -419,8 +419,7 @@ Reject names already used by string environment entries. Children receive only
 explicit selected facets through launch; scripts have their own table. The
 future environment must unify storage/lookup, not wrap a second request registry.
 
-Package the pinned BusyBox `printf` as an ordinary external applet; it is absent
-today. It receives stdout, not HTTP/control authority. The prefix form
+The implementation packages pinned BusyBox `printf` as an ordinary external applet. It receives stdout, not HTTP/control authority. The prefix form
 `request send` is not adopted.
 
 ### 2. Coordinator — accepted: one bounded trusted staging worker
@@ -486,7 +485,7 @@ declared `staging` resource, publishes its OPEN_READ/OPEN_WRITE grants and alias
 then consumes the backing source before the interactive handoff. The provider
 requests CREATE/REMOVE/READ_FILES/WRITE_FILES/FILESYSTEM_INFO on its leaf. Setup
 drops ancestor/provisioning copies; shells/programs get no backing authority.
-Service selection, leaf provisioning and consumption still need implementation.
+The task 5 implementation supplies service selection, leaf provisioning and consumption.
 
 Large uploads opt into a dedicated private NPFS volume outside **every** client
 root/cwd/alias. Example (`volumes` is global; `grants` belongs to the space):

@@ -6,8 +6,9 @@ The [ABI](../../include/abi/http_transaction.h) and SDK's `http_transaction.h`
 define PREPARE, COMMIT, ABORT, STATUS and METADATA. HTTP/TLS remain userspace
 protocols;
 [STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
-[Libc streaming](../userland/stdio.md) uses these facets; shell transaction
-coordination remains task 5 of the [native HTTP milestone](../wip/native-http-requests.md).
+[Libc streaming](../userland/stdio.md) uses these facets; the [shell coordinator](../userland/shell.md#prepared-http-requests)
+uses the same facets. Standalone script delivery remains pending in
+[task 5](../wip/native-http-requests.md#standalone-http-scripts--owner-decision-required).
 
 ## Authority and preparation
 

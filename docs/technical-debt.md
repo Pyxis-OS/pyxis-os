@@ -1978,8 +1978,10 @@ installed activation. Until then follow the [accepted override/frozen-set contra
 Owner accepted 2026-10-13: shell body producers write a bounded pipe and a trusted
 worker checks every staging write and final close. **To look into later:** direct
 body FILE WRITE plus a reliable producer I/O-completion contract could remove
-this process/copy/IPC cost. Revisit against the task 5 measured worker cost; exit
-status alone currently misses ignored or uncertain writes. Capacity and declared
+this process/copy/IPC cost. Nested controls measured an extra 4.371 ms per empty
+producer (2.977–4.949); whole-POST paired differences cross zero. Revisit against
+[worker costs](development/experiments/http-shell.md#matched-worker-costs-and-get-control);
+exit status alone misses ignored or uncertain writes. Capacity and declared
 isolation remain unchanged by that future comparison.
 
 Private NPFS provisioning leaves can remain as empty linked directories after
