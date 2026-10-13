@@ -82,7 +82,7 @@ static struct {
   unsigned window;
   uint64_t started_at, reported_at, previous_at;
   uint64_t samples, accepted, resets, rejections[TOUCHPAD_REJECT_COUNT_TOTAL];
-  uint64_t paired, stale_pairs, ambiguous_pairs, separated_pairs, drag_samples;
+  uint64_t paired, unusable_pairs, ambiguous_pairs, separated_pairs, drag_samples;
   uint64_t contacts[4], pressure[5], width[4], spacing_min, spacing_max;
   uint8_t pressure_min, pressure_max, width_min, width_max;
   int32_t x_min, x_max, y_min, y_max;
@@ -430,6 +430,15 @@ void touchpad_report(const struct touchpad_sample *sample,
     return;
   }
   if (sample->pressure <= TOUCHPAD_PRESSURE_OFF) {
+    /* A weak primary with multiple contact hints is not a confirmed lift
+     * of the other finger; retain admission and rejection lifetimes. */
+    if (geometry.has_second && sample->fingers >= 2) {
+      if (diagnostic.enabled && !diagnostic.finished) {
+        diagnostic.unusable_pairs++;
+      }
+      reject(TOUCHPAD_REJECT_PAIR, motion);
+      return;
+    }
     contacts[0] = contacts[1] = (struct contact_state){0};
     palm = loss_quarantine = previous_pressed = false;
     previous_count = 0;
@@ -465,7 +474,7 @@ void touchpad_report(const struct touchpad_sample *sample,
         now - sample->observed_at > TOUCHPAD_PAIR_FRESH_NS ||
         now - sample->second_at > TOUCHPAD_PAIR_FRESH_NS) {
       if (diagnostic.enabled && !diagnostic.finished) {
-        diagnostic.stale_pairs++;
+        diagnostic.unusable_pairs++;
       }
       reject(TOUCHPAD_REJECT_PAIR, motion);
       return;
@@ -596,10 +605,10 @@ static void diagnostic_summary(uint64_t elapsed)
   klog("synaptics-contact: coords-valid=%u X=%d..%d Y=%d..%d\n",
       diagnostic.have_coordinates, diagnostic.x_min, diagnostic.x_max,
       diagnostic.y_min, diagnostic.y_max);
-  klog("synaptics-contact: pair usable/stale/ambiguous/separated=%lu/%lu/%lu/%lu drag=%lu\n",
-      diagnostic.paired, diagnostic.stale_pairs, diagnostic.ambiguous_pairs,
+  klog("synaptics-contact: pair usable/unusable/ambiguous/separated=%lu/%lu/%lu/%lu drag=%lu\n",
+      diagnostic.paired, diagnostic.unusable_pairs, diagnostic.ambiguous_pairs,
       diagnostic.separated_pairs, diagnostic.drag_samples);
-  diagnostic.paired = diagnostic.stale_pairs = diagnostic.ambiguous_pairs = 0;
+  diagnostic.paired = diagnostic.unusable_pairs = diagnostic.ambiguous_pairs = 0;
   diagnostic.separated_pairs = diagnostic.drag_samples = 0;
   diagnostic.samples = diagnostic.accepted = diagnostic.resets = 0;
   for (unsigned i = 0; i < TOUCHPAD_REJECT_COUNT_TOTAL; i++) {

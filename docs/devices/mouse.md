@@ -169,8 +169,10 @@ capability: the latter can be absent even when a TrackPoint uses the guest port.
 Five-second `synaptics-transport:` lines report cumulative decoded touch/guest
 packets, guest overflows, malformed headers, unsupported packets and reset
 packets and AGM position/count/unsupported counters; reporting stops after 150
-seconds. Contact summaries also count usable/stale/ambiguous/separated pairs and
-physical drag samples, and print effective tuning values. These are observations, not guest
+seconds. Contact summaries also count usable/unusable/ambiguous/separated pairs and
+physical drag samples, and print effective tuning values. Unusable pairs include
+missing/stale data, invalid pressure/coordinates and inconsistent multi-contact
+lift hints; none of those retires a known contact as a new typing-gated finger. These are observations, not guest
 initialization or proof that every physical button has been exercised.
 
 Malformed absolute framing, raw queue loss and controller errors reset both

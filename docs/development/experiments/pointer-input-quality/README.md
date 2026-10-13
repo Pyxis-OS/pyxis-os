@@ -728,7 +728,7 @@ Make flag is needed. Retain the relative control entry and a diagnosis-off
 Diagnostics start during boot, not program launch; old named windows remain
 labels, and summaries stop at 150 seconds. Record actual action order rather
 than assuming it matches those windows. Contact summaries report Z/W/observed
-X/Y, rejection and usable/stale/ambiguous/separated pair counts, plus drag
+X/Y, rejection and usable/unusable/ambiguous/separated pair counts, plus drag
 samples and effective tuning. Transport counters are cumulative touch/guest
 and AGM position/count/unsupported observations. Packet gaps are delivery
 spacing, not filter CPU cost. No raw contacts, typed text, key identities or
