@@ -2,7 +2,7 @@
 
 `boot://session.pxe` is a native userspace launcher that evaluates
 `boot://config/session.lua` and optional `boot://config/network.lua`, applies
-terminal tab spacing, and hands off to `boot://shell.pxb/app/bin/shell.pxe`, or `bin://mux.pxe` when the local space
+terminal tab spacing, and hands off to `boot://shell.pxe`, or `bin://mux.pxe` when the local space
 opts into the [multiplexer](multiplexer.md). The optional
 `--configure-network` argument also applies shared NIC settings.
 `--start-services` selects the trusted `boot://init-services` script after
@@ -13,7 +13,7 @@ Custom CA augmentation is selected by the trusted service command in
 init script selects it:
 
 ```text
-#!boot://shell.pxb/app/bin/shell.pxe
+#!boot://shell.pxe
 mount --optional --read-write host
 namespace create
 session boot://session.pxe --configure-network --start-services

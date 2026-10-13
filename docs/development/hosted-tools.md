@@ -61,7 +61,7 @@ Replace `REV` below with the producer's full `hosted-SHA256` directory name.
 Run these as a shell script: its first failed command stops publication.
 
 ```text
-#!boot://shell.pxb/app/bin/shell.pxe
+#!boot://shell.pxe
 mkdir toolchain://REV
 mkdir toolchain://REV/.staging
 cd toolchain://REV/.staging

@@ -104,7 +104,7 @@ programs and do not need it. With no `home` root, the space starts in `tmp://`.
 Save this trusted script as `/tmp/init-usb-development.sh`:
 
 ```sh
-#!boot://shell.pxb/app/bin/shell.pxe
+#!boot://shell.pxe
 namespace create
 service start text boot://textfs.pxe
 session boot://session.pxe --configure-network --start-remote-services

@@ -192,7 +192,7 @@ may supply mount-only selection or selected MOUNT/data grants.
 A space whose required volume is missing or fails to mount, whose CPU set names
 an absent CPU, or whose init cannot be opened is created but not started. Its
 tab and the log say why, and the other spaces start. If no space starts, boot
-init creates a `rescue` space running `boot://shell.pxb/app/bin/shell.pxe` with only `boot://`,
+init creates a `rescue` space running `boot://shell.pxe` with only `boot://`,
 `tmp://` and `bin://`, starting in `tmp://`; it cannot repair the pool.
 
 The archive `hostname` defaults to `pyxis` and follows the
@@ -304,7 +304,7 @@ Replace the GUID placeholder only in local configuration. Do not change an
 attached image from the host. The space's init receives `data://` and can hand it to a session:
 
 ```sh
-#!boot://shell.pxb/app/bin/shell.pxe
+#!boot://shell.pxe
 session boot://session.pxe --start-services
 ```
 
@@ -363,7 +363,7 @@ closes. Call sync explicitly before reporting that persistent work is complete.
 
 ## Packaged scripts
 
-The userland repository supplies shebang scripts using `boot://shell.pxb/app/bin/shell.pxe`:
+The userland repository supplies shebang scripts using `boot://shell.pxe`:
 
 - `init/development.sh`, installed as `boot://init`, receives the optional host
   export read-write from `live.lua` and hands off with
@@ -436,7 +436,7 @@ Trusted init can narrow its space's CPUs within the configured ceiling before
 anything else runs there:
 
 ```sh
-#!boot://shell.pxb/app/bin/shell.pxe
+#!boot://shell.pxe
 affinity 2-3
 session boot://session.pxe --start-remote-services
 ```
@@ -591,7 +591,7 @@ Failure to load boot init stops the boot. A space init that cannot be opened
 or launched leaves its space unstarted, with the reason on its tab. A running
 script stops on its first failed command; EOF exits without opening a prompt.
 Inits and sessions are not restarted. Their space, terminal contents and shared
-namespace roots survive exit. A space whose init is `boot://shell.pxb/app/bin/shell.pxe` opens a
+namespace roots survive exit. A space whose init is `boot://shell.pxe` opens a
 shell directly, as the `rescue` space does. See [later lifecycle work](../wip/later-os-directions.md#execution-lifecycle)
 for deferred supervision and process replacement.
 
