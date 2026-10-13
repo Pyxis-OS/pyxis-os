@@ -176,6 +176,31 @@ from 5a and preserved in a blocked draft follow-up. All owned VMs/server/debugge
 this failure gates standalone 5b, not the qualified interactive 5a delivery. No native or final bundle-startup timing
 claim follows from these functional checks.
 
+## Split-core regression
+
+After withdrawing the positional loader, clean parent `d046e254`, userland
+`0d89874` and ports `1b171610` passed stock live and host-shaped normal/missing-bin
+installed boots. Each sent exact JSON `{}`, read the retained response and
+observed complete HTTP 200/framing success. Only three POSTs reached the fixture;
+no GET or cancelled POST. Plain `shell PATH` refused without executing the file.
+Both installed forms used real native NPFS bin/system/home volumes; archive
+shaping was host-side, not an executed native installer.
+
+Rebased parent `5d2c8b66`, userland `06812e7` (main `fcb0c0e`) and ports
+`1b171610` (main `a8b50bc6`) built an ordinary image and all four bundles, with
+all verifiers passing. The unchanged nested configuration above passed fresh
+stock live startup, exact interactive printf JSON POST/retained read/STATUS and
+withdrawn positional-loader refusal. Physical Ctrl+C on a blocked body producer
+removed both cat and worker; debugger inspection confirmed no console reader or
+surviving stage. These are functional checks, with no new timings. The rebase
+retains main's configuration checker and uses the selected directory capability
+for staging creation and failed-start cleanup. All owned jobs are stopped.
+
+Standalone [draft #792](https://git.internal/PyxisOS/pyxis-os/pulls/792) and
+[userland #250](https://git.internal/PyxisOS/pyxis-userland/pulls/250) preserve the
+loader for #789; subgroup integration and cancellation qualification remain
+pending there. No console-interrupt handoff is implemented.
+
 ## Owner native recheck
 
 Use the same local fixtures and image configuration for main/PR comparisons;
