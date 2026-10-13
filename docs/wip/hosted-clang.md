@@ -9,7 +9,7 @@ small C program in 1/4-CPU QEMU and on the ThinkPad (2026-10-13). Native wall
 proxies and the authorized unmerged peak probe inform the capacity profile.
 Driver-invoked linking is assigned to Codex delta, after the accepted minimal
 nested-group prerequisite ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788),
-draft [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)). This WIP records
+merged [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)). This WIP records
 that remaining process boundary.
 
 ## Accepted owner decisions (2026-10-11)
@@ -311,8 +311,8 @@ and Clang cannot wait for a group that still contains itself.
   WAIT storage in 1/4-CPU QEMU/GDB. **After this unit the owner can:** create and
   inspect a genuinely contained native job subtree without changing Clang. The
   [qualification record](../development/experiments/hosted-clang-driver/README.md#native-subgroup-foundation-2026-10-13)
-  covers builds, matched workloads and 1/4-CPU QEMU/GDB; kernel #789 awaits
-  Daybreak's adversarial review before merge.
+  covers builds, matched workloads and 1/4-CPU QEMU/GDB; kernel #789 merged after
+  Daybreak's adversarial source/exercised review found no confirmed serious issue.
 - [ ] **Core and declared bundles:** implement the contained job profile using that
   foundation and shared manifest preparation, packaging the linker root. No
   second executor, implicit authority inventory or default grouping overhaul.
@@ -335,7 +335,7 @@ The foundation/core alone need no compiler-container rebuild. The driver fork
 changes do, under the existing compiler/SDK source-pin contract. Source checkpoint:
 [LLVM #8](https://git.internal/PyxisOS/pyxis-llvm/pulls/8),
 `8c3b0fe13b1a63caff2ea82faaae9fe2ead2e9de`; contained runtime
-[userland #251](https://git.internal/PyxisOS/pyxis-userland/pulls/251), `68cf967e`.
+[userland #251](https://git.internal/PyxisOS/pyxis-userland/pulls/251), `8c052506`.
 The owner build branch `toolchain/clang-driver-container` at `e05d8673` prepares
 that exact fork and image `pyxis-llvm23.1.3-8c3b0fe`:
 
@@ -349,8 +349,7 @@ Do not adopt the tag until the owner publishes it. If merging the fork changes
 the SHA, update the pin and rebuild the image for that exact merged provenance.
 The integration remains draft: source compilation and SDK builds pass, but
 fresh target links, driver QEMU/GDB, overlapping-memory evidence and native
-qualification remain pending. Kernel #789 is ready for Daybreak's required
-adversarial review before merge; [#793](https://git.internal/PyxisOS/pyxis-os/pulls/793)
+qualification remain pending. [#793](https://git.internal/PyxisOS/pyxis-os/pulls/793)
 keeps the core/fork/bundle integration separate. The foundation (#789 and
 userland #248) merged into main `ad86d6e5`; the contained core is userland #251
 at `8c052506`, already based on current userland main `39499b92`. The recorded
