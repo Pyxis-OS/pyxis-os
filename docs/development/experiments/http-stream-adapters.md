@@ -58,13 +58,52 @@ rates were 2.905/1.599 MiB/s; clock controls varied 36.553–135.571 microsecond
 per GET clock read and were not subtracted. Raw samples/captures and exact
 commands stay in local `build/http4-lab/`, rather than the repository.
 
+A final pair covered the rebased source and retained-binding/FILE-refusal fixes:
+A stayed at the table's frozen heads; B's built parent was `d6825b87`, userland
+`ab7e00bc`, ports `d732dd4`. Current parent `2316d097` differed only in docs.
+Same compiler/configuration/commands, five samples plus warmup per workload.
+All 20 samples and four warmups verified.
+
+| Final boot | OPEN median (range), ms | Whole GET median (range), ms | RAM whole median (range), ms |
+| --- | --- | --- | --- |
+| A | 268.800 (200.652–386.339) | 546.007 (454.970–643.354) | 0.465 (0.442–0.513) |
+| B | 33.365 (19.854–44.809) | 1001.803 (779.455–1371.745) | 0.540 (0.505–0.630) |
+
+This final nested whole-GET median regressed **1.835×** (1.832 → 0.998 MiB/s).
+One-minute host load rose 1.06 → 16.15 during A, then 17.39 at B's end; another
+one-CPU hosted-VM probe was active. That observation does not establish which
+work caused the regression. Earlier B results and final B differ substantially;
+no final throughput improvement or native attribution is claimed. OPEN still
+returned earlier. Raw final samples, memory inspection and captures remain in
+local build output. No optimization follows from these measurements in task 4.
+
+### Provider backing capacity
+
+After those timed workloads, read-only GDB inspected existing VM records while
+providers were parked, address spaces OPEN and no pending VM mutator. It summed
+owned RANGE_BACKED pages, without target calls or instrumentation. Frozen A's
+memory was measured retrospectively, not before implementation. The benchmark
+itself retains a separate 1 MiB verification buffer on both images.
+
+| HTTP provider | A | B |
+| --- | --- | --- |
+| Exercised provider owned backing | 721 pages / 2,953,216 B | 451 pages / 1,847,296 B |
+| Exercised private-service backing | 1,257,472 B | 135,168 B |
+| Idle provider private-service backing | 69,632 B | 69,632 B |
+| Exercised minus idle owned backing | 290 pages / 1,187,840 B | 16 pages / 65,536 B |
+
+These are observed retained allocation capacities: libc keeps freed heap pools.
+They exclude page tables, kernel TCP/IPC/filesystem buffers, external mappings
+and the client; they are neither live HTTP bytes, complete RSS nor true peaks.
+Source inspection separately explains removal of the body-sized snapshot below.
+
 **Pyxis must be able to hit good network targets overall in the future.**
 The prior [native task 3 A/B](http-prepared.md) measured approximately 58 MiB/s
 HTTP versus the current ThinkPad TCP receive reference of 85 MiB/s (send
 70.5 MiB/s, 2026-10-09). Those are reference measurements, not contracts. The
 new nested figures cannot measure the native task 4 HTTP/TCP gap or its change.
 A matched native run remains required before an HTTP-heavy consumer; no native
-throughput or resident-memory result is claimed here.
+throughput or native memory result is claimed here.
 
 ## Functional checks
 
@@ -87,23 +126,34 @@ Manual C qualification observed:
 - cp materialized 17 MiB; after normal pool flush, read-only structural checking
   passed and extracted bytes matched SHA-256
   `47c5726efb41b54248182988e40ae5abd9ca50724eeb8f3d214e790917410adc`.
-  A truncated copy failed before publication.
+  A truncated copy failed before publication. Final-head recheck over an existing
+  destination left its 661 bytes/hash unchanged and no `.cp-` file behind; the
+  flushed pool again passed structural checking.
 
 Final functional image: parent `d6825b87`, userland `ab7e00bc` (rebased onto
 `c472de7`), ports `d732dd4`; ordinary and manual fixture builds passed in the
 same published builder. Lua consumed 17 MiB in 64 KiB chunks, rejected seek,
 reported truncated input as an error, committed w/w+ with separate/same FILE
 ownership, and retained complete 404 bodies. Precommit EBUSY followed by staging
-and commit succeeded. Close/abort before commit generated no POST, confirmed by
+and commit succeeded. A 17 MiB HTTPS POST also completed; the server independently
+confirmed length and SHA-256 `553373126b11a81d6cea970e44a4f9fc01270a3d32f6b578240144acdb882a46`.
+HTTPS GET delivered the same 17 MiB byte pattern. Close/abort before commit generated no POST, confirmed by
 server records. Links `-dump` consumed a redirected page and printed its final
 content with exit zero. A C explicit 120-second HTTPS deadline completed a
-35-second delayed body beyond the ordinary 30-second budget. Early reader close
+35-second delayed body beyond the ordinary 30-second budget; the same endpoint
+through ordinary fopen timed out with ferror, no EOF and failed final framing.
+Early reader close
 released the exchange; another GET then completed.
 
 Source inspection confirms no body-sized allocation in the stream adapter:
-fixed provider scratch/backpressure, bounded native reads, caller-selected FILE
-buffering. Lua `read("*a")` and Links' cache deliberately materialize their own
-results. This is not a measured process-RSS claim or multi-GB qualification.
+an 8 KiB provider queue and approximately 131,000 bytes of active fixed dynamic
+provider scratch at the audited maxima, excluding TLS, allocator pools,
+image/stack, retained metadata and kernel buffers. The baseline 1 MiB GET also
+allocates its 1 MiB snapshot body. Both benchmark clients retain their own 1 MiB
+verification buffer. Bounded native reads and caller-selected FILE buffering
+replace body-sized transport allocation. Lua `read("*a")` and Links' cache deliberately materialize their own
+results. The retained-capacity measurement above is not a process-RSS/peak claim.
+Multi-GB qualification belongs to final task 5, not these 17 MiB checks.
 
 ## Native follow-up
 

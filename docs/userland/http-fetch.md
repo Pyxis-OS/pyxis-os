@@ -299,7 +299,7 @@ redirect count, HTTP status and media type from an open FILE without changing
 position/indicators or granting authority. Local handles can have absent
 metadata; inherited HTTP streams query METADATA+STATUS for the actual final URI,
 HTTP status and media type, without recovering the parent's redirect count.
-Close frees owned metadata. Native path callers can request the same data. Failed
+Close frees owned metadata. Native typed URI helpers return the same data. Failed
 fopen still reports errno; the native bridge retains diagnostic HTTP status.
 [Links](links.md) adopts the final URL, materializes the forward response into
 its own cache and requires final completion before publishing cached bytes.

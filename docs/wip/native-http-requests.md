@@ -330,6 +330,7 @@ Main `2f2109fc`, userland `9f781e94`, ports `f93becb9`; source inspection only.
 | --- | --- |
 | Links | `ports/links/pyxis.c` `provider_func`: sequential fread into its own cache; validate final result before cache publication and preserve final URL/status/media type. No temporary native file needed. |
 | Lua I/O/loadfile | Upstream liolib/lauxlib read sequentially and check ferror; chunk reads stream, `read("*a")` explicitly allocates the whole result. Seek fails; failed input cannot yield executable code. |
+| TCC | `tccpp.c` sequential refill and ferror for source/includes; final URL drives relative includes and once handling. Object/archive loaders and `tcc_load_text` seek: materialize those inputs into a native file with cp. |
 | Native cp | `userspace/cp/copy.c` `cp_copy_file_handle`: SIZE and positioned reads; add explicit streamed HTTP copy into destination staging, without changing native-file copying. |
 | libuv/Neovim | `ports/libuv/pyxis/fs.c`: offset -1 can stream; pread/stat need a real file. Neovim editor selection already proves native parents; download then edit, without adding remote editing. |
 | Program loading | `userspace/lib/program.c` prefix/interpreter reads and kernel launcher require FILE; materialize explicitly before loading, never feed STREAM to the launcher. |

@@ -2,8 +2,9 @@
 
 Pyxis services run in ordinary userspace processes. Clients discover exported
 capabilities through explicitly delegated namespaces, then invoke the provider's
-protocol. The text, HTTP and HTTPS providers return immutable FILE snapshots that
-ordinary `cat`, `cksum`, `tee`, libc readers and shell redirection can consume.
+protocol. Text returns immutable FILE snapshots; ordinary HTTP(S) URL opens
+return response streams with read-only final observation. `cat`, libc readers and
+shell redirection consume these through their declared grants.
 
 The kernel owns capability enforcement, bounded delivery, routing and lifetime.
 Providers interpret requests and enforce operation-specific resource rights.
@@ -18,7 +19,7 @@ use the same namespace and IPC without exposing a FILE interface.
 | [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, withdrawal and acknowledged retirement |
 | [Namespaces](namespaces.md) | Flat exact-name bindings, separate LOOKUP and MANAGE rights, atomic replacement and explicit startup delegation |
 | [File providers](file-providers.md) | Full-URI OPEN, validated FILE grants and byte representation, shared native/exported file helpers |
-| [HTTP fetching](../userland/http-fetch.md) | Bounded HTTP/verified HTTPS GET, immutable snapshots and separate diagnostics |
+| [HTTP fetching](../userland/http-fetch.md) | Streamed HTTP/verified HTTPS GET, prepared POST, explicit snapshots and final diagnostics |
 
 Endpoint creation requires a service grant; it supplies no namespace-publication,
 file or network authority. Each receiver and its export control belong to one
@@ -90,8 +91,9 @@ continues from confirmed short transfers. Exported standard streams retain CALL
 transport authority through launch and redirection. Direct execution of an
 exported binary is unsupported; the image loader requires a native file.
 
-Text, HTTP and HTTPS opens produce immutable snapshots with stable size and bytes.
-Copies retain the same snapshot; independent HTTP/HTTPS opens fetch independently.
+Text and explicit legacy HTTP/HTTPS OPEN produce immutable snapshots with stable
+size and bytes. Ordinary HTTP URL opens instead use prepared STREAMs; copies
+share consumption, and independent opens fetch independently.
 Each provider has 63 file-export slots beside its OPEN service. Removing the
 binding does not close existing files: the provider serves retained exports and
 exits naturally after all its exports retire.
@@ -155,10 +157,10 @@ Accepted limitations and their revisit points are recorded in technical debt:
 - [HTTP provider responsiveness](../technical-debt.md#http-provider-responsiveness).
 - [HTTPS trust and platform limits](../technical-debt.md#https-trust-and-platform-limits).
 
-Each HTTP/HTTPS provider fetches synchronously, delaying snapshot reads and retirement
-behind network work. Ordinary file/open helpers have no IPC deadline, so the
-fetch budget does not bound total client wait. Call expiry cannot kill a provider
-or reclaim its unfinished receipts.
+HTTP/HTTPS uses cooperative completion/TCP/TLS progress. Synchronous entropy
+waits and local work still delay control replies; see
+[prepared service limits](http-transactions.md#service-and-limits). Call expiry
+cannot kill a provider or reclaim its unfinished native operations.
 
 [Scheme-provider extensions](../wip/userspace-scheme-providers.md) retain proposals
 for writes, media-type aliases, richer representations, caches and SQLite views

@@ -1,7 +1,7 @@
 # Standard streams, redirection and pipelines
 
 Pyxis programs use independent stdin, stdout and stderr bindings backed by
-console, file or pipe capabilities. The shell supplies file redirection and
+console, file, pipe or observed response capabilities. The shell supplies file redirection and
 foreground pipelines, and `cat` and `head` consume the selected streams without
 knowing their backing. The shell-streams milestone is complete.
 
@@ -17,7 +17,9 @@ cat missing 2> home://errors | cat > home://empty
 Launch selects dedicated stream grants with explicit protocol tags. Each stdin
 handle has READ authority; stdout and stderr have WRITE authority. A stream's
 FILE grant may be native or [exported by a provider](../interfaces/file-providers.md); exported
-streams additionally carry SEND|RECEIVE transport, while native streams carry zero.
+streams additionally carry CALL transport, while native streams carry zero.
+HTTP response stdin selects a trusted STREAM READ/STATUS-only observation pair;
+launch copies only those declared facets, never control or body authority.
 The kernel checks the interface and both authority masks. A stream's
 grant index cannot also be used by another stream or an ordinary startup binding.
 Libc descriptors adopt those handles directly, without leaving unused startup
@@ -31,11 +33,11 @@ See [stdio](stdio.md#standard-streams-formatting-and-exit) and
 File positions belong to each libc descriptor. Copying a grant does not create a
 shared position; stdout and stderr targeting the same file can overwrite one
 another.
-Console and pipe streams are sequential. `fread` retains fill-request semantics;
+Console, pipe and response streams are sequential. `fread` retains fill-request semantics;
 `fread_some` returns bytes already read ahead or one available backend transfer,
 with sticky EOF/error indicators, and never reads ahead. Cat uses it to forward
 terminal and pipe data promptly while retaining bulk file reads. Buffered stdio
-input may read ahead on file and pipe streams; those bytes stay in the reading
+input may read ahead on file, pipe and response streams; those bytes stay in the reading
 process and do not accompany a delegated stream. See
 [input read-ahead](stdio.md#input-read-ahead).
 
@@ -106,5 +108,7 @@ revisit points are retained in [technical debt](../technical-debt.md#shell-redir
 
 Future provider-to-shell capability handoff and explicit request submission
 remain separate designs in [userspace scheme providers](../wip/userspace-scheme-providers.md#prepared-requests-and-shell-handoff).
-FILE provider opens are implemented through the shared library bridge. Prepared
-requests, implicit submission and additional authority remain outside it.
+Ordinary HTTP GET uses the [stdio response adapter](stdio.md#http-streams-and-explicit-submission).
+Explicit C/Lua prepared helpers are implemented; the running shell's retained
+request bindings and producer-success coordinator remain HTTP task 5. Shell
+write redirection does not submit POST implicitly.
