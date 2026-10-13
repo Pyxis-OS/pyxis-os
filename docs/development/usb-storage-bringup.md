@@ -703,3 +703,44 @@ access, physical write qualification or power-loss claim. The two merged C.1
 are retained for evidence-guided physical follow-up. C.4 and ThinkPad testing
 remain deferred. All task-owned QEMU, remote client and debugger processes were
 closed, and the checked-in configuration remains unchanged.
+
+## 2026-10-13 unsupported synchronization qualification
+
+Base `b408187e`, implementation `ae56b309`; unchanged pins: fs `414be0a`,
+userspace `ec234db`, ports `2296a06`, lwIP `a1aadb9`. Ordinary `make -j8 image
+LOG_LEVEL=info` and the committed kernel build passed with
+`pyxis-llvm23.1.3-e0801c2`. This qualifies the
+[write-through policy](../devices/usb-storage.md#write-and-cache-qualification),
+with the native unsupported-command branch still pending.
+
+Interactive QEMU 10.2.2 used q35, nested KVM, host CPU, four vCPUs, 2 GiB RAM,
+OVMF with private variables, qemu-xhci and two disposable raw GPT disks. The
+current archive had private boot configuration for a writable `bench://` npfs
+volume and remote shell; no installed config or repository pins changed. The
+256 MiB pool's disk used `write-cache=off`; the other disk used `readonly=on`.
+Read-only debugger inspection observed known WP-clear, writable/flush true and
+`write_through=false` on the first device; known WP-set, writable/flush false,
+zero writes/flushes and readable READY state on the second.
+
+The remote shell ran:
+
+```sh
+echo usb-write-qualified > bench://write-through-check.txt
+sync bench://
+cat bench://write-through-check.txt
+exit
+```
+
+Each command and final drain completed with status 0; readback matched. GDB
+observed 14 writes, nine real synchronizations including admission, no write
+failure and both captured slots free. After stopping QEMU, `fsck.npfs` on the
+extracted pool passed and `npfs-inspect` read the same marker. The protected
+disk's whole-image hash was unchanged. All owned QEMU/client/debugger jobs stopped.
+
+The file-backed QEMU device accepted SYNCHRONIZE CACHE even with its cache
+disabled; its ordinary profile provides no unsupported-command switch. There
+is no existing BOT unit harness. No new injection or test infrastructure was
+added. The exact current-sense predicate, no-op ordering/counters and unchanged
+runtime failure latch were source-reviewed, not exercised by these devices.
+The owner's affected SanDisk test remains required; these results establish
+neither physical cache behaviour nor power-loss durability.
