@@ -1,7 +1,9 @@
 # USB storage read throughput
 
-Owner-assigned scoped freeze exception, 2026-10-13. Investigation is complete;
-the changes below are **proposed, not accepted or implemented**. The
+Owner-assigned scoped freeze exception, 2026-10-13. All three defaults below
+were **accepted on 2026-10-13**, with implementation authorized. The bounded npfs
+change is implemented and has QEMU and native A/B qualification. Native
+shared-worker responsiveness remains unqualified. The
 [native baseline](../development/experiments/usb-read-throughput.md) separates
 ordinary launch timings, instrumented attribution and QEMU functional checks.
 
@@ -14,16 +16,16 @@ npfs capture issues 22,102 4-KiB READ commands on the first launch, taking 4.344
 warm launches still issue 21,035 and take 4.078–4.104 s. Eager image loading
 then takes about 128 ms. The dominant measured interval is npfs capture reads.
 
-`kernel/fs/npfs_store.c` reads one cache page per miss and waits for its block
+At the measured baseline, `kernel/fs/npfs_store.c` reads one cache page per miss and waits for its block
 request before the next. The file's misses form 45 contiguous logical/physical
 runs (43 warm); splitting these at the existing 16-page device cap gives
 1,379 data commands (1,316 warm), plus metadata reads. This is a grouping lower
-bound, not a completed implementation. BOT still serializes three synchronous
+bound from the original baseline, not a measured post-change command count. BOT still serializes three synchronous
 CBW/data/CSW transfers per command. The raw curve shows the combined cost of
 small commands; it does not isolate controller, device, interrupt or scheduler
 CPU time. No FULL retries were observed.
 
-Recommend bounded aggregation of consecutive clean npfs read misses within a
+Implemented bounded aggregation of consecutive clean npfs read misses within a
 multi-page read, up to the device's reported cap and a 64-KiB workspace limit.
 Keep existing cached/dirty-page precedence, metadata/journal overlays and sparse
 zero handling. Use one BSP-worker-owned temporary staging buffer to scatter a
@@ -41,33 +43,27 @@ reads happen before Caelum and are outside this change. Do not change USB transf
 sizes, concurrency, interrupt waits, copies or architecture boundaries until a
 remaining cost requires it. No image reuse or prefetch beyond the current read.
 
-## Expected gain, not a promise
+## Native outcome
 
-At the warmed 64-KiB raw rate, moving about 90 MB would cost roughly 0.8 s,
-versus the measured 4.1–4.3 s capture interval. This extrapolates a repeated
-32-MiB region to a different, larger extent. The initial full-region warmup
-took 0.740 s (about 45 MB/s), so it does not demonstrate that cold 90-MB rate.
-Metadata/cache lookup, mapping,
-scatter copies, shorter tail runs and scheduling add cost. The useful target is
-a several-fold reduction in capture time and an optimistic roughly 1–2 s warm
-ordinary Clang startup;
-that range is an engineering estimate, not a native result or acceptance gate.
-An ideal 16-fold command reduction does not imply a 16-fold speedup. Keep the
-ordinary baseline's 4.30–4.56 s version and 4.30–4.31 s hello compile as the
-end-to-end comparison. Native decides whether the gain and other-path costs
-justify merging.
+The [matched native record](../development/experiments/npfs-read-runs.md#native-ab-2026-10-13)
+reports clean A1/B1/A2/B2 on the same stick/port: hello compile 4.296–4.311 s
+became 1.123–1.127 s, about 3.8× faster. Repeated version launches show the same
+gain; first post-boot launches are separated from repetitions. Empty/small-read
+controls show no material regression in that campaign. The native concurrent
+responsiveness attempt did not obtain its second beacon session and is not a
+passed check. Source-only failure-path limits remain explicit in the record.
 
-## Owner decisions (at most three)
+## Owner decisions (accepted 2026-10-13)
 
-1. **First path. Default:** aggregate misses in the existing multi-page npfs read
+1. **First path. Accepted:** aggregate misses in the existing multi-page npfs read
    path, retaining ordinary cache semantics. A capture-only direct-read path
    would avoid cache scatter/copies, but creates a second read/coherency path and
    does less for later bulk consumers; defer it unless measured costs justify it.
-2. **Bound and lifetime. Default:** at most 64 KiB of reclaimable worker-owned
+2. **Bound and lifetime. Accepted:** at most 64 KiB of reclaimable worker-owned
    staging for one read, bounded also by the device cap; fall back to single-page
    reads if staging cannot be allocated. No new read-ahead, retained image cache,
    cache-size change or asynchronous requests in flight.
-3. **Qualification. Default:** keep BOT/xHCI unchanged and qualify the npfs change
+3. **Qualification. Accepted:** keep BOT/xHCI unchanged and qualify the npfs change
    first in QEMU, then on the same native stick/port with interleaved ordinary
    before/after version/compile samples, separating the first post-boot launch
    from repetitions rather than claiming forced cold media. Use an unmerged probe only for command
@@ -77,6 +73,22 @@ justify merging.
    reference remains optional; it is not required to establish this bottleneck.
 
 After this first task the owner can: launch existing USB-backed Clang/LLD bundles
-through the same authority and loader path with fewer storage commands. An
-implementation go is still required. Image reuse, UAS and device classes remain
-out of scope.
+through the same authority and loader path with fewer storage commands. Native A/B results are recorded for owner review; the concurrent native check
+remains incomplete. Image reuse, UAS and device classes remain out of scope.
+
+## Implementation qualification
+
+Aggregation covers aligned interiors containing at least two full requested
+pages; partial heads/tails and ordinary FILE reads keep the original path. Runs
+stop before metadata that is not resident, without speculative backing I/O or
+publishing a future error. Cache slots retain their existing selection policy;
+mandatory cache storage precedes optional staging, and each page is consumed
+before another reservation can evict it. Staging is released on every exit.
+A failed aggregated ticket contributes no confirmed bytes within that ticket;
+earlier successful chunks retain their known progress. No failed-run retry.
+
+- [x] Implement bounded synchronous aggregation, with allocation fallback.
+- [x] Record QEMU byte/error/cleanup qualification and its limits.
+- [x] Record native interleaved timing and small-read controls on the same
+  stick/port, separately from debugger attribution. Native responsiveness is
+  not qualified because the second beacon session never received READY.
