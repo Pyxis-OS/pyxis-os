@@ -372,14 +372,15 @@ not EW mode bit 2 or four-byte guest negotiation. Evidence:
 and [capability definitions](https://github.com/torvalds/linux/blob/v6.17/drivers/input/mouse/synaptics.h).
 Independently implement protocol facts; do not incorporate Linux GPL code.
 
-Three remaining defaults are **proposed, not accepted**:
+All three defaults are **accepted 2026-10-13 and explicitly revisitable**.
+The distances, freshness and quiet interval are authored tuning, not permanent
+hardware or architectural constants:
 
 1. **Close-finger threshold.** Enter scrolling at at most 25 mm centre-to-centre
    physical distance, leave at 30 mm; keep both authored tunables. Use calibrated
    X/Y scaling and the pair's centroid displacement, with existing direction,
    dead zone and detent scale. This hysteresis avoids mode chatter. Separated
-   fingers do not produce wheel events. Alternative: a different owner-selected
-   separation, without hysteresis.
+   fingers do not produce wheel events.
 2. **Paired contact freshness and moving-finger drag.** Admit two-position input
    only from a queried image-sensor AGM layout, with both observations no older
    than 50 ms and consistent contact count/valid coordinates. Associate the two
@@ -392,7 +393,6 @@ Three remaining defaults are **proposed, not accepted**:
    pressed two-contact input drags from the available position, never scrolls;
    no claim of distance-qualified scrolling or second-finger tracking there.
    Failed AGM activation on an advertising device recovers relative input.
-   Alternative: withhold all two-contact drag until a stronger identity rule.
 3. **Typing-gated contact lifetime.** Check typing at each newly identified
    contact's onset, never reset or suspend a previously admitted contact for
    later typing or an added finger. A gated contact retries after 75 ms without
@@ -400,12 +400,11 @@ Three remaining defaults are **proposed, not accepted**:
    lift. Until admitted, genuine continued typing can extend that quiet interval.
    Once admitted it remains unaffected by subsequent typing. Palm/edge/loss
    quarantine retains its separate rules. Keep 75 ms authored/build-tunable in
-   the owner's 50..100 ms range, with no new runtime authority. Alternative:
-   keep until-lift typing quarantine, which can still feel indefinitely dead.
+   the owner's 50..100 ms range, with no new runtime authority.
 
-No interaction code is changed in this decision checkpoint. Implement after
-the owner answers these three lifetime/tuning defaults, then build/QEMU check
-and request a short typing/scroll/trampoline native re-run through luna.
+Interaction implementation is authorized on #773. Keep the backend opt-in;
+build/QEMU checks precede the short typing/scroll/trampoline native re-run
+through luna. Native qualification and default-on remain separate owner gates.
 
 ## Qualification and tuning
 
