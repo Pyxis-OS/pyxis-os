@@ -505,35 +505,31 @@ it never silently selects another backend. No repartitioning or volume creation
 during updates. This current named-resource path is an interim provisioner,
 not capability-valued configuration; unify it in that separate assignment.
 
-### Standalone HTTP scripts — owner decision required
+### Standalone HTTP scripts — accepted 2026-10-13
 
-The ordinary outer shell has declared PIPE CREATE and its delegated child
-launcher. A standalone shebang shell script currently inherits the ordinary
-program profile, which omits PIPE CREATE; the interpreter cannot coordinate the
-HTTP worker. Adding grants when a command happens to mention HTTP would violate
-the declared-authority rule. Trusted bootstrap scripts have their own complete
-profile; their successful requests do not qualify ordinary script invocation.
-
-**Default:** package `shell.pxb` with explicit memory, clock, console, PIPE CREATE
-and LAUNCH requests, selecting only the caller's existing delegated authority.
-Add `shell --script PATH`: it opens a native FILE READ through its own roots,
-uses the existing bounded script reader and owns a separate typed table. No
-provider script loading, grant acquisition or hidden request state. Declared
-`launcher` and `child_launcher` bindings both narrow the supplied child launcher;
+Package `shell.pxb` with required memory, clock, console, PIPE CREATE and LAUNCH
+requests, selecting only the caller's existing delegated authority. Both
+`launcher` and `child_launcher` bindings narrow that launcher to LAUNCH alone;
 neither receives CREATE_GROUP. Missing required grants refuse before launch.
-The body-producer profile still withholds LAUNCH, so this coordinator cannot be
-used as an escaping body producer. Existing bootstrap shebang scripts stay
-unchanged.
+Body-producer profiles withhold LAUNCH, so the coordinator cannot be used to
+escape producer attenuation.
+
+`shell home://post.pxs` opens a native FILE READ through the shell's held roots,
+uses the existing bounded script reader and owns a separate typed table. No
+provider script loading or hidden request state. When startup already supplies
+`script` READ, argv[1] remains its diagnostic name; the positional loader is
+selected only without that resource. Existing interactive flags keep their
+meaning, and there is no `--script` flag.
 
 ```text
-# home://post.sh contains the already accepted printf/cat/request session.
-shell --script home://post.sh
+# home://post.pxs contains the accepted printf/cat/request session.
+shell home://post.pxs
 ```
 
-**Alternative:** qualify only interactive/trusted-bootstrap shell requests now
-and defer standalone shell scripts. Lua's accepted explicit HTTP adapter remains
-usable, but the task's ordinary shell-scripting outcome would remain incomplete.
-Stop before implementing this additional launch/interface contract.
+The owner selected `.pxs` for shell scripts. New examples use it; renaming the
+existing init scripts is separate work after task 5 merges. Trusted bootstrap
+scripts retain their existing granted-script behavior. Bundle-interpreter
+shebangs are a [later direction](later-os-directions.md#lua-follow-ups).
 
 ### Baseline and delivery checks
 
