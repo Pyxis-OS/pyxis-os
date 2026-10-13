@@ -67,13 +67,32 @@ because QEMU stops the guest clocks too.
 
 The native horizon (`horizon-ns` in trace logs) is not exercised in QEMU.
 
-## Native check
+## Native result
 
-On the next native session, on AC power:
+Owner session on the ThinkPad, 2026-10-13, AC power, PXE image of this change
+at `df7db1bc` (main plus #807; later commits change only documentation),
+default logging. `pcm` played a test tone in the Read-only space while
+Chocolate Quake (sound bundle from #787) was opened and closed in Development.
 
-- `pcm 1000 500 60` in the Read-only space while Chocolate Quake or EDuke32
-  starts, plays and quits in Development;
-- `log | grep -e audio: -e hda:`, expecting at most an `output restarted`
-  line at each quit and no `engine unavailable`;
-- `pcm`'s final line, expecting `state=0` and a `discontinuity` count at
-  least the last logged `since boot` count.
+- **Passed.** The tone stopped briefly when Chocolate Quake was **opened**,
+  then resumed. Closing it caused no audible stop. The engine never failed:
+  no `engine unavailable` line.
+- Log: `audio: output observation exceeded service horizon; output restarted
+  (1 since boot)`, then `(2 since boot)`, then `(4 since boot)`. The rate
+  limit hid one line, so there were at least four restarts.
+- With this build, the native trigger is the game's **startup**: Chocolate
+  Quake's large private-memory setup runs in a non-preemptible syscall,
+  starving the BSP audio worker, as seen at EDuke32's startup in nested QEMU.
+  No stop was heard at the quit. The log has no timestamps, so an inaudible
+  restart there cannot be ruled out. The longer native horizon (about 50 ms)
+  probably covers the 39.7 ms teardown measured in the trace build plus the
+  5 ms watchdog, where the old 20 ms guard did not. That is an inference;
+  `horizon-ns` is logged only at trace level.
+
+Startup and teardown both stall the BSP; recovery now turns each stall into a
+short gap. Removing the stalls is separate, paused work: bounded teardown and
+the BSP-pinning inventory.
+
+For later native audio checks, use `pcm 440 220 SECONDS` (A4 left, A3 right)
+at moderate volume, not the 1000/500 Hz tones of the nested runs above (owner
+request).
