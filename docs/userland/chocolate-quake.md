@@ -2,10 +2,9 @@
 
 [Chocolate Quake](https://github.com/Henrique194/chocolate-quake) 2.1.0 runs
 Quake through the [SDL2 port](../development/sdl2.md), beside the native
-[Quake](quake.md). It plays the same staged data, without sound, music or
-network play. Ordinary images include it. Its SDL sound driver reports
-"Couldn't open SDL audio: Couldn't create audio thread": the plain program has
-no threads grant for SDL's [audio](../development/sdl2.md#audio) callback thread.
+[Quake](quake.md). It plays the same staged data, with sound effects but
+without music or network play. Ordinary images include it as the program
+bundle `chocolate-quake.pxb`; typing `chocolate-quake` selects it.
 
 In an application space:
 
@@ -24,9 +23,22 @@ chocolate-quake +timedemo demo1
   under `PATH` instead. Files are written in place, as upstream does. That is
   RAM on live boots, so it lasts until reboot; installed systems keep it on
   the pool.
-- **Grants:** the space's display, keyboard and clock. With the pointer
-  grant, the mouse turns through SDL's relative mode, as upstream; without
-  it, the game plays from the keyboard.
+- **Grants:** the bundle [manifest](../../ports/chocolate-quake/manifest.json)
+  declares them. Required: memory, clock, display and keyboard. Optional: the
+  pointer, so the mouse turns through SDL's relative mode as upstream (without
+  it the game plays from the keyboard), and for sound the space's audio
+  session, threads for SDL's audio callback thread and pipe creation for SDL's
+  event wakeup.
+- **Sound:** upstream's SDL sound driver plays through the SDL2 port's
+  [audio](../development/sdl2.md#audio) at 44.1 kHz, converted by SDL to the
+  native 48 kHz. `-nosound` turns it off. When the optional sound grants are
+  absent, or the executable is started directly by its
+  `chocolate-quake.pxb/app/bin` path, which launches it as a plain program,
+  the console reports "Couldn't open SDL audio: Couldn't create audio thread"
+  and the game runs silent. One process per space can own the audio session,
+  so a second sound program in the same space plays silently. The
+  [sound qualification](../development/experiments/chocolate-quake-sound/README.md)
+  records nested-QEMU timings and the native run sheet.
 - **Quitting:** Quit in the menu, or `quit` in the console, shows upstream's
   end screen; any key returns to the shell.
 - **Timedemo:** `+timedemo demo1` prints frames, seconds and frames per second
@@ -55,8 +67,8 @@ QEMU.
 ## Boundaries
 
 - **Left out of the build:**
-  - sound and music: SDL2 has no audio here, and the Vorbis, MP3 and FLAC
-    codecs aren't built;
+  - music: the Vorbis, MP3 and FLAC codecs aren't built, and there is no CD
+    audio;
   - network play: no SDL2_net and no UDP driver. Single player uses the
     loopback driver.
 - **Gamepads:** the SDL2 port's joystick driver is SDL's dummy, which finds
