@@ -39,10 +39,13 @@ be mounted.
 
 ## Programs
 
-The installed archive keeps only the rescue set listed in `boot/rescue.list`,
+The installed archive keeps executable files and complete bundle roots named in
+`boot/rescue.list`,
 packaged as `boot://share/installer/rescue.list`: boot init, the installer, the
 shell and session, the init providers and a few file commands, including
-`echo` and `cp` for writing configuration and copying recovery files. Other
+`echo` and `cp` for writing configuration and copying recovery files. The
+HTTP provider bundle and its trusted staging worker stay in this archive so
+service startup also works when the installed program revision is unavailable. Other
 root-level `.pxe` files and complete root-level `.pxb` directories live in
 `bin/REVISION`, one directory per kernel revision. Boot
 init binds the running kernel's directory. When that directory is missing it

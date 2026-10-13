@@ -63,9 +63,9 @@ cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifes
   "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1" \
   "diablo_spawn=$diablo_spawn" devilutionx=build/ports/devilutionx/stage \
   "duke3d_grp=$duke3d_grp" eduke32=build/ports/eduke32/stage
-# Installed systems keep only these executables in boot://; the rest go to bin://.
+# Installed systems keep these executable files and complete bundle roots in boot://.
 while IFS= read -r program; do
-  [ -f "build/initrd-root/$program" ] || {
+  { [ -f "build/initrd-root/$program" ] || [ -d "build/initrd-root/$program" ]; } || {
     echo "boot/rescue.list names $program, which the archive lacks" >&2
     exit 1
   }

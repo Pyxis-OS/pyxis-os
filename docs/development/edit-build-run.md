@@ -280,7 +280,7 @@ CA's PEM certificate must be available as a native file, for example
 In the guest, replace HTTPS with an instance that augments packaged public trust:
 
 ```text
-service replace --read-only https bin://httpfs.pxb --https --ca-bundle home://custom-ca.pem
+service replace --read-only https boot://httpfs.pxb --https --ca-bundle home://custom-ca.pem
 cat https://tls.pyxis.test:8443/hello.c > home://hello.c
 cat home://hello.c
 tcc home://hello.c -o home://hello.pxe
