@@ -229,7 +229,7 @@ Development space's init. It can be a native PXE executable or a shebang script:
 
 ```sh
 make run CPUS=4
-make run INIT=/tmp/init.sh
+make run INIT=/tmp/init.pxs
 make image INIT=build/userspace/shell.pxe
 make image                         # restore the packaged init
 ```
@@ -295,7 +295,7 @@ spaces = {
 ```
 
 ```sh
-make run CPUS=4 INIT=/tmp/init-native.sh \
+make run CPUS=4 INIT=/tmp/init-native.pxs \
   VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw \
   MOUNT_DISK="<GPT_GUID>"
 ```
@@ -303,7 +303,7 @@ make run CPUS=4 INIT=/tmp/init-native.sh \
 Replace the GUID placeholder only in local configuration. Do not change an
 attached image from the host. The space's init receives `data://` and can hand it to a session:
 
-```sh
+```text
 #!boot://shell.pxe
 session boot://session.pxe --start-services
 ```
@@ -365,24 +365,24 @@ closes. Call sync explicitly before reporting that persistent work is complete.
 
 The userland repository supplies shebang scripts using `boot://shell.pxe`:
 
-- `init/development.sh`, installed as `boot://init`, receives the optional host
+- `init/development.pxs`, installed as `boot://init`, receives the optional host
   export read-write from `live.lua` and hands off with
   `session boot://session.pxe --configure-network --start-services`.
-- `init/readonly.sh`, installed as `boot://init-readonly`, receives the same
+- `init/readonly.pxs`, installed as `boot://init-readonly`, receives the same
   optional export read-only and hands off with
   `session boot://session.pxe --start-services`, leaving network settings alone.
-- `init/services.sh`, installed as `boot://init-services`, publishes the HTTP
+- `init/services.pxs`, installed as `boot://init-services`, publishes the HTTP
   provider using the configured session environment, then starts a separate
   optional HTTPS provider with read-only trust grants and hands off to the
   interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
   and permits that handoff. It runs only when session selects `--start-services`.
-- `init/remote.sh`, installed as `boot://init-remote`, receives optional HOST
+- `init/remote.pxs`, installed as `boot://init-remote`, receives optional HOST
   read-write, creates the service namespace and hands off through
   `session boot://session.pxe --start-remote-services`.
-- `init/installed.sh`, installed as `boot://init-installed`, receives
+- `init/installed.pxs`, installed as `boot://init-installed`, receives
   `system://` read-write from `installed.lua` and hands off like the
   development script.
-- `init/remote-services.sh`, installed as `boot://init-remote-services`, starts
+- `init/remote-services.pxs`, installed as `boot://init-remote-services`, starts
   HTTP/optional HTTPS with the configured environment and hands off through
   `session boot://session.pxe --remote-server 2323`. The trusted launcher waits
   for network assignment and delegates one listener to the
@@ -435,7 +435,7 @@ launches the supervisor; ordinary remote shells receive application handles only
 Trusted init can narrow its space's CPUs within the configured ceiling before
 anything else runs there:
 
-```sh
+```text
 #!boot://shell.pxe
 affinity 2-3
 session boot://session.pxe --start-remote-services
