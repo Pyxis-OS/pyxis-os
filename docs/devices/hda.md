@@ -239,7 +239,11 @@ progress. A recovery needed before that is a failed recovery. Failed recoveries
 that keep recurring for **2 s** mean the cause is not transient: the next one
 fails the engine as `output kept missing service after repeated recovery`.
 Isolated restarts never fail it, however often they occur. These bounds are
-tuning, not ABI. The
+tuning, not ABI. **This repeat rule awaits owner acceptance** (#807): the
+accepted proposal said more than 3 recoveries within 10 s. In nested QEMU,
+that rule disabled audio after one EDuke32 startup burst (four restarts in
+about 130 ms), while three matching runs under this rule played through; see the
+[record](../development/experiments/audio-recovery/README.md#nested-qemu-validation-of-recovery). The
 [recovery record](../development/experiments/audio-recovery/README.md) has the
 native evidence and nested validation.
 
