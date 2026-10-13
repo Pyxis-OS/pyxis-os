@@ -9,6 +9,10 @@ and [subsystems per space](subsystems-per-space.md).
 
 Owner direction (2026-10-11): extend negotiated remote resize to plain interactive sessions after the mux-only slice.
 
+## Package manager
+
+Parked: a package manager has multiple dependencies and will replace [manual toolchain revision publication](hosted-clang.md#accepted-task-5-profile-2026-10-13); see the related [source-build direction](source-builds.md). No work is assigned.
+
 ## Execution lifecycle
 
 The implemented [init handoff](../userland/init.md) launches a successor and exits. Real

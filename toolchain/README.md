@@ -45,6 +45,54 @@ podman build -f ci/Containerfile \
 podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-4c23a20
 ```
 
+## Native hosted payloads
+
+`build-hosted.sh` is an opt-in Linux build of native Clang and standalone LLD.
+It does not run from ordinary SDK, ports or image builds. Use the installed Pyxis
+compiler, CMake, GNU Make, Python 3 and a host C/C++ compiler, with a complete current
+SDK and a fresh work directory:
+
+```sh
+JOBS=16 toolchain/build-hosted.sh /absolute/sdk /absolute/payloads /absolute/work
+```
+
+The script selects the exact fork commit in `SDK/share/toolchain/llvm-revision`
+and fetches only that commit from the internal mirror. `LLVM_SOURCE` may select
+a clean checkout of that same commit. Installed compiler provenance and builtins
+must match the SDK. `CROSS_COMPILE` selects the installed compiler prefix;
+`HOSTCC`/`HOSTCXX` select Linux compilers for the two TableGen tools. Target
+objects are always built afresh against the selected SDK. No compiler-container rebuild is needed for SDK
+changes; a changed fork still requires the owner-published compiler image.
+Keep the SDK, source checkout and installed resources unchanged through build
+and export. Before/after inventories detect changes; they are not atomic
+snapshots or protection against another builder modifying these inputs.
+
+The Release X86 build uses real SDK C++ runtimes, with LLVM workers, compiler
+project EH/RTTI and optional host libraries disabled. It builds only the Clang,
+LLD and resource-header closure. Both `.pxb` bundles include the full installed
+compiler resource directory, matching SDK sysroot and notices, with host
+symlinks expanded into regular files. They request an 8 MiB stack and required
+`memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read` grants.
+`app`, `clang_resources` and `sysroot` are read-only roots; neither tool requests
+a launcher. Source and output use separately selected ordinary roots. Compile
+with Clang `-c`, then invoke standalone LLD for linking.
+
+Output is `OUTPUT/hosted-SHA256/payload/` plus `payload.tar` and its checksum.
+The content identity covers files and directories before the identity inventory
+itself is added. Metadata records per-file checksums, SDK inputs, exact source,
+producer/configuration provenance and actual P1F segment, image, span and eager
+backing sizes. The build refuses changed SDK/source inputs, images over the
+existing 128 MiB ceiling, spans over 256 MiB and existing published revision
+paths. These sizes do not establish a native working-memory peak or budget.
+
+`payload.tar` is deterministic, uncompressed USTAR containing `clang.pxb`,
+`lld.pxb` and `metadata`, without a revision prefix. Verify the archive checksum
+before transfer and leave the published revision immutable. Launch explicitly
+as `toolchain://hosted-SHA256/payload/clang.pxb` or `.../lld.pxb`. Preparing the
+volume and selecting native storage remain owner actions. Follow the
+[hosted-tools guide](../docs/development/hosted-tools.md) for staged publication,
+configuration and invocation using the existing native tools.
+
 ## Installation
 
 - Clang and LLD for the X86 target, with `x86_64-unknown-pyxis` as the default

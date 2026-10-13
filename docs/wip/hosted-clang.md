@@ -3,9 +3,12 @@
 Owner-assigned planning, 2026-10-11. This is the
 [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting):
 compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
-and running the [ports runner](source-builds.md) come later. Tasks 1–4 are qualified: both native target links complete and default
-single-source `-c` runs on Pyxis in 1/4-CPU QEMU. Installed tools, standalone LLD
-execution and native-hardware budgets remain task 5, which is not assigned.
+and running the [ports runner](source-builds.md) come later. Tasks 1–5 are
+qualified: installed pool-volume bundles compile, separately link and run the
+small C program in 1/4-CPU QEMU and on the ThinkPad (2026-10-13). Native wall
+proxies and the authorized unmerged peak probe inform the capacity profile.
+Driver-invoked linking remains queued after task 5 merges; this WIP records
+that pending process boundary.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -42,7 +45,7 @@ remain later work.
 
 Tasks 1–3 left the then-installed fork pin (`49e2c1a`) unchanged. Gate 7 later
 adopted their merged fork work in `2d234435`. Task 4 has an explicit go;
-task 5 still needs its own separate assignment.
+task 5 has its own owner go, with pre-implementation decisions below.
 
 1. [x] **LLVM Support platform and header fixes** (2026-10-11): fork
    [PR 4](https://git.internal/PyxisOS/pyxis-llvm/pulls/4), Pyxis #708.
@@ -77,12 +80,31 @@ task 5 still needs its own separate assignment.
      ([owner evidence](https://git.internal/PyxisOS/pyxis-os/pulls/763#issuecomment-9557)).
      Native compile time and peak memory were not measured; task 5 owns those.
 
-5. [ ] **Installed tools and first completion.** Pool-volume bundles delegate
+5. [x] **Installed tools and first completion (2026-10-13).** Pool-volume bundles delegate
    explicit resource/sysroot roots, scratch/output authority and launcher rights
    only where needed. Measure native image/span/stack/peak memory before settling
    budgets. **Owner check:** compile the same small C source, separately launch
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
+   Opt-in producer, pool authority and immutable publication:
+   [native hosted tools](../development/hosted-tools.md).
+   [Task 5 baseline, artifact and separate probe record](../development/experiments/hosted-clang-task5/README.md).
+
+   - [x] Fresh producer, exclusive pool publication, read-only 1/4-CPU
+     compile/separate-link/run, rejected input/output, clean reopen and GDB
+     grant/TLS inspection. Existing ceilings preserved; separate local probe
+     qualifies backing accounting and real low-memory rollback. Refreshed
+     against SDK/main `6bc3a009` (216-byte startup/32-byte streams); older
+     runtime payloads are superseded.
+   - [x] **Native owner check:** ThinkPad PXE `9887dc48`, USB npfs toolchain
+     volume, compile/separate-link/`hello 5` pass; all rejected inputs/outputs
+     fail honestly, and object/PXE hashes match exactly. Ordinary wall proxies
+     and the separate labelled PROBE peaks are recorded, with cleanup zero
+     throughout ([owner evidence](https://git.internal/PyxisOS/pyxis-os/pulls/772#issuecomment-9779)).
+     The ordinary build was restored after the probe. Working-memory planning
+     allowances are 128 MiB Clang / 96 MiB LLD with separate capture backing;
+     existing loader ceilings and 8 MiB stacks remain unchanged. Real exhausted
+     capture/image admission was checked in QEMU, not claimed natively.
 
 ### Qualified task 4 closure
 
@@ -139,43 +161,103 @@ revision check and workflow image tag together under the
 [single compiler/SDK source-pin contract](../development/llvm-toolchain.md#changing-the-pin).
 This is source adoption, not a new codegen/TLS ABI requirement. Ordinary CI
 consumes the published image without rebuilding LLVM. Userland #242 and Pyxis
-#763 are merged; the adopted head passed exact-head CI. Task 5 still needs a go.
+#763 are merged; the adopted head passed exact-head CI. Task 5 is qualified;
+its implemented profile and measurement gate follow below.
+
+### Accepted task 5 profile (2026-10-13)
+
+Build repeatable native Clang/LLD bundle payloads against the current SDK, publish
+them on a pool volume, and qualify compile, separate link and execution of the
+same small C program. Keep compiler payloads out of the boot archive. The
+existing fork already supplies the source closure; no new compiler image is
+currently required. If execution reaches a required fork change, publish its
+exact source/adoption branch and owner build/push commands before adopting it.
+
+**Baseline captured before implementation:** then-main `0e95af3a`, matching
+SDK and freshly rebuilt temporary bundles pass repeated version/startup, hello
+`-c`, separate LLD link and resulting PXE launch in 1/4-CPU nested-KVM QEMU.
+Rejected input exits 1 without an object. Unprofiled remote-session elapsed
+times and separate probe memory observations are in the
+[task 5 record](../development/experiments/hosted-clang-task5/README.md);
+native samples are now in the owner qualification there. The earlier "instant"
+compile/extraction observation remains qualitative, not a timed baseline.
+
+The owner accepted all three defaults:
+
+1. **Publication:** opt-in host-built bundle payloads on a separately prepared
+   npfs `toolchain` volume, under immutable revision directories, using existing
+   formatting/mounting facilities. Launch by explicit `toolchain://` bundle URI
+   first. Do not add these large payloads to ordinary image/boot-archive staging,
+   a package manager or a generic installer/updater in this task. Qualification
+   uses a disposable pool; native storage selection/publication stays an owner
+   action. This manual publication per revision is an accepted annoyance that
+   the [parked package manager](later-os-directions.md#package-manager) will resolve;
+   it has multiple dependencies and is not assigned.
+2. **Tool profile:** two self-contained bundles, Clang and standalone LLD, each
+   with the current matching SDK resources, an 8 MiB guarded stack and declared
+   `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`. Source
+   and output use selected ordinary roots; app/resource roots are read-only.
+   Neither tool receives a launcher. Preserve real workers-off runtime code,
+   default integrated cc1 and inherited diagnostics.
+3. **Capacity/qualification:** preserve the 128 MiB image/256 MiB span ceilings
+   and existing honest allocation refusal; no new heap quota or profiling ABI.
+   Record actual images, eager stacks, staging coexistence and process-backed
+   memory from existing debugger/accounting tools, separately from elapsed time.
+   Do not call sampled memory an exact peak or settle a working-memory budget
+   without a native bound. If native peak is not observable with existing tools,
+   stop with that limitation and a bounded measurement proposal. Exercise
+   invalid inputs, denied output and constrained-memory refusal without allocator
+   fault injection.
+
+### Authorized VM backing measurement (2026-10-13)
+
+Existing tools retain totals/snapshots, not an exact native process peak. The
+owner authorized a separate, unmerged kernel probe accounting event-based
+current/peak owned data frames per process, including provisional frames rolled
+back on failure. Include image, eager stack, startup and private regions;
+explicitly exclude page tables, kernel metadata, filesystem/cache, borrowed/
+device mappings and kernel stacks. Tagged launch-capture payloads are separate
+per-boot current/peak accounting, not part of a child's process charge.
+
+Output uses `ktrace` only; there are no ordinary `klog` diagnostics. Keep the
+probe patch/branch outside shipping code, label its images **probe builds** and
+never stage them as normal PXE builds. Record the patch path/SHA and actual
+inputs in the [task 5 experiment record](../development/experiments/hosted-clang-task5/README.md).
+Use separate profiled runs for memory and untouched-main runs for elapsed
+baselines. No quota, public profiling ABI, compiler change or container rebuild.
+Native runs and publication go through the owner/luna.
+
+**Queued after task 5 merges:** the owner auto-assigns driver-invoked LLD. Its
+proposal must decide whether a single direct child can satisfy the REQUIRED
+[nested-group direction](nested-execution-groups.md), or those groups must land
+first. Today's groups are flat and the [native job core](../userland/native-jobs.md)
+rejects descendant launchers; same-group launch alone does not implement the
+required subgroup lifetime. Do not work around this with a broker/executor or
+authority wrapper, and do not start that task during task 5.
 
 ## Resources and native limits
 
-**Measured Linux proxy**, same fork/configuration, in the owner's Linux VM
-(16 vCPUs, i9-12900K reported, 31 GiB RAM). Host libstdc++ and demand paging
-make these neither Pyxis binary sizes nor native RAM admission results.
+The [installed capacity profile](../development/hosted-tools.md#qualified-capacity)
+uses the native task 5 measurements: Clang hello peak 101.85 MB, standalone LLD
+70.23 MB (decimal MB, reported precision), cleanup zero throughout. It records
+artifact image/span bytes, 8 MiB eager guarded stacks, separate capture backing
+and provisional owned-data planning allowances with headroom. Existing loader
+ceilings remain; these allowances add no heap quota and are not total system-RAM
+requirements or bounds for arbitrary programs. Page tables, kernel metadata/
+stacks, filesystem/cache, borrowed/device mappings and scratch files are excluded
+from the probe's process metric.
 
-| Measurement | Result |
-| --- | --- |
-| clang / lld ELF bytes, before stripping | 108,438,344 / 68,931,328 |
-| Same binaries, fork llvm-strip --strip-all | 90,111,728 / 57,246,064 (85.94 / 54.59 MiB) |
-| 12-line C file, SDK stdint/stdio, -std=gnu23 -O2 -fintegrated-cc1 -c; /usr/bin/time -v, three runs | Peak RSS 60,860 / 61,328 / 60,560 KiB; all exit 0; elapsed 0.12 / 0.01 / 0.01 s |
-| Clang resource headers / source SDK sysroot | Approximately 8.2 / 20 MiB on disk |
-
-Native sizes remain estimates of roughly the same order; static libc++, P1F,
-source adaptations and section collection will change them. The decisive loader
-check is page-rounded P1F segment memory extent including BSS, not stripped
-file size. Proxy file sizes are below 256 MiB, but they do not establish native
-mapped spans or required physical backing. The proxy file sizes fit the now
-implemented 128 MiB selected-image capture ceiling; that does not establish that
-native Clang or LLD will fit or load under available physical memory.
-
-Clang requests an 8 MiB stack and its near-exhaustion diagnostic assumes that
-scale. Plain native executables retain fixed eager 1 MiB stacks after the owner
-reviewed the 8 MiB default's costs. An unpacked
-[application bundle](../userland/program-bundles.md#manifest-and-stack) can now supply a
-bounded initial-stack parameter to the common loader, without a P1F field or
-compiler-container rebuild. Clang's actual stack use remains unqualified. Threads-off
-RunSafelyOnNewStack runs inline. A trivial host compile does not establish stack
-safety for templates/deep includes or justify automatic stack growth.
+Ordinary native wall proxies are 4.289 s for Clang version, 4.325 s for the small
+compile and 2.966 s for LLD (medians). USB image loading dominates; effective
+roughly 20 MB/s loading and no selected-image reuse are
+[deferred debt](../technical-debt.md#hosted-tool-launch-loading), not task 5 work.
+Nested-QEMU wall values and historical Linux RSS are not isolated comparisons
+or native RAM admission requirements.
 
 **Inspected allocator:** TLSF pools grow from eager native zeroed private memory;
 minimum 64 KiB, with slack for large requests. There is no fixed pool count or
 measured total-heap limit; an individual request above 2 GiB fails. Free retains
-pools until exit; realloc growth allocates/copies before freeing. Image segments,
-launch staging, RAM files, copied input/output and retained pools all contribute
-to native peaks. Host RSS is not a heap measurement. Large C/C++ compilation,
-linker peaks, pool retention, native load/stack limits and out-of-memory behavior
-remain unqualified; no performance claim or guarantee of fitting a guest follows.
+pools until exit; realloc growth allocates/copies before freeing. The 8 MiB stack
+is eager backing, not measured stack high-water. Threads-off RunSafelyOnNewStack
+runs inline. Large C/C++/LTO, started-tool malloc exhaustion and arbitrary stack
+safety remain unqualified; actual capture/image refusal was checked in QEMU.
