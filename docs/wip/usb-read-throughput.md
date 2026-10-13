@@ -43,10 +43,14 @@ remaining cost requires it. No image reuse or prefetch beyond the current read.
 
 ## Expected gain, not a promise
 
-At the observed 64-KiB raw rate, moving about 90 MB would cost roughly 0.8 s,
-versus the measured 4.1–4.3 s capture interval. Metadata/cache lookup, mapping,
+At the warmed 64-KiB raw rate, moving about 90 MB would cost roughly 0.8 s,
+versus the measured 4.1–4.3 s capture interval. This extrapolates a repeated
+32-MiB region to a different, larger extent. The initial full-region warmup
+took 0.740 s (about 45 MB/s), so it does not demonstrate that cold 90-MB rate.
+Metadata/cache lookup, mapping,
 scatter copies, shorter tail runs and scheduling add cost. The useful target is
-a several-fold reduction in capture time and roughly 1–2 s ordinary Clang startup;
+a several-fold reduction in capture time and an optimistic roughly 1–2 s warm
+ordinary Clang startup;
 that range is an engineering estimate, not a native result or acceptance gate.
 An ideal 16-fold command reduction does not imply a 16-fold speedup. Keep the
 ordinary baseline's 4.30–4.56 s version and 4.30–4.31 s hello compile as the
@@ -65,7 +69,8 @@ justify merging.
    cache-size change or asynchronous requests in flight.
 3. **Qualification. Default:** keep BOT/xHCI unchanged and qualify the npfs change
    first in QEMU, then on the same native stick/port with interleaved ordinary
-   before/after version/compile samples. Use an unmerged probe only for command
+   before/after version/compile samples, separating the first post-boot launch
+   from repetitions rather than claiming forced cold media. Use an unmerged probe only for command
    size/count attribution, kept separate from uninstrumented timings. Include
    fragmented, sparse, cached/dirty, unaligned and failed reads, capture rollback,
    small-read latency/throughput and shared-worker responsiveness. A Fedora
