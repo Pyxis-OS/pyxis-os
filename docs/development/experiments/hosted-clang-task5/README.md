@@ -1,7 +1,8 @@
 # Hosted Clang task 5
 
-Status: implementation and QEMU qualification complete, 2026-10-13; native
-owner check/measurements pending. No native task 5
+Status: implementation complete, 2026-10-13; matched `0e95af3a` QEMU qualification
+complete, current `6bc3a009` SDK refresh and native owner check/measurements pending.
+No native task 5
 performance or peak measurements yet; the earlier "instant" compile/extract
 observation is qualitative. Task 5 uses the accepted separate npfs toolchain
 volume and no-launcher bundles; owner/luna handle native staging and runs.
@@ -211,10 +212,10 @@ both CPU counts preserve the raw image byte-for-byte. All owned jobs stopped.
 Exact configuration, commands, full samples, GDB and raw evidence are beside
 `/shared/present/batch2/hosted-clang-task5/native/qualification.txt`.
 
-## Owner/luna native handoff
+## Superseded owner/luna handoff (`0e95af3a` only)
 
 Prepared data-only GPT image, exact consumer/publisher configurations, sources,
-commands and run sheet: `/shared/present/batch2/hosted-clang-task5/native/`.
+commands and run sheet: `/shared/present/batch2/hosted-clang-task5/previous-0e95-native/`.
 `toolchain-disk.raw` is 1,077,936,128 bytes, GUID
 `12b45896-c898-48e3-99b1-0671c19ac078`, SHA-256
 `fbdcf053e355f4bd4cd95ef20ba536a60c4be4504dcef3af76f8c88f74ce7ac0`.
@@ -228,3 +229,28 @@ capture records. Nothing has been staged or run on physical hardware by delta.
 Task 5 stays unchecked until the owner returns native compile/link/run and
 properly labelled time/peak evidence. Arbitrary C/C++/LTO, started-tool malloc
 exhaustion and actual stack high-water bounds remain unqualified.
+
+## Current-main integration refresh
+
+Main advanced during qualification to `6bc3a009` (HTTP stdio/FAT workflow/SDL
+dependencies); this PR rebases without changing its producer scripts. Userland
+pin `b38b0e09`, ports `9f407742`; fs/lwIP and compiler/fork `4c23a208` unchanged.
+Source ABI identity is now
+`7c3e54374a431c83f8048c55bc5d4841d5e9877060f8f0ed768048c712bcadd0`.
+`startup_stream` grew 16 → 32 bytes and `startup_info` 168 → 216 bytes: old
+runtime binaries must not be used with this kernel. The historical matching
+kernel/SDK measurements above are not invalidated, but their native handoff is
+superseded and preserved. Current `native/README.md` explicitly says not to stage.
+
+The new ordinary image/SDK build passes with the existing published compiler.
+Fresh generators and target objects are rebuilding against that SDK. No source
+adaptation, compatibility shim, fork/container rebuild or new task. Final
+current-SDK payload, QEMU checks and native image/run sheet follow before staging.
+
+The identical authorized counter changes apply on the new base, in a separate
+local probe `8e2b5de9aaebfe92e57bc00932b203ac9476d051`, never merged. Current patch:
+`/shared/present/batch2/hosted-clang-task5/probe-current/probe-current.patch`,
+SHA-256 `f3f823054d2f0f6a214460f227b9209f94bf959765cffb8607a8e4706d9aa9f3`.
+Added/removed code is unchanged; patch context reflects base `6bc3a009`.
+Trace kernel build/ABI checks pass; current runtime counters remain unqualified
+until the refreshed tools run. Do not use trace/probe runs for wall timings.
