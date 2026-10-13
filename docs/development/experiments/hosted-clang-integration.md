@@ -160,4 +160,5 @@ No fault or panic occurred, and the shell kept working. Task 4's native owner
 check passed. The owner described compilation and tar extraction as "instant";
 this was not timed. Object header/hash, compile time and peak memory were not measured;
 performance/resource measurements, standalone LLD execution and installation
-remain task 5, now owner-assigned with pre-implementation decisions pending.
+remain task 5, now owner-assigned with the
+[installed-tool profile accepted](../../wip/hosted-clang.md#accepted-task-5-profile-2026-10-13).

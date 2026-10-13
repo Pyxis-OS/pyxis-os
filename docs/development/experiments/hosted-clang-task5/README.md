@@ -124,3 +124,28 @@ Exact probe configuration, GDB observations, raw logs and native field
 interpretation are in `probe-qualification.txt` beside the patch. All owned
 probe QEMU/GDB/client/virtio-fs jobs are stopped. Native measurements and the
 production pool payload's qualification remain pending.
+
+## Fresh production payload
+
+Opt-in producer commit `e8eadc28` (integrated as `26b67bc6`) completes from fresh
+host generators and target objects with the existing published compiler. No
+fork, container, runtime, ABI or ordinary image-build change. Both P1Fs are
+byte-identical to the current-SDK baseline above. Static script syntax and
+diff checks pass; inventory verifies 4,323 regular files plus directories, with
+per-file hashes, normalized USTAR ownership/modes/timestamps and no symlinks.
+
+- Revision: `hosted-8bb435668f5d5c899faccd634fb549aefd001883b465ef15728b66b9959fd8b0`
+- Archive: 206,694,400 bytes; SHA-256
+  `f4a821d87212f10354372ec5c5176ccba22c2b75d20e72f7b8dd353d729e6429`
+- Owner artifact directory:
+  `/shared/present/batch2/hosted-clang-task5/payloads/hosted-8bb435668f5d5c899faccd634fb549aefd001883b465ef15728b66b9959fd8b0/`
+
+The archive contains only `clang.pxb`, `lld.pxb` and `metadata`; sources and
+qualification results are separate. The metadata records exact SDK/source,
+producer-file hashes, installed tools, fresh generators, CMake configuration,
+image/backing sizes and notices. Production scripts match the recorded hashes.
+The unused `LLD_INCLUDE_TESTS` configure warning is harmless: effective
+`LLVM_INCLUDE_TESTS=OFF` excludes those tests.
+
+Usage and the explicit authority/publication contract:
+[native hosted tools](../../hosted-tools.md).

@@ -85,6 +85,9 @@ task 5 has its own owner go, with pre-implementation decisions below.
    budgets. **Owner check:** compile the same small C source, separately launch
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
+   Opt-in producer, pool authority and immutable publication:
+   [native hosted tools](../development/hosted-tools.md).
+   [Task 5 baseline, artifact and separate probe record](../development/experiments/hosted-clang-task5/README.md).
 
 ### Qualified task 4 closure
 
