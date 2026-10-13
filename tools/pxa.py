@@ -36,6 +36,7 @@ RIGHTS = {
     "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
     "tcp": {"connect", "listen"}, "pipe": {"create"}, "udp": {"open"},
     "display": {"draw"}, "audio": {"create"}, "screen_capture": {"capture"},
+    "clipboard_local": {"publish", "paste"}, "clipboard_shared": {"publish", "paste"},
     "input": {"read"}, "output": {"write"}, "profile": {"memory", "host"},
     "keyboard": {"input"}, "pointer": {"input"},
     "job_work": {"create", "remove", "read-files", "write-files"},

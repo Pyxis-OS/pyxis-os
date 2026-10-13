@@ -94,7 +94,8 @@ CHOCOLATE_QUAKE_INPUTS := $(wildcard ports/chocolate-quake/*.lua ports/chocolate
 
 # EDuke32 is built only when DUKE3D_DATA asks for it; see its PORT-NOTICE.
 EDUKE32_INPUTS := $(wildcard ports/eduke32/*.lua ports/eduke32/Makefile \
-                            ports/eduke32/PORT-NOTICE ports/eduke32/patches/*.patch) \
+                            ports/eduke32/PORT-NOTICE ports/eduke32/manifest.json \
+                            ports/eduke32/patches/*.patch) \
                   ports/ports.lua ports/build.lua
 
 # DevilutionX is built only when DIABLO_DATA asks for it; see its PORT-NOTICE.

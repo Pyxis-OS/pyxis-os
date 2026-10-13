@@ -81,11 +81,10 @@ media-type aliases such as `json+http://` remains future work.
   personal-use build: single player without sound or networking.
 - **Chocolate Doom, Chocolate Quake and EDuke32:**
   [implemented](../development/sdl-game-ports.md); Chocolate Quake plays sound
-  effects as a bundle, the others are silent. EDuke32 is an opt-in personal
-  build. Deferred:
-  - **sound for Chocolate Doom and EDuke32, and music.** Music needs a
-    choice per game: built-in OPL synthesis for Chocolate Doom and EDuke32, CD
-    tracks for Chocolate Quake, or none at first;
+  effects and EDuke32 effects and its default OPL-emulated music as bundles;
+  Chocolate Doom is silent. EDuke32 is an opt-in personal build. Deferred:
+  - **sound for Chocolate Doom (an SDL_mixer port), and music** for Chocolate
+    Doom (built-in OPL synthesis) and Chocolate Quake (CD tracks), or none;
   - **network play;**
   - **EDuke32's OpenGL renderers** and the other Chocolate Doom games;
   - **whether a Chocolate port replaces its native port,** an owner decision

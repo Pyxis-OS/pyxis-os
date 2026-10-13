@@ -108,7 +108,11 @@ bundle and use explicitly delegated ordinary capabilities.
 The launcher preserves explicit streams, cwd, environment, namespace and other
 directory roots. `pipe/create` is an ordinary manifest request available to
 foreground bundles when their supplying shell holds the pipe service; plain
-foreground programs still receive no pipe-creation grant. Caller-selected
+foreground programs still receive no pipe-creation grant. `clipboard_local` and
+`clipboard_shared` (owner decision, 2026-10-13) follow the plain-program rule: the
+shell supplies them only on foreground and session launches, and only the stores it
+holds, so a game declaring them optionally still runs without them and its
+[Copy/Paste](../interfaces/clipboard.md#graphics-and-sdl2) then refuses. Caller-selected
 authority supplies the requests, and a shell supplies its delegated child launcher
 rather than its own supervision launcher. The kernel still prevents increasing
 the supplier's rights or transport authority. Unused source resource grants are
@@ -130,6 +134,7 @@ omitted.
 | `display` | `draw` |
 | `audio` | `create` (native playback authority) |
 | `screen_capture` | `capture` |
+| `clipboard_local`, `clipboard_shared` | `publish`, `paste` |
 | `input` | `read` (console authority) |
 | `output` | `write` (console authority) |
 | `profile` | `memory`, `host` |
