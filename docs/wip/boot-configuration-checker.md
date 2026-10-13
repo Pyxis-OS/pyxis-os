@@ -1,7 +1,7 @@
 # Boot configuration checker
 
-Status: **owner idea, 2026-10-06.** The [system layout](../userland/system-layout.md)
-milestone it waited for is done. Not yet agreed; nothing here authorizes code. In the [Asterism](spaces.md#asterism)
+Status: **shared static checker accepted within [installer task 4](installer-tui.md), 2026-10-13; implemented for scratch validation.** The [system layout](../userland/system-layout.md)
+milestone it waited for is done. The ordinary `config validate` bundle shares startup schemas and reports merged provenance/available CPU checks; [reference](../userland/configuration-editor.md). Live application remains deferred. In the [Asterism](spaces.md#asterism)
 direction this checker is the validation half of **Polaris**, which later also
 applies configuration changes to the Continuum supervisor.
 

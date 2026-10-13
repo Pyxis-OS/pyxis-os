@@ -1241,6 +1241,15 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
+## Configuration publication lease cost
+
+Native FAT32 mutation preflights can exhaust the editor's 30-second publication
+lease: the 128 MiB scratch run stopped at committed-record sync, while the 40 MiB
+runs completed. Larger ESPs may retain incomplete recovery and require manual
+disposition. Revisit backing/preflight cost before installer task 5 activates
+installed publication; [scratch evidence](../userspace/config-editor/qualification/README.md)
+does not establish native-media timing or authorize a longer lease.
+
 ## NVMe native qualification and temporary raw authority
 
 The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's
@@ -1956,3 +1965,10 @@ FAT32/host return BAD_OPERATION, with no cross-store copying. FAT32 needs atomic
 runtime identity/held-child locator repair, on-disk `..` updates and qualification
 of its ordered failure behavior; host external-name races need their own contract.
 Revisit when directory moves on either store are required. See [native rename](interfaces/directories.md#atomic-rename-and-directory-moves).
+
+## Editable boot configuration location
+
+Accepted 2026-10-13, explicitly revisitable: the owner's personal pool boot
+override migrates to ESP `boot.lua`, making ESP editing the configuration path.
+The owner may revisit ESP versus pool storage after living with installer task 5's
+installed activation. Until then follow the [accepted override/frozen-set contract](wip/installer-tui.md#task-4-round-one--accepted-2026-10-13); task 4 stays scratch-only.

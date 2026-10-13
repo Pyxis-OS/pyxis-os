@@ -2,7 +2,7 @@
 
 Status: **direction and all three configuration choices accepted by the owner,
 2026-10-11.** Tasks 1–2 and task 3's shared FAT32 dependency are delivered.
-Task 4 is assigned and in draft qualification
+Task 4 is implemented and scratch-qualified for review
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)); later tasks
 still need separate owner go-aheads.
@@ -224,7 +224,8 @@ kernel configuration model is proposed.
    ownership/confirmation and ordinary-Update preservation obligations.
    **With this delivered dependency the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
-4. [ ] **Shared configuration validation and delta editor.** Under the accepted
+4. [x] **Shared configuration validation and delta editor — delivered by Codex alpha,
+   2026-10-13; scratch publication/replay qualified.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
    validation and coordinate its writer; no live Continuum application. Qualify
@@ -252,3 +253,216 @@ kernel configuration model is proposed.
    and existing inspection tools; a new hands-free harness needs separate go.
    **After this task the owner can:** use the qualified workflow with documented
    recovery limits. Fold this WIP into the installer/config references.
+
+## Task 4 baseline and decisions — 2026-10-13
+
+Task 4 only; the functional baseline preceded implementation. Native FAT32 read/write mounts and the raw writer are
+implemented. The editor consumes the delivered trusted mount workflow/ESP views
+and shares their binding, exclusion and lifetime.
+Only scratch ESP loading/editing is qualified here; ordinary Update and installed
+ESP activation stay unchanged until installer task 5.
+
+### Functional baseline
+
+Current main `2f2109fc`, userland `9f781e94`, fs `414be0ac`, ports `f93becb9`.
+Used the successful current-main CI image (Forgejo run ID 2172), without rebuilding
+or measuring timing while the owner's LLVM build saturates horse. Kernel SHA-256
+`550306b410a9211ebaa2cb739d5d7e8af26f55807576aab1754b6cea8c6f5850`;
+initrd `87ffe577483ddd5fba107ea0ea296ecf711a9d3a90446cebce05c89a48e43441`.
+
+Manual QEMU 10.2.2, Q35/nested KVM, host CPU, four CPUs, 512 MiB, matching fresh
+OVMF, modern VirtIO block/RNG, PS/2, software GOP 1280x800, no NIC/USB. A disposable
+160 MiB GPT disk held a 128 MiB ESP with boot/session/network Lua, Limine text and
+synthetic foreign bytes. The existing trusted read-only scratch browser selected
+disk 1/entry 1 and read all five files through native FAT32. Reported no failure;
+QEMU showed zero scratch writes. Before/after whole-disk SHA-256 was identical
+(`8546e815826917b25bbe329acfcde4786502e730c009bda848733fa8438e0d46`), and the
+scratch FAT image passed `fsck.fat -n`. All QEMU jobs stopped. No owner media used.
+
+The baseline predates literal admission, shared schemas, ownership/catalog deltas
+and complete-set selection. Those now live in [libconfig](../../userspace/libconfig/)
+and the [editor](../userland/configuration-editor.md); existing Update still
+regenerates the ESP until task 5.
+
+### Task 4 round one — accepted 2026-10-13
+
+1. **Input and validation accepted: declarative admission for the new ESP path.**
+   Parse literal `return { ... }` data: tables, explicit keys/array entries,
+   strings, numbers, booleans and comments, with duplicate-key/structure checks;
+   no calls, loops, functions, metatables or migration execution. Recognize
+   ownership markers as real comments, never marker-looking string bytes.
+   Unsupported handwritten Lua stays untouched and receives printed changes;
+   automatic validation/edit/apply refuses to certify it. Keep the existing
+   trusted archive evaluator for recovery/legacy inputs, but extract shared typed
+   schema/merge validation so boot, checker and editor use the same constraints.
+   Separate source validity from unavailable CPU/volume/zoneinfo checks, with
+   source/entry/reason diagnostics and merged-entry provenance. Include static
+   network address/subnet/gateway constraints without applying networking.
+   Reuse the existing machine hostname/scroll validators and paths; no separate
+   schema/store, machine-setting writer, Polaris or Continuum implementation.
+
+2. **Boot meaning and selection accepted, revisitable: preserve the current override model.**
+   ESP `boot.lua` replaces the current pool override input: volumes/spaces only,
+   by-name whole-entry merge with archive installed defaults; no editable `system`
+   bootstrap binding or competing hostname/input store. Display and confirm the
+   existing pool override's migration into that file. Session/network files are
+   complete inputs with their existing defaults, not per-file fallback chains.
+   Validate the whole Lua triple before effects and freeze the selected bytes;
+   later sessions receive explicitly declared READ snapshots, not independently
+   reopened ESP paths. Missing/corrupt/unsupported/incomplete selection uses the
+   complete archive-default triple, with rescue always selecting it. Task 4 builds
+   and scratch-qualifies the loader; installed activation waits for task 5.
+   **Owner may revisit:** where the editable boot configuration lives (ESP
+   versus the npfs pool), after living with task 5's installed activation. The
+   present accepted contract migrates the owner's personal pool override to the
+   ESP and makes ESP editing the configuration path. See the
+   [revisitable location limit](../technical-debt.md#editable-boot-configuration-location).
+
+3. **Declarations and deltas accepted: a revision-owned data catalog.**
+   Ship one literal data catalog beside installer source assets, with stable ID,
+   file/schema target, required/optional disposition, default and optional explicit
+   migration per entry. Targets are complete volume/space/settings entries or
+   complete Limine entries. Marker syntax is `-- pyxis:begin ID` / `-- pyxis:end ID`
+   for Lua and `# pyxis:begin ID` / `# pyxis:end ID` for Limine; entry separators
+   belong inside the span. Missing/duplicate/overlapping/ambiguous markers offer
+   printed changes; unmarked adoption requires an explicit displayed choice.
+   Preserve outside bytes exactly. Migrations are declared entry/field moves or
+   explicit typed replacements reviewed individually, not executable scripts.
+   Plans record each choice, expected consumed bytes/hashes and source catalog;
+   declined required changes make the plan inapplicable. Optional changes may
+   be declined; changed owner values are never replaced just because a default
+   changed. Old defaults require a supplied/preserved old catalog: without one,
+   provenance is unknown and existing values are conservatively owner edits.
+   Do not invent old defaults from the current archive or programs manifest.
+
+### Task 4 round two — accepted 2026-10-13
+
+All three defaults are accepted. These settle the command, authority/lifetime
+and recovery boundaries; round one is not reopened.
+
+1. **Standalone surface accepted: normal `config` bundle invocation.**
+   `config validate` checks the supplied selection and reports static errors,
+   merged-entry provenance and unavailable machine-dependent checks.
+   `config plan` prints a data-only delta plan; `config edit` uses the existing
+   plain libterm review/prompt flow for each change and final Apply/Print/Cancel.
+   `config apply` consumes one framed plan on stdin, revalidates it and requires
+   final confirmation; `--confirm=config` supplies that consent non-interactively.
+   Human diagnostics/progress use stderr; printed plan bytes use stdout. All
+   surfaces share the existing installer planner/executor family; no current-plan
+   global slot, separate service, curses frontend or live Continuum application.
+   The declaring bundle requests read-only source/catalog views and optional
+   administrative writable config parents/bound control. Without writer authority
+   validation/planning still work; write modes refuse. Trusted administrative or
+   scratch startup provides grants where allowed. No call-site wrapper/prefix,
+   raw-disk/mount-acquisition grant or implicit forwarding to ordinary children.
+   Machine `config get/set/list` and its npfs writer remain their separately
+   assigned task, using the same machine validators rather than competing stores.
+
+2. **Target/replay accepted: stable, issuer-bound ESP evidence.**
+   Reuse the accepted plan identity model: normalized GPT disk/ESP UUIDs,
+   sector geometry/partition extent and expected consumed bytes/hashes. Epsilon's
+   trusted selected-view issuer must supply read-only facts tied to its root and
+   bound FAT control; the editor checks current root/control domain/extent too.
+   UUIDs name a logical target, not authenticated physical hardware. No raw disk
+   access is given to the editor. MOUNT_OBSERVE supplies retained GPT identity and
+   device geometry with explicit validity; ordinals and names alone do not fill that gap.
+   Missing/ambiguous evidence permits read-only validation/printed diagnostics,
+   but refuses publication/replay. A printed plan grants no authority: apply
+   needs the independently supplied matching writable view/control and refuses
+   stale source, target or file bytes without automatic replanning.
+
+3. **Publication/provenance accepted: complete-set record and one previous set.**
+   Retain the current catalog beside the committed configuration, with its exact
+   bytes/hash and source revision; later deltas can distinguish old defaults from
+   edits. Missing/corrupt history remains unknown. Keep one complete previous Lua
+   set/catalog and recovery copies of any changed Limine file. Stage new files,
+   sync and read-verify before switching, using the existing native FAT32 writer.
+   Under a bounded exclusive interval, recheck expected current bytes, flush a
+   prepared record before the first canonical-name swap, publish only approved
+   changes with retained recovery files, then flush a committed record naming the
+   exact selected triple/catalog hashes. This is completion detection, not a FAT
+   journal or cross-file atomicity. The loader requires a matching complete record;
+   absent, prepared, malformed or mismatching state selects the complete archive
+   defaults. Previous Limine recovery remains manual.
+   Failure/deadline/uncertainty stops writes, retains artifacts and prints the
+   reached phase/recovery names; no blind rollback, retry or resume. Cleanup of an
+   older previous set occurs only after committed publication, and only for
+   verified owned artifacts named in that record, never by filename prefix.
+   Scratch-only qualification until task 5 replaces destructive Update; no installed
+   loader activation or personal-pool deletion in task 4.
+
+### Ordinary Install/Update remains the default path
+
+Owner requirement accepted 2026-10-13: "the installer will still work by default,
+and update by default, without having to configure with this".
+
+Install and Update require **no prior use of `config` and no manual configuration
+step**. Task 4 changes nothing in installed Install/Update: its new loader/editor
+is scratch-only. When task 5 integrates configuration publication, normal Update
+with no owner edits completes with the revision's defaults. Required changes
+are shown in its existing review, with the safe default pre-selected; accepting
+the review is the ordinary path, never a prerequisite `config` invocation.
+
+A missing/absent catalog or completion record does not block Update. The loader
+uses the complete archive-default triple; unsupported or unknown-provenance
+edits receive printed changes while their bytes remain protected. Task 5 may
+use that archive/printed-change path without asserting that an unrecorded value
+was an old default or silently adopting unowned spans. Lack of provenance still
+prevents the standalone editor from certifying an unsafe overwrite; it must
+never turn into "configure first" for ordinary Install/Update. The committed
+record gates selected ESP overrides, not the ability to install/update programs.
+This is consistent with whole-triple archive fallback and preserves rescue.
+
+### Bound ESP evidence — delivered by #790 / userland #249
+
+The native FAT32 issuer exposes immutable selected-target facts
+through the already bound MOUNT control's OBSERVE reply, requiring its existing
+OBSERVE right. This keeps facts tied to the issuer's actual mounted instance,
+not a caller-authored sidecar or a raw-DISK grant. It retains domain, device,
+GPT-entry ordinal, first-block, block-count and lifecycle flags alongside:
+
+| Fact | Source at mount admission |
+| --- | --- |
+| `disk_guid[16]`, raw GPT bytes | Validated `fat32_volume.disk_guid`, cross-checked against the kernel's healthy GPT snapshot and selected disk GUID. |
+| `partition_guid[16]`, raw GPT bytes | Validated `fat32_volume.partition_guid`, cross-checked against the selected GPT entry and boot-origin UUID where applicable. |
+| `partition_type[16]`, raw GPT bytes | Validated `fat32_volume.partition_type`; the config publisher verifies ESP type, rather than trusting a root name. |
+| `partition_attributes`, 64 bits | Validated `fat32_volume.partition_attributes`, already matched to the selected GPT entry. |
+| `device_block_size`, bytes | Admitted `block_info.block_size` / `fat32_volume.source.sector_bytes`. |
+| `device_block_count` | Admitted `block_info.block_count` / `fat32_volume.source.sectors`; distinct from the existing selected partition's block count. |
+| `MOUNT_STATE_IDENTITY_VALID` flag | Explicit validity in the OBSERVE contract/flags: zero, unavailable or unsupported facts must not be fabricated; clients refuse publication/replay without complete facts. |
+
+The UUID byte order is the existing on-disk GPT convention; the client uses the
+shared GUID formatting rules for normalized plan text. Names, paths, configured
+selectors and ordinal numbers never substitute for these fields. Kernel
+`kernel/fs/fat32.c` already cross-checks the admitted library volume against the
+healthy snapshot before publication; OBSERVE can copy the retained immutable
+volume/source data, not re-read raw media on each query. Preserve retired/failed
+state reporting, and never certify a tombstone as an active publication target.
+Metadata from a held directory must match the control's live domain; stable
+UUIDs remain logical target identity, not physical-device authentication.
+
+The public ABI and libpyxis helper validate the reply together. The client owns
+consumed file/catalog hashes and revision checks; those are not issuer facts.
+There is no new factory, selector, grant class or writer right.
+
+### Task 4 delivery — 2026-10-13
+
+[userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247) and
+[parent #786](https://git.internal/PyxisOS/pyxis-os/pulls/786) deliver shared typed
+validation/literal admission, catalog/marker deltas, declared scoped sources,
+frozen selection, replay and native FAT32 complete-set publication. They consume
+the merged bound identity ABI/helper (#790 / userland #249).
+The [reference](../userland/configuration-editor.md) describes the contract;
+the [scratch record](../../userspace/config-editor/qualification/README.md)
+distinguishes builds, source inspection, QEMU/GDB and remaining native limits.
+
+Confirmed edit/adoption, committed loading, replay, stale target/source/catalog
+refusal, required decline, explicit migrations, foreign-byte preservation and
+previous-set cleanup are scratch-qualified. A larger scratch volume exhausted
+the native publication lease and stopped with retained recovery; this cost is
+[debt](../technical-debt.md#configuration-publication-lease-cost), not permission
+to extend the lease or activate installed publication.
+
+No native media was touched. Installed startup, personal pool overrides and
+ordinary Install/Update remain unchanged; task 5 owns their activation. Normal
+Install/Update requires no prior `config` invocation or manual setup.
