@@ -531,6 +531,33 @@ existing init scripts is separate work after task 5 merges. Trusted bootstrap
 scripts retain their existing granted-script behavior. Bundle-interpreter
 shebangs are a [later direction](later-os-directions.md#lua-follow-ups).
 
+### Foreground script cancellation — owner decision required
+
+QEMU at parent `8cba734d` / userland `cef30297` confirmed that Ctrl+C kills the
+positional script but leaves its blocked `cat` and staging worker alive. The
+parent owns the armed console interval and supervises only its direct child;
+the script has READ alone. No POST occurred, but a surviving reader can consume
+later terminal input. Standalone delivery is not ready with this behavior.
+
+**Default:** a declared console-interrupt handoff for one foreground coordinator.
+The manifest requests input READ|INTERRUPT and a separately named initial armed
+interval. Preparation derives that interval from the caller's held console
+INTERRUPT authority before launch; no grant-adding command-name wrapper. After
+admission the parent transfers the interval without an unarmed startup gap and
+waits for the coordinator without terminating it independently. The script
+owns cancellation, terminates/collects every producer and worker, then propagates
+failure. Nested coordinators transfer ownership in the same way. Outside an
+active delegated job, ordinary interval handling resumes. Missing authority or
+an unsupported multi-stage handoff refuses before launch; no CREATE_GROUP,
+recursive kernel termination or new kernel ABI. Existing synchronous
+PREPARE/COMMIT waits keep their documented cancellation latency.
+
+**Alternative:** defer standalone delivery until scoped descendant cancellation
+is available; interactive requests remain usable, but task 5 stays incomplete.
+No implementation of this additional authority/lifetime change yet. Qualify
+actual Ctrl+C, surviving-task absence, nested handoff and startup interruption
+before declaring readiness.
+
 ### Baseline and delivery checks
 
 Captured before proposal edits, main `26c9e9ca`, pins userland `da098fd`,
