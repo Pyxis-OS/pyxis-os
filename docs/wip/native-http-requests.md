@@ -278,15 +278,15 @@ All three provider/adapter defaults accepted 2026-10-11; delivery is tasks 3–5
    `"w+"` adopts the response reader at its start rather than reading the body
    or issuing GET. Ordinary `fclose` and editor saves remain non-submitting.
 
-## Task 4 adapter decisions — proposed 2026-10-13
+## Task 4 accepted adapters — 2026-10-13
 
-Task 4 is assigned; implementation waits for these choices. TLS stays solely in
+All three defaults accepted by the owner; task 4 implementation assigned. TLS stays solely in
 the provider. Authority comes from declared namespace/resource/stream grants:
 no launch-site wrapper may add grants, widen a bundle request or provision a
 provider behind the caller's back. Missing POST preparation/private staging
 remains a refusal. Shell transaction coordination is task 5.
 
-1. **Explicit commit for staged stdio (default).** `"r"` opens a forward response;
+1. **Explicit commit for staged stdio .** `"r"` opens a forward response;
    `"w"` and `"w+"` prepare a POST and expose only its staged writer initially.
    Native libc and Lua helpers expose prepare/commit/status/abort. Commit flushes
    this FILE's pending output and refuses a failed/uncertain producer; it never
@@ -298,10 +298,8 @@ remains a refusal. Shell transaction coordination is task 5.
    other explicitly retained copies remain governed by the accepted lifetime.
    The ordinary URL-open deadline is one 30-second budget including staging and
    response consumption; explicit preparation accepts a longer absolute deadline.
-   **Alternative:** reject URL `"w+"` and require a separate request/response
-   object for every POST. The default delivers the accepted mode without hidden
-   submission; slow/manual staging needs an explicit longer deadline.
-2. **Paired declared standard-stream facets (default).** Extend launch/startup
+   Slow/manual staging needs an explicit longer deadline.
+2. **Paired declared standard-stream facets .** Extend launch/startup
    stream records with an optional, typed read-only observation companion, selected
    from the caller's declared grant list. HTTP response stdin carries STREAM READ
    plus HTTP STATUS-only observation, both with CALL transport; kernel/startup
@@ -311,10 +309,9 @@ remains a refusal. Shell transaction coordination is task 5.
    a response implicitly. Update all launch, bundle and job adapters together;
    pairing is supplied by the trusted handoff, not inferred from a name or numeric
    handle. Missing/failing final observation cannot establish successful completion.
-   **Alternative:** a separately declared named resource for stdin observation.
-   The default keeps its lifetime/association with the selected stream and avoids
-   accidental rebinding when stdin is replaced; neither option creates authority.
-3. **Stream URL GET, preserve URL policy, explicitly materialize (default).**
+   The pair keeps its lifetime/association with the selected stream; replacing
+   stdin never infers a companion or creates authority.
+3. **Stream URL GET, preserve URL policy, explicitly materialize .**
    Switch libc `fopen`/`open` HTTP reads to prepared streams. Keep the existing
    anonymous redirect rules, final URL/media type and errno mapping for ordinary
    URL opens; explicit prepared APIs retain complete HTTP error bodies/status.
@@ -327,9 +324,7 @@ remains a refusal. Shell transaction coordination is task 5.
    caller-owned destination staging file and publishes only after validated EOF
    and final status. Keep native FILE-only APIs honest: a URL needing seek/SIZE
    requires explicit caller-owned materialization; no universal legacy snapshot
-   fallback or implicit RAM/disk authority. **Alternative:** make every URL open
-   require the explicit prepared API for now. The default enables existing
-   sequential consumers while preserving grant and redirect policy.
+   fallback or implicit RAM/disk authority.
 
 ### Inspected consumer audit
 
