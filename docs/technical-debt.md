@@ -1728,10 +1728,14 @@ packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the 
 would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
 the [pointer quality task 2](wip/pointer-input-quality.md) adds opt-in queried
 absolute-W palm/typing rejection and two-finger scrolling. Native query geometry,
-physical-button/TrackPoint routing and authored contact tuning remain unqualified;
-default boots retain relative mode until the owner's full pass. Missing usable
+physical-button/TrackPoint routing and authored contact tuning are qualified on
+the owner's calibrated T14 by the 2026-10-13 runs, including #773 `fef995a7`
+EW/AGM secondary delivery, paired scroll/drag and good typing response.
+Other touchpad identities and tuning remain unqualified. Default boots still
+use relative mode pending the default-activation closure step. Missing usable
 geometry preserves relative touch motion, without claiming palm/scroll support.
-Revisit with the owner's native contact batch before enabling default-on.
+Revisit default activation at pointer task 2 closure and other hardware with
+its own queried geometry/contact evidence.
 [USB mice](devices/usb-hid.md) are independent sources; report-wheel and the
 reserved-ID boot-wheel paths are implemented, while other unknown extensions
 remain undecoded. Doom has no mouse support.

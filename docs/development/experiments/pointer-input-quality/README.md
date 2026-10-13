@@ -943,3 +943,25 @@ checks c5/EW admission, received AGM positions, typing, two-contact scroll,
 physical-click drag and palm/TrackPoint regressions. If AGM remains silent,
 confirm functional basic-W recovery and report its limitations separately.
 The owner still decides complete native qualification and default-on.
+
+### Owner EW/AGM native qualification — 2026-10-13
+
+Owner re-run of #773 `fef995a7`: "trackpad feels great now". The owner reports
+mode=0xc5, EW=1 and actual secondary packets: cumulative AGM positions climb
+324..629 across reported windows; an interval's usable/unusable/ambiguous/
+separated pairs are 125/2/0/34. Separated pairs and trampoline drag are active;
+basic-W fallback is unused. This confirms the corrected PS/2 format gate
+without requiring an SMBus/RMI4 driver. Log remains on horse at
+`~/shared/batch-2026-10-09/caelum-4.log`, from line 20193. These are owner-run
+observations, not local QEMU measurements or independent raw-log analysis.
+
+Combined with b4b4f594's calibrated extents, solid palms and working TrackPoint,
+and 1a07dcf4's good typing/movement, the native interaction check is complete.
+The latest diagnosis-off/Synaptics-only repeat is optional and not performed
+or claimed; bounded diagnostics are observational, with source and QEMU
+options-off checks recorded above. No fallback use is claimed from this run;
+its availability remains implementation evidence.
+
+Default activation is unchanged and opt-in while its closure gate is resolved.
+No dependency PR remains: userland #214 and ports #99 merged with task 1.
+Merge #773, then the reference close-out after the activation outcome is settled.

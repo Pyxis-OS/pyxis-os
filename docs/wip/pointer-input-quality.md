@@ -2,7 +2,9 @@
 
 Plan accepted 2026-10-10. Task 1 is merged (#716, userland #214, ports #99).
 Task 2 is assigned to Codex alpha (2026-10-11); baseline captured from fresh
-main `df7ec8ab`, decisions below accepted; opt-in implementation is assigned. Scope:
+main `df7ec8ab`, decisions below accepted. The owner qualified the calibrated
+EW/AGM interaction on 2026-10-13 at #773 `fef995a7`; activation remains opt-in
+pending resolution of the default-on gate before milestone close-out. Scope:
 USB relative mice and the ThinkPad's PS/2 Synaptics touchpad/TrackPoint, feeding
 one [system pointer](../interfaces/pointer.md#input-source-coordination).
 
@@ -230,8 +232,8 @@ unqualified, not claimed by closure.
 fresh main after #716, with the before-code baseline recorded. Default boots
 remain firmware-relative and mouse-class during qualification. Absolute touch
 and guest input use separate logical sources; physical holds/loss still follow
-the common coordinator. Native qualification and the accepted default-on change
-remain outstanding.
+the common coordinator. Native qualification is recorded below; the default-on
+gate remains outstanding before milestone closure.
 
 ## Task 2 accepted decisions (2026-10-11)
 
@@ -281,8 +283,8 @@ separate touchpad and guest sources; no public contact or raw-input interface.
 The first native record must establish identity/query bytes, physical switch
 routing and usable geometry, then qualify finger, palm, typing, lift/count
 transitions, physical drag and guest behavior. Luna stages owner-run builds;
-no native hardware was touched in the baseline. Native qualification is still
-pending.
+no native hardware was touched in the baseline. The owner's native qualification
+is recorded below.
 
 Implementation uses `ps2.synaptics=1` to qualify basic W and
 `ps2.synaptics.diagnose=1` for bounded info-level query/contact summaries.
@@ -343,8 +345,11 @@ commands and button routing are unchanged until a re-run establishes a need.
   packets and zero transport resets. The owner also booted Synaptics-only and
   the standard entry. The eight-unit Y endpoint difference does not justify
   changing queried bounds or the authored calibration.
-- [ ] Qualify the owner-requested typing, close-finger scroll and trampoline
-  corrections below. Default-on remains gated on the complete native pass.
+- [x] Qualify the owner-requested typing, close-finger scroll and trampoline
+  corrections: owner run `fef995a7`, 2026-10-13, recorded below.
+- [ ] Resolve default activation before milestone close-out; current activation
+  stays opt-in. The original accepted contract enables the qualified profile
+  after the complete pass; later follow-up records retain a separate owner gate.
 
 ### Native interaction corrections — owner requirements 2026-10-13
 
@@ -414,9 +419,14 @@ No secondary width is reported by AGM; keep existing available palm hints,
 edge policy and until-lift loss quarantine, rather than inventing width.
 
 - [x] Implement the accepted interaction correction and record tuning.
-- [ ] Owner/luna short re-run: AGM positions, typing response, close/separated
-  fingers, trampoline drag, palm/TrackPoint regression and diagnosis-off repeat.
-  Native qualification and default-on remain separate owner gates.
+- [x] Owner/luna short native re-run `fef995a7`, 2026-10-13: mode c5/EW on,
+  arriving secondary packets, usable/separated pairs and trampoline drag; owner
+  reports "trackpad feels great now". Earlier calibrated native runs established
+  palms/TrackPoint, and the preceding run established good typing/motion.
+  The diagnosis-off (`ps2.synaptics=1` only) repeat is optional, not performed
+  in this latest run and not claimed. Diagnostics are observational and gated;
+  source inspection and options-off QEMU checks establish that boundary.
+  Default activation remains a separate unresolved closure step.
 
 ### Missing secondary packets — native failure, 2026-10-13
 
@@ -463,8 +473,26 @@ immediate basic-W fallback. This explicitly supersedes the earlier accepted
 secondary packets, and pinned Linux enables bit 2 on this firmware before AGM.
 The initial no-EW interpretation was wrong. Other basic-W devices retain c1;
 guest negotiation/decoding and the approved typing policy are unchanged. No
-SMBus driver is introduced. Default activation remains off; native positive
-EW delivery and the full interaction pass are still required.
+SMBus driver is introduced. Default activation remains off. The owner confirmed
+native EW delivery and the interaction pass below.
+
+### Native EW/AGM qualification — 2026-10-13
+
+Owner run on the ThinkPad, #773 `fef995a7`: "trackpad feels great now".
+The owner reports the UDP log confirms mode `0xc5`, EW=1 and arriving AGM
+positions, increasing 324..629 across reported windows. One interval's
+usable/unusable/ambiguous/separated pairs are `125/2/0/34`; separated pairs and
+trampoline drag are active, and basic-W fallback is unused. This establishes
+real secondary delivery and pair processing, rather than only acknowledged
+activation. Log stays on horse at `~/shared/batch-2026-10-09/caelum-4.log`,
+from line 20193; no raw logs or serials are committed.
+
+Together with the earlier calibrated/palm/TrackPoint and typing/motion runs,
+this completes task 2's native check. A diagnosis-off repeat is optional and
+not claimed for this head. Merge #773 directly; it changes no dependency pins.
+Task 1's userland #214 and ports #99 are already merged. WIP-to-reference
+close-out follows #773 and resolution of default activation, not an unreviewed
+activation change in this qualification record.
 
 ## Qualification and tuning
 
