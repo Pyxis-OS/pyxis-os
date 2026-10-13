@@ -78,6 +78,12 @@ natively on the ThinkPad: the [kernel writer](../devices/filesystem-native-adapt
 the [native installer](../userland/installer.md), [system updates](../userland/system-updates.md)
 and [USB installation](../devices/usb-installation.md).
 
+[Pointer input quality](../devices/pointer-input-quality.md), 2026-10-13:
+report-protocol USB mice/shared scroll (#716), calibrated Synaptics EW/AGM palms,
+typing, paired scroll/physical drag (#739/#773), and calibrated-profile-only
+default activation. Owner T14 qualification passes; other profiles, USB axes
+and terminal application reporting remain in technical debt.
+
 [Presentation timing and pacing](presentation-timing.md), 2026-10-09: RAM staging
 and the completed-frame handoff (#610, #618); step 3 is unassigned.
 

@@ -328,7 +328,8 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
   }
   setup->step = "Synaptics inventory";
   if (!read_inventory(setup)) {
-    return recover_relative(setup, false, "inventory query failed");
+    /* No absolute mode was entered; unqualified pads retain legacy motion. */
+    return recover_relative(setup, true, "inventory query failed");
   }
   if (diagnostics) {
     klog("synaptics: firmware=%u.%u newabs=%u W=%u clickpad=%u ext-buttons=%u pass-through=%u ext-stick-buttons=%u\n",
@@ -342,8 +343,11 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
          profile.x_resolution, profile.y_resolution, inventory.geometry,
          inventory.calibrated_geometry ? "owner-measured-T14-102x70" : "queried");
   }
-  if (!activate) {
-    /* Diagnosis alone leaves the same relative defaults and wheel probe path. */
+  if (!activate || !inventory.calibrated_geometry) {
+    /* Only the calibrated fingerprint has native absolute qualification. */
+    if (diagnostics && activate) {
+      klog("synaptics: no matching calibrated profile; restore ordinary PS/2\n");
+    }
     return mouse_ps2_reset(setup) && set_mode(setup, 0) ?
            SYNAPTICS_NOT_DEVICE : SYNAPTICS_UNAVAILABLE;
   }

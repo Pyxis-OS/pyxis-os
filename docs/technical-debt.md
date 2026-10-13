@@ -452,10 +452,19 @@ Revisit each when a concrete consumer or native device needs it.
 ## Pointer gestures and alternative transports
 
 The pointer has no pinch, swipe/rotation, momentum or explicit touch-contact API.
-The [pointer quality proposal](wip/pointer-input-quality.md) keeps these separate,
+The [pointer quality reference](devices/pointer-input-quality.md) keeps these separate,
 with tapping off and no new I2C-HID/RMI4 transport. Revisit gesture/contact work
 for a concrete consumer, or another transport if native PS/2 capabilities cannot
 meet the palm/two-finger contract. USB gamepads/Deck mode switching remain later work.
+
+## Terminal mouse input reporting
+
+Shared scroll events are available, but local TTY, mux and remote terminal do
+not yet deliver xterm modes 1000/1002 and SGR 1006 mouse reporting to terminal
+programs. Links does not request terminal mouse input and Neovim disables it;
+device qualification does not establish application wheel behavior. Revisit in
+the separate terminal input-reporting task, with explicit modes, selection
+interaction and matching local/mux/remote qualification.
 
 ## VirtIO cursor frontend limits
 
@@ -1804,17 +1813,19 @@ hardware is available, keeping trust claims separate from the health and RFC che
 
 The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's always-set bit, so a byte lost inside the device can give wrong motion or buttons for a few
 packets, and its IRQ 12 route must share the keyboard's I/O APIC (otherwise the mouse is unavailable). Reconsider if native packets show drift a short inter-byte timeout
-would catch, or a target routes IRQ 12 elsewhere. The ThinkPad touchpad stays in firmware relative mode without scrolling or multi-finger input and TrackPoint motion arrives mixed into that stream;
-the [pointer quality task 2](wip/pointer-input-quality.md) adds opt-in queried
-absolute-W palm/typing rejection and two-finger scrolling. Native query geometry,
+would catch, or a target routes IRQ 12 elsewhere. The calibrated T14's
+[pointer input](devices/pointer-input-quality.md) now defaults to absolute EW/AGM
+palm/typing rejection and paired scrolling, with TrackPoint as a separate source.
+Native query geometry,
 physical-button/TrackPoint routing and authored contact tuning are qualified on
 the owner's calibrated T14 by the 2026-10-13 runs, including #773 `fef995a7`
 EW/AGM secondary delivery, paired scroll/drag and good typing response.
-Other touchpad identities and tuning remain unqualified. Default boots still
-use relative mode pending the default-activation closure step. Missing usable
-geometry preserves relative touch motion, without claiming palm/scroll support.
-Revisit default activation at pointer task 2 closure and other hardware with
-its own queried geometry/contact evidence.
+Other touchpad identities and tuning remain unqualified and stay relative,
+even when queries supply usable geometry; ps2.synaptics=1 cannot bypass the
+calibrated-profile gate. ps2.synaptics=0 forces relative on all pads. Without
+matching calibration, relative input does not qualify palm/scroll support.
+Revisit admission of another profile with that hardware's native query,
+geometry and contact evidence; never infer square units from one axis.
 [USB mice](devices/usb-hid.md) are independent sources; report-wheel and the
 reserved-ID boot-wheel paths are implemented, while other unknown extensions
 remain undecoded. Doom has no mouse support.
