@@ -4,8 +4,9 @@ Owner-assigned planning, 2026-10-11. This is the
 [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting):
 compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
 and running the [ports runner](source-builds.md) come later. Tasks 1–4 are qualified: both native target links complete and default
-single-source `-c` runs on Pyxis in 1/4-CPU QEMU. Installed tools, standalone LLD
-execution and native-hardware budgets remain task 5, which is not assigned.
+single-source `-c` runs on Pyxis in 1/4-CPU QEMU and passed the native owner check.
+Task 5 is owner-assigned (2026-10-13); its installation, authority and capacity
+choices below remain proposed. No task 5 implementation has started.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -42,7 +43,7 @@ remain later work.
 
 Tasks 1–3 left the then-installed fork pin (`49e2c1a`) unchanged. Gate 7 later
 adopted their merged fork work in `2d234435`. Task 4 has an explicit go;
-task 5 still needs its own separate assignment.
+task 5 has its own owner go, with pre-implementation decisions below.
 
 1. [x] **LLVM Support platform and header fixes** (2026-10-11): fork
    [PR 4](https://git.internal/PyxisOS/pyxis-llvm/pulls/4), Pyxis #708.
@@ -139,7 +140,60 @@ revision check and workflow image tag together under the
 [single compiler/SDK source-pin contract](../development/llvm-toolchain.md#changing-the-pin).
 This is source adoption, not a new codegen/TLS ABI requirement. Ordinary CI
 consumes the published image without rebuilding LLVM. Userland #242 and Pyxis
-#763 are merged; the adopted head passed exact-head CI. Task 5 still needs a go.
+#763 are merged; the adopted head passed exact-head CI. Task 5 is assigned;
+its implementation waits for the decisions below.
+
+### Task 5 pre-implementation proposal (2026-10-13)
+
+Build repeatable native Clang/LLD bundle payloads against the current SDK, publish
+them on a pool volume, and qualify compile, separate link and execution of the
+same small C program. Keep compiler payloads out of the boot archive. The
+existing fork already supplies the source closure; no new compiler image is
+currently required. If execution reaches a required fork change, publish its
+exact source/adoption branch and owner build/push commands before adopting it.
+
+**Baseline pending, before implementation:** current main `d3bc9b5a`, current
+SDK and temporary bundles; repeated version/startup, hello `-c`, separate LLD
+link and resulting PXE launch, plus diagnostics and memory accounting. Keep
+unprofiled elapsed timings separate from debugger observations. Repeat matched
+1/4-CPU QEMU configurations; native samples come through the owner. The owner's
+"instant" compile/extraction observation is qualitative, not a timed baseline.
+
+Three decisions, **proposed defaults; stop for owner review**:
+
+1. **Publication:** opt-in host-built bundle payloads on a separately prepared
+   npfs `toolchain` volume, under immutable revision directories, using existing
+   formatting/mounting facilities. Launch by explicit `toolchain://` bundle URI
+   first. Do not add these large payloads to ordinary image/boot-archive staging,
+   a package manager or a generic installer/updater in this task. Qualification
+   uses a disposable pool; native storage selection/publication stays an owner
+   action. Alternative: assign a narrow installer import action now, using its
+   existing volume-create and mount authority without reformatting the pool.
+2. **Tool profile:** two self-contained bundles, Clang and standalone LLD, each
+   with the current matching SDK resources, an 8 MiB guarded stack and declared
+   `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`. Source
+   and output use selected ordinary roots; app/resource roots are read-only.
+   Neither tool receives a launcher. Preserve real workers-off runtime code,
+   default integrated cc1 and inherited diagnostics. Alternative: share one SDK
+   root through explicit space configuration instead of self-contained bundles.
+3. **Capacity/qualification:** preserve the 128 MiB image/256 MiB span ceilings
+   and existing honest allocation refusal; no new heap quota or profiling ABI.
+   Record actual images, eager stacks, staging coexistence and process-backed
+   memory from existing debugger/accounting tools, separately from elapsed time.
+   Do not call sampled memory an exact peak or settle a working-memory budget
+   without a native bound. If native peak is not observable with existing tools,
+   stop with that limitation and a bounded measurement proposal. Exercise
+   invalid inputs, denied output and constrained-memory refusal without allocator
+   fault injection. Alternative: authorize narrowly scoped measurement support
+   first if exact native peak requires it.
+
+**Queued after task 5 merges:** the owner auto-assigns driver-invoked LLD. Its
+proposal must decide whether a single direct child can satisfy the REQUIRED
+[nested-group direction](nested-execution-groups.md), or those groups must land
+first. Today's groups are flat and the [native job core](../userland/native-jobs.md)
+rejects descendant launchers; same-group launch alone does not implement the
+required subgroup lifetime. Do not work around this with a broker/executor or
+authority wrapper, and do not start that task during task 5.
 
 ## Resources and native limits
 

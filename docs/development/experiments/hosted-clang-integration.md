@@ -157,6 +157,7 @@ The first command completed silently with a non-empty `hello.o`. The second
 reported `bad.c:3:11: error: expected ';' after return statement`, with a caret
 and semicolon fix-it; the shell reported exit status 1 and no `bad.o` remained.
 No fault or panic occurred, and the shell kept working. Task 4's native owner
-check passed. Object header/hash, compile time and peak memory were not measured;
+check passed. The owner described compilation and tar extraction as "instant";
+this was not timed. Object header/hash, compile time and peak memory were not measured;
 performance/resource measurements, standalone LLD execution and installation
-remain task 5, which still needs a separate owner go.
+remain task 5, now owner-assigned with pre-implementation decisions pending.
