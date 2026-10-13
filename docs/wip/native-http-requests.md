@@ -519,7 +519,9 @@ loader or public `shell.pxb` in this slice.
 owner. No console-interrupt handoff. QEMU proved that terminating the prototype
 script left its blocked producer and worker alive, with the producer retaining
 console input; no POST occurred. The positional code is removed from 5a and
-preserved in a separate draft follow-up.
+preserved in [draft userland #250](https://git.internal/PyxisOS/pyxis-userland/pulls/250)
+and [draft parent #792](https://git.internal/PyxisOS/pyxis-os/pulls/792), based on
+#789. Subgroup ownership integration and required qualification remain pending.
 
 In 5b, the script owns a subgroup containing its producers and worker; stopping
 the script must stop that whole subtree. Required declared memory, clock,
