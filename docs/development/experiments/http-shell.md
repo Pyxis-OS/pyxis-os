@@ -32,9 +32,9 @@ via `cp boot://share/iobench.bin tmp://http5-ram.bin`, monotonic timing around
 explicit flush/commit and complete response/status. Every payload/EOF/hash check
 passed; one untimed warmup each. No clock costs subtracted or isolated spawn cost
 claimed. Unrelated host compiler load produced broad ranges: these initial
-samples do not establish worker overhead/savings. The matched worker comparison
-still needs interleaved runs in one window, identical producer/backing/data/CPU
-configuration; Lua w+ remains direct and must not be labelled a worker path.
+samples do not establish worker overhead/savings. The interleaved comparison
+below uses identical producer/backing/data/CPU configuration in one quieter
+window; Lua w+ remains direct and must not be labelled a worker path.
 
 ## Matched worker costs and GET control
 
