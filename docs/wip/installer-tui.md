@@ -256,7 +256,7 @@ kernel configuration model is proposed.
 
 ## Task 4 baseline and decisions — 2026-10-13
 
-Task 4 only; no code yet. Native FAT32 read/write mounts and the raw writer are
+Task 4 only; the functional baseline preceded implementation. Native FAT32 read/write mounts and the raw writer are
 implemented. Epsilon owns the task-5 mount workflow/ESP views; this consumer must
 share its binding, exclusion and lifetime rather than create a second mount
 workflow. Grant names/provisioning have been requested through the orchestrator.
