@@ -282,8 +282,9 @@ This libc saves only the callee-saved integer registers, stack pointer and retur
 address; it adds no signal-mask handling or kernel context-switch interface.
 
 The `<math.h>` subset provides `floor`, `floorf`, `ceil`, `ceilf`, `round`, `roundf`, `trunc`,
-`rintf`, `lrint`, `lrintf`, `llrintf`, `modf`, `fmod`, `fmodf`, `pow`, `powf`,
-`exp`, `expf`, `expm1`, `log`, `logf`, `log10`, `log10f`, `sqrt`, `sqrtf`, `sin`,
+`rint`, `rintf`, `lround`, `lrint`, `lrintf`, `llrintf`, `modf`, `fmod`, `fmodf`, `pow`, `powf`,
+`exp`, `expf`, `exp2`, `expm1`, `log`, `logf`, `log10`, `log10f`, `log2`,
+`log2f`, `logb`, `ilogb`, `log1p`, `erf`, `erfc`, `sqrt`, `sqrtf`, `sin`,
 `sinf`, `cos`, `cosf`, `tan`, `tanf`, `asin`, `acos`, `acosf`, `atan`, `atanf`,
 `atan2`, `atan2f`, `sinh`, `cosh`, `tanh`, `frexp`, `ldexp`, `scalbn`, `fabs`, `fabsf`, `scalbnl`, `ldexpl`,
 `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources,
@@ -291,7 +292,9 @@ and POSIX's `M_*` constants with musl's values. The `isnan` and `isinf` macros
 classify any real floating type through compiler builtins; the other C
 classification macros are not provided. The `rint` family rounds in the
 current rounding mode. `round` and `roundf`
-round halfway cases away from zero. `sqrt` and `sqrtf` use SSE2 `sqrtsd` and
+round halfway cases away from zero; `lround` follows the same rounding and may
+raise inexact for fractional input. Its integer result is unspecified for NaN,
+infinity or an out-of-range value; this is not an Annex F promise. `sqrt` and `sqrtf` use SSE2 `sqrtsd` and
 `sqrtss`; the trigonometric functions take radians and reduce
 arguments of any magnitude exactly modulo pi/2. They are in libc and need no `-lm`. The SDK uses SSE2
 float/double evaluation and x87 80-bit long double. `floor` rounds downward;

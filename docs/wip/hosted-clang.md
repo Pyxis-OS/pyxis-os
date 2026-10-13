@@ -3,9 +3,9 @@
 Owner-assigned planning, 2026-10-11. This is the
 [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting):
 compile, link and run a small C program inside Pyxis. Rebuilding LLVM itself
-and running the [ports runner](source-builds.md) come later. No hosted compiler
-has run yet: tasks 1-3 deliver Support, C++ and libc prerequisites, and the
-target Clang/LLD link waits on the thread gates.
+and running the [ports runner](source-builds.md) come later. Tasks 1–4 are qualified: both native target links complete and default
+single-source `-c` runs on Pyxis in 1/4-CPU QEMU. Installed tools, standalone LLD
+execution and native-hardware budgets remain task 5, which is not assigned.
 
 ## Accepted owner decisions (2026-10-11)
 
@@ -23,30 +23,26 @@ target Clang/LLD link waits on the thread gates.
 
 ## Process boundary
 
-**Inspected in the pinned fork** (LLVM `49e2c1a1518b`): `-fintegrated-cc1 -c`
-with one source and integrated assembly runs cc1 in-process.
-`clang/lib/Driver/Driver.cpp:5562` disables integration for multiple jobs or
-process statistics, so source-to-executable and multiple-source invocations
-still launch cc1 externally. `clang/lib/Driver/ToolChains/Pyxis.cpp:96` creates
-an external LLD `Command`; `-fuse-ld=lld` does not embed the linker. The first
-completion keeps compilation and native LLD launch separate.
+**Inspected in the current fork:** default integrated cc1 and integrated assembly
+run one source `-c` in-process. Multiple jobs or process statistics disable cc1
+integration; the Pyxis toolchain constructs an external LLD command rather than
+embedding LLD. The native fork already disables child crash helpers and recovery:
+a fatal compiler/library fault terminates the process. Task 4 keeps these policies.
 
-The driver launching LLD or external cc1 requires
-[nested execution groups](nested-execution-groups.md), a parked required direction
-for contained descendant execution. It does not change the accepted first
-completion: the caller compiles one source and separately invokes LLD.
-
-`lldMain` in `lld/include/lld/Common/Driver.h` is the later library-entry route;
-embedding must respect `canRunAgain`, context cleanup and fatal-exit containment.
-Integrated cc1 enables signal-based crash recovery
-(`clang/tools/driver/driver.cpp:384`). The native adaptation must make faults
-terminate the process, without continuing after a fatal compiler/library failure.
-This is not permission to add crash helpers or start embedding work.
+**Owner requirement (2026-10-12), not an assigned design:** Clang must eventually
+invoke LLD itself (`clang hello.c -o hello`). Task 5 or a follow-up must provide
+that through declared launch grants, the
+[native command-execution core](native-command-execution.md) and the
+[nested execution groups direction](nested-execution-groups.md), never a wrapper.
+Task 4 retains its no-launcher profile; first completion still permits separately
+launching LLD. General multi-job execution and reusable embedded compilation
+remain later work.
 
 ## Parallel delivery tasks
 
-This line proceeds alongside delta's threads gates 5–8. Tasks 4 and 5 need
-separate go-aheads. The installed fork pin (`49e2c1a`) is unchanged by tasks 1-3.
+Tasks 1–3 left the then-installed fork pin (`49e2c1a`) unchanged. Gate 7 later
+adopted their merged fork work in `2d234435`. Task 4 has an explicit go;
+task 5 still needs its own separate assignment.
 
 1. [x] **LLVM Support platform and header fixes** (2026-10-11): fork
    [PR 4](https://git.internal/PyxisOS/pyxis-llvm/pulls/4), Pyxis #708.
@@ -58,16 +54,20 @@ separate go-aheads. The installed fork pin (`49e2c1a`) is unchanged by tasks 1-3
    locale, wide FILE/UTF-8 closure and `getentropy`-backed `random_device`;
    see [C++ in userspace](../development/cxx-userspace.md) and
    [hosted-clang-cxx](../development/experiments/hosted-clang-cxx.md).
-   Ordinary SDK adoption waits for the owner-built container (below).
 3. [x] **Remaining reached libc operations** (2026-10-11): userland
    [#217](https://git.internal/PyxisOS/pyxis-userland/pulls/217), Pyxis #718.
    Disposition of absent names and the 155/170 Support compile inventory are in
    [hosted-clang-libc](../development/experiments/hosted-clang-libc.md).
-4. [ ] **Thread-gated compiler/linker integration.** After delta's tasks 5–8 and
-   its audited C++ adapter land, build the real Clang/LLD closure with LLVM workers
+4. [x] **Thread-gated compiler/linker integration — qualified 2026-10-12.** Threads
+   gates 5–8 and the audited C++ adapter are merged. Build the real Clang/LLD closure with LLVM workers
    off, static TLS and real runtime primitives. **Owner check:** both target links
    complete; compile one default single-source `-c`, with diagnostics/failure exit
-   and no child crash helper. No serial-only source adaptation.
+   and no child crash helper. No serial-only source adaptation. Fork
+   [#7](https://git.internal/PyxisOS/pyxis-llvm/pulls/7), userland
+   [#242](https://git.internal/PyxisOS/pyxis-userland/pulls/242), integration
+   [#763](https://git.internal/PyxisOS/pyxis-os/pulls/763);
+   [build and QEMU/GDB record](../development/experiments/hosted-clang-integration.md).
+   Production adopts the merged fork and its owner-published compiler image.
 5. [ ] **Installed tools and first completion.** Pool-volume bundles delegate
    explicit resource/sysroot roots, scratch/output authority and launcher rights
    only where needed. Measure native image/span/stack/peak memory before settling
@@ -75,31 +75,62 @@ separate go-aheads. The installed fork pin (`49e2c1a`) is unchanged by tasks 1-3
    LLD, run its PXE; rejected inputs and exhausted budgets fail honestly. Record
    repeated startup/compile/link costs and native versus nested-QEMU limits.
 
-### Open gaps for task 4
+### Qualified task 4 closure
 
-Source inspection of the pinned fork, relative to the
-[LLVM source](https://git.internal/PyxisOS/pyxis-llvm/src/commit/49e2c1a1518b3e4687b52ceb6001069c1b6d261e).
+Source inspection of the current
+[pinned fork](https://git.internal/PyxisOS/pyxis-llvm/src/commit/4c23a208a023007024a1b4ff32e5d9cd8733cf1c).
 
 | Area | Boundary and work |
 | --- | --- |
-| C++ synchronization/TLS | `ThreadPool.h:97–117` instantiates `shared_future`/deferred `async` outside its threads guard; `Parallel.h:61–85` declares mutex/condition-variable state; `lld/Common/Memory.h:68` uses `thread_local`. These wait for delta's gates 5–8 and the C++ adapter audit at gate 8, even with `LLVM_ENABLE_THREADS=OFF`. The 15 Support units that still fail are listed in [hosted-clang-libc](../development/experiments/hosted-clang-libc.md#compile-and-symbol-inventory). LLD `Filesystem.cpp:78–109` also uses detached `std::thread` for unlink: give that helper an honest synchronous or joined lifetime, not unsupported detach or a serial-only compiler substitute. |
-| Metadata consumers | Task 4's full build must adapt each remaining consumer of unknown metadata without replacing unknown values with zero or unchecked optional dereferences ([LLVM Support](../development/llvm-support.md#paths-and-inputs)). |
-| Randomness/sleep | `LockFileManager.cpp:298` uses backoff; disable unsupported lock/module-cache features explicitly. No deterministic entropy or successful file-lock placeholder. |
-| Retained-handle, memory, stack budgets | Need actual native compiler artifacts (task 5); see Resources below. |
+| C++ synchronization/TLS | `ThreadPool.h` still instantiates genuine deferred futures; `Parallel.h` has mutex/condition state and LLD uses `thread_local`. Gate 8 supplies the real primitives; task 4 links the genuine closure and observes native TLS/mutex use. General detached async remains outside the profile. Pyxis LLD unlink is already synchronous in the current pin. |
+| Metadata consumers | ASTReader/Writer, PrecompiledPreamble, ModuleCache, the driver module-session path and CodeGenModule retain deleted unconditional metadata accessors. Fork #7 captures the full inventory and adapts supported operations through checked optionals, preserving explicit cache refusals; no fake zero values or unchecked dereferences ([LLVM Support](../development/llvm-support.md#paths-and-inputs)). |
+| Existing refusals | Module locking, PCH/modules/preambles and child crash helpers already refuse in the current fork. Preserve those policies; default integrated cc1 is already configured. |
+| Native image and stack | Clang 90,335,834-byte P1F / 90,927,104-byte span; LLD 55,731,474 / 56,340,480. Temporary Clang requests 8 MiB stack; both fit existing ceilings. Installed heap/handle/native-hardware budgets remain task 5. |
+
+### Accepted task 4 qualification defaults (2026-10-12)
+
+The [pre-code baseline](../development/experiments/hosted-clang-integration.md)
+is captured before compiler source changes. These defaults authorize task 4
+qualification; installed tools still require a separate task 5 go.
+
+1. **Resource defaults.** A temporary unpacked development Clang bundle contains
+   read-only `clang_resources` and `sysroot` directories. Configure only the hosted
+   build with `CLANG_RESOURCE_DIR=clang_resources://` and
+   `DEFAULT_SYSROOT=sysroot://`. Qualification is ordinary
+   `clang -c SOURCE -o OUTPUT`, without discovery from executable text or a launch
+   wrapper. Build the real X86 Clang and standalone LLD closure; both target links
+   must complete, but LLD execution and installed-tool registration stay in task 5.
+2. **Declared authority.** The manifest requires `memory/manage`, `threads/manage`,
+   `clock/read,sleep` and `random/read`, with inherited diagnostics and no launcher
+   grant. Read-only source and writable scratch/output come from a minimal declared
+   qualification-space configuration (`boot://`/`tmp://`), with output named
+   explicitly. Existing manifests preserve caller-selected directory roots; this
+   does not claim bundle confinement of inherited roots. No call-site grant wrapper
+   or new external-directory request API. Stage the temporary bundle on an existing
+   development pool/HOST path, outside the boot archive; this is not installation.
+3. **Provisional qualification capacity.** Clang requests an eager guarded 8 MiB
+   bundle stack. Preserve the existing 128 MiB serialized-image and 256 MiB mapped
+   span ceilings. Inspect actual P1F segments/BSS and staging coexistence before
+   booting; initially use a 2 GiB QEMU guest, adjusting the test configuration from
+   measured artifacts without promising a heap/handle admission budget. If an image
+   exceeds an existing ceiling, stop with its measured size rather than lifting
+   the ceiling. Installed budgets and native capacity qualification remain task 5.
 
 ### Compiler-container boundary
 
-Tasks 1-3 leave the installed pin unchanged. Their Support/header and libc++
-changes are fork PRs, not ports-only patches. **Before a parent PR adopts the new
-fork pin**, the owner must build/publish the matching compiler container and the
-PR must update `toolchain/build.sh`, `ci/Containerfile`, workflow image tag and
-[toolchain documentation](../development/llvm-toolchain.md#changing-the-pin)
-together. Ordinary SDK configuration or libc edits alone need no container
-rebuild. Coordinate the chosen fork head with delta's gate 7 TLS change to avoid
-publishing incompatible compiler/runtime pins. Gate 7 adoption pins fork #6 at
-`2d2344355c6825f3293e026aafe185c5632abfdb`, including merged fork #5;
-its matching owner-published image is `pyxis-llvm23.1.3-2d23443`. It provides
-static TLS, not the remaining gate 8 synchronization/C++ audit.
+Local task 4 qualification uses the existing `pyxis-llvm23.1.3-2d23443` image
+and its matching C++ runtime source. It already generates the required code;
+math additions alone need no new container. Fork #7 supplies the remaining
+native source closure at `4c23a208a023007024a1b4ff32e5d9cd8733cf1c`.
+
+The owner built and published `pyxis-llvm23.1.3-4c23a20` from the prepared
+adoption commit `efcc309a`. Fork #7 merged at the exact qualified source SHA,
+so no further image rebuild is needed. Integration adopts that pin, Containerfile
+revision check and workflow image tag together under the
+[single compiler/SDK source-pin contract](../development/llvm-toolchain.md#changing-the-pin).
+This is source adoption, not a new codegen/TLS ABI requirement. Ordinary CI
+consumes the published image without rebuilding LLVM. Remaining merge order:
+userland #242, then Pyxis #763 after exact-head CI. Task 5 still needs a go.
 
 ## Resources and native limits
 
