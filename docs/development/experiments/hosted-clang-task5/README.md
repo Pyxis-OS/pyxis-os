@@ -1,10 +1,9 @@
 # Hosted Clang task 5
 
-Status: implementation and current `6bc3a009` SDK/1/4-CPU QEMU qualification
-complete, 2026-10-13; native owner check/measurements pending.
-No native task 5 performance or peak measurements yet; the earlier "instant" compile/extract
-observation is qualitative. Task 5 uses the accepted separate npfs toolchain
-volume and no-launcher bundles; owner/luna handle native staging and runs.
+Status: implementation, current `6bc3a009` SDK/1/4-CPU QEMU qualification and
+native owner check/measurements complete, 2026-10-13. Task 5 uses the accepted
+separate npfs toolchain volume and no-launcher bundles. The owner/luna performed
+native staging and runs; delta's local probe stays unmerged.
 
 ## Before implementation (`0e95af3a`)
 
@@ -123,8 +122,8 @@ that loader failure is excluded from kernel qualification.
 
 Exact probe configuration, GDB observations, raw logs and native field
 interpretation are in `probe-qualification.txt` beside the patch. All owned
-probe QEMU/GDB/client/virtio-fs jobs are stopped. Native measurements and the
-production pool payload's native qualification remain pending.
+probe QEMU/GDB/client/virtio-fs jobs are stopped. Native measurements and pool
+qualification were still pending at this historical checkpoint.
 
 ## First production payload (`0e95af3a`)
 
@@ -194,7 +193,8 @@ The binaries/runtime are identical; storage backend and placement differ, so
 this is not an isolated producer/source performance A/B. Version alone is slow;
 launch/storage costs need native measurement before compiler-cost attribution.
 The existing [npfs cache/I/O limits](../../../technical-debt.md#native-mount-design-limits)
-remain; no storage optimization or throughput claim is part of this task.
+remain; these nested wall times do not benchmark storage throughput. No
+storage optimization is part of this task.
 Keep first/cold samples and variation. The two negative-input tables use
 different inputs and must not be compared as matched diagnostics workloads.
 
@@ -225,8 +225,8 @@ geometry adjusted/verified for its real last LBA. No compiler-container rebuild.
 The run sheet separates ordinary main/PR PXE timing/checks from a clearly
 labelled patch-based probe build, with paired VM-ID peak/cleanup and separate
 capture records. Nothing has been staged or run on physical hardware by delta.
-Task 5 stays unchecked until the owner returns native compile/link/run and
-properly labelled time/peak evidence. Arbitrary C/C++/LTO, started-tool malloc
+At this superseded checkpoint task 5 awaited native compile/link/run and
+properly labelled time/peak evidence; the current results follow below. Arbitrary C/C++/LTO, started-tool malloc
 exhaustion and actual stack high-water bounds remain unqualified.
 
 ## Current-main integration refresh
@@ -285,7 +285,8 @@ Current owner run sheet, prepared data image/configs/commands, checksums and
 full ordinary qualification evidence:
 `/shared/present/batch2/hosted-clang-task5/native/README.md`.
 Use this current revision/runtime, not `previous-0e95-native`. No physical
-media has been written or staged by delta; native checks remain pending.
+media has been written or staged by delta; the owner used this handoff for
+the native qualification below.
 
 The identical authorized counter changes apply on the new base, in a separate
 local probe `8e2b5de9aaebfe92e57bc00932b203ac9476d051`, never merged. Current patch:
@@ -328,5 +329,82 @@ initrd `578f93d76f57b0cc17f5c3fda73f7c1da4726b9d9f921183e3c4c84959a009b4`.
 These supersede the never-run virtio-fs preparation ISO. Full artifacts/logs:
 `probe-current/probe-current-record.txt` beside the patch. All owned QEMU/GDB/client jobs are stopped; the read-only disk
 hash remains unchanged. Metric/exclusions remain those specified above.
-Native compile/link/run, uninstrumented wall samples and separately labelled
-peak measurements remain the owner/luna action before task 5 completion.
+Native results follow; the probe remains outside shipping code.
+
+## Native owner qualification (2026-10-13)
+
+[Owner report](https://git.internal/PyxisOS/pyxis-os/pulls/772#issuecomment-9779),
+approximately 13:20–13:40: ThinkPad T14 Gen 1 AMD, PXE, ordinary source
+`9887dc48` with private consumer archive. USB 3.2 Gen1 SanDisk toolchain stick
+prepared from the qualified data image, SHA-256 `3043ea06…`, verified GPT GUID
+and `mount.disk` configuration. Payload revision, source/SDK, declared grants
+and full expected object/PXE hashes are those recorded above.
+
+Clang reports 23.1.3 (`4c23a208`), target `x86_64-unknown-pyxis`. Hello compile
+and separately launched LLD exit 0; the resulting PXE prints `hello 5`.
+Object/PXE hashes match QEMU exactly. Missing-semicolon input reports the
+diagnostic, caret and fix-it, exits 1 and leaves no object. Both tools refuse
+read-only toolchain outputs with permission diagnostics/exit 1; LLD rejects C
+source as `unknown directive: int`, exit 1/no output. FINAL is shell_exit,
+exited 0, drain complete. Real low-memory admission/rollback remains the
+separately labelled QEMU qualification, not a native exhaustion claim.
+
+Uninstrumented host `date` around one machine-mode remote session, three serial
+samples per workload; empty-session overhead 0.006–0.008 s. No probe during
+these timings. The earlier "instant" observation was qualitative; these are
+wall proxies including transport, image loading, execution and cleanup, not
+compiler CPU time or an isolated native-versus-QEMU performance A/B.
+
+| Native session seconds | Ordered samples | Median (range) |
+| --- | --- | --- |
+| Clang version/startup | 4.289 / 4.292 / 4.289 | 4.289 (4.289–4.292) |
+| Hello compile | 4.325 / 4.325 / 4.328 | 4.325 (4.325–4.328) |
+| Standalone LLD link | 2.966 / 2.967 / 2.960 | 2.966 (2.960–2.967) |
+
+The separately labelled **PROBE** uses base `6bc3a009`, the recorded
+`probe-current.patch` (`f3f82305…`) and `LOG_LEVEL=trace`. The owner restored the
+ordinary build afterward. Native measurements below are decimal MB at the
+owner's reported precision, not inferred exact byte counts. All 67 retained
+probe records report `after_cleanup_bytes=0`.
+
+| Native process | Startup owned MB | Peak owned MB |
+| --- | ---: | ---: |
+| Clang version | 99.34 | 99.58 |
+| Clang hello compile | 99.34 | 101.85 |
+| Clang bad source / denied output | 99.34 | 100.74 / 100.00 |
+| LLD hello link | 64.75 | 70.23 |
+| LLD invalid input / denied output | 64.75 | 65.00 / 68.47 |
+| Hello PXE | 1.22 | 1.29 |
+
+Same owned-VM metric/exclusions as the QEMU probe; native compiler/linker peaks
+agree at the posted precision. Clang capture is separately approximately
+90.35 MB per launch, released around startup, outside the child's charge.
+Independent process/capture peaks do not establish a simultaneous whole-system
+peak. Native probe ELF/archive hashes were not included in the posted report;
+do not substitute the QEMU image hashes for them. Raw native evidence remains
+on horse: `~/xf/clang-task5/` (`native-check.jsonl`, `probe-run.jsonl`, ordered
+`*-N.jsonl/.time`, `timing-owner-native.txt`), with all probe records in
+`probe/vm-probe-records.log`.
+
+## Qualified capacity and remaining limits
+
+Keep the existing 128 MiB selected-image / 256 MiB mapped-span ceilings and
+8 MiB eager guarded stacks. For this small-C profile, use provisional per-tool
+owned-data planning allowances of **128 MiB for Clang and 96 MiB for LLD**,
+rounded above native peaks of 101.85 / 70.23 MB. These are tunable planning
+headroom, not new allocator quotas or guarantees for arbitrary inputs.
+Additionally budget temporary capture backing of 90,349,568 / 55,746,560 bytes
+for the current images. Page tables, kernel metadata/stacks, filesystem/cache,
+boot archive, borrowed/device mappings and scratch files need separate space;
+these allowances are not a minimum system-RAM specification. Peak capture and
+peak process backing are not claimed to coexist.
+
+Version and compile wall times differ by about 36 ms; this supports the owner's
+observation that image loading dominates, without measuring internal compile
+CPU time. The roughly 20 MB/s effective USB image-loading rate and lack of
+selected-image reuse across launches are recorded in
+[technical debt](../../../technical-debt.md#hosted-tool-launch-loading).
+Throughput is inferred from image sizes/session times, not an isolated stick
+or driver benchmark. Neither finding expands task 5. Actual stack high-water,
+large C/C++/LTO inputs, started-tool malloc exhaustion and total attributable
+physical memory remain unqualified; the native first compile/link/run is complete.

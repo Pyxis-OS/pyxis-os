@@ -6,6 +6,8 @@ compiler. LLVM workers stay off; the real SDK TLS and C++ runtime remain linked.
 SDK changes require fresh target objects, not a compiler-container rebuild.
 Each bundle contains its own resource/sysroot roots, notices and provenance.
 Neither receives a launcher. Driver-invoked linking is a separate task.
+The native first compile, standalone link and PXE run passed on the ThinkPad
+on 2026-10-13, including rejected inputs/outputs and matching object/PXE hashes.
 
 ## Pool and authority
 
@@ -94,8 +96,32 @@ toolchain://REV/payload/lld.pxb -flavor gnu --sysroot=sysroot:// -m elf_x86_64 -
 tmp://hello.pxe
 ```
 
-The bundles enforce the existing 128 MiB selected-image and 256 MiB mapped-span
-ceilings. Available physical backing can still refuse capture, image loading or
-private allocations. The 8 MiB eager stack is not evidence that arbitrary C++
-or deep templates fit. Measurements, failure checks and native qualification
-status are in the [task 5 record](experiments/hosted-clang-task5/README.md).
+## Qualified capacity
+
+The bundles retain the existing 128 MiB selected-image and 256 MiB mapped-span
+ceilings. Current artifacts and the native small-C qualification give:
+
+| Per tool | Clang | LLD |
+| --- | ---: | ---: |
+| Serialized image bytes | 90,347,866 | 55,743,570 |
+| Page-rounded image backing/span bytes | 90,939,392 | 56,352,768 |
+| Eager guarded stack | 8 MiB | 8 MiB |
+| Temporary image-capture backing bytes | 90,349,568 | 55,746,560 |
+| Native peak owned VM backing, reported decimal MB | 101.85 | 70.23 |
+| Provisional owned-data planning allowance | 128 MiB | 96 MiB |
+
+Planning allowances include headroom above the qualified peaks; they are tunable
+policy, not new enforced quotas or bounds on arbitrary inputs. Peak owned
+backing already includes image, stack, startup and private working allocations.
+Capture is a separate kernel allocation released around startup; independent
+peaks are not a measured simultaneous total. Page tables, kernel metadata/cache/
+stacks, boot archive, device/borrowed mappings and scratch files need separate
+space, so this is not a minimum system-RAM specification. Available backing can
+still refuse capture, image loading or private allocations honestly.
+
+The 8 MiB eager stack is not a measured high-water bound for deep includes or
+C++ templates. Native wall proxies were about 4.29 s for Clang version,
+4.33 s for the small compile and 2.97 s for LLD, dominated by repeated USB image
+loading. [Loading/reuse debt](../technical-debt.md#hosted-tool-launch-loading)
+is deferred. Samples, probe exclusions, failure checks and native evidence are
+in the [task 5 record](experiments/hosted-clang-task5/README.md).

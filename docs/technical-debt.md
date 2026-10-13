@@ -840,6 +840,23 @@ by hand: every native toolchain revision must be staged and published manually.
 The [package manager](wip/later-os-directions.md#package-manager) is parked with
 multiple dependencies; revisit this annoyance when it is unparked.
 
+## Hosted-tool launch loading
+
+Owner-native [task 5 measurements](development/experiments/hosted-clang-task5/README.md#native-owner-qualification-2026-10-13)
+on the ThinkPad USB toolchain volume qualify the first compile/link/run, with
+two deferred costs:
+
+- **USB image-loading throughput:** approximately 90/56 MB Clang/LLD images
+  and version/link wall proxies of about 4.29/2.97 s imply roughly 20 MB/s
+  effective loading. This is inferred from wall proxies, not an isolated device/driver
+  benchmark. Loading dominates small compiles; revisit when USB storage
+  throughput is profiled for native builds.
+- **No selected-image reuse across launches:** each compiler/linker invocation
+  recaptures and loads its image, so warm repeated invocations still pay the
+  launch cost. Revisit for launch-heavy native builds when image reuse, its
+  authority and invalidation rules are assigned. Task 5 adds no cache or reuse
+  mechanism.
+
 ## Clang code generation and predefines
 
 Pyxis builds with Clang since the [LLVM toolchain milestone](development/llvm-toolchain.md). Matched nested-KVM measurements on 2026-10-07
