@@ -61,13 +61,15 @@
 #define DEVICE_SELF_TEST 0xaa
 #define DEVICE_RESET_ID 0x00
 #define COORDINATE_LIMIT 8192
+#define DIAGNOSTIC_INTERVAL_NS UINT64_C(5000000000)
+#define DIAGNOSTIC_DURATION_NS UINT64_C(150000000000)
 
 struct synaptics_inventory {
   uint32_t identity, model, firmware, modes;
   uint32_t capabilities, extended, continued, more;
   uint32_t resolution, minimum, maximum;
   unsigned extended_buttons;
-  bool geometry, clickpad, stick_buttons;
+  bool geometry, calibrated_geometry, clickpad, stick_buttons;
 };
 
 static struct synaptics_inventory inventory;
@@ -80,6 +82,31 @@ static unsigned guest_packet_buttons, stick_buttons;
 static bool stick_buttons_observed;
 static volatile uint64_t malformed_headers, unsupported_packets, guest_overflows;
 static volatile uint64_t reset_packets, decoded_touch_packets, decoded_guest_packets;
+static bool diagnostic_started, diagnostic_finished;
+static uint64_t diagnostic_started_at, diagnostic_reported_at;
+
+static void calibrate_geometry(void)
+{
+  /* Owner measured 102x70 mm three times. X45 implies 98.04 mm usable width
+   * with 1.98 mm borders; queried Y54 implies 65.41 mm and 2.30 mm borders.
+   * Those borders are authored allowances, not measured sensor dimensions.
+   * Query 01's low byte is the current mode, not part of the fingerprint. */
+  if (inventory.identity != UINT32_C(0x20471a) ||
+      inventory.model != UINT32_C(0x01e2a1) ||
+      inventory.firmware != UINT32_C(0x3c9cfd) ||
+      (inventory.modes & UINT32_C(0xffff00)) != UINT32_C(0x378f00) ||
+      inventory.capabilities != UINT32_C(0xf014a3) ||
+      inventory.extended != UINT32_C(0x940300) ||
+      inventory.continued != UINT32_C(0x12e800) ||
+      inventory.more != UINT32_C(0x500000) ||
+      inventory.resolution != UINT32_C(0x008036) ||
+      inventory.minimum != UINT32_C(0x275924) ||
+      inventory.maximum != UINT32_C(0xb1b792)) {
+    return;
+  }
+  profile.x_resolution = 45;
+  inventory.calibrated_geometry = true;
+}
 
 static bool encoded_argument(struct ps2_setup *setup, uint8_t argument)
 {
@@ -229,6 +256,7 @@ static bool read_inventory(struct ps2_setup *setup)
     }
     decode_bound(inventory.minimum, &profile.x_min, &profile.y_min);
   }
+  calibrate_geometry();
   inventory.geometry = minimum_supported &&
                        (inventory.continued & CAP_MAXIMUM) &&
                        profile.x_resolution && profile.y_resolution &&
@@ -280,13 +308,16 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
     return recover_relative(setup, false, "inventory query failed");
   }
   if (diagnostics) {
-    klog("synaptics: firmware=%u.%u newabs=%u W=%u clickpad=%u ext-buttons=%u stick=%u\n",
+    klog("synaptics: firmware=%u.%u newabs=%u W=%u clickpad=%u ext-buttons=%u pass-through=%u ext-stick-buttons=%u\n",
          inventory.identity & 0x0f, inventory.identity >> 16,
          !!(inventory.model & MODEL_NEW_ABSOLUTE), !!(inventory.capabilities & CAP_EXTENDED),
-         inventory.clickpad, inventory.extended_buttons, inventory.stick_buttons);
-    klog("synaptics: bounds x=%d..%d y=%d..%d resolution=%u,%u/mm geometry=%u\n",
+         inventory.clickpad, inventory.extended_buttons,
+         !!(inventory.capabilities & CAP_GUEST), inventory.stick_buttons);
+    klog("synaptics: bounds x=%d..%d y=%d..%d raw-resolution=%u,%u/mm effective-resolution=%u,%u/mm geometry=%u source=%s\n",
          profile.x_min, profile.x_max, profile.y_min, profile.y_max,
-         profile.x_resolution, profile.y_resolution, inventory.geometry);
+         inventory.resolution >> 16, inventory.resolution & 0xff,
+         profile.x_resolution, profile.y_resolution, inventory.geometry,
+         inventory.calibrated_geometry ? "owner-measured-T14-102x70" : "queried");
   }
   if (!activate) {
     /* Diagnosis alone leaves the same relative defaults and wheel probe path. */
@@ -321,6 +352,27 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
 const struct mouse_profile *synaptics_profile(void)
 {
   return &profile;
+}
+
+void synaptics_diagnose(uint64_t now)
+{
+  if (!diagnostics || !profile.absolute || diagnostic_finished) {
+    return;
+  }
+  if (!diagnostic_started) {
+    diagnostic_started = true;
+    diagnostic_started_at = diagnostic_reported_at = now;
+  }
+  if (now < diagnostic_started_at || now < diagnostic_reported_at ||
+      now - diagnostic_reported_at < DIAGNOSTIC_INTERVAL_NS) {
+    return;
+  }
+  klog("synaptics-transport: t=%lu s touch-packets=%lu guest-packets=%lu guest-overflows=%lu malformed-headers=%lu unsupported-packets=%lu reset-packets=%lu\n",
+       (now - diagnostic_started_at) / UINT64_C(1000000000),
+       decoded_touch_packets, decoded_guest_packets, guest_overflows,
+       malformed_headers, unsupported_packets, reset_packets);
+  diagnostic_reported_at = now;
+  diagnostic_finished = now - diagnostic_started_at >= DIAGNOSTIC_DURATION_NS;
 }
 
 void synaptics_reset_decoder(void)

@@ -41,6 +41,8 @@ struct mouse_event {
 
 bool mouse_available(void);
 const struct mouse_profile *mouse_profile(void);
+/* Bounded opt-in transport diagnostics, one BSP consumer. No device commands. */
+void mouse_diagnose(uint64_t now);
 
 /* One BSP consumer outside interrupt entry. Nonblocking and preserves IF.
  * RESET loses both logical sources on the shared transport. Contact rejection

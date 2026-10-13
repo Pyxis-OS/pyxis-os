@@ -655,7 +655,9 @@ void input_pointer_drain(void)
   }
   attach_ps2_pointer();
   if (touchpad_initialized && boot_options_get()->ps2_synaptics_diagnose) {
-    touchpad_service(arch_monotonic_ns());
+    uint64_t now = arch_monotonic_ns();
+    touchpad_service(now);
+    mouse_diagnose(now);
   }
 #if POINTER_SYNTHETIC_ENABLED
   drained_physical_buttons = 0;

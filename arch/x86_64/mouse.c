@@ -192,6 +192,11 @@ const struct mouse_profile *mouse_profile(void)
   return synaptics_profile();
 }
 
+void mouse_diagnose(uint64_t now)
+{
+  synaptics_diagnose(now);
+}
+
 enum raw_result {
   RAW_EMPTY,
   RAW_BYTE,

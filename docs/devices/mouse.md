@@ -96,9 +96,17 @@ checks identity/model/capabilities, reads advertised query pages, validates
 usable min/max coordinates and counts/mm, and checks mode readback plus a forced
 master packet before publishing the absolute format. Serial-number queries are
 never sent. Basic W leaves extended-W/AGM and four-byte guest negotiation off.
-No nominal panel dimensions or device identity substitutes for queried geometry.
-Missing geometry falls back to relative touch motion, with firmware tap-off
-when proven; the owner's geometry-only exception can retain legacy taps if that
+Geometry is queried, except for one owner-measured T14 Gen 1 AMD calibration
+matched to the complete non-serial query fingerprint and raw bounds/resolution.
+The owner measured 102x70 mm three times: X45 implies 98.04 mm usable width,
+and queried Y54 implies 65.41 mm height. The roughly 2 mm borders are an authored
+allowance pending native observed-extents qualification. Diagnostics retain raw
+resolution `0,54`, report effective `45,54` and label the calibration source.
+Query 01's live mode byte is excluded from matching. There is no square-unit
+guessing or generic geometry default; see the
+[accepted calibration](../wip/pointer-input-quality.md#t14-geometry-correction--accepted-2026-10-13).
+Missing geometry without this match falls back to relative touch motion, with
+firmware tap-off when proven; the owner's geometry-only exception can retain legacy taps if that
 cannot be established. Such fallback does not qualify palm rejection, two-finger
 scrolling or touch/TrackPoint separation. Other unsupported layouts or failed
 mode negotiation recover only a proven relative format with tap-off; failure
@@ -130,6 +138,13 @@ retained holds. A guest source exists only after an actual packet/switch snapsho
 initial holds are quarantined until release. The forced boot master snapshot is
 consumed once and is never replayed after loss. Unsupported physical-button
 layouts recover to relative input rather than silently discard switches.
+
+Diagnosis reports pass-through capability separately from extended stick-button
+capability: the latter can be absent even when a TrackPoint uses the guest port.
+Five-second `synaptics-transport:` lines report cumulative decoded touch/guest
+packets, guest overflows, malformed headers, unsupported packets and reset
+packets; reporting stops after 150 seconds. These are observations, not guest
+initialization or proof that every physical button has been exercised.
 
 Malformed absolute framing, raw queue loss and controller errors reset both
 logical sources, retaining the existing OR/lock-revocation/held-click rules.

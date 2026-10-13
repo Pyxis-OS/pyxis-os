@@ -286,14 +286,60 @@ pending.
 
 Implementation uses `ps2.synaptics=1` to qualify basic W and
 `ps2.synaptics.diagnose=1` for bounded info-level query/contact summaries.
-Neither option is present by default. The first implements queried geometry
-only; no calibrated identity profile is invented. Physical-button layouts
+Neither option is present by default. Geometry comes from validated queries or
+the narrowly matched owner-measured profile below. Physical-button layouts
 outside standard switches, single-switch clickpad and the advertised three
 TrackPoint switches recover to proven relative input rather than silently lose
 buttons. [Mouse input](../devices/mouse.md#synaptics-opt-in-absolute-input)
 describes the filtering, loss and fallback behaviour. The existing
 [qualification record](../development/experiments/pointer-input-quality/README.md)
 contains the QEMU limits and exact owner/luna native steps.
+
+### T14 geometry correction — accepted 2026-10-13
+
+The first owner-run native boot, main `d3bc9b5a`, stopped at admission. Query 08
+returned `00 80 36`: valid flag, X resolution zero, Y 54 units/mm. Queried bounds
+were X 1266..5678 and Y 1162..4694. Relative recovery and tap-off succeeded;
+this is not a palm/scroll pass. The owner measured the T14 Gen 1 AMD touchpad's
+visible surface three times, each **102 x 70 mm**.
+
+The owner rejected square-unit inference and accepted a narrow calibrated
+profile. Its authored X resolution is **45 units/mm**: the 4412-unit usable
+span becomes 98.04 mm, leaving about 1.98 mm per side within the measured width.
+Firmware Y **54 units/mm** gives 65.41 mm of usable height, about 2.30 mm per
+side within the measured 70 mm. The border allowance is inferred, not a measured
+sensor edge, and awaits the native edge-to-edge slide. Raw query responses are
+retained; diagnostics label effective `45,54` as owner-measured calibration.
+
+Match this complete non-serial query fingerprint; query 01 excludes its live
+mode byte. Any mismatch retains the existing queried-geometry/fallback rules,
+so a zero-X pad without this profile stays relative. No square-unit guessing.
+
+| Query | Response |
+| --- | --- |
+| 00 identity | `20 47 1a` |
+| 01 board/more-query flags | `37 8f` (last byte ignored) |
+| 02 capabilities | `f0 14 a3` |
+| 03 model | `01 e2 a1` |
+| 08 raw resolution | `00 80 36` |
+| 09 extended capabilities | `94 03 00` |
+| 0a firmware | `3c 9c fd` |
+| 0c continued capabilities | `12 e8 00` |
+| 0d maximum | `b1 b7 92` |
+| 0f minimum | `27 59 24` |
+| 10 more capabilities | `50 00 00` |
+
+Query 02 advertises the pass-through port; query 10 does not advertise extended
+buttons belonging to the stick. Diagnose those separately and report cumulative
+guest packet/overflow/framing/reset counts during the existing 150-second run.
+The second query 01 response `37 8f 04` is intentional relative-mode readback
+after recovery writes gesture-disable, rather than a print defect. Guest decode,
+commands and button routing are unchanged until a re-run establishes a need.
+
+- [x] Record owner measurement, accepted calibration and opt-in correction.
+- [ ] Owner/luna re-run: absolute admission, edge-to-edge observed X/Y extents,
+  TrackPoint motion/L/M/R and the full palm/scroll run, then diagnosis-off repeat.
+  Default-on remains gated on the owner's complete native pass.
 
 ## Qualification and tuning
 
