@@ -1243,12 +1243,14 @@ Milestone closure does not perform or authorize a native run.
 
 ## Configuration publication lease cost
 
-Native FAT32 mutation preflights can exhaust the editor's 30-second publication
-lease: the 128 MiB scratch run stopped at committed-record sync, while the 40 MiB
-runs completed. Larger ESPs may retain incomplete recovery and require manual
-disposition. Revisit backing/preflight cost before installer task 5 activates
-installed publication; [scratch evidence](../userspace/config-editor/qualification/README.md)
-does not establish native-media timing or authorize a longer lease.
+Whole-volume FAT checks and free collection repeat for each mutation; small
+writes also reserve volume-sized workspace. The editor's 128-MiB scratch
+publication exhausted its fixed 30-second interval. The
+[baseline and sizing investigation](development/experiments/fat32-preflight-cost.md)
+proposes [bounded read/plan changes](wip/fat32-preflight-cost.md), not a longer
+lease. Resolve and qualify complete publication before installer task 5;
+[existing scratch evidence](../userspace/config-editor/qualification/README.md)
+is not native-media timing.
 
 ## NVMe native qualification and temporary raw authority
 
