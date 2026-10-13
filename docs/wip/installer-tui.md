@@ -482,3 +482,27 @@ addition is coordinated through the orchestrator with epsilon, not invented in
 the client. Build with the published
 `pyxis-builder:pyxis-llvm23.1.3-4c23a20`, prefer `-j8`, and capture the relevant
 matched timing baseline now that the owner's LLVM rebuild is complete.
+
+### Task 4 implementation checkpoint — 2026-10-13
+
+Implementation is published as [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)
+and [parent #786](https://git.internal/PyxisOS/pyxis-os/pulls/786), both draft until
+the bound issuer facts and positive scratch writer checks are complete. Shared
+validators/literal admission, catalog/marker deltas, scoped selected sources,
+frozen loader/replay and native mounted publication are implemented. The
+[editor reference](../userland/configuration-editor.md) and
+[scratch record](../../userspace/config-editor/qualification/README.md) distinguish
+source inspection, local builds, QEMU/GDB and remaining write qualification.
+
+The full default image built and booted at parent `5c3dfe3f` / published userland
+`3c5fa88`, with all four exact-head CI jobs passing in #2174. Bare `config validate`
+works without setup in the ordinary Development tab, validating archive defaults.
+RW missing-history and RO committed-record scratch reads/plans preserve owner
+values and leave whole-disk hashes unchanged; no native media was touched.
+
+The current ABI lacks epsilon's identity facts, so publication/replay refuse as
+accepted. Consume its published ABI/helper, rebase the userland dependency onto
+its current main and repin, then qualify actual scratch publication, stale replay
+and recovery before ticking task 4. No bypass/fabricated proof, new owner question,
+installed activation, personal-override deletion or ordinary Update change. All
+owned QEMU/GDB jobs are stopped.
