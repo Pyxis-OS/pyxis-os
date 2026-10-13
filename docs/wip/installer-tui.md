@@ -225,7 +225,7 @@ kernel configuration model is proposed.
    **With this delivered dependency the owner can:** read/edit/sync authorized FAT32
    files independently of the TUI/configuration editor.
 4. [ ] **Shared configuration validation and delta editor — assigned to Codex alpha,
-   2026-10-13; functional baseline captured, decisions pending.** Under the accepted
+   2026-10-13; functional baseline captured, round one accepted, implementation authorized.** Under the accepted
    contract, deliver ESP configuration loading, declaration/ownership parsing,
    per-change planning, the checker and standalone editing. Share machine-setting
    validation and coordinate its writer; no live Continuum application. Qualify
@@ -289,9 +289,9 @@ no declaration catalog, delta/checker/editor or complete-set selection record.
 Existing Update still regenerates the ESP. Native mounting/reads above are runtime
 results; these missing facilities and validation boundaries are source findings.
 
-### Round one — three owner decisions, all pending
+### Task 4 round one — accepted 2026-10-13
 
-1. **Input and validation default: declarative admission for the new ESP path.**
+1. **Input and validation accepted: declarative admission for the new ESP path.**
    Parse literal `return { ... }` data: tables, explicit keys/array entries,
    strings, numbers, booleans and comments, with duplicate-key/structure checks;
    no calls, loops, functions, metatables or migration execution. Recognize
@@ -305,10 +305,8 @@ results; these missing facilities and validation boundaries are source findings.
    network address/subnet/gateway constraints without applying networking.
    Reuse the existing machine hostname/scroll validators and paths; no separate
    schema/store, machine-setting writer, Polaris or Continuum implementation.
-   **Alternative:** evaluate arbitrary handwritten Lua for checking, which would
-   need a separate bounded execution policy and still could not prove editable spans.
 
-2. **Boot meaning and selection default: preserve the current override model.**
+2. **Boot meaning and selection accepted, revisitable: preserve the current override model.**
    ESP `boot.lua` replaces the current pool override input: volumes/spaces only,
    by-name whole-entry merge with archive installed defaults; no editable `system`
    bootstrap binding or competing hostname/input store. Display and confirm the
@@ -319,10 +317,13 @@ results; these missing facilities and validation boundaries are source findings.
    reopened ESP paths. Missing/corrupt/unsupported/incomplete selection uses the
    complete archive-default triple, with rescue always selecting it. Task 4 builds
    and scratch-qualifies the loader; installed activation waits for task 5.
-   **Alternative:** make ESP `boot.lua` a full replacement for the archive boot
-   configuration, requiring a separate choice about bootstrap/machine defaults.
+   **Owner may revisit:** where the editable boot configuration lives (ESP
+   versus the npfs pool), after living with task 5's installed activation. The
+   present accepted contract migrates the owner's personal pool override to the
+   ESP and makes ESP editing the configuration path. See the
+   [revisitable location limit](../technical-debt.md#editable-boot-configuration-location).
 
-3. **Declarations and deltas default: a revision-owned data catalog.**
+3. **Declarations and deltas accepted: a revision-owned data catalog.**
    Ship one literal data catalog beside installer source assets, with stable ID,
    file/schema target, required/optional disposition, default and optional explicit
    migration per entry. Targets are complete volume/space/settings entries or
@@ -338,11 +339,9 @@ results; these missing facilities and validation boundaries are source findings.
    changed. Old defaults require a supplied/preserved old catalog: without one,
    provenance is unknown and existing values are conservatively owner edits.
    Do not invent old defaults from the current archive or programs manifest.
-   **Alternative:** manual-only reconciliation initially, without per-revision
-   default/migration provenance.
 
 The next round must settle the standalone command/profile and stable target/replay
 binding, plus the publication/recovery record and old-catalog retention, using
-Epsilon's grant surface. No proposed choice above is accepted; code waits for the
-owner and any remaining material decisions. Existing accepted ownership,
+Epsilon's grant surface. Round one above is accepted and implementation is
+authorized; dependent code waits for the remaining material decisions. Existing accepted ownership,
 confirmation, no-wrapper authority and whole-set fallback rules are not reopened.

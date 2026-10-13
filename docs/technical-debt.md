@@ -1956,3 +1956,10 @@ FAT32/host return BAD_OPERATION, with no cross-store copying. FAT32 needs atomic
 runtime identity/held-child locator repair, on-disk `..` updates and qualification
 of its ordered failure behavior; host external-name races need their own contract.
 Revisit when directory moves on either store are required. See [native rename](interfaces/directories.md#atomic-rename-and-directory-moves).
+
+## Editable boot configuration location
+
+Accepted 2026-10-13, explicitly revisitable: the owner's personal pool boot
+override migrates to ESP `boot.lua`, making ESP editing the configuration path.
+The owner may revisit ESP versus pool storage after living with installer task 5's
+installed activation. Until then follow the [accepted override/frozen-set contract](wip/installer-tui.md#task-4-round-one--accepted-2026-10-13); task 4 stays scratch-only.
