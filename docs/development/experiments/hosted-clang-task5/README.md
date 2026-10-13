@@ -81,3 +81,46 @@ Startup/final-retirement summaries and capture allocation/release records use
 backing. Profiled measurements remain separate from untouched-main timings;
 these counters are not malloc payload usage, sampled RSS or total attributable
 physical footprint. No public profiling ABI, quota or compiler-container rebuild.
+
+### Probe qualification
+
+Separate labelled ISO SHA-256
+`6c08e140fd925bbdae4791bdf78b93323574158d63b460da791c62279a92a8d6`,
+with the exact probe kernel above and the freshly rebuilt baseline bundles.
+Q35/nested KVM, 1/4 CPUs, 2 GiB, private read-only virtio-fs. Full trace-build
+consistency checked; no instrumented timing claims.
+
+| Workload | Startup owned bytes | Lifetime peak bytes | After cleanup |
+| --- | ---: | ---: | ---: |
+| Clang hello compile | 99,323,904 | 101,838,848 | 0 |
+| Standalone LLD link | 64,737,280 | 70,078,464 | 0 |
+| Clang undeclared identifier | 99,323,904 | 100,442,112 | 0 |
+| Clang denied output | 99,323,904 | 99,983,360 | 0 |
+
+Identical observations at both CPU counts. Compile/link/run exit 0 and retain
+baseline object/PXE hashes; rejected input and denied output exit 1 without
+output. Startup is image backing + 8 MiB stack + 8 KiB argument/startup pages.
+Separate captures use 90,337,280 / 55,734,272 bytes, returning to zero after each
+release. Their per-boot peak is 90,337,280 bytes; it must not be added to the
+process peak as a simultaneous global peak.
+
+Read-only GDB independently sums backed VM ranges at startup and retirement,
+checks counter zero after cleanup, observes a real 64 KiB private allocation,
+and verifies the existing allocbench's 4 KiB allocate/release changes
+312 → 313 → 312 pages with peak 313 retained. On CPU 2 in the four-CPU boot,
+Clang has one task, one active root, zero borrowers and live FS backing.
+
+Fresh one-CPU 256 MiB boots reach a usable shell: both captures complete, then
+image backing refuses allocation; provisional process peaks are 3,080,192 /
+37,617,664 bytes and both clean up to zero. At 224 MiB, Clang capture itself
+returns NO_MEMORY, current zero, provisional capture peak 59,944,960 bytes;
+LLD captures successfully, then refuses image backing and cleans up to zero.
+Subsequent echo/ls and complete session drain succeed, without panic. These
+are real low-memory launch failures, not started-tool malloc failures or an
+injected allocator hook. At 192 MiB Limine cannot load the full 83 MiB initrd;
+that loader failure is excluded from kernel qualification.
+
+Exact probe configuration, GDB observations, raw logs and native field
+interpretation are in `probe-qualification.txt` beside the patch. All owned
+probe QEMU/GDB/client/virtio-fs jobs are stopped. Native measurements and the
+production pool payload's qualification remain pending.

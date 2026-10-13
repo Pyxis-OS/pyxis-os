@@ -37,6 +37,8 @@ does not contain the required tar/xfer tools. No compiler payload belongs in
 either boot archive. One configured disk supplies the selected volumes; this
 does not add a second mounted disk alongside an existing installed-system disk.
 Preparing volumes or writing physical media remains an owner action.
+Attach the selected qualified USB storage before boot; storage hotplug is not
+part of this profile. Never modify a mounted/attached pool externally.
 
 The consumer has read-only `toolchain://`, writable `home://`/`tmp://` and
 inherited diagnostics. The manifest declares an 8 MiB guarded stack and
