@@ -404,10 +404,29 @@ round one is accepted and is not reopened.
 
 ### Coordination and checkpoint
 
-Requested through the orchestrator: Epsilon's read-only config/catalog view,
-scoped writable config parents plus bound control for OBSERVE/SYNC/BEGIN/END,
-and stable selected-target evidence. Grant names and issuance remain coordination,
-not an invented competing mount API. Decisions above are proposed, not accepted;
-no implementation code has changed. After answers, build with the published
+Resumed after the owner-qualified pointer follow-up, 2026-10-13; current main
+`bfd14785` includes FAT32 trusted workflow #775 and reference close-out #779.
+The task branch incorporates that main without changing the accepted round-one
+configuration choices or scratch-only boundary. The original functional baseline
+remains a measurement of `2f2109fc`, not a rerun on this newer main.
+
+The [trusted FAT32 workflow](../devices/fat32-mounts.md#trusted-workflow) now
+provides separate selected DIRECTORY and MOUNT sources resolved through bundle
+declarations. Configured RW admission precedes editing; normal roots stay RO.
+An authorized RW factory may deliberately admit the boot ESP, while its
+boot-origin view stays RO. Reuse those sources for scoped config parents and
+bound OBSERVE/SYNC/BEGIN/END control rather than add a competing mount surface.
+
+One evidence gap remains: `disks_fat32_request.expected_disk_guid` guards
+admission, but the editor receives no disk/ESP UUIDs through MOUNT_OBSERVE.
+Its state still reports live domain/device/GPT ordinal/extent. A selector guard
+is not a stable issuer-bound target record for later printed-plan replay.
+Requested through the orchestrator: coordinate the stable selected-target facts
+and catalog view with the trusted issuer; the editor must not acquire raw disk
+authority to fill this gap.
+
+The three round-two defaults above remain proposed, not accepted. No
+implementation code has changed or unanswered choice been assumed. The owner
+answers are required before dependent delivery code. After answers, build with the published
 `pyxis-builder:pyxis-llvm23.1.3-4c23a20`, prefer `-j8`, and capture the relevant
 matched timing baseline now that the owner's LLVM rebuild is complete.
