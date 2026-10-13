@@ -249,13 +249,6 @@ therefore cannot supply the [required subtree lifetime](nested-execution-groups.
 by itself. Killing/waiting Clang's whole session group would also stop the shell,
 and Clang cannot wait for a group that still contains itself.
 
-| Inspected gap | Evidence at the current pins |
-| --- | --- |
-| Process stop and group retirement affect only that process/member | `kernel/process.c:171`, `kernel/object/execution_group.c:195`; shell `launch.c:833`; native jobs explicitly have no caller-death guarantee. |
-| Scoped creation/binding unavailable | `kernel/object/launcher.c:831` denies CREATE_GROUP to bound/grouped callers; `capability.c:218` and endpoint admission require exact group equality. Groups have no parent/child accounting. |
-| Default linker invocation stops before launch | Fork `4c23a208` `Program.cpp:51` refuses non-null statistics; `Job.cpp:385` always supplies them. Baseline exit 1/no executable has this diagnostic, not a measured missing-launcher failure. |
-| The later launch path is not the native job core | Fork `Support/Pyxis/Program.inc:155` requires explicit launch selection; `:349` makes a raw launcher CALL. Driver supplies no selection; path lookup accepts a native FILE, not a bundle. `libpyxis` already exports common bundle preparation. |
-
 ### Accepted contracts (owner, 2026-10-13)
 
 1. **Containment and completion — accepted: native subgroups first, with a
@@ -313,12 +306,12 @@ and Clang cannot wait for a group that still contains itself.
   [qualification record](../development/experiments/hosted-clang-driver/README.md#native-subgroup-foundation-2026-10-13)
   covers builds, matched workloads and 1/4-CPU QEMU/GDB; kernel #789 merged after
   Daybreak's adversarial source/exercised review found no confirmed serious issue.
-- [ ] **Core and declared bundles:** implement the contained job profile using that
+- [x] **Core and declared bundles:** implement the contained job profile using that
   foundation and shared manifest preparation, packaging the linker root. No
   second executor, implicit authority inventory or default grouping overhaul.
   **After this unit the owner can:** run a declared leaf job with normal
   observation and caller-loss stop ownership in either shell profile.
-- [ ] **Fork/integration:** wire native Command execution through the core, resolve
+- [x] **Fork/integration:** wire native Command execution through the core, resolve
   the declared linker bundle and GNU LLD flavor, then build fresh target closure
   and qualify default compile/link/run plus failures and stop cleanup. **After
   this unit the owner can:** use `clang hello.c -o hello.pxe` and run its output.
@@ -331,44 +324,35 @@ foreign syscalls, fork or a per-space Clang execution setting. This preserves
 [aarch64 review lens](later-os-directions.md#beyond-x86-aarch64), without assigning
 another personality or target architecture.
 
-The foundation/core alone need no compiler-container rebuild. The driver fork
-changes do, under the existing compiler/SDK source-pin contract. Source checkpoint:
-[LLVM #8](https://git.internal/PyxisOS/pyxis-llvm/pulls/8),
-`8c3b0fe13b1a63caff2ea82faaae9fe2ead2e9de`; contained runtime
-[userland #251](https://git.internal/PyxisOS/pyxis-userland/pulls/251), `8c052506`.
-The owner build branch `toolchain/clang-driver-container` at `e05d8673` prepares
-that exact fork and image `pyxis-llvm23.1.3-8c3b0fe`:
+The foundation (#789/userland #248) is merged. The contained core in
+[userland #251](https://git.internal/PyxisOS/pyxis-userland/pulls/251),
+`19df7341`, and driver fork [LLVM #8](https://git.internal/PyxisOS/pyxis-llvm/pulls/8),
+`e0801c2660613d130abc66edc52a33875ee2e1f1`, are qualified in
+[Pyxis #793](https://git.internal/PyxisOS/pyxis-os/pulls/793).
+The owner published `pyxis-llvm23.1.3-e0801c2`; source pin, Containerfile
+provenance and workflow tag adopt it. No further compiler-container rebuild is
+needed for the current SDK refresh. LLVM #8 must **fast-forward first**,
+preserving the qualified SHA; a changed merge SHA requires matching compiler
+provenance. Merge order: LLVM #8, userland #251, then #793.
 
-```sh
-podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8c3b0fe .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8c3b0fe
-```
+Fresh ordinary SDK/image and complete target links pass after merged libc #256
+and ports jq. The current immutable `hosted-e0d776…` revision passes default
+compile/link/run and honest refusals on 1/4-CPU QEMU, including both failed-link
+forms preserving pre-existing output and leaving no partial file. Launcher
+withholding keeps compile-only usable. Separate GDB verifies actual process and
+subgroup completion; Ctrl+C on a real Clang/LLD pair stops the child and drains
+deferred cleanup. Ordinary wall proxies and the actual simultaneous memory
+probe are in the [qualification record](../development/experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13).
+Existing ceilings/stacks remain. The probe stays unmerged; no new native driver
+execution, timing or peak result is claimed.
 
-The owner published and verified the `8c3b0fe` image on 2026-10-13; #793 adopts
-its exact pin, Containerfile provenance and workflow tag. Both fresh target links
-pass, but QEMU qualification found two blockers: parent lookup-root collisions
-while opening leaf LLD, and inherited driver cleanup deleting a pre-existing
-requested output after a missing-launcher refusal. Userland #251 at `78372410`
-fixes private-root parsing without relaxing selected child-publication checks;
-LLVM #8 at `e0801c2660613d130abc66edc52a33875ee2e1f1` preserves requested outputs
-while retaining owned temporary cleanup. Neither corrected runtime loop is claimed
-qualified yet. See the [checkpoint record](../development/experiments/hosted-clang-driver/README.md#adopted-image-runtime-checkpoint-2026-10-13).
-
-Replacement container branch `toolchain/clang-driver-container` at `e982a12e`
-selects `pyxis-llvm23.1.3-e0801c2`, using the same build/push recipe above with
-the replacement tag. Publication remains an owner action; adopt it only after
-it exists. LLVM #8 must fast-forward first, preserving the final qualified SHA.
-A changed merge SHA requires matching compiler/SDK provenance. Merge order is
-LLVM #8, userland #251, then #793. The integration remains draft pending the
-corrected fresh closure, 1/4-CPU QEMU/GDB, ordinary timings, overlapping-memory
-qualification and the native handoff; no new native result is claimed.
-
-The foundation (#789 and userland #248) is merged into main `ad86d6e5`.
-The baseline precedes code changes. The first container-build timing hold was
-lifted; pause timings during the replacement build and keep debugger/PROBE runs
-separate. The private native run-sheet inputs are prepared, with final artifact
-provenance pending; the initial `bb12b9a…` payload must not be staged as complete.
+The ready native run sheet is
+`/shared/present/batch2/hosted-clang-driver/native-final/README.md`: exact current
+archive/checksums, declared consumer/publisher/launcher-withheld configurations,
+positive/failure/KEEP commands, ordinary timing and separate memory-probe runs.
+Physical publication and the native run remain owner actions. Earlier `native/`
+and `native-corrected/` packets are historical; do not stage their old payloads
+as the current driver. All owned qualification jobs are stopped.
 
 Queued owner gallery request, after both this driver work and HTTP task 5c
 merge: a clean Pyxis QEMU screendump, Neovim on the left with a short C version

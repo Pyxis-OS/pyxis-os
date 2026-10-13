@@ -159,84 +159,110 @@ evidence remains historical; the current rebuild/CI is reported on #789.
 Daybreak's independent source/exercised review found no confirmed serious issue;
 its bounded race/refill/escape coverage and limits are in that PR's review comment.
 
-## Driver source checkpoint (2026-10-13)
+## Qualified driver integration (2026-10-13)
 
-Contained core `68cf967e` (userland #251), integration SDK `0a00512c`, clean
-inputs, published compiler `4c23a20`. Fresh ordinary SDK/runtime builds pass;
-the existing C++ runtime emits its known missing-prototype and unsupported
-`hardware_concurrency` warnings. Producer syntax and document/diff checks pass.
-The producer declares Clang's optional launcher and embeds the same leaf LLD
-bundle under read-only `linker://`; no launch authority is added to LLD.
+Fresh source/SDK `da89bcf5`, userland `19df7341` (rebased on merged libc
+#256), ports `7d698eeb` (merged jq), fs `414be0ac`, exact fork
+`e0801c2660613d130abc66edc52a33875ee2e1f1` and published
+`pyxis-llvm23.1.3-e0801c2`. Ordinary image/SDK, fresh workers-off Release X86
+Clang/LLD links and staging pass. No serial-only source adaptation. Existing
+platform warnings remain; no build error. Matching debugger ELFs compare every
+LOAD byte, extent, flag, entry and zero tail against the actual P1Fs.
 
-Fork `8c3b0fe1` (LLVM #8): compile the five changed translation units (Support
-Program, Clang Job/Driver/Pyxis toolchain/driver main) for Pyxis and Linux using
-existing generated commands/configuration. Native uses the current SDK/core;
-Linux selects `x86_64-unknown-linux-gnu` without stale precompiled headers.
-All ten compile checks pass without warnings/errors. Objects/commands/logs stay
-local in the fork worktree's `build/reached/`. This is source-compilation evidence,
-not target links, tool runtime or installed compiler adoption.
+Revision `hosted-e0d776324e241b611495059eb7691d5901c35a0ba35b998bee2c93fd9dc0d7fc`;
+archive 293,416,960 bytes, SHA-256
+`a94062826a98b2f099f0839f078938396ad3857243cae6487ff98c8d0c901787`.
+All 6,487 imported files compare exactly; fsck/GPT pass. Clang image/span
+90,385,074/90,976,256 bytes, LLD 55,776,366/56,389,632; both 8 MiB stacks,
+existing 128/256 MiB image/span ceilings. Read-only toolchain pool, writable
+tmp, separate network space, Remote launch=true; no HOST/home or boot payload.
 
-Exact-fork container publication is an owner action from
-`toolchain/clang-driver-container` at `e05d8673`. Current integration retains the
-published old compiler pin until the new image exists. Full target closure,
-default driver compile/link/run and refusals, cleanup, overlapping-memory
-measurement and native owner check remain pending. No new native speedup claim.
+### Runtime and ownership
 
+QEMU 10.2.2, Q35/nested KVM/host CPU, 2 GiB, UTC, fresh OVMF, VirtIO
+SCSI/net/RNG/read-only npfs block; 1 then 4 CPUs. Each 31-command machine
+session returns all expected typed results and FINAL exited0/complete drain.
+The plain relative command is `toolchain://REV/payload/clang.pxb hello.c -o hello.pxe`.
+Driver and separate link/run print `hello 5`, exit0; their PXEs match
+`acb72969…`, object `68ba3eeb…` (1,160 bytes). The reference object was generated
+and downloaded from this guest, rather than reused from an earlier revision.
 
-## Adopted-image runtime checkpoint (2026-10-13)
+Syntax, genuine default undefined-symbol link, invalid linker option, read-only
+compile/link output, statistics and oversized child capture all exit1 with the
+correct diagnostic. Both invalid-option and default undefined-symbol links
+preserve the five-byte KEEP file, hash `c7cde802…`; final listings contain only
+fixtures and successful outputs, no failed requested files or owned temporaries.
+A fresh 4-CPU launch=false boot still compiles, refuses linking with exit1,
+preserves KEEP and leaves no partial file.
 
-Parent `b810b64e` (later docs-only `12111262`), userland `8c052506`, exact fork
-and published image `8c3b0fe1`. Fresh ordinary image/SDK and all four CI jobs
-pass; fresh workers-off Release X86 Clang/LLD links pass. Clean producer inputs
-stage `hosted-bb12b9a196bf486d48e03ac57ffc28e90b541bccc05fab720131eaca4fc0a450`.
-Archive 292,915,200 bytes, SHA-256 `d456eb973d2108bc57b5da78a80157dd10d9ec07808a28c31c6dbf51ed7dd9df`.
+Separate interactive GDB: successful close on 1/4 CPUs has actual EXITED/0,
+process+group complete, exact handle generations and zero members/launches/
+pending cleanup/children before close. On 4 CPUs, a new real LLD entry is
+identified by argv/process/CR3, not overlapping symbol addresses. Foreground
+Ctrl+C stops Clang; kernel table cleanup releases its sole CONTROL, stopping
+LLD. Actual child TERMINATED precedes subgroup completion (pending cleanup 4);
+NPFS retirement then completes the subgroup with all four counts zero. No
+injected calls, target writes, program delays or stale-pointer inspection.
 
-| Image bytes / mapped span bytes | Clang | LLD |
-| --- | ---: | ---: |
-| P1F | 90,385,750 | 55,776,350 |
-| Page-rounded backing/span | 90,976,256 | 56,389,632 |
+Initial `8c3b0fe` qualification exposed two genuine blockers: the bundle parser
+compared private child roots with parent lookup roots, and inherited driver
+cleanup deleted pre-existing requested output. Userland #251 separates private
+manifest validation from final selected-publication collision checks; fork
+`e0801c2` skips native requested-name cleanup while retaining owned TempFiles.
+Initial `bb12…` and intermediate `5f09…` payloads are historical, not current.
 
-Both retain 8 MiB stacks and existing ceilings. Imported files compare exactly;
-fsck/GPT pass. Ordinary read-only consumer ISO `0acb366f…`; isolated 1 GiB npfs
-pool/disk `e8f10160…`. Configuration is the frozen Q35/nested-KVM/2 GiB profile,
-separate network space and Remote with declared launch authority, no HOST/home.
+### Ordinary wall proxies
 
-**Qualification blockers, not a completed driver loop:** 1 CPU: version,
-compile-only, standalone LLD and `hello 5` pass. Default driver refuses before
-job admission: `Pyxis tool bundle: Invalid argument`. Inspection finds the shared
-bundle parser rejects LLD's private `clang_resources`/`sysroot` names against
-Clang's parent lookup roots, before final child selection filters them. Userland
-`78372410` separates private manifest names from lookup context; actual selected
-child-publication collision checks and external grant-alias policy stay unchanged.
-Syntax, compile-only read-only output, requested statistics and oversized child
-capture reject honestly. Linker/read-only driver failures are masked by the
-bundle failure and are not qualified yet. No new timing or peak result.
+No debugger/probe/own builds during timing; host remains unisolated. Three serial
+samples after functional preparation, warm caches without forced eviction.
+Times include remote connection, image loading, command and cleanup/FINAL;
+host CPU time is the client, not compiler CPU time. Every timed command exits0.
+Old baseline/native task5 numbers are references, not matched current-SDK A/B.
 
-4 CPUs, `launch=false`: compile-only passes; link-only refuses the missing declared
-launcher, exit 1. A pre-existing `tmp://kept.pxe` containing `KEEP` disappears.
-Separate hardware-breakpoint GDB observes `Compilation::CleanupFile` with that
-exact filename, called by `CleanupFileMap` / `Driver::ExecuteCompilation`.
-Fork `e0801c26` removes native requested-name cleanup, retaining owned temporary
-cleanup and native writers' staged publication. This fixes the accepted old-output
-preservation boundary; host cleanup behavior stays unchanged. Replacement image
-`pyxis-llvm23.1.3-e0801c2` is an owner action from container branch `e982a12e`.
-Do not qualify or stage the initial `bb12b9a…` revision as the completed driver.
+| Session seconds | 1 CPU ordered; median | 4 CPUs ordered; median |
+| --- | --- | --- |
+| Empty | .02 / .02 / .02; .02 | .02 / .02 / .01; .02 |
+| Clang version | 10.36 / 10.34 / 10.35; 10.35 | 10.41 / 10.47 / 10.36; 10.41 |
+| Compile-only | 10.55 / 10.58 / 10.57; 10.57 | 10.65 / 10.53 / 10.52; 10.53 |
+| Separate LLD | 8.15 / 8.10 / 8.09; 8.10 | 7.82 / 7.99 / 8.04; 7.99 |
+| Driver compile/link | 18.06 / 18.06 / 17.99; 18.06 | 18.36 / 18.24 / 18.06; 18.24 |
 
-The prepared native handoff is `/shared/present/batch2/hosted-clang-driver/native/`;
-its final revision/hashes and expected output remain pending the corrected fresh
-build. Final 1/4-CPU driver/refusal/owner-loss/cleanup checks, ordinary timings,
-separate memory-probe checks and the native owner run remain. Matching debugger
-ELFs were linked from the initial exact objects: all LOAD bytes/extents/flags,
-entry and zero tails match the P1Fs. Raw captures stay under
-`build/driver-qualification/` and shared handoff directories.
+### Separate memory probe and limits
 
-Unmerged measurement branch `probe/clang-driver-vm-peak`, `694160f1`, base
-`b810b64e`: patch `/shared/present/batch2/hosted-clang-task5/probe-driver/driver-vm-peak.patch`,
+Authorized **unmerged** branch `probe/clang-driver-vm-peak`,
+`694160f160139b0f5fa9d4df05edad000ac2fc54`, base `b810b64e` (kernel/ABI/arch
+code equals current source before the probe). Patch
+`/shared/present/batch2/hosted-clang-task5/probe-driver/driver-vm-peak.patch`,
 SHA-256 `bda42582195352cd3d000f5e0922b5cf0d7f6b882dda345e8126fa378822152a`.
-It records owned private data-frame backing per VM, tagged capture separately,
-and their actual simultaneous global sum including shell/services. It excludes
-page tables, kernel metadata/stacks, filesystem/cache, untagged allocations and
-shared/device/borrowed mappings. Lifetime/per-boot peaks are not subtree-only or
-whole physical RAM; independent peaks must not be added. Probe kernel
-`648821b4…` built, labelled PROBE ISO `63fe832d…`, not yet run; never merge or
-stage as ordinary PXE. All QEMU/GDB/client jobs for this checkpoint are stopped.
+Trace kernel `8749ae05…`, labelled PROBE ISO `6b32c75f…`; ktrace only, never
+shipping code or ordinary PXE. Fresh 4-CPU/2-GiB boot for each case, same inputs;
+standalone link uses the new reference object without compiling first.
+
+| Tracked peak bytes | Clang VM | LLD VM | Actual per-boot VM+capture total |
+| --- | ---: | ---: | ---: |
+| Version | 99,618,816 | — | 206,139,392 |
+| Compile-only | 101,888,000 | — | 206,139,392 |
+| Separate LLD | — | 70,451,200 | 136,945,664 |
+| Driver compile/link | 101,888,000 | 70,451,200 | 238,833,664 |
+
+Capture backing is 90,386,432/55,779,328 bytes and returns0 after release.
+Every retired VM has after_cleanup0; global current returns to the live-services
+baseline 14,970,880 after shell exit. The global peak includes other tracked
+VMs/services and actual overlapping capture, not a sum of independent peaks or
+a compiler-subtree-only total. Excluded: page tables, kernel metadata/stacks,
+filesystem/cache, untagged allocations, borrowed/shared/device mappings and
+unbacked guards/reservations. This is not total RAM or a stack high-water bound.
+Existing planning allowances remain provisional; native driver peaks are pending.
+
+Real 1-CPU/256-MiB PROBE boot: nine Clang capture attempts refuse before program
+entry with launch_failed/Out of memory. Partial backing returns0, every retired
+VM cleans to0, shell remains usable, KEEP unchanged, no failed outputs and
+FINAL0/complete. This qualifies admission rollback, not started-tool malloc
+exhaustion or native low-RAM behavior.
+
+All owned build/QEMU/GDB/client jobs stopped. Raw records, inputs, exact hashes,
+ordinary samples and debugger proofs remain under the integration worktree's
+`build/driver-qualification/`; final native packet is
+`/shared/present/batch2/hosted-clang-driver/native-final/README.md`.
+**Native driver execution/timing/peak and physical publication are NOT RUN**;
+the ready sheet specifies owner/luna ordinary and separately labelled PROBE runs.

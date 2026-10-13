@@ -8,8 +8,9 @@ Each bundle contains its own resource/sysroot roots, notices and provenance.
 The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
 root. Clang's manifest requests optional `launcher/launch`; withholding it keeps
 compile-only available and linking refuses. LLD never receives a launcher.
-The native first compile, standalone link and PXE run passed on the ThinkPad
-on 2026-10-13, including rejected inputs/outputs and matching object/PXE hashes.
+The first compile, standalone link and PXE run passed on the ThinkPad on
+2026-10-13. Driver-invoked linking is qualified in 1/4-CPU QEMU; its native
+run is pending. Both retain honest diagnostics and failure results.
 
 ## Pool and authority
 
@@ -121,15 +122,16 @@ execution and unsupported statistics/timeouts are outside this profile.
 ## Qualified capacity
 
 The bundles retain the existing 128 MiB selected-image and 256 MiB mapped-span
-ceilings. Current artifacts and the native small-C qualification give:
+ceilings. Current driver-profile artifacts and the separately identified task5
+native baseline give:
 
 | Per tool | Clang | LLD |
 | --- | ---: | ---: |
-| Serialized image bytes | 90,347,866 | 55,743,570 |
-| Page-rounded image backing/span bytes | 90,939,392 | 56,352,768 |
+| Current serialized image bytes | 90,385,074 | 55,776,366 |
+| Current page-rounded image backing/span bytes | 90,976,256 | 56,389,632 |
 | Eager guarded stack | 8 MiB | 8 MiB |
-| Temporary image-capture backing bytes | 90,349,568 | 55,746,560 |
-| Native peak owned VM backing, reported decimal MB | 101.85 | 70.23 |
+| Current image-capture backing bytes | 90,386,432 | 55,779,328 |
+| Task5 native peak owned VM backing, historical decimal MB | 101.85 | 70.23 |
 | Provisional owned-data planning allowance | 128 MiB | 96 MiB |
 
 Planning allowances include headroom above the qualified peaks; they are tunable
@@ -147,3 +149,11 @@ C++ templates. Native wall proxies were about 4.29 s for Clang version,
 loading. [Loading/reuse debt](../technical-debt.md#hosted-tool-launch-loading)
 is deferred. Samples, probe exclusions, failure checks and native evidence are
 in the [task 5 record](experiments/hosted-clang-task5/README.md).
+
+The current driver [qualification](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13)
+measures 101,888,000/70,451,200 bytes per compiler/linker VM in QEMU, and an
+actual simultaneous VM+capture peak of 238,833,664 bytes including other guest
+processes. Cleanup returns each VM and capture to zero. Its native measurements
+are pending; this total excludes kernel/cache and is not a minimum-RAM claim.
+A failed ordinary link preserves pre-existing requested output and leaves no
+partial output; the driver cleans its owned temporary files.
