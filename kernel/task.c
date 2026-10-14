@@ -1484,7 +1484,6 @@ void kernel_task_yield_masked(void)
 
   struct scheduler *scheduler = local_scheduler();
   arch_timer_deadline_start();
-  bool idle_reported = false;
   for (;;) {
     task_timer_service();
     cancel_expired_address_waits(scheduler);
@@ -1496,18 +1495,11 @@ void kernel_task_yield_masked(void)
     struct task *task = dequeue(scheduler, cpu_index);
     scheduler->current_task = task;
     if (!task) {
-      if (!idle_reported) {
-        ktrace("scheduler: CPU %zu no runnable tasks, idle\n", cpu_index);
-        idle_reported = true;
-      }
       /* Remote ready-queue publication is followed by an IPI. With IF=0 here,
        * STI/HLT also handles a notification arriving after the empty check.
        * The timer still services deadlines and BSP-only request/cleanup queues. */
       cpu_wait_interrupt();
       continue;
-    }
-    if (task->kind == TASK_USER) {
-      idle_reported = false;
     }
 
     if (task->kind == TASK_USER && !task->in_syscall && task_stop_requested()) {
