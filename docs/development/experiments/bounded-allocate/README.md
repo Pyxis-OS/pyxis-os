@@ -110,8 +110,9 @@ the game's audio started in both images.
 RELEASE frees its whole region in one step (natively about 1.3 ms per
 128 MiB, from the teardown run). Image loading and launch preparation use the
 synchronous backing. DISPLAY services take 7–20 ms natively at Chocolate Quake
-start. Worker precedence on CPU 0 remains a separate follow-up; the native
-reaper queue delay (median 4.6 ms) is its input.
+start. Worker precedence on CPU 0 is parked: the native reaper queue delay
+(median 4.6 ms) was diagnostic logging
+([record](../worker-precedence/README.md)).
 
 ## Native run
 

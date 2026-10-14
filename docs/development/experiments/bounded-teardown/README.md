@@ -75,10 +75,11 @@ Small exits (13 per boot, mostly boot-time programs and `ls`):
 | 4 CPUs | 1.08–1.21, median 1.13 | 0.30–4.29, median 0.90 | 3.70–16.21, median 4.56 (16 exits) |
 | 1 CPU | 1.07–1.17, median 1.11 | 0.70–4.65, median 0.96 | not measured |
 
-The reaper waits in the BSP ready queue behind other runnable work, so a small
-program's WAIT now completes about 4–5 ms later in nested QEMU. Which task runs
-ahead was not traced. Precedence for BSP kernel tasks is the separate
-follow-up (BSP inventory decision 2).
+These queue delays include this record's own diagnostic lines: two `klog`
+lines printed in the BSP scheduler loop between queueing a process and the
+reaper running. Each line costs CPU 0 its output time
+([worker precedence record](../worker-precedence/README.md#kernel-console-rendering-cost)),
+so the figures overstate the delay.
 
 Lifecycle checks with a tone playing (4 CPUs, one boot each):
 `session bin://threadprobe.pxe` `lifecycle`, `stop`, `fault`, `tls-stop`,
@@ -121,10 +122,14 @@ Quake timedemo and quit, and EDuke32 for about 10 s and a quit.
 | --- | --- | --- |
 | Interrupts off at exit | one 21.8–39.8 ms span | longest step 0.012 ms |
 | Largest total release | (same) | 2.5 ms (up to 284 steps) |
-| Reaper queue delay | — | median 4.61 ms, max 6.67 ms (21 exits) |
+| Reaper queue delay | — | median 4.61 ms, max 6.67 ms (21 exits); diagnostic logging, see below |
 | Audio recoveries | 4 | 6 |
 | ...following a teardown | 0 | 0 |
 | ...following a large ALLOCATE (about 80 ms) | 4 | 6 |
+
+The queue delay is two or three diagnostic lines of about 2.1 ms each
+(4.19–4.33 and 6.55–6.66 ms). A later native run without per-exit lines measured
+tens of microseconds ([worker precedence](../worker-precedence/README.md#native-attribution)).
 
 The owner heard each Lua run interrupt the tone and Quake glitch when its demo
 ended, on both images; EDuke32 was clean start to end on `after`. The

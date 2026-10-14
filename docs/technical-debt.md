@@ -235,8 +235,11 @@ a BSP user task at the next interrupt, but there are no priorities and user sysc
 syscall delays workers and device interrupts (large private allocations now yield between bounded steps on the VM worker). With all four CPUs loaded in the nested
 VM ttcp and RAM-file writes stayed within their spread ([7b record](development/experiments/smp-task7b/README.md)), and the SMP
 task 8 native check saw no dropped keystrokes or frames under load ([record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)),
-though display smoothness and input latency were judged by feel, not measured. Revisit if interactive use shows worker or
-presentation latency under load: exclude the BSP by policy, add worker priority, or make long syscalls preemptible.
+though display smoothness and input latency were judged by feel, not measured. Nested, with user tasks saturating CPU 0, a woken
+audio worker waited 1.1 ms (4 CPUs) and 2.6 ms (1 CPU) on average, mostly behind them, and audio restarts rose. Natively, with 12 CPUs, the reaper waited
+tens of microseconds. CPU 0 worker precedence is therefore parked, with an accepted design: a woken worker gets 2 ms of CPU
+ahead of CPU 0's user tasks ([record](development/experiments/worker-precedence/README.md)). Revisit if a native workload
+keeps every CPU busy (all-CPU builds) or interactive use shows worker or presentation latency under load.
 
 ## ACPI interpreter host limits
 
@@ -984,14 +987,37 @@ interrupts-off for 128 MiB). ALLOCATE is now stepped the same way on the VM
 worker; nested, no restart falls inside an allocation
 ([record](development/experiments/bounded-allocate/README.md)).
 
-A woken BSP kernel worker still waits behind user tasks in round-robin;
-precedence for it is a separate measured follow-up
-([BSP inventory](wip/bsp-pinning-inventory.md#owner-decisions--accepted-2026-10-13)).
-Its native input: the reaper waited a median 4.6 ms (max 6.7 ms, 21 exits) in
-the BSP ready queue. RELEASE, image loading and DISPLAY services still run as
-single interrupts-off spans (DISPLAY 7–20 ms natively at Chocolate Quake
-start). Revisit with native `audio:` restart counts at game start and during
-play.
+Natively the stepped ALLOCATE run had no restarts. The 4.6 ms native reaper
+queue delay recorded earlier was the diagnostic's own log lines. Without them,
+the reaper waits tens of microseconds natively, so CPU 0 worker precedence is
+parked ([record](development/experiments/worker-precedence/README.md)). Every
+kernel log line and local console write can still stop CPU 0 while it renders
+([kernel console rendering](#kernel-console-rendering)). RELEASE, image loading
+and DISPLAY services still run as single interrupts-off spans (DISPLAY 7–20 ms
+natively at Chocolate Quake start). Revisit with native `audio:` restart counts
+at game start and during play.
+
+## Kernel console rendering
+
+Every `klog` line, and every write by a program to a local space's console, is
+drawn into that terminal's full-screen RAM image by the writer, on its own CPU,
+with interrupts off and the global output lock held. At the bottom margin each
+new row moves the whole image up by one row. Off-screen spaces pay the same.
+Other CPUs that log or write a console spin on the lock, and so does the CPU 0
+presenter, once per frame and per row. The Remote space and Multiplexer panes
+do not use this path.
+
+Measured ([record](development/experiments/worker-precedence/README.md#kernel-console-rendering-cost)):
+- **Native ThinkPad:** about 2.1 ms per scrolled row for kernel log lines; a
+  burst of about 30 lines stopped CPU 0 for 130 ms and was followed by two audio
+  restarts.
+- **Nested, 1280×800:** one console write of 256 newlines held the lock for
+  164 ms, and a tone played during such writes had 17–21 gaps.
+
+Consequence: printing many short lines in a local shell, or a burst of kernel log
+lines, can stop audio and every other CPU 0 device. Diagnostics that log per
+event perturb what they measure. Next task (owner, 2026-10-14): a proposal to
+decouple terminal rendering from the writer.
 
 ## HD Audio request batching
 
