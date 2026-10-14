@@ -39,26 +39,29 @@ while individually inspected disks can be probed.
 
 All resources are prepared on the BSP before AP startup. The initial choices in
 `kernel/usb/settings.h` reserve four storage entries per controller. Each owns
-two ring pages and a transfer buffer up to 64 KiB, with padding to select a
-64 KiB-aligned physical interior. One controller-owned DMA arena supplies these
-slices; with current choices it occupies 528 KiB and one mapping. The USB core
-also reserves one 64 KiB non-DMA read scratch buffer per controller. Admission
-exhaustion is explicit. Admitted entries remain associated with their original
-device even after setup failure; resources and records remain until reboot.
-The block backend additionally reserves two 64 KiB captured I/O buffers per
-supported device (512 KiB per controller at the current four-device budget),
-and candidate metadata covering the retained root/descendant inventory. Failed
-buffer preparation yields a terminal SETUP_FAILED candidate without discarding
-descriptor observations. These are resource choices independent of image sizes
-and physical topology.
+two ring pages and a 1 MiB transfer buffer, padded to select a 64 KiB-aligned
+physical interior. The controller-owned DMA arena occupies 4,368 KiB and one
+mapping; the core's non-DMA probe scratch remains 64 KiB. The block backend
+prepares two 1 MiB captured I/O buffers for each of the four entries (8 MiB
+payload per controller), plus retained candidate metadata. These reservations
+are made before device service, including on controllers with fewer usable
+disks. Admission exhaustion and failed preparation remain explicit; storage
+and records remain until reboot. These are resource choices, not disk-format or
+authority limits. The [matched QEMU record](../development/experiments/usb-superspeed-transfers.md)
+measures their resident cost.
 
 ## Transfers and recovery
 
 The owning BSP controller worker serializes each interface's command/data/status
 exchange. Private host transfers capture outbound bytes, retain no caller read
-pointer, and use one Normal TRB within a checked 64 KiB boundary. Cycle publication
-precedes the DCI doorbell. Completions must identify the active controller/device,
-endpoint and physical TRB; residue is bounded before deriving actual bytes.
+pointer, and use a bounded TD of at most sixteen Normal TRBs for a 1 MiB
+SuperSpeed exchange. High/full-speed devices retain 64 KiB. Each TRB stays within
+a checked 64 KiB boundary; chain and link-cycle state cover ring wrap. The tail
+is prepared before publishing the first cycle and ringing the DCI doorbell.
+Completions must identify the active controller/device, endpoint and a TRB in
+that TD; per-TRB residue is bounded before deriving actual bytes. An intermediate
+IN short event retains its byte count and DMA ownership until final IOC retires
+the tail.
 Ordinary successful input collection copies only actual bytes. Errors leave the
 destination untouched.
 
@@ -68,8 +71,9 @@ transaction-translator cleanup and Set TR Dequeue past the old data/status
 stages, then permits another SETUP. Full/low-speed devices behind high-speed hubs
 use their discovered TT owner and actual USB address; EP0 cleans both directions.
 
-Bulk halt clearing resets a halted xHCI endpoint, cleans its TT when required,
-sends CLEAR_FEATURE(ENDPOINT_HALT), and uses Configure Endpoint Drop+Add to reset
+Bulk halt clearing resets a halted xHCI endpoint and sets dequeue beyond its
+whole failed TD, cleans its TT when required, sends
+CLEAR_FEATURE(ENDPOINT_HALT), and uses Configure Endpoint Drop+Add to reset
 host toggle state and start at the retained producer frontier. Already idle
 non-stalled endpoints also receive device/host toggle reset during BOT recovery.
 Stalled input or output reports bounded transferred bytes only after successful
@@ -129,6 +133,35 @@ not run: its second session never became ready, so it is **not qualified**
 ([technical debt](../technical-debt.md#usb-read-aggregation-responsiveness)).
 Write-side throughput has not been investigated
 ([later directions](../wip/later-os-directions.md#persistent-storage-and-installation)).
+
+## SuperSpeed command size and rejection fallback
+
+Owner accepted 2026-10-14: try Linux usb-storage's larger-command shape before
+another diagnostic build. SuperSpeed BOT selects a 1 MiB command/capture ceiling;
+other speeds select 64 KiB. This changes neither BOT serialization nor queue
+depth. npfs gathers up to 512 KiB contiguous dirty data within its existing
+128-page publication batch; metadata image capacity and commit/barrier order
+remain unchanged. Current other transports retain their 128 KiB staging because
+their transfer caps are at most 64 KiB. Optional larger staging falls back to
+128 KiB and then individual pages on allocation pressure; pressure frees its
+actual allocated extent. No read-ahead, new cache or metadata grouping is added.
+
+A larger command may fall back only after a valid failed CSW reports **zero
+processed bytes** and valid current ILLEGAL REQUEST sense reports invalid opcode
+or field (`20/00` or `24/00`). REQUEST SENSE uses separate scratch, preserving
+captured outbound bytes. The worker permanently lowers its command ceiling to
+64 KiB for this boot and processes the untouched remainder under the original
+deadline. There is no replay of a processed prefix, transport failure, timeout
+or uncertain result. Any later failure retains the existing submitted-mutation
+latch. This narrow unsupported-command fallback trusts device residue/sense,
+just as other BOT processed-byte validation does.
+
+The captured block-ticket ceiling stays stable after registration; queued
+requests and mounted clients may retain it. A downgraded device splits those
+accepted requests internally into 64 KiB commands. The advertised request bound
+therefore describes captured capacity, not a promise of one physical command.
+[Qualification and native A/B limits](../development/experiments/usb-superspeed-transfers.md)
+separate QEMU results from the pending replacement-media native run.
 
 ## Write and cache qualification
 
@@ -222,7 +255,9 @@ latches failure on return. Later mutations, including already queued work,
 complete with `BLOCK_WRITE_FAILED` without publication. A clean rejection with
 valid sense preserves healthy read admission. Genuine transport/protocol
 failure, timeout or failed recovery retires the device and queued I/O. No
-mutation is replayed, and a later successful flush cannot clear the latch.
+uncertain mutation is replayed, and a later successful flush cannot clear the
+latch. The zero-processed unsupported-command fallback above happens before a
+request reports failure; it does not clear or bypass an existing latch.
 The block backend solely owns the mutable failure flag; probe qualification
 facts remain unchanged.
 
