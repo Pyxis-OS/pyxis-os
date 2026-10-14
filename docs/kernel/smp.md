@@ -308,8 +308,8 @@ does not make a still-running task available to another context.
 
 Process exit, termination and ordinary user faults atomically elect the first
 process-wide terminal result, taking no lifetime lock in fault entry. Later
-events preserve it. Fault entry does no peer stop fanout; the BSP reaper closes
-admission and requests sibling stop from its safe permanent stack. Native thread
+events preserve it. Fault entry does no peer stop fanout; task reaping in the BSP
+scheduler closes admission and requests sibling stop from its safe permanent stack. Native thread
 EXIT records only that thread's word and leaves siblings running. Last ordinary
 thread retirement supplies process EXITED/zero only if no earlier terminal
 event exists.
@@ -324,10 +324,19 @@ thread result. Completion retains neither process nor task pointers.
 
 `process_task_reclaimed()` decrements retiring-storage accounting only after
 that sequence. Final process teardown requires no linked tasks, retained task
-storage or VM activity. It detaches control/group links and destroys the private
-address space and remaining resources under group cleanup attribution, then
-publishes process control completion and completes the group member. Deferred
-cleanup can still delay group completion. Every admitted reference and operation
+storage or VM activity. The scheduler only marks the process RETIRED, detaches
+its control and group links and queues it for the BSP process reaper, without
+allocating. From then on TERMINATE finds no process and WAIT keeps waiting; the
+group still counts the member. The reaper is a BSP kernel task. Under group
+cleanup attribution held in its own task record, it ends device sessions, then
+releases the private address space in steps of at most 256 backed pages, range
+records or page-table entries with interrupts off, enabling interrupts and
+yielding to runnable BSP work between steps. Only after the remaining resources
+are released does it publish process control completion and complete the group
+member, so WAIT still means the memory is free. The budget is tuning, not a
+contract. Endpoint, capability-table and object release after the address space
+still run as one interrupts-off step, as does object reaping in the scheduler.
+Deferred cleanup can still delay group completion. Every admitted reference and operation
 must unwind before task retirement. Kernel tasks have no process or user
 request/profile allocations. A pending completion makes the BSP's next user
 timer interrupt return to the scheduler even with no second runnable BSP task.
@@ -664,7 +673,7 @@ These stay on the BSP:
   native filesystem admission, readiness waits and system-info memory;
 - the network, native filesystem, HOST transport, virtio-blk, USB, ACPI, audio
   and presentation workers;
-- task reaping, object retirement and the general kernel VM;
+- task reaping, the process reaper, object retirement and the general kernel VM;
 - device interrupt routing.
 
 The heap, PMM, scratch mappings and RAM-file backing work on any CPU; private

@@ -950,16 +950,20 @@ fail the engine until reboot. Hardware faults keep that fail-closed rule, with n
 controller reset.
 
 The faults come from the BSP audio worker missing service. Final process
-teardown runs in the BSP scheduler loop with interrupts off, so the worker
-waits for all of it: natively 21.8 ms for EDuke32 and 39.7 ms for Chocolate
-Quake, nested 51–95 ms ([record](development/experiments/audio-recovery/README.md)).
-Natively both quits tripped the old 20 ms guard; play did not. In nested QEMU,
-EDuke32's startup also caused restarts. Bounded, interrupts-on teardown is the
-next change. A woken
-BSP kernel worker still waits behind user tasks in round-robin; precedence for
-it is held until the BSP-pinning inventory decides whether the worker should
-leave the BSP. Revisit with native `audio:` restart counts during play and at
-quits once both land.
+teardown used to run in the BSP scheduler loop with interrupts off: natively
+21.8 ms for EDuke32 and 39.7 ms for Chocolate Quake, nested 51–95 ms
+([record](development/experiments/audio-recovery/README.md)). The BSP reaper now
+releases it in bounded steps; nested, the longest interrupts-off step is under
+0.25 ms and quits no longer trip
+([record](development/experiments/bounded-teardown/README.md)).
+
+Two causes remain. A large ALLOCATE zeroes and maps its whole region in one
+interrupts-off BSP service: nested, up to 269 ms at EDuke32 startup and
+100–300 ms for a growing 128 MiB Lua table, and natively the likely cause of
+the restart when Chocolate Quake starts. A woken BSP kernel worker still waits
+behind user tasks in round-robin; precedence for it is a separate measured
+follow-up ([BSP inventory](wip/bsp-pinning-inventory.md#owner-decisions--accepted-2026-10-13)).
+Revisit with native `audio:` restart counts at game start and during play.
 
 ## HD Audio request batching
 
