@@ -188,3 +188,17 @@ No libc, shell, public ABI or port changes were introduced by this task.
 The rebased image at parent `81f506f0`, userland `499fca0`, rebuilt warning-free
 using matching main SDK/ports artifacts (Actions API run 2537) with the same
 builder. Earlier functional captures remain the pre-environment record above.
+Both rebased flows completed on separate disposable disks: 2,231 files /
+47,603,873 bytes copied and compared, raw EFI verification 5/5, final `installed`
+and `updated`. The known-revision Update correctly reported all 56 roots updated
+by the runtime migration (47,426,689 → 47,603,873 bytes). Normal Review and final
+progress stayed within the 1280×800 view. Private diagnostics appeared in serial;
+neither rebased run reported a storage timeout. Captures/logs are under local
+`build/qualification/environment`.
+
+The final parent rebase also incorporates main `dd0e608c` (vela boot changes),
+without changing installer code or userland `499fca0`. SDK/public headers and
+runtime inputs remain the same; the full image and read-only Review are checked
+again after that rebase. The normal/verbose Print and small legacy fixture
+checks above precede the environment migration; their rendering/serializer code
+is unchanged. Observer failure paths remain source-only evidence.
