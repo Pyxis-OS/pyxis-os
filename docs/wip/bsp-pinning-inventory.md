@@ -159,7 +159,7 @@ but today local interrupt exclusion relies on their common BSP.
 | --- | --- | --- |
 | 1 | Bounded interrupt-on BSP reclamation | Directly removes proven 21.8/39.7 ms native scheduler blackout without reopening general VM ownership. VM pages/table entries, task/cap/object tails must be distinguished. **M/L, high safety risk but bounded scope**. |
 | 2 | Bound other IF=0 owner operations | Launch/rollback, VM allocation, capture, table growth and input/clipboard scans can still starve every BSP device. Moving a worker is not required to reduce these spans. **M/L per operation**. |
-| 3 | Worker selection precedence with user progress | Cheap queue-policy change reduces runnable delay after interrupts resume; not an IF=0 remedy or audio deadline guarantee. Native queue-delay attribution is not established. **S/M, policy/fairness risk**. |
+| 3 | Worker selection precedence with user progress | Cheap queue-policy change reduces runnable delay after interrupts resume; not an IF=0 remedy or audio deadline guarantee. Native reaper delay is tens of microseconds; parked with a design (decision 2). **S/M, policy/fairness risk**. |
 | 4 | Small direct immutable snapshots / fixed worker pilot | SYSTEM_INFO_MEMORY can use existing any-CPU PMM stats (**S**, low benefit/cost). Entropy or one-shot identity is a **M** pilot for AP kernel workers; little measured steady benefit, lower shared-state exposure. |
 | 5 | Audio off BSP with its IRQ/queue ownership | High benefit isolating steady stream service from remaining BSP blackouts; does not fix other devices or blocked producers. **M/L**, requires AP worker and cleanup foundation first. |
 | 6 | Device-private block queues, then leased CPU rendering | Preallocation helps block ownership; immutable render jobs can reduce visible-frame work. Whole-frame skipping already removes idle rendering. **M/L**, DMA/capture/panic hazards. |
@@ -202,7 +202,7 @@ inventory must not duplicate that implementation. Accepted first-slice direction
 **Status:** items 1–3 are implemented by the bounded-teardown change; see its
 [record](../development/experiments/bounded-teardown/README.md) for nested
 qualification, residual interrupts-off tails and the native run. Worker
-precedence (decision 2) remains a separate follow-up.
+precedence (decision 2) is parked; see below.
 
 **After the first slice the owner can:** quit or terminate a large game while
 CPU0 continues taking device interrupts and scheduling between reclaim chunks,
@@ -223,6 +223,12 @@ All three defaults are **accepted, not implemented**:
    accepted direction prefers FIFO worker selection rather than LIFO head
    insertion; this inventory does not settle the user-progress bound or remove
    the independently observed uncapped-load queue-delay risk.
+   **Parked 2026-10-14, design accepted:** a woken BSP worker gets 2 ms of CPU
+   ahead of CPU 0's user tasks, then rejoins round-robin. Nested, user tasks
+   delay workers only when they saturate CPU 0. Natively, with 12 CPUs, the
+   reaper waits tens of microseconds; the 4.6 ms input was diagnostic logging
+   ([record](../development/experiments/worker-precedence/README.md)). Revisit
+   with a native workload that keeps every CPU busy.
 3. **Fixed worker owner CPUs.** Never migrate or work-steal live kernel workers.
    Start a separately authorized AP-placement pilot with entropy/identity after
    its backend/IRQ ownership is proved. Audio is the first substantial candidate
