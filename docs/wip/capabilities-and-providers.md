@@ -313,12 +313,50 @@ Consequences for the remaining questions:
 
 - A **configuration document** names capabilities by resolving entries in its
   own environment, so it can hand out only what it holds.
-- **Revocation** is mostly a slot question: a manager points the slot at
-  nothing. Revoking a capability that was handed over directly remains open.
+- **Revocation** uses forwarders, of which service slots are one; see
+  Revocation below.
 
 Costs: the startup record (64 KiB budget today) and the 64-binding namespace
 limit become one general table whose limits need revisiting, and every URI open
 does one table lookup first.
+
+## Revocation (decided)
+
+Today a provider can withdraw an export, which stops every copy of it at once,
+and kernel objects cannot be revoked at all: closing a granting handle leaves
+copies already granted intact. Revocation uses one mechanism instead, the
+**forwarder** (a caretaker, in capability-system terms). The service slot above
+is one.
+
+- **A forwarder stands in for a capability and has two management rights:**
+  *retarget*, to another capability of the same type, and *cut*. A service slot
+  has both, so a supervisor can restart a provider. A **revocable copy** has
+  only *cut*: retargeting a file that its holder believes is `notes.txt` would
+  be a trap.
+- **The forwarder's creator keeps the management handle.** That is the
+  delegator, not necessarily the issuer, so whoever handed access out can take
+  it back without asking the provider.
+- **Plain copies stay irrevocable** and cost nothing extra, as today. A
+  delegator asks for a revocable copy explicitly. Launchers use revocable copies
+  wherever access may need taking back: consent-based device grants such as a
+  microphone or camera always, so a user's privacy switch can withdraw them
+  mid-run, and everything a session or space hands out, so teardown revokes it.
+- **No escape by copying.** Cutting a forwarder also cuts every copy derived
+  through it. The kernel tracks derivation only for revocable copies, so the
+  cost stays where revocation is used.
+- **The holder sees *denied*** (the facet outcome class; `EACCES` in libc).
+  Queued operations fail; operations already delivered to a provider complete,
+  as with export withdrawal today; later opens of the entry fail the same way.
+  Data already read stays read.
+
+```sh
+mic=$(revocable $microphone)
+export mic; ./recorder &
+revoke $mic                      # the recorder's next read is denied
+```
+
+The command names are placeholders. Revoking a shared-memory mapping also
+unmaps it, which waits for the shared-memory rules.
 
 ## Variables and the environment
 
@@ -475,15 +513,14 @@ Partial bodies never satisfy another open.
 
 ## Open questions
 
-1. **Revocation of directly held capabilities:** slots cover services; how a
-   capability handed over directly is revoked, and what its holder sees.
-2. **Retention numbers:** default and maximum backing for bound values.
-3. **Providers:** how a provider learns its client exited and a client sees its
+1. **Retention numbers:** default and maximum backing for bound values.
+2. **Providers:** how a provider learns its client exited and a client sees its
    provider gone; whether a client may hold both a provider's and the kernel's
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
-4. **Shared memory:** the capability type, mapping and lifetime rules.
-5. **Provider policy:** caller isolation, credentials and cache reuse for any
+3. **Shared memory:** the capability type, mapping and lifetime rules,
+   including unmapping on revocation.
+4. **Provider policy:** caller isolation, credentials and cache reuse for any
    shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
 
