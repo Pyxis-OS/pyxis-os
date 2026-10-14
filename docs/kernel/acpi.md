@@ -24,8 +24,10 @@ battery queries. Its policy choices, all made by the owner:
   operations drain and retained RW mounts are flushed/sealed before npfs pools,
   NVMe shutdown and S5/reset. An unresolved FAT mutation or failed storage flush
   keeps the system up; held detached FAT chains alone do not.
-- **Events.** Only the embedded controller's GPE and the fixed-feature power
-  button are enabled. An unclaimed SCI is re-armed after one second.
+- **Events.** The embedded controller's GPE, applicable fixed power event and
+  device power notifications are supported. Additional button GPEs require
+  runtime-route AML proof; `_PRW` alone is insufficient. No general runtime-GPE
+  initialization. An unclaimed SCI is re-armed after one second.
 - **Battery data.** The kernel polls every five seconds. The widget is always
   three characters on a red-to-green gradient; userspace reads firmware
   values, unconverted, through `system_info` READ. Fastfetch has no Power
@@ -155,10 +157,11 @@ query numbers while the status register reports an event, at most 32 per item,
 and runs `_Qxx` for each one on the EC device, then lets the GPE fire again. A
 missing `_Qxx` is normal and goes to the trace log.
 
-A notify handler on the namespace root receives every `Notify` and writes it to
-the trace log. Nothing acts on notifications yet; without that handler, uACPI
-would print a warning for each one, such as the T14's AC, USB-C and GPU
-notifications when AC is plugged in or out.
+A notify handler on the namespace root receives every `Notify`, including those
+with a device-specific handler, and writes it to the trace log. Power-button
+handlers act only on their admitted power events; other notifications remain
+trace-only. The root listener also prevents uACPI warning for unhandled events,
+such as the T14's AC, USB-C and GPU notifications when AC is plugged in or out.
 
 `kernel/acpi/battery.c` finds up to two `PNP0C0A` batteries and the first
 `ACPI0003` AC adapter. Every five seconds, at its top level, the worker:
@@ -189,19 +192,33 @@ rights. The kernel grants both to boot init, which forwards them to spaces that
 set `power = true` ([boot configuration](../userland/init.md#boot-configuration)).
 The shell's `poweroff` and `reboot` builtins use it.
 
-A short press of the power button runs the same power-off without any
-capability: physical access already allows holding the button, the firmware's
-forced power-off. The worker clears a press latched before boot, such as the
-one that powered the machine on, then enables the power button's fixed event.
-The event handler, in SCI service, only records the press; the worker logs
-`power: power button pressed` and runs the power-off at its top level. A press
-while a power operation runs is dropped, and a request that arrives while a
-press's power-off runs completes with BUSY. If that power-off fails, the system
-stays up and the next press tries again. Only the fixed-feature power button is
-supported; a control-method button (`PNP0C0C` sending `Notify` 0x80) is not.
-[Vela's extension scope](../development/experiments/vela-power-button/README.md)
-records the pending event-route boundary; no Notify power support is implemented
-yet.
+A short press runs the same clean power-off without a capability: physical
+access already permits the firmware's forced power-off by holding the button.
+`kernel/acpi/buttons.c` handles the fixed feature only when FADT declares it,
+and registers present `PNP0C0C` devices for Notify `0x80` and `INTC10CC` devices
+for Intel power press `0xce`. Intel release `0xcf` does nothing. Generic Intel
+Notify `0xc0` reads HDEM and accepts only power index 9. Intel admission requires
+simple mode (HDMM=0) and BTNL power-event setup: advertised event-filter `_DSM`
+functions, revision 1, or named-method fallback. Unrelated hotkeys and tablet
+features are not enabled. Contexts and registrations remain owned until reboot.
+
+Startup clears the applicable fixed latch, then services SCI and drains deferred
+work while presses are disarmed. During any power operation, fixed and Notify
+presses are dropped; after failure, deferred work drains before rearming. This
+avoids a queued operation-time Notify retrying shutdown. Queued deliveries
+coalesce into one latch, with no assumed physical debounce. The top-level worker
+logs `power: power button pressed` and runs power-off. Failure leaves the system
+up; a new press tries again. Force remains exclusive to the explicit overlay.
+
+The accepted event-route rule (2026-10-14) permits only existing event sources
+and a firmware-proven additional runtime power-button GPE, enabled through its
+existing handler. `_PRW` supplies wake-routing candidates, not runtime proof.
+No such additional route is qualified yet: preparation reports **unqualified**
+and enables no extra GPE. General runtime-GPE finalization is not called.
+Vela's owner run must establish delivery through the current EC route or provide
+AML evidence before another GPE can be enabled. The
+[qualification record](../development/experiments/vela-power-button/README.md)
+separates QEMU fixed-event coverage from this pending native result.
 
 The Ctrl+Alt+Delete [power overlay](power-overlay.md) has the same
 physical-access authority. `acpi_power_local()` hands its power-off or restart
