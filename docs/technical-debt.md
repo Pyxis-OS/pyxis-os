@@ -1007,8 +1007,11 @@ for behavior, measured/manual evidence and validation limits.
   background queries and ambiguous batch/filtered events refuse; apps inspecting
   global modifiers need the command-event snapshot for shared chords. Revisit
   with a concrete consumer and explicit approval, retaining private action identity.
-  Bundle manifests do not delegate clipboard grants; revisit when assigning a
-  bundled clipboard consumer.
+  Bundles request `clipboard_local` and `clipboard_shared` (`publish` and `paste`
+  rights, owner decision 2026-10-13), but a shell supplies them only on foreground
+  and session launches and only the stores it holds, so a bundle declaring them
+  optionally still runs without them and its Copy and Paste then refuse
+  ([program bundles](userland/program-bundles.md)).
 
 ## SDL2 port limits
 
@@ -1078,7 +1081,7 @@ next batches native checks.
 
 The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240; a resolution switcher would need a video driver with a mode
 list behind Quake's Video Modes menu, reallocation of the frame, z-buffer and surface cache, and a check of the renderer's size limits
-(upstream reverted 640x480 as unstable). Sound, networking, CD audio and joysticks are absent, and sound needs a native audio device first.
+(upstream reverted 640x480 as unstable). Sound, networking, CD audio and joysticks are absent; sound would need a Quake-specific adapter to the native [PCM audio sessions](interfaces/audio.md) and its own qualification ([Chocolate Quake](userland/chocolate-quake.md) already plays effects through SDL2).
 Saves are Quake's trusted text format, and shareware and retail data share `home://quake/id1` so their configuration and saves mix;
 QuakeC strings outside the hunk use a 512-entry table whose overflow stops the game with an error. Revisit when a second data set matters.
 Config, saves and screenshots follow the [atomic-save limits](#atomic-save-limits); demos are still recorded in place.

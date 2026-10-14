@@ -156,13 +156,20 @@ owner's `mirrors/SDL` mirror as a static library with a native backend:
 - video: one fullscreen window over the display session, with resize;
 - input: keyboard and pointer;
 - the clock;
-- paths: `SDL_GetPrefPath` gives `home://APP/`.
+- paths: `SDL_GetPrefPath` gives `home://APP/`;
+- threads and callback timers over libc's joinable [thread profile](../userland/threads.md),
+  with a lazily started timer thread and a pipe-based cross-thread wakeup;
+- PCM audio output through the space's native session.
 
 SDL draws into its own surface and presents by copying the whole surface into
-a held display slot and submitting it. Text input uses the SDK's shared US layout. Threads, audio
-devices and the other facilities Pyxis lacks are left out and report
-themselves as unsupported. The [SDL2 reference](sdl2.md) has the
-decisions and measurements.
+a held display slot and submitting it. Text input uses the SDK's shared US layout.
+Threads, timers and audio need declared grants: a bundle manifest requests
+`threads/manage` (and `pipe/create` for blocking event waits), and audio output
+needs the `audio` grant plus `threads/manage` for the callback thread. A plain
+program without them gets honest errors and, for audio, stays silent. Audio capture
+and output device selection, joysticks (zero devices), haptics, sensors, HIDAPI,
+shared objects, power, OpenGL and Vulkan are left out and report themselves as
+unsupported. The [SDL2 reference](sdl2.md) has the decisions and measurements.
 
 `build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
 port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
