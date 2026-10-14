@@ -73,6 +73,35 @@ will name the space that becomes the active tab once it has started:
 - If the focus space fails to start, Caelum stays active, because it shows the
   failure reason. A kernel panic still takes over the display.
 
+Task scope, 2026-10-14: two remaining defaults await the owner's answer before
+implementation:
+
+1. **Readiness:** after successful initial launch, focus when the presenter can
+   use the space's first nonblank terminal content or validated submitted graphics
+   frame. A silent space stays on Caelum; shell readiness is not a new handshake.
+   Creation/initial-launch failures never focus. Failures after successful launch
+   are ordinary runtime failures, without automatic switching back.
+2. **User intent:** cancel the one pending automatic switch after any meaningful
+   physical input since input service starts: keyboard presses, pointer motion,
+   button changes or wheel. Unchanged reports and the tagged synthetic probe do
+   not cancel it. Manual tab/layer switching always wins. There is no later retry
+   or persistent focus authority for ordinary children.
+
+Implementation will add the boolean to the shared `libconfig` boot schema and
+final merged-plan validation used by boot init and the configuration tools. The
+revision-derived installed catalog carries the new default without a second
+validator or manual setup requirement. Duplicate focus selections are diagnosed
+as invalid settings; automatic focus is suppressed for that boot even if an
+invalid installed override is ignored and archive defaults are used. Other
+configuration-error/fallback behavior stays unchanged.
+
+Qualification is functional, with no timing work during the owner's container
+build: live Development and installed Pyxis defaults; an unusable selected init;
+two selected spaces, including an invalid installed override; a silent/delayed
+space; physical input before readiness; Caelum's pinned first tab. Publish the
+userland PR before the parent pin. After implementation, move this section to
+[init](../userland/init.md), retaining the source-only limits and observed checks.
+
 ## Kernel and supervisor responsibilities
 
 Caelum would own space membership, lifetime, resource accounting and access
