@@ -7,11 +7,15 @@
 
 #define CPUID_BASIC_FEATURES 1
 #define CPUID_FEATURE_PAT (1u << 16)
+#define CPUID_FEATURE_X2APIC (1u << 21)
 #define CPUID_EXTENDED_FEATURES 0x80000001
 #define CPUID_FEATURE_SYSCALL (1u << 11)
 #define CPUID_FEATURE_NX (1u << 20)
 
 #define IA32_EFER 0xc0000080
+#define IA32_APIC_BASE 0x1b
+#define APIC_BASE_X2APIC (UINT64_C(1) << 10)
+#define IA32_X2APIC_ID 0x802
 #define IA32_STAR 0xc0000081
 #define IA32_LSTAR 0xc0000082
 #define IA32_FMASK 0xc0000084
@@ -56,22 +60,6 @@ static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
 #define CPUID_VENDOR 0
 #define CPUID_X2APIC_TOPOLOGY 0xb
 #define CPUID_INITIAL_APIC_ID_SHIFT 24
-
-/* This CPU's APIC ID from CPUID; needs no GS, LAPIC mapping or memory. Uses
- * the 32-bit x2APIC ID when leaf 0xb exists, otherwise the 8-bit initial ID. */
-static inline uint32_t cpu_initial_apic_id(void)
-{
-  uint32_t eax, ebx, ecx, edx;
-  cpuid(CPUID_VENDOR, &eax, &ebx, &ecx, &edx);
-  if (eax >= CPUID_X2APIC_TOPOLOGY) {
-    cpuid(CPUID_X2APIC_TOPOLOGY, &eax, &ebx, &ecx, &edx);
-    if (ebx) {
-      return edx;
-    }
-  }
-  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
-  return ebx >> CPUID_INITIAL_APIC_ID_SHIFT;
-}
 
 static inline void cpu_disable_interrupts(void)
 {
@@ -218,6 +206,18 @@ static inline void write_msr(uint32_t number, uint64_t value)
 {
   __asm__ volatile("wrmsr" : : "c"(number), "a"((uint32_t)value),
                    "d"((uint32_t)(value >> 32)) : "memory");
+}
+
+/* Needs no GS or LAPIC mapping, including early panic and NMI entry. Read the
+ * active x2APIC identity directly; xAPIC retains its eight-bit CPUID identity. */
+static inline uint32_t cpu_initial_apic_id(void)
+{
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  if ((ecx & CPUID_FEATURE_X2APIC) && (read_msr(IA32_APIC_BASE) & APIC_BASE_X2APIC)) {
+    return (uint32_t)read_msr(IA32_X2APIC_ID);
+  }
+  return ebx >> CPUID_INITIAL_APIC_ID_SHIFT;
 }
 
 static inline void invlpg(uintptr_t address)

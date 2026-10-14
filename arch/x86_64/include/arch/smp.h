@@ -5,6 +5,9 @@
 #define AP_BOOT_STACK_OFFSET 8
 #define AP_BOOT_CPU_OFFSET 16
 
+/* Dense CPU indices fit the fixed per-CPU scratch mapping window. */
+#define ARCH_CPU_LIMIT 256u
+
 #ifndef __ASSEMBLER__
 #include <stddef.h>
 #include <stdint.h>

@@ -75,6 +75,11 @@ bool io_apic_init(void)
     panic("keyboard GSI outside supported I/O APIC inputs");
   }
 
+  uint32_t destination = apic_id();
+  if (destination > UINT8_MAX) {
+    panic("I/O APIC target ID %u exceeds 255; interrupt remapping is required", destination);
+  }
+
   for (unsigned i = 0; i <= max_entry; ++i) {
     io_apic_write(IO_APIC_REDIRECTION_BASE + i * IO_APIC_REDIRECTION_REGISTERS,
                   IO_APIC_MASKED);
@@ -85,11 +90,11 @@ bool io_apic_init(void)
 
   /* Fixed delivery, physical destination: all keyboard interrupts go to the
    * BSP. Keep the route masked until the controller and receive queue are ready. */
-  io_apic_write(keyboard_register + 1, apic_id() << IO_APIC_DESTINATION_SHIFT);
+  io_apic_write(keyboard_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
   io_apic_write(keyboard_register, keyboard_entry | IO_APIC_MASKED);
   initialized = true;
   klog("keyboard: IRQ 1 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
-       keyboard_route.gsi, pin, apic_id());
+       keyboard_route.gsi, pin, destination);
 
   /* Only the keyboard's controller is mapped. A mouse input elsewhere, beyond
    * its entries or shared with the keyboard leaves the mouse unavailable. */
@@ -103,11 +108,11 @@ bool io_apic_init(void)
   } else {
     mouse_register = IO_APIC_REDIRECTION_BASE + mouse_pin * IO_APIC_REDIRECTION_REGISTERS;
     mouse_entry = redirection_entry(&mouse_route, APIC_MOUSE_VECTOR);
-    io_apic_write(mouse_register + 1, apic_id() << IO_APIC_DESTINATION_SHIFT);
+    io_apic_write(mouse_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
     io_apic_write(mouse_register, mouse_entry | IO_APIC_MASKED);
     mouse_initialized = true;
     klog("mouse: IRQ 12 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
-         mouse_route.gsi, mouse_pin, apic_id());
+         mouse_route.gsi, mouse_pin, destination);
   }
 
   /* The SCI is level-triggered and may be shared on other platforms. Sharing
@@ -123,11 +128,11 @@ bool io_apic_init(void)
   } else {
     sci_register = IO_APIC_REDIRECTION_BASE + sci_pin * IO_APIC_REDIRECTION_REGISTERS;
     sci_entry = redirection_entry(&sci_route, APIC_ACPI_VECTOR);
-    io_apic_write(sci_register + 1, apic_id() << IO_APIC_DESTINATION_SHIFT);
+    io_apic_write(sci_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
     io_apic_write(sci_register, sci_entry | IO_APIC_MASKED);
     sci_initialized = true;
     klog("ACPI: SCI IRQ %u -> GSI %u, I/O APIC input %u -> BSP APIC %u, %s %s\n",
-         sci_irq, sci_route.gsi, sci_pin, apic_id(),
+         sci_irq, sci_route.gsi, sci_pin, destination,
          sci_route.level_triggered ? "level" : "edge",
          sci_route.active_low ? "active-low" : "active-high");
   }

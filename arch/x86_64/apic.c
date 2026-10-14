@@ -7,10 +7,11 @@
 #include <kernel/panic.h>
 
 #define CPUID_FEATURE_APIC (1u << 9)
-#define IA32_APIC_BASE 0x1b
 #define APIC_BASE_ENABLED (UINT64_C(1) << 11)
-#define APIC_BASE_X2APIC (UINT64_C(1) << 10)
 #define APIC_BASE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
+#define X2APIC_MSR_BASE 0x800
+#define X2APIC_REGISTER_SHIFT 4
+#define X2APIC_ICR_DESTINATION_SHIFT 32
 
 #define APIC_ID 0x020
 #define APIC_ID_SHIFT 24
@@ -65,6 +66,9 @@
 #define PIT_POLL_LIMIT 10000000u
 #define PIT_CLOCK_POLL_INTERVAL 1024u
 
+/* Published before AP startup; the mode never changes while Caelum runs. */
+static bool x2apic, prepared;
+
 uint32_t arch_timer_frequency(void)
 {
   return TIMER_FREQUENCY;
@@ -73,7 +77,9 @@ uint32_t arch_timer_frequency(void)
 struct apic_msi_message apic_bsp_msi_message(uint8_t vector)
 {
   uint32_t destination = cpu_bsp()->lapic_id;
-  KASSERT(destination <= UINT8_MAX);
+  if (destination > UINT8_MAX) {
+    panic("MSI target APIC ID %u exceeds 255; interrupt remapping is required", destination);
+  }
   KASSERT(vector >= APIC_TIMER_VECTOR && vector < APIC_SPURIOUS_VECTOR);
 
   /* Address bits 19:12 select the physical APIC. Zero mode/delivery/trigger
@@ -88,16 +94,24 @@ struct apic_msi_message apic_bsp_msi_message(uint8_t vector)
 
 static uint32_t apic_read(unsigned offset)
 {
+  if (x2apic) {
+    return (uint32_t)read_msr(X2APIC_MSR_BASE + (offset >> X2APIC_REGISTER_SHIFT));
+  }
   return *(volatile uint32_t *)(APIC_BASE + offset);
 }
 
 static void apic_write(unsigned offset, uint32_t value)
 {
+  if (x2apic) {
+    write_msr(X2APIC_MSR_BASE + (offset >> X2APIC_REGISTER_SHIFT), value);
+    return;
+  }
   *(volatile uint32_t *)(APIC_BASE + offset) = value;
 }
 
-uint64_t apic_physical_address(void)
+void apic_prepare(bool boot_x2apic)
 {
+  KASSERT(!prepared);
   uint32_t eax, ebx, ecx, edx;
   cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
   if (!(edx & CPUID_FEATURE_APIC)) {
@@ -105,10 +119,20 @@ uint64_t apic_physical_address(void)
   }
 
   uint64_t base = read_msr(IA32_APIC_BASE);
-  if (base & APIC_BASE_X2APIC) {
-    panic("x2APIC boot mode is not supported");
+  if (boot_x2apic != !!(ecx & CPUID_FEATURE_X2APIC)) {
+    panic("boot local APIC mode disagrees with CPU x2APIC support");
   }
-  return base & APIC_BASE_ADDRESS_MASK;
+  if (!(base & APIC_BASE_ENABLED) || boot_x2apic != !!(base & APIC_BASE_X2APIC)) {
+    panic("boot local APIC mode disagrees with hardware");
+  }
+  x2apic = boot_x2apic;
+  prepared = true;
+}
+
+uint64_t apic_physical_address(void)
+{
+  KASSERT(prepared);
+  return x2apic ? 0 : read_msr(IA32_APIC_BASE) & APIC_BASE_ADDRESS_MASK;
 }
 
 static uint32_t calibrate_timer(void)
@@ -147,7 +171,10 @@ void apic_init(void)
     outb(PIC_MASTER_MASK, PIC_MASK_ALL);
     outb(PIC_SLAVE_MASK, PIC_MASK_ALL);
   }
-  write_msr(IA32_APIC_BASE, read_msr(IA32_APIC_BASE) | APIC_BASE_ENABLED);
+  uint64_t base = read_msr(IA32_APIC_BASE);
+  if (!prepared || !(base & APIC_BASE_ENABLED) || x2apic != !!(base & APIC_BASE_X2APIC)) {
+    panic("CPU local APIC mode differs from the selected boot mode");
+  }
 
   unsigned max_lvt = (apic_read(APIC_VERSION) >> APIC_MAX_LVT_SHIFT) & APIC_MAX_LVT_MASK;
   if (max_lvt < 5) {
@@ -169,8 +196,8 @@ void apic_init(void)
 
   cpu_current()->timer_count = calibrate_timer();
   if (cpu_current() == cpu_bsp()) {
-    klog("x86_64: local APIC timer calibrated, %u counts per ~8.33 ms\n",
-         cpu_current()->timer_count);
+    klog("x86_64: %s local APIC timer calibrated, %u counts per ~8.33 ms\n",
+         x2apic ? "x2APIC" : "xAPIC", cpu_current()->timer_count);
   }
 }
 
@@ -276,7 +303,8 @@ uint32_t apic_timer_remaining(void)
 
 uint32_t apic_id(void)
 {
-  return apic_read(APIC_ID) >> APIC_ID_SHIFT;
+  uint32_t id = apic_read(APIC_ID);
+  return x2apic ? id : id >> APIC_ID_SHIFT;
 }
 
 void apic_end_interrupt(void)
@@ -284,44 +312,44 @@ void apic_end_interrupt(void)
   apic_write(APIC_EOI, 0);
 }
 
-void apic_send_reschedule(uint32_t destination)
+static bool try_send_ipi(uint32_t destination, uint32_t command)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(destination != UINT32_MAX);
+  if (x2apic) {
+    /* x2APIC WRMSR is not serializing. Publish queues/TLB/debug state before
+     * notification; MFENCE alone need not order the subsequent WRMSR. */
+    __asm__ volatile("mfence; lfence" : : : "memory");
+    write_msr(X2APIC_MSR_BASE + (APIC_ICR_LOW >> X2APIC_REGISTER_SHIFT),
+        ((uint64_t)destination << X2APIC_ICR_DESTINATION_SHIFT) | command);
+    return true;
+  }
   KASSERT(destination <= UINT8_MAX);
+  if (apic_read(APIC_ICR_LOW) & APIC_ICR_SEND_PENDING) {
+    return false;
+  }
+  apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
+  apic_write(APIC_ICR_LOW, command);
+  return true;
+}
 
+void apic_send_reschedule(uint32_t destination)
+{
   unsigned remaining = APIC_ICR_POLL_LIMIT;
-  while (apic_read(APIC_ICR_LOW) & APIC_ICR_SEND_PENDING) {
+  while (!try_send_ipi(destination, APIC_RESCHEDULE_VECTOR)) {
     if (!--remaining) {
       panic("local APIC IPI delivery stalled");
     }
     __asm__ volatile("pause");
   }
-  /* Writing the low half sends the command. Zero mode fields select a physical
-   * destination, fixed delivery and edge triggering; no shorthand or broadcast. */
-  apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
-  apic_write(APIC_ICR_LOW, APIC_RESCHEDULE_VECTOR);
 }
 
 bool apic_try_send_tlb_flush(uint32_t destination)
 {
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(destination <= XAPIC_MAX_ID);
-  if (apic_read(APIC_ICR_LOW) & APIC_ICR_SEND_PENDING) {
-    return false;
-  }
-  apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
-  apic_write(APIC_ICR_LOW, APIC_TLB_FLUSH_VECTOR);
-  return true;
+  return try_send_ipi(destination, APIC_TLB_FLUSH_VECTOR);
 }
 
 bool apic_try_send_nmi(uint32_t destination)
 {
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(destination <= XAPIC_MAX_ID);
-  if (apic_read(APIC_ICR_LOW) & APIC_ICR_SEND_PENDING) {
-    return false;
-  }
-  apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
-  apic_write(APIC_ICR_LOW, APIC_ICR_DELIVERY_NMI);
-  return true;
+  return try_send_ipi(destination, APIC_ICR_DELIVERY_NMI);
 }

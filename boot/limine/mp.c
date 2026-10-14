@@ -1,5 +1,6 @@
 #include "mp.h"
 #include <limine.h>
+#include <arch/apic.h>
 #include <arch/smp.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
@@ -8,6 +9,7 @@
 __attribute__((used, section(".limine_requests")))
 static volatile struct limine_mp_request mp_request = {
   .id = LIMINE_MP_REQUEST_ID,
+  .flags = LIMINE_MP_REQUEST_X86_64_X2APIC,
 };
 
 static const struct boot_info *startup_boot;
@@ -42,9 +44,7 @@ void limine_capture_cpus(const struct boot_info *boot)
       response->cpu_count > SIZE_MAX / sizeof(struct limine_mp_info *)) {
     panic("missing or invalid Limine MP response");
   }
-  if (response->flags & LIMINE_MP_RESPONSE_X86_64_X2APIC) {
-    panic("x2APIC boot mode is not supported");
-  }
+  apic_prepare(response->flags & LIMINE_MP_RESPONSE_X86_64_X2APIC);
 
   startup_boot = boot;
   pointer_offset = boot->bootstrap_direct_offset;
