@@ -59,4 +59,4 @@ extend the foundation's scope.
   services. The foundation fixes the space and refuses grouped space creation.
 - **Capability-valued environment:** how bound launchers and supervision
   capabilities are selected, attenuated, copied, inherited or withheld through
-  [capability entries](capability-environment.md), configuration and namespaces.
+  [capability entries](capabilities-and-providers.md), configuration and namespaces.

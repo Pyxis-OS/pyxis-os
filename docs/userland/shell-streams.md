@@ -107,7 +107,7 @@ file positions do not provide descriptor-duplication semantics. These limits and
 revisit points are retained in [technical debt](../technical-debt.md#shell-redirection-side-effects-and-file-aliases).
 
 Future provider-to-shell capability handoff and explicit request submission
-remain separate designs in [userspace scheme providers](../wip/userspace-scheme-providers.md#prepared-requests-and-shell-handoff).
+remain separate designs in [userspace scheme providers](../wip/capabilities-and-providers.md#variables-and-the-environment).
 Ordinary HTTP GET uses the [stdio response adapter](stdio.md#http-streams-and-explicit-submission).
 Explicit C/Lua prepared helpers are implemented; the running shell's retained
 request bindings and producer-success coordinator remain HTTP task 5. Shell

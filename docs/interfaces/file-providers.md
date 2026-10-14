@@ -156,7 +156,7 @@ native integration and accepted limits.
 
 See the [service overview](userspace-services.md) for authority and lifetime across
 protocols. Format negotiation and writable providers remain
-[scheme-provider extensions](../wip/userspace-scheme-providers.md); shared-memory
+[scheme-provider extensions](../wip/capabilities-and-providers.md); shared-memory
 transfers need a separate ownership contract.
 
 [Prepared HTTP transactions](http-transactions.md) add a separate PREPARE and

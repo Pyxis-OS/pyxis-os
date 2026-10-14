@@ -13,7 +13,7 @@ proposals or investigations, and no new tasks in existing milestones. Ideas go i
 problems found in use are still fixed.
 
 **Sequencing (owner, 2026-10-14):** finish the open work, then resolve the
-[capability model](shell-capability-flow.md), then continue. No new libc, shell,
+[capability model](capabilities-and-providers.md), then continue. No new libc, shell,
 web/HTTP or Git work starts until then; independent tracks (storage and drivers,
 kernel) may run alongside.
 
@@ -131,9 +131,11 @@ tasks 1 to 3 are complete (#545, #552, #564).
 non-rescue userland build from source on the installed system until a package
 manager exists.
 
-[Capability-valued environment variables](capability-environment.md): parked
-(2026-10-11); revisit before prepared HTTP requests, session configuration or
-users and authority store a capability in a variable.
+[Capabilities and providers](capabilities-and-providers.md): **the active design
+track (owner-led, 2026-10-14).** Typed capabilities instead of URI spellings,
+capability-valued variables, pipes and redirects that carry capabilities,
+endpoints, interchangeable providers and representations. It gates new libc,
+shell, web/HTTP and Git work.
 
 [Control, events and faults](control-events-faults.md): Pyxis's answer to signals,
 tied to Continuum.
@@ -145,10 +147,6 @@ owner's compositor.
 
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) and the
 [Go runtime investigation](go-runtime.md).
-
-[Interchangeable providers](interchangeable-providers.md): programs depend on
-protocols and launchers choose who serves them, so a compositor can serve the same
-display, pointer and keyboard interfaces as the kernel.
 
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,
@@ -166,10 +164,6 @@ The merged host packer/checker (2a, #706) stays; bin placement is merged
 ([reference](../userland/program-bundles.md)) and its
 [future command index](program-bundles.md#future-command-index) awaits a separate go.
 
-[Shell capability flow](shell-capability-flow.md): proposal (2026-10-14) that
-typed capabilities, not URI spellings, carry semantics through redirects, blocks,
-pipes and variables; decide together with the capability environment.
-
 [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
 [filesystems and namespaces](vfs.md): working drafts.
 
@@ -179,8 +173,6 @@ personality such as NT per space; revisit before a second loader or format.
 [Users and authority](users-and-authority.md), a cross-cutting design checkpoint,
 and [credentials and biometric unlock](credentials-and-biometrics.md), parked after
 local users.
-
-[Userspace scheme providers](userspace-scheme-providers.md).
 
 ## Agreed boundaries
 

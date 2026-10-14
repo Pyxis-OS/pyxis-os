@@ -65,9 +65,9 @@ the environment exceeds the 64 KiB startup metadata limit.
 
 Values are strings for now. Environment variables are expected to carry
 capabilities later, as in the
-[capability-valued shell variables](../wip/userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
+[capability-valued shell variables](../wip/capabilities-and-providers.md#variables-and-the-environment)
 idea, so string-only is not a permanent property of this table. The parked
-[capability-valued environment](../wip/capability-environment.md) direction
+[capability-valued environment](../wip/capabilities-and-providers.md) direction
 records the invariants and open questions.
 
 Timezone names follow libc's IANA-name syntax: slash-separated components of

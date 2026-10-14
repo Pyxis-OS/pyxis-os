@@ -162,7 +162,7 @@ waits and local work still delay control replies; see
 [prepared service limits](http-transactions.md#service-and-limits). Call expiry
 cannot kill a provider or reclaim its unfinished native operations.
 
-[Scheme-provider extensions](../wip/userspace-scheme-providers.md) retain proposals
+[Scheme-provider extensions](../wip/capabilities-and-providers.md) retain proposals
 for writes, media-type aliases, richer representations, caches and SQLite views
 and sessions. [Desktop services](../wip/desktop-graphics.md) need their own window,
 shared-memory, frame-ownership and scheduling contracts. These are future designs,

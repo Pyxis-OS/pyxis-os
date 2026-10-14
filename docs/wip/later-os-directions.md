@@ -4,7 +4,7 @@ Status: parked ideas, not an implementation milestone or worklist. Promote one
 to a focused milestone when its prerequisites and intended result are clear.
 See the [planning index](boot-sdk-ports.md) for the current sequence.
 
-Parked elsewhere: [capability-valued environment variables](capability-environment.md)
+Parked elsewhere: [capability-valued environment variables](capabilities-and-providers.md)
 and [subsystems per space](subsystems-per-space.md).
 
 Owner direction (2026-10-11): extend negotiated remote resize to plain interactive sessions after the mux-only slice.
@@ -184,11 +184,11 @@ services; server resource contracts need their own scope. Hosting the Pyxis
 landing page remains an eventual application; revisit init supervision and restart
 policies when defining that web-server milestone.
 
-[Userspace URI scheme providers](userspace-scheme-providers.md) are a separate
+[Userspace URI scheme providers](capabilities-and-providers.md) are a separate
 future consumer: scoped kernel routing to userspace HTTP/HTTPS services, with
 readable results usable by `fopen` and `cat`. A bounded LRU response cache and
 remote compiler includes are later ideas, and the provider direction includes
-[read-only SQLite views and query results](userspace-scheme-providers.md#sqlite-views-and-query-results).
+[read-only SQLite views and query results](capabilities-and-providers.md#sqlite-views-and-query-results).
 Structured database sessions and an editor-based query worksheet are later
 experiments. This adds no HTTP or TLS to the kernel.
 

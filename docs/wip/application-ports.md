@@ -66,7 +66,7 @@ cat http://example.com/ | pup 'a json{}' | jq '.[].href'
 Shell pipelines, native head, cksum and restricted tee are implemented
 ([shell streams](../userland/shell-streams.md),
 [libc portability](../userland/libc-portability.md)). The separate
-[userspace scheme provider](userspace-scheme-providers.md) proposal for
+[userspace scheme provider](capabilities-and-providers.md) proposal for
 media-type aliases such as `json+http://` remains future work.
 
 ## Graphical applications and games
@@ -128,7 +128,7 @@ media-type aliases such as `json+http://` remains future work.
 
 Keep [retawq](later-os-directions.md#additional-ports) and Neovim on the list.
 Neovim requires its own runtime/dependency milestone before it can host the
-proposed [database worksheet experiment](userspace-scheme-providers.md#database-worksheet-experiment).
+proposed [database worksheet experiment](capabilities-and-providers.md#database-worksheet-experiment).
 
 One possible ordering is to alternate a practical usability milestone with an
 enjoyable port. This is a suggestion awaiting selection, not permission to start
