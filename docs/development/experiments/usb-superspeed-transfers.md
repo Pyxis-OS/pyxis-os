@@ -1,5 +1,13 @@
 # SuperSpeed BOT transfer qualification
 
+**Outcome: reverted, 2026-10-14.** #831 was merged by mistake and reverted in
+the next PR; main keeps the 64 KiB WRITE limit. The native sweep below found no
+repeatable end-to-end gain from larger commands, against about 11 MiB more
+backing per controller. The slow writes wait on the device during the data and
+status phases, and roughly 15,200 small 4 KiB WRITEs per run remain at every
+command size; that small-write pattern is the open lead, recorded in
+[technical debt](../../technical-debt.md#usb-stick-write-throughput).
+
 Owner decision accepted 2026-10-14 in [#824](https://git.internal/PyxisOS/pyxis-os/pulls/824):
 try SuperSpeed BOT commands up to 1 MiB before another diagnostic build, retain
 64 KiB for other speeds/rejecting devices, then one native A/B campaign. The
@@ -299,5 +307,4 @@ executed 1 MiB/rejected-large paths remain unqualified. Do not infer a SanDisk
 120/256 KiB rule. If publication throughput remains a priority, attribute its
 small-WRITE/metadata/reclamation work and completion waiting before proposing
 another change. No new task or timing run starts from this recommendation.
-#831 remains draft; the private probe and raw results are retained. All owned
-jobs are stopped.
+The private probe and raw results are retained. All owned jobs are stopped.

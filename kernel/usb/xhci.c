@@ -84,10 +84,8 @@ struct xhci_bulk {
   struct usb_host_device *device;
   struct xhci_bulk_endpoint in, out, *active;
   uintptr_t data_address;
-  phys_addr_t data_physical;
+  phys_addr_t data_physical, trb;
   size_t requested, actual;
-  unsigned first_trb, trb_count;
-  bool short_packet;
   enum control_state state;
   enum usb_result result;
 };
@@ -848,14 +846,10 @@ static bool allocate_devices(struct usb_host_controller *controller)
 
 static bool allocate_bulk(struct usb_host_controller *controller)
 {
-  _Static_assert(USB_BULK_BYTES && USB_BULK_BYTES <= USB_SUPER_BULK_BYTES,
-                 "SuperSpeed preparation covers ordinary bulk capacity");
-  _Static_assert(USB_SUPER_BULK_BYTES &&
-                 (USB_SUPER_BULK_BYTES + XHCI_TRB_TRANSFER_BYTES_MAX - 1) /
-                   XHCI_TRB_TRANSFER_BYTES_MAX < XHCI_RING_TRBS - 1,
-                 "a bulk TD leaves an unpublished transfer-ring frontier");
+  _Static_assert(USB_BULK_BYTES && USB_BULK_BYTES <= XHCI_RING_BOUNDARY,
+                 "bulk buffer fits one boundary-aligned Normal TRB");
   size_t padding = XHCI_RING_BOUNDARY - PAGE_SIZE;
-  size_t data_bytes = (USB_SUPER_BULK_BYTES + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  size_t data_bytes = (USB_BULK_BYTES + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
   size_t stride = 2 * PAGE_SIZE + data_bytes + padding;
   if (dma_buffer_allocate(&controller->bulk_dma, USB_STORAGE_DEVICE_BUDGET * stride) != MM_OK) {
     return false;
@@ -1627,55 +1621,22 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
 {
   struct xhci_bulk *bulk = device->bulk;
   if (!bulk || bulk->state != CONTROL_ACTIVE || !bulk->active ||
-      endpoint != bulk->active->dci) {
+      endpoint != bulk->active->dci || event->parameter != bulk->trb) {
     controller->failure = "unowned bulk transfer event";
     return false;
   }
-  const struct dma_buffer *ring = &bulk->active->ring;
-  if (event->parameter < ring->physical ||
-      event->parameter >= ring->physical + (XHCI_RING_TRBS - 1) * XHCI_TRB_BYTES ||
-      (event->parameter - ring->physical) % XHCI_TRB_BYTES) {
-    controller->failure = "invalid bulk transfer event pointer";
-    return false;
-  }
-  unsigned index = (event->parameter - ring->physical) / XHCI_TRB_BYTES;
-  unsigned ordinal = (index + XHCI_RING_TRBS - 1 - bulk->first_trb) % (XHCI_RING_TRBS - 1);
-  if (ordinal >= bulk->trb_count) {
-    controller->failure = "bulk transfer event outside active TD";
-    return false;
-  }
-  size_t offset = (size_t)ordinal * XHCI_TRB_TRANSFER_BYTES_MAX;
-  size_t bytes = bulk->requested - offset;
-  if (bytes > XHCI_TRB_TRANSFER_BYTES_MAX) {
-    bytes = XHCI_TRB_TRANSFER_BYTES_MAX;
-  }
-  bool last = ordinal == bulk->trb_count - 1;
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
   bool inbound = bulk->active == &bulk->in;
-  if (completion == XHCI_EVENT_SUCCESS && last && !residue && !bulk->short_packet) {
-    bulk->actual = bulk->requested;
+  if ((completion == XHCI_EVENT_SUCCESS && !residue) ||
+      (completion == XHCI_EVENT_SHORT_PACKET && inbound && residue <= bulk->requested)) {
+    bulk->actual = bulk->requested - residue;
     bulk->result = USB_OK;
     bulk->state = CONTROL_DONE;
     return true;
   }
-  if (completion == XHCI_EVENT_SHORT_PACKET && inbound &&
-      ((!bulk->short_packet && residue <= bytes) ||
-       (bulk->short_packet && last && residue <= XHCI_TRB_TRANSFER_BYTES_MAX))) {
-    /* Residue belongs to the first short TRB. The final IOC repeats that
-     * event while skipping the tail; only that final event retires the TD. */
-    if (!bulk->short_packet) {
-      bulk->actual = offset + bytes - residue;
-      bulk->short_packet = true;
-    }
-    if (last) {
-      bulk->result = USB_OK;
-      bulk->state = CONTROL_DONE;
-    }
-    return true;
-  }
-  if (completion == XHCI_EVENT_STALL && !bulk->short_packet && residue <= bytes) {
-    bulk->actual = offset + bytes - residue;
+  if (completion == XHCI_EVENT_STALL && residue <= bulk->requested) {
+    bulk->actual = bulk->requested - residue;
     bulk->result = USB_STALL;
     bulk->active->halted = true;
     bulk->state = CONTROL_HALTED;
@@ -3824,10 +3785,7 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
     return USB_IO;
   }
   if (endpoint->halted &&
-      (!endpoint_command(device, XHCI_TRB_RESET_ENDPOINT, endpoint->dci, 0, deadline) ||
-       !endpoint_command(device, XHCI_TRB_SET_DEQUEUE, endpoint->dci,
-                         (endpoint->ring.physical + endpoint->enqueue * XHCI_TRB_BYTES) |
-                         (endpoint->cycle ? XHCI_TRB_CYCLE : 0), deadline))) {
+      !endpoint_command(device, XHCI_TRB_RESET_ENDPOINT, endpoint->dci, 0, deadline)) {
     enum usb_result result = controller->command.timed_out ? USB_TIMEOUT : USB_IO;
     controller->failure = "bulk stall retirement failed";
     stop_controller(controller);
@@ -3851,10 +3809,10 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
     stop_controller(controller);
     return result;
   }
-  /* The final IOC proves Running:Idle; Reset+Set Dequeue leaves a stalled
-   * endpoint Stopped beyond the whole failed TD. Drop+Add resets host toggle
-   * state for either case, including the non-stalled pipe during BOT recovery.
-   * The retained producer frontier contains an unpublished cycle. */
+  /* A completed single-TRB TD proves Running:Idle; a reset stalled endpoint is
+   * Stopped. Drop+Add resets host toggle state for either case, including the
+   * non-stalled pipe during BOT reset recovery. The retained producer frontier
+   * skips the failed TD and contains an unpublished cycle. */
   memset((void *)device->input.address, 0, device->input.bytes);
   uint32_t *input = (uint32_t *)device->input.address;
   input[0] = 1u << endpoint->dci;
@@ -3879,59 +3837,6 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
   return result;
 }
 
-static void publish_bulk(struct xhci_bulk *bulk, struct xhci_bulk_endpoint *endpoint,
-                         size_t length, bool inbound)
-{
-  volatile struct xhci_trb *ring = (volatile struct xhci_trb *)endpoint->ring.address;
-  unsigned first = endpoint->enqueue;
-  bool first_cycle = endpoint->cycle;
-  unsigned first_control = 0;
-  bulk->active = endpoint;
-  bulk->first_trb = first;
-  bulk->trb_count = (length + XHCI_TRB_TRANSFER_BYTES_MAX - 1) / XHCI_TRB_TRANSFER_BYTES_MAX;
-  bulk->requested = length;
-  bulk->actual = 0;
-  bulk->short_packet = false;
-  bulk->result = USB_BUSY;
-  bulk->state = CONTROL_ACTIVE;
-  /* Prepared data is 64 KiB-aligned; every chunk stays within one boundary. */
-  size_t offset = 0;
-  size_t packets = (length + endpoint->descriptor.packet - 1) / endpoint->descriptor.packet;
-  for (unsigned i = 0; i < bulk->trb_count; ++i) {
-    unsigned index = endpoint->enqueue;
-    bool cycle = endpoint->cycle;
-    size_t bytes = length - offset;
-    if (bytes > XHCI_TRB_TRANSFER_BYTES_MAX) {
-      bytes = XHCI_TRB_TRANSFER_BYTES_MAX;
-    }
-    bool last = i == bulk->trb_count - 1;
-    size_t remaining = last ? 0 : packets - (offset + bytes) / endpoint->descriptor.packet;
-    if (remaining > XHCI_TRB_TD_SIZE_MAX) {
-      remaining = XHCI_TRB_TD_SIZE_MAX;
-    }
-    unsigned control = (XHCI_TRB_NORMAL << XHCI_TRB_TYPE_SHIFT) |
-      (inbound ? XHCI_TRB_SHORT_INTERRUPT : 0) |
-      (last ? XHCI_TRB_COMPLETION_INTERRUPT : XHCI_TRB_CHAIN);
-    ring[index].parameter = bulk->data_physical + offset;
-    ring[index].status = bytes | (remaining << XHCI_TRB_TD_SIZE_SHIFT);
-    /* Hold the first TRB behind its cycle until the whole TD is published. */
-    ring[index].control = control | ((i ? cycle : !cycle) ? XHCI_TRB_CYCLE : 0);
-    if (!i) {
-      first_control = control;
-    }
-    if (++endpoint->enqueue == XHCI_RING_TRBS - 1) {
-      ring[XHCI_RING_TRBS - 1].control = (XHCI_TRB_LINK << XHCI_TRB_TYPE_SHIFT) |
-        XHCI_TRB_TOGGLE_CYCLE | (last ? 0 : XHCI_TRB_CHAIN) | (cycle ? XHCI_TRB_CYCLE : 0);
-      endpoint->enqueue = 0;
-      endpoint->cycle = !cycle;
-    }
-    offset += bytes;
-  }
-  dma_write_barrier();
-  ring[first].control = first_control | (first_cycle ? XHCI_TRB_CYCLE : 0);
-  dma_write_barrier();
-}
-
 enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t address,
                                        const void *outbound, void *destination, size_t length,
                                        uint64_t deadline, size_t *actual, bool *submitted)
@@ -3944,8 +3849,7 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
     return USB_IO;
   }
   bool inbound = endpoint == &bulk->in;
-  size_t capacity = usb_speed_is_enhanced(device->link.speed) ? USB_SUPER_BULK_BYTES : USB_BULK_BYTES;
-  if (!actual || !length || length > capacity || (inbound ? !destination : !outbound)) {
+  if (!actual || !length || length > USB_BULK_BYTES || (inbound ? !destination : !outbound)) {
     return USB_INVALID;
   }
   *actual = 0;
@@ -3959,7 +3863,27 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
     memcpy((void *)bulk->data_address, outbound, length);
   }
   uint64_t flags = cpu_save_interrupts();
-  publish_bulk(bulk, endpoint, length, inbound);
+  unsigned index = endpoint->enqueue;
+  bool cycle = endpoint->cycle;
+  bulk->active = endpoint;
+  bulk->trb = endpoint->ring.physical + index * XHCI_TRB_BYTES;
+  bulk->requested = length;
+  bulk->actual = 0;
+  bulk->result = USB_BUSY;
+  bulk->state = CONTROL_ACTIVE;
+  volatile struct xhci_trb *ring = (volatile struct xhci_trb *)endpoint->ring.address;
+  ring[index].parameter = bulk->data_physical;
+  ring[index].status = length;
+  unsigned control = (XHCI_TRB_NORMAL << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_COMPLETION_INTERRUPT |
+    (inbound ? XHCI_TRB_SHORT_INTERRUPT : 0);
+  if (++endpoint->enqueue == XHCI_RING_TRBS - 1) {
+    ring[XHCI_RING_TRBS - 1].control = (XHCI_TRB_LINK << XHCI_TRB_TYPE_SHIFT) |
+      XHCI_TRB_TOGGLE_CYCLE | (cycle ? XHCI_TRB_CYCLE : 0);
+    endpoint->enqueue = 0;
+    endpoint->cycle = !cycle;
+  }
+  dma_write_barrier();
+  ring[index].control = control | (cycle ? XHCI_TRB_CYCLE : 0);
   if (submitted) {
     *submitted = true;
   }
