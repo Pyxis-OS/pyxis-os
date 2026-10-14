@@ -203,11 +203,16 @@ backing is allocated/zeroed once, copies use actual lengths, and the additional
 npfs staging is at most 384 KiB beyond A's 128 KiB. The measured QEMU controller
 backing increase above remains a separate cost, not measured native attribution.
 
-Next step is a proposal only: an unmerged diagnostic binary sweeping effective
+Owner authorized this diagnostic on 2026-10-14: one unmerged binary sweeping effective
 WRITE caps of 64, 120, 256 and 512 KiB with identical B backing, read limits and
 npfs staging. Bracket it with A; rotate size order and record bounded command-size,
 CBW/data/CSW, copy/queue-wait and Link-crossing aggregates. The B/64 control
 separates the changed implementation/backing from command size. No permanent
-256 KiB cap or SanDisk-specific rule is selected by this result. The owner must
-authorize this diagnostic before code. Raw captures remain private under the
-packet's `native-A1/` and `native-B1/`; all owned jobs are stopped.
+256 KiB cap or SanDisk-specific rule is selected by this result. The private
+branch `probe/usb-write-size-sweep` at `dc82a033` implements the sweep;
+its packet is `/shared/present/usb-large-bot/write-sweep-packet/README.md`.
+QEMU validates all four WRITE bounds, hashes and cleanup; the complete 120 KiB
+packet passes all 37 diagnostic snapshots. Backing/staging are fixed. Native
+sweep execution is pending; no permanent cap or performance acceptance follows
+from these functional checks. Raw A1/B1 and diagnostic captures remain private;
+all owned jobs are stopped.
