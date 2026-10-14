@@ -31,6 +31,8 @@ pins. The existing compiler container is
 Run the helper in that builder environment, with the checkout and shared output
 mounted at their same absolute paths. It refuses dirty/mismatched source or
 existing output; it uses the ordinary `make image` path, without stale bundles.
+The container installs the same host configuration dependency as CI, then runs
+the builds as Luna's UID/GID; the compiler itself is unchanged.
 
 ```sh
 BASELINE_REV=09a51b9a52d9fa1e3c9c0d7f7c33b75e9e008fa4
@@ -40,10 +42,17 @@ BASELINE_BUILDER=git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-e0801c2
 git clone --no-checkout ssh://git@git.internal:2222/PyxisOS/pyxis-os.git "$BASELINE_SOURCE"
 git -C "$BASELINE_SOURCE" checkout --detach "$BASELINE_REV"
 git -C "$BASELINE_SOURCE" submodule update --init --recursive
-podman run --rm --userns=keep-id --security-opt label=disable \
-  -v "$BASELINE_SOURCE:$BASELINE_SOURCE" -v "$BASELINE_SHARED:$BASELINE_SHARED" \
+podman run --rm --userns=keep-id --user=0 --security-opt label=disable \
+  --env HOME -v "$BASELINE_SOURCE:$BASELINE_SOURCE" -v "$BASELINE_SHARED:$BASELINE_SHARED" \
   -w "$BASELINE_SOURCE" "$BASELINE_BUILDER" \
-  "$BASELINE_SHARED/build.sh" "$BASELINE_SOURCE" "$BASELINE_REV" "$BASELINE_SHARED/images-A"
+  sh -s -- "$(id -u)" "$(id -g)" "$BASELINE_SHARED" "$BASELINE_SOURCE" "$BASELINE_REV" <<'BUILD'
+set -eu
+apt-get update
+apt-get install -y --no-install-recommends python3-pip
+python3 -m pip install --break-system-packages -r requirements.txt
+exec setpriv --reuid="$1" --regid="$2" --clear-groups --no-new-privs \
+  "$3/build.sh" "$4" "$5" "$3/images-A"
+BUILD
 ```
 
 The helper executes both recipes sequentially; the debug flags are the only
