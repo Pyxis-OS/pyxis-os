@@ -118,6 +118,10 @@ scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
 The VM owns one full guarded reservation and one eager backed suffix. Whole
 release and destruction free only that suffix; failure unmaps/frees only the
 provisional backed prefix, leaving the full reservation bare for unwind.
+Unmapping clears a run of leaf entries per page-table visit. Final destruction
+of a retired space releases backing, range records and page tables in bounded
+steps on the [BSP reaper](smp.md#scheduling-and-ownership). ALLOCATE
+still zeroes and maps its whole region in one interrupts-off BSP service.
 
 ## Native use
 

@@ -37,6 +37,14 @@ enum mm_result vm_space_activate(struct vm_space *space);
  * Frees VM-owned backing, private page tables and metadata on success.
  * The active check is local: a remote task must return ownership first. */
 enum mm_result vm_space_destroy(struct vm_space *space);
+/* The same destruction in bounded steps, BSP, IF=0 per call. Retirement
+ * performs the checks and frees nothing; on success the caller keeps exclusive
+ * ownership and makes no other VM call on the space. Each release step frees
+ * at most budget backed pages, range records or page-table entries read, and
+ * returns true once the space itself is freed. Between steps the caller may
+ * enable interrupts and yield. */
+enum mm_result vm_space_retire(struct vm_space *space);
+bool vm_space_release_step(struct vm_space *space, size_t budget);
 
 /* Addresses belong to the target space, not necessarily the active one.
  * Sizes are nonzero, rounded up to pages; alignment is a power of two >= a page.

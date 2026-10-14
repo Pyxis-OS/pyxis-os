@@ -7,6 +7,7 @@
  * Do not copy a live space or change its root outside the paging code. */
 struct arch_address_space {
   phys_addr_t root;
+  uintptr_t release_cursor; /* Paging-owned progress of arch_space_release_step(). */
 };
 
 void paging_init(struct boot_info *boot);
@@ -27,9 +28,13 @@ enum mm_result arch_space_create(struct arch_address_space *space);
  * mutate/destroy a private space; callers must first retire it on its CPU. */
 bool arch_space_active(const struct arch_address_space *space);
 enum mm_result arch_space_activate(struct arch_address_space *space);
-/* Rejects the kernel/active space. Frees private tables, never leaf frames;
- * callers must reclaim their backing first. Clears the root on success. */
-enum mm_result arch_space_destroy(struct arch_address_space *space);
+/* Exclusively owned, inactive private space, IF=0 on the calling CPU. Frees
+ * private tables bottom-up, never leaf frames; callers reclaim their backing
+ * first and make no other use of the space once release begins. Each call
+ * reads at most *budget table entries, deducting what it used, and resumes
+ * where the previous call stopped. Returns true once the root is freed and
+ * the storage is zeroed. */
+bool arch_space_release_step(struct arch_address_space *space, size_t *budget);
 
 /* Kernel mutations are limited to its shared allocation area and the heap
  * arena; other spaces permit lower-half mutations. Calls are BSP-only, IF=0,
@@ -61,6 +66,11 @@ bool paging_display_aperture_overlaps(phys_addr_t physical, size_t bytes);
 void paging_pci_config_writable(uintptr_t virtual, bool writable);
 enum mm_result arch_page_unmap(struct arch_address_space *space,
                                uintptr_t virtual, phys_addr_t *physical);
+/* Unmaps consecutive mapped pages from virtual, at most count and never past
+ * the end of its leaf table, storing their frames in physical. Returns the
+ * number unmapped; zero for an invalid or unmapped start. */
+size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
+                           size_t count, phys_addr_t *physical);
 enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions);
 enum mm_result arch_page_query(const struct arch_address_space *space,

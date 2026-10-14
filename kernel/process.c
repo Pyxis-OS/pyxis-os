@@ -59,23 +59,28 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
   return MM_OK;
 }
 
-static enum mm_result destroy_process(struct process *process)
-{
-  KASSERT(arch_cpu_index() == 0);
-  KASSERT(process->lifetime != PROCESS_SUBMITTED && !process->tasks &&
-      !process->task_count && !process->task_storage_count);
-  process_vm_retire(process);
+/* Pages, range records or page-table entries per interrupts-off teardown
+ * step. Tuning, not a contract. */
+#define TEARDOWN_STEP_BUDGET 256
 
+static struct process *retired_head, *retired_tail; /* BSP, IF=0. */
+static struct task_wait *reaper_wait; /* BSP, IF=0. */
+
+/* Closes VM admission and ends device sessions. */
+static void release_sessions(struct process *process)
+{
+  process_vm_retire(process);
   clipboard_process_exit(process);
   keyboard_process_exit(process);
   pointer_process_exit(process);
   bluetooth_hci_process_exit(process);
   display_process_exit(process);
   audio_process_exit(process);
-  enum mm_result result = vm_space_destroy(process->address_space);
-  if (result != MM_OK) {
-    return result;
-  }
+}
+
+/* After the address space is gone; frees the process. */
+static void release_records(struct process *process)
+{
   endpoint_process_exit(process);
   native_completion_process_exit(process);
   private_memory_discard_records(process);
@@ -89,6 +94,19 @@ static enum mm_result destroy_process(struct process *process)
     object_release(&process->execution_group->object);
   }
   kfree(process);
+}
+
+static enum mm_result destroy_process(struct process *process)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(process->lifetime != PROCESS_SUBMITTED && !process->tasks &&
+      !process->task_count && !process->task_storage_count);
+  release_sessions(process);
+  enum mm_result result = vm_space_destroy(process->address_space);
+  if (result != MM_OK) {
+    return result;
+  }
+  release_records(process);
   return MM_OK;
 }
 
@@ -258,24 +276,98 @@ bool process_task_reclaimed(struct process *process)
   process->lifetime = PROCESS_RETIRED;
   spin_unlock(&process->lifetime_lock);
 
-  struct process_control *control = process->control;
-  struct execution_group *group = process->execution_group;
-  struct process_result result;
-  KASSERT(process_result_get(process, &result));
-  process_control_detach_process(control);
+  /* Waiters keep the control and the group keeps its member count until the
+   * reaper has released the address space and resources. */
+  process_control_detach_process(process->control);
+  process->retired_control = process->control;
   process->control = NULL;
-  if (group) {
-    execution_group_member_detach(group, &process->group_member);
+  if (process->execution_group) {
+    execution_group_member_detach(process->execution_group, &process->group_member);
+    process->retired_group = process->execution_group;
     process->execution_group = NULL;
   }
 
+  process->retired_next = NULL;
+  if (retired_tail) {
+    retired_tail->retired_next = process;
+  } else {
+    retired_head = process;
+  }
+  retired_tail = process;
+  if (reaper_wait) {
+    struct task_wait *wait = reaper_wait;
+    reaper_wait = NULL;
+    task_wait_wake(wait);
+  }
+  return true;
+}
+
+/* Releases one retired process in bounded interrupts-off steps, yielding to
+ * other BSP work between them, then publishes its completion. */
+static void reclaim_process(struct process *process)
+{
+  struct process_control *control = process->retired_control;
+  struct execution_group *group = process->retired_group;
+  struct process_result result;
+  KASSERT(process_result_get(process, &result));
+
+  uint64_t flags = cpu_save_interrupts();
+  /* Cleanup attribution belongs to this task, so it survives the yields. */
   struct execution_group *previous = object_cleanup_enter(group);
-  KASSERT(destroy_process(process) == MM_OK);
+  release_sessions(process);
+  KASSERT(vm_space_retire(process->address_space) == MM_OK);
+  cpu_restore_interrupts(flags);
+
+  for (;;) {
+    flags = cpu_save_interrupts();
+    bool released = vm_space_release_step(process->address_space, TEARDOWN_STEP_BUDGET);
+    cpu_restore_interrupts(flags);
+    if (released) {
+      break;
+    }
+    kernel_task_yield_if_runnable();
+  }
+  process->address_space = NULL;
+
+  flags = cpu_save_interrupts();
+  release_records(process);
   process_control_complete(control, result);
   object_release(&control->object);
   object_cleanup_leave(previous);
   if (group) {
     execution_group_member_complete(group);
   }
-  return true;
+  cpu_restore_interrupts(flags);
+}
+
+static void reaper(void *argument)
+{
+  (void)argument;
+  for (;;) {
+    uint64_t flags = cpu_save_interrupts();
+    struct process *process = retired_head;
+    if (!process) {
+      struct task_wait *wait = task_wait_prepare();
+      reaper_wait = wait;
+      task_wait_sleep(wait);
+      cpu_restore_interrupts(flags);
+      continue;
+    }
+    retired_head = process->retired_next;
+    if (!retired_head) {
+      retired_tail = NULL;
+    }
+    process->retired_next = NULL;
+    cpu_restore_interrupts(flags);
+    reclaim_process(process);
+  }
+}
+
+void process_reaper_init(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  enum mm_result result = kernel_task_create(reaper, NULL);
+  if (result != MM_OK) {
+    panic("cannot create process reaper (error %u)", (unsigned)result);
+  }
 }

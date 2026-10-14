@@ -29,7 +29,11 @@ struct vm_space {
   struct vm_range *head;
   size_t total_pages;
   atomic_size_t waiters;
+  bool retired; /* Owner committed to release; no other operation follows. */
 };
+
+/* Frames unmapped per leaf-table visit before freeing; stack-sized. */
+#define BACKING_RUN_PAGES 64
 
 static struct vm_space kernel_space;
 /* BSP-owned, never reused, including after failed provisional backing. */
@@ -350,23 +354,37 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
 static void free_backing(struct vm_space *space, uintptr_t base,
                          size_t pages)
 {
-  for (size_t i = 0; i < pages; ++i) {
-    phys_addr_t physical;
-    KASSERT(arch_page_unmap(page_space(space), base + i * PAGE_SIZE,
-                             &physical) == MM_OK);
-    pmm_free(physical, 1);
+  phys_addr_t frames[BACKING_RUN_PAGES];
+  while (pages) {
+    size_t count = arch_page_unmap_run(page_space(space), base,
+        pages < BACKING_RUN_PAGES ? pages : BACKING_RUN_PAGES, frames);
+    KASSERT(count);
+    for (size_t i = 0; i < count; ++i) {
+      pmm_free(frames[i], 1);
+    }
+    base += count * PAGE_SIZE;
+    pages -= count;
+  }
+}
+
+static uintptr_t backing_base(const struct vm_range *range)
+{
+  return range->base + (range->pages - range->backed_pages) * PAGE_SIZE;
+}
+
+static void drop_wait_tokens(struct vm_space *space, struct vm_range *range)
+{
+  if (range->wait_tokens) {
+    withdraw_wait_pages(space, backing_base(range), range->backed_pages * PAGE_SIZE);
+    kfree(range->wait_tokens);
+    range->wait_tokens = NULL;
   }
 }
 
 static void retire_backing(struct vm_space *space, struct vm_range *range)
 {
-  uintptr_t base = range->base + (range->pages - range->backed_pages) * PAGE_SIZE;
-  if (range->wait_tokens) {
-    withdraw_wait_pages(space, base, range->backed_pages * PAGE_SIZE);
-    kfree(range->wait_tokens);
-    range->wait_tokens = NULL;
-  }
-  free_backing(space, base, range->backed_pages);
+  drop_wait_tokens(space, range);
+  free_backing(space, backing_base(range), range->backed_pages);
 }
 
 enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
@@ -567,13 +585,14 @@ enum mm_result vm_space_activate(struct vm_space *space)
   return arch_space_activate(page_space(space));
 }
 
-enum mm_result vm_space_destroy(struct vm_space *space)
+enum mm_result vm_space_retire(struct vm_space *space)
 {
-  if (!space || space == &kernel_space || arch_space_active(page_space(space))) {
+  if (!space || space == &kernel_space || space->retired ||
+      arch_space_active(page_space(space))) {
     return MM_INVALID;
   }
 
-  /* Check borrowed mappings before freeing anything. A rejected destruction
+  /* Check borrowed mappings before freeing anything. A rejected retirement
    * must leave the entire space usable, including its VM-owned allocations. */
   for (struct vm_range *range = space->head; range; range = range->next) {
     if (range->state == RANGE_RESERVED) {
@@ -583,19 +602,48 @@ enum mm_result vm_space_destroy(struct vm_space *space)
       }
     }
   }
+  space->retired = true;
+  return MM_OK;
+}
 
-  for (struct vm_range *range = space->head; range;) {
-    struct vm_range *next = range->next;
-    if (range->state == RANGE_BACKED) {
-      retire_backing(space, range);
+bool vm_space_release_step(struct vm_space *space, size_t budget)
+{
+  KASSERT(space && space->retired && budget);
+  while (budget) {
+    struct vm_range *range = space->head;
+    if (!range) {
+      if (!arch_space_release_step(&space->arch, &budget)) {
+        return false;
+      }
+      KASSERT(!atomic_load_explicit(&space->waiters, memory_order_relaxed));
+      kfree(space);
+      return true;
     }
-    drop_record(space, range);
-    range = next;
-  }
 
-  KASSERT(!atomic_load_explicit(&space->waiters, memory_order_relaxed));
-  KASSERT(arch_space_destroy(&space->arch) == MM_OK);
-  kfree(space);
+    if (range->state == RANGE_BACKED && range->backed_pages) {
+      drop_wait_tokens(space, range);
+      /* Freeing from the front keeps the remaining backing a suffix. */
+      size_t pages = range->backed_pages < budget ? range->backed_pages : budget;
+      free_backing(space, backing_base(range), pages);
+      range->backed_pages -= pages;
+      budget -= pages;
+      continue;
+    }
+    space->head = range->next;
+    drop_record(space, range);
+    --budget;
+  }
+  return false;
+}
+
+enum mm_result vm_space_destroy(struct vm_space *space)
+{
+  enum mm_result status = vm_space_retire(space);
+  if (status != MM_OK) {
+    return status;
+  }
+  /* An unlimited budget finishes in one call. */
+  KASSERT(vm_space_release_step(space, SIZE_MAX));
   return MM_OK;
 }
 

@@ -393,7 +393,9 @@ root can the CPU return ownership to the BSP for cleanup. This prevents freeing
 an executing stack or active page tables. The BSP detaches the retired task,
 frees its kernel stack and metadata, releases its stack/FS pins and publishes
 native completion. Only after every task storage record and VM activity drains
-does it destroy the process and private address space.
+does it queue the process for the BSP reaper. The reaper releases the private
+address space in bounded interrupts-off steps, yielding between them, then the
+remaining resources, and only then publishes process completion.
 The owning space and its TTY survive; original boot-module frames remain
 reserved. Fatal kernel exceptions still panic. Normal libc exit flushes and
 closes registered streams before invoking the kernel; _Exit and fatal faults

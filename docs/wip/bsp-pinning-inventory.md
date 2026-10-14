@@ -199,6 +199,11 @@ inventory must not duplicate that implementation. Accepted first-slice direction
    diagnostic method for before/after masked spans and report total reclaim time
    separately. No new instrumentation or measurement is merged by this inventory.
 
+**Status:** items 1–3 are implemented by the bounded-teardown change; see its
+[record](../development/experiments/bounded-teardown/README.md) for nested
+qualification, residual interrupts-off tails and the native run. Worker
+precedence (decision 2) remains a separate follow-up.
+
 **After the first slice the owner can:** quit or terminate a large game while
 CPU0 continues taking device interrupts and scheduling between reclaim chunks,
 with unchanged native retirement results. This is the planned outcome, not

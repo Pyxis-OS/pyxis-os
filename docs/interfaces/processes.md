@@ -631,12 +631,15 @@ admission is not sealed. A handle restricted to WAIT is denied. Today no
 process forwards an observer. Any future transfer of an observer handle carries
 TERMINATE unless the rights are reduced to WAIT at transfer.
 
-For TERMINATE, the control object borrows a task link. Launch preparation sets it
+For TERMINATE, the control object borrows a process link. Launch preparation sets it
 after installing the observer, and the BSP clears it under the completion lock
-before discarding an unpublished preparation or reaping the task. The reaper
-clears it before freeing the task, then publishes completion. A request holds
-the completion lock while it calls the stop request, so the task memory stays
-live; this follows the existing completion-then-queues lock order. Libpyxis
+before discarding an unpublished preparation or retiring the process.
+Retirement follows the reaping of its last task: the scheduler queues the
+process for the BSP process reaper, which publishes completion only after
+releasing the process. A TERMINATE in between finds no process and does
+nothing; WAIT keeps waiting. A request holds the completion lock while it calls the stop request,
+so the process memory stays live; this follows the existing
+completion-then-queues lock order. Libpyxis
 `process_terminate()` wraps the request.
 
 Wait records live in permanent task metadata, never remote task stacks. The
