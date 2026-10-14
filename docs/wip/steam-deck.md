@@ -1,9 +1,9 @@
 # Steam Deck as the second hardware target
 
-Status: **proposal; nothing is implemented and no task is assigned.** The owner
-approved writing this and accepted its [three decisions](#owner-decisions-2026-10-11)
-on 2026-10-11. Each task below needs its own go, and its unresolved behavior is
-settled in its task proposal before code starts.
+Status: **accepted plan; task 9 assigned by the owner, 2026-10-14.** Its
+[scope](#task-9-scope-before-code) and three unresolved choices below precede
+implementation. The owner accepted the [plan decisions](#owner-decisions-2026-10-11)
+on 2026-10-11. Each task requires its own owner go.
 
 The ThinkPad T14 Gen 1 (AMD) stays the primary machine. A Steam Deck OLED adds a
 second AMD machine with a handheld form factor: a portrait panel, a touchscreen,
@@ -223,6 +223,104 @@ console, because network logging starts late in boot.
 
 **After this task the owner can:** get a DHCP lease and reach the network from
 the Deck through the dock, and use the UDP log and remote terminal on it.
+
+#### Task 9 scope before code
+
+**Assigned; choices proposed, not accepted or implemented.** Scope branch
+`usb/cdc-ncm-dock-ethernet` starts at main `d4948f33`. Implementation depends on
+[#852](https://git.internal/PyxisOS/pyxis-os/pulls/852), whose ThinkPad dock
+retirement check passed; rebase after it merges before kernel work.
+
+Measured inventory, `/shared/present/dock-ethernet-lsusb.txt`: AX88179A
+`0b95:1790`, SuperSpeed behind `2109:0817`; configuration 1 vendor `ff/ff`,
+configuration 2 NCM control `02/0d` plus data `0a`/alt 1, configuration 3 ECM
+`02/06`. This outline does not establish functional/endpoint companion bytes,
+MAC or NTB parameters. RTL8156 remains descriptor-unconfirmed.
+
+Implement a native class driver, selecting the unique supported NCM function
+from checked CDC header/union/Ethernet/NCM descriptors and endpoint companions;
+use its real configuration value and data alternate. For the observed dock this
+means configuration 2, not a VID/PID-specific vendor path. Refuse ambiguous or
+unsupported profiles without disturbing existing HID/BOT bindings. No ECM,
+RNDIS, MBIM, vendor driver or jumbo-frame fallback in this slice; reconsider ECM
+only with evidence that NCM is unworkable.
+
+Provisional transfer profile: negotiated NTB16 without appended CRC, a 16 KiB
+RX/TX ceiling, two posted RX buffers, bounded copied frame queues and TX batches
+of at most eight Ethernet frames, with a 1 ms batch deadline serviced when the
+BSP is scheduled. Initial preparation allows
+two NIC candidates per controller and four retained replacement generations per
+known NIC branch. Honor actual device size,
+alignment/remainder and datagram-count parameters; a smaller accepted size wins,
+and an incompatible device is refused. Keep the stack's 1500-byte MTU. Buffers,
+counts and pacing are tunable policy, not ABI. Obtain a validated unicast MAC
+from the CDC Ethernet descriptor's string; never invent one. Carrier/speed come
+from real NCM notifications, with unknown/down distinct from up.
+
+Source-inspected gaps: `usb_host_configure_async_bulk()` currently admits only
+root/full-speed HCI with 4 KiB buffers; interrupt-IN refuses SuperSpeed and has
+only HCI/HID/hub kinds. Add separate network resources and checked high/SuperSpeed
+bulk/notification scheduling, preserving HCI firmware recovery boundaries.
+All backing/records are prepared before AP startup. Owning xHCI workers alone
+issue USB operations; the network worker exchanges owned copied frames/status
+with them, never borrows DMA or calls their helpers from another context.
+
+Register the NIC in the existing provider/driver layer and use existing MAC/link
+selection, DHCP, UDP, Remote and xfer. Add the driver family and collision-free
+opaque USB IDs; no new selector or raw USB userspace authority. Complete NIC
+candidate discovery after bounded USB enumeration, independently of unrelated
+unsupported classes making USB's observation snapshot incomplete. Preserve one
+selected logical NIC and no failover to a different adapter.
+
+**Owner choices — stop before implementation:**
+
+1. **Preparation before binding. Default: permit bounded class setup and carrier
+   notifications for candidates; Ethernet bulk traffic begins only at net0
+   BIND.** LOOKUP/enumeration remain read-only and start no work. This allows
+   linked selection to learn MAC/carrier from USB, unlike passive PCI identity.
+   Alternative: require explicit MAC binding before class setup, losing ordinary
+   automatic link selection for these NICs.
+2. **Known-branch recovery. Default: bounded re-enumeration of an already admitted
+   NCM branch, plus bounded initial retries of boot-connected branches before
+   NIC discovery seals, with fresh prepared generations and endpoint fences.**
+   The native boot blip retired the whole dock before manual unplug; #852 does
+   not restore its hubs. Initial retries must also cover loss before the first
+   MAC/function capture; a settle delay alone cannot guarantee recovery after
+   capture. After binding, keep it only for the same checked MAC/function;
+   close admission while recovering, fail queued work honestly, never replay
+   uncertain TX. Refuse a different adapter; exhausted recovery capacity leaves
+   this NIC unavailable, preserving other devices. This excludes general USB
+   hotplug, storage/HCI readmission and DMA reuse. Alternative: boot-only NIC,
+   requiring reboot after branch loss, including the observed startup blip.
+3. **Emergency transport. Default: normal UDP logging, Remote and xfer now;
+   explicitly defer fatal USB UDP and stopped-kernel debugging.** Those require
+   safe ownership of the shared xHCI event/command/interrupter state, not merely
+   NIC rings; current panic/debug paths forbid locks, scheduling and allocation.
+   Refuse unsupported emergency takeover honestly, retaining DMA and local
+   reporting. Alternative: include controller-wide fatal/debug handoff here,
+   enlarging this task substantially. The Deck would need that before relying
+   on network GDB for driver bring-up.
+
+First concrete implementation step after answers and baseline: validate/capture
+the selected NCM function and class parameters into retained candidate storage,
+with explicit refusal reasons, then qualify the native transport and provider
+together. Capture matched IPC/launch and ordinary network controls before code;
+record resource counts and negotiated parameters before throughput claims.
+
+QEMU's [USB network model](https://gitlab.com/qemu-project/qemu/-/blob/master/hw/usb/dev-network.c?ref_type=heads)
+is ECM/RNDIS, not NCM. Qualify ordinary non-NCM boots/hot-unplug in QEMU, and
+evaluate an isolated existing Linux NCM gadget via `dummy_hcd`/configfs and
+QEMU `usb-host` for class traffic; the matching host modules exist, setup is
+unrun. No new emulator or test framework. Native owner checks: dock then Deck
+and vela/RTL8156 when available, exact MAC selection, DHCP, normal UDP log,
+Remote/xfer integrity, Ethernet cable down/up and USB branch loss/recovery;
+record the emergency limits separately.
+
+Use original native code from the USB-IF wire contract. The
+[Linux v6.11 implementation](https://raw.githubusercontent.com/torvalds/linux/v6.11/drivers/net/usb/cdc_ncm.c)
+is a prior reference with an explicit GPLv2/BSD-2-Clause choice, not a port added
+here; any later adaptation must retain its selected notices/provenance.
+No compiler rebuild or new mirrored build dependency is expected.
 
 ### 10. Bluetooth over UART
 
