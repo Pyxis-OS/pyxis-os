@@ -93,7 +93,9 @@ and [memory](docs/kernel/memory.md). Low-level allocation contracts live in
 [heap](include/kernel/mm/heap.h) headers. Concurrent shared mapping mutation and AVX
 remain outside the current implementation. Pyxis runs natively on its first
 hardware target, the [ThinkPad T14 Gen 1 AMD](docs/targets/t14-gen1-amd/notes.md#native-status),
-including networking and USB installation.
+including networking and USB installation. It also boots on the
+[IdeaPad Slim 5 16IPH11](docs/targets/ideapad-slim5-16iph11/notes.md), its first Intel
+machine, with partial device support.
 
 Find subsystem references in the [documentation guide](docs/README.md).
 For development, follow [AGENTS.md](AGENTS.md) and the
