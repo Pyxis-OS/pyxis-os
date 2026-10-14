@@ -90,6 +90,25 @@ dispatch contradicts it in both directions:
    - content types reaching consumers and terminals are where
      representations come in, per the project's founding idea.
 
+## Libc
+
+The same model applies to C programs, through ordinary stdio:
+
+- **`fopen` dispatches on the capability type** returned by the generic
+  write-open (or read-open), not on the URI spelling. `descriptor_open()` stops
+  classifying HTTP by name; a provider that returns a transaction gets
+  transaction behaviour whatever its scheme.
+- **`fflush(f)` commits because the FILE is transactional.** Task 5c's rules
+  (an explicit flush commits once; implicit drains, `fclose` and exit only stage;
+  `"w+"` reads the reply from the same FILE) stay, keyed on the FILE's type.
+- **A FILE can expose its capability's facets.** A small Pyxis API (in
+  `<pyxis/…>`, not stdio) lets a program ask what a stream is: its type, status
+  (for example an HTTP code) and content type. This is how a C program reads
+  the status and content type of a reply handed to it as stdin by a
+  capability-passing pipe. Programs that ignore it keep reading bytes.
+- **`$job`-style expansion needs nothing new in libc**: the child opens the
+  expanded name (such as `env://job`) like any other path, through its grant.
+
 ## Variables
 
 With the [capability environment](capability-environment.md), `$job` holds a
