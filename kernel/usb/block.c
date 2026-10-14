@@ -136,7 +136,7 @@ void usb_block_set_id(struct usb_block_device *device, block_device_id id)
 static bool accepting(const struct usb_block_device *device)
 {
   return device && device->id && device->preparation == BLOCK_DEVICE_READY &&
-    !device->failed && !device->pool->failed;
+    !device->failed && !device->pool->failed && usb_host_device_present(device->bot->host);
 }
 
 enum block_result usb_block_get_info(struct usb_block_device *device, struct block_info *info)
@@ -337,6 +337,9 @@ void usb_block_process(struct usb_block_pool *pool)
     struct usb_block_device *device = &pool->devices[i];
     for (unsigned request = 0; request < USB_BLOCK_SLOTS; ++request) {
       flags = cpu_save_interrupts();
+      if (!device->failed && !usb_host_device_present(device->bot->host)) {
+        fail_device(device);
+      }
       struct usb_block_slot *slot = NULL;
       for (unsigned j = 0; accepting(device) && j < USB_BLOCK_SLOTS; ++j) {
         struct usb_block_slot *candidate = &device->slots[j];
