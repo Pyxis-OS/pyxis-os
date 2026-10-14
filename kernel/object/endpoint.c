@@ -1,4 +1,6 @@
 #include <abi/endpoint.h>
+#include <abi/file.h>
+#include <abi/stream.h>
 #include <abi/provider.h>
 #include <abi/http_transaction.h>
 #include <abi/wait.h>
@@ -8,6 +10,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/launcher.h>
@@ -31,11 +34,19 @@ struct packet_header {
 _Static_assert(sizeof(struct packet_header) == ENDPOINT_PACKET_HEADER_SIZE,
                "endpoint packet prefix");
 
+struct endpoint_description {
+  struct kernel_object object;
+  struct resource_description value;
+  struct file_object *body;
+  struct endpoint_description *released_next;
+};
+
 struct endpoint_export {
   struct kernel_object client;
   struct kernel_object storage;
   struct endpoint_state *endpoint;
   struct endpoint_export *next;
+  struct endpoint_description *description;
   uint64_t object_id, protocol, rights, transport;
   size_t in_flight, clients, caretakers;
   bool client_live, linked, withdrawn, retire_pending, retire_delivered;
@@ -77,6 +88,7 @@ struct endpoint_state {
   struct endpoint_delivery_record deliveries[ENDPOINT_DELIVERIES_MAX];
   struct endpoint_delivery_record *head, *tail;
   struct endpoint_export *exports;
+  struct endpoint_description *released_descriptions;
   size_t export_count;
   struct task_wait *waiting_receiver;
   size_t storage_references;
@@ -148,7 +160,14 @@ static void end_endpoint_update(struct endpoint_state *state, uint64_t before)
 {
   bool notify = state->readiness_waiters && (receiver_events(state) & ~before);
   bool release = state->released_count != 0;
+  struct endpoint_description *descriptions = state->released_descriptions;
+  state->released_descriptions = NULL;
   unlock_endpoint(state);
+  while (descriptions) {
+    struct endpoint_description *next = descriptions->released_next;
+    object_release(&descriptions->object);
+    descriptions = next;
+  }
   if (release) {
     drain_released_grants(state);
   }
@@ -156,6 +175,25 @@ static void end_endpoint_update(struct endpoint_state *state, uint64_t before)
   if (notify) {
     readiness_notify();
   }
+}
+
+static void defer_description(struct endpoint_export *export)
+{
+  struct endpoint_description *description = export->description;
+  if (description) {
+    export->description = NULL;
+    description->released_next = export->endpoint->released_descriptions;
+    export->endpoint->released_descriptions = description;
+  }
+}
+
+static void destroy_description(struct kernel_object *object)
+{
+  struct endpoint_description *description = (struct endpoint_description *)object;
+  if (description->body) {
+    object_release(&description->body->object);
+  }
+  kfree(description);
 }
 
 void endpoint_readiness_register(struct endpoint *receiver)
@@ -250,7 +288,7 @@ static void destroy_export_storage(struct kernel_object *object)
       offsetof(struct endpoint_export, storage));
   struct endpoint_state *state = export->endpoint;
   lock_endpoint(state);
-  KASSERT(!export->linked && !export->client_live && !export->in_flight);
+  KASSERT(!export->linked && !export->client_live && !export->in_flight && !export->description);
   bool destroy = --state->storage_references == 0;
   unlock_endpoint(state);
   kfree(export);
@@ -356,6 +394,34 @@ uint64_t endpoint_export_protocol(const struct kernel_object *object)
 {
   KASSERT(object->type == OBJECT_ENDPOINT_EXPORT);
   return ((const struct endpoint_export *)object)->protocol;
+}
+
+enum call_status endpoint_description_capture(struct kernel_object *object,
+    struct resource_description *description, struct file_object **body)
+{
+  KASSERT(object->type == OBJECT_ENDPOINT_EXPORT);
+  *description = (struct resource_description){.outcome = RESOURCE_OK};
+  if (body) {
+    *body = NULL;
+  }
+  struct endpoint_export *export = (struct endpoint_export *)object;
+  lock_endpoint(export->endpoint);
+  enum call_status status = CALL_OK;
+  if (export->endpoint->closed || export->withdrawn || !export->client_live) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (export->description) {
+    struct endpoint_description *snapshot = export->description;
+    if (body && snapshot->body && !object_retain(&snapshot->body->object)) {
+      status = CALL_LIMIT;
+    } else {
+      *description = snapshot->value;
+      if (body) {
+        *body = snapshot->body;
+      }
+    }
+  }
+  unlock_endpoint(export->endpoint);
+  return status;
 }
 
 static void free_delivery(struct endpoint_delivery_record *record)
@@ -717,6 +783,7 @@ static void close_endpoint(struct endpoint_state *state)
     export->linked = false;
     export->withdrawn = true;
     export->retire_pending = false;
+    defer_description(export);
     object_release(&export->storage);
     export = next;
   }
@@ -893,6 +960,182 @@ static struct endpoint_export *find_export(struct endpoint_state *state, uint64_
     }
   }
   return NULL;
+}
+
+static bool description_string_valid(const char *text, size_t length, size_t capacity)
+{
+  if (length >= capacity) {
+    return false;
+  }
+  for (size_t offset = 0; offset < length;) {
+    uint32_t value = (uint8_t)text[offset++];
+    if (!value) {
+      return false;
+    }
+    if (value < 0x80) {
+      continue;
+    }
+    unsigned trailing;
+    uint32_t minimum;
+    if (value >= 0xc2 && value <= 0xdf) {
+      trailing = 1;
+      minimum = 0x80;
+      value &= 0x1f;
+    } else if (value >= 0xe0 && value <= 0xef) {
+      trailing = 2;
+      minimum = 0x800;
+      value &= 0x0f;
+    } else if (value >= 0xf0 && value <= 0xf4) {
+      trailing = 3;
+      minimum = 0x10000;
+      value &= 7;
+    } else {
+      return false;
+    }
+    if (trailing > length - offset) {
+      return false;
+    }
+    while (trailing--) {
+      uint8_t byte = text[offset++];
+      if ((byte & 0xc0) != 0x80) {
+        return false;
+      }
+      value = (value << 6) | (byte & 0x3f);
+    }
+    if (value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+      return false;
+    }
+  }
+  for (size_t i = length; i < capacity; ++i) {
+    if (text[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool description_valid(const struct endpoint_describe_publish *input)
+{
+  const struct resource_description *description = &input->description;
+  if (!input->object_id || description->outcome >= RESOURCE_OUTCOME_COUNT ||
+      (description->flags & ~RESOURCE_FLAGS) ||
+      (!(description->flags & RESOURCE_LENGTH_KNOWN) && description->length) ||
+      input->error_body_size > RESOURCE_ERROR_BODY_MAX_BYTES ||
+      (!(description->flags & RESOURCE_ERROR_BODY) &&
+      (input->error_body_address || input->error_body_size))) {
+    return false;
+  }
+  return description_string_valid(description->detail, description->detail_size,
+      sizeof(description->detail)) &&
+      description_string_valid(description->media_type, description->media_type_size,
+      sizeof(description->media_type));
+}
+
+static enum call_status description_publish(struct endpoint_describe_request *request)
+{
+  struct endpoint *receiver = (struct endpoint *)request->receiver;
+  if (receiver->owner != request->owner) {
+    return CALL_DENIED;
+  }
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  struct endpoint_export *export = find_export(state, request->object_id);
+  enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
+      !export ? CALL_NOT_FOUND :
+      export->withdrawn || !export->client_live ? CALL_ENDPOINT_CLOSED : CALL_OK;
+  unlock_endpoint(state);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct endpoint_description *snapshot = kmalloc(sizeof(*snapshot));
+  if (!snapshot) {
+    return CALL_NO_MEMORY;
+  }
+  *snapshot = (struct endpoint_description){.value = request->description};
+  object_init(&snapshot->object, OBJECT_DESCRIPTION_STORAGE, destroy_description);
+  if (request->description.flags & RESOURCE_ERROR_BODY) {
+    snapshot->body = file_prepare_snapshot(request->body_size);
+    if (!snapshot->body) {
+      object_release(&snapshot->object);
+      return CALL_NO_MEMORY;
+    }
+    file_fill_snapshot(snapshot->body, request->body_bytes);
+  }
+  lock_endpoint(state);
+  export = find_export(state, request->object_id);
+  status = state->closed ? CALL_ENDPOINT_CLOSED : !export ? CALL_NOT_FOUND :
+      export->withdrawn || !export->client_live ? CALL_ENDPOINT_CLOSED :
+      task_operation_start() ? CALL_OK : CALL_DENIED;
+  struct endpoint_description *previous = NULL;
+  if (status == CALL_OK) {
+    previous = export->description;
+    export->description = snapshot;
+  }
+  unlock_endpoint(state);
+  if (status != CALL_OK) {
+    object_release(&snapshot->object);
+  } else if (previous) {
+    object_release(&previous->object);
+  }
+  return status;
+}
+
+void endpoint_describe_execute(struct endpoint_describe_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->owner);
+  request->result = description_publish(request);
+  object_release(request->receiver);
+  request->receiver = NULL;
+  request->owner = NULL;
+}
+
+static struct syscall_result publish_description(struct endpoint *receiver,
+    uintptr_t address, size_t size)
+{
+  struct endpoint_describe_publish input = {0};
+  if (size != sizeof(input) - sizeof(input.header)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&input.object_id, address, size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!description_valid(&input)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  void *bytes = NULL;
+  if (input.error_body_size) {
+    bytes = kmalloc(input.error_body_size);
+    if (!bytes) {
+      return (struct syscall_result){CALL_NO_MEMORY, 0};
+    }
+    if (!copy_from_user(bytes, input.error_body_address, input.error_body_size)) {
+      kfree(bytes);
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+  }
+  if (task_stop_requested()) {
+    kfree(bytes);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  if (!object_retain(&receiver->object)) {
+    kfree(bytes);
+    return (struct syscall_result){CALL_LIMIT, 0};
+  }
+  struct endpoint_describe_request *request =
+      (struct endpoint_describe_request *)bsp_request_prepare(BSP_SERVICE_ENDPOINT_DESCRIBE);
+  request->owner = process_current();
+  request->receiver = &receiver->object;
+  request->object_id = input.object_id;
+  request->description = input.description;
+  request->body_bytes = bytes;
+  request->body_size = input.error_body_size;
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->result;
+  kfree(request->body_bytes);
+  request->body_bytes = NULL;
+  bsp_request_release(&request->request);
+  return (struct syscall_result){status, 0};
 }
 
 static enum call_status endpoint_export_create(struct endpoint_export_request *request)
@@ -1109,6 +1352,7 @@ static struct syscall_result acknowledge_export(struct endpoint *receiver,
   export->next = NULL;
   export->linked = false;
   export->withdrawn = true;
+  defer_description(export);
   --state->export_count;
   end_endpoint_update(state, ready_before);
   object_release(&export->storage);
@@ -1232,6 +1476,28 @@ static enum call_status provider_authority(const struct endpoint_export *target,
   return (rights & required) == required ? CALL_OK : CALL_DENIED;
 }
 
+/* Endpoint guard held. Only published byte-resource outcomes affect READ;
+ * private continuation operations keep their existing provider behavior. */
+static enum call_status description_read_status(const struct endpoint_export *target,
+    const struct endpoint_message *message)
+{
+  if (!target || !target->description ||
+      !((target->protocol == PROTOCOL_FILE && message->operation == FILE_READ) ||
+      (target->protocol == PROTOCOL_STREAM && message->operation == STREAM_READ))) {
+    return CALL_OK;
+  }
+  switch (target->description->value.outcome) {
+  case RESOURCE_OK: return CALL_OK;
+  case RESOURCE_NOT_FOUND: return CALL_NOT_FOUND;
+  case RESOURCE_DENIED: return CALL_DENIED;
+  case RESOURCE_IO_ERROR: return CALL_IO;
+  case RESOURCE_TOO_LARGE: return CALL_FILE_TOO_LARGE;
+  case RESOURCE_ABORTED: return CALL_ABANDONED;
+  case RESOURCE_UNCERTAIN: return CALL_OUTCOME_UNKNOWN;
+  default: panic("invalid cached resource outcome");
+  }
+}
+
 /* Admission owns all copied bytes and references. A SEND publishes no task
  * pointer and never touches its record after unlocking: the receiver may
  * already finish it before the sender returns. A CALL keeps its record until
@@ -1257,9 +1523,10 @@ static enum call_status admit_message(struct endpoint *endpoint,
   } else if (state->closed || (target && (!target->client_live || target->withdrawn))) {
     status = CALL_ENDPOINT_CLOSED;
   } else {
+    status = description_read_status(target, message);
     /* Reject before admission: an incompatible SEND at the FIFO head must not
      * leave the receiver permanently unable to collect later valid messages. */
-    for (size_t i = 0; i < message->grant_count; ++i) {
+    for (size_t i = 0; status == CALL_OK && i < message->grant_count; ++i) {
       if (state->execution_group && !launcher_grant_allowed(state->execution_group, grants[i].object)) {
         status = CALL_DENIED;
         break;
@@ -1315,6 +1582,14 @@ static enum call_status admit_message(struct endpoint *endpoint,
     status = expired ? CALL_TIMED_OUT : state->closed ||
         (target && (!target->client_live || target->withdrawn)) ?
         CALL_ENDPOINT_CLOSED : CALL_DENIED;
+    forwarder_operation_release(&record->origin);
+    end_endpoint_update(state, ready_before);
+    release_grants(grants, message->grant_count);
+    return status;
+  }
+  status = description_read_status(target, message);
+  if (status != CALL_OK) {
+    record->state = DELIVERY_FREE;
     forwarder_operation_release(&record->origin);
     end_endpoint_update(state, ready_before);
     release_grants(grants, message->grant_count);
@@ -1991,6 +2266,12 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
         return (struct syscall_result){CALL_DENIED, 0};
       }
       return acknowledge_export(endpoint, request_address, request_size);
+    }
+    if (operation == ENDPOINT_DESCRIBE_PUBLISH) {
+      if (!(rights & ENDPOINT_RECEIVER_RIGHT_CONTROL)) {
+        return (struct syscall_result){CALL_DENIED, 0};
+      }
+      return publish_description(endpoint, request_address, request_size);
     }
     if (operation != ENDPOINT_RECEIVE && operation != ENDPOINT_TRY_RECEIVE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

@@ -2,6 +2,7 @@
 #define KERNEL_ENDPOINT_H
 
 #include <abi/endpoint.h>
+#include <abi/describe.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 #include <kernel/object/capability.h>
@@ -11,6 +12,7 @@ struct process;
 struct endpoint_state;
 struct native_completion;
 struct forwarder_operation;
+struct file_object;
 struct endpoint {
   struct kernel_object object;
   struct endpoint_state *state;
@@ -38,9 +40,26 @@ struct endpoint_export_request {
   enum call_status result;
 };
 
+struct endpoint_describe_request {
+  struct bsp_request request;
+  struct process *owner; /* Kept alive by the admitted caller. */
+  struct kernel_object *receiver; /* Owned storage, no borrowed user pointers. */
+  uint64_t object_id;
+  struct resource_description description;
+  void *body_bytes;
+  size_t body_size;
+  enum call_status result;
+};
+
 /* BSP, IF=0. Preserve atomic installation and rollback; caller owns completion. */
 void endpoint_create_execute(struct endpoint_create_request *request);
 void endpoint_export_execute(struct endpoint_export_request *request);
+void endpoint_describe_execute(struct endpoint_describe_request *request);
+/* IF=0, held export storage. Provider-free copy; optional body receives one
+ * owned native FILE storage reference. Grant installation/release is outside
+ * the endpoint guard. A closed export returns no body or cached metadata. */
+enum call_status endpoint_description_capture(struct kernel_object *object,
+    struct resource_description *description, struct file_object **body);
 /* Logical client lifetime is independent of admitted storage references. */
 bool endpoint_export_grant_retain(struct kernel_object *object);
 void endpoint_export_grant_release(struct kernel_object *object);
