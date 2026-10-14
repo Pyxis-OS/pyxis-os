@@ -17,6 +17,9 @@ need to.
 This is dependency injection in operating-system form. Programs declare what they
 need by name; their launcher chooses the implementation.
 
+Clients currently pick HTTP semantics from the URI spelling; see the
+[shell capability flow](shell-capability-flow.md) proposal (2026-10-14).
+
 ## Precedents
 
 - **Plan 9's rio** serves each window the same `/dev/draw`, mouse and keyboard
