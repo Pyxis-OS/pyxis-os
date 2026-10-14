@@ -226,10 +226,10 @@ the Deck through the dock, and use the UDP log and remote terminal on it.
 
 #### Task 9 scope before code
 
-**Assigned; choices proposed, not accepted or implemented.** Scope branch
-`usb/cdc-ncm-dock-ethernet` starts at main `d4948f33`. Implementation depends on
-[#852](https://git.internal/PyxisOS/pyxis-os/pulls/852), whose ThinkPad dock
-retirement check passed; rebase after it merges before kernel work.
+**Assigned; all three defaults accepted by the owner (2026-10-14), not yet
+implemented.** Branch `usb/cdc-ncm-dock-ethernet` is based on main `8395f988`,
+which includes [#852](https://git.internal/PyxisOS/pyxis-os/pulls/852) and its
+ThinkPad dock retirement qualification.
 
 Measured inventory, `/shared/present/dock-ethernet-lsusb.txt`: AX88179A
 `0b95:1790`, SuperSpeed behind `2109:0817`; configuration 1 vendor `ff/ff`,
@@ -272,15 +272,13 @@ candidate discovery after bounded USB enumeration, independently of unrelated
 unsupported classes making USB's observation snapshot incomplete. Preserve one
 selected logical NIC and no failover to a different adapter.
 
-**Owner choices — stop before implementation:**
+**Accepted owner decisions (2026-10-14):**
 
-1. **Preparation before binding. Default: permit bounded class setup and carrier
+1. **Preparation before binding: permit bounded class setup and carrier
    notifications for candidates; Ethernet bulk traffic begins only at net0
    BIND.** LOOKUP/enumeration remain read-only and start no work. This allows
    linked selection to learn MAC/carrier from USB, unlike passive PCI identity.
-   Alternative: require explicit MAC binding before class setup, losing ordinary
-   automatic link selection for these NICs.
-2. **Known-branch recovery. Default: bounded re-enumeration of an already admitted
+2. **Known-branch recovery: bounded re-enumeration of an already admitted
    NCM branch, plus bounded initial retries of boot-connected branches before
    NIC discovery seals, with fresh prepared generations and endpoint fences.**
    The native boot blip retired the whole dock before manual unplug; #852 does
@@ -290,18 +288,16 @@ selected logical NIC and no failover to a different adapter.
    close admission while recovering, fail queued work honestly, never replay
    uncertain TX. Refuse a different adapter; exhausted recovery capacity leaves
    this NIC unavailable, preserving other devices. This excludes general USB
-   hotplug, storage/HCI readmission and DMA reuse. Alternative: boot-only NIC,
-   requiring reboot after branch loss, including the observed startup blip.
-3. **Emergency transport. Default: normal UDP logging, Remote and xfer now;
+   hotplug, storage/HCI readmission and DMA reuse.
+3. **Emergency transport: normal UDP logging, Remote and xfer now;
    explicitly defer fatal USB UDP and stopped-kernel debugging.** Those require
    safe ownership of the shared xHCI event/command/interrupter state, not merely
    NIC rings; current panic/debug paths forbid locks, scheduling and allocation.
    Refuse unsupported emergency takeover honestly, retaining DMA and local
-   reporting. Alternative: include controller-wide fatal/debug handoff here,
-   enlarging this task substantially. The Deck would need that before relying
-   on network GDB for driver bring-up.
+   reporting. See the [emergency USB transport debt](../technical-debt.md#usb-network-emergency-transport);
+   the dock-only Deck cannot yet rely on network GDB for driver bring-up.
 
-First concrete implementation step after answers and baseline: validate/capture
+First concrete implementation step after baseline: validate/capture
 the selected NCM function and class parameters into retained candidate storage,
 with explicit refusal reasons, then qualify the native transport and provider
 together. Capture matched IPC/launch and ordinary network controls before code;

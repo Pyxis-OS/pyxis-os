@@ -14,6 +14,15 @@ conversely), even with the same protocol. Revisit with the **provider-backed
 device handles** prerequisite in [interchangeable providers](wip/capabilities-and-providers.md#interchangeable-providers),
 designed with the compositor. No kernel FILE bridge is assigned in this slice.
 
+## USB network emergency transport
+
+Owner-accepted (2026-10-14): [CDC-NCM dock Ethernet](wip/steam-deck.md#9-dock-ethernet)
+delivers normal UDP logs, Remote and xfer; fatal UDP and stopped-kernel GDB
+over USB remain unsupported. A dock-only Steam Deck therefore has no emergency
+network diagnostics. Revisit before relying on network GDB for Deck driver work,
+with a bounded controller-wide polled xHCI ownership handoff; a NIC-only handoff
+cannot protect the shared event/command/interrupter state.
+
 ## USB HID native coverage
 
 [Report-mouse/shared-scroll task 1](development/experiments/pointer-input-quality/README.md#native-task-1-closure)
