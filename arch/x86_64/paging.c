@@ -1301,6 +1301,62 @@ enum mm_result arch_page_map(struct arch_address_space *space,
   return map_page(space, virtual, physical, permissions, 0);
 }
 
+enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t virtual,
+                                 size_t count, const phys_addr_t *physical,
+                                 unsigned permissions, size_t *mapped)
+{
+  *mapped = 0;
+  if (!count || !physical || !permissions_valid(permissions) ||
+      (space == &kernel_space && (permissions & PAGE_USER)) ||
+      !mutable_address(space, virtual)) {
+    return MM_INVALID;
+  }
+  unsigned first = index_at(virtual, LEVEL_PT);
+  if (count > TABLE_INDEX_MASK + 1 - first) {
+    count = TABLE_INDEX_MASK + 1 - first;
+  }
+  if (!mutable_address(space, virtual + (count - 1) * PAGE_SIZE)) {
+    return MM_INVALID;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    if (!physical_valid(physical[i])) {
+      return MM_INVALID;
+    }
+  }
+
+  phys_addr_t table;
+  unsigned allowed;
+  enum mm_result result = walk_to_leaf(space, virtual, true, &table, &allowed);
+  if (result != MM_OK) {
+    return result;
+  }
+  if (permissions & ~allowed) {
+    return MM_INVALID;
+  }
+  /* Check the whole run before installing any of it. */
+  volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
+  bool vacant = true;
+  for (size_t i = 0; i < count && vacant; ++i) {
+    vacant = !(entries[first + i] & PTE_PRESENT);
+  }
+  if (vacant) {
+    for (size_t i = 0; i < count; ++i) {
+      entries[first + i] = physical[i] | leaf_flags(permissions);
+    }
+  }
+  unmap_scratch(SCRATCH_TABLE);
+  if (!vacant) {
+    return MM_COLLISION;
+  }
+  if (affects_active_space(space, virtual)) {
+    for (size_t i = 0; i < count; ++i) {
+      invlpg(virtual + i * PAGE_SIZE);
+    }
+  }
+  *mapped = count;
+  return MM_OK;
+}
+
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical)
 {
   if (paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
@@ -1490,6 +1546,59 @@ size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
   return count;
 }
 
+static uintptr_t next_boundary(uintptr_t address, unsigned shift)
+{
+  return (address | ((UINT64_C(1) << shift) - 1)) + 1;
+}
+
+enum mm_result arch_range_vacant(const struct arch_address_space *space,
+                                 uintptr_t virtual, size_t pages)
+{
+  if (!space_valid(space) || !pages || !canonical(virtual) ||
+      pages - 1 > (UINTPTR_MAX - virtual) / PAGE_SIZE ||
+      !canonical(virtual + (pages - 1) * PAGE_SIZE)) {
+    return MM_INVALID;
+  }
+  uintptr_t end = virtual + (pages - 1) * PAGE_SIZE;
+  /* Absent ancestors skip their whole span; each present leaf table is
+   * scanned under one mapping. */
+  while (virtual <= end) {
+    uintptr_t next = 0;
+    phys_addr_t table = space->root;
+    for (unsigned level = LEVEL_PML4; level > LEVEL_PT && !next; --level) {
+      uint64_t entry = read_table_entry(table, index_at(virtual, level));
+      if (!(entry & PTE_PRESENT)) {
+        next = next_boundary(virtual, PAGE_OFFSET_BITS + (level - LEVEL_PT) * TABLE_INDEX_BITS);
+      } else if ((entry & PTE_LARGE) || !physical_valid(entry & PTE_ADDRESS_MASK)) {
+        panic("corrupt or unsupported page-table ancestor at %p", (void *)virtual);
+      } else {
+        table = entry & PTE_ADDRESS_MASK;
+      }
+    }
+    if (!next) {
+      unsigned first = index_at(virtual, LEVEL_PT);
+      size_t remaining = (end - virtual) / PAGE_SIZE + 1;
+      unsigned last = remaining > TABLE_INDEX_MASK - first ? TABLE_INDEX_MASK :
+          first + (unsigned)remaining - 1;
+      volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
+      bool vacant = true;
+      for (unsigned i = first; i <= last && vacant; ++i) {
+        vacant = !(entries[i] & PTE_PRESENT);
+      }
+      unmap_scratch(SCRATCH_TABLE);
+      if (!vacant) {
+        return MM_COLLISION;
+      }
+      next = next_boundary(virtual, PD_INDEX_SHIFT);
+    }
+    if (next <= virtual) {
+      break;
+    }
+    virtual = next;
+  }
+  return MM_OK;
+}
+
 enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions)
 {
@@ -1642,11 +1751,6 @@ enum mm_result arch_space_activate(struct arch_address_space *space)
   write_cr3(space->root);
   cpu_current()->active_space = space;
   return MM_OK;
-}
-
-static uintptr_t next_boundary(uintptr_t address, unsigned shift)
-{
-  return (address | ((UINT64_C(1) << shift) - 1)) + 1;
 }
 
 /* Index of the first present entry in [index, end), or end. */

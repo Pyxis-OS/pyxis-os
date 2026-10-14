@@ -35,6 +35,12 @@ static bool allocates_memory(uint64_t operation)
   return operation == MEMORY_ALLOCATE || operation == MEMORY_ALLOCATE_GUARDED;
 }
 
+bool memory_request_stepped(const struct memory_request *request)
+{
+  return allocates_memory(request->operation) &&
+      request->region.size > PRIVATE_MEMORY_STEP_PAGES * PAGE_SIZE;
+}
+
 static size_t allocation_reply_size(uint64_t operation)
 {
   return operation == MEMORY_ALLOCATE_GUARDED ?

@@ -319,19 +319,7 @@ enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t byte
 static enum mm_result require_unmapped(struct vm_space *space,
                                        const struct vm_range *range)
 {
-  for (size_t i = 0; i < range->pages; ++i) {
-    struct page_translation translation;
-    enum mm_result status = arch_page_query(page_space(space),
-                                            range->base + i * PAGE_SIZE,
-                                            &translation);
-    if (status == MM_OK) {
-      return MM_COLLISION;
-    }
-    if (status != MM_NOT_MAPPED) {
-      return status;
-    }
-  }
-  return MM_OK;
+  return arch_range_vacant(page_space(space), range->base, range->pages);
 }
 
 enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
@@ -387,10 +375,11 @@ static void retire_backing(struct vm_space *space, struct vm_range *range)
   free_backing(space, backing_base(range), range->backed_pages);
 }
 
-enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
-                       unsigned permissions)
+enum mm_result vm_back_begin(struct vm_space *space, uintptr_t base, size_t bytes,
+                             unsigned permissions, struct vm_backing *backing)
 {
   require_kernel_owner(space);
+  *backing = (struct vm_backing){0};
   size_t pages;
   struct vm_range *range = range_containing(space, base);
   if (!range || range->state != RANGE_RESERVED ||
@@ -424,40 +413,107 @@ enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
     }
   }
 
-  size_t mapped_pages = 0;
-  for (; mapped_pages < pages; ++mapped_pages) {
-    phys_addr_t physical = pmm_alloc(1);
-    if (!physical) {
-      status = MM_NO_MEMORY;
+  *backing = (struct vm_backing){
+    .range = range, .base = base, .pages = pages, .permissions = permissions,
+    .tokens = tokens, .first_token = first_token, .status = MM_OK,
+  };
+  return MM_OK;
+}
+
+/* Allocates, zeroes and maps up to count frames within one leaf table. */
+static enum mm_result back_run(struct vm_space *space, struct vm_backing *backing,
+                               size_t count, size_t *mapped)
+{
+  phys_addr_t frames[BACKING_RUN_PAGES];
+  size_t allocated = 0;
+  for (; allocated < count; ++allocated) {
+    frames[allocated] = pmm_alloc(1);
+    if (!frames[allocated]) {
       break;
     }
+    arch_frame_zero(frames[allocated]);
+  }
+  enum mm_result status = allocated ? MM_OK : MM_NO_MEMORY;
+  *mapped = 0;
+  /* A run maps within one leaf table, so a batch can take two. */
+  while (status == MM_OK && *mapped < allocated) {
+    size_t count_mapped;
+    status = arch_page_map_run(page_space(space),
+        backing->base + (backing->mapped + *mapped) * PAGE_SIZE, allocated - *mapped,
+        frames + *mapped, backing->permissions, &count_mapped);
+    *mapped += count_mapped;
+  }
+  for (size_t i = *mapped; i < allocated; ++i) {
+    pmm_free(frames[i], 1);
+  }
+  if (status == MM_OK && allocated < count) {
+    status = MM_NO_MEMORY;
+  }
+  return status;
+}
 
-    arch_frame_zero(physical);
-    status = arch_page_map(page_space(space),
-                           base + mapped_pages * PAGE_SIZE, physical,
-                           permissions);
+bool vm_back_step(struct vm_space *space, struct vm_backing *backing, size_t budget)
+{
+  require_kernel_owner(space);
+  for (;;) {
+    if (backing->status != MM_OK) {
+      /* Unwind from the end, so the remaining backing stays a prefix. */
+      if (!backing->mapped) {
+        kfree(backing->tokens);
+        backing->tokens = NULL;
+        return true;
+      }
+      if (!budget) {
+        return false;
+      }
+      size_t pages = backing->mapped < budget ? backing->mapped : budget;
+      free_backing(space, backing->base + (backing->mapped - pages) * PAGE_SIZE, pages);
+      backing->mapped -= pages;
+      budget -= pages;
+      continue;
+    }
+
+    if (backing->mapped == backing->pages) {
+      struct vm_range *range = backing->range;
+      if (backing->tokens) {
+        for (size_t i = 0; i < backing->pages; ++i) {
+          backing->tokens[i] = backing->first_token ? backing->first_token + i : 0;
+        }
+      }
+      range->wait_tokens = backing->tokens;
+      range->backed_pages = backing->pages;
+      range->state = RANGE_BACKED;
+      backing->tokens = NULL;
+      return true;
+    }
+    if (!budget) {
+      return false;
+    }
+
+    size_t count = backing->pages - backing->mapped;
+    count = count < budget ? count : budget;
+    count = count < BACKING_RUN_PAGES ? count : BACKING_RUN_PAGES;
+    size_t mapped;
+    enum mm_result status = back_run(space, backing, count, &mapped);
+    backing->mapped += mapped;
+    budget -= mapped ? mapped : 1;
     if (status != MM_OK) {
-      pmm_free(physical, 1);
-      break;
+      backing->status = status;
     }
   }
+}
 
-  if (mapped_pages != pages) {
-    /* Only this prefix owns frames; the remainder is still just reserved. */
-    free_backing(space, base, mapped_pages);
-    kfree(tokens);
+enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
+                       unsigned permissions)
+{
+  struct vm_backing backing;
+  enum mm_result status = vm_back_begin(space, base, bytes, permissions, &backing);
+  if (status != MM_OK) {
     return status;
   }
-
-  if (tokens) {
-    for (size_t i = 0; i < pages; ++i) {
-      tokens[i] = first_token ? first_token + i : 0;
-    }
-  }
-  range->wait_tokens = tokens;
-  range->backed_pages = pages;
-  range->state = RANGE_BACKED;
-  return MM_OK;
+  /* An unlimited budget finishes in one call. */
+  KASSERT(vm_back_step(space, &backing, SIZE_MAX));
+  return backing.status;
 }
 
 enum mm_result vm_alloc(struct vm_space *space, size_t bytes, size_t alignment,

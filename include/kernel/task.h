@@ -161,6 +161,10 @@ void kernel_task_sleep_until(uint64_t deadline);
 /* Current BSP kernel task, IF=1, no held locks. Yield to the normal ready queue
  * only when another task is runnable; otherwise return. Resumes with IF=1. */
 void kernel_task_yield_if_runnable(void);
+/* Current BSP kernel task between bounded steps of a service it runs with
+ * interrupts masked, holding no lock or scratch slot. Enables interrupts,
+ * yields only when another task is runnable, and masks them again. */
+void kernel_task_yield_masked(void);
 
 /* ACPI worker on the BSP, IF=0. Power-off hold of all user execution: each user
  * task parks at its next return to user mode, whether from a syscall, a timer

@@ -66,6 +66,25 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes);
  * PAGE_USER is required for user backing and forbidden for kernel backing. */
 enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
                        unsigned permissions);
+/* The same backing in bounded steps. Begin validates and reserves wait tokens
+ * without mapping anything. Each step allocates, zeroes and maps at most budget
+ * pages, or after a failure unmaps and frees at most budget pages from the end,
+ * and returns true once the backing is complete (status MM_OK) or fully
+ * unwound (status holds the failure; the reservation is bare). Between steps
+ * the caller keeps the space exclusively and may enable interrupts and yield. */
+struct vm_range;
+struct vm_backing {
+  struct vm_range *range;
+  uintptr_t base;
+  size_t pages, mapped;
+  unsigned permissions;
+  uint64_t *tokens;
+  uint64_t first_token;
+  enum mm_result status;
+};
+enum mm_result vm_back_begin(struct vm_space *space, uintptr_t base, size_t bytes,
+                             unsigned permissions, struct vm_backing *backing);
+bool vm_back_step(struct vm_space *space, struct vm_backing *backing, size_t budget);
 enum mm_result vm_alloc(struct vm_space *space, size_t bytes, size_t alignment,
                         unsigned permissions, uintptr_t *result);
 enum mm_result vm_alloc_at(struct vm_space *space, uintptr_t base, size_t bytes,
