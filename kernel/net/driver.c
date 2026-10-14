@@ -5,16 +5,18 @@
 #include <kernel/net/ethernet.h>
 #include <kernel/virtio/net.h>
 #include <kernel/net/rtl8111.h>
+#include <kernel/net/usb_ncm.h>
 #include <kernel/net/log_udp.h>
 #include <stdatomic.h>
 
 /* The worker owns this binding; controller state stays with its driver. */
-enum driver_kind { DRIVER_NONE, DRIVER_VIRTIO, DRIVER_RTL8111 };
+enum driver_kind { DRIVER_NONE, DRIVER_VIRTIO, DRIVER_RTL8111, DRIVER_USB_NCM };
 struct controller {
   enum driver_kind kind;
   union {
     struct virtio_net_controller *virtio;
     struct rtl8111_controller *rtl;
+    struct usb_ncm_nic *ncm;
   };
 };
 static struct controller bound;
@@ -50,7 +52,8 @@ void net_driver_debug_enable(void)
 static bool same_controller(struct controller a, struct controller b)
 {
   return a.kind == b.kind && (a.kind == DRIVER_VIRTIO ? a.virtio == b.virtio :
-    a.kind == DRIVER_RTL8111 ? a.rtl == b.rtl : true);
+    a.kind == DRIVER_RTL8111 ? a.rtl == b.rtl :
+    a.kind == DRIVER_USB_NCM ? a.ncm == b.ncm : true);
 }
 
 static enum call_status find_controller(const struct net_selector *selector,
@@ -77,7 +80,8 @@ static enum call_status find_controller(const struct net_selector *selector,
     return CALL_BAD_REQUEST;
   }
   if (!virtio_net_inventory_complete() ||
-      (selector->kind != NET_SELECT_VIRTIO && !rtl8111_inventory_complete())) {
+      (selector->kind != NET_SELECT_VIRTIO &&
+       (!rtl8111_inventory_complete() || !usb_ncm_inventory_complete()))) {
     return CALL_UNAVAILABLE;
   }
 
@@ -126,6 +130,23 @@ static enum call_status find_controller(const struct net_selector *selector,
       }
       match = (struct controller){.kind = DRIVER_RTL8111, .rtl = candidate};
     }
+    for (struct usb_ncm_nic *candidate = usb_ncm_first(); candidate;
+         candidate = usb_ncm_next(candidate)) {
+      if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+        if (usb_ncm_controller_id(candidate) != selector->controller_id) {
+          continue;
+        }
+      } else {
+        const uint8_t *mac = usb_ncm_identity_mac(candidate);
+        if (memcmp(mac, selector->mac, sizeof(selector->mac))) {
+          continue;
+        }
+      }
+      if (match.kind != DRIVER_NONE) {
+        return CALL_BUSY;
+      }
+      match = (struct controller){.kind = DRIVER_USB_NCM, .ncm = candidate};
+    }
   }
   if (unknown_identity) {
     return CALL_UNAVAILABLE;
@@ -148,15 +169,18 @@ static void snapshot(struct controller controller,
     reply->flags |= NET_CONFIG_BOUND;
   }
   if (controller.kind == DRIVER_VIRTIO ? virtio_net_ready(controller.virtio) :
-      rtl8111_ready(controller.rtl)) {
+      controller.kind == DRIVER_RTL8111 ? rtl8111_ready(controller.rtl) :
+      usb_ncm_ready(controller.ncm)) {
     reply->flags |= NET_CONFIG_READY;
   }
   if (controller.kind == DRIVER_VIRTIO ? virtio_net_available(controller.virtio) :
-      rtl8111_available(controller.rtl)) {
+      controller.kind == DRIVER_RTL8111 ? rtl8111_available(controller.rtl) :
+      usb_ncm_available(controller.ncm)) {
     reply->flags |= NET_CONFIG_LINK_UP;
   }
   const uint8_t *mac = controller.kind == DRIVER_VIRTIO ?
-    virtio_net_mac(controller.virtio) : rtl8111_mac(controller.rtl);
+    virtio_net_mac(controller.virtio) : controller.kind == DRIVER_RTL8111 ?
+    rtl8111_mac(controller.rtl) : usb_ncm_mac(controller.ncm);
   if (mac) {
     memcpy(reply->mac, mac, sizeof(reply->mac));
   }
@@ -180,7 +204,8 @@ enum call_status net_driver_bind(const struct net_selector *selector)
     bool up;
     bool known = controller.kind == DRIVER_VIRTIO ?
       virtio_net_carrier(controller.virtio, &up) :
-      rtl8111_carrier(controller.rtl, &up);
+      controller.kind == DRIVER_RTL8111 ? rtl8111_carrier(controller.rtl, &up) :
+      usb_ncm_carrier(controller.ncm, &up);
     if (!known || !up) {
       return CALL_UNAVAILABLE;
     }
@@ -189,8 +214,10 @@ enum call_status net_driver_bind(const struct net_selector *selector)
   atomic_store_explicit(&panic_kind, bound.kind, memory_order_release);
   if (bound.kind == DRIVER_VIRTIO) {
     virtio_net_start(bound.virtio);
-  } else {
+  } else if (bound.kind == DRIVER_RTL8111) {
     rtl8111_start(bound.rtl);
+  } else {
+    usb_ncm_start(bound.ncm);
   }
   return CALL_OK;
 }
@@ -198,7 +225,7 @@ enum call_status net_driver_bind(const struct net_selector *selector)
 bool net_driver_panic_begin(uint8_t mac[6])
 {
   enum driver_kind kind = atomic_load_explicit(&panic_kind, memory_order_acquire);
-  if (kind == DRIVER_NONE) {
+  if (kind == DRIVER_NONE || kind == DRIVER_USB_NCM) {
     return false;
   }
   const uint8_t *identity = kind == DRIVER_VIRTIO ?
@@ -224,7 +251,8 @@ void net_driver_next_controller(uint32_t after_id,
 {
   net_worker_assert_context();
   *reply = (struct net_controller_reply){0};
-  if (virtio_net_inventory_complete() && rtl8111_inventory_complete()) {
+  if (virtio_net_inventory_complete() && rtl8111_inventory_complete() &&
+      usb_ncm_inventory_complete()) {
     reply->flags = NET_CONTROLLER_INVENTORY_COMPLETE;
   }
   struct controller selected = {0};
@@ -244,17 +272,27 @@ void net_driver_next_controller(uint32_t after_id,
       selected = (struct controller){.kind = DRIVER_RTL8111, .rtl = candidate};
     }
   }
+  for (struct usb_ncm_nic *candidate = usb_ncm_first(); candidate;
+       candidate = usb_ncm_next(candidate)) {
+    uint32_t id = usb_ncm_controller_id(candidate);
+    if (id > after_id && (!reply->controller_id || id < reply->controller_id)) {
+      reply->controller_id = id;
+      selected = (struct controller){.kind = DRIVER_USB_NCM, .ncm = candidate};
+    }
+  }
   if (selected.kind == DRIVER_NONE) {
     return;
   }
   bool virtio = selected.kind == DRIVER_VIRTIO;
-  reply->driver = virtio ? NET_DRIVER_VIRTIO : NET_DRIVER_RTL8111;
-  if (virtio ? virtio_net_prepared(selected.virtio) : rtl8111_prepared(selected.rtl)) {
+  bool rtl = selected.kind == DRIVER_RTL8111;
+  reply->driver = virtio ? NET_DRIVER_VIRTIO : rtl ? NET_DRIVER_RTL8111 : NET_DRIVER_CDC_NCM;
+  if (virtio ? virtio_net_prepared(selected.virtio) : rtl ?
+      rtl8111_prepared(selected.rtl) : usb_ncm_prepared(selected.ncm)) {
     reply->flags |= NET_CONTROLLER_PREPARED;
   }
   bool up;
   if (virtio ? virtio_net_carrier(selected.virtio, &up) :
-      rtl8111_carrier(selected.rtl, &up)) {
+      rtl ? rtl8111_carrier(selected.rtl, &up) : usb_ncm_carrier(selected.ncm, &up)) {
     reply->flags |= NET_CONTROLLER_CARRIER_KNOWN;
     if (up) {
       reply->flags |= NET_CONTROLLER_LINK_UP;
@@ -264,7 +302,7 @@ void net_driver_next_controller(uint32_t after_id,
     reply->flags |= NET_CONTROLLER_BOUND;
   }
   const uint8_t *mac = virtio ? virtio_net_identity_mac(selected.virtio) :
-    rtl8111_identity_mac(selected.rtl);
+    rtl ? rtl8111_identity_mac(selected.rtl) : usb_ncm_identity_mac(selected.ncm);
   if (mac) {
     memcpy(reply->mac, mac, sizeof(reply->mac));
   }
@@ -293,7 +331,8 @@ bool net_driver_service(void)
 {
   net_worker_assert_context();
   return bound.kind == DRIVER_VIRTIO ? virtio_net_service(bound.virtio) :
-    bound.kind == DRIVER_RTL8111 && rtl8111_service(bound.rtl);
+    bound.kind == DRIVER_RTL8111 ? rtl8111_service(bound.rtl) :
+    bound.kind == DRIVER_USB_NCM && usb_ncm_service(bound.ncm);
 }
 
 bool net_driver_next_deadline(uint64_t *deadline)
@@ -305,19 +344,22 @@ bool net_driver_next_deadline(uint64_t *deadline)
 const uint8_t *net_driver_mac(void)
 {
   return bound.kind == DRIVER_VIRTIO ? virtio_net_mac(bound.virtio) :
-    bound.kind == DRIVER_RTL8111 ? rtl8111_mac(bound.rtl) : NULL;
+    bound.kind == DRIVER_RTL8111 ? rtl8111_mac(bound.rtl) :
+    bound.kind == DRIVER_USB_NCM ? usb_ncm_mac(bound.ncm) : NULL;
 }
 
 bool net_driver_available(void)
 {
   return bound.kind == DRIVER_VIRTIO ? virtio_net_available(bound.virtio) :
-    bound.kind == DRIVER_RTL8111 && rtl8111_available(bound.rtl);
+    bound.kind == DRIVER_RTL8111 ? rtl8111_available(bound.rtl) :
+    bound.kind == DRIVER_USB_NCM && usb_ncm_available(bound.ncm);
 }
 
 enum net_result net_driver_transmit(const void *frame, size_t length)
 {
   return bound.kind == DRIVER_VIRTIO ? virtio_net_transmit(bound.virtio, frame, length) :
-    bound.kind == DRIVER_RTL8111 ? rtl8111_transmit(bound.rtl, frame, length) : NET_UNAVAILABLE;
+    bound.kind == DRIVER_RTL8111 ? rtl8111_transmit(bound.rtl, frame, length) :
+    bound.kind == DRIVER_USB_NCM ? usb_ncm_transmit(bound.ncm, frame, length) : NET_UNAVAILABLE;
 }
 
 bool net_driver_debug_ready(struct net_debug_device *device)
@@ -335,7 +377,8 @@ bool net_driver_debug_service(void)
 {
   net_worker_assert_context();
   return bound.kind == DRIVER_VIRTIO ? virtio_net_debug_service(bound.virtio) :
-    bound.kind == DRIVER_RTL8111 && rtl8111_debug_service(bound.rtl);
+    bound.kind == DRIVER_RTL8111 ? rtl8111_debug_service(bound.rtl) :
+    bound.kind == DRIVER_USB_NCM && usb_ncm_service(bound.ncm);
 }
 
 enum net_debug_status net_driver_debug_begin(uint64_t generation)
