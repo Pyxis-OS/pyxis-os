@@ -440,17 +440,19 @@ static enum call_status create_volume(struct npfs_store_context *context, struct
 
 static enum call_status child(struct npfs_store_context *context, struct npfs_job *job)
 {
-  if (job->kind != DIRECTORY_KIND_DIRECTORY && job->kind != DIRECTORY_KIND_FILE) {
+  bool typed = job->operation == NPFS_LOOKUP && job->kind == DIRECTORY_KIND_ANY;
+  if (!typed && job->kind != DIRECTORY_KIND_DIRECTORY && job->kind != DIRECTORY_KIND_FILE) {
     return CALL_BAD_REQUEST;
   }
-  uint64_t mask = job->kind == DIRECTORY_KIND_DIRECTORY ? DIRECTORY_RIGHTS : FILE_RIGHTS;
-  if (job->child_rights & ~mask) {
+  uint64_t mask = !typed && job->kind == DIRECTORY_KIND_DIRECTORY ? DIRECTORY_RIGHTS : FILE_RIGHTS;
+  if ((job->child_rights & ~mask) || (typed &&
+      (job->directory_child_rights & ~DIRECTORY_RIGHTS))) {
     return CALL_BAD_REQUEST;
   }
   uint64_t allowed = job->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
       ((job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
       ((job->rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
-  if (job->child_rights & ~allowed) {
+  if (!typed && (job->child_rights & ~allowed)) {
     return CALL_DENIED;
   }
   enum call_status status = check_name(job->name, job->count);
@@ -463,11 +465,21 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
     if (status != CALL_OK) {
       return status;
     }
-    if (npfs_store_kind(inode) != job->kind) {
+    uint64_t kind = npfs_store_kind(inode);
+    if (!typed && kind != job->kind) {
       npfs_store_release(inode);
       return CALL_WRONG_TYPE;
     }
-    return wrap_inode(inode, job->child_rights, &job->object);
+    uint64_t child_rights = typed && kind == DIRECTORY_KIND_DIRECTORY ?
+        job->directory_child_rights : job->child_rights;
+    allowed = kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
+        ((job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
+        ((job->rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+    if (child_rights & ~allowed) {
+      npfs_store_release(inode);
+      return CALL_DENIED;
+    }
+    return wrap_inode(inode, child_rights, &job->object);
   }
   if (!job->reservation.table && !job->completion) {
     return CALL_BAD_REQUEST;

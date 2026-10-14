@@ -31,11 +31,11 @@
 #define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
 #define DIRECTORY_RENAME_REPLACE UINT64_C(1)
 
-/* ANY is accepted by REMOVE/RENAME; lookup/create require an exact kind. */
+/* ANY is accepted by REMOVE/RENAME; ordinary LOOKUP/CREATE require an exact kind. */
 #define DIRECTORY_KIND_ANY UINT64_C(0)
 #define DIRECTORY_KIND_FILE UINT64_C(1)
 #define DIRECTORY_KIND_DIRECTORY UINT64_C(2)
-/* Enumeration only: lookup/create still request FILE or DIRECTORY. */
+/* Enumeration only: LOOKUP/CREATE still request FILE or DIRECTORY. */
 #define DIRECTORY_KIND_UNKNOWN UINT64_C(3)
 #define DIRECTORY_KIND_SYMLINK UINT64_C(4)
 #define DIRECTORY_KIND_OTHER UINT64_C(5)

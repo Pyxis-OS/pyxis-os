@@ -260,6 +260,23 @@ static enum call_status check_child_request(struct directory_object *directory, 
   return CALL_OK;
 }
 
+static enum call_status check_typed_lookup(uint64_t file_rights, uint64_t directory_rights,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if ((file_rights & ~FILE_RIGHTS) || (directory_rights & ~DIRECTORY_RIGHTS) ||
+      reply_capacity < sizeof(struct directory_typed_lookup_reply)) {
+    return CALL_BAD_REQUEST;
+  }
+  return user_buffer_check(reply_address, sizeof(struct directory_typed_lookup_reply),
+      USER_BUFFER_WRITE) ? CALL_OK : CALL_BAD_BUFFER;
+}
+
+static uint64_t allowed_file_rights(uint64_t rights)
+{
+  return ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
+      ((rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+}
+
 static enum call_status child_capability_status(enum capability_result result)
 {
   switch (result) {
@@ -315,11 +332,13 @@ static enum call_status install_child(struct capability_reservation *reservation
 }
 
 static struct syscall_result lookup(struct directory_object *directory, uint64_t rights,
-    const struct directory_child_request *request, uintptr_t reply_address,
+    const struct directory_child_request *request, uint64_t directory_rights, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  enum call_status status = check_child_request(directory, rights, request,
-      reply_address, reply_capacity);
+  bool typed = request->kind == DIRECTORY_KIND_ANY;
+  enum call_status status = typed ?
+      check_typed_lookup(request->rights, directory_rights, reply_address, reply_capacity) :
+      check_child_request(directory, rights, request, reply_address, reply_capacity);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -343,6 +362,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     }
     pending->job.rights = rights;
     pending->job.child_rights = request->rights;
+    pending->job.directory_child_rights = directory_rights;
     pending->job.kind = request->kind;
     pending->job.count = request->name_length;
     memcpy(pending->job.name, (const void *)request->name, request->name_length);
@@ -356,6 +376,9 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_LOOKUP);
     pending->node = directory->host;
     pending->kind = request->kind;
+    pending->lookup_rights = rights;
+    pending->file_rights = request->rights;
+    pending->directory_rights = directory_rights;
     pending->count = request->name_length;
     memcpy(pending->name, (const void *)request->name, request->name_length);
     hostfs_request_submit_and_wait(pending);
@@ -368,7 +391,10 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     struct directory_entry *entry = find_named_entry(directory, request->name, request->name_length);
     if (!entry) {
       status = CALL_NOT_FOUND;
-    } else if (entry_kind(entry) != request->kind) {
+    } else if (typed && entry->object->type != OBJECT_FILE &&
+        entry->object->type != OBJECT_DIRECTORY) {
+      status = CALL_BAD_OPERATION;
+    } else if (!typed && entry_kind(entry) != request->kind) {
       status = CALL_WRONG_TYPE;
     } else if (!object_retain(entry->object)) {
       status = CALL_LIMIT;
@@ -388,17 +414,28 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     return (struct syscall_result){status, 0};
   }
 
-  struct directory_child_reply reply;
-  status = install_child(&reservation, &slot, object, request->rights, &reply.handle);
+  uint64_t child_rights = typed && object->type == OBJECT_DIRECTORY ?
+      directory_rights : request->rights;
+  uint64_t allowed = object->type == OBJECT_DIRECTORY ? rights : allowed_file_rights(rights);
+  if (typed && (object->type != OBJECT_FILE && object->type != OBJECT_DIRECTORY)) {
+    status = CALL_BAD_OPERATION;
+  } else if (typed && (child_rights & ~allowed)) {
+    status = CALL_DENIED;
+  }
+  struct directory_typed_lookup_reply reply = {.protocol = object_protocol(object)};
+  if (status == CALL_OK) {
+    status = install_child(&reservation, &slot, object, child_rights, &reply.handle);
+  }
   object_release(object);
   capability_reservation_release(&reservation, &slot);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
-  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.handle, 1)) {
+  size_t reply_size = typed ? sizeof(reply) : sizeof(struct directory_child_reply);
+  if (!copy_returned_handles_to_user(reply_address, &reply, reply_size, &reply.handle, 1)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  return (struct syscall_result){CALL_OK, reply_size};
 }
 
 static bool name_exists(struct directory_object *directory, const struct directory_entry *candidate)
@@ -1309,7 +1346,17 @@ static struct syscall_result directory_operation(struct directory_object *direct
     return filesystem_info(directory, rights, reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_LOOKUP) {
-    return lookup(directory, rights, &request.lookup, reply_address, reply_capacity);
+    return lookup(directory, rights, &request.lookup, 0, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_LOOKUP_TYPED) {
+    struct directory_child_request child = {
+      .name = request.lookup_typed.name,
+      .name_length = request.lookup_typed.name_length,
+      .kind = DIRECTORY_KIND_ANY,
+      .rights = request.lookup_typed.file_rights,
+    };
+    return lookup(directory, rights, &child, request.lookup_typed.directory_rights,
+        reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_CREATE) {
     return create_child(directory, rights, &request.create, reply_address, reply_capacity);
@@ -1361,6 +1408,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     required = 0;
     break;
   case DIRECTORY_LOOKUP:
+  case DIRECTORY_LOOKUP_TYPED:
     required = DIRECTORY_RIGHT_LOOKUP;
     break;
   case DIRECTORY_ENUMERATE:
@@ -1398,7 +1446,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (operation == DIRECTORY_RENAME) {
     return rename_child(directory, rights, &request.rename);
   }
-  size_t name_length = operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE ?
+  size_t name_length = operation == DIRECTORY_LOOKUP_TYPED ? request.lookup_typed.name_length :
+      operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE ?
       request.lookup.name_length : operation == DIRECTORY_REMOVE ? request.remove.name_length : 0;
   if (((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
       name_length > NPFS_NAME_MAX) ||
@@ -1413,11 +1462,21 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
       return (struct syscall_result){status, 0};
     }
   }
+  if (operation == DIRECTORY_LOOKUP_TYPED) {
+    status = check_typed_lookup(request.lookup_typed.file_rights,
+        request.lookup_typed.directory_rights, reply_address, reply_capacity);
+    if (status != CALL_OK) {
+      return (struct syscall_result){status, 0};
+    }
+  }
   /* Only private name fields are rewritten. Enumeration's destination remains
    * a user address; all named operations consume one immutable kernel capture. */
   if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
     status = capture_name(request.lookup.name, request.lookup.name_length, &source);
     request.lookup.name = (uintptr_t)source;
+  } else if (operation == DIRECTORY_LOOKUP_TYPED) {
+    status = capture_name(request.lookup_typed.name, request.lookup_typed.name_length, &source);
+    request.lookup_typed.name = (uintptr_t)source;
   } else if (operation == DIRECTORY_REMOVE) {
     status = capture_name(request.remove.name, request.remove.name_length, &source);
     request.remove.name = (uintptr_t)source;

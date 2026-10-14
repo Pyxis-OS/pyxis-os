@@ -69,6 +69,8 @@ struct npfs_job {
   uint64_t fat_access, interval_id, interval_deadline;
   struct boot_origin origin;
   uint64_t rights, child_rights, destination_rights, kind, offset;
+  /* LOOKUP with ANY selects child_rights for FILE, this mask for DIRECTORY. */
+  uint64_t directory_child_rights;
   size_t count;
   size_t progress; /* Completion profile: known copied/accepted byte prefix. */
   char name[NPFS_NAME_MAX + 1];

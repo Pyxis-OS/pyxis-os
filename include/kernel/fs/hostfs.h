@@ -46,6 +46,8 @@ struct hostfs_request {
   enum hostfs_operation operation;
   struct hostfs_node *node;
   uint64_t kind, offset;
+  /* Typed LOOKUP only: actual parent authority and the two child masks. */
+  uint64_t lookup_rights, file_rights, directory_rights;
   struct file_info_reply info;
   size_t count;
   /* CAPTURE transfers complete BSP-only page backing; failure leaves it empty.
