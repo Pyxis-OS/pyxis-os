@@ -41,6 +41,7 @@
 #define NCM_NDP16_HEADER_BYTES 8u
 #define NCM_NDP16_MIN_BYTES 16u
 #define NCM_POINTER_BYTES 4u
+#define NCM_NDP16_ALIGNMENT 4u
 #define NCM_MIN_NTB_BYTES 2048u
 #define ETHERNET_HEADER_BYTES 14u
 
@@ -475,7 +476,7 @@ enum usb_ncm_wire_result usb_ncm_ntb16_validate(const struct usb_ncm_parameters 
     return USB_NCM_WIRE_INVALID;
   }
   while (offset) {
-    if (offset < NCM_NTH16_BYTES || offset % parameters->rx_alignment ||
+    if (offset < NCM_NTH16_BYTES || offset % NCM_NDP16_ALIGNMENT ||
         offset > block || block - offset < NCM_NDP16_MIN_BYTES) {
       return USB_NCM_WIRE_INVALID;
     }
@@ -507,8 +508,7 @@ enum usb_ncm_wire_result usb_ncm_ntb16_validate(const struct usb_ncm_parameters 
         break;
       }
       if (span.offset < NCM_NTH16_BYTES || span.bytes < ETHERNET_HEADER_BYTES ||
-          span.offset > block || span.bytes > block - span.offset ||
-          ((size_t)span.offset + ETHERNET_HEADER_BYTES) % parameters->rx_divisor != parameters->rx_remainder) {
+          span.offset > block || span.bytes > block - span.offset) {
         return USB_NCM_WIRE_INVALID;
       }
       if (span.bytes > USB_NCM_FRAME_BYTES) {
@@ -517,6 +517,8 @@ enum usb_ncm_wire_result usb_ncm_ntb16_validate(const struct usb_ncm_parameters 
       if (result.count == USB_NCM_RX_FRAMES) {
         return USB_NCM_WIRE_LIMIT;
       }
+      /* IN alignment describes the function's intent; byte reads and copies
+       * need no such promise. OUT must honor its reported payload constraints. */
       result.frames[result.count++] = span;
     }
     if (!terminated) {

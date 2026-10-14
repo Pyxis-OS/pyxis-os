@@ -128,7 +128,7 @@ static enum usb_result class_value(struct usb_ncm_transport *transport,
   enum usb_result result = control(transport, &setup, inbound ? NULL : transport->control,
       inbound ? transport->control : NULL, inbound ? sizeof(transport->control) : 0,
       deadline, &actual);
-  return result != USB_OK ? result : actual != (inbound ? length : 0) ? USB_INVALID : USB_OK;
+  return result != USB_OK ? result : actual != length ? USB_INVALID : USB_OK;
 }
 
 static enum usb_result read_mac(struct usb_ncm_transport *transport,
