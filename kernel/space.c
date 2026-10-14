@@ -1072,13 +1072,12 @@ static void try_boot_focus(void)
     cpu_restore_interrupts(flags);
     return;
   }
-  bool locked = log_begin();
-  if (!locked) {
+  struct tty *tty = space->tty;
+  if (!tty_lock(tty)) {
     cpu_restore_interrupts(flags);
     return;
   }
   bool ready = space->display->presented && space->display->visible;
-  struct tty *tty = space->tty;
   if (!ready && (!boot_focus_checked || boot_focus_tty_generation != tty->visual_generation)) {
     boot_focus_checked = true;
     boot_focus_tty_generation = tty->visual_generation;
@@ -1089,7 +1088,7 @@ static void try_boot_focus(void)
       }
     }
   }
-  log_end(locked);
+  tty_unlock(tty);
   if (ready) {
     boot_focus_space = NULL;
     switch_space(space);
