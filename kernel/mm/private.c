@@ -20,9 +20,14 @@ struct private_allocation {
 static uint64_t next_identity = 1;
 
 /* Backs a bare reservation in bounded interrupts-off steps. The process VM
- * transaction stays exclusive across the yields between them. */
+ * transaction stays exclusive across the yields between them. A size within
+ * one step completes, or unwinds, in a single call and never yields, so the
+ * request executor can run it inline. */
 static enum mm_result back_private(struct process *process, uintptr_t base, size_t size)
 {
+  if (!private_memory_stepped(size)) {
+    return vm_back(process->address_space, base, size, PAGE_USER | PAGE_WRITE);
+  }
   struct vm_backing backing;
   enum mm_result result = vm_back_begin(process->address_space, base, size,
       PAGE_USER | PAGE_WRITE, &backing);
