@@ -1209,7 +1209,7 @@ copy gives a read-only degraded map when the other is absent or invalid; the doc
 copies as degraded (I/O errors, timeouts and unsupported metadata prevent fallback).
 These bounds can exclude usable media; revisit only for a consumer with explicit resource limits and a recovery policy.
 
-A native GPT repair tool is deferred: larger-device sticks remain read-only on Pyxis and need `sgdisk --move-second-header` on another OS until then; revisit when installer/disk tooling lands.
+A native tool to relocate the backup GPT and protective MBR under explicit write authority is deferred: larger-device sticks remain read-only on Pyxis and need `sgdisk --move-second-header` on another OS until then; revisit when installer/disk tooling lands.
 
 ## Installer authority and retained pools
 

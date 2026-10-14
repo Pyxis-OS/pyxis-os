@@ -58,8 +58,9 @@ that a disk is corrupt.
 The protective MBR is a gate for exposing any map. It must have the MBR signature
 and exactly one `0xee` entry starting at logical block 1. Normally it covers the
 disk through its last block, with the size field saturated at `UINT32_MAX` when
-necessary; the bounded larger-device exception below permits a shorter extent. Other entries must be zero. On 4 KiB media, bytes after the first 512
-bytes of the MBR block must also be zero. Legacy and hybrid MBR partition types
+necessary; the bounded larger-device exception below permits a shorter extent.
+Other entries must be zero. On 4 KiB media, bytes after the first 512 bytes of
+the MBR block must also be zero. Legacy and hybrid MBR partition types
 are unsupported. A valid GPT copy cannot bypass an absent or invalid protective
 MBR; the scanner never repairs it.
 
@@ -88,8 +89,8 @@ position or preference.
 
 ### Images copied onto larger devices
 
-A copied image may
-record its backup before the physical device end and/or retain a shorter
+A copied image may record its backup before the physical device end and/or
+retain a shorter
 protective MBR. The exception requires a valid primary, a valid reciprocal
 backup at the primary's recorded alternate, and matching declared arrays and
 header fields. The protective MBR remains structurally strict; its extent must
@@ -98,8 +99,8 @@ cover the primary array and every used partition, or have the standard
 recorded alternate is earlier refuses this exception rather than choosing
 between layouts. All reads remain bounded by the existing scan deadline.
 
-The scanner publishes the primary as read-only `GPT_DEGRADED`, with one warning naming
-`sgdisk --move-second-header`. Never repair or expand partitions automatically.
+The scanner publishes the primary as read-only `GPT_DEGRADED`, with one warning
+naming `sgdisk --move-second-header`. Never repair or expand partitions automatically.
 Bad CRCs, disagreement, overlaps, unsupported or unexamined metadata do not
 qualify for this exception. Existing full-sized single-copy degraded recovery
 remains unchanged. NPFS refuses writable initial opens and upgrades of degraded
@@ -115,7 +116,7 @@ have zero selected copy and no exposed partitions.
 | --- | --- |
 | `GPT_HEALTHY` | Full protective MBR coverage and two valid, agreeing GPT copies at the device endpoints. The primary supplies the map. |
 | `GPT_DEGRADED` | A surviving full-sized copy, or two agreeing copies with smaller-image placement/MBR coverage under the exception above. Read-only map. |
-| `GPT_AMBIGUOUS` | Both GPT copies validate independently but disagree. No map is selected. |
+| `GPT_AMBIGUOUS` | Valid copies disagree, or a competing valid header exists at the physical end beyond the recorded alternate. No map is selected. |
 | `GPT_ABSENT` | No protective MBR and neither GPT header is present. |
 | `GPT_INVALID` | Metadata is malformed, the protective MBR gate fails, or neither copy can supply a valid map. |
 | `GPT_UNSUPPORTED` | A legacy/hybrid MBR, unsupported GPT revision, bounds, attributes or device geometry prevents interpretation. |
@@ -125,8 +126,8 @@ have zero selected copy and no exposed partitions.
 | `GPT_TIMED_OUT` | The scan's deadline expired during admission or read completion. |
 
 A read timeout or I/O error prevents map publication even if the other copy is
-valid. Unsupported metadata also prevents degraded fallback. Ordinary full-sized degraded discovery is for one valid copy paired with an
-absent or invalid copy. The larger-device exception requires two valid agreeing
+valid. Unsupported metadata also prevents degraded fallback. Ordinary full-sized
+degraded discovery is for one valid copy paired with an absent or invalid copy. The larger-device exception requires two valid agreeing
 copies; neither path treats an unexamined or uninterpretable copy as evidence of
 agreement.
 
@@ -179,8 +180,32 @@ outstanding and published only after selecting the validated map. Scratch was
 released after publication. Whole-image SHA-256 hashes matched before and after
 all attached-image boots, including the writable attachments.
 
-Degraded or disagreeing copies, malformed metadata, I/O/timeout failures and
-allocation failures have code inspection only. Deliberately damaged images,
-fault injection, automated tests and boot/output automation were not used.
-These observations do not establish physical-hardware behavior, power-loss
-recovery or owner-host performance.
+### Larger-device recovery (2026-10-14)
+
+The kernel/image build passed at `3c445d94`, using unchanged dependency bundles
+from baseline main `30fb8888`. Manual QEMU 10.2.2 boots used nested KVM, four
+CPUs, 1 GiB RAM, a writable VirtIO block device with 512-byte blocks and a
+VirtIO-SCSI boot CD to avoid the host's stock AHCI CD-ROM crash. Host `sgdisk`
+created a 1 GiB GPT image with a 128 MiB NPFS partition at LBA 2048. The clean
+pool contained `data` with `hello.txt`; enlarging the image to 2 GiB preserved
+its original metadata. A temporary, uncommitted native init probe used the
+existing disk-scoped mount authority to request writable admission, read the
+file, and request a writable upgrade after the read-only open.
+
+| Image / kernel | Observed result |
+| --- | --- |
+| Enlarged 2 GiB image / baseline `30fb8888` | `GPT_INVALID`, no partitions; both mount requests refused. |
+| Same image / `3c445d94` | `GPT_DEGRADED`, both copies valid, primary selected; original usable range 34..2097118 and partition extent preserved. One relocation warning; file read succeeded; initial writable open and read-only-pool upgrade returned `READ_ONLY`. |
+| Original full-sized 1 GiB control / `3c445d94` | `GPT_HEALTHY`; file read and writable admission succeeded. |
+| Backup relocated to the 2 GiB end, original short PMBR retained / `3c445d94` | `GPT_DEGRADED`; read succeeded, both writable requests returned `READ_ONLY`. |
+| Original 1 GiB layout copied over a different 2 GiB GPT, retaining its valid end backup / `3c445d94` | `GPT_AMBIGUOUS`, zero partitions; mount requests refused. |
+
+GDB confirmed the snapshots and NPFS pool state: degraded pools stayed
+read-only; the healthy control was writable; the ambiguous case opened no
+pool. Whole-image SHA-256 hashes were unchanged across all boots, including
+the writable attachments. QEMU/GDB jobs were stopped afterward.
+
+Full-sized single-copy recovery, malformed metadata, I/O/timeout failures and
+allocation failures remain source-inspected only. No fault-injection or new
+test framework was added. These observations do not establish native hardware
+behavior, power-loss recovery or owner-host performance.
