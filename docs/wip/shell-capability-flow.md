@@ -156,14 +156,14 @@ Owner direction, still part of this parked proposal; nothing is implemented.
 
 A prepared request stored in a variable is reusable. It acts as an endpoint:
 every write to it starts a new, independent transaction and yields a new reply.
-The owner's example:
+The owner's example (braces and `$` as corrected by the owner):
 
 ```sh
 endpoint = { http prepare ... https://... }
-printf '{}' > endpoint                  # POST
-reply1 = printf '{}' > endpoint         # also store the reply
-reply1_value = { cat $reply1 }          # no pipe needed: it flows like a string
-reply2 = printf '{}' > endpoint         # new reply
+{ printf '{}' > $endpoint }                    # POST
+reply1 = { printf '{}' > $endpoint }           # also store the reply
+reply1_value = { cat $reply1 }                 # no pipe needed: it flows like a string
+reply2 = { printf '{}' > $endpoint }           # new reply
 reply2_value = { cat $reply2 }
 ```
 
@@ -181,10 +181,9 @@ reply2_value = { cat $reply2 }
 - **`reply1_value = { cat $reply1 }`** binds the reply's content as a read-only
   value. With every variable holding a capability, this is the same as a text
   value, and it no longer carries the reply's outcome facet.
-- Syntax details to settle: whether a redirection target that names a variable
-  is written `> endpoint` or `> $endpoint` (a bare word is also a valid relative
-  path), and whether single-command assignment needs braces
-  (`reply1 = printf … > endpoint` versus `reply1 = { … }`).
+- Syntax: assignment always uses braces (`x = { … }`), and a variable is always
+  referenced with `$`, including as a redirection target (`> $endpoint`); a bare
+  word stays an ordinary path.
 
 Implementation notes for when this is picked up:
 
