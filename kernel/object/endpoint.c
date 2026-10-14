@@ -1726,12 +1726,13 @@ static enum call_status derive_reply_children(struct endpoint_delivery_record *r
     children = count;
   } else if (record->target->protocol == PROTOCOL_HTTP_TRANSACTION &&
       record->operation == HTTP_TRANSACTION_COMMIT) {
-    children = count ? 1 : 0;
+    children = count;
   } else {
     return CALL_OK;
   }
   /* The sender's started operation owns the ancestor storage throughout REPLY.
-   * COMMIT's observation is existing authority; only its new reader derives. */
+   * COMMIT creates both its reader and handoff observation through that origin.
+   * Unrelated pre-existing attachments on other operations retain their lineage. */
   for (size_t i = 0; i < children; ++i) {
     enum capability_result result = forwarder_request_derivation_from(&grants[i], &record->origin);
     if (result != CAP_OK) {

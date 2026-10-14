@@ -53,8 +53,9 @@ opened files remain held. These are not controller references: last-controller
 auto-CUT still applies. A delivered OPEN that completes after CUT may publish
 an already-denied child handle, preserving the operation's delivery outcome
 without allowing the child to escape revocation. Provider OPEN/PREPARE replies
-inherit the invoking lineage; HTTP COMMIT's new response reader does too. Its
-existing observation attachment retains its own lineage.
+inherit the invoking lineage; HTTP COMMIT's new response reader and handoff
+observation do too. Independently retaining an observation separates its
+ordinary lifetime from control/response closure, without escaping source CUT.
 
 ## Controller lifetime (accepted 2026-10-14)
 
