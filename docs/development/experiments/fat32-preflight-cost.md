@@ -73,4 +73,80 @@ Native scratch timing is not collected; source/count evidence is stronger than
 an extrapolation to physical media.
 
 Raw images, commands, debugger scripts/captures and excluded records stay local.
-See the [proposal](../../wip/fat32-preflight-cost.md); no performance fix exists yet.
+The following implementation record updates the [accepted contract](../../wip/fat32-preflight-cost.md); the preceding measurements describe the original implementation.
+
+
+## 2026-10-14 retained allocation proof and local checks
+
+Untouched control `5fab8d39`, fs `414be0ac`, userland `ec234db4`, ports
+`2296a06c`, lwIP `a1aadb91`; changed kernel code `0b2f65dd`, fs `c52ab584`
+([fs #37](https://git.internal/PyxisOS/pyxis-fs/pulls/37)), userland `7156ff6a`
+([userland #257](https://git.internal/PyxisOS/pyxis-userland/pulls/257)).
+Both ordinary default images passed `make -j8 image LOG_LEVEL=info` with
+`pyxis-llvm23.1.3-e0801c2`. Changed-build gitlinks were subsequently committed;
+only documentation changed on main during qualification. No compiler rebuild.
+
+The QEMU configuration, fixture selection and primary command sequence match
+those above: four CPUs, 1 GiB, Q35/nested KVM/host CPU, fresh OVMF, VirtIO
+scratch `cache=none`, no NIC/USB. The existing read-only GDB observer additionally
+records allocation-map/workspace charges. Times include debugger overhead and
+shared-host variation, and nested intervals must not be added. No native rate
+is inferred. Raw images, hashes, commands and captures remain outside the repo.
+
+The refreshed 128-MiB control admits 8,144 requests at RW open, including two
+4,033-request full checks. CREATE admits 8,093/8,088/8,088 requests, writes
+8,090/8,087/8,087, sync one. Dense 1-GiB admission returns LIMIT after 32,314
+requests, with unchanged disk bytes and 40.66-MiB conservative preparation.
+Only admission (3.968 s) and first CREATE (3.861 s) predate a concurrent ordinary
+build; all later control timings are excluded from matched comparisons. Counts
+and functional outcomes remain usable. The changed timing runs had no concurrent
+task-owned builds; the host remains unisolated.
+
+| Partition / cluster bytes | RW admission requests | Map bytes | Observed charged backing bytes | CREATE requests (3) | CREATE milliseconds (3) |
+| --- | ---: | ---: | ---: | --- | --- |
+| 40 MiB / 512 | 229 | 10,079 | 66,895 | 25 / 20 / 20 | 51.7 / 53.9 / 49.3 |
+| 128 MiB / 512 | 577 | 32,260 | 89,080 | 25 / 20 / 20 | 72.4 / 69.2 / 25.5 |
+| 512 MiB / 512 | 2,089 | 129,052 | 273,596 | 25 / 20 / 20 | 78.5 / 82.4 / 38.1 |
+| 1 GiB / 512 | 4,105 | 258,107 | 531,707 | 25 / 20 / 20 | 53.2 / 40.0 / 49.3 |
+| 512 MiB / 4,096 | 363 | 16,352 | 88,992 | 56 / 59 / 67 | 66.2 / 48.4 / 55.3 |
+| 1 GiB / 4,096 | 619 | 32,704 | 105,344 | 56 / 59 / 67 | 119.3 / 76.6 / 167.1 |
+
+Backing is the maximum observed at operation boundaries, including held chains;
+it is not total resident memory or a sampled allocator peak. Replacement overlap
+remains charged before allocation. All six supported geometries complete
+CREATE/write/sync/resize/drop/retirement; each retirement returns charged backing
+and active instances to zero. Detached host `fsck.fat` passes. The 40/128-MiB
+4-KiB-cluster fixtures are below FAT32's minimum cluster count: admission returns
+UNAVAILABLE after 40 reads, retains no backing and leaves disk bytes unchanged.
+
+At 128 MiB, CHECK without BEGIN is DENIED with no I/O; under the owner's active
+interval it uses 513 requests in 244–263 ms. Held replacement preserves old and
+new FILE contents, and CHECK validates the detached root. Root close/reopen and
+CHECK succeed; every check preserves the original absolute deadline. After
+operator delay beyond expiry, CHECK is TIMED_OUT with zero admissions. Dense
+1-GiB admission takes 1.932 s; its explicit CHECK uses 4,041 requests in 1.700 s.
+Its mutation workspace is 273,584 bytes, so tiny writes no longer reserve all
+FAT sectors. Sync still admits one flush; neither BEGIN nor SYNC runs a check.
+
+Host library qualification separately covers six geometries with three fresh
+sequences, zero-fill/held replacement, proof rebuild and stopped-writer refusal.
+Touched corruption/stale parent chains and unexpected detached-directory entries
+refuse before effects. Capacity refusals before CHECK validation retain proof.
+Truncated backing invalidates it; real host ENOSPC retains the uncertain writer,
+failed workspace and diagnostic records unchanged across refused operations.
+A mtools-seeded full FAT with sixteen interleaved holes allocates exactly those
+independently located candidates. Further allocation returns NO_SPACE with valid
+proof, zero writes/flushes and unchanged media; cleanup/CHECK/fsck agree.
+
+A separate functional clean-power run holds an attached RW FILE and active
+publication interval. Physical Ctrl+Alt+Delete and clean shutdown complete;
+GDB observes seal OK and the owned dirty mark cleared while both objects,
+backing and the same interval/deadline remain held. Detached host fsck is clean
+and reads the written bytes. This is QEMU, not physical power-loss evidence.
+
+The allocation proof is not an ownership proof for unrelated objects. Coherent
+in-session cross-links may be detected only at CHECK/remount. Actual kernel
+physical-memory exhaustion and native media/power loss are not qualified here.
+The publisher hook and actual 128-MiB config-editor publication under the
+original lease remain a separate, coordinated gate; this scratch sequence is
+not an editor-success claim. No real ESP writes were performed.

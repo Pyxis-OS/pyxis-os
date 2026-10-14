@@ -2,32 +2,22 @@
 
 Owner-assigned investigation, 2026-10-13, before installer task 5 activates
 installed configuration publication. **All three revised defaults accepted, 2026-10-13; implementation authorized.**
-No optimization is implemented yet. The [baseline](../development/experiments/fat32-preflight-cost.md)
+The retained-map engine, bounded windows and native CHECK are implemented and
+qualified on disposable media. Publisher integration and complete editor
+publication remain pending. The [baseline](../development/experiments/fat32-preflight-cost.md)
 records the exact-main measurements, including the final geometry run after
 the owner lifted the container-build timing hold. No native FAT32 timing is claimed.
 
 ## Evidence
 
-`full_check` validates every chain/directory and retained object; `begin_plan`
-then scans all clusters again for its free vector (`fs/fat32/mounted.c`). Each
-miss reads one 512-byte FAT sector and its mirror separately (`volume.c`);
-operation contexts reset the cache. Native callbacks submit/wait serially.
-
-An empty CREATE's preflight admits about 2,525 / 8,073 / 32,269 reads on dense
-40 / 128 / 512 MiB. Profiled nested-QEMU CREATE ranges are 1.20–1.21 /
-3.99–7.55 / 14.77–14.84 s; only about 15–18 further requests implement creation.
-Explicit sync admits one flush. With 4-KiB clusters, 1-GiB operations succeed
-with about 8,204 preflight requests. Cost follows cluster count, not MiB alone.
-These ranges include debugger/shared-host variation; they are not native rates.
-
-The full free vector and conservative prepared capacity use about 20.35 MiB
-at dense 512 MiB. A tiny write returns LIMIT because old/new overlap exceeds
-32 MiB; dense 1-GiB RW admission requests about 40.66 MiB and refuses LIMIT.
-The editor's [128-MiB qualification](../../userspace/config-editor/qualification/README.md)
-stopped at committed-record sync: admitted work can finish beyond the lease,
-then sync is refused before I/O. The baseline's separate expiry check included
-operator idle and is not a complete editor reproduction. A longer lease fixes
-neither repeated work nor capacity refusals.
+The [baseline and implementation record](../development/experiments/fat32-preflight-cost.md)
+separates the original investigation, exact-main refresh and changed-build runs.
+Main repeats a volume-wide check and free collection on every mutation; dense
+1-GiB admission exceeds the 32-MiB workspace cap. The implementation performs
+one admission check, then local checks: at 128 MiB, empty CREATE uses 20–25
+requests instead of about 8,088–8,093. Dense 1-GiB admission and tiny writes
+succeed within the unchanged cap. These are profiled nested-QEMU results,
+not native hardware rates or complete editor publication.
 
 ## Accepted contract (2026-10-13)
 
@@ -72,9 +62,8 @@ interval. The installer/config publisher calls it once immediately after its
 existing BEGIN, before publication effects, inside the same non-extending
 30-second lease. A successful check publishes replacement allocation state
 atomically; failure preserves recovery and leaves proof invalid. Neither BEGIN
-nor SYNC silently becomes a check or renews the lease. The engine already has
-`fat32_mounted_check`; the native control operation/helper and publisher call
-are new work, coordinated with alpha through the owner.
+nor SYNC silently becomes a check or renews the lease. The native `MOUNT_CHECK` operation and `mount_check` helper are implemented.
+The publisher call remains coordinated with alpha through the owner.
 
 Keep operation-sized candidates and sector-and-phase images under 32 MiB:
 new-directory allocation, parent growth, touched/shrunk/reclaimed chains,
@@ -128,8 +117,8 @@ corruption outside touched structures at explicit check/remount. Run the actual
 power seal/resume and fsck, then owner-scheduled native scratch checks if useful.
 No real ESP writes are authorized.
 
-- [ ] Implement and qualify the retained allocation proof and bounded workspaces
+- [x] Implement and qualify the retained allocation proof and bounded workspaces
   in pyxis-fs.
-- [ ] Add observable invalid state and the native bound-control CHECK ABI/helper.
+- [x] Add observable invalid state and the native bound-control CHECK ABI/helper.
 - [ ] Coordinate the once-per-publication CHECK with alpha and qualify the actual
   128-MiB editor publication under the unchanged lease.
