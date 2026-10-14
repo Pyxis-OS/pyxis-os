@@ -363,7 +363,55 @@ An enabled network debugger attempts local panic text before takeover, but these
 same display limits can leave partial or absent text; successful GDB inspection
 remains independent and does not invoke fatal UDP concurrently.
 
-## Space-layer qualification
+## Failures before the first pixel
+
+Owner-accepted (2026-10-14): failures before the early console starts stay
+invisible on machines without serial. `limine_entry()` starts the
+[early console](kernel/early-console.md) only after checking Limine's responses,
+copying the memory map and checking the framebuffer against its reservation;
+until then a panic reports only to serial. Exception handlers arrive later still,
+in `arch_init()`, so a fault before them, including the first write to a
+framebuffer the loader left unmapped, hangs or resets with nothing on screen.
+vela, the ThinkPad and most laptops have no serial port, so either case is a
+black screen. vela's first boots stopped this way at the framebuffer check, and
+finding that took a diagnostic kernel. Revisit if another failure before the
+first pixel is hit on hardware, or before adding a loader or target. Options:
+start the console after only the layout checks, install exception handlers
+before the first framebuffer write, or check the loader's mapping first.
+
+## Unchecked hardware assumptions
+
+Owner (2026-10-14): vela exposed assumptions that held on every earlier machine
+(QEMU, the ThinkPad). A later audit round across the kernel should look for
+similar ones: alignment, size multiples, address ranges, legacy devices
+(PIT, PS/2, serial) and firmware defaults. No task now; revisit when the owner
+opens the audit.
+
+Fixed so far:
+- **Framebuffer size a whole number of 4 KiB pages.** Limine reports its exact
+  bytes; 2880x1800 ends mid-page. Fixed 2026-10-14.
+- **A working 8254 PIT.** The local APIC timer was calibrated on PIT channel 2,
+  which vela gates; it now uses CPUID `0x15` or the HPET
+  ([timekeeping](kernel/timekeeping.md)). Fixed 2026-10-14.
+- **x2APIC off at boot.** vela's firmware enables it (#835).
+- **Framebuffer below 4 GiB.** vela's is above 1 TiB; Caelum maps it by physical
+  address within the CPU's width, and Limine 12.9.3 (#846) no longer drops it
+  from its page tables when it is the highest memory map entry.
+
+Noticed, not fixed:
+- **An HPET is required.** Boot panics without the ACPI table. Linux on vela
+  disables its HPET ("dysfunctional in PC10"); Caelum reads it only until the
+  TSC is selected, but a CPU that rejects the TSC keeps it as the clock, idle
+  included.
+- **The framebuffer must be 32-bit with 8-bit channels.** A 10-bit GOP mode
+  panics before the first pixel.
+- **MSI targets the BSP by an 8-bit APIC ID.** A BSP x2APIC ID above 255 panics
+  without interrupt remapping.
+- **Fixed boot table capacities:** 256 memory map regions (vela has 57) and a
+  256x128 early console grid, which larger screens show top-left.
+- **Legacy ports assumed or probed without audit:** COM1 at `0x3f8` (probed,
+  bounded), the i8042 PS/2 controller and the 8259 PIC mask ports.
+
 
 The [space-layer milestone](userland/space-layers.md) closed on 2026-10-08 with nested QEMU qualification, and the owner ran the native
 Quake check the same day (ThinkPad PXE, main `4332801`, 1920x1080, AC): Super+Down/Up, continued game time and terminal output, held
@@ -851,8 +899,8 @@ and held the clock through a native session of more than 15 minutes on 2026-10-0
 **TSC (accepted limits, owner 2026-10-09; native qualified).** On the ThinkPad two cold boots calibrated 2096.063 and 2096.064 MHz (within ±12 ppm of Linux's 2096.061 MHz), clock reads
 take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
-qualifies with an error bound up to 100 ppm on top of the HPET's crystal error, and CPUID `0x15` is only logged. Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
-calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp, needs better accuracy or is an Intel CPU.
+qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
+calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp or needs better accuracy.
 
 ## Doom configuration and save-format limits
 

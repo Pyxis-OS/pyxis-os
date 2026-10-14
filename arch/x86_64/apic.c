@@ -48,26 +48,21 @@
 #define PIC_SLAVE_MASK 0xa1
 #define PIC_MASK_ALL 0xff
 
-#define PIT_CHANNEL2_DATA 0x42
-#define PIT_COMMAND 0x43
-#define PIT_CHANNEL2_SELECT (2u << 6)
-#define PIT_ACCESS_LO_HI (3u << 4)
-#define PIT_MODE_TERMINAL_COUNT 0
-#define PIT_SPEAKER_CONTROL 0x61
-#define PIT_CHANNEL2_GATE (1u << 0)
-#define PIT_SPEAKER_ENABLE (1u << 1)
-#define PIT_CHANNEL2_OUTPUT (1u << 5)
-#define PIT_FREQUENCY 1193182u
+#define APIC_TIMER_DIVISOR 16u /* APIC_DIVIDE_BY_16 */
 #define TIMER_FREQUENCY 120u
 #define NANOSECONDS_PER_SECOND UINT64_C(1000000000)
 #define TIMER_PERIOD_NS ((NANOSECONDS_PER_SECOND + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
-#define PIT_CALIBRATION_COUNT ((PIT_FREQUENCY + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
-#define PIT_CALIBRATION_DENOMINATOR ((uint64_t)PIT_CALIBRATION_COUNT * NANOSECONDS_PER_SECOND)
-#define PIT_POLL_LIMIT 10000000u
-#define PIT_CLOCK_POLL_INTERVAL 1024u
+#define TIMER_CALIBRATION_NS UINT64_C(50000000)
+/* Half the counter: far beyond the calibration interval at any real rate. */
+#define TIMER_CALIBRATION_COUNT_LIMIT (UINT32_MAX / 2)
 
 /* Published before AP startup; the mode never changes while Caelum runs. */
 static bool x2apic, prepared;
+/* The local timer's rate after the divider, and its count for one periodic
+ * tick. Set once by the BSP before AP startup; every CPU's timer shares the
+ * crystal or bus clock it measures. */
+static uint64_t timer_hz;
+static uint32_t timer_period_count;
 
 uint32_t arch_timer_frequency(void)
 {
@@ -135,34 +130,55 @@ uint64_t apic_physical_address(void)
   return x2apic ? 0 : read_msr(IA32_APIC_BASE) & APIC_BASE_ADDRESS_MASK;
 }
 
-static uint32_t calibrate_timer(void)
+/* BSP only: one HPET measurement, used where CPUID 0x15 does not give the
+ * crystal (AMD). The timer counts down at divide-by-16 throughout. */
+static uint64_t measure_timer_hz(void)
 {
-  /* Channel 2 supplies a polling interval without enabling the PIC or speaker.
-   * The local timer counts down at divide-by-16 throughout that interval. */
-  uint8_t speaker = inb(PIT_SPEAKER_CONTROL);
-  uint8_t stopped = speaker & ~(PIT_CHANNEL2_GATE | PIT_SPEAKER_ENABLE);
-  outb(PIT_SPEAKER_CONTROL, stopped);
-  outb(PIT_COMMAND, PIT_CHANNEL2_SELECT | PIT_ACCESS_LO_HI | PIT_MODE_TERMINAL_COUNT);
-  outb(PIT_CHANNEL2_DATA, (uint8_t)PIT_CALIBRATION_COUNT);
-  outb(PIT_CHANNEL2_DATA, (uint8_t)(PIT_CALIBRATION_COUNT >> 8));
-
   apic_write(APIC_TIMER_INITIAL, UINT32_MAX);
-  outb(PIT_SPEAKER_CONTROL, stopped | PIT_CHANNEL2_GATE);
-  unsigned remaining = PIT_POLL_LIMIT;
-  while (!(inb(PIT_SPEAKER_CONTROL) & PIT_CHANNEL2_OUTPUT) && remaining) {
-    if (!(remaining % PIT_CLOCK_POLL_INTERVAL)) {
-      arch_clock_maintain();
-    }
-    --remaining;
-  }
-  uint32_t elapsed = UINT32_MAX - apic_read(APIC_TIMER_CURRENT);
+  uint32_t start_count = apic_read(APIC_TIMER_CURRENT);
+  uint64_t start_ns = arch_clock_hpet_ns();
+  uint64_t elapsed_ns = 0;
+  uint32_t end_count;
+  do {
+    __asm__ volatile("pause");
+    end_count = apic_read(APIC_TIMER_CURRENT);
+    elapsed_ns = arch_clock_hpet_ns() - start_ns;
+  } while (elapsed_ns < TIMER_CALIBRATION_NS &&
+           start_count - end_count < TIMER_CALIBRATION_COUNT_LIMIT);
   apic_write(APIC_TIMER_INITIAL, 0);
-  outb(PIT_SPEAKER_CONTROL, stopped);
 
-  if (!remaining || !elapsed || elapsed == UINT32_MAX) {
-    panic("cannot calibrate the local APIC timer");
+  uint32_t counts = start_count - end_count;
+  if (elapsed_ns < TIMER_CALIBRATION_NS || !counts) {
+    panic("cannot calibrate the local APIC timer against the HPET");
   }
-  return elapsed;
+  return (uint64_t)counts * NANOSECONDS_PER_SECOND / elapsed_ns;
+}
+
+/* Rounded up, so an armed deadline never fires early. ns is at most
+ * TIMER_PERIOD_NS, which keeps the product far inside uint64_t. */
+static uint64_t timer_counts(uint64_t ns)
+{
+  uint64_t product = timer_hz * ns;
+  return product / NANOSECONDS_PER_SECOND + (product % NANOSECONDS_PER_SECOND != 0);
+}
+
+static void calibrate_timer(void)
+{
+  uint64_t crystal = arch_clock_crystal_hz();
+  const char *source = "from the CPUID 0x15 crystal";
+  if (crystal) {
+    timer_hz = crystal / APIC_TIMER_DIVISOR;
+  } else {
+    timer_hz = measure_timer_hz();
+    source = "measured against the HPET";
+  }
+  uint64_t period_count = timer_counts(TIMER_PERIOD_NS);
+  if (!period_count || period_count > UINT32_MAX) {
+    panic("unusable local APIC timer rate %lu Hz", timer_hz);
+  }
+  timer_period_count = (uint32_t)period_count;
+  klog("x86_64: %s local APIC timer %lu Hz %s, %u counts per %lu ns\n",
+       x2apic ? "x2APIC" : "xAPIC", timer_hz, source, timer_period_count, TIMER_PERIOD_NS);
 }
 
 void apic_init(void)
@@ -194,11 +210,10 @@ void apic_init(void)
   apic_write(APIC_SPURIOUS, APIC_SOFTWARE_ENABLED | APIC_SPURIOUS_VECTOR);
   apic_write(APIC_TIMER_DIVIDE, APIC_DIVIDE_BY_16);
 
-  cpu_current()->timer_count = calibrate_timer();
   if (cpu_current() == cpu_bsp()) {
-    klog("x86_64: %s local APIC timer calibrated, %u counts per ~8.33 ms\n",
-         x2apic ? "x2APIC" : "xAPIC", cpu_current()->timer_count);
+    calibrate_timer();
   }
+  cpu_current()->timer_count = timer_period_count;
 }
 
 void apic_timer_start(void)
@@ -250,13 +265,7 @@ void arch_timer_arm(uint64_t deadline, uint64_t now)
   if (remaining > TIMER_PERIOD_NS || now == UINT64_MAX) {
     remaining = TIMER_PERIOD_NS;
   }
-  /* The nominal occasion bounds this product. Splitting before multiplying by
-   * PIT_FREQUENCY keeps both products in uint64_t, including the rounding add.
-   * Use the PIT interval itself, rather than treating it as exactly 1/120 s. */
-  uint64_t product = (uint64_t)cpu->timer_count * remaining;
-  uint64_t count = (product / PIT_CALIBRATION_DENOMINATOR) * PIT_FREQUENCY;
-  uint64_t fraction = (product % PIT_CALIBRATION_DENOMINATOR) * PIT_FREQUENCY;
-  count += (fraction + PIT_CALIBRATION_DENOMINATOR - 1) / PIT_CALIBRATION_DENOMINATOR;
+  uint64_t count = timer_counts(remaining);
   if (!count) {
     count = 1;
   } else if (count > UINT32_MAX) {

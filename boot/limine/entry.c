@@ -397,13 +397,11 @@ static void copy_framebuffer(void)
   uint64_t physical = address - boot.bootstrap_direct_offset;
 
   /* The framebuffer response gives the address. The map only confirms these
-   * frames are unavailable to the PMM, including any partial boundary pages. */
-  uint64_t covered = physical & ~(ARCH_PAGE_SIZE - 1);
+   * bytes are unavailable to the PMM. Limine reports the framebuffer's exact
+   * extent: only usable entries are rounded to pages, so one ending mid-page
+   * (2880x1800x4 bytes) leaves the rest of that page unreported. */
   uint64_t end = physical + size;
-  if (end > UINT64_MAX - (ARCH_PAGE_SIZE - 1)) {
-    panic("framebuffer page extent overflows");
-  }
-  end = (end + ARCH_PAGE_SIZE - 1) & ~(ARCH_PAGE_SIZE - 1);
+  uint64_t covered = physical;
   for (size_t i = 0; i < boot.region_count && covered < end; ++i) {
     const struct boot_region *region = &boot.regions[i];
     uint64_t region_end = region->base + region->length;
@@ -417,6 +415,23 @@ static void copy_framebuffer(void)
   }
   if (covered < end) {
     panic("framebuffer is outside framebuffer reservations");
+  }
+
+  /* Its partial boundary pages are mapped whole, so they must not hold RAM
+   * that Caelum allocates, reclaims or occupies. */
+  uint64_t first_page = physical & ~(ARCH_PAGE_SIZE - 1);
+  if (end > UINT64_MAX - (ARCH_PAGE_SIZE - 1)) {
+    panic("framebuffer page extent overflows");
+  }
+  uint64_t page_end = (end + ARCH_PAGE_SIZE - 1) & ~(ARCH_PAGE_SIZE - 1);
+  for (size_t i = 0; i < boot.region_count; ++i) {
+    const struct boot_region *region = &boot.regions[i];
+    bool allocatable = region->type == BOOT_USABLE || region->type == BOOT_LOADER ||
+                       region->type == BOOT_KERNEL;
+    if (allocatable && region->base < page_end &&
+        region->base + region->length > first_page) {
+      panic("framebuffer pages overlap allocatable memory");
+    }
   }
 
   boot.framebuffer = (struct boot_framebuffer){

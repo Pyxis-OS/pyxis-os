@@ -43,7 +43,8 @@ Only after acquiring that state may the BSP reuse the handoff for another AP.
 The BSP's running APIC timer supplies a startup timeout of approximately five
 seconds without requiring interrupts on the BSP.
 
-PIT calibration is serialized by this startup order. APs do not print startup
+The BSP sets the local APIC timer rate once, before AP startup, and APs reuse
+it ([timekeeping](timekeeping.md)). APs do not print startup
 messages. The normal log has one line with the online CPU count; with
 `LOG_LEVEL=trace`, the BSP also reports each AP's APIC ID, stack top and timer
 count.
