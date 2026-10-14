@@ -11,6 +11,7 @@ struct environment_table;
 struct environment_cell;
 struct environment_snapshot;
 struct environment_staging;
+struct file_object;
 
 /* BSP owned tunable admission policies, not ABI constants. */
 #define ENVIRONMENT_ENTRIES_LIMIT 1024
@@ -23,6 +24,7 @@ enum environment_request_action {
   ENVIRONMENT_COMMIT_UNSET,
   ENVIRONMENT_CAPTURE,
   ENVIRONMENT_RELEASE_STAGING,
+  ENVIRONMENT_CREATE_TEXT_FILE,
 };
 
 struct environment_request {
@@ -35,6 +37,8 @@ struct environment_request {
   size_t count;
   uint64_t flags;
   struct kernel_object *snapshot;
+  struct environment_cell *cell; /* Caller retains the immutable cell through service. */
+  struct file_object *file; /* Owned storage returned after sealing its bytes. */
   enum call_status result;
 };
 
