@@ -87,7 +87,8 @@ position or preference.
 
 ### Larger-device image recovery scope
 
-Owner-approved task, 2026-10-14; implementation pending. A copied image may
+Owner-approved task, 2026-10-14; scanner implementation is draft and unqualified.
+The NPFS read-only enforcement scope awaits the owner. A copied image may
 record its backup before the physical device end and/or retain a shorter
 protective MBR. The exception requires a valid primary, a valid reciprocal
 backup at the primary's recorded alternate, and matching declared arrays and
@@ -102,6 +103,10 @@ Publish the primary as read-only `GPT_DEGRADED`, with one warning naming
 Bad CRCs, disagreement, overlaps, unsupported or unexamined metadata do not
 qualify for this exception. Existing full-sized single-copy degraded recovery
 and filesystem write-authority rules remain unchanged.
+Source review found that NPFS currently derives pool writability from requested
+rights and device flags without enforcing degraded GPT health. The draft's
+read-only map status therefore does not yet guarantee read-only NPFS operation;
+the owner must choose whether this PR adds that guard or defers the gap.
 
 ## Published results
 

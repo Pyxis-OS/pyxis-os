@@ -26,11 +26,11 @@
 #define MBR_ENTRY_COUNT 4u
 #define MBR_PROTECTIVE_TYPE 0xeeu
 
-enum mbr_status { MBR_VALID, MBR_ABSENT, MBR_INVALID, MBR_UNSUPPORTED };
+enum mbr_status { MBR_VALID, MBR_SHORT, MBR_ABSENT, MBR_INVALID, MBR_UNSUPPORTED };
 
 struct gpt_header {
   struct gpt_guid disk_guid;
-  uint64_t first_usable, last_usable, array_lba;
+  uint64_t current_lba, alternate_lba, first_usable, last_usable, array_lba;
   uint32_t header_bytes, entry_count, entry_bytes, array_bytes, array_crc;
 };
 
@@ -45,7 +45,8 @@ struct gpt_device {
   struct block_info device;
   struct gpt_snapshot snapshot;
   struct gpt_scratch *scratch;
-  bool published, shared_scratch;
+  uint32_t protective_blocks;
+  bool published, shared_scratch, relocatable;
 };
 
 static struct gpt_device *devices;
@@ -159,7 +160,9 @@ static enum mbr_status validate_mbr(struct gpt_device *scan)
     const uint8_t *entry = block + MBR_ENTRIES_OFFSET + i * MBR_ENTRY_BYTES;
     if (entry[4] == MBR_PROTECTIVE_TYPE) {
       ++protective;
-      if (read_le32(entry + 8) != 1 || read_le32(entry + 12) != expected) {
+      scan->protective_blocks = read_le32(entry + 12);
+      if (read_le32(entry + 8) != 1 || !scan->protective_blocks ||
+          scan->protective_blocks > expected) {
         invalid = true;
       }
     } else if (entry[4]) {
@@ -171,15 +174,16 @@ static enum mbr_status validate_mbr(struct gpt_device *scan)
   if (invalid || protective > 1 || !zero_bytes(block + 512, scan->device.block_size - 512)) {
     return MBR_INVALID;
   }
-  return protective == 1 ? MBR_VALID : MBR_ABSENT;
+  if (!protective) {
+    return MBR_ABSENT;
+  }
+  return scan->protective_blocks == expected ? MBR_VALID : MBR_SHORT;
 }
 
-static enum gpt_copy_status validate_header(struct gpt_device *scan, unsigned copy)
+static enum gpt_copy_status validate_header(struct gpt_device *scan, unsigned copy, uint64_t location)
 {
   uint8_t *block = scan->scratch->block;
   struct gpt_header *header = &scan->scratch->headers[copy];
-  uint64_t last = scan->device.block_count - 1;
-  uint64_t location = copy == 0 ? 1 : last;
   if (memcmp(block, "EFI PART", 8)) {
     return GPT_COPY_ABSENT;
   }
@@ -195,12 +199,15 @@ static enum gpt_copy_status validate_header(struct gpt_device *scan, unsigned co
   if (read_le32(block + 8) != GPT_REVISION) {
     return GPT_COPY_UNSUPPORTED;
   }
-  if (read_le32(block + 20) ||
+  uint64_t alternate = read_le64(block + 32);
+  uint64_t last = copy == 0 ? alternate : location;
+  if (last <= 1 || last >= scan->device.block_count || read_le32(block + 20) ||
       !zero_bytes(block + GPT_HEADER_BYTES, scan->device.block_size - GPT_HEADER_BYTES) ||
-      read_le64(block + 24) != location || read_le64(block + 32) != (copy == 0 ? last : 1)) {
+      read_le64(block + 24) != location || (copy == 1 && alternate != 1)) {
     return GPT_COPY_INVALID;
   }
   *header = (struct gpt_header){
+    .current_lba = location, .alternate_lba = alternate,
     .header_bytes = bytes,
     .first_usable = read_le64(block + 40), .last_usable = read_le64(block + 48),
     .array_lba = read_le64(block + 72), .entry_count = read_le32(block + 80),
@@ -268,27 +275,32 @@ static enum gpt_copy_status validate_entries(struct gpt_device *scan, unsigned c
   return GPT_COPY_VALID;
 }
 
-static enum gpt_copy_status scan_copy(struct gpt_device *scan, unsigned copy, uint64_t deadline)
+static enum gpt_copy_status scan_array(struct gpt_device *scan, unsigned copy, uint64_t deadline)
 {
-  enum gpt_copy_status status = read_blocks(scan, copy == 0 ? 1 : scan->device.block_count - 1,
-      1, scan->scratch->block, deadline);
-  if (status != GPT_COPY_VALID) {
-    return status;
-  }
-  status = validate_header(scan, copy);
-  if (status != GPT_COPY_VALID) {
-    return status;
-  }
   const struct gpt_header *header = &scan->scratch->headers[copy];
   uint32_t blocks = (header->array_bytes + scan->device.block_size - 1) / scan->device.block_size;
-  status = read_blocks(scan, header->array_lba, blocks, scan->scratch->arrays[copy], deadline);
+  enum gpt_copy_status status = read_blocks(scan, header->array_lba, blocks,
+      scan->scratch->arrays[copy], deadline);
   return status == GPT_COPY_VALID ? validate_entries(scan, copy) : status;
+}
+
+static enum gpt_copy_status scan_copy(struct gpt_device *scan, unsigned copy, uint64_t location,
+    uint64_t deadline)
+{
+  enum gpt_copy_status status = read_blocks(scan, location, 1, scan->scratch->block, deadline);
+  if (status != GPT_COPY_VALID) {
+    return status;
+  }
+  status = validate_header(scan, copy, location);
+  return status == GPT_COPY_VALID ? scan_array(scan, copy, deadline) : status;
 }
 
 static bool copies_agree(struct gpt_device *scan)
 {
   const struct gpt_header *primary = &scan->scratch->headers[0], *backup = &scan->scratch->headers[1];
-  return primary->header_bytes == backup->header_bytes &&
+  return primary->alternate_lba == backup->current_lba &&
+      backup->alternate_lba == primary->current_lba &&
+      primary->header_bytes == backup->header_bytes &&
       primary->first_usable == backup->first_usable && primary->last_usable == backup->last_usable &&
       primary->entry_count == backup->entry_count && primary->entry_bytes == backup->entry_bytes &&
       !memcmp(primary->disk_guid.bytes, backup->disk_guid.bytes, sizeof(primary->disk_guid.bytes)) &&
@@ -320,6 +332,23 @@ static void select_copy(struct gpt_device *scan, unsigned copy)
   }
 }
 
+static bool protective_extent_covers_map(struct gpt_device *scan)
+{
+  const struct gpt_header *primary = &scan->scratch->headers[0];
+  uint32_t array_blocks = (primary->array_bytes + scan->device.block_size - 1) /
+      scan->device.block_size;
+  if (primary->array_lba + array_blocks - 1 > scan->protective_blocks) {
+    return false;
+  }
+  for (uint32_t i = 0; i < primary->entry_count; ++i) {
+    const uint8_t *entry = scan->scratch->arrays[0] + i * primary->entry_bytes;
+    if (!zero_bytes(entry, 16) && read_le64(entry + 40) > scan->protective_blocks) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static enum gpt_status choose_map(struct gpt_device *scan, enum mbr_status mbr)
 {
   enum gpt_copy_status primary = scan->snapshot.primary, backup = scan->snapshot.backup;
@@ -335,15 +364,25 @@ static enum gpt_status choose_map(struct gpt_device *scan, enum mbr_status mbr)
   if (mbr == MBR_ABSENT && primary == GPT_COPY_ABSENT && backup == GPT_COPY_ABSENT) {
     return GPT_ABSENT;
   }
-  if (mbr != MBR_VALID) {
+  if (mbr != MBR_VALID && mbr != MBR_SHORT) {
     return GPT_INVALID;
   }
   if (primary == GPT_COPY_VALID && backup == GPT_COPY_VALID) {
     if (!copies_agree(scan)) {
       return GPT_AMBIGUOUS;
     }
+    if (mbr == MBR_SHORT && !protective_extent_covers_map(scan)) {
+      return GPT_INVALID;
+    }
     select_copy(scan, 0);
-    return GPT_HEALTHY;
+    scan->relocatable = mbr == MBR_SHORT ||
+        scan->scratch->headers[0].alternate_lba < scan->device.block_count - 1;
+    return scan->relocatable ? GPT_DEGRADED : GPT_HEALTHY;
+  }
+  /* The larger-device exception requires two validated, agreeing copies. */
+  if (mbr == MBR_SHORT || (primary == GPT_COPY_VALID &&
+      scan->scratch->headers[0].alternate_lba < scan->device.block_count - 1)) {
+    return GPT_INVALID;
   }
   if (primary == GPT_COPY_VALID || backup == GPT_COPY_VALID) {
     select_copy(scan, primary == GPT_COPY_VALID ? 0 : 1);
@@ -368,8 +407,13 @@ static void publish(struct gpt_device *scan, enum gpt_status status)
   scan->scratch = NULL;
   scan->published = true;
   cpu_restore_interrupts(flags);
-  klog("GPT: device %u %s; primary=%u backup=%u partitions=%u\n", (unsigned)scan->id, names[status],
-       (unsigned)scan->snapshot.primary, (unsigned)scan->snapshot.backup, scan->snapshot.partition_count);
+  if (scan->relocatable) {
+    klog("GPT: device %u warning: metadata describes a smaller disk; degraded read-only map; repair with sgdisk --move-second-header under explicit write authority\n",
+        (unsigned)scan->id);
+  } else {
+    klog("GPT: device %u %s; primary=%u backup=%u partitions=%u\n", (unsigned)scan->id, names[status],
+         (unsigned)scan->snapshot.primary, (unsigned)scan->snapshot.backup, scan->snapshot.partition_count);
+  }
   for (uint32_t i = 0; i < scan->snapshot.partition_count; ++i) {
     const struct gpt_partition *partition = &scan->snapshot.partitions[i];
     klog("GPT: entry %u first=%lu blocks=%lu\n", partition->entry_number,
@@ -391,8 +435,40 @@ static void scan_disk(void *argument)
     return;
   }
   enum mbr_status mbr = validate_mbr(scan);
-  scan->snapshot.primary = scan_copy(scan, 0, deadline);
-  scan->snapshot.backup = scan_copy(scan, 1, deadline);
+  scan->snapshot.primary = scan_copy(scan, 0, 1, deadline);
+  uint64_t device_end = scan->device.block_count - 1;
+  uint64_t alternate = scan->snapshot.primary == GPT_COPY_VALID ?
+      scan->scratch->headers[0].alternate_lba : device_end;
+  scan->snapshot.backup = scan_copy(scan, 1, alternate, deadline);
+  if (alternate < device_end) {
+    status = read_blocks(scan, device_end, 1, scan->scratch->block, deadline);
+    if (status != GPT_COPY_VALID) {
+      publish(scan, status == GPT_COPY_TIMED_OUT ? GPT_TIMED_OUT : GPT_IO_ERROR);
+      return;
+    }
+    if (!memcmp(scan->scratch->block, "EFI PART", 8)) {
+      /* An additional header is not evidence that either older layout wins.
+       * This branch never selects a map, so slot 1 can validate the extra copy. */
+      status = validate_header(scan, 1, device_end);
+      if (status == GPT_COPY_VALID) {
+        status = scan_array(scan, 1, deadline);
+      }
+      ktrace("GPT: device %u additional header at physical end; refusing copied-image recovery\n",
+          (unsigned)scan->id);
+      enum gpt_status result = GPT_INVALID;
+      if (status == GPT_COPY_VALID) {
+        result = GPT_AMBIGUOUS;
+      } else if (status == GPT_COPY_UNSUPPORTED) {
+        result = GPT_UNSUPPORTED;
+      } else if (status == GPT_COPY_IO_ERROR) {
+        result = GPT_IO_ERROR;
+      } else if (status == GPT_COPY_TIMED_OUT) {
+        result = GPT_TIMED_OUT;
+      }
+      publish(scan, result);
+      return;
+    }
+  }
   publish(scan, choose_map(scan, mbr));
 }
 
@@ -427,6 +503,8 @@ void gpt_prepare(void)
 static bool prepare_scan(struct gpt_device *scan)
 {
   scan->snapshot = (struct gpt_snapshot){0};
+  scan->protective_blocks = 0;
+  scan->relocatable = false;
   scan->published = false;
   if (block_get_info(scan->id, &scan->device) != BLOCK_OK) {
     publish(scan, GPT_UNAVAILABLE);
