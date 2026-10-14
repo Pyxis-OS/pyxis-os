@@ -68,6 +68,11 @@ installs one owned local handle with unchanged resource/transport masks; a text
 reply copies into caller storage, reports required length on insufficient space
 and publishes no partial text. A size retry may observe a later complete value;
 a held SNAPSHOT instead fixes the generation for enumeration and launch.
+Launch must allow owned, explicitly selected per-child stream/entry overrides
+and attenuation against that snapshot. Existing redirections and pipelines must
+not SET/UNSET the parent's live table temporarily. Overrides are child staging,
+not a second live environment or a grant to enumerate the parent's unexported
+entries; the child receives only the explicitly delegated selection.
 
 Task 3 needs exact, case-sensitive entry routing (including existing `_`, `+`,
 `-` and `.` names), no protected names, no URI-prefix normalization, and no table
