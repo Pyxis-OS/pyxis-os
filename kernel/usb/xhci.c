@@ -2804,7 +2804,8 @@ static bool retire_device(struct usb_host_device *device, uint64_t deadline)
       return false;
     }
   }
-  if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, device->slot, 0, deadline)) {
+  if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, device->slot, 0, deadline) ||
+      controller->command.completion != XHCI_EVENT_SUCCESS) {
     controller->failure = "Disable Slot fence failed";
     return false;
   }
