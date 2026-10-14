@@ -199,6 +199,9 @@ while a power operation runs is dropped, and a request that arrives while a
 press's power-off runs completes with BUSY. If that power-off fails, the system
 stays up and the next press tries again. Only the fixed-feature power button is
 supported; a control-method button (`PNP0C0C` sending `Notify` 0x80) is not.
+[Vela's extension scope](../development/experiments/vela-power-button/README.md)
+records the pending event-route boundary; no Notify power support is implemented
+yet.
 
 The Ctrl+Alt+Delete [power overlay](power-overlay.md) has the same
 physical-access authority. `acpi_power_local()` hands its power-off or restart
