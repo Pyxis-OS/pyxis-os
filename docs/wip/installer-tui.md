@@ -100,33 +100,24 @@ blocking flush whose completion cannot be measured.
 
 ## Progress display — accepted 2026-10-14
 
-Task 1's records print one line per phase, so an ordinary Update scrolls dozens
-of `Inspecting … bytes` lines, an inventory scan scrolls the disk selection out
-of view, and the review lists every program's old and new sizes. The owner
-wanted a progress bar for long work and detail only on request.
-Accepted, not implemented; it applies to today's line-mode installer and
-updater (one executor) and does not wait for the curses TUI:
+Implemented in the line-mode installer and updater (one executor), independently
+of the later curses TUI: one bounded live bar/activity line for long work,
+silent short checks, finished major steps, opt-in `-v`/Print details, a normal
+Review summary and selected target re-shown before later questions. Printed
+plans remain data-only on stdout; human output remains on stderr. Planning,
+consent, storage, verification and installed-activation gates are unchanged.
+See the [implemented progress contract](../userland/installer.md#progress) and
+[QEMU record](../development/experiments/installer-progress/README.md#quiet-display-revision--qemu-2026-10-14).
 
-- **One live line per long operation, redrawn in place:** phase name, a bar and
-  completed/total files or bytes, plus a rate where known, for example
-  `Copying programs [#########-----] 412/980 files 38 MB/s`. Without a known
-  total it shows the phase and an activity indicator, never an invented
-  percentage.
-- **Short checks print nothing unless they fail.** The major steps (inspect,
-  copy, verify, switch the ESP, clean up) each leave one finished line.
-- **Detailed phase records move to the kernel log** (`log`) instead of the
-  screen, so diagnosis keeps the same detail. The curses TUI later draws its
-  progress page from the same records.
-- **Verbose output is opt-in.** Per-phase records, the per-program old/new
-  list and similar detail print only with a verbose flag (`-v`) or the existing
-  **print plan** action, never in the normal flow.
-- **The review is a summary that fits on one screen:** the target disk, counts
-  of updated, new and removed programs with total sizes, what is kept and what
-  is replaced, the recovery limits and the action prompt.
-- **Nothing scrolls a choice out of view.** A question asked during selection,
-  such as the read-only inventory scan of a revision without a manifest, runs
-  under the same quiet progress line, and the selection is shown again before
-  the next prompt.
+**Delegation accepted by the owner, 2026-10-14.** Trusted `init-install`
+explicitly delegates its existing Caelum console with WRITE alone as
+`installer_diagnostics`. Only the trusted installer receives it. Detailed phase
+boundaries and coalesced counters enter the existing kernel log ring/serial
+path, while local progress and errors use the install space's own output.
+Diagnostic failure disables that observer without affecting confirmed I/O;
+Review-output failure still prevents apply. No LOG write right or new kernel API
+is added. A general authority-scoped userspace log writer remains
+[technical debt](../technical-debt.md#userspace-kernel-log-writer).
 
 ## Configuration delta model
 
@@ -250,7 +241,8 @@ record the QEMU evidence and its limits.
 Progress coverage can land independently before curses or coexistence. No new
 kernel configuration model is proposed.
 
-1. [x] **Complete progress coverage — delivered 2026-10-11.**
+1. [x] **Complete progress coverage — delivered 2026-10-11; quiet display revision
+   delivered 2026-10-14.**
    Shared observational phase/counter records cover source/target inspection,
    copying, filesystem-view verification, raw EFI read-back, sync and cleanup.
    [Reference](../userland/installer.md#progress) and

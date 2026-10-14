@@ -85,9 +85,11 @@ installed system. No wipe marker is needed. See
 ## Plans and Programs report
 
 Preparation is read-only: no target mount, persistent journal replay, formatting,
-cleanup or writes. Review shows the target, partition extents, journal/policy
-choices, destruction/recovery limits and whole-program changes with old/new
-payload sizes. Its Apply/Print/Dry-run choice edits no disk. Only the exact word
+cleanup or writes. Normal Review shows the target, journal/policy choices,
+selected payload, aggregate program changes and destruction/recovery limits on
+one screen at ordinary console sizes. `-v` / `--verbose`, `--plan` and the Print
+plan action add per-program old/new sizes, partition extents and volume details.
+Its Apply/Print/Dry-run choice edits no disk. Only the exact word
 `wipe` or `update` authorizes the prepared plan; exclusive revalidation precedes
 the first write and changed inputs refuse without automatic replanning.
 
@@ -100,7 +102,8 @@ consent for one-time raw read/hash inventory, repeated at exclusive revalidation
 Unknown prior revision/ancestry stays unknown. A valid manifest describes the
 recorded revision; it is not a full live audit of subsequent payload changes.
 
-`--plan` prints and exits; `--dry-run` reviews and exits. `--apply` reads one
+`-v` / `--verbose` also prints detailed phase records locally. `--plan` prints
+and exits; `--dry-run` reviews and exits. `--apply` reads one
 `pyxis-install-plan 1` frame from stdin, ending with `end` plus LF, rebuilds its
 read-only inspection and displays Review. `--apply --confirm=wipe` or
 `--apply --confirm=update` provides separate non-interactive consent and skips
@@ -149,19 +152,19 @@ baseline costs, measurements, inspected behavior and qualification limits.
 
 ## Progress
 
-Install and Update identify each I/O phase before it starts: source and target
-inspection, existing metadata/checksum checks, pool/GPT preparation, revision
-removal, copying, sync, verification, EFI publication/read-back, cleanup and
-handle release. Blocking claims, flushes and rescans show an activity line;
-they have no invented percentage.
+Install and Update show one bounded live line for long work: phase, a bar and
+completed/total files or bytes when known, otherwise an activity indicator.
+Major inspection, copy, verification, EFI publication and cleanup phases leave
+one finished line. Short checks stay silent unless they fail. Selected disk
+identity is shown again before journal/legacy-inventory questions and in Review.
 
-Copy and program verification report completed regular files and payload bytes,
+Copy and program verification count completed regular files and payload bytes,
 including bundle descendants. Verification bytes count successful comparisons
-once; directories are checked separately. File/byte totals come from the
-existing archive pass when known, without another scan. Removal counts deleted
-files and directories; raw stages count successful disk-command bytes, including
-sector/cluster padding, with totals where the existing layout establishes them.
-Counters describe work observed, not durability or whole-operation success.
+once; directories are checked separately. Totals come from the existing archive
+pass, without another scan. Removal counts deleted files and directories; raw
+stages count successful disk-command bytes, including sector/cluster padding.
+Measured byte rates use the read-only clock. Counters describe observed work,
+not durability or whole-operation success; a phase ending does not mean success.
 
 Program verification explicitly says **filesystem view; may be cached**. Pool
 sync precedes it, but ordinary npfs reads can return retained copied pages. It
@@ -169,15 +172,22 @@ is not guaranteed device read-back. ESP verification separately issues raw disk
 reads after flush/release; that bypasses npfs caches, without proving physical
 media behavior or power-loss safety.
 
-The shared installer phase/counter records feed the plain renderer and the later
-TUI. Console rows redraw at most four times per second; other output uses newline
-updates at most once per second. Clock checks are coalesced after 64 KiB or 32
-items, so small phases show transition/final records. A blocked syscall cannot
-animate. Transitions and final counts are unconditional; diagnostics first close
-the current row. Clock failure stops timed redraws, and output failure disables
-the renderer, without changing consent, I/O, checks or publication order.
-[QEMU measurements](../development/experiments/installer-progress/README.md)
-record the matched costs and qualification limits.
+Shared phase/counter records also send detailed boundaries and coalesced updates
+to Caelum's log through the trusted install launch's WRITE-only
+`installer_diagnostics` console grant. Ordinary programs do not receive it.
+`-v` prints these records locally; normal output remains quiet. The standalone
+configuration editor keeps its local detailed records and has no diagnostic grant.
+
+Console rows reserve the final column, adapt to current width and redraw at most
+four times per second. Minor work becomes visible after one second. Non-console
+output leaves final major/long-operation lines, without carriage-return animation.
+Clock checks are coalesced after 64 KiB or 32 items. A blocked syscall can show
+only a static activity marker. Prompts/errors close the current row. Clock or
+output failure disables the corresponding observer without changing confirmed
+I/O, consent, checks or publication order; failure to print Review still refuses
+apply. The future curses TUI can consume the same records.
+[QEMU qualification and earlier costs](../development/experiments/installer-progress/README.md)
+record the runtime evidence and limits.
 
 ## Restart
 
