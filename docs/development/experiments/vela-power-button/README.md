@@ -1,6 +1,6 @@
 # Vela power-button scope — assigned 2026-10-14
 
-Implementation authorized; event-route default accepted 2026-10-14. The owner reported Linux's control-method
+Implemented handlers; event-route default accepted 2026-10-14. Native pending. The owner reported Linux's control-method
 power button `PNP0C0C` (`PWRB`) and Intel HID `INTC10CC` 5-button array. These are
 enumeration facts, not proof of which event route carries this machine's press.
 This task follows [NVMe compatibility](../nvme-task1/README.md#vela-nvme-20-scope--assigned-2026-10-14)
@@ -63,3 +63,29 @@ and [Linux v6.18 Intel HID driver](https://raw.githubusercontent.com/torvalds/li
 (power setup and press/release meanings). The pinned in-tree uACPI
 `include/uacpi/event.h` distinguishes selective enable from whole runtime
 initialization; its Notify implementation queues delivery as worker work.
+
+## Implementation and QEMU check — 2026-10-14
+
+Code `7df76407`, with unchanged ABI/pins and LLVM builder
+`pyxis-llvm23.1.3-df87791`. Default/info kernel and image builds passed without
+warnings, using verified matching SDK/userland/ports bundles. The host's installed
+kconfiglib supplied the builder's missing module; no container rebuild.
+
+The control reused the unchanged kernel on `e5e995f0` (main `0068e4d2` differs
+only in docs), before button code. Control and implementation used Q35/nested
+KVM, host CPU, four CPUs, 512 MiB, standard VGA/PS2, VirtIO RNG, fresh OVMF
+variables and VirtIO-SCSI ISO boot, no disk and no passthrough. Both reached
+Development and powered off cleanly after QMP `system_powerdown`, through the
+fixed ACPI event. GDB observed startup on the ACPI worker with arming/latch/ready
+all false, and runtime arming/ready true. The press breakpoint came from
+`fixed_power_button` via uACPI fixed-event dispatch, with no pending/running power
+operation. No Notify devices existed in stock QEMU; Intel DSM and device Notify
+behavior received source review, not runtime qualification. No performance claim.
+Raw serial/debugger captures remain local under `build/power-button/`.
+
+Preparation discovers present matching devices, registers retained Notify
+contexts, and reports `_PRW` candidates explicitly as additional-GPE
+**unqualified**. No extra GPE is enabled: no machine runtime-route AML proof
+exists in this workspace. There is no guessed route, general GPE finalization,
+HDSM/BTNE enable or copied driver implementation. Native qualification remains
+pending, including whether the supported EC path carries vela's button.
