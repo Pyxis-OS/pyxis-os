@@ -152,6 +152,40 @@ Owner direction, still part of this parked proposal; nothing is implemented.
    provider issues. Transaction semantics come from a provider or preparer that
    issues a transaction, not from a separate client-chosen PREPARE path.
 
+## Reusable prepared requests (owner, 2026-10-14)
+
+A prepared request stored in a variable is reusable. It acts as an endpoint:
+every write to it starts a new, independent transaction and yields a new reply.
+The owner's example:
+
+```sh
+endpoint = { http prepare ... https://... }
+printf '{}' > endpoint                  # POST
+reply1 = printf '{}' > endpoint         # also store the reply
+reply1_value = { cat $reply1 }          # no pipe needed: it flows like a string
+reply2 = printf '{}' > endpoint         # new reply
+reply2_value = { cat $reply2 }
+```
+
+- **The endpoint is a template, not a one-shot request.** It holds the method,
+  URI, headers, deadline policy and backing choice. Writing to it never consumes
+  it; each write is an explicit new submission (no hidden retries), and
+  concurrent writes are separate transactions.
+- **Replies are independent of the endpoint.** Each reply has its own outcome,
+  media type and lifetime. Unsetting the endpoint does not affect replies
+  already bound, and vice versa.
+- **Holding an endpoint is the authority to call it.** Private request headers
+  such as credentials can live inside the endpoint capability: the holder can
+  make requests without being able to read the token. Passing an endpoint
+  delegates calling, not the secret.
+- **`reply1_value = { cat $reply1 }`** binds the reply's content as a read-only
+  value. With every variable holding a capability, this is the same as a text
+  value, and it no longer carries the reply's outcome facet.
+- Syntax details to settle: whether a redirection target that names a variable
+  is written `> endpoint` or `> $endpoint` (a bare word is also a valid relative
+  path), and whether single-command assignment needs braces
+  (`reply1 = printf … > endpoint` versus `reply1 = { … }`).
+
 Implementation notes for when this is picked up:
 
 - A text value only needs to behave as a read-only capability. It may be held as
