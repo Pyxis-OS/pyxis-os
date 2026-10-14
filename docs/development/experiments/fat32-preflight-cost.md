@@ -152,6 +152,56 @@ physical power-loss evidence.
 The allocation proof is not an ownership proof for unrelated objects. Coherent
 in-session cross-links may be detected only at CHECK/remount. Actual kernel
 physical-memory exhaustion and native media/power loss are not qualified here.
-The publisher hook and actual 128-MiB config-editor publication under the
-original lease remain a separate, coordinated gate; this scratch sequence is
-not an editor-success claim. No real ESP writes were performed.
+The scratch-writer sequence is separate from the actual editor publication
+qualified below. No real ESP writes were performed.
+
+## Actual 128-MiB editor publication, 2026-10-14
+
+Publisher code `fb9b767d`, parent `2d76c70c`, fs `c52ab584`, other pins unchanged.
+Ordinary default image build passes. QEMU uses the original pristine editor
+128-MiB ESP on a 160-MiB disk, 512-byte clusters/two FATs, four CPUs and 512 MiB,
+matching the original editor profile; current archive has only the existing
+private scratch grant override. No concurrent task-owned builds during timing.
+
+Confirmed `config edit` adds three missing boot entries and explicitly adopts
+four existing values. Read-only GDB observes exactly one BEGIN → CHECK → END,
+same process and delivered active interval, no intervening publication effect,
+and unchanged absolute deadline. CHECK succeeds with 616 block admissions in
+291 ms. BEGIN through successful END takes 4.711 s including debugger/shared-host
+overhead, within the original 30 seconds. All 30 observed interval operations
+succeed: swaps, sync, committed verification, cleanup and release.
+
+`config validate` selects the complete committed ESP triple. After clean
+physical-overlay shutdown, host extraction matches all four selected sizes/hashes
+to the committed record and all three previous files to pristine originals.
+Limine is byte-identical, and foreign spans/owner values remain preserved.
+`fsck.fat -n` is clean (17 files/27 allocated clusters), both FAT copies clean.
+This closes the large-volume publication gate; native ESP publication remains
+unqualified. All owned QEMU/GDB jobs stopped. The
+[userland record](../../../userspace/config-editor/qualification/README.md)
+retains the earlier failure and the new result with its source-reviewed failure
+path; no failing-CHECK injection was added.
+
+## Owner-present native follow-up
+
+Native ESP steps require the owner's explicit approval and presence. This sheet
+adds no permission to write the real ESP. Keep GUIDs/serials in owner-local
+configuration; verify the exact selected disk/partition before running commands.
+
+1. Record the merged kernel/fs/userland revisions and stage a compatible build
+   through the owner. First use disposable supported scratch FAT media, with
+   declared scoped config directories and the same RW control's WRITE|INTERVAL.
+2. Run `config plan`, inspect the selected target and proposed changes, then
+   `config edit` with explicit confirmation or apply that saved frame. Record
+   native statuses and elapsed time; publication must complete under the original
+   lease, including CHECK, read-back, sync and interval release. On failure retain
+   diagnostics/recovery artifacts and stop; do not retry or repair automatically.
+3. Run `config validate`, read back the selected files and retained previous
+   hashes, then cleanly shut down with a file still open. Reboot and verify the
+   committed triple. Any detached-chain dirty mark is an expected recovery case,
+   not permission to repair during this check.
+4. Perform the separately scheduled real-ESP
+   [RO run sheet](../../devices/fat32-volumes.md#owner-present-native-esp-run-sheet):
+   observe, list/read/hash, close and release. Do not run editor Apply there.
+5. Report exact revisions/media/profile/results and restore the ordinary owner
+   profile. Real ESP publication is a separate owner-approved consumer run.

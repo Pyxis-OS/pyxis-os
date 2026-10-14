@@ -3,8 +3,8 @@
 Owner-assigned investigation, 2026-10-13, before installer task 5 activates
 installed configuration publication. **All three revised defaults accepted, 2026-10-13; implementation authorized.**
 The retained-map engine, bounded windows and native CHECK are implemented and
-qualified on disposable media. Publisher integration and complete editor
-publication remain pending. The [baseline](../development/experiments/fat32-preflight-cost.md)
+qualified on disposable media. The publisher runs CHECK immediately after
+BEGIN; actual 128-MiB editor publication completes under the original lease. The [baseline](../development/experiments/fat32-preflight-cost.md)
 records the exact-main measurements, including the final geometry run after
 the owner lifted the container-build timing hold. No native FAT32 timing is claimed.
 
@@ -63,7 +63,8 @@ existing BEGIN, before publication effects, inside the same non-extending
 30-second lease. A successful check publishes replacement allocation state
 atomically; failure preserves recovery and leaves proof invalid. Neither BEGIN
 nor SYNC silently becomes a check or renews the lease. The native `MOUNT_CHECK` operation and `mount_check` helper are implemented.
-The publisher call remains coordinated with alpha through the owner.
+The config-editor publisher calls it once in the same process, stops honestly
+on failure and releases the interval through its existing cleanup path.
 
 Keep operation-sized candidates and sector-and-phase images under 32 MiB:
 new-directory allocation, parent growth, touched/shrunk/reclaimed chains,
@@ -120,5 +121,5 @@ No real ESP writes are authorized.
 - [x] Implement and qualify the retained allocation proof and bounded workspaces
   in pyxis-fs.
 - [x] Add observable invalid state and the native bound-control CHECK ABI/helper.
-- [ ] Coordinate the once-per-publication CHECK with alpha and qualify the actual
+- [x] Coordinate the once-per-publication CHECK with alpha and qualify the actual
   128-MiB editor publication under the unchanged lease.

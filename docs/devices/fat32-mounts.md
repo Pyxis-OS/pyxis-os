@@ -242,7 +242,7 @@ For disposable scratch media only, the separate trusted bootstrap
 `init=boot://init-fat32-mount-write.pxe boot.install=1` opens the explicitly
 selected disk RW and starts the mounted writer. It never falls back to the real
 boot ESP. Commands include `create`, `mkdir`, `remove`, `rmdir`,
-`rename /FROM | /TO`, `replace /FROM | /TO`, `sync`, `begin` and `end ID`.
+`rename /FROM | /TO`, `replace /FROM | /TO`, `sync`, `begin`, `check` and `end ID`.
 Eight held-file slots support `hold SLOT ro|rw /PATH`, `hinfo SLOT`,
 `hread SLOT OFFSET LENGTH`, `hwrite SLOT OFFSET = LITERAL`, `resize SLOT SIZE`,
 `hsync SLOT` and `drop SLOT`. `shell` receives RO roots and explicit streams,

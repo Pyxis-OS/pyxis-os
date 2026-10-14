@@ -1276,17 +1276,6 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
-## Configuration publication lease cost
-
-The original 128-MiB editor publication exhausted its 30-second interval. The
-[retained allocation proof and local checks](wip/fat32-preflight-cost.md) remove
-repeated whole-volume work and volume-sized mutation preparation. The publisher
-still needs its once-per-publication CHECK immediately after BEGIN and a complete
-128-MiB run under the unchanged lease before installer task 5. The
-[record](development/experiments/fat32-preflight-cost.md) distinguishes scratch
-engine/control qualification from that remaining end-to-end gate; no native
-ESP publication is qualified.
-
 ## NVMe native qualification and temporary raw authority
 
 The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's
