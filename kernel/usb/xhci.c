@@ -123,7 +123,7 @@ struct xhci_async_bulk_receive {
 };
 struct xhci_async_bulk_record {
   struct usb_interrupt_completion completion;
-  uint8_t bytes[USB_ASYNC_BULK_BYTES];
+  uint8_t *bytes;
 };
 enum async_bulk_boot_state { ASYNC_BULK_BOOT_NONE, ASYNC_BULK_BOOT_HALTED, ASYNC_BULK_BOOT_RETIRED };
 struct xhci_async_bulk {
@@ -131,9 +131,10 @@ struct xhci_async_bulk {
   struct xhci_bulk_endpoint in, out;
   struct xhci_async_bulk_receive receive[USB_ASYNC_BULK_RECEIVES];
   struct xhci_async_bulk_record queue[USB_ASYNC_BULK_COMPLETIONS];
-  size_t receive_bytes;
+  size_t receive_bytes, capacity;
   uint64_t sequence;
   unsigned queue_head, queue_count;
+  bool network;
   enum usb_result result;
   enum async_bulk_boot_state boot_state;
   bool configured, started, successful_short_traced;
@@ -161,7 +162,7 @@ struct usb_host_device {
   uint8_t raw_speed, parent_slot, parent_port;
   uint16_t packet;
   struct usb_link link;
-  bool cycle, addressed, multi_tt, removed, hid, retiring;
+  bool cycle, addressed, multi_tt, removed, hid, retiring, branch;
   phys_addr_t stopped_trb;
   unsigned stopping_dci;
   struct {
@@ -185,6 +186,7 @@ struct xhci_port {
   bool protocol, dirty, boot_present;
   uint64_t generation;
   struct usb_host_device device;
+  struct usb_host_device *active;
 };
 
 static void controller_worker(void *argument);
@@ -215,16 +217,18 @@ struct usb_host_controller {
   size_t extended_first;
   uint64_t extended_end;
   struct dma_buffer dcbaa, command_ring, event_ring, erst, scratchpad_array, scratchpads;
-  struct dma_buffer descendant_dma, hid_dma, bulk_dma, interrupt_dma, async_bulk_dma;
+  struct dma_buffer descendant_dma, hid_dma, branch_dma, bulk_dma, interrupt_dma, async_bulk_dma, network_bulk_dma;
   struct xhci_bulk bulk[USB_STORAGE_DEVICE_BUDGET];
   struct usb_host_interrupt *interrupt_streams;
   struct xhci_async_bulk *async_bulk_streams;
+  uint8_t *async_bulk_queue;
   struct xhci_port *ports;
   struct usb_host_device *descendants;
-  struct usb_host_device *hid_devices;
+  struct usb_host_device *hid_devices, *branch_devices;
   uint32_t operational, runtime, doorbells;
   unsigned port_count, slot_count, scratchpad_count, context_bytes;
   unsigned descendant_capacity, descendants_used, hid_used, interrupt_count;
+  unsigned branch_capacity, branch_used, async_bulk_count;
   unsigned command_enqueue, event_dequeue;
   bool command_cycle, event_cycle, port_power;
   bool prepared, running, interrupt_ready, notified, failed, enumerating;
@@ -247,7 +251,8 @@ static struct usb_host_controller *controllers;
 
 static unsigned device_capacity(const struct usb_host_controller *controller)
 {
-  return controller->port_count + controller->descendant_capacity + USB_HID_DEVICE_BUDGET;
+  return controller->port_count + controller->descendant_capacity + USB_HID_DEVICE_BUDGET +
+    controller->branch_capacity;
 }
 
 static struct usb_host_device *device_at(struct usb_host_controller *controller, unsigned index)
@@ -256,8 +261,12 @@ static struct usb_host_device *device_at(struct usb_host_controller *controller,
     return &controller->ports[index].device;
   }
   index -= controller->port_count;
-  return index < controller->descendant_capacity ? &controller->descendants[index] :
-    &controller->hid_devices[index - controller->descendant_capacity];
+  if (index < controller->descendant_capacity) {
+    return &controller->descendants[index];
+  }
+  index -= controller->descendant_capacity;
+  return index < USB_HID_DEVICE_BUDGET ? &controller->hid_devices[index] :
+    &controller->branch_devices[index - USB_HID_DEVICE_BUDGET];
 }
 
 static uint32_t read32(uintptr_t base, unsigned offset)
@@ -460,6 +469,7 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
     controller->ports[i] = (struct xhci_port){0};
   }
   controller->hid_devices = kmalloc(USB_HID_DEVICE_BUDGET * sizeof(*controller->hid_devices));
+
   if (!controller->hid_devices) {
     return false;
   }
@@ -468,6 +478,14 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
   unsigned available = controller->slot_count > controller->port_count ?
     controller->slot_count - controller->port_count : 0;
   controller->descendant_capacity = available < USB_DESCENDANT_BUDGET ? available : USB_DESCENDANT_BUDGET;
+  controller->branch_capacity = USB_NETWORK_INITIAL_RETRIES *
+    (controller->port_count + controller->descendant_capacity) + USB_NETWORK_STREAMS *
+    (XHCI_SLOT_ROUTE_DEPTH + 1);
+  controller->branch_devices = kmalloc(controller->branch_capacity * sizeof(*controller->branch_devices));
+  if (!controller->branch_devices) {
+    return false;
+  }
+  memset(controller->branch_devices, 0, controller->branch_capacity * sizeof(*controller->branch_devices));
   if (controller->descendant_capacity) {
     controller->descendants = kmalloc(controller->descendant_capacity * sizeof(*controller->descendants));
     if (!controller->descendants) {
@@ -963,7 +981,9 @@ static bool allocate_devices(struct usb_host_controller *controller)
   return allocate_device_pool(controller, controller->descendants, &controller->descendant_dma,
                               controller->descendant_capacity, capacity, padding) &&
     allocate_device_pool(controller, controller->hid_devices, &controller->hid_dma,
-                         USB_HID_DEVICE_BUDGET, capacity, padding);
+                         USB_HID_DEVICE_BUDGET, capacity, padding) &&
+    allocate_device_pool(controller, controller->branch_devices, &controller->branch_dma,
+                         controller->branch_capacity, capacity, padding);
 }
 
 static bool allocate_bulk(struct usb_host_controller *controller)
@@ -999,40 +1019,62 @@ static bool allocate_bulk(struct usb_host_controller *controller)
 static bool allocate_async_bulk(struct usb_host_controller *controller)
 {
   _Static_assert(USB_ASYNC_BULK_BYTES && USB_ASYNC_BULK_BYTES <= PAGE_SIZE,
-                 "a prepared async bulk buffer fits one page and one Normal TRB boundary");
+                 "HCI backing remains one page");
+  _Static_assert(USB_NETWORK_BULK_BYTES &&
+                 (1 + USB_ASYNC_BULK_RECEIVES) * USB_NETWORK_BULK_BYTES <= XHCI_RING_BOUNDARY,
+                 "network data slices fit one aligned TRB boundary");
   _Static_assert(USB_ASYNC_BULK_RECEIVES && USB_ASYNC_BULK_RECEIVES < XHCI_RING_TRBS,
-                 "posted async bulk receives fit the usable transfer ring");
-  _Static_assert(USB_ASYNC_BULK_COMPLETIONS, "async bulk completion queue is nonempty");
-  size_t stride = (3 + USB_ASYNC_BULK_RECEIVES) * PAGE_SIZE;
-  size_t count = USB_ASYNC_BULK_DEVICE_BUDGET;
-  if (!count || count > SIZE_MAX / stride || count > SIZE_MAX / sizeof(*controller->async_bulk_streams)) {
+                 "posted receives fit the usable ring");
+  size_t count = USB_ASYNC_BULK_DEVICE_BUDGET + USB_NETWORK_STREAMS;
+  size_t stride = 2 * PAGE_SIZE + XHCI_RING_BOUNDARY - PAGE_SIZE +
+    (1 + USB_ASYNC_BULK_RECEIVES) * USB_NETWORK_BULK_BYTES;
+  size_t hci_stride = (3 + USB_ASYNC_BULK_RECEIVES) * PAGE_SIZE;
+  size_t queue_bytes = USB_ASYNC_BULK_COMPLETIONS *
+    (USB_ASYNC_BULK_DEVICE_BUDGET * USB_ASYNC_BULK_BYTES + USB_NETWORK_STREAMS * USB_NETWORK_BULK_BYTES);
+  if (!count || USB_NETWORK_STREAMS > SIZE_MAX / stride ||
+      count > SIZE_MAX / sizeof(*controller->async_bulk_streams)) {
     return false;
   }
+  controller->async_bulk_count = count;
   controller->async_bulk_streams = kmalloc(count * sizeof(*controller->async_bulk_streams));
-  if (!controller->async_bulk_streams) {
+  controller->async_bulk_queue = kmalloc(queue_bytes);
+  if (!controller->async_bulk_streams || !controller->async_bulk_queue) {
     return false;
   }
   memset(controller->async_bulk_streams, 0, count * sizeof(*controller->async_bulk_streams));
-  if (dma_buffer_allocate(&controller->async_bulk_dma, count * stride) != MM_OK) {
+  if (dma_buffer_allocate(&controller->async_bulk_dma, USB_ASYNC_BULK_DEVICE_BUDGET * hci_stride) != MM_OK ||
+      dma_buffer_allocate(&controller->network_bulk_dma, USB_NETWORK_STREAMS * stride) != MM_OK) {
     return false;
   }
+  size_t queue_offset = 0;
   for (unsigned i = 0; i < count; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
-    size_t offset = i * stride;
-    bulk->in.ring = descendant_dma_slice(&controller->async_bulk_dma, offset, PAGE_SIZE);
-    bulk->out.ring = descendant_dma_slice(&controller->async_bulk_dma, offset + PAGE_SIZE, PAGE_SIZE);
+    bulk->network = i >= USB_ASYNC_BULK_DEVICE_BUDGET;
+    bulk->capacity = bulk->network ? USB_NETWORK_BULK_BYTES : USB_ASYNC_BULK_BYTES;
+    struct dma_buffer *arena = bulk->network ? &controller->network_bulk_dma : &controller->async_bulk_dma;
+    size_t offset = bulk->network ? (i - USB_ASYNC_BULK_DEVICE_BUDGET) * stride : i * hci_stride;
+    bulk->in.ring = descendant_dma_slice(arena, offset, PAGE_SIZE);
+    bulk->out.ring = descendant_dma_slice(arena, offset + PAGE_SIZE, PAGE_SIZE);
     if (!ring_layout(&bulk->in.ring) || !ring_layout(&bulk->out.ring)) {
       return false;
     }
     initialize_transfer_ring(&bulk->in.ring);
     initialize_transfer_ring(&bulk->out.ring);
     bulk->in.cycle = bulk->out.cycle = true;
-    bulk->tx.data_address = controller->async_bulk_dma.address + offset + 2 * PAGE_SIZE;
-    bulk->tx.data_physical = controller->async_bulk_dma.physical + offset + 2 * PAGE_SIZE;
+    offset += 2 * PAGE_SIZE;
+    if (bulk->network) {
+      offset += -(arena->physical + offset) & (XHCI_RING_BOUNDARY - 1);
+    }
+    bulk->tx.data_address = arena->address + offset;
+    bulk->tx.data_physical = arena->physical + offset;
     for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
-      size_t data_offset = offset + (j + 3) * PAGE_SIZE;
-      bulk->receive[j].data_address = controller->async_bulk_dma.address + data_offset;
-      bulk->receive[j].data_physical = controller->async_bulk_dma.physical + data_offset;
+      size_t data_offset = offset + (j + 1) * bulk->capacity;
+      bulk->receive[j].data_address = arena->address + data_offset;
+      bulk->receive[j].data_physical = arena->physical + data_offset;
+    }
+    for (unsigned j = 0; j < USB_ASYNC_BULK_COMPLETIONS; ++j) {
+      bulk->queue[j].bytes = controller->async_bulk_queue + queue_offset;
+      queue_offset += bulk->capacity;
     }
   }
   return true;
@@ -1048,7 +1090,7 @@ static bool allocate_interrupts(struct usb_host_controller *controller)
   _Static_assert(USB_INTERRUPT_COMPLETIONS, "interrupt completion queue is nonempty");
   size_t stride = (1 + USB_INTERRUPT_RECEIVES) * PAGE_SIZE;
   size_t ports = controller->port_count + USB_HID_DEVICE_BUDGET * USB_HID_ENDPOINTS_PER_DEVICE +
-    USB_HUB_INTERRUPT_DEVICE_BUDGET;
+    USB_HUB_INTERRUPT_DEVICE_BUDGET + controller->branch_capacity + USB_NETWORK_STREAMS;
   controller->interrupt_count = ports;
   if (ports > SIZE_MAX / stride || ports > SIZE_MAX / sizeof(*controller->interrupt_streams)) {
     return false;
@@ -1133,9 +1175,16 @@ static void release_boot_resources(struct usb_host_controller *controller)
   dma_buffer_release(&controller->interrupt_dma);
   kfree(controller->interrupt_streams);
   controller->interrupt_streams = NULL;
+  dma_buffer_release(&controller->network_bulk_dma);
   dma_buffer_release(&controller->async_bulk_dma);
+  kfree(controller->async_bulk_queue);
+  controller->async_bulk_queue = NULL;
   kfree(controller->async_bulk_streams);
   controller->async_bulk_streams = NULL;
+  dma_buffer_release(&controller->branch_dma);
+  kfree(controller->branch_devices);
+  controller->branch_devices = NULL;
+  controller->branch_capacity = 0;
   dma_buffer_release(&controller->hid_dma);
   kfree(controller->hid_devices);
   controller->hid_devices = NULL;
@@ -1614,7 +1663,7 @@ static bool publish_async_bulk_receive(struct xhci_async_bulk *bulk,
 
 static bool rearm_async_bulk(struct usb_host_controller *controller)
 {
-  for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
+  for (unsigned i = 0; i < controller->async_bulk_count; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
     if (!bulk->started || bulk->device->removed || bulk->device->retiring) {
       continue;
@@ -1638,7 +1687,7 @@ static bool rearm_async_bulk(struct usb_host_controller *controller)
 
 static bool async_bulk_deadlines(struct usb_host_controller *controller)
 {
-  for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
+  for (unsigned i = 0; i < controller->async_bulk_count; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
     if (bulk->device && !bulk->device->removed && !bulk->device->retiring &&
         !device_present(bulk->device)) {
@@ -1724,7 +1773,7 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
       bulk->successful_short_traced = true;
     }
   }
-  if (completion == XHCI_EVENT_TRANSACTION_ERROR && residue == bulk->receive_bytes &&
+  if (!bulk->network && completion == XHCI_EVENT_TRANSACTION_ERROR && residue == bulk->receive_bytes &&
       bulk->result == USB_OK && bulk->boot_state == ASYNC_BULK_BOOT_NONE &&
       !bulk->queue_count && bluetooth_hci_boot_bulk_end(bulk->device)) {
     /* The error halted IN; neither this TD nor its prefetched successor may be
@@ -2391,6 +2440,14 @@ static void stop_controller(struct usb_host_controller *controller)
          controller->failure, halted, interrupts_disabled);
 }
 
+void usb_host_assert_worker(struct usb_host_controller *controller)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(arch_cpu_index() == 0 && kernel_task_is_current(controller_worker, controller));
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  cpu_restore_interrupts(flags);
+}
+
 static void assert_device_owner(const struct usb_host_device *device)
 {
   struct usb_host_controller *controller = device->controller;
@@ -2447,7 +2504,7 @@ struct usb_host_device *usb_host_device_at(struct usb_host_controller *controlle
       controller->ports[index].state != PORT_RESERVED) {
     return NULL;
   }
-  return &controller->ports[index].device;
+  return controller->ports[index].active ? controller->ports[index].active : &controller->ports[index].device;
 }
 
 bool usb_host_port_present(const struct usb_host_controller *controller, unsigned index)
@@ -2544,7 +2601,7 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
                        device->packet, device->control_ring.physical);
   volatile uint64_t *dcbaa = (volatile uint64_t *)controller->dcbaa.address;
   dcbaa[device->slot] = device->output.physical;
-  controller->command.admission = device->hid;
+  controller->command.admission = device->hid || device->branch;
   enum usb_result result = context_command(device, XHCI_TRB_ADDRESS_DEVICE, deadline);
   controller->command.admission = false;
   if (result == USB_OK) {
@@ -2560,7 +2617,7 @@ enum usb_result usb_host_configure_hub(struct usb_host_device *device, unsigned 
   if (!device_ready(device) || !device->addressed) {
     return USB_IO;
   }
-  if (!device->controller->enumerating || device->hub_ports || device->async_bulk ||
+  if ((!device->controller->enumerating && !device->branch) || device->hub_ports || device->async_bulk ||
       device->request.state != CONTROL_IDLE) {
     return USB_BUSY;
   }
@@ -2636,8 +2693,25 @@ static unsigned child_speed_id(const struct xhci_port *root, const struct usb_li
   return match;
 }
 
-enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned port,
-                                      const struct usb_link *link, uint64_t deadline,
+static struct usb_host_device *reserve_branch_device(struct usb_host_controller *controller)
+{
+  if (controller->branch_used == controller->branch_capacity) {
+    return NULL;
+  }
+  struct usb_host_device *device = &controller->branch_devices[controller->branch_used++];
+  device->branch = true;
+  return device;
+}
+
+unsigned usb_host_branch_capacity(const struct usb_host_controller *controller)
+{
+  return controller->branch_capacity;
+}
+
+static enum usb_result enable_admitted_slot(struct usb_host_device *device, uint64_t deadline);
+
+static enum usb_result attach_child(struct usb_host_device *parent, unsigned port,
+                                      const struct usb_link *link, bool branch, uint64_t deadline,
                                       struct usb_host_device **child)
 {
   assert_device_owner(parent);
@@ -2649,7 +2723,7 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
   if (!device_ready(parent) || !parent->addressed) {
     return USB_IO;
   }
-  if (!controller->enumerating || parent->request.state != CONTROL_IDLE) {
+  if ((!controller->enumerating && !branch) || parent->request.state != CONTROL_IDLE || parent->request.client) {
     return USB_BUSY;
   }
   enum usb_speed speed = link->speed;
@@ -2660,11 +2734,12 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
         (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL && speed != USB_SPEED_HIGH) ||
         usb_speed_is_enhanced(parent->link.speed) ||
         (parent->link.speed != USB_SPEED_HIGH && speed == USB_SPEED_HIGH)) ||
-      controller->descendants_used == controller->descendant_capacity) {
+      (!branch && controller->descendants_used == controller->descendant_capacity)) {
     return USB_UNSUPPORTED;
   }
-  for (unsigned i = 0; i < controller->descendants_used; ++i) {
-    if (controller->descendants[i].parent == parent && controller->descendants[i].downstream_port == port) {
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *old = device_at(controller, i);
+    if (old->parent == parent && old->downstream_port == port && old->slot && !old->removed) {
       return USB_UNSUPPORTED;
     }
   }
@@ -2683,7 +2758,11 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
   if (task_deadline_expired(deadline)) {
     return USB_TIMEOUT;
   }
-  struct usb_host_device *device = &controller->descendants[controller->descendants_used++];
+  struct usb_host_device *device = branch ? reserve_branch_device(controller) :
+    &controller->descendants[controller->descendants_used++];
+  if (!device) {
+    return USB_BUSY;
+  }
   device->parent = parent;
   device->port = parent->port;
   device->downstream_port = port;
@@ -2714,13 +2793,24 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
       below = hub;
     }
   }
-  if (!run_command(controller, XHCI_TRB_ENABLE_SLOT, root->slot_type, 0, deadline)) {
-    stop_controller(controller);
-    return USB_IO;
+  enum usb_result result = enable_admitted_slot(device, deadline);
+  if (result != USB_OK) {
+    return result;
   }
-  device->slot = controller->command.slot;
   *child = device;
   return USB_OK;
+}
+
+enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned port,
+    const struct usb_link *link, uint64_t deadline, struct usb_host_device **child)
+{
+  return attach_child(parent, port, link, false, deadline, child);
+}
+
+enum usb_result usb_host_branch_attach_child(struct usb_host_device *parent, unsigned port,
+    const struct usb_link *link, uint64_t deadline, struct usb_host_device **child)
+{
+  return attach_child(parent, port, link, true, deadline, child);
 }
 
 enum usb_result usb_host_update_packet(struct usb_host_device *device, uint16_t packet, uint64_t deadline)
@@ -2802,7 +2892,7 @@ static struct usb_host_device *reserve_hid_device(struct usb_host_controller *co
   return device;
 }
 
-static enum usb_result enable_hid_slot(struct usb_host_device *device, uint64_t deadline)
+static enum usb_result enable_admitted_slot(struct usb_host_device *device, uint64_t deadline)
 {
   struct usb_host_controller *controller = device->controller;
   if (task_deadline_expired(deadline)) {
@@ -2875,7 +2965,7 @@ enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
   if (device->link.speed != USB_SPEED_LOW && device->link.speed != USB_SPEED_FULL) {
     return USB_UNSUPPORTED;
   }
-  enum usb_result result = enable_hid_slot(device, deadline);
+  enum usb_result result = enable_admitted_slot(device, deadline);
   if (result != USB_OK) {
     return result;
   }
@@ -2883,6 +2973,75 @@ enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
   port->state = PORT_RESERVED;
   *output = device;
   return USB_OK;
+}
+
+enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controller,
+    unsigned port_index, uint64_t generation, uint64_t deadline, struct usb_host_device **output)
+{
+  usb_host_assert_worker(controller);
+  if (!output || port_index >= controller->port_count) {
+    return USB_INVALID;
+  }
+  *output = NULL;
+  struct xhci_port *port = &controller->ports[port_index];
+  uint32_t status = observe_port(controller, port_index);
+  if (!controller->running || controller->failed || !port->boot_present || !port->protocol ||
+      (port->major != XHCI_PROTOCOL_USB_2 && port->major != XHCI_PROTOCOL_USB_3) ||
+      !(status & XHCI_PORT_CONNECTED) || (status & XHCI_PORT_OVER_CURRENT)) {
+    return USB_UNSUPPORTED;
+  }
+  if (port->generation != generation) {
+    return USB_STALE;
+  }
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *old = device_at(controller, i);
+    if (old->slot && !old->removed && old->port == port_index) {
+      return USB_BUSY;
+    }
+  }
+  struct usb_host_device *device = reserve_branch_device(controller);
+  if (!device) {
+    return USB_BUSY;
+  }
+  device->port = port_index;
+  if (port->major == XHCI_PROTOCOL_USB_2 && !(status & XHCI_PORT_ENABLED)) {
+    write32(port_register(controller, port_index), 0, (status & XHCI_PORT_NEUTRAL) | XHCI_PORT_RESET);
+  }
+  while ((status & XHCI_PORT_CONNECTED) &&
+         (!(status & XHCI_PORT_ENABLED) || (status & XHCI_PORT_RESET))) {
+    if (task_deadline_expired(deadline)) {
+      return USB_TIMEOUT;
+    }
+    if (!controller_healthy(controller) || !drain_events(controller)) {
+      stop_controller(controller);
+      return USB_IO;
+    }
+    wait_activity(controller, task_deadline_after_ms(USB_WORKER_POLL_MS));
+    status = observe_port(controller, port_index);
+  }
+  if (!(status & XHCI_PORT_CONNECTED) || (status & XHCI_PORT_OVER_CURRENT) ||
+      port->generation != generation) {
+    return USB_STALE;
+  }
+  port->speed = (status >> XHCI_PORT_SPEED_SHIFT) & XHCI_PORT_SPEED_MASK;
+  device->link = port->speeds[port->speed].link;
+  device->raw_speed = port->speed;
+  if (device->link.speed == USB_SPEED_UNKNOWN) {
+    return USB_UNSUPPORTED;
+  }
+  if (usb_speed_is_enhanced(device->link.speed)) {
+    uint32_t lanes = read32(port_register(controller, port_index), XHCI_PORT_LINK_INFO);
+    device->link.rx_lanes = ((lanes >> XHCI_PORT_RX_LANES_SHIFT) & XHCI_PORT_LANES_MASK) + 1;
+    device->link.tx_lanes = ((lanes >> XHCI_PORT_TX_LANES_SHIFT) & XHCI_PORT_LANES_MASK) + 1;
+  }
+  enum usb_result result = enable_admitted_slot(device, deadline);
+  if (result == USB_OK) {
+    port->slot = device->slot;
+    port->active = device;
+    port->state = PORT_RESERVED;
+    *output = device;
+  }
+  return result;
 }
 
 enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsigned port,
@@ -2931,7 +3090,7 @@ enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsign
   device->parent_slot = parent->link.speed == USB_SPEED_HIGH ? parent->slot : parent->parent_slot;
   device->parent_port = parent->link.speed == USB_SPEED_HIGH ? port : parent->parent_port;
   device->multi_tt = parent->multi_tt;
-  enum usb_result result = enable_hid_slot(device, deadline);
+  enum usb_result result = enable_admitted_slot(device, deadline);
   if (result == USB_OK) {
     *output = device;
   }
@@ -3035,13 +3194,15 @@ enum usb_result usb_host_device_retire(struct usb_host_device *device, uint64_t 
     return USB_IO;
   }
   mark_subtree_retiring(device);
-  /* Descendants are prepared after their parents. No backing is recycled. */
-  for (unsigned i = device_capacity(controller); i; --i) {
-    struct usb_host_device *child = device_at(controller, i - 1);
-    if (!child->removed && child->retiring && in_subtree(child, device) &&
-        !retire_device(child, deadline)) {
-      stop_controller(controller);
-      return USB_IO;
+  /* Pool order is not topology order once fresh branch contexts exist. */
+  for (unsigned depth = XHCI_SLOT_ROUTE_DEPTH + 1; depth; --depth) {
+    for (unsigned i = 0; i < device_capacity(controller); ++i) {
+      struct usb_host_device *child = device_at(controller, i);
+      if (child->depth == depth - 1 && !child->removed && child->retiring &&
+          in_subtree(child, device) && !retire_device(child, deadline)) {
+        stop_controller(controller);
+        return USB_IO;
+      }
     }
   }
   return USB_OK;
@@ -3410,10 +3571,13 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
     return USB_IO;
   }
   enum usb_speed speed = device->link.speed;
+  bool enhanced = usb_speed_is_enhanced(speed);
   if ((kind == USB_INTERRUPT_HCI && (device->parent || speed != USB_SPEED_FULL)) ||
       (kind == USB_INTERRUPT_HID && !device->hid) ||
-      (kind == USB_INTERRUPT_HUB && (!controller->enumerating || !device->hub_ports)) ||
-      (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL && speed != USB_SPEED_HIGH)) {
+      (kind == USB_INTERRUPT_HUB && ((!controller->enumerating && !device->branch) || !device->hub_ports)) ||
+      (kind == USB_INTERRUPT_NETWORK && speed != USB_SPEED_HIGH && !enhanced) ||
+      (enhanced ? kind != USB_INTERRUPT_NETWORK && kind != USB_INTERRUPT_HUB :
+        speed != USB_SPEED_LOW && speed != USB_SPEED_FULL && speed != USB_SPEED_HIGH)) {
     return USB_UNSUPPORTED;
   }
   unsigned packet_max = speed == USB_SPEED_LOW ? 8 : speed == USB_SPEED_FULL ? 64 : 1024;
@@ -3421,12 +3585,16 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
   if (!endpoint || !(endpoint->address & USB_ENDPOINT_DIRECTION_IN) ||
       !(endpoint->address & USB_ENDPOINT_NUMBER) || (endpoint->address & USB_ENDPOINT_RESERVED) ||
       !endpoint->interval || !endpoint->packet || endpoint->packet > packet_max ||
-      (speed == USB_SPEED_HIGH ? endpoint->interval > 16 || endpoint->transactions > 2 :
-                                endpoint->transactions != 0) ||
-      !receive_bytes || receive_bytes > receive_capacity || kind > USB_INTERRUPT_HUB) {
+      (enhanced ? endpoint->interval > 16 || endpoint->transactions || endpoint->burst > 15 ||
+        !endpoint->bytes_per_interval ||
+        endpoint->bytes_per_interval > endpoint->packet * (endpoint->burst + 1) :
+        endpoint->burst || endpoint->bytes_per_interval ||
+        (speed == USB_SPEED_HIGH ? endpoint->interval > 16 || endpoint->transactions > 2 :
+                                  endpoint->transactions != 0)) ||
+      !receive_bytes || receive_bytes > receive_capacity || kind > USB_INTERRUPT_NETWORK) {
     return USB_INVALID;
   }
-  if ((!controller->enumerating && kind != USB_INTERRUPT_HID) ||
+  if ((!controller->enumerating && kind != USB_INTERRUPT_HID && !device->branch) ||
       device->request.state != CONTROL_IDLE || device->request.client) {
     return USB_BUSY;
   }
@@ -3445,9 +3613,17 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
   }
   unsigned first = kind == USB_INTERRUPT_HCI ? device->port : controller->port_count;
   unsigned count = kind == USB_INTERRUPT_HCI ? 1 : USB_HID_DEVICE_BUDGET * USB_HID_ENDPOINTS_PER_DEVICE;
-  if (kind == USB_INTERRUPT_HUB) {
+  if (kind == USB_INTERRUPT_HUB || kind == USB_INTERRUPT_NETWORK) {
     first += count;
     count = USB_HUB_INTERRUPT_DEVICE_BUDGET;
+    if (device->branch || kind == USB_INTERRUPT_NETWORK) {
+      first += count;
+      count = controller->branch_capacity;
+    }
+    if (kind == USB_INTERRUPT_NETWORK) {
+      first += count;
+      count = USB_NETWORK_STREAMS;
+    }
   }
   struct usb_host_interrupt *interrupt = NULL;
   for (unsigned i = first; i < first + count; ++i) {
@@ -3476,7 +3652,7 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
       (dci << XHCI_SLOT_ENTRIES_SHIFT);
   }
   unsigned interval = endpoint->interval - 1;
-  if (speed != USB_SPEED_HIGH) {
+  if (speed != USB_SPEED_HIGH && !enhanced) {
     unsigned microframes = endpoint->interval * USB_MICROFRAMES_PER_FRAME;
     interval = 0;
     while (microframes > 1) {
@@ -3484,11 +3660,12 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
       ++interval;
     }
   }
-  unsigned payload = endpoint->packet * (endpoint->transactions + 1);
+  unsigned payload = enhanced ? endpoint->bytes_per_interval : endpoint->packet * (endpoint->transactions + 1);
+  unsigned burst = enhanced ? endpoint->burst : endpoint->transactions;
   uint32_t *context = input_endpoint(device, dci);
   context[0] = interval << XHCI_ENDPOINT_INTERVAL_SHIFT;
   context[1] = ((unsigned)endpoint->packet << XHCI_ENDPOINT_PACKET_SHIFT) |
-    ((unsigned)endpoint->transactions << XHCI_ENDPOINT_BURST_SHIFT) |
+    (burst << XHCI_ENDPOINT_BURST_SHIFT) |
     (XHCI_ENDPOINT_INTERRUPT_IN << XHCI_ENDPOINT_TYPE_SHIFT) | XHCI_ENDPOINT_ERRORS;
   context[2] = (uint32_t)interrupt->ring.physical | XHCI_TRB_CYCLE;
   context[3] = interrupt->ring.physical >> 32;
@@ -3675,27 +3852,28 @@ size_t usb_host_async_bulk_capacity(void)
   return USB_ASYNC_BULK_BYTES;
 }
 
-enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
+static enum usb_result configure_async_bulk(struct usb_host_device *device,
                                              const struct usb_bulk_endpoint *in,
                                              const struct usb_bulk_endpoint *out,
-                                             size_t receive_bytes, uint64_t deadline)
+                                             size_t receive_bytes, bool network, uint64_t deadline)
 {
   assert_device_owner(device);
   struct usb_host_controller *controller = device->controller;
   if (!device_ready(device) || !device->addressed) {
     return USB_IO;
   }
-  if (device->parent || device->link.speed != USB_SPEED_FULL) {
+  if (network ? device->link.speed != USB_SPEED_HIGH && !usb_speed_is_enhanced(device->link.speed) :
+      device->parent || device->link.speed != USB_SPEED_FULL) {
     return USB_UNSUPPORTED;
   }
-  if (!controller->enumerating || device->async_bulk || device->bulk || device->hub_ports ||
+  if ((!controller->enumerating && !(network && device->branch)) || device->async_bulk || device->bulk || device->hub_ports ||
       device->request.state != CONTROL_IDLE || device->request.client) {
     return USB_BUSY;
   }
   if (!valid_bulk_endpoint(device, in, true) || !valid_bulk_endpoint(device, out, false)) {
     return USB_UNSUPPORTED;
   }
-  if (!receive_bytes || receive_bytes > USB_ASYNC_BULK_BYTES) {
+  if (!receive_bytes || receive_bytes > (network ? USB_NETWORK_BULK_BYTES : USB_ASYNC_BULK_BYTES)) {
     return USB_INVALID;
   }
   unsigned in_dci = ((in->address & USB_ENDPOINT_NUMBER) << 1) | 1;
@@ -3704,8 +3882,8 @@ enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
     return USB_BUSY;
   }
   struct xhci_async_bulk *bulk = NULL;
-  for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
-    if (!controller->async_bulk_streams[i].device) {
+  for (unsigned i = 0; i < controller->async_bulk_count; ++i) {
+    if (controller->async_bulk_streams[i].network == network && !controller->async_bulk_streams[i].device) {
       bulk = &controller->async_bulk_streams[i];
       break;
     }
@@ -3734,12 +3912,28 @@ enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
   input_slot(device)[0] = (input_slot(device)[0] & ~XHCI_SLOT_ENTRIES_MASK) |
     (entries << XHCI_SLOT_ENTRIES_SHIFT);
   set_bulk_endpoint(device, &bulk->in, receive_bytes);
-  set_bulk_endpoint(device, &bulk->out, USB_ASYNC_BULK_BYTES);
+  set_bulk_endpoint(device, &bulk->out, bulk->capacity);
+  controller->command.admission = true;
   enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  controller->command.admission = false;
   if (result == USB_OK) {
     bulk->configured = true;
   }
   return result;
+}
+
+enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
+    const struct usb_bulk_endpoint *in, const struct usb_bulk_endpoint *out,
+    size_t receive_bytes, uint64_t deadline)
+{
+  return configure_async_bulk(device, in, out, receive_bytes, false, deadline);
+}
+
+enum usb_result usb_host_configure_network_bulk(struct usb_host_device *device,
+    const struct usb_bulk_endpoint *in, const struct usb_bulk_endpoint *out,
+    size_t receive_bytes, uint64_t deadline)
+{
+  return configure_async_bulk(device, in, out, receive_bytes, true, deadline);
 }
 
 static enum usb_result async_bulk_result(struct usb_host_device *device)
@@ -3822,9 +4016,9 @@ bool usb_host_async_bulk_in_ready(const struct usb_host_device *device)
 
 static bool recover_boot_bulk(struct usb_host_controller *controller)
 {
-  for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
+  for (unsigned i = 0; i < controller->async_bulk_count; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
-    if (bulk->boot_state == ASYNC_BULK_BOOT_NONE) {
+    if (bulk->network || bulk->boot_state == ASYNC_BULK_BOOT_NONE) {
       continue;
     }
     struct usb_host_device *device = bulk->device;
@@ -3897,7 +4091,7 @@ enum usb_result usb_host_async_bulk_out_submit(struct usb_host_device *device, c
   if (bulk->tx.state != CONTROL_IDLE || bulk->tx.client) {
     return USB_BUSY;
   }
-  if (!bytes || !length || length > USB_ASYNC_BULK_BYTES || !ticket || bulk->tx.generation == UINT64_MAX) {
+  if (!bytes || !length || length > bulk->capacity || !ticket || bulk->tx.generation == UINT64_MAX) {
     return USB_INVALID;
   }
   if (task_deadline_expired(deadline)) {

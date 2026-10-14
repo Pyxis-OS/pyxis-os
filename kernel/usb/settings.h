@@ -19,6 +19,11 @@
 #define USB_ASYNC_BULK_BYTES 4096
 #define USB_ASYNC_BULK_RECEIVES 2
 #define USB_ASYNC_BULK_COMPLETIONS 8
+#define USB_NETWORK_CANDIDATES 2
+#define USB_NETWORK_REPLACEMENTS 4
+#define USB_NETWORK_INITIAL_RETRIES 2
+#define USB_NETWORK_BULK_BYTES 16384
+#define USB_NETWORK_STREAMS (USB_NETWORK_CANDIDATES * (1 + USB_NETWORK_REPLACEMENTS))
 /* Maximum HCI event: two header bytes plus 255 parameter bytes. */
 #define USB_INTERRUPT_BYTES 257
 /* USB 2 high-speed interrupt endpoints permit 1024-byte packets. */
