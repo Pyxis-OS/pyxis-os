@@ -18,7 +18,7 @@ use the same environment and IPC without exposing a FILE interface.
 | [Endpoints](endpoints.md) | CALL/SEND, copied payloads and capability attachments, receipts, absolute call deadlines and lifecycle notifications |
 | [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, separate CUT controllers and acknowledged retirement |
 | [Environment](environment.md) | Owned CAP/TEXT entries, immutable captures, exported-only child selection and explicit private delegation |
-| [File providers](file-providers.md) | Full-URI OPEN, validated FILE grants and byte representation, shared native/exported file helpers |
+| [File providers](file-providers.md) | Intent-based typed OPEN, attested grants, cached describe and immutable native error bodies |
 | [HTTP fetching](../userland/http-fetch.md) | Streamed HTTP/verified HTTPS GET, prepared POST, explicit snapshots and final diagnostics |
 
 Endpoint creation requires a service grant; it supplies no environment-mutation,
@@ -81,20 +81,21 @@ replaced. There is no automatic restart, reconnect or rebinding.
 
 ## File opens and snapshots
 
-Libpyxis selects the complete URI scheme in userspace. Directory roots retain
-native traversal; provider schemes use OPEN with the full URI and requested
-READ/WRITE rights. A scheme present in both routes is an error, with no fallback.
-Successful OPEN returns an owned FILE grant with matching authority and byte
-representation metadata; failed OPEN returns no resource. Returned children
-inherit the source service's revocation lineage, so source CUT also denies later
-use of its opened files. Ordinary COPY, IPC and launch preserve lineage;
-independent reply attachments keep their own authority and already-read bytes
-are unaffected. See [forwarders](forwarders.md).
+Libpyxis captures an exact name from the one environment table. Directory values
+use native traversal, inline text becomes a sealed native FILE, and provider
+values receive an opaque remainder with READ/WRITE intent and open flags. Typed
+results own a kernel-attested resource and any independent immutable error body;
+a failed outcome stays a failure. Cached describe never calls the provider.
+See [file providers](file-providers.md).
 
-Native `provider_open()` separates transport/validation status from the provider's
-operation result and diagnostic status, and accepts an optional caller deadline.
-HTTP diagnostics preserve the final response code when available. Media type is
-descriptive metadata, not proof of content or additional authority.
+Ordinary opened children inherit the source service's revocation lineage, so CUT
+denies later use. COPY, IPC and launch preserve it. Copied error-body snapshots
+remain readable after provider exit or CUT. Description fields are bounded but
+untrusted and confer no authority; unknown length stays unknown.
+
+The FILE adapter keeps transport/local validation separate from the typed
+outcome. HTTP continuation and diagnostics remain explicitly private until B6;
+new generic callers never fall back to them.
 
 Native and exported FILE helpers use the same copied wire payloads and explicit
 offsets, with at most 4,088 read bytes or 4,080 write bytes per call. Larger I/O

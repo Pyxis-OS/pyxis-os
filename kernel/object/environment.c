@@ -1,8 +1,10 @@
+#include <abi/file.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/object/environment.h>
+#include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -613,6 +615,15 @@ void environment_execute(struct environment_request *request)
     staging_destroy(request->staging);
     request->staging = NULL;
     break;
+  case ENVIRONMENT_CREATE_TEXT_FILE:
+    KASSERT(request->cell && request->cell->kind == ENVIRONMENT_TEXT);
+    request->file = file_prepare_snapshot(request->cell->length);
+    if (!request->file) {
+      request->result = CALL_NO_MEMORY;
+    } else {
+      file_fill_snapshot(request->file, request->cell->text);
+    }
+    break;
   default:
     panic("unknown environment action");
   }
@@ -814,7 +825,7 @@ static enum call_status capture_cell(struct kernel_object *object, const char *n
 
 static struct syscall_result return_cell(struct environment_cell *cell,
     uint64_t generation, uintptr_t text_address, size_t text_capacity,
-    uintptr_t reply_address)
+    uintptr_t reply_address, bool lookup_file)
 {
   struct environment_entry_reply reply = {
     .kind = cell->kind, .flags = cell->flags, .identity = cell->identity,
@@ -822,7 +833,7 @@ static struct syscall_result return_cell(struct environment_cell *cell,
     .rights = cell->grant.rights, .transport = cell->grant.transport,
   };
   memcpy(reply.name, cell->name, sizeof(reply.name));
-  if (cell->kind == ENVIRONMENT_TEXT) {
+  if (cell->kind == ENVIRONMENT_TEXT && !lookup_file) {
     if (!task_operation_start()) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
@@ -842,8 +853,27 @@ static struct syscall_result return_cell(struct environment_cell *cell,
   if (result != CAP_OK) {
     return (struct syscall_result){grant_status(result), 0};
   }
-  struct capability_grant grant;
-  result = environment_cell_grant(cell, &grant);
+  struct capability_grant grant = {0};
+  if (cell->kind == ENVIRONMENT_TEXT) {
+    struct environment_request *request = (struct environment_request *)
+        bsp_request_prepare(BSP_SERVICE_ENVIRONMENT);
+    request->action = ENVIRONMENT_CREATE_TEXT_FILE;
+    request->cell = cell;
+    bsp_request_submit_and_wait(&request->request);
+    enum call_status status = request->result;
+    struct file_object *file = request->file;
+    bsp_request_release(&request->request);
+    if (status != CALL_OK) {
+      capability_reservation_release(&reservation, &slot);
+      return (struct syscall_result){status, 0};
+    }
+    reply.rights = FILE_RIGHT_READ;
+    reply.transport = 0;
+    result = capability_grant_retain(&file->object, reply.rights, reply.transport, &grant);
+    object_release(&file->object);
+  } else {
+    result = environment_cell_grant(cell, &grant);
+  }
   if (result == CAP_OK) {
     result = forwarder_request_derivation(&grant);
   }
@@ -974,7 +1004,8 @@ struct syscall_result environment_call(struct kernel_object *object, uint64_t ri
     return snapshot_call(flags, reply_address);
   }
   bool enumerate = snapshot && operation == ENVIRONMENT_ENUMERATE;
-  if (operation != ENVIRONMENT_LOOKUP && !enumerate) {
+  bool lookup_file = operation == ENVIRONMENT_LOOKUP_FILE;
+  if (operation != ENVIRONMENT_LOOKUP && !lookup_file && !enumerate) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   char name[ENVIRONMENT_NAME_MAX + 1] = {0};
@@ -1005,6 +1036,9 @@ struct syscall_result environment_call(struct kernel_object *object, uint64_t ri
     text_address = message.address;
     text_capacity = message.capacity;
   }
+  if (lookup_file && (text_address || text_capacity)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
   if (reply_capacity < sizeof(struct environment_entry_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -1018,7 +1052,7 @@ struct syscall_result environment_call(struct kernel_object *object, uint64_t ri
     return (struct syscall_result){status, 0};
   }
   struct syscall_result result = return_cell(cell, generation, text_address, text_capacity,
-      reply_address);
+      reply_address, lookup_file);
   cell_release(cell);
   return result;
 }

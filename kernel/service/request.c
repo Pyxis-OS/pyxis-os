@@ -83,6 +83,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct endpoint_create_request, request)},
   [BSP_SERVICE_ENDPOINT_EXPORT] = {sizeof(struct endpoint_export_request), alignof(struct endpoint_export_request),
       offsetof(struct endpoint_export_request, request)},
+  [BSP_SERVICE_ENDPOINT_DESCRIBE] = {sizeof(struct endpoint_describe_request), alignof(struct endpoint_describe_request),
+      offsetof(struct endpoint_describe_request, request)},
   [BSP_SERVICE_RAMFS] = {sizeof(struct ramfs_request), alignof(struct ramfs_request),
       offsetof(struct ramfs_request, request)},
   [BSP_SERVICE_LAUNCHER] = {sizeof(struct launcher_request), alignof(struct launcher_request),
@@ -167,6 +169,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_ENVIRONMENT:
   case BSP_SERVICE_ENDPOINT_CREATE:
   case BSP_SERVICE_ENDPOINT_EXPORT:
+  case BSP_SERVICE_ENDPOINT_DESCRIBE:
   case BSP_SERVICE_RAMFS:
   case BSP_SERVICE_LAUNCHER:
   case BSP_SERVICE_HOSTFS:
@@ -349,6 +352,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_ENDPOINT_EXPORT:
     endpoint_export_execute((struct endpoint_export_request *)request);
+    break;
+  case BSP_SERVICE_ENDPOINT_DESCRIBE:
+    endpoint_describe_execute((struct endpoint_describe_request *)request);
     break;
   case BSP_SERVICE_RAMFS:
     ramfs_request_execute((struct ramfs_request *)request);

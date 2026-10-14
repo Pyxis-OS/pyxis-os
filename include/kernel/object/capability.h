@@ -155,6 +155,10 @@ enum capability_result capability_grow(struct capability_table *table);
 enum capability_result capability_acquire(struct capability_table *table,
     handle_t handle, uint64_t required_rights, uint64_t required_transport,
     struct capability_reference *reference);
+/* Metadata-only observation of the held entry, even after CUT. Retains wrapper
+ * storage but admits no operation and extracts no target authority. */
+enum capability_result capability_acquire_metadata(struct capability_table *table,
+    handle_t handle, struct capability_reference *reference);
 /* IF=0; consumes and clears an owned reference. An empty reference is allowed. */
 void capability_release(struct capability_reference *reference);
 /* Operation-only resolution; COPY/launch/IPC grant capture never calls this.

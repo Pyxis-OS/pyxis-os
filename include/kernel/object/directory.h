@@ -64,12 +64,14 @@ void directory_init_fat32(struct directory_object *directory, struct fat32_node 
  * CREATE reserves returned-handle capacity before submitting its namespace
  * edit and preflights owned grant authority before mutation. RENAME borrows both
  * live parent capabilities through completion without table-entry pointers.
- * LOOKUP reserves before worker waits and retains an in-memory child before
+ * LOOKUP and typed LOOKUP reserve before worker waits and retain an in-memory child before
  * releasing the lock. CREATE waits for BSP entry allocation/disposal with no locks held.
  * Enumeration copies the selected name while locked. REMOVE detaches an entry
  * under the lock and then lends it to BSP disposal, with no borrowed readers.
  * RENAME stages name storage on BSP, rechecks both parents under their locks,
- * transfers the child reference and disposes obsolete entries after unlocking. */
+ * transfers the child reference and disposes obsolete entries after unlocking.
+ * Typed LOOKUP selects authority from the retained actual child, never a second
+ * name lookup. Its returned protocol describes that owned grant. */
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);

@@ -1,7 +1,7 @@
 #ifndef ABI_HTTP_TRANSACTION_H
 #define ABI_HTTP_TRANSACTION_H
 
-#include <abi/provider.h>
+#include <abi/provider_http_private.h>
 #include <abi/stream.h>
 
 #define HTTP_TRANSACTION_COMMIT UINT64_C(1)

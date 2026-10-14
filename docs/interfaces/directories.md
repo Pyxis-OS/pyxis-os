@@ -329,3 +329,15 @@ independent grants and lists them. It writes and truncates through the creation
 handle, which has WRITE only, then reads through a READ-only lookup handle.
 All creation and lookup handles are closed; the retained home tree owns the
 entries and file contents after the program exits.
+
+## Typed child lookup
+
+`DIRECTORY_LOOKUP_TYPED` resolves one ordinary component once and returns an
+owned handle plus kernel-attested FILE or DIRECTORY protocol. Its request has
+separate FILE and DIRECTORY masks: both must contain known bits, but authority
+is checked only for the actual kind. Parent LOOKUP remains required. FILE masks
+need parent READ_FILES/WRITE_FILES; DIRECTORY masks must fit the parent's mask.
+Native archive/RAM, host, npfs and FAT32 use their existing retained lookup and
+reservation path, preserving source lineage. Symbolic links and unknown/special
+kinds remain refused. There is no kind-probe/re-lookup fallback; exact-kind
+LOOKUP and exclusive CREATE retain their current contracts.

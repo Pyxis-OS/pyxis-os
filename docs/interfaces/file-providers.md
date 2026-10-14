@@ -16,49 +16,63 @@ cat text://guide > home://guide.txt
 
 ## Discovery and OPEN
 
-Libpyxis selects the complete `scheme://` prefix. Directory roots retain their
-existing component-walking rules; exported provider entries use provider OPEN.
-One exact-name lookup chooses the capability; there is no second binding map. Provider failure never causes a fallback to directory lookup or creation.
-Relative paths still use the retained native working directory.
+Exact `name://rest` lookup uses the process's one [environment table](environment.md).
+CAP values retain their masks and lineage; TEXT values become immutable native
+READ FILE snapshots of one captured publication. Directory values walk literal
+components; providers receive only the opaque remainder. Relative paths copy the
+complete held cwd chain. No provider failure falls back to directory creation.
 
-The [OPEN ABI](../../include/abi/provider.h) carries the complete URI as copied bytes
-and a nonzero READ/WRITE mask. The provider interprets the URI without library
-decoding, normalization or component walking. Generic URI bytes are bounded to 3,768;
-longer requests fail with FILE_TOO_LARGE instead of being truncated. Requested access
-needs the corresponding service OPEN right. Read-only services reject writable
-opens before producing an exported file.
+The [generic OPEN ABI](../../include/abi/provider.h) carries READ/WRITE intent,
+CREATE, EXCLUSIVE, TRUNCATE and APPEND flags, an opaque target remainder and an
+absolute deadline. The 32-byte prefix has no HTTP fields. Targets are bounded to
+4,064 bytes; longer requests fail with FILE_TOO_LARGE. The original deadline is
+also the endpoint deadline; it is never restarted. CREATE needs OPEN_WRITE even
+with READ-only intent, EXCLUSIVE requires CREATE, and TRUNCATE/APPEND need WRITE.
+Targets refuse unsupported intents. Text remains read-only.
 
-The 328-byte request prefix carries rights, URI length and optional HTTP
-continuation context; an 80-byte reply prefix distinguishes ERROR, BYTES and
-REDIRECT. Generic requests zero HTTP flags/origin/budgets.
+A 432-byte typed reply declares protocol and bounded generic description, with
+one owned resource grant when a protocol is supplied. Type and both masks are
+checked against the kernel; issuers may attenuate authority. A resource failure
+has an outcome rather than successful empty bytes. Kernel-cached failed FILE and
+STREAM outcomes reject byte READ before provider delivery. Text's failed FILEs
+also refuse SIZE/INFO rather than fabricate an empty size.
 
-BYTES returns exactly one owned exported FILE grant, exactly the
-requested resource rights, and CALL transport authority. Reply metadata
-declares the FILE interface and byte representation, with an optional printable
-ASCII media type of at most 127 bytes. Libpyxis checks these declarations against
-the kernel-authenticated handle query. Metadata grants no authority and does not
-prove that bytes conform to their media type. Malformed replies release received
-grants and fail; unsuccessful OPEN returns no resource. Every reply includes
-the fixed OPEN prefix. Failure zeroes the interface, representation and media-type
-fields, outcome and accounting, but may retain a provider-specific diagnostic status.
-REDIRECT succeeds without a FILE, carrying a bounded Location and HTTP charges;
-only the shared HTTP open bridge follows it. HTTP uses its final
-response code; text uses zero. The kernel does not interpret this field.
+`provider_open_typed()` owns the resource and any independently copied native
+error body. Malformed extents, strings, counts, types or descriptions release all
+provisional grants; actual query errors stay errors. The narrow `provider_open()`
+FILE adapter uses this same wire for current FILE-only callers; it reports other
+types as unsupported. There is no second generic ABI or legacy fallback.
 
-`provider_open(provider, uri, rights, deadline_ns, &result, &file)` returns a
-transport/local-validation status. When that is CALL_OK, `result.status` is the
-provider's operation result and `result.provider_status` is its diagnostic, on
-both success and failure. `result.delivery` retains IPC delivery state even on
-transport or validation failure. Successful representation metadata is in
-`result.metadata`; only BYTES supplies an owned file. REDIRECT has no grant,
-with Location and consumed accounting in the result. The contextual helper is
-`provider_open_context()`; low-level `provider_open()` performs just one hop.
-`deadline_ns` is an absolute monotonic deadline; zero means unlimited. `path_resolve()` for
-files and `path_open_file()` use generic provider OPEN; libc and shell redirects
-share the latter's open/create routing for ordinary files. These FILE-only path
-helpers refuse HTTP(S) URLs, including `json+` aliases, with BAD_OPERATION after
-binding discovery rather than collecting a response implicitly. Provider
-directory operations, cwd changes, removal and rename are unsupported.
+`resource_open_held()` borrows a FILE, native DIRECTORY or provider capability.
+A held FILE requires an empty remainder; CREATE without a name is unsupported,
+TRUNCATE needs WRITE, and APPEND remains consumer intent over positioned I/O.
+A directory walk cannot cross the held root, follows no symlinks and resolves the
+final component once through [typed native lookup](directories.md). Native lookup,
+creation and resize retain their synchronous native wait contract; exported
+OPEN and truncation use the supplied endpoint deadline. CREATE races return
+ALREADY_EXISTS without re-lookup or replay. Libc dispatch/transaction close belong
+to task A4, and shell syntax belongs to A5.
+
+`provider_open(provider, target, intent, flags, deadline_ns, &result, &file)`
+returns transport/local-validation status. CALL_OK makes `result.status` the
+provider's operation status. `result.delivery` preserves IPC delivery state even
+on failure; successful copied metadata is in `result.metadata`. No generic call
+retries, rebinds or falls back to HTTP continuation.
+
+`resource_open_path()` and `resource_open_held()` return the same owned typed
+result. The name helper never falls back to private HTTP continuation. Existing
+`path_resolve()`/`path_open_file()` FILE consumers adapt that result, while native
+filesystem-only callers reject actual exported resources rather than a URI name.
+Libc returned-type dispatch/transaction close belong to A4 and shell syntax to A5.
+
+The [private HTTP continuation ABI](../../include/abi/provider_http_private.h)
+uses operation `PROVIDER_LEGACY_HTTP_OPEN` (3), independently of generic OPEN (1)
+and PREPARE (2). Its 328-byte request and 80-byte reply retain the existing
+complete URI, origin, flags, budgets, ERROR/BYTES/REDIRECT results, HTTP diagnostic
+status and Location semantics. `provider_legacy_http_open()` is the private
+single-hop helper; `provider_http_open()` retains bounded redirect accounting.
+Both remain until B6. Existing libc URL access still uses PREPARE/COMMIT and
+STREAM, with its final observation checks and no new generic fallback.
 
 ## File dispatch and lifetime
 
@@ -91,7 +105,7 @@ can supply a deadline explicitly; an unresponsive generic provider can block its
 client.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
-Each libc descriptor keeps its own offset. Namespace replacement affects future
+Each libc descriptor keeps its own offset. Environment replacement affects future
 opens; existing grants remain attached to the original provider. OPEN results
 inherit their source service's revocation lineage; ordinary COPY, IPC and launch
 preserve it. Cutting the source therefore denies later use of its opened files,
@@ -112,10 +126,9 @@ the shared helpers.
 
 The `textfs` program serves a fixed collection of immutable text files, including
 `welcome` and a multi-transfer `guide`. Development and read-only init scripts
-publish separate instances as `text` before starting their sessions. URI schemes
-use a leading ASCII letter followed by letters, digits, `+`, `-` or `.`, with
-exact `welcome` or `guide` remainders; other remainders return NOT_FOUND. The
-service may be published under another compatible name. `textfs --welcome MESSAGE`
+publish separate instances as `text` before starting their sessions. OPEN accepts
+exact opaque `welcome` or `guide` remainders; other remainders return NOT_FOUND.
+The service may be published under another compatible routing name. `textfs --welcome MESSAGE`
 selects an alternative immutable welcome message, for example:
 
 ```text
@@ -153,7 +166,7 @@ Separate [HTTP and HTTPS services](../userland/http-fetch.md) publish OPEN_READ 
 The shared bridge follows the [bounded redirect policy](../userland/http-fetch.md#redirect-chains);
 only a complete final response becomes a read-only FILE snapshot. Optional
 Content-Type, status and effective URL are returned as copied metadata.
-This explicit provider OPEN route remains legacy; ordinary libc URL reads use
+This explicitly private continuation route remains until B6; ordinary libc URL reads use
 PREPARE/COMMIT and STREAM, preserving the anonymous redirect/status policy.
 FILE-only consumers must explicitly materialize a response into caller-owned
 storage when they need SIZE or positioned reads.
@@ -171,5 +184,28 @@ protocols. Format negotiation and writable providers remain
 transfers need a separate ownership contract.
 
 [Prepared HTTP transactions](http-transactions.md) add a separate PREPARE and
-forward-only STREAM contract. Existing provider OPEN returns snapshots and keeps
+forward-only STREAM contract. Private HTTP continuation returns snapshots and keeps
 its redirect/budget semantics; it does not implicitly commit a POST.
+
+## Describe and error-body contract
+
+**Owner accepted, 2026-10-14; implementation in progress.** Issuers publish a
+bounded immutable description on their owned receiver; describe reads the latest
+kernel-held snapshot without provider calls. Kernel-attested protocol and both
+authority masks are separate from declared outcome/detail/media/length fields.
+Unknown native backing length remains unknown rather than waiting for I/O.
+
+Error bodies are copied once into kernel-held native immutable FILE snapshots.
+Publication takes bytes, never a provider-served capability. Returned READ-only
+bodies remain readable after provider exit or revocation; they are independent
+copied data, not newly opened children of the source. Replacing or clearing a
+description releases only its ownership; returned body grants survive. This
+prevents description/body reference cycles. Ordinary OPEN still preserves source
+lineage. No writable body grant is published, and no subsequent write/resize is
+allowed.
+
+The [description ABI](../../include/abi/describe.h) bounds detail to 255 bytes,
+media type to 127, and each copied error body to 64 KiB (a starting storage
+budget). Empty bodies are distinguishable from absent bodies. Metadata-only
+queries need no handle slot; including a body requires one immediately available
+slot and returns LIMIT rather than waiting for allocation when full.

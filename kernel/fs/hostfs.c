@@ -353,6 +353,16 @@ static void destroy_node(struct hostfs_node *node)
 
 static enum call_status create_node(struct hostfs_request *request)
 {
+  bool typed = request->operation == HOSTFS_LOOKUP && request->kind == DIRECTORY_KIND_ANY;
+  if (typed) {
+    if ((request->file_rights & ~FILE_RIGHTS) ||
+        (request->directory_rights & ~DIRECTORY_RIGHTS)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!(request->lookup_rights & DIRECTORY_RIGHT_LOOKUP)) {
+      return CALL_DENIED;
+    }
+  }
   if (!session->ready) {
     return CALL_UNAVAILABLE;
   }
@@ -380,9 +390,19 @@ static enum call_status create_node(struct hostfs_request *request)
     result = virtio_fs_lookup(&request->node->node, request->name, request->count, &node->node);
   }
   status = call_result(result);
-  if (status == CALL_OK && request->operation == HOSTFS_LOOKUP &&
+  if (status == CALL_OK && request->operation == HOSTFS_LOOKUP && !typed &&
       native_kind(node->node.kind) != request->kind) {
     status = CALL_WRONG_TYPE;
+  }
+  if (status == CALL_OK && typed) {
+    bool directory = node->node.kind == VIRTIO_FS_DIRECTORY;
+    uint64_t selected = directory ? request->directory_rights : request->file_rights;
+    uint64_t allowed = directory ? request->lookup_rights :
+        ((request->lookup_rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
+        ((request->lookup_rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+    if (selected & ~allowed) {
+      status = CALL_DENIED;
+    }
   }
   if (status != CALL_OK) {
     destroy_node(node);

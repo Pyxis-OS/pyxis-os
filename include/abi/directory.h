@@ -26,15 +26,16 @@
 #define DIRECTORY_SYNC UINT64_C(6)
 #define DIRECTORY_FILESYSTEM_INFO UINT64_C(7)
 #define DIRECTORY_INFO UINT64_C(8)
+#define DIRECTORY_LOOKUP_TYPED UINT64_C(9)
 
 #define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
 #define DIRECTORY_RENAME_REPLACE UINT64_C(1)
 
-/* ANY is accepted by REMOVE/RENAME; lookup/create require an exact kind. */
+/* ANY is accepted by REMOVE/RENAME; ordinary LOOKUP/CREATE require an exact kind. */
 #define DIRECTORY_KIND_ANY UINT64_C(0)
 #define DIRECTORY_KIND_FILE UINT64_C(1)
 #define DIRECTORY_KIND_DIRECTORY UINT64_C(2)
-/* Enumeration only: lookup/create still request FILE or DIRECTORY. */
+/* Enumeration only: LOOKUP/CREATE still request FILE or DIRECTORY. */
 #define DIRECTORY_KIND_UNKNOWN UINT64_C(3)
 #define DIRECTORY_KIND_SYMLINK UINT64_C(4)
 #define DIRECTORY_KIND_OTHER UINT64_C(5)
@@ -55,6 +56,21 @@ struct directory_child_request {
   uint64_t name_length; /* Bytes excluding NUL; one ordinary component. */
   uint64_t kind;
   uint64_t rights;
+};
+
+/* Resolve once and return the actual FILE or DIRECTORY. Both masks must use
+ * their protocol's known bits; only the selected kind's mask is checked against
+ * parent authority. Symlinks and special files retain ordinary lookup refusals. */
+struct directory_typed_lookup_request {
+  uint64_t name;
+  uint64_t name_length;
+  uint64_t file_rights;
+  uint64_t directory_rights;
+};
+
+struct directory_typed_lookup_reply {
+  handle_t handle;
+  uint64_t protocol; /* Kernel-attested protocol of the returned owned handle. */
 };
 
 struct directory_enumerate_request {
@@ -94,6 +110,7 @@ struct directory_rename_request {
 
 union directory_payload {
   struct directory_child_request lookup;
+  struct directory_typed_lookup_request lookup_typed;
   struct directory_child_request create;
   struct directory_enumerate_request enumerate;
   struct directory_remove_request remove;
@@ -175,6 +192,8 @@ _Static_assert(sizeof(union directory_payload) == 56, "directory payload layout"
 _Static_assert(offsetof(struct directory_message, body) == 16, "directory payload offset");
 _Static_assert(sizeof(struct directory_message) == 72, "directory message layout");
 _Static_assert(sizeof(struct directory_child_reply) == 8, "directory child reply layout");
+_Static_assert(sizeof(struct directory_typed_lookup_request) == 32, "typed directory lookup request layout");
+_Static_assert(sizeof(struct directory_typed_lookup_reply) == 16, "typed directory lookup reply layout");
 _Static_assert(sizeof(struct directory_enumerate_reply) == 40, "directory enumeration reply layout");
 
 #endif

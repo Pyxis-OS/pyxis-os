@@ -179,6 +179,18 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Milestone A: the core, with files and text
 
+### Task 3 error-body contract (accepted, 2026-10-14)
+
+Error bodies are native immutable FILE snapshots. The issuer supplies bounded
+bytes once; the kernel holds the sealed snapshot and describe returns a READ-only
+native grant. Exported/provider-served bodies are not accepted. Previously
+returned body snapshots remain readable after provider exit, independently of
+its controller and lineage, as copied bytes do. This replaces the proposed
+error-body lineage derivation; ordinary OPEN children still inherit lineage.
+Descriptions cannot form body-reference cycles. Snapshot publication/capture and
+retirement are coordinated with delta's merged export code. The implemented ABI
+and limits belong in the [provider interface](../interfaces/file-providers.md).
+
 - [x] **1. Kernel forwarders.** A forwarder object with *retarget* (same protocol/representation
   only) and *cut* rights, held by its creator; revocable copies with
   derivation tracking, so a cut also cuts copies made through it; holders see
@@ -191,7 +203,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
   declared required or optional entries. Kernel namespaces, the namespace grant
   and the `namespace` commands are removed; `service start` returns a slot from
   task 1.
-- [ ] **3. Typed open and `describe`.** The generic OPEN with intent flags and no
+- [x] **3. Typed open and `describe`.** The generic OPEN with intent flags and no
   protocol fields, open on held capabilities, typed results checked against the
   kernel's protocol, the `describe` operation and the outcome classes (ok, not
   found, denied, I/O error, too large, aborted, uncertain) with their `errno`

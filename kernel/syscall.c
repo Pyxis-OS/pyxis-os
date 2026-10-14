@@ -33,6 +33,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/forwarder.h>
+#include <kernel/object/describe.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -415,7 +416,8 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
         PROTOCOL_ENVIRONMENT : PROTOCOL_ENVIRONMENT_SNAPSHOT) &&
         !(object->type == OBJECT_ENVIRONMENT_SNAPSHOT &&
         header.protocol == PROTOCOL_ENVIRONMENT &&
-        (header.operation == ENVIRONMENT_LOOKUP || header.operation == ENVIRONMENT_INFO))) {
+        (header.operation == ENVIRONMENT_LOOKUP || header.operation == ENVIRONMENT_LOOKUP_FILE ||
+        header.operation == ENVIRONMENT_INFO))) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return environment_call(object, rights, header.operation, request_address,
@@ -497,6 +499,8 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return user_wait_many(arg1, arg2, arg3, arg4);
   case SYSCALL_FORWARDER_CREATE:
     return forwarder_create_call(arg1, arg2);
+  case SYSCALL_DESCRIBE:
+    return describe_call(arg1, arg2, arg3);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc((char)arg1);

@@ -1399,11 +1399,16 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
     if (!directory || !(job->rights & DIRECTORY_RIGHT_LOOKUP)) {
       return CALL_DENIED;
     }
+    bool typed = job->kind == DIRECTORY_KIND_ANY;
     uint64_t allowed = job->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
         (job->rights & DIRECTORY_RIGHT_READ_FILES ? FILE_RIGHT_READ : 0) |
         (job->rights & DIRECTORY_RIGHT_WRITE_FILES ? FILE_RIGHT_WRITE : 0);
-    if ((job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY) ||
-        (job->child_rights & ~allowed)) {
+    if (typed && ((job->child_rights & ~FILE_RIGHTS) ||
+        (job->directory_child_rights & ~DIRECTORY_RIGHTS))) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!typed && ((job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY) ||
+        (job->child_rights & ~allowed))) {
       return CALL_DENIED;
     }
     struct fat32_locator child;
@@ -1414,10 +1419,18 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
       return status;
     }
     uint64_t kind = entry.attributes & FAT32_ATTR_DIRECTORY ? OBJECT_DIRECTORY : OBJECT_FILE;
-    if ((kind == OBJECT_DIRECTORY) != (job->kind == DIRECTORY_KIND_DIRECTORY)) {
+    if (!typed && ((kind == OBJECT_DIRECTORY) != (job->kind == DIRECTORY_KIND_DIRECTORY))) {
       return CALL_WRONG_TYPE;
     }
-    return wrap(mount, kind, &child, job->child_rights, &job->object);
+    uint64_t child_rights = typed && kind == OBJECT_DIRECTORY ?
+        job->directory_child_rights : job->child_rights;
+    allowed = kind == OBJECT_DIRECTORY ? job->rights :
+        ((job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
+        ((job->rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+    if (child_rights & ~allowed) {
+      return CALL_DENIED;
+    }
+    return wrap(mount, kind, &child, child_rights, &job->object);
   }
   case NPFS_ENUMERATE: {
     if (!directory || !(job->rights & DIRECTORY_RIGHT_ENUMERATE)) {

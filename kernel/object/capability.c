@@ -389,9 +389,9 @@ enum capability_result capability_grant_acquire_same(struct capability_table *so
   return acquire_grant(source, handle, 0, 0, true, grant);
 }
 
-enum capability_result capability_acquire(struct capability_table *table,
+static enum capability_result acquire_reference(struct capability_table *table,
     handle_t handle, uint64_t required_rights, uint64_t required_transport,
-    struct capability_reference *reference)
+    bool metadata_only, struct capability_reference *reference)
 {
   if (!reference) {
     return CAP_INVALID;
@@ -413,7 +413,7 @@ enum capability_result capability_acquire(struct capability_table *table,
   } else {
     *reference = (struct capability_reference){.object = entry->object,
       .rights = entry->rights, .transport = entry->transport};
-    if (entry->object->type == OBJECT_FORWARDER) {
+    if (!metadata_only && entry->object->type == OBJECT_FORWARDER) {
       result = forwarder_snapshot(entry->object, &reference->admitted);
     }
   }
@@ -422,6 +422,20 @@ enum capability_result capability_acquire(struct capability_table *table,
     capability_release(reference);
   }
   return result;
+}
+
+enum capability_result capability_acquire(struct capability_table *table,
+    handle_t handle, uint64_t required_rights, uint64_t required_transport,
+    struct capability_reference *reference)
+{
+  return acquire_reference(table, handle, required_rights, required_transport,
+      false, reference);
+}
+
+enum capability_result capability_acquire_metadata(struct capability_table *table,
+    handle_t handle, struct capability_reference *reference)
+{
+  return acquire_reference(table, handle, 0, 0, true, reference);
 }
 
 void capability_release(struct capability_reference *reference)

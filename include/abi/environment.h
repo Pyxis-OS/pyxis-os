@@ -13,6 +13,7 @@
 #define ENVIRONMENT_UNSET UINT64_C(3)
 #define ENVIRONMENT_INFO UINT64_C(4)
 #define ENVIRONMENT_SNAPSHOT UINT64_C(5)
+#define ENVIRONMENT_LOOKUP_FILE UINT64_C(6)
 #define ENVIRONMENT_ENUMERATE UINT64_C(2)
 #define ENVIRONMENT_CAP UINT64_C(1)
 #define ENVIRONMENT_TEXT UINT64_C(2)
@@ -32,6 +33,13 @@ struct environment_lookup_message {
   uint64_t text_address;
   uint64_t text_capacity;
 };
+
+/* LOOKUP_FILE uses the same request with zero text_address/text_capacity. CAP
+ * returns its unchanged owned grant. TEXT returns an owned READ-only immutable
+ * native FILE containing exactly text_length bytes, excluding the final NUL.
+ * The reply keeps the captured cell's kind, identity and generation; TEXT has
+ * FILE_RIGHT_READ and zero transport. No directory/provider authority is added.
+ * Allocation/admission failure publishes neither a handle nor a partial reply. */
 
 struct environment_enumerate_message {
   struct message_header header;
@@ -102,8 +110,8 @@ struct environment_snapshot_message {
 /* Default capture is exported entries only. INCLUDE_PRIVATE selects the
  * caller's own private entries too; TEXT_ONLY excludes all logical grants.
  * Captures are immutable, readable owned handles and never mutate a parent.
- * Snapshot LOOKUP and INFO also accept PROTOCOL_ENVIRONMENT, allowing a shared
- * lookup helper without querying handle metadata first. ENUMERATE uses the
+ * Snapshot LOOKUP, LOOKUP_FILE and INFO also accept PROTOCOL_ENVIRONMENT,
+ * allowing shared helpers without querying handle metadata first. ENUMERATE uses the
  * snapshot protocol; live environment SET/UNSET never reach a snapshot.
  * Slot wrappers retain identity; a snapshot does not freeze their targets. */
 struct environment_snapshot_reply {
