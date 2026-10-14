@@ -434,7 +434,9 @@ static void copy_framebuffer(void)
 static void copy_command_line(void)
 {
   if (!command_line_request.response || !command_line_request.response->cmdline) {
-    panic("Limine did not supply a kernel command line");
+    klog("boot options: no kernel command line supplied; using defaults\n");
+    boot.command_line[0] = '\0';
+    return;
   }
   const char *source = command_line_request.response->cmdline;
   for (size_t i = 0; i < sizeof(boot.command_line); ++i) {

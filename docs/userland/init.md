@@ -22,12 +22,14 @@ applications.
 
 ## Boot command line
 
-The kernel accepts the following options, each at most once, in a command line
-of at most 4095 bytes without quoting or escaping:
+The kernel accepts options in a command line of at most 4095 bytes without
+quoting or escaping. Unknown options warn and are ignored; duplicates warn and
+the last occurrence wins. Invalid final values warn and use their safe fallback.
+See the [complete option/fallback list](../development/configuration.md#kernel-boot-option-recovery).
 
 | Option | Meaning |
 | --- | --- |
-| `init=boot://IMAGE` | Required. The boot init, a native PXE or shebang archive entry. |
+| `init=boot://IMAGE` | The boot init, a native PXE or shebang archive entry; default `boot://boot-init.pxe`. |
 | `mount.disk=GUID` | The disk native mounts may use; boot init then reads the installed configuration. |
 | `boot.install=1` | The install entry: boot init also receives the raw installer resources. |
 | `boot.default_config=1` | The rescue entry: boot init ignores the pool override. |
@@ -35,14 +37,17 @@ of at most 4095 bytes without quoting or escaping:
 | `log.udp=1` | Enable the [UDP kernel log](../interfaces/kernel-log.md#udp-capture) after networking initialization. |
 | `display.size=WIDTHxHEIGHT` | Set an exact initial Bochs pixel size; see [QEMU display selection](../development/qemu.md#display-device). |
 
-Anything else, a repeated option or a non-`boot://` init stops the boot.
-Normal live and installed boots use `init=boot://boot-init.pxe`.
+Normal live and installed boots use `init=boot://boot-init.pxe`; an absent or
+malformed init option selects it. Invalid mount GUIDs select no disk, invalid
+install/write settings grant no authority, and invalid/incomplete debugger
+settings leave the debugger off. The entire command line exceeding 4095 bytes
+still stops boot, because truncation could change meaning.
 Options are parsed once before display and AP initialization into retained kernel
-storage; boot init consumes the same result later. `display.size` is an exception
-to fatal value validation: malformed/unsupported geometry keeps the firmware
-framebuffer with a message. It applies to the selected Bochs device, not VirtIO
-or an unsupported native GPU. `DISPLAY_SIZE` supplies it during image assembly,
-including rescue and installer entries; an empty setting omits it.
+storage; boot init consumes the same result later. Malformed/unsupported
+`display.size` keeps firmware geometry with a warning; backend geometry/capacity
+validation applies to the selected Bochs device, not VirtIO or an unsupported
+native GPU. `DISPLAY_SIZE` supplies it during image assembly, including rescue
+and installer entries; an empty build setting omits it.
 
 Boot init runs on CPU 0 in Caelum's space. Its messages go to the Caelum tab and
 to serial. It receives console output but no input, the bootstrap services, the

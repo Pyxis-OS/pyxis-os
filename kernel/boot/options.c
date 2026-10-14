@@ -4,6 +4,7 @@
 #include <kernel/boot.h>
 #include <kernel/boot/options.h>
 #include <kernel/panic.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/string.h>
 #include <kernel/user/launch.h>
@@ -20,7 +21,7 @@ static bool same_text(const char *left, const char *right)
   return size == strlen(right) && !memcmp(left, right, size);
 }
 
-static unsigned hex_digit(char value)
+static int hex_digit(char value)
 {
   if (value >= '0' && value <= '9') {
     return value - '0';
@@ -31,14 +32,14 @@ static unsigned hex_digit(char value)
   if (value >= 'A' && value <= 'F') {
     return value - 'A' + 10;
   }
-  panic("invalid mount disk GUID hex digit");
+  return -1;
 }
 
-static struct gpt_guid parse_disk_guid(const char *text)
+static bool parse_disk_guid(const char *text, struct gpt_guid *disk)
 {
   if (strlen(text) != 36 || text[8] != '-' || text[13] != '-' ||
       text[18] != '-' || text[23] != '-') {
-    panic("mount.disk must be a canonical GPT GUID");
+    return false;
   }
   uint8_t canonical[16];
   unsigned index = 0;
@@ -47,66 +48,118 @@ static struct gpt_guid parse_disk_guid(const char *text)
       ++offset;
       continue;
     }
-    canonical[index++] = hex_digit(text[offset]) * 16 + hex_digit(text[offset + 1]);
+    int high = hex_digit(text[offset]), low = hex_digit(text[offset + 1]);
+    if (high < 0 || low < 0) {
+      return false;
+    }
+    canonical[index++] = high * 16 + low;
     offset += 2;
   }
-  struct gpt_guid disk;
   /* The first three textual fields use little-endian GPT encoding. */
   for (unsigned i = 0; i < 4; ++i) {
-    disk.bytes[i] = canonical[3 - i];
+    disk->bytes[i] = canonical[3 - i];
   }
   for (unsigned i = 0; i < 2; ++i) {
-    disk.bytes[4 + i] = canonical[5 - i];
-    disk.bytes[6 + i] = canonical[7 - i];
+    disk->bytes[4 + i] = canonical[5 - i];
+    disk->bytes[6 + i] = canonical[7 - i];
   }
-  memcpy(disk.bytes + 8, canonical + 8, 8);
+  memcpy(disk->bytes + 8, canonical + 8, 8);
   struct gpt_guid zero = {0};
-  if (!memcmp(&disk, &zero, sizeof(disk))) {
-    panic("mount.disk must be nonzero");
-  }
-  return disk;
+  return memcmp(disk, &zero, sizeof(*disk)) != 0;
 }
 
-static void parse_debug_image(const char *text, uint8_t image[32])
+static bool parse_debug_image(const char *text, uint8_t image[32])
 {
   if (strlen(text) != 64) {
-    panic("debug.image must be a 64-digit SHA-256 hex token");
+    return false;
   }
   for (unsigned i = 0; i < 32; ++i) {
-    unsigned byte = 0;
-    for (unsigned half = 0; half < 2; ++half) {
-      char digit = text[i * 2 + half];
-      unsigned value;
-      if (digit >= '0' && digit <= '9') {
-        value = digit - '0';
-      } else if (digit >= 'a' && digit <= 'f') {
-        value = digit - 'a' + 10;
-      } else if (digit >= 'A' && digit <= 'F') {
-        value = digit - 'A' + 10;
-      } else {
-        panic("debug.image contains an invalid hex digit");
-      }
-      byte = byte * 16 + value;
+    int high = hex_digit(text[i * 2]), low = hex_digit(text[i * 2 + 1]);
+    if (high < 0 || low < 0) {
+      return false;
     }
-    image[i] = byte;
+    image[i] = high * 16 + low;
   }
+  return true;
 }
 
-/* Each option may occur once. FLAG options accept only the value 1. */
 static void take_option(const char **option, const char *key, const char *value)
 {
   if (*option) {
-    panic("kernel option %s must occur once", key);
+    klog("boot options: duplicate %s; using last occurrence\n", key);
   }
   *option = value;
 }
 
-static bool flag_option(const char *key, const char *value)
+static bool boolean_value(const char *value)
 {
-  if (!same_text(value, "1")) {
-    panic("kernel option %s accepts only the value 1", key);
+  return same_text(value, "0") || same_text(value, "1");
+}
+
+static bool flag_option(const char *key, const char *value, bool fallback)
+{
+  if (!value) {
+    return fallback;
+  }
+  if (!boolean_value(value)) {
+    klog("boot options: %s expects 0 or 1; using default %u\n", key, (unsigned)fallback);
+    return fallback;
+  }
+  return same_text(value, "1");
+}
+
+static bool display_size_valid(const char *text)
+{
+  for (unsigned dimension = 0; dimension < 2; ++dimension) {
+    uint32_t value = 0;
+    if (*text < '0' || *text > '9') {
+      return false;
+    }
+    do {
+      unsigned digit = *text - '0';
+      if (value > (UINT32_MAX - digit) / 10) {
+        return false;
+      }
+      value = value * 10 + digit;
+      ++text;
+    } while (*text >= '0' && *text <= '9');
+    if (!value || (dimension == 0 ? *text != 'x' : *text != '\0')) {
+      return false;
+    }
+    if (dimension == 0) {
+      ++text;
+    }
   }
   return true;
+}
+
+static void configure_debugger(const char *net, const char *image, const char *wait)
+{
+  if (!net && !image && !wait) {
+    return;
+  }
+  bool valid = true;
+  if (!remote_beacon_name_length(net)) {
+    klog("boot options: debug.net needs 1..%u printable ASCII bytes without spaces\n",
+        REMOTE_BEACON_NAME_MAX);
+    valid = false;
+  }
+  uint8_t parsed_image[32];
+  if (!image || !parse_debug_image(image, parsed_image)) {
+    klog("boot options: debug.image needs 64 hexadecimal SHA-256 digits\n");
+    valid = false;
+  }
+  bool parsed_wait = flag_option("debug.wait", wait, false);
+  if (wait && !boolean_value(wait)) {
+    valid = false;
+  }
+  if (!valid) {
+    klog("boot options: invalid or incomplete debug settings; debugger and wait off\n");
+    return;
+  }
+  options.debug_net = net;
+  options.debug_wait = parsed_wait;
+  memcpy(options.debug_image, parsed_image, sizeof(parsed_image));
 }
 
 const struct boot_options *boot_options_parse(const char *command_line)
@@ -158,10 +211,9 @@ const struct boot_options *boot_options_parse(const char *command_line)
     while (*value && *value != '=') {
       ++value;
     }
-    if (!*value) {
-      panic("kernel option needs a value: %s", key);
+    if (*value) {
+      *value++ = '\0';
     }
-    *value++ = '\0';
     if (same_text(key, "init")) {
       take_option(&init, key, value);
     } else if (same_text(key, "mount.disk")) {
@@ -209,74 +261,65 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&pointer_synthetic, key, value);
 #endif
     } else {
-      panic("unknown kernel option: %s", key);
+      klog("boot options: unknown option %s; ignored\n", key);
     }
   }
-  if (!init) {
-    panic("kernel command line must name init");
+  if (init && (strlen(init) <= USER_BOOT_ROOT_PREFIX_LENGTH ||
+      memcmp(init, USER_BOOT_ROOT_PREFIX, USER_BOOT_ROOT_PREFIX_LENGTH))) {
+    klog("boot options: init must name a " USER_BOOT_ROOT_PREFIX
+        " archive entry; using " USER_DEFAULT_BOOT_INIT "\n");
+    init = NULL;
   }
-  options.log_udp = log_udp && flag_option("log.udp", log_udp);
-  if ((debug_wait || debug_image) && !debug_net) {
-    panic("debug.wait and debug.image require debug.net");
-  }
-  if (debug_net) {
-    if (!remote_beacon_name_length(debug_net)) {
-      panic("debug.net must name 1..%u printable ASCII bytes without spaces",
-          REMOTE_BEACON_NAME_MAX);
-    }
-    if (!debug_image) {
-      panic("debug.net requires the exact staged ELF debug.image token");
-    }
-    parse_debug_image(debug_image, options.debug_image);
-  }
-  options.debug_net = debug_net;
-  options.debug_wait = debug_wait && flag_option("debug.wait", debug_wait);
-  if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
-    panic("remote.beacon must name 1..%u printable ASCII bytes without spaces",
-        REMOTE_BEACON_NAME_MAX);
-  }
-  if (strlen(init) <= USER_BOOT_ROOT_PREFIX_LENGTH ||
-      memcmp(init, USER_BOOT_ROOT_PREFIX, USER_BOOT_ROOT_PREFIX_LENGTH)) {
-    panic("init must name a " USER_BOOT_ROOT_PREFIX " archive entry: %s", init);
-  }
+  options.init = init ? init : USER_DEFAULT_BOOT_INIT;
 
   if (mount_disk) {
-    options.mount.disk = parse_disk_guid(mount_disk);
-    options.mount.enabled = true;
+    struct gpt_guid disk;
+    if (parse_disk_guid(mount_disk, &disk)) {
+      options.mount.disk = disk;
+      options.mount.enabled = true;
+    } else {
+      klog("boot options: mount.disk needs a canonical nonzero GPT GUID; mounting nothing\n");
+    }
   }
-
-  options.init = init;
-  options.install = install && flag_option("boot.install", install);
-  options.nvme_write = nvme_write && flag_option("nvme.write", nvme_write);
-  options.default_config = default_config && flag_option("boot.default_config", default_config);
+  options.install = flag_option("boot.install", install, false);
+  options.nvme_write = flag_option("nvme.write", nvme_write, false);
+  options.default_config = flag_option("boot.default_config", default_config, false);
+  options.log_udp = flag_option("log.udp", log_udp, false);
+  if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
+    klog("boot options: remote.beacon needs 1..%u printable ASCII bytes without spaces; ignored\n",
+        REMOTE_BEACON_NAME_MAX);
+    remote_beacon = NULL;
+  }
   options.remote_beacon = remote_beacon;
+  configure_debugger(debug_net, debug_image, debug_wait);
+
+  if (display_size && !display_size_valid(display_size)) {
+    klog("boot options: display.size needs positive uint32 WIDTHxHEIGHT; keeping firmware geometry\n");
+    display_size = NULL;
+  }
   options.display_size = display_size;
+  if (display_timing && !same_text(display_timing, "off") &&
+      !same_text(display_timing, "observe") && !same_text(display_timing, "blank")) {
+    klog("boot options: display.timing expects off, observe or blank; using observe\n");
+    display_timing = NULL;
+  }
   options.display_timing = display_timing;
-  options.display_timing_metrics = display_timing_metrics &&
-    flag_option("display.timing.metrics", display_timing_metrics);
-  options.display_inventory = display_inventory && flag_option("display.inventory", display_inventory);
-  if (display_flip && !same_text(display_flip, "0") && !same_text(display_flip, "1")) {
-    panic("kernel option display.flip accepts only 0 or 1");
-  }
-  options.display_flip = !display_flip || same_text(display_flip, "1");
-  options.display_flip_metrics = display_flip_metrics &&
-    flag_option("display.flip.metrics", display_flip_metrics);
-  if (ps2_synaptics && !same_text(ps2_synaptics, "0") && !same_text(ps2_synaptics, "1")) {
-    panic("kernel option ps2.synaptics accepts only 0 or 1");
-  }
-  options.ps2_synaptics = !ps2_synaptics || same_text(ps2_synaptics, "1");
-  options.ps2_synaptics_diagnose = ps2_synaptics_diagnose &&
-    flag_option("ps2.synaptics.diagnose", ps2_synaptics_diagnose);
-  options.usb_hid_describe = usb_hid_describe && flag_option("usb.hid.describe", usb_hid_describe);
-  options.usb_xhci_diagnose = usb_xhci_diagnose && flag_option("usb.xhci.diagnose", usb_xhci_diagnose);
-  options.display_cursor_probe = display_cursor_probe &&
-    flag_option("display.cursor.probe", display_cursor_probe);
+  options.display_timing_metrics = flag_option("display.timing.metrics", display_timing_metrics, false);
+  options.display_inventory = flag_option("display.inventory", display_inventory, false);
+  options.display_flip = flag_option("display.flip", display_flip, true);
+  options.display_flip_metrics = flag_option("display.flip.metrics", display_flip_metrics, false);
+  options.ps2_synaptics = flag_option("ps2.synaptics", ps2_synaptics, true);
+  options.ps2_synaptics_diagnose = flag_option("ps2.synaptics.diagnose", ps2_synaptics_diagnose, false);
+  options.usb_hid_describe = flag_option("usb.hid.describe", usb_hid_describe, false);
+  options.usb_xhci_diagnose = flag_option("usb.xhci.diagnose", usb_xhci_diagnose, false);
+  options.display_cursor_probe = flag_option("display.cursor.probe", display_cursor_probe, false);
 #if POINTER_SYNTHETIC_ENABLED
   if (pointer_synthetic) {
-    if (!same_text(pointer_synthetic, "schedule")) {
-      panic("kernel option pointer.synthetic accepts only the value schedule");
+    if (same_text(pointer_synthetic, "schedule")) {
+      options.pointer_synthetic = true;
+    } else {
+      klog("boot options: pointer.synthetic expects schedule; disabled\n");
     }
-    options.pointer_synthetic = true;
   }
 #endif
   return &options;

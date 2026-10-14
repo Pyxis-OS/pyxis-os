@@ -31,6 +31,9 @@ Boot options: `debug.net=NAME` enables the service (same case-sensitive printabl
 name limits as `remote.beacon`); `debug.wait=1` waits once at the readiness
 checkpoint and is invalid without `debug.net`; `debug.image=SHA256` is mandatory
 with `debug.net` and generated images derive it from the completed ELF.
+Invalid or incomplete final `debug.net`/`debug.image`/`debug.wait` settings warn
+and disable the debugger and initial wait together; they never stop normal boot.
+Duplicates warn and the last occurrence wins.
 `remote.beacon=t14` and `log.udp=1` stay independent. Prefer the static-IP net0
 profile for repeatable PXE work.
 
