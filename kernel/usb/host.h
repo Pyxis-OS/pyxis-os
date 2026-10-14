@@ -94,7 +94,8 @@ enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb
                                       void *destination, size_t capacity, struct usb_completion *completion);
 void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket ticket);
 
-/* BSP/IF=0. Notify the owning controller worker without allocating. */
+/* Any CPU, IF=0. Notify the BSP worker without borrowing controller work or
+ * allocating. The guarded handoff owns a published wait through wake. */
 void usb_host_notify(struct usb_host_controller *controller);
 /* BSP/IF=0 observer, gated by usb.xhci.diagnose; reads retained state only. */
 void usb_host_diagnose_tick(void);

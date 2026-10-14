@@ -15,6 +15,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci/msix.h>
 #include <kernel/pci/registers.h>
+#include <kernel/spinlock.h>
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include "registers.h"
@@ -190,9 +191,10 @@ static enum usb_result recover_control_stall(struct usb_host_device *device, uin
 static bool device_present(const struct usb_host_device *device);
 static struct usb_host_interrupt *device_interrupt(const struct usb_host_device *device, unsigned dci);
 
-/* Each controller owns its records and BSP worker. IF=0 protects notification
- * and wait publication against the shared BSP-routed interrupt. The retained
- * list is complete before AP startup and never changes at runtime. */
+/* Controller work stays BSP-owned. The notification lock protects only the
+ * latch/wait handoff, including IRQ and remote producers, at IF=0. It may nest
+ * the scheduler queue lock through wake; never hold it across sleep or logging.
+ * The retained list is complete before AP startup and never changes at runtime. */
 struct usb_host_controller {
   struct usb_host_controller *next;
   struct usb_discovery *discovery;
@@ -215,6 +217,7 @@ struct usb_host_controller {
   unsigned command_enqueue, event_dequeue;
   bool command_cycle, event_cycle, port_power;
   bool prepared, running, interrupt_ready, notified, failed, enumerating;
+  struct spinlock notification_lock;
   struct task_wait *wait;
   struct {
     phys_addr_t physical;
@@ -294,6 +297,11 @@ static void diagnose_controller(struct usb_host_controller *controller, bool end
   struct xhci_diagnostic_registers registers = saved ? *saved : diagnostic_registers(controller);
   volatile const struct xhci_trb *ring = (const volatile struct xhci_trb *)controller->event_ring.address;
   dma_read_barrier();
+  uint64_t flags = cpu_save_interrupts();
+  spin_lock(&controller->notification_lock);
+  bool waiting = controller->wait != NULL, notified = controller->notified;
+  spin_unlock(&controller->notification_lock);
+  cpu_restore_interrupts(flags);
   klog("usb xhci diag %x:%x.%u: sample=%s status=%x command=%x iman=%x erdp=%llx "
       "dequeue=%u cycle=%u irq=%llu events=%llu running=%u failed=%u stage=%s "
       "worker-age-ms=%llu pending-command=%u type=%u wait=%u notified=%u head=%x/%x\n",
@@ -305,7 +313,7 @@ static void diagnose_controller(struct usb_host_controller *controller, bool end
       controller->running, controller->failed,
       controller->diagnostic_stage ? controller->diagnostic_stage : "startup",
       (unsigned long long)(age / UINT64_C(1000000)), controller->command.pending, controller->command.type,
-      controller->wait != NULL, controller->notified,
+      waiting, notified,
       ring[controller->event_dequeue].status, ring[controller->event_dequeue].control);
   if (!endpoints && !controller->failed) {
     return;
@@ -1164,39 +1172,38 @@ void xhci_interrupt(void)
     write32(interrupter(controller), XHCI_INTR_MANAGEMENT, management);
     /* MSI-X delivery can already have cleared IP. The shared vector notifies
      * every active controller, whose worker checks its own cycle-owned events. */
-    controller->notified = true;
-    struct task_wait *wait = controller->wait;
-    controller->wait = NULL;
-    if (wait) {
-      task_wait_wake(wait);
-    }
+    usb_host_notify(controller);
   }
 }
 
 void usb_host_notify(struct usb_host_controller *controller)
 {
-  KASSERT(arch_cpu_index() == 0);
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  spin_lock(&controller->notification_lock);
   controller->notified = true;
   struct task_wait *wait = controller->wait;
   controller->wait = NULL;
   if (wait) {
     task_wait_wake(wait);
   }
+  spin_unlock(&controller->notification_lock);
 }
 
 static void wait_activity(struct usb_host_controller *controller, uint64_t deadline)
 {
   uint64_t flags = cpu_save_interrupts();
+  spin_lock(&controller->notification_lock);
   if (!controller->notified) {
     struct task_wait *wait = task_wait_prepare();
     controller->wait = wait;
+    spin_unlock(&controller->notification_lock);
     task_wait_sleep_until(wait, deadline);
+    spin_lock(&controller->notification_lock);
     if (controller->wait == wait) {
       controller->wait = NULL;
     }
   }
   controller->notified = false;
+  spin_unlock(&controller->notification_lock);
   cpu_restore_interrupts(flags);
 }
 
