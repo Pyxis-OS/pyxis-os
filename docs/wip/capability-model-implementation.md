@@ -237,100 +237,40 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Task 1 scope (delta, 2026-10-14)
 
-**Implementation assigned.** Branch `kernel/capability-forwarders`, based on
-`3b714754`, rebased onto `e0644943`. The lifetime rules below were accepted by the owner on
-2026-10-14. Beta's native baseline record must be linked here before task 1 merges.
+Task 1 implements the [forwarder interface](../interfaces/forwarders.md):
+REVOCABLE copies and stable service SLOTs, separate copyable controllers,
+bounded lineage and native/provider admission. CUT replaces public export
+WITHDRAW; provider-private RETIRE/ACK remains. Allocation and destruction stay
+BSP-owned, with short structural guards and unchanged VM/activity leases.
+The [qualification record](../development/experiments/capability-forwarders/README.md)
+distinguishes source inspection, QEMU and unrun cases. The
+[native baseline](../development/experiments/capability-model-baseline.md) is
+merged in #825; repeat its profile after A and C.
 
-The kernel forwarder owns its target grant and exposes the target's
-kernel-attested protocol and attenuated authority to holders. A separate
-controller carries CUT and, for service slots, RETARGET; holders never gain
-these management rights merely by receiving the forwarded grant. Retargeting
-requires a held replacement of the same attested type and sufficient authority
-for the slot's fixed ceiling. It cannot widen an existing holder's grant.
-An empty service slot reports NOT_FOUND; CUT reports DENIED and is terminal,
-distinct from reversible retargeting to an empty slot.
-
-Explicit revocable copies create lineage; ordinary COPY, IPC attachments and
-launch preserve that lineage instead of extracting a bare target. Creating a
-further revocable copy beneath one preserves its ancestors, so cutting an
-ancestor cuts its descendants. Plain grants acquire no derivation metadata.
-Grant capture retains prospective authority and rechecks the exact source
-generation outside/under the existing table guard, as today. Resolution for an
-operation retains target storage separately from grant ownership; neither a
-blocking call nor a queued request borrows a capability-table entry.
-
-CUT denies new operations and cancels matching queued work. Provider delivery
-is the endpoint's locked transition to RECEIVED; already-delivered work keeps
-its receipt and may complete, subject to the existing deadline, caller stop,
-receiver closure and provider-exit rules. This follows the accepted design
-literally: the removed `ENDPOINT_WITHDRAW` implementation canceled RECEIVED
-work, whereas forwarder CUT leaves its receipt valid.
-Native worker queues need the equivalent before-effects check, and readiness
-waits must wake with DENIED on cut rather than retain a bare unrevocable target.
-Data already read and committed effects are not rolled back.
-
-The public WITHDRAW revocation operation is replaced by forwarder CUT, with
-its in-tree helpers and consumers migrated in the same task. Export IDs,
-receipt ownership, RETIRE/ACK and provider-exit cleanup remain necessary for
-provider-private storage lifetime. Stable service slots use the same forwarder
-with both controller rights; task 2 replaces namespace publication and makes
-`service start` return the slot, without a second revocation mechanism.
-
-Allocation, growth and final destruction stay BSP-owned. Creation preflights
-table reservations and owned target grants before publication; failure unwinds
-without publishing either handle. Short guards cover structural changes only,
-never allocation, user copies, worker waits or callbacks. Retarget/CUT detach
-owned grants before releasing their logical authority outside guards. Private
-VM mutation keeps the existing activity/lease transaction; this task introduces
-no shared-memory mapping revocation. Deferred destruction keeps the existing
-execution-group cleanup accounting and waits for admitted storage references.
-No new ordinary klog diagnostics are planned.
-
-### Accepted lifetime rules (owner, 2026-10-14)
-
-1. **Last controller release:** revocable copies are cut automatically,
-   including process teardown. Admitted storage references do not keep controller
-   authority alive. **Service slots retain their last target** when the last
-   manager goes away, following the owner's recovery-over-shutdown principle,
-   until a new authorized manager takes over. This does not grant management
-   rights to ordinary holders; explicit CUT remains terminal for either kind.
-2. **New child capabilities: inherit derivation.** OPEN/LOOKUP/CREATE
-   results granting access beneath a forwarded directory/resource retain the
-   source lineage as well, so opening a file cannot escape a directory cut.
-   Existing unrelated grants returned as reply attachments keep their own
-   lineage; returned bytes are not revocable.
-
-### Service-slot takeover (accepted owner decision, 2026-10-14)
-
-Controllers can be copied. The manager's supervisor (init or Continuum) keeps
-a controller copy and uses it for takeover. There is **no separate recovery
-capability** and no implicit management authority from holding the slot or
-belonging to a group/space. If every controller copy is gone, the slot stays
-unmanaged and retains its last target for holders. The accepted contract is
-also recorded in the [forwarder interface](../interfaces/forwarders.md).
+**Owner-accepted lifetime rules, 2026-10-14:** last controller release auto-cuts
+revocable copies, including teardown. Slots retain their last target after
+manager loss; a supervisor keeps a copyable controller for takeover. No recovery
+capability or implicit holder management is introduced. Opened descendants
+inherit lineage. Queued work fails DENIED; delivered/started work completes
+under its ordinary deadline, stop and provider-lifetime rules. Bytes and effects
+already produced are not revoked.
 
 ### RETARGET representation (accepted owner decision, 2026-10-14)
 
 Retargeting requires the same attested protocol and representation: native to
 native or exported to exported. Native/exported switches return WRONG_TYPE
-without changing the slot. Current envelopes and transport masks differ, so
-this slice provides no kernel FILE bridge. Revisit with the interchangeable-
-providers prerequisite **provider-backed device handles**, designed with the
-compositor; see [technical debt](../technical-debt.md#forwarder-retarget-representation).
-
-The owner's native baseline is complete and recorded in
-[#825](https://git.internal/PyxisOS/pyxis-os/pulls/825). Its merge satisfies
-the task-1 baseline prerequisite; implementation qualification continues here.
-Checkpoint qualification is recorded in
-[the experiment summary](../development/experiments/capability-forwarders/README.md).
+without changing the slot. No kernel FILE bridge is provided in this slice.
+Revisit with the interchangeable-providers prerequisite **provider-backed device
+handles**, designed with the compositor; see
+[technical debt](../technical-debt.md#forwarder-retarget-representation).
 
 ### Task 2 coordination
 
-Beta's required lookup contract is confirmed: each name yields a retained
-capability with unchanged rights/transport, or owned immutable text, never a
-pointer into movable table backing. One process-local table serves mutation
-and exported child snapshots. The proposed caller-bound environment service
-provides LOOKUP/SET/UNSET/SNAPSHOT; launch captures exported entries only, with
-no whole-map namespace grant. Header layout and bounded text-copy replies are
-being agreed directly with beta before task 2, rather than treated as owner
-policy decisions.
+Beta's lookup contract is agreed: a retained capability with unchanged resource
+and transport rights, or owned immutable text, never movable-table pointers.
+One caller-bound process table serves LOOKUP/SET/UNSET and owned SNAPSHOT;
+launch captures exported entries and explicit child overrides without mutating
+the parent. Canonical headers are `abi/environment.h` and userland `environment.h`;
+helpers are `environment_lookup`, `environment_set_capability`,
+`environment_set_text`, `environment_unset` and `environment_snapshot`.
+Exact bounded replies/layout remain task-2 scope work, not placeholder APIs.

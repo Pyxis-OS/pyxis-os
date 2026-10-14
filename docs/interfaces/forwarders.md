@@ -1,11 +1,11 @@
 # Capability forwarders
 
-Status: capability-model task 1 implementation is under qualification. See the
+Status: capability-model task 1 implementation. See the
 [task scope](../wip/capability-model-implementation.md#task-1-scope-delta-2026-10-14).
 
 A forwarder owns a target grant. Holders use its kernel-attested type and
 attenuated authority; a separate controller carries CUT and, for service
-slots, RETARGET. Retargeting accepts the same type and cannot widen existing
+slots, RETARGET. Retargeting accepts the same protocol/representation and cannot widen existing
 holder authority. Retargeting a service slot to nothing returns NOT_FOUND on
 later use. CUT is terminal and returns DENIED instead.
 
@@ -23,6 +23,12 @@ payload; RETARGET requires RETARGET authority and a replacement handle (zero
 empties the slot). Controllers carry no target authority. COPY can attenuate
 management rights; zero-right controller copies (including forwarded proxies)
 do not count as managers.
+Native storage-only observers do not preserve close-bearing authority: GROUP
+WAIT cannot keep CONTROL alive, terminal attachment observation cannot keep
+HANGUP alive, and zero-right or INTERRUPT-only console views cannot keep input,
+output, ARMED or PASSTHROUGH open. Native ARMED and PASSTHROUGH grants each carry
+that right alone. Exported clients and pipe directions retain their existing
+logical lifetime rules, including zero-right grants.
 Insufficient replacement authority returns DENIED; wrong type returns
 WRONG_TYPE; cycles are BAD_REQUEST. A cut slot cannot be retargeted.
 
