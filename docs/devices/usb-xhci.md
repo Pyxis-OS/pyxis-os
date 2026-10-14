@@ -92,6 +92,14 @@ snapshot and `lsusb`, including partial observations from unsupported devices.
 Changing IMAN interrupt enablement writes zero to the W1C pending bit to preserve
 notification; acknowledgement remains explicit in the IRQ path.
 
+`usb_host_notify()` accepts any CPU at IF=0, including revocation after an AP
+CUT or final controller-grant release. A short per-controller guard protects
+only the notification latch and waiter. IRQ notification shares that guard;
+wait publication/expiry cleanup use it, and wake keeps it through scheduler
+notification so the waiter cannot be reused concurrently. No guard spans sleep
+or logging. Event, command, DMA and class progress stay BSP-owned. See the
+[cross-CPU notification check](../development/experiments/usb-controller-notify/README.md).
+
 ## Root-port and failure ownership
 
 The worker powers controllable ports, allows 20 ms after a power change and takes

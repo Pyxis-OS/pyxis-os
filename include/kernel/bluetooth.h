@@ -19,6 +19,7 @@ void bluetooth_hci_attach(struct usb_host_controller *host,
  * selected host; the global inventory can retain unsupported controllers. */
 void bluetooth_hci_inventory_sealed(void);
 /* CUT may originate on any CPU; notify only, without borrowing adapter state. */
+/* Any CPU, IF=0. Wake the owning BSP worker; no HCI/device work here. */
 void bluetooth_hci_revocation_notify(void);
 /* Owning USB worker, BSP/IF=1. Both hooks run one bounded nonblocking tick:
  * collect/parse/account copied packets, service bounded queued request loans,
