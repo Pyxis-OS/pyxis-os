@@ -166,6 +166,7 @@ and exits non-zero; nothing is turned into empty output.
 | 404, 410 | missing file | `grep: https://bla: not found (404)` |
 | 401, 403 | permission denied | `cat: https://bla: permission denied (403)` |
 | 5xx, timeout, body cut off | I/O error, possibly mid-read | `cat: https://bla: I/O error (503)` |
+| over a retention limit | file too large | `x: too large to retain (limit 64 MiB)` |
 
 Libc maps these outcomes to the matching `errno` values, so ports need no change.
 Writes follow the same rule: a rejected submission fails like writing to a file
@@ -183,7 +184,7 @@ reply to begin.
 | Facet | Meaning | Example |
 |---|---|---|
 | type, rights | kernel-attested, not the issuer's claim | FILE, read |
-| outcome | ok, not found, denied, I/O error, aborted or uncertain | not found |
+| outcome | ok, not found, denied, I/O error, too large, aborted or uncertain | not found |
 | detail | text for people only; programs never parse it | `404 Not Found` |
 | error body | bounded, handed out as its own readable capability | an API's JSON error |
 | media type | declared by the producer, never guessed | `application/json` |
@@ -369,9 +370,23 @@ unmaps it, which waits for the shared-memory rules.
   narrow rights, never widen them.
 - **Lifetime (decided).** Overwriting or unsetting a variable releases its
   capability; shell and job exit follow the existing cleanup rules.
-- **Retention (decided).** Bound values and re-readable replies use a bounded
-  backing policy like today's private RAM staging, with explicit opt-in for
-  large values.
+- **Retention (decided).** Only one-pass output is copied. When `x=$(…)`
+  captures something already re-readable (a file, an HTTP GET snapshot, a
+  stored reply), the variable holds that capability with no copy and no limit:
+  `x=$(cat tmp://big.json)` costs nothing. Output produced on the fly, such as
+  `x=$(jq …)`, `x=$(ls home://)` or a streamed reply, is retained in RAM so it
+  can be read again:
+  - **Limits:** 64 MiB per retained value and 512 MiB per session, charged to
+    the session's space and set in session configuration.
+  - **Over a limit, nothing is truncated.** The variable holds a failed
+    capability whose outcome is *too large* (`EFBIG` in libc), the status is
+    non-zero, and the message suggests a file:
+    `x: too large to retain (limit 64 MiB); write it to a file instead`.
+    Writing the data to a file and binding the file is the opt-in for large
+    values; there is no other mechanism.
+  - **Sharing:** exporting or copying a retained value shares its backing.
+    It stays charged to whoever retained it, not to the readers, and is
+    released when the last holder lets go.
 - **Expansion.** `cat $job` passes the child `job://` with that entry (see One
   environment), so every program that opens files can use it.
 - **Cheap text values.** A text value only has to behave as a read-only
@@ -513,14 +528,13 @@ Partial bodies never satisfy another open.
 
 ## Open questions
 
-1. **Retention numbers:** default and maximum backing for bound values.
-2. **Providers:** how a provider learns its client exited and a client sees its
+1. **Providers:** how a provider learns its client exited and a client sees its
    provider gone; whether a client may hold both a provider's and the kernel's
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
-3. **Shared memory:** the capability type, mapping and lifetime rules,
+2. **Shared memory:** the capability type, mapping and lifetime rules,
    including unmapping on revocation.
-4. **Provider policy:** caller isolation, credentials and cache reuse for any
+3. **Provider policy:** caller isolation, credentials and cache reuse for any
    shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
 
