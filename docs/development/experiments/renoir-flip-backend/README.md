@@ -367,7 +367,7 @@ play on 2026-10-13 (game reports 60–70 fps, presenter at most 60 Hz; two audio
 runs without an engine trip). No qualification predicate or write allowlist changes.
 
 Local functional qualification: baseline main `5fab8d39`, changed code
-`ef9d4799`, builder `pyxis-llvm23.1.3-e0801c2`, unchanged dependency pins and
+`ef9d4799` (explicit-off parser follow-up `60fe1c2b`), builder `pyxis-llvm23.1.3-e0801c2`, unchanged dependency pins and
 matching main CI SDK/userland/ports bundles. Kernel and image builds passed.
 Nested KVM, four CPUs, 1 GiB RAM, QEMU 10.2.2, OVMF and q35: default standard
 VGA kept `DISPLAY_BOOT`; explicit Bochs at 800×600 kept `DISPLAY_BOCHS`; VirtIO
