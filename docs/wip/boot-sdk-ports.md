@@ -186,6 +186,10 @@ The merged host packer/checker (2a, #706) stays; bin placement is merged
 [Selecting existing build artifacts](build-artifact-reuse.md) and the postponed
 [host development overlay](host-development-overlay.md).
 
+[Shell capability flow](shell-capability-flow.md): proposal (2026-10-14) that
+typed capabilities, not URI spellings, carry semantics through redirects, blocks,
+pipes and variables; decide together with the capability environment.
+
 [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
 [filesystems and namespaces](vfs.md): working drafts.
 

@@ -7,6 +7,9 @@ direction. Revisit before session or space configuration changes the environment
 [users and authority](users-and-authority.md) work, or another feature stores a
 capability in a variable.
 
+The [shell capability flow](shell-capability-flow.md) proposal (2026-10-14)
+extends this to redirects, blocks and pipes; decide them together.
+
 ## The idea
 
 An environment entry may hold a real capability, a transferred grant, instead of
