@@ -118,7 +118,8 @@ return {
   explicit successor handoff. A bundle must request `job_work`, plus usable
   launcher/pipe/clock grants; the trusted launch path creates a fresh leaf for
   that client. Ordinary commands receive neither leaf nor ancestor implicitly.
-  Live Development and installed `pyxis` enable it; other spaces can opt in.
+  Live Development, Multiplexer and installed `pyxis` enable it; other spaces
+  can opt in.
   The setting does not enable ordinary launch when `launch` is false. See
   [declared contexts](program-bundles.md#private-job-contexts).
 - **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
@@ -143,8 +144,8 @@ return {
 - **Power.** A space that sets `power = true` receives the kernel's `power`
   resource, with power-off and restart rights, for the shell's
   [`poweroff` and `reboot`](shell.md#power-off-and-restart). Any number of spaces
-  may set it. The live Development space and the installed `pyxis` space do, and
-  boot init's built-in rescue space always has it. Read-only does not.
+  may set it. Live Development, Multiplexer and installed `pyxis` do, and boot
+  init's built-in rescue space always has it. Read-only does not.
   `remote_power` is a separate optional boolean, defaulting to false: it grants
   the same object as `remote_power` through trusted session handoffs, and the
   remote supervisor binds it as `power` only in its root shell. Ordinary local
@@ -160,7 +161,7 @@ return {
   session, remote-daemon and shell handoffs preserve it explicitly; ordinary
   foreground commands, every pipeline stage and background commands inherit it
   from a shell that holds it. This is a space policy, not an executable-name
-  restriction. Live Development and Remote and installed `pyxis` opt in;
+  restriction. Live Development, Multiplexer, Remote and installed `pyxis` opt in;
   Read-only and the built-in rescue space do not. If an opted-in space's boot
   init lacks the resource, that space does not start and reports the reason.
   See [screen capture](../interfaces/screen-capture.md) and the
@@ -264,11 +265,13 @@ read-write, starting in `home://`, and network ownership. `home` is optional:
 if the volume cannot be mounted, `pyxis` still starts, in `tmp://`, in both
 the normal and the rescue entry. `system` is required. That init starts the
 ordinary local session and configures networking. `tmp://` remains RAM-backed.
-The packaged live Development and Remote, and installed `pyxis` entries set
-`launch = true`; the live Read-only entry leaves it disabled.
-Live boots give the Development and Read-only spaces the RAM `home://`,
-read-write and read-only, and the Remote space read-write, starting in
-`tmp://`. Installed disks omit the installer
+The packaged live Development, Multiplexer and Remote, and installed `pyxis`
+entries set `launch = true`; the live Read-only entry leaves it disabled.
+Live boots give Development and Multiplexer read-write RAM `home://`, and
+Read-only the same root read-only. Remote has it read-write and starts in
+`tmp://`. Multiplexer follows Development in tab order and starts mux using
+`boot://init-readonly` to leave network setup with Development; its other flags,
+grants and roots match Development. Installed disks omit the installer
 entry; enter install mode through live media.
 
 ## Native disk configuration and mounting
