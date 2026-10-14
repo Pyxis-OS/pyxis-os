@@ -256,8 +256,9 @@ READ_ONLY. Queue publication/completion counts matched. Debuggers and QEMU
 were stopped. Raw logs/captures remain local under `build/nvme-v2/`.
 
 Stock QEMU does not exercise CRTO readiness or CSS-6-only profile admission;
-these received source review, not runtime qualification. Vela NVMe 2.0 remains
-**native pending**. The read-only packet is `/shared/present/vela-nvme/`, with
+these received source review, not runtime qualification. Vela namespace readiness
+passed the owner run below; GPT and clean shutdown remain unreported. The
+read-only packet is `/shared/present/vela-nvme/`, with
 `README.md`, owner `/dev/sdb1` copy/restore commands and verified `SHA256SUMS`.
 Its never-merged diagnostic branch `diag/vela-nvme-on-75a8aaac` at `65fa0dec`
 contains stick base `75a8aaac`, its existing #847 boot fix (`78646104`), and
@@ -266,3 +267,12 @@ It is an info kernel-only build; keep the stick's initrd and Limine, enforce
 `nvme.write=0`, and expect USB unavailable and rescue execution. Native evidence
 required: namespace read-only readiness, Fedora's GPT layout and confirmed clean
 shutdown. No internal disk writes or native staging by Codex.
+
+## Vela native readiness — 2026-10-14
+
+The owner booted the combined Vela power-button diagnostic kernel and reported:
+`nvme 1: namespace 1 ready, 2000409264 blocks of 512 bytes, transfer=65536 slots=8 read-only`.
+This confirms the NVMe 2.0 controller/namespace admission on the SanDisk SN7100S
+and read-only readiness (1,024,209,543,168 bytes). No native writes were enabled.
+GPT read/layout and confirmed clean shutdown were not reported by this run and
+are not claimed as qualified.

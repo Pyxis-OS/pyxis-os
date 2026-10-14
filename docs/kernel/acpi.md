@@ -199,8 +199,11 @@ and registers present `PNP0C0C` devices for Notify `0x80` and `INTC10CC` devices
 for Intel power press `0xce`. Intel release `0xcf` does nothing. Generic Intel
 Notify `0xc0` reads HDEM and accepts only power index 9. Intel admission requires
 simple mode (HDMM=0) and BTNL power-event setup: advertised event-filter `_DSM`
-functions, revision 1, or named-method fallback. Unrelated hotkeys and tablet
-features are not enabled. Contexts and registrations remain owned until reboot.
+functions, revision 1, or named-method fallback. Command execution accepts a void
+or arbitrary return; integer queries remain typed. HEBC's advertised array uses
+BTNC/BTNE before BTNL, preserving the firmware's final policy. Only power events
+are consumed; HDSM hotkeys/tablet input are not enabled. Contexts and
+registrations remain owned until reboot.
 
 Startup clears the applicable fixed latch, then services SCI and drains deferred
 work while presses are disarmed. During any power operation, fixed and Notify
@@ -213,12 +216,14 @@ up; a new press tries again. Force remains exclusive to the explicit overlay.
 The accepted event-route rule (2026-10-14) permits only existing event sources
 and a firmware-proven additional runtime power-button GPE, enabled through its
 existing handler. `_PRW` supplies wake-routing candidates, not runtime proof.
-No such additional route is qualified yet: preparation reports **unqualified**
-and enables no extra GPE. General runtime-GPE finalization is not called.
-Vela's owner run must establish delivery through the current EC route or provide
-AML evidence before another GPE can be enabled. The
+Preparation reports additional routes **unqualified** and enables no extra GPE.
+General runtime-GPE finalization is not called. Vela's supplied AML proves an
+existing EC query route: `_Q10` → PWPR → HIDD Notify `0xce` after BTNL; `_Q11`
+delivers release `0xcf`. The EC worker already evaluates its firmware-selected
+`_GPE` and handles queries. No additional enable is needed. The
 [qualification record](../development/experiments/vela-power-button/README.md)
-separates QEMU fixed-event coverage from this pending native result.
+separates static AML evidence, QEMU Notify coverage and the pending physical
+retest after correcting void BTNL admission.
 
 The Ctrl+Alt+Delete [power overlay](power-overlay.md) has the same
 physical-access authority. `acpi_power_local()` hands its power-off or restart

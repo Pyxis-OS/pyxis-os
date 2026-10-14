@@ -1,99 +1,95 @@
-# Vela power-button scope — assigned 2026-10-14
+# Vela power button
 
-Implemented handlers; event-route default accepted 2026-10-14. Native pending. The owner reported Linux's control-method
-power button `PNP0C0C` (`PWRB`) and Intel HID `INTC10CC` 5-button array. These are
-enumeration facts, not proof of which event route carries this machine's press.
-This task follows [NVMe compatibility](../nvme-task1/README.md#vela-nvme-20-scope--assigned-2026-10-14)
-and remains a separate PR. Current control: main `0068e4d2`.
+## Contract and source evidence
 
-## Bounded handling
+Owner event-route decision accepted 2026-10-14: retain existing event sources;
+an additional runtime power-button GPE requires AML proof and selective enable
+of its existing handler. `_PRW` alone is insufficient. No general runtime-GPE
+finalization or guessed GPE. All discovery, AML and retained Notify contexts
+belong to the BSP ACPI worker until reboot.
 
-- Discover present matching devices through uACPI, register worker-owned
-  device Notify handlers, and retain their contexts for the namespace lifetime.
-  Accept `PNP0C0C` Notify `0x80`; accept Intel power press `0xce`, ignore its
-  `0xcf` release. Other notifications remain trace-only. Preserve the fixed
-  power event for machines using it.
-- Use only Intel's power-button setup, with advertised `_DSM` function 1 or
-  the named `BTNL` method. Do not enable unrelated hotkeys/tablet functions.
-  Confirm the simple-mode contract before admitting that interface. A setup
-  failure leaves other power sources and boot working, with an explicit reason.
-  The generic HID event path, if needed for power, reads the event index and
-  acts only on the defined power index; it does not expose a new input API.
-- Reuse the existing physical-access authority and clean power-off latch;
-  no capability, forced-power shortcut, restart choice or sleep policy changes.
-  Both sources coalesce while queued together. No speculative debounce interval.
-- Suppress presses during startup setup, service SCI and drain queued Notify
-  work before arming. Also drain deferred notifications while a power operation
-  is still marked running before discarding its press latch on failure. Merely
-  clearing the fixed-event latch would leave a deferred press queued to retry.
-  Never clear an already-owned EC GPE just to initialize a button.
-- Keep all AML, discovery, handlers and method calls on the existing BSP ACPI
-  worker. Do not run AML in interrupt entry or bypass ACPI mapping/PCI rules.
+Present `PNP0C0C` devices accept Notify `0x80`. Intel `INTC10CC` devices require
+simple mode (HDMM=0), request the advertised array through BTNC/BTNE, then execute
+BTNL. Advertised event-filter `_DSM` functions use revision 1, with named-method
+fallback. Successful command execution accepts a void or arbitrary return value;
+integer-valued queries remain typed. The array request precedes BTNL so firmware
+keeps its final policy. No HDSM hotkey enable. Intel Notify `0xce` presses,
+`0xcf` releases, and `0xc0` reads HDEM: only power index 9 acts.
 
-## Owner decision — accepted 2026-10-14
+The [pinned Linux Intel HID source](https://raw.githubusercontent.com/torvalds/linux/0fcb05b72344f40806cbe810de8872f1698bf053/drivers/platform/x86/intel/hid.c)
+uses an integer helper for BTNL, but failure warns without disabling its input
+handler. Thus Linux does not literally ignore the method's return; Caelum's
+fatal admission check was the incompatible assumption. Linux requests the
+advertised button-array mask before loading buttons and recognizes HEBC function
+9; Caelum retains the second mask byte for that function. Source inspection only;
+no GPL driver code copied.
 
-Keep existing event sources and enable only a firmware-proven additional
-runtime power-button GPE. `_PRW` is a candidate, not runtime-route proof:
-require AML evidence that it carries the press, then enable its existing
-handler with `uacpi_enable_gpe()`. Never guess a GPE number and report
-**unqualified** when the route cannot be established. Do not call general
-runtime-GPE finalization. No Vela AML route has yet been provided, so this
-implementation must leave all additional GPEs disabled.
+A press uses existing physical-access clean power-off, storage checks and the
+recovery overlay. Startup and operation-time notifications drain while disarmed;
+queued presses coalesce. Failure leaves the machine usable, with Force available
+only through the explicit overlay. No ABI or dependency change.
 
-## Qualification and missing evidence
+## Failed native control and AML route — 2026-10-14
 
-First capture the unchanged fixed-event QEMU baseline;
-repeat the normal QEMU power-button and clean-shutdown checks after the change,
-with GDB inspection of registrations and queued work. Stock QEMU does not model
-vela's Intel HID interface or prove its AML route. No new test framework,
-boot automation or speculative firmware writes.
+The owner's first Vela boot of the diagnostic packet did not react to a press.
+PNP0C0C registered, while BTNL's missing integer return disabled the Intel
+handler. The supplied local DSDT/SSDT tables were disassembled with iasl; raw
+firmware and identifying data remain outside the repository.
 
-Native evidence needed: vela's DSDT/SSDT button, Intel HID and GPE/EC method
-routing (serial-free disassembly sections are sufficient), then one short
-owner-present press with the Caelum log photographed. The existing trace
-Notify record can establish whether the supported EC path already delivers it.
-Keep the current recovery overlay and storage refusal/force behavior. No native
-run or firmware change has been performed by Codex.
+The DSDT establishes the runtime chain:
 
-References, inspected for facts only; no GPL driver code is copied:
-[ACPI control-method button example](https://uefi.org/specs/ACPI/6.5/04_ACPI_Hardware_Specification.html),
-[ACPI wake routing via _PRW](https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#managing-a-wake-event-using-device-prw-objects),
-[Linux v6.19 button driver](https://raw.githubusercontent.com/torvalds/linux/v6.19/drivers/acpi/button.c),
-and [Linux v6.18 Intel HID driver](https://raw.githubusercontent.com/torvalds/linux/v6.18/drivers/platform/x86/intel/hid.c)
-(power setup and press/release meanings). The pinned in-tree uACPI
-`include/uacpi/event.h` distinguishes selective enable from whole runtime
-initialization; its Notify implementation queues delivery as worker work.
+- `\_SB.PC00.LPCB.Q_EC._Q10` calls `\_SB.PWPR`. On the modern OS path with
+  `HIDD.BTLD=1`, PWPR sends HIDD Notify `0xce`; otherwise PWRB receives `0x80`
+  when its press route is enabled.
+- `_Q11` calls PWRR, which sends HIDD Notify `0xcf` on the same Intel path.
+- HIDD's `_HID` is `INTC10CC`. BTNL returns nothing, sets `PWRB.PBST=0` and
+  `HIDD.BTLD=1`, and applies the firmware's final array policy. `_DSM` function 1
+  calls it, then returns a buffer. The old typed helper rejected that successful
+  call, repeated BTNL through fallback, and disabled the now-selected handler.
+- Q_EC is the present `PNP0C09` embedded controller. Its `_GPE` is selected by
+  firmware, including an ESPI branch; no number is hardcoded. Existing
+  `acpi_ec_start()` evaluates it, installs/enables the EC handler and dispatches
+  `_Qxx`. No separate `_Lxx`/`_Exx` runtime press route was found. PWRB has no
+  `_PRW`.
 
-## Implementation and QEMU check — 2026-10-14
+This is static firmware evidence, not a measured SCI/Notify delivery. It calls
+for correcting Intel admission, with **no additional GPE enable**. Preparation's
+“additional GPE unqualified … none enabled” describes additional routes; the
+existing EC route already has a handler. The supplied failure summary named
+INT34C3, but the saved ELF, source and supplied AML identify INTC10CC.
 
-Code `7df76407`, with unchanged ABI/pins and LLVM builder
-`pyxis-llvm23.1.3-df87791`. Default/info kernel and image builds passed without
-warnings, using verified matching SDK/userland/ports bundles. The host's installed
-kconfiglib supplied the builder's missing module; no container rebuild.
+## QEMU qualification
 
-The control reused the unchanged kernel on `e5e995f0` (main `0068e4d2` differs
-only in docs), before button code. Control and implementation used Q35/nested
-KVM, host CPU, four CPUs, 512 MiB, standard VGA/PS2, VirtIO RNG, fresh OVMF
-variables and VirtIO-SCSI ISO boot, no disk and no passthrough. Both reached
-Development and powered off cleanly after QMP `system_powerdown`, through the
-fixed ACPI event. GDB observed startup on the ACPI worker with arming/latch/ready
-all false, and runtime arming/ready true. The press breakpoint came from
-`fixed_power_button` via uACPI fixed-event dispatch, with no pending/running power
-operation. No Notify devices existed in stock QEMU; Intel DSM and device Notify
-behavior received source review, not runtime qualification. No performance claim.
-Raw serial/debugger captures remain local under `build/power-button/`.
+Default/info kernel and image builds passed with LLVM builder
+`pyxis-llvm23.1.3-df87791`, using matching prebuilt SDK/userland/ports bundles.
+No compiler rebuild. Code follow-up `f0524baa`.
 
-Preparation discovers present matching devices, registers retained Notify
-contexts, and reports `_PRW` candidates explicitly as additional-GPE
-**unqualified**. No extra GPE is enabled: no machine runtime-route AML proof
-exists in this workspace. There is no guessed route, general GPE finalization,
-HDSM/BTNE enable or copied driver implementation. Native qualification remains
-pending, including whether the supported EC path carries vela's button.
+Q35/KVM, host CPU, four CPUs, 512 MiB, VGA/PS2, VirtIO RNG, fresh OVMF variables,
+VirtIO-SCSI ISO boot, no disk or passthrough. The unchanged fixed-event control
+and initial implementation both powered off cleanly through QMP
+`system_powerdown`. GDB observed disarmed startup and armed runtime handling.
 
-Native packet: `/shared/present/vela-power-button/`, verified ELF/config hashes
-and owner `/dev/sdb1` copy/restore/run sheet. Never-merged diagnostic branch
-`diag/vela-power-on-75a8aaac` at `755d3d96`: stick main `75a8aaac`, existing
-#847 boot fix, #853 NVMe code (`65fa0dec`), then #855 button code. No #848 or
-newer ABI/pins; keep the stick's initrd/Limine and `nvme.write=0`. Kernel-only
-info build; native disk writes and native staging by Codex remain unauthorized.
-The owner runs the NVMe test first. All local QEMU/debugger jobs are stopped.
+A local synthetic SSDT, unrelated to the native firmware, supplied a named
+void BTNL and a buffer-returning DSM load, plus Notify methods. The pre-fix
+kernel disabled both Intel handlers. After the fix both stayed enabled; GDB
+observed one BTNL call each and the advertised masks 5 and 17 delivered to BTNE.
+DSM function 9 remained admitted. Manual AML calls on the ACPI worker verified
+release `0xcf` and non-power `0xc0` did nothing, while HDEM index 9, Intel press
+`0xce` and PNP0C0C `0x80` each reached clean power-off in separate boots. This
+qualifies software behavior, not Vela's physical transport. No test framework or
+firmware fixture is committed. Local captures remain in `build/power-button/`;
+all task-owned QEMU/debuggers are stopped. No performance claim.
+
+## Native retest packet
+
+`/shared/present/vela-power-button/README.md` contains verified ELF/config hashes,
+owner **`/dev/sdc1`** copy/restore commands (check `lsblk` first), and one short
+press after startup. Never-merged diagnostic branch
+`diag/vela-power-on-75a8aaac` at `45c61551`: stick base `75a8aaac`, existing #847
+boot fix, #853 NVMe code, then #855 and this follow-up. Kernel-only info build;
+keep the stick's initrd/Limine, `nvme.write=0`, and no #848/newer ABI/pins.
+Native firmware and disks are untouched by Codex. Physical Notify delivery and
+clean power-off remain **retest pending**.
+
+The same owner boot confirmed Vela NVMe 2.0 namespace readiness; see the
+[NVMe record](../nvme-task1/README.md#vela-native-readiness--2026-10-14).
