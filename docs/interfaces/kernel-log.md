@@ -19,6 +19,9 @@ and its remaining bytes are discarded through the newline. This counts as one
 lost line. The ring needs no heap, clock, network or initialized CPU-local state.
 It is volatile and does not survive reboot.
 
+
+Levels beyond `klog` and `ktrace` are planned: see [kernel log levels](../wip/log-levels.md).
+
 ## Read authority and cursors
 
 The explicitly delegated `log` resource implements
