@@ -137,8 +137,10 @@ has no request/reply body and never extends the lease. Publishers call
 Children cannot use the parent's interval. RO controls and non-FAT mount
 authorities do not expose this operation.
 
-RW admission performs one full check, using bounded FAT windows, and retains
-an exact free-cluster bitmap/count. Mutations check touched chains, parent
+RW admission performs one full check, using callback-bounded FAT windows of
+up to 64 KiB per copy, and retains an exact free-cluster bitmap/count. Local
+mutations retain eight-sector windows. Full-check scratch adds at most 128 KiB
+for the two windows. Mutations check touched chains, parent
 directories and names; successful durable transitions maintain the map. FSInfo
 is a hint. Local checks do not reprove ownership of unrelated chains: silent
 in-session corruption by a Pyxis bug can remain undetected until CHECK or remount.

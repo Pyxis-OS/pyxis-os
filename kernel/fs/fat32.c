@@ -23,6 +23,8 @@
 #define FAT32_MOUNT_LIMIT 4u
 #define FAT32_STEP_LIMIT UINT64_C(67108864)
 #define FAT32_SECTOR_LIMIT UINT64_C(16777216)
+/* Internal block reads do not use the public DISK message payload. */
+#define FAT32_READ_MAX_BYTES 65536u
 #define FAT32_DEPTH_LIMIT 64u
 #define FAT32_INTERVAL_LIMIT 16u
 
@@ -100,7 +102,7 @@ static bool read_sectors(void *argument, uint64_t first, uint32_t count, void *b
   struct fat32_mount *mount = argument;
   struct npfs_store_context *context = mount->context;
   KASSERT(context);
-  if (!count || count > DISK_IO_MAX_BYTES / FAT32_SECTOR_BYTES ||
+  if (!count || count > FAT32_READ_MAX_BYTES / FAT32_SECTOR_BYTES ||
       (!mount->probing && (first < mount->extent.first_block ||
        first - mount->extent.first_block >= mount->extent.block_count ||
        count > mount->extent.block_count - (first - mount->extent.first_block)))) {
@@ -1063,8 +1065,8 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
   if (status == CALL_OK) {
     struct fat32_source source = {read_sectors, mount, info.block_count,
         info.block_size, info.max_transfer / info.block_size};
-    if (source.max_read_sectors > DISK_IO_MAX_BYTES / FAT32_SECTOR_BYTES) {
-      source.max_read_sectors = DISK_IO_MAX_BYTES / FAT32_SECTOR_BYTES;
+    if (source.max_read_sectors > FAT32_READ_MAX_BYTES / FAT32_SECTOR_BYTES) {
+      source.max_read_sectors = FAT32_READ_MAX_BYTES / FAT32_SECTOR_BYTES;
     }
     status = format_status(mount, fat32_open(&source, job->partition,
         &mount->workspace, &mount->volume));
