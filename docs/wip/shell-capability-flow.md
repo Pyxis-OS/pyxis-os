@@ -152,19 +152,20 @@ Owner direction, still part of this parked proposal; nothing is implemented.
    provider issues. Transaction semantics come from a provider or preparer that
    issues a transaction, not from a separate client-chosen PREPARE path.
 
-## Reusable prepared requests (owner, 2026-10-14)
+## Reusable prepared requests
 
-A prepared request stored in a variable is reusable. It acts as an endpoint:
-every write to it starts a new, independent transaction and yields a new reply.
-The owner's example (braces and `$` as corrected by the owner):
+From the owner discussion, 2026-10-14. A prepared request bound to a variable is
+an **endpoint**: every write to it starts a new, independent transaction and
+yields its own reply.
 
 ```sh
-endpoint = { http prepare ... https://... }
-{ printf '{}' > $endpoint }                    # POST
-reply1 = { printf '{}' > $endpoint }           # also store the reply
-reply1_value = { cat $reply1 }                 # no pipe needed: it flows like a string
-reply2 = { printf '{}' > $endpoint }           # new reply
-reply2_value = { cat $reply2 }
+endpoint = { http prepare POST json+https://ci.example/jobs }
+
+{ printf '{}' > $endpoint }                 # submit, discard the reply
+first = { printf '{"ref":"main"}' > $endpoint }
+second = { printf '{"ref":"next"}' > $endpoint }
+
+first_id = { cat $first | jq .id }          # values flow like any other capability
 ```
 
 - **The endpoint is a template, not a one-shot request.** It holds the method,
@@ -178,9 +179,9 @@ reply2_value = { cat $reply2 }
   such as credentials can live inside the endpoint capability: the holder can
   make requests without being able to read the token. Passing an endpoint
   delegates calling, not the secret.
-- **`reply1_value = { cat $reply1 }`** binds the reply's content as a read-only
-  value. With every variable holding a capability, this is the same as a text
-  value, and it no longer carries the reply's outcome facet.
+- **Deriving values:** `first_id = { cat $first | jq .id }` binds new read-only
+  content. Like any text value it is a capability; it no longer carries the
+  reply's outcome facet, which stays on `$first`.
 - Syntax: assignment always uses braces (`x = { … }`), and a variable is always
   referenced with `$`, including as a redirection target (`> $endpoint`); a bare
   word stays an ordinary path.
