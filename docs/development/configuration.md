@@ -65,6 +65,42 @@ commit deliberate default changes with their code. `make clean` preserves
 `.config`. When adding an option to `Kconfig`, also list its default in `.config`
 so it remains directly editable without opening the menu.
 
+## Kernel boot option recovery
+
+Kernel command-line errors warn through `klog` on serial and the Caelum screen,
+then continue boot. Unknown options are ignored. Repeated known options warn;
+the last occurrence wins, including an empty value or a missing `=`. The final
+value is validated: a malformed final occurrence replaces an earlier valid value
+with the fallback below. Boolean options accept `0` and `1`.
+
+| Option | Fallback when absent or invalid |
+| --- | --- |
+| `init` | `boot://boot-init.pxe`; invalid means missing/empty `boot://` archive path. |
+| `mount.disk` | No disk mount authority; GUID must be canonical and nonzero. |
+| `boot.install` | Off; no raw installer grants. |
+| `nvme.write` | Off; no NVMe write authority. |
+| `boot.default_config` | Off; ordinary boot configuration selection. |
+| `remote.beacon` | Absent; no reverse-beacon selection. |
+| `log.udp` | Off. |
+| `debug.net`, `debug.image`, `debug.wait` | Debugger and initial wait off as a group if any final value is invalid or incomplete; a valid group needs name and image, with wait defaulting off. |
+| `display.size` | No requested size; firmware geometry retained. Backend geometry/capacity checks remain authoritative. |
+| `display.timing` | `observe`, unsynchronized copying; `off`, `observe` and `blank` are valid. |
+| `display.flip` | On only where the existing Renoir backend qualifies; `0` forces off. |
+| `ps2.synaptics` | On only for a matching calibrated profile; other pads remain relative. |
+| `display.timing.metrics`, `display.flip.metrics`, `display.inventory`, `display.cursor.probe` | Off. |
+| `ps2.synaptics.diagnose`, `usb.hid.describe`, `usb.xhci.diagnose` | Off. |
+| `pointer.synthetic` | Off; only `schedule` enables it, only in a `POINTER_SYNTHETIC=1` build. Otherwise it is an unknown ignored option. |
+
+Names retain their existing 1–63 printable-ASCII limits. A debugger image needs
+64 hexadecimal SHA-256 digits; invalid debug settings never enable the service.
+This is command-line recovery, not recovery from an absent/unloadable archive
+program, unavailable hardware or failed startup. Build-time image-setting
+validation remains strict.
+
+The 4095-byte command-line limit remains fatal, in both the Limine adapter and
+parser. Truncation could discard a later disable, select a different duplicate
+or shorten an authority-bearing value; neither layer truncates and continues.
+
 ## Boot menu timeout
 
 Synaptics absolute input defaults on only for a matching calibrated profile,

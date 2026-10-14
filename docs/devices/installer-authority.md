@@ -4,8 +4,9 @@ The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
 is a build setting, default `0` for immediate normal boot. Build install media
 with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
 generated for either value. The install entry's command line is
-`init=boot://init-install.pxe boot.install=1`. A duplicate install option or a
-value other than `1` fails boot.
+`init=boot://init-install.pxe boot.install=1`. Duplicates warn and the last
+value wins; `0` disables install authority, and an invalid final value warns and
+leaves it disabled.
 
 Boot init, space inits, sessions and applications receive no raw-disk service on
 a normal boot. Install mode gives the install entry's boot init, `init-install`,
