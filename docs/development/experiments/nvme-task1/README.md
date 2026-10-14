@@ -171,7 +171,7 @@ off unless `nvme.write=1`. The supported geometry, one active namespace,
 64 KiB/MDTS request bound, DMA retention, clean shutdown and forced local power
 escape stay unchanged.
 
-### Contract audit and intended implementation
+### Implementation contract
 
 | Area | Bounded handling |
 | --- | --- |
@@ -230,3 +230,39 @@ The orchestrator/Luna stage vela's read-only native boot: default info logging,
 refusal reason if any, and retain the existing SMART/normal-shutdown evidence.
 No native Write, Flush, format, HMB allocation or installer apply is authorized.
 The power-button task remains separate and follows this NVMe task.
+
+### NVMe 2.0 implementation qualification — 2026-10-14
+
+Control: unchanged driver on `e5e995f0`; implementation: `f7a940e3`. Default/info
+kernel and image builds passed with LLVM builder `pyxis-llvm23.1.3-df87791`,
+matching prebuilt SDK/userland/ports from the merged quiet-updater image and
+unchanged dependency pins. The builder's missing kconfiglib was supplied from
+the installed host module; no container rebuild. No timing measurement.
+
+Four interactive QEMU boots paired control/implementation with
+`max_ioqpairs=1` and `4`: Q35, nested KVM, host CPU, four CPUs, 512 MiB,
+standard VGA, PS/2, VirtIO RNG, fresh OVMF variables, VirtIO-SCSI ISO boot.
+The same disposable 128 MiB GPT disk, 512-byte blocks, MDTS 7 and default write
+prohibition were used throughout. Each boot reached Development, read the
+healthy primary/backup GPT and confirmed normal shutdown with zero published
+write bytes. The disk's SHA-256 remained unchanged.
+
+Implementation GDB inspection: VS `0x10400`, CAP `0x4008200f0107ff`,
+CC `0x460001` (CSS 0, CRIME 0), 7.5 s CAP.TO, one queue pair, eight slots,
+64 KiB request bound, writable/flush flags false. CNS 3 supplied NVM CSI on
+this command-set-capable controller. A 64 KiB read through the PRP list completed
+and matched the host's first 64 KiB; WRITE and FLUSH admission returned
+READ_ONLY. Queue publication/completion counts matched. Debuggers and QEMU
+were stopped. Raw logs/captures remain local under `build/nvme-v2/`.
+
+Stock QEMU does not exercise CRTO readiness or CSS-6-only profile admission;
+these received source review, not runtime qualification. Vela NVMe 2.0 remains
+**native pending**. The read-only packet is `/shared/present/vela-nvme/`, with
+`README.md`, owner `/dev/sdb1` copy/restore commands and verified `SHA256SUMS`.
+Its never-merged diagnostic branch `diag/vela-nvme-on-75a8aaac` at `65fa0dec`
+contains stick base `75a8aaac`, its existing #847 boot fix (`78646104`), and
+only the NVMe implementation commit. No #848 USB changes or newer ABI/pins.
+It is an info kernel-only build; keep the stick's initrd and Limine, enforce
+`nvme.write=0`, and expect USB unavailable and rescue execution. Native evidence
+required: namespace read-only readiness, Fedora's GPT layout and confirmed clean
+shutdown. No internal disk writes or native staging by Codex.
