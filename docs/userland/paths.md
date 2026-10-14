@@ -1,7 +1,7 @@
 # Native paths and working directories
 
 [Libpyxis path helpers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/path.h) walk the existing directory
-protocol in userspace. They use startup scheme-root grants and an explicit
+protocol in userspace. They capture named directory grants from the process environment and use an explicit
 working-directory context. The kernel still accepts only one ordinary component
 per lookup; it has no path parser or process-global working directory.
 
@@ -31,14 +31,13 @@ chooses the initial chain and its order from directory handles it grants. The
 kernel validates their types, not their ancestry: those explicit handles are
 the authority, regardless of the display string.
 
-An explicit [service namespace](../interfaces/namespaces.md) is separate from directory roots.
-Resolution rejects a scheme bound in both routes, including a binding whose
-provider has exited. Launch checks known conflicts too; mutation after launch
-makes the runtime check necessary. A namespace-only scheme opens files through
-its [provider](../interfaces/file-providers.md), passing the complete URI without component
-walking, normalization or decoding. The provider decides its own URI semantics.
-Provider directories, cwd changes, removal and rename are unsupported; there is
-no fallback to directory operations after provider failure. HTTP(S) URLs use
+An exact [environment](../interfaces/environment.md) lookup selects one owned
+capability for a scheme. DIR bindings use component walking; exported provider
+bindings receive the complete URI without normalization or decoding. There is
+one binding per name, and a failed provider never falls back to a directory.
+TEXT bindings are not interpreted as URI redirects in this task. Provider
+directories, cwd changes, removal and rename remain unsupported.
+HTTP(S) URLs use
 the [prepared transaction bridge](../interfaces/http-transactions.md) for libc
 `fopen`/`open`, preserving anonymous URL policy while returning a forward-only
 response. Native FILE-only `path_resolve()` and `path_open_file()` refuse these

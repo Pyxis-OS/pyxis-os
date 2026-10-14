@@ -162,9 +162,9 @@ Trusted startup starts one system-wide controller service and supplies controlle
 clock, randomness, private storage and input-source grants directly to it; it
 does not give each space a radio owner. Its placement and bootstrap handoff are
 implementation details within that singleton/grant policy. A read-only status
-export can use the [native service namespace](../interfaces/namespaces.md);
+export can use the [process environment](../interfaces/environment.md);
 enrollment/forget management must be granted separately to a trusted local control
-tool, never ordinary shell children by incidental namespace lookup. Existing
+tool, never ordinary shell children by incidental environment inheritance. Existing
 startup has no supervisor; service restart is explicit. A retained client must not
 silently bind to a replacement provider. Reacquiring the controller requires
 confirmed cleanup or an explicit unavailable/reboot result, not recycled ownership.

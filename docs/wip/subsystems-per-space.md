@@ -46,7 +46,7 @@ A **userspace personality**:
 - **URI providers.** An NT drive namespace could be a provider under the
   [userspace services](../interfaces/userspace-services.md) and
   [scheme provider](capabilities-and-providers.md) model, bound by name into the
-  space's [namespace](../interfaces/namespaces.md).
+  process's [environment](../interfaces/environment.md).
 - **Volume claims.** The [FAT32 volumes](../devices/fat32-volumes.md) backend provides a
   physical-extent registry with explicit mount authority. A subsystem filesystem
   server would claim an extent the way any mount does, and be excluded from

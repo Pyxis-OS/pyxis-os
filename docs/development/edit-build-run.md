@@ -105,7 +105,6 @@ Save this trusted script as `/tmp/init-usb-development.pxs`:
 
 ```text
 #!boot://shell.pxe
-namespace create
 service start text boot://textfs.pxe
 session boot://session.pxe --configure-network --start-remote-services
 ```

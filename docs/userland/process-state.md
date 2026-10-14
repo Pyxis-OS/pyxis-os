@@ -1,16 +1,16 @@
 # Working path and environment
 
-Libc owns one mutable working-path context and one copied environment per process.
-They use synchronized immutable snapshots, seeded lazily from the immutable
-[startup snapshot](../../userspace/include/startup.h). The kernel has no cwd or
-implicit environment inheritance. Native code can still use independent
+Libc owns one mutable working-path context per process. Its text environment
+operations use the native [process environment](../interfaces/environment.md),
+shared by siblings; there is no second mutable libc table. The cwd is seeded
+from the independent [startup chain](../../userspace/include/startup.h).
+Child inheritance is explicit. Native code can still use independent
 [capability path contexts](paths.md).
 
 `chdir` preallocates a replacement chain, description and traversal workspace,
 then calls `path_change` before publication. Failure preserves cwd and rights.
 All libc path operations use this context; existing open files keep their own
-handles. Root/namespace overrides borrow caller-owned bindings through
-[`pyxis_working_bindings`](../../userspace/libc/include/pyxis/working_path.h).
+handles. Named path bindings use owned captures from the environment.
 The shell uses the same context rather than owning a second cwd.
 
 `getcwd` returns the tracked normalized `scheme://` description. It does not
@@ -22,8 +22,9 @@ change establishes a description. A short buffer returns ERANGE unchanged.
 `realpath` supplies a separately [proved bounded spelling](paths.md#proved-realpath);
 `getcwd` remains descriptive even when such proof fails.
 
-`getenv`, `setenv` and `unsetenv` use copied strings. Names are case-sensitive,
-nonempty and exclude `=`; empty values differ from absence. `overwrite == 0`
+`getenv` caches only immutable TEXT captures by table generation; CAP entries
+are not exposed as text. `setenv` and `unsetenv` mutate the native table. Names
+follow its case-sensitive bounded name grammar; empty values differ from absence. `overwrite == 0`
 preserves an existing value, and removing an absent name succeeds. Failure
 preserves existing values. Borrowed `getenv` pointers must not be modified or
 freed and may be invalidated by mutation; exclude mutation from lookup through

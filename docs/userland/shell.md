@@ -286,25 +286,29 @@ permissions, errors and durability limits.
 
 ## Service publication
 
-Init scripts can create and populate an explicit [service namespace](../interfaces/namespaces.md):
+Init scripts publish services into the process
+[environment](../interfaces/environment.md#publication):
 
 ```text
-namespace create
 service start counter bin://counter.pxe --provide
 counter --lookup counter
-namespace remove counter
+env unset counter
 ```
 
-`service replace NAME IMAGE [ARG...]` atomically replaces an existing binding
-after the provider transfers an exported client through IPC. Existing clients
-keep their original object. `namespace remove` does not withdraw an export.
-Ordinary commands receive namespace LOOKUP only; trusted session handoff can
-retain held management authority. Provider publication launches omit the parent
-namespace. FILE providers expose ordinary read-only snapshots through the
-[shared file bridge](../interfaces/file-providers.md).
+`service start NAME IMAGE [ARG...]` atomically publishes an exported SLOT at
+`NAME` and its private controller at `NAME.control`. A collision on either name
+refuses publication. `service replace NAME IMAGE [ARG...]` retargets the held
+slot after the new provider transfers its client through IPC. Existing slot
+holders follow the new target; already-opened child objects keep their identity.
+`env unset NAME` removes the binding, without cutting independently held grants.
+Controllers are unexported and explicitly delegated only to trusted successors
+or supervisors. Ordinary launches receive exported entries selected by their
+launch profile, with the original rights or deliberate attenuation. Provider
+startup receives declared dependencies and omits its own publication names.
+FILE providers use the [shared file bridge](../interfaces/file-providers.md).
 
 `service start --optional` continues after a provider explicitly reports setup
-failure; malformed handshakes, launch failures, namespace errors and cleanup
+failure; malformed handshakes, launch failures, environment publication errors and cleanup
 failures are still errors. `service start|replace --read-only` restricts the
 launched provider's native directory roots and working directories to traversal
 and file reads. HTTPS boot startup uses both options; custom trust is selected

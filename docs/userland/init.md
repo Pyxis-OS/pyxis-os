@@ -8,9 +8,10 @@ runs one trusted init. The number of spaces does not depend on the CPU count.
 Children stay in their parent's space. This introduces no migration,
 supervision or global PID 1.
 
-Space inits receive an explicit namespace-creation service. The packaged active
-init scripts create a [service namespace](../interfaces/namespaces.md) before session handoff;
-it is delegated independently of space membership.
+Space inits publish services through their caller-bound
+[process environment](../interfaces/environment.md), then explicitly stage the
+selected bindings for session handoff. Environment authority is independent of
+space membership; controllers remain private unless deliberately delegated.
 
 Space inits share the read-only `boot://` archive and writable RAM-backed
 `tmp://` tree. It is not private per space and disappears on reboot. Spaces

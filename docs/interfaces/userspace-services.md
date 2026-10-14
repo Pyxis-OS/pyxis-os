@@ -1,7 +1,7 @@
 # Userspace services
 
 Pyxis services run in ordinary userspace processes. Clients discover exported
-capabilities through explicitly delegated namespaces, then invoke the provider's
+capabilities through their process environment, then invoke the provider's
 protocol. Text returns immutable FILE snapshots; ordinary HTTP(S) URL opens
 return response streams with read-only final observation. `cat`, libc readers and
 shell redirection consume these through their declared grants.
@@ -9,7 +9,7 @@ shell redirection consume these through their declared grants.
 The kernel owns capability enforcement, bounded delivery, routing and lifetime.
 Providers interpret requests and enforce operation-specific resource rights.
 Discovery, transport and resource protocols are separate: a non-file service can
-use the same namespace and IPC without exposing a FILE interface.
+use the same environment and IPC without exposing a FILE interface.
 
 ## Interfaces and authority
 
@@ -17,11 +17,11 @@ use the same namespace and IPC without exposing a FILE interface.
 | --- | --- |
 | [Endpoints](endpoints.md) | CALL/SEND, copied payloads and capability attachments, receipts, absolute call deadlines and lifecycle notifications |
 | [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, separate CUT controllers and acknowledged retirement |
-| [Namespaces](namespaces.md) | Flat exact-name bindings, separate LOOKUP and MANAGE rights, atomic replacement and explicit startup delegation |
+| [Environment](environment.md) | Owned CAP/TEXT entries, immutable captures, exported-only child selection and explicit private delegation |
 | [File providers](file-providers.md) | Full-URI OPEN, validated FILE grants and byte representation, shared native/exported file helpers |
 | [HTTP fetching](../userland/http-fetch.md) | Streamed HTTP/verified HTTPS GET, prepared POST, explicit snapshots and final diagnostics |
 
-Endpoint creation requires a service grant; it supplies no namespace-publication,
+Endpoint creation requires a service grant; it supplies no environment-mutation,
 file or network authority. Each receiver belongs to one process. Receiver and
 receipt handles cannot be copied or delegated; client handles can, with equal
 or reduced resource and transport masks independently. Export creation returns
@@ -138,14 +138,14 @@ cat http://example.com/
 cat https://example.com/
 cat http://example.com/ | tee home://example.html | cksum
 service replace text boot://textfs.pxe --welcome "Replacement service"
-namespace remove http
+env unset http
 service start http boot://httpfs.pxb
 ```
 
-The publication command receives an exported grant through IPC and binds it before
-acknowledging readiness. It omits the parent's namespace from provider startup,
-so the provider does not retain its own binding through a namespace reference.
-See [publication and delegation](namespaces.md#init-publication) for the handoff
+The publication command receives an exported grant through IPC and atomically
+publishes its slot and private controller before acknowledging readiness.
+Provider startup omits its own publication entries.
+See [publication and delegation](environment.md#publication) for the handoff
 and [HTTP usage and limits](../userland/http-fetch.md) for host-server examples and error mapping.
 
 HTTP uses the pinned picohttpparser port for header syntax and chunk decoding.

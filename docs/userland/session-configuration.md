@@ -15,7 +15,6 @@ init script selects it:
 ```text
 #!boot://shell.pxe
 mount --optional --read-write host
-namespace create
 session boot://session.pxe --configure-network --start-services
 ```
 
@@ -96,9 +95,9 @@ input/output, memory and launcher grants; app/home and optional
 host roots with their actual queried grants;
 the working-directory chain and display path; and optional display, clock,
 [random](../devices/randomness.md) and keyboard resources, using the same rights as the shell's session handoff.
-The optional service namespace is forwarded with its actual held rights, and
-namespace-creation authority is forwarded explicitly through trusted session
-handoff. Ordinary shell children receive namespace LOOKUP only.
+The selected exported environment entries are captured for each child.
+Trusted session handoff explicitly delegates private service controllers;
+ordinary shell children do not receive them.
 The init shell explicitly delegates `net_config` through session handoff only.
 The launcher applies network settings only with `--configure-network`, then
 passes READ alone to the interactive shell or mux for later child DNS snapshots.

@@ -1,7 +1,7 @@
 # Userspace file providers
 
-A generic provider publishes an OPEN service through an explicitly delegated
-[namespace](namespaces.md). Opening a provider URI returns an exported FILE
+A generic provider publishes an OPEN service through its process
+[environment](environment.md). Opening a provider URI returns an exported FILE
 capability. Ordinary libpyxis file helpers, libc, `cat`, `cksum`, `tee` and shell
 input redirection use it without provider-specific code. HTTP additionally offers
 [prepared transactions](http-transactions.md), used by libc URL reads for
@@ -17,9 +17,8 @@ cat text://guide > home://guide.txt
 ## Discovery and OPEN
 
 Libpyxis selects the complete `scheme://` prefix. Directory roots retain their
-existing component-walking rules; namespace-only schemes use provider OPEN.
-Binding a scheme in both places is an error, including when the provider has
-closed. Provider failure never causes a fallback to directory lookup or creation.
+existing component-walking rules; exported provider entries use provider OPEN.
+One exact-name lookup chooses the capability; there is no second binding map. Provider failure never causes a fallback to directory lookup or creation.
 Relative paths still use the retained native working directory.
 
 The [OPEN ABI](../../include/abi/provider.h) carries the complete URI as copied bytes
@@ -122,12 +121,12 @@ selects an alternative immutable welcome message, for example:
 ```text
 service replace text boot://textfs.pxe --welcome "Replacement service"
 cat text://welcome
-namespace remove text
+env unset text
 ```
 
 Writable opens are denied by the published OPEN_READ grant (EACCES through libc).
 Publication uses the existing service handoff and its ordinary resource grants,
-omitting the parent namespace and namespace-creation service. The text service
+omitting its own publication entries. The text service
 performs no network operations.
 
 Each OPEN creates one export. A receiver can hold 64 exports, including its OPEN
@@ -150,7 +149,7 @@ supervisor; this is capability-driven shutdown, not forced cancellation.
 ## HTTP and HTTPS snapshots
 
 Separate [HTTP and HTTPS services](../userland/http-fetch.md) publish OPEN_READ as `http` and
-`https` in configured interactive namespaces. Each performs one network hop.
+`https` in configured interactive environments. Each performs one network hop.
 The shared bridge follows the [bounded redirect policy](../userland/http-fetch.md#redirect-chains);
 only a complete final response becomes a read-only FILE snapshot. Optional
 Content-Type, status and effective URL are returned as copied metadata.
