@@ -87,8 +87,8 @@ static size_t display_aperture_bytes;
 
 /* Each CPU index owns one pair of slots. Only that CPU reads or changes its row
  * or remaps its pages, so its local invlpg is sufficient. */
-static bool scratch_busy[XAPIC_CPU_LIMIT][SCRATCH_SLOT_COUNT];
-_Static_assert(XAPIC_CPU_LIMIT * SCRATCH_SLOT_COUNT * ARCH_PAGE_SIZE <=
+static bool scratch_busy[ARCH_CPU_LIMIT][SCRATCH_SLOT_COUNT];
+_Static_assert(ARCH_CPU_LIMIT * SCRATCH_SLOT_COUNT * ARCH_PAGE_SIZE <=
                APIC_BASE - TEMP_MAP_BASE, "scratch slots for every CPU");
 
 static uintptr_t scratch_address(size_t cpu, unsigned slot)
@@ -359,9 +359,12 @@ static void map_local_apic(void)
     panic("unexpected APIC PAT memory type");
   }
 
-  bootstrap_map(APIC_BASE, apic_physical_address(), PAGE_WRITE);
-  /* PCD=1, PWT=1 select Limine's PAT entry 3: device registers must be UC. */
-  *bootstrap_leaf(APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+  phys_addr_t local_apic = apic_physical_address();
+  if (local_apic) {
+    bootstrap_map(APIC_BASE, local_apic, PAGE_WRITE);
+    /* PCD=1, PWT=1 select Limine's PAT entry 3: registers must be UC. */
+    *bootstrap_leaf(APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+  }
 
   phys_addr_t io_apic = io_apic_physical_address();
   if (io_apic) {
@@ -449,7 +452,7 @@ void paging_init(struct boot_info *boot)
 
   /* Every CPU's scratch leaves start absent, but each ancestor is allocated now,
    * before any root copies the shared kernel slots. */
-  for (size_t cpu = 0; cpu < XAPIC_CPU_LIMIT; ++cpu) {
+  for (size_t cpu = 0; cpu < ARCH_CPU_LIMIT; ++cpu) {
     for (unsigned slot = 0; slot < SCRATCH_SLOT_COUNT; ++slot) {
       KASSERT(!*bootstrap_leaf(scratch_address(cpu, slot)));
     }
@@ -493,7 +496,7 @@ static void *map_scratch(phys_addr_t physical, unsigned slot)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   size_t cpu = cpu_current()->index;
   KASSERT(active && physical_valid(physical) && slot < SCRATCH_SLOT_COUNT &&
-          cpu < XAPIC_CPU_LIMIT && !scratch_busy[cpu][slot]);
+          cpu < ARCH_CPU_LIMIT && !scratch_busy[cpu][slot]);
 
   uintptr_t virtual = scratch_address(cpu, slot);
   volatile uint64_t *table = active_table(virtual, LEVEL_PT);

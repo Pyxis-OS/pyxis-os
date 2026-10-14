@@ -15,7 +15,8 @@ CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 
 ## Boot handoff
 
-The Limine adapter requests multiprocessor information in xAPIC mode. Before
+The Limine adapter always requests x2APIC when supported (owner decision,
+2026-10-14); CPUs without x2APIC retain xAPIC MMIO. Before
 replacing the BSP root it records the CPU count, BSP APIC ID and physical
 location of Limine's CPU pointer array. The original direct-map offset is
 retained only to decode pointers in that array, never for later dereferences.
@@ -23,8 +24,10 @@ retained only to decode pointers in that array, never for later dereferences.
 After VM and heap initialization, the BSP temporarily maps the bootloader-owned
 CPU records through the kernel VM allocator. It allocates each AP's CPU-local
 record and two separate 16 KiB stack areas, for normal execution and double fault.
-These allocations remain kernel-owned until shutdown. There is no fixed CPU
-array limit; allocation failure and unsupported xAPIC IDs fail boot explicitly.
+These allocations remain kernel-owned until shutdown. CPU records grow with the
+reported count, bounded by the existing 256-CPU scratch window. This is a limit
+on dense CPU indices, independent of the full 32-bit APIC IDs. Allocation failure,
+excess CPUs and duplicate or reserved broadcast IDs fail boot explicitly.
 
 APs start one at a time. The BSP publishes a handoff pointer and entry address
 using the release ordering required by the pinned Limine protocol. A small
@@ -47,6 +50,36 @@ count.
 After all handoffs, the adapter removes its temporary mappings and drops its
 startup references. No CPU continues to depend on Limine's stacks, page tables
 or response pointers. The original bootloader frames remain reserved.
+
+### Local APIC and external destinations
+
+The adapter passes the boot mode to architecture code before paging. The BSP
+checks CPU support, the selected mode and IA32_APIC_BASE; every AP checks the
+same hardware mode before initialization. A supported CPU whose bootloader
+declines x2APIC fails explicitly, rather than silently weakening the accepted
+preference. Caelum never switches APIC modes while running.
+
+x2APIC accesses local registers through MSRs `0x800 + register_offset / 16`;
+there is no local-APIC MMIO mapping. Timer calibration/arming, EOI and priority
+keep their existing semantics. xAPIC retains its uncached MMIO mapping and
+bounded ICR delivery polling. x2APIC writes the 64-bit ICR at MSR `0x830`, with
+the full destination in bits 63:32 and no delivery-status polling. `MFENCE;
+LFENCE` before that write orders queue, TLB and debugger publications before
+the IPI, following the [Intel SDM x2APIC ordering rules](https://cdrdv2-public.intel.com/812386/253668-sdm-vol-3a.pdf)
+and the [pinned Limine sequence](https://github.com/Limine-Bootloader/Limine/blob/34fe53c3d27d229ea25c28fc3e04db362543715b/common/sys/lapic.c#L424).
+
+CPU records, topology and local IPI destinations retain 32-bit identities. Early
+panic/NMI entry reads the active x2APIC ID MSR without GS or memory mappings;
+xAPIC uses CPUID's eight-bit initial ID. Debugger NMI lookup matches the full
+ID against prepared snapshots, published with release/acquire ordering, rather
+than indexing by the hardware ID.
+
+External IO-APIC and MSI/MSI-X still use eight-bit physical destinations to the
+BSP. A target above 255 panics clearly before programming a truncated route.
+There is no interrupt remapping; QEMU compatibility-message delivery does not
+establish support for every native platform. MADT processor types are unchanged:
+Limine supplies the CPUs; ACPI supplies the IO-APIC and override routes. See the
+[x2APIC qualification record](../development/experiments/x2apic/README.md).
 
 ### Core topology
 
@@ -197,7 +230,7 @@ A short lock protects ready-list and completion-list links. It is never held
 across allocation, logging, a context switch or waiting for another CPU. The
 current task and saved scheduler stack are local to their CPU. After scheduler
 startup, remote task creation and resource wakeups of parked tasks send a fixed
-xAPIC rescheduling IPI after releasing the queue lock. The sender retains only
+local APIC rescheduling IPI after releasing the queue lock. The sender retains only
 the destination CPU index after publication, not a borrowed task/wait pointer.
 The target checks its ready queue without waiting for its next timer tick.
 
@@ -561,7 +594,7 @@ outside interrupt and fault entry:
   unzeroed; the caller zeroes them outside the lock. Memory-pressure
   notification can also come from any CPU.
 - **Scratch mappings.** Each CPU index owns two slots in the 2 MiB window at
-  `TEMP_MAP_BASE`, enough for all 256 xAPIC IDs. Every slot's page-table
+  `TEMP_MAP_BASE`, enough for 256 dense CPU indices. Every slot's page-table
   ancestors exist before any private root copies the kernel slots. Only the
   owning CPU maps its slots, with a local `invlpg`; IF=0 keeps it on that CPU
   until it unmaps. Frame zeroing and page-table walks use the calling CPU's

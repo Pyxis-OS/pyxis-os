@@ -113,6 +113,9 @@ void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
   _Static_assert(offsetof(struct ap_boot, stack_top) == AP_BOOT_STACK_OFFSET, "AP stack offset");
   _Static_assert(offsetof(struct ap_boot, cpu) == AP_BOOT_CPU_OFFSET, "AP CPU offset");
   KASSERT(!cpus && count && count <= SIZE_MAX / sizeof(*cpus));
+  if (count > ARCH_CPU_LIMIT) {
+    panic("CPU count %zu exceeds the %u-CPU scratch window", count, ARCH_CPU_LIMIT);
+  }
   KASSERT(cpu_current() == cpu_bsp() && apic_id() == bsp_lapic_id);
   cpus = count == 1 ? bsp_only : kmalloc(count * sizeof(*cpus));
   if (!cpus) {
@@ -135,7 +138,7 @@ void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
 struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
 {
   arch_clock_maintain();
-  KASSERT(cpu_count < cpu_capacity && lapic_id <= XAPIC_MAX_ID);
+  KASSERT(cpu_count < cpu_capacity && lapic_id != UINT32_MAX);
   for (size_t i = 0; i < cpu_count; ++i) {
     if (cpus[i]->lapic_id == lapic_id) {
       panic("duplicate APIC ID %u", lapic_id);

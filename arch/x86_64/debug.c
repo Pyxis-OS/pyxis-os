@@ -16,11 +16,24 @@
 
 struct debug_stop_state arch_debug_stop ARCH_DEBUG_DATA;
 bool arch_debug_enabled ARCH_DEBUG_DATA;
-static struct debug_cpu_snapshot *by_apic[XAPIC_CPU_LIMIT] ARCH_DEBUG_DATA;
+static _Atomic(struct debug_cpu_snapshot *) by_cpu[ARCH_CPU_LIMIT] ARCH_DEBUG_DATA;
 static atomic_bool incomplete_claim ARCH_DEBUG_DATA;
 static atomic_bool bsp_requested ARCH_DEBUG_DATA;
 static bool origin_frame_saved ARCH_DEBUG_DATA;
 static struct debug_registers origin_registers ARCH_DEBUG_DATA;
+
+/* NMI entry cannot trust GS. Only prepared snapshots are published here,
+ * indexed by dense CPU number and matched by the full immutable APIC ID. */
+static ARCH_DEBUG_CODE struct debug_cpu_snapshot *snapshot_by_apic(uint32_t id)
+{
+  for (size_t i = 0; i < arch_debug_stop.cpu_count; ++i) {
+    struct debug_cpu_snapshot *snapshot = atomic_load_explicit(&by_cpu[i], memory_order_acquire);
+    if (snapshot && snapshot->lapic_id == id) {
+      return snapshot;
+    }
+  }
+  return NULL;
+}
 
 static ARCH_DEBUG_CODE void capture_registers(struct debug_registers *out,
                               const struct exception_frame *frame)
@@ -53,7 +66,7 @@ void arch_debug_enable(const struct boot_info *boot)
 void arch_debug_prepare_cpu(struct cpu_local *cpu)
 {
   KASSERT(cpu_current() == cpu_bsp() && arch_debug_enabled);
-  KASSERT(cpu->index < arch_debug_stop.cpu_count && cpu->lapic_id <= XAPIC_MAX_ID);
+  KASSERT(cpu->index < arch_debug_stop.cpu_count);
   struct debug_cpu_snapshot *snapshot = &arch_debug_stop.cpus[cpu->index];
   uintptr_t base;
   if (vm_reserve(vm_kernel_space(), DEBUG_STACK_BYTES + 2 * PAGE_SIZE,
@@ -75,12 +88,12 @@ void arch_debug_prepare_cpu(struct cpu_local *cpu)
   snapshot->stack_top = base + PAGE_SIZE + DEBUG_STACK_BYTES;
   snapshot->lapic_id = cpu->lapic_id;
   cpu->descriptors.tss.ist[DEBUG_NMI_IST - 1] = snapshot->stack_top;
-  by_apic[cpu->lapic_id] = snapshot;
+  atomic_store_explicit(&by_cpu[cpu->index], snapshot, memory_order_release);
 }
 
 void arch_debug_prepare(size_t cpu_count)
 {
-  KASSERT(arch_debug_enabled && cpu_count && cpu_count <= XAPIC_CPU_LIMIT);
+  KASSERT(arch_debug_enabled && cpu_count && cpu_count <= ARCH_CPU_LIMIT);
   arch_debug_stop.cpus = kmalloc(cpu_count * sizeof(*arch_debug_stop.cpus));
   if (!arch_debug_stop.cpus) {
     panic("cannot allocate debugger CPU snapshots");
@@ -207,7 +220,7 @@ static ARCH_DEBUG_CODE void service_stop(uint64_t generation)
 uint64_t arch_debug_nmi_handler(const struct exception_frame *frame)
 {
   uint32_t id = cpu_initial_apic_id();
-  struct debug_cpu_snapshot *snapshot = id <= XAPIC_MAX_ID ? by_apic[id] : NULL;
+  struct debug_cpu_snapshot *snapshot = snapshot_by_apic(id);
   enum debug_stop_phase phase = atomic_load_explicit(&arch_debug_stop.phase, memory_order_acquire);
   uint64_t generation = arch_debug_stop.generation;
   if (!snapshot || (phase != DEBUG_STOP_REQUESTED && phase != DEBUG_STOP_ACQUIRING &&
@@ -251,7 +264,7 @@ uint64_t arch_debug_nmi_handler(const struct exception_frame *frame)
 
 void arch_debug_nmi_exit(uint64_t generation)
 {
-  struct debug_cpu_snapshot *snapshot = by_apic[cpu_initial_apic_id()];
+  struct debug_cpu_snapshot *snapshot = snapshot_by_apic(cpu_initial_apic_id());
   /* No stop-state access follows this ACK; IRET still blocks NMI until return. */
   atomic_store_explicit(&snapshot->exit_generation, generation, memory_order_release);
 }
@@ -328,7 +341,7 @@ static ARCH_DEBUG_CODE bool enter_stop(const struct exception_frame *frame, uint
 {
   uint64_t flags = cpu_save_interrupts();
   uint32_t id = cpu_initial_apic_id();
-  struct debug_cpu_snapshot *snapshot = id <= XAPIC_MAX_ID ? by_apic[id] : NULL;
+  struct debug_cpu_snapshot *snapshot = snapshot_by_apic(id);
   if (!arch_debug_enabled || !snapshot ||
       (reason == DEBUG_STOP_CHECKPOINT && snapshot != arch_debug_stop.cpus)) {
     cpu_restore_interrupts(flags);
