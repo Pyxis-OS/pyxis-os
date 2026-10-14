@@ -136,7 +136,9 @@ enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
 enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsigned port,
                                          const struct usb_link *link, uint64_t deadline,
                                          struct usb_host_device **device);
-enum usb_result usb_host_hid_retire(struct usb_host_device *device, uint64_t deadline);
+/* Retire this device and its subtree, child first. Close admission before any
+ * wait; retain DMA and identities, and fail closed if hardware fences fail. */
+enum usb_result usb_host_device_retire(struct usb_host_device *device, uint64_t deadline);
 bool usb_host_device_present(const struct usb_host_device *device);
 bool usb_host_hid_root_present(const struct usb_host_controller *controller, unsigned port);
 uint64_t usb_host_port_generation(const struct usb_host_controller *controller, unsigned port);
