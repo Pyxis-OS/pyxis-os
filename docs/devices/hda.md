@@ -67,8 +67,19 @@ memory errors or deadline expiry fail the engine. An expired command is not reus
 for a later reply. Unsolicited replies are counted and ignored, without jack policy.
 
 Command operations retain bounded 1 ms polling and 100 ms phase/command deadlines.
-Codec power polling shares an absolute deadline; individual verbs have the
-transport bound. QEMU requires response-status generation and RINTFL
+Each codec readiness wait (a widget's power transition, the native AFG
+subsystem read) has its own budget from when that wait starts, so time spent
+earlier in setup on a busy BSP cannot expire it; individual verbs have the
+transport bound.
+
+Initialization (link release, command rings, codec discovery) is attempted up
+to **3 times**. A failed attempt records its first reason instead of failing
+the engine; the worker logs `hda: setup attempt N failed: <reason>; resetting
+link`, then masks delivery, stops both command rings, asserts link reset and
+disables bus mastering, checking each step, and starts again. Audio fails
+closed only if that reset cannot be verified or the last attempt fails, with
+the usual checked shutdown. This follows Linux's practice of resetting the link
+and probing again after a failed codec probe; the attempt count is tuning. QEMU requires response-status generation and RINTFL
 acknowledgement with RINTCNT=1. Playback completion and errors use checked
 single-message MSI routed to the BSP. PCI INTx remains disabled. The IRQ captures
 bounded status, acknowledges only observed bits and wakes the worker; it never
@@ -249,8 +260,9 @@ native evidence and nested validation.
 
 ## Failure and retained ownership
 
-Transport failure, stream errors, a refused stream reset or stop, unaligned or
-unstable positions and repeated recovery stop admission until reboot. Existing
+Transport failure after initialization, stream errors, a refused stream reset
+or stop, unaligned or unstable positions and repeated recovery stop admission
+until reboot. Failed initialization retries first, as above. Existing
 sessions report FAILED, writable waits report WAIT_ERROR and writes/acquisition
 of an unowned session report UNAVAILABLE; owner STATUS, RELEASE and exit cleanup
 remain serviceable. Ordinary producer starvation is separate and does not
