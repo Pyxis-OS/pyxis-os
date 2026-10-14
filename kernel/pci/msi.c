@@ -8,7 +8,6 @@
 
 #define MSI_64BIT (1u << 7)
 #define MSI_VECTOR_MASK_CAPABLE (1u << 8)
-#define MSI_MESSAGE_CAPACITY_MASK (7u << 1)
 #define MSI_MESSAGE_ENABLE_MASK (7u << 4)
 #define MSI_ADDRESS_LOW 4
 #define MSI_ADDRESS_HIGH 8
@@ -47,8 +46,9 @@ bool pci_msi_prepare(struct pci_claim *claim, struct pci_msi *msi, uint8_t vecto
   struct pci_address address = claim->device->address;
   unsigned control_offset = capability + PCI_MSI_CONTROL;
   uint16_t control = pci_read16(address, control_offset);
-  unsigned layout_mask = MSI_64BIT | MSI_VECTOR_MASK_CAPABLE | MSI_MESSAGE_CAPACITY_MASK |
-      PCI_MSI_ENABLE;
+  /* A function that can use several messages gets exactly one: Multiple
+   * Message Enable stays zero. */
+  unsigned layout_mask = MSI_64BIT | MSI_VECTOR_MASK_CAPABLE | PCI_MSI_ENABLE;
   if ((control & layout_mask) != MSI_64BIT) {
     return false;
   }

@@ -1159,7 +1159,7 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
   if (!pci_reserve_device(device, &disk->claim) || !pci_begin_mmio_probe(&disk->claim, &probe)) {
     return "cannot reserve controller or obtain firmware MMIO access";
   }
-  if (pci_map_bootstrap_bar(&disk->claim, 0, boot, &disk->registers) != MM_OK) {
+  if (pci_map_bootstrap_bar(&disk->claim, 0, 0, PCI_BOOTSTRAP_BAR_BYTES, boot, &disk->registers) != MM_OK) {
     return "cannot map controller register prefix";
   }
   disk->cap = read_register64(disk, NVME_CAP);

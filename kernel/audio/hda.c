@@ -967,7 +967,8 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     probe_failure = native_probe_failure(&boot_state);
   }
   if (!probe_ready ||
-      pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->registers) != MM_OK) {
+      pci_map_bootstrap_bar(&controller->claim, 0, 0, PCI_BOOTSTRAP_BAR_BYTES, boot,
+                            &controller->registers) != MM_OK) {
     if (pci_restore_mmio_probe(&controller->claim, &controller->firmware)) {
       pci_cancel_reservation(&controller->claim);
       klog("hda: %s; inactive\n", probe_failure);

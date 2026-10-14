@@ -13,6 +13,7 @@
 #include <kernel/mm/dma.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
+#include <kernel/pci/msi.h>
 #include <kernel/pci/msix.h>
 #include <kernel/pci/registers.h>
 #include <kernel/spinlock.h>
@@ -202,8 +203,17 @@ struct usb_host_controller {
   struct pci_address address;
   size_t inventory_index;
   struct pci_claim claim;
+  /* MSI-X when the function has it, otherwise one MSI message. */
+  bool msi_only;
   struct pci_msix msix;
+  struct pci_msi msi;
   struct pci_mapping bootstrap, registers;
+  /* Bootstrap window over the extended capability list, from the page of its
+   * first header; released after the firmware handoff. extended_end is the
+   * furthest byte read, checked against the sized BAR. */
+  struct pci_mapping extended;
+  size_t extended_first;
+  uint64_t extended_end;
   struct dma_buffer dcbaa, command_ring, event_ring, erst, scratchpad_array, scratchpads;
   struct dma_buffer descendant_dma, hid_dma, bulk_dma, interrupt_dma, async_bulk_dma;
   struct xhci_bulk bulk[USB_STORAGE_DEVICE_BUDGET];
@@ -473,16 +483,58 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
   return true;
 }
 
+static uintptr_t extended_base(const struct usb_host_controller *controller)
+{
+  return controller->extended.address - controller->extended_first;
+}
+
+/* Maps [offset, offset + bytes) of the extended capability list, growing the
+ * window forward from its first page as far as the list reaches. */
+static bool extended_window(struct usb_host_controller *controller, unsigned offset,
+                            size_t bytes, const struct boot_info *boot)
+{
+  uint64_t end = (uint64_t)offset + bytes;
+  if (end > PCI_BOOTSTRAP_WINDOW_LIMIT) {
+    return false;
+  }
+  size_t first = controller->extended.bytes ? controller->extended_first :
+                 offset & ~(PAGE_SIZE - 1);
+  if (offset < first) {
+    return false;
+  }
+  if (!controller->extended.bytes || end > first + controller->extended.bytes) {
+    size_t mapped_end = (end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (controller->extended.bytes) {
+      pci_unmap(&controller->claim, &controller->extended);
+    }
+    if (pci_map_bootstrap_bar(&controller->claim, 0, first, mapped_end - first, boot,
+                              &controller->extended) != MM_OK) {
+      return false;
+    }
+    controller->extended_first = first;
+  }
+  if (end > controller->extended_end) {
+    controller->extended_end = end;
+  }
+  return true;
+}
+
 static bool legacy_handoff(struct usb_host_controller *controller, unsigned offset)
 {
-  uintptr_t base = controller->bootstrap.address + offset;
+  uintptr_t base = extended_base(controller) + offset;
   volatile uint8_t *os_owned = (volatile uint8_t *)(base + XHCI_LEGACY_OS_BYTE);
+  volatile uint8_t *bios_owned = (volatile uint8_t *)(base + XHCI_LEGACY_BIOS_BYTE);
   /* Byte access avoids writing the independently changing BIOS semaphore. */
   *os_owned |= XHCI_LEGACY_OWNED;
   uint64_t deadline = task_deadline_after_ms(USB_STATE_TIMEOUT_MS);
-  while (*(volatile uint8_t *)(base + XHCI_LEGACY_BIOS_BYTE) & XHCI_LEGACY_OWNED) {
+  while (*bios_owned & XHCI_LEGACY_OWNED) {
     if (task_deadline_expired(deadline)) {
-      return false;
+      /* As Linux does: firmware that never answers loses ownership. */
+      klog("xHCI %x:%x.%u: firmware kept ownership for %u ms; taking it\n",
+           controller->address.bus, controller->address.device, controller->address.function,
+           (unsigned)USB_STATE_TIMEOUT_MS);
+      *bios_owned &= (uint8_t)~XHCI_LEGACY_OWNED;
+      break;
     }
     __asm__ volatile("pause");
   }
@@ -602,21 +654,72 @@ static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
   return true;
 }
 
-static bool extended_capabilities(struct usb_host_controller *controller)
+static void skip_protocol(const struct usb_host_controller *controller, unsigned offset,
+                          const char *reason)
 {
-  uintptr_t base = controller->bootstrap.address;
-  unsigned offset = (read32(base, XHCI_CAP_FEATURES) >> XHCI_EXT_CAP_SHIFT) *
-    XHCI_EXT_CAP_DWORD_BYTES;
+  klog("xHCI %x:%x.%u: skipped Supported Protocol capability at 0x%x: %s\n",
+       controller->address.bus, controller->address.device, controller->address.function,
+       offset, reason);
+}
+
+/* A malformed Supported Protocol capability is skipped and its ports stay
+ * unusable; the rest of the controller still works. */
+static void supported_protocol(struct usb_host_controller *controller, unsigned offset,
+                               uint32_t header, unsigned speeds)
+{
+  uintptr_t base = extended_base(controller);
+  uint32_t ports = read32(base, offset + 8);
+  unsigned first = ports & XHCI_EXT_ID_MASK;
+  unsigned count = (ports >> XHCI_PROTOCOL_PORT_COUNT_SHIFT) & XHCI_EXT_ID_MASK;
+  if (read32(base, offset + 4) != XHCI_PROTOCOL_NAME || !first || !count ||
+      first > controller->port_count || count > controller->port_count - first + 1) {
+    skip_protocol(controller, offset, "invalid name or port range");
+    return;
+  }
+  unsigned slot_type = read32(base, offset + 12) & XHCI_PROTOCOL_SLOT_TYPE_MASK;
+  struct xhci_speed speed_map[XHCI_PORT_SPEED_MASK + 1] = {0};
+  if (!protocol_speeds(base, offset, speeds, header >> XHCI_PROTOCOL_MAJOR_SHIFT,
+                       (header >> XHCI_PROTOCOL_MINOR_SHIFT) & XHCI_EXT_ID_MASK, speed_map)) {
+    skip_protocol(controller, offset, "invalid speed entries");
+    return;
+  }
+  for (unsigned i = first - 1; i < first - 1 + count; ++i) {
+    if (controller->ports[i].protocol) {
+      skip_protocol(controller, offset, "ports already described");
+      return;
+    }
+  }
+  for (unsigned i = first - 1; i < first - 1 + count; ++i) {
+    struct xhci_port *port = &controller->ports[i];
+    port->protocol = true;
+    port->major = header >> XHCI_PROTOCOL_MAJOR_SHIFT;
+    port->minor = header >> XHCI_PROTOCOL_MINOR_SHIFT;
+    port->slot_type = slot_type;
+    memcpy(port->speeds, speed_map, sizeof(speed_map));
+  }
+}
+
+/* Unknown capability IDs (vendor, debug, power management) are skipped. A
+ * list that leaves the window, overlaps the register regions or repeats the
+ * legacy capability is refused. */
+static bool extended_capabilities(struct usb_host_controller *controller,
+                                  const struct boot_info *boot)
+{
+  unsigned offset = (read32(controller->bootstrap.address, XHCI_CAP_FEATURES) >>
+                     XHCI_EXT_CAP_SHIFT) * XHCI_EXT_CAP_DWORD_BYTES;
   unsigned legacy = 0;
   /* Next pointers only move forward; a body must fit before the next header. */
   while (offset) {
-    if (offset < XHCI_CAP_BYTES || !bootstrap_fits(offset, sizeof(uint32_t))) {
+    if (offset < XHCI_CAP_BYTES || !extended_window(controller, offset, sizeof(uint32_t), boot)) {
       return false;
     }
-    uint32_t header = read32(base, offset);
+    uint32_t header = read32(extended_base(controller), offset);
     unsigned id = header & XHCI_EXT_ID_MASK;
     unsigned next = ((header >> XHCI_EXT_NEXT_SHIFT) & XHCI_EXT_NEXT_MASK) *
       XHCI_EXT_CAP_DWORD_BYTES;
+    ktrace("xHCI %x:%x.%u: extended capability %u at 0x%x\n",
+           controller->address.bus, controller->address.device, controller->address.function,
+           id, offset);
     unsigned bytes = sizeof(uint32_t);
     if (id == XHCI_EXT_LEGACY) {
       bytes = XHCI_LEGACY_BYTES;
@@ -625,38 +728,18 @@ static bool extended_capabilities(struct usb_host_controller *controller)
       }
       legacy = offset;
     } else if (id == XHCI_EXT_PROTOCOL) {
-      if (!bootstrap_fits(offset, XHCI_PROTOCOL_BYTES)) {
+      if (!extended_window(controller, offset, XHCI_PROTOCOL_BYTES, boot)) {
         return false;
       }
-      uint32_t ports = read32(base, offset + 8);
-      unsigned speeds = ports >> XHCI_PROTOCOL_SPEED_COUNT_SHIFT;
+      unsigned speeds = read32(extended_base(controller), offset + 8) >>
+        XHCI_PROTOCOL_SPEED_COUNT_SHIFT;
       bytes = XHCI_PROTOCOL_BYTES + speeds * sizeof(uint32_t);
-      unsigned first = ports & XHCI_EXT_ID_MASK;
-      unsigned count = (ports >> XHCI_PROTOCOL_PORT_COUNT_SHIFT) & XHCI_EXT_ID_MASK;
-      if (read32(base, offset + 4) != XHCI_PROTOCOL_NAME || !first || !count ||
-          first > controller->port_count || count > controller->port_count - first + 1) {
+      if (!extended_window(controller, offset, bytes, boot)) {
         return false;
       }
-      unsigned slot_type = read32(base, offset + 12) & XHCI_PROTOCOL_SLOT_TYPE_MASK;
-      struct xhci_speed speed_map[XHCI_PORT_SPEED_MASK + 1] = {0};
-      if (!bootstrap_fits(offset, bytes) ||
-          !protocol_speeds(base, offset, speeds, header >> XHCI_PROTOCOL_MAJOR_SHIFT,
-                           (header >> XHCI_PROTOCOL_MINOR_SHIFT) & XHCI_EXT_ID_MASK, speed_map)) {
-        return false;
-      }
-      for (unsigned i = first - 1; i < first - 1 + count; ++i) {
-        struct xhci_port *port = &controller->ports[i];
-        if (port->protocol) {
-          return false;
-        }
-        port->protocol = true;
-        port->major = header >> XHCI_PROTOCOL_MAJOR_SHIFT;
-        port->minor = header >> XHCI_PROTOCOL_MINOR_SHIFT;
-        port->slot_type = slot_type;
-        memcpy(port->speeds, speed_map, sizeof(speed_map));
-      }
+      supported_protocol(controller, offset, header, speeds);
     }
-    if (!bootstrap_fits(offset, bytes) || (next && next < bytes)) {
+    if (!extended_window(controller, offset, bytes, boot) || (next && next < bytes)) {
       return false;
     }
     uint64_t end = (uint64_t)offset + bytes;
@@ -671,7 +754,11 @@ static bool extended_capabilities(struct usb_host_controller *controller)
     }
     offset = next ? offset + next : 0;
   }
-  return !legacy || legacy_handoff(controller, legacy);
+  bool owned = !legacy || legacy_handoff(controller, legacy);
+  if (controller->extended.bytes) {
+    pci_unmap(&controller->claim, &controller->extended);
+  }
+  return owned;
 }
 
 static bool halt_and_reset(struct usb_host_controller *controller)
@@ -704,6 +791,24 @@ static bool regions_overlap(uint64_t first, uint64_t bytes, const struct pci_reg
     region->offset < first + bytes;
 }
 
+static bool interrupt_delivery(struct usb_host_controller *controller, bool enabled)
+{
+  if (controller->msi_only) {
+    return enabled ? pci_msi_enable(&controller->msi) : pci_msi_disable(&controller->msi);
+  }
+  return enabled ? pci_msix_enable(&controller->msix) : pci_msix_disable(&controller->msix);
+}
+
+static bool has_msix(const struct pci_claim *claim)
+{
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    if (pci_read8(claim->device->address, claim->capabilities[i]) == PCI_CAP_MSIX) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool map_registers(struct usb_host_controller *controller, const struct boot_info *boot)
 {
   struct pci_claim *claim = &controller->claim;
@@ -718,13 +823,18 @@ static bool map_registers(struct usb_host_controller *controller, const struct b
   uint64_t runtime_end = (uint64_t)controller->runtime + XHCI_INTERRUPTER_ZERO + XHCI_INTERRUPTER_BYTES;
   uint64_t doorbells_end = (uint64_t)controller->doorbells +
     (controller->slot_count + 1) * XHCI_DOORBELL_BYTES;
-  if (!pci_size_bars(claim) || claim->bars[0].bytes < PCI_BOOTSTRAP_BAR_BYTES ||
+  /* Every bootstrap read, including the extended capability list, must have
+   * been inside BAR0. */
+  uint64_t bootstrap_end = controller->extended_end > PCI_BOOTSTRAP_BAR_BYTES ?
+                           controller->extended_end : PCI_BOOTSTRAP_BAR_BYTES;
+  controller->msi_only = !has_msix(claim);
+  if (!pci_size_bars(claim) || claim->bars[0].bytes < bootstrap_end ||
       !register_region_fits(controller, 0, ports_end) ||
       !register_region_fits(controller, controller->runtime, runtime_end - controller->runtime) ||
       !register_region_fits(controller, controller->doorbells, doorbells_end - controller->doorbells) ||
       controller->runtime < ports_end || controller->doorbells < ports_end ||
       ((uint64_t)controller->runtime < doorbells_end && controller->doorbells < runtime_end) ||
-      !pci_msix_discover(claim, &controller->msix)) {
+      (!controller->msi_only && !pci_msix_discover(claim, &controller->msix))) {
     return false;
   }
   uint64_t end = ports_end;
@@ -736,10 +846,13 @@ static bool map_registers(struct usb_host_controller *controller, const struct b
   }
   /* The single register mapping includes holes. Reject table/PBA overlap with
    * that whole extent before any MSI-X access, not merely individual registers. */
-  if (regions_overlap(0, end, &controller->msix.table) ||
-      regions_overlap(0, end, &controller->msix.pba) ||
-      pci_map_bar(claim, 0, 0, end, boot, &controller->registers) != MM_OK ||
-      pci_msix_map(&controller->msix, boot) != MM_OK) {
+  if (!controller->msi_only &&
+      (regions_overlap(0, end, &controller->msix.table) ||
+       regions_overlap(0, end, &controller->msix.pba))) {
+    return false;
+  }
+  if (pci_map_bar(claim, 0, 0, end, boot, &controller->registers) != MM_OK ||
+      (!controller->msi_only && pci_msix_map(&controller->msix, boot) != MM_OK)) {
     return false;
   }
   pci_write16(claim, PCI_COMMAND, (command | PCI_COMMAND_MEMORY) & ~PCI_COMMAND_IO);
@@ -1056,7 +1169,8 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     return;
   }
   const char *failure = "unsupported assigned BAR0 bootstrap mapping";
-  if (pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->bootstrap) != MM_OK) {
+  if (pci_map_bootstrap_bar(&controller->claim, 0, 0, PCI_BOOTSTRAP_BAR_BYTES, boot,
+                            &controller->bootstrap) != MM_OK) {
     goto fail;
   }
   failure = "unsupported capabilities or controller record allocation failed";
@@ -1068,8 +1182,8 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
   if (!controller->discovery) {
     goto fail;
   }
-  failure = "unsupported extended capabilities or firmware ownership timeout";
-  if (!extended_capabilities(controller)) {
+  failure = "unsupported extended capability list or firmware handoff failed";
+  if (!extended_capabilities(controller, boot)) {
     goto fail;
   }
   failure = "cannot confirm controller halt/reset";
@@ -1086,7 +1200,7 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     }
     goto fail;
   }
-  failure = "invalid register/MSI-X resources";
+  failure = "invalid register or interrupt resources";
   if (!map_registers(controller, boot)) {
     goto fail;
   }
@@ -1098,9 +1212,13 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
   if (!allocate_dma(controller)) {
     goto fail;
   }
-  failure = "MSI-X setup failed";
-  if (!pci_msix_prepare(&controller->msix, APIC_XHCI_VECTOR)) {
-    if (!pci_msix_disable(&controller->msix)) {
+  failure = controller->msi_only ? "MSI setup failed" : "MSI-X setup failed";
+  bool interrupt_ready = controller->msi_only ?
+    pci_msi_prepare(&controller->claim, &controller->msi, APIC_XHCI_VECTOR) :
+    pci_msix_prepare(&controller->msix, APIC_XHCI_VECTOR);
+  if (!interrupt_ready) {
+    /* A failed MSI prepare never enables delivery; MSI-X may need undoing. */
+    if (!controller->msi_only && !pci_msix_disable(&controller->msix)) {
       controller->failure = failure;
       klog("xHCI %x:%x.%u: %s; resources retained until reboot\n",
            controller->address.bus, controller->address.device, controller->address.function,
@@ -1171,7 +1289,7 @@ void xhci_interrupt(void)
     }
     uint32_t management = read32(interrupter(controller), XHCI_INTR_MANAGEMENT);
     write32(interrupter(controller), XHCI_INTR_MANAGEMENT, management);
-    /* MSI-X delivery can already have cleared IP. The shared vector notifies
+    /* MSI or MSI-X delivery can already have cleared IP. The shared vector notifies
      * every active controller, whose worker checks its own cycle-owned events. */
     usb_host_notify(controller);
   }
@@ -2133,7 +2251,7 @@ static void stop_controller(struct usb_host_controller *controller)
   uint64_t flags = cpu_save_interrupts();
   controller->interrupt_ready = false;
   set_interrupt_enable(controller, false);
-  bool interrupts_disabled = pci_msix_disable(&controller->msix);
+  bool interrupts_disabled = interrupt_delivery(controller, false);
   cpu_restore_interrupts(flags);
   uintptr_t op = operational(controller);
   bool ready = !(read32(op, XHCI_OP_STATUS) & XHCI_STATUS_NOT_READY);
@@ -4044,7 +4162,7 @@ static void controller_worker(void *argument)
   controller->interrupt_ready = enabled;
   if (enabled) {
     set_interrupt_enable(controller, true);
-    enabled = pci_msix_enable(&controller->msix);
+    enabled = interrupt_delivery(controller, true);
   }
   if (enabled) {
     write32(operational(controller), XHCI_OP_COMMAND,
@@ -4053,7 +4171,7 @@ static void controller_worker(void *argument)
   }
   cpu_restore_interrupts(flags);
   if (!enabled) {
-    controller->failure = "cannot initialize rings or enable DMA/MSI-X";
+    controller->failure = "cannot initialize rings or enable DMA/interrupts";
     stop_controller(controller);
     return;
   }

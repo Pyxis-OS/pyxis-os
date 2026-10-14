@@ -216,7 +216,8 @@ static const char *prepare_controller(struct rtl8111_controller *controller,
   if (!pci_begin_mmio_probe(claim, &controller->probe)) {
     return "initial power/decode state unavailable or inconsistent";
   }
-  if (pci_map_bootstrap_bar(claim, RTL_REGISTER_BAR, boot, &controller->registers) != MM_OK) {
+  if (pci_map_bootstrap_bar(claim, RTL_REGISTER_BAR, 0, PCI_BOOTSTRAP_BAR_BYTES, boot,
+                            &controller->registers) != MM_OK) {
     return "cannot map provisional BAR2 registers";
   }
   uint32_t tx = rtl_read32(controller, RTL_TX_CONFIG);
