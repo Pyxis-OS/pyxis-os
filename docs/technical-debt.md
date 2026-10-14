@@ -435,9 +435,11 @@ debugger or a diagnostic build. Directions, none decided (owner, 2026-10-14):
 
 - Kernel: walk frames in `panic()` and name them from the kernel ELF, which boot
   already keeps mapped read-only with its symbol table.
-- Programs: a later P2F revision with an optional, strippable symbol table; or
-  symbol files shipped beside the program in its bundle; or a build ID that the
-  host resolves against kept ELFs, as `debug.image` does for the kernel.
+- Programs: a P2F revision that is a superset of P1F, adding an optional symbol
+  table. Stripping that table yields a valid P1F, which is what the versioned
+  format allows. Alternatives: symbol files beside the program in its bundle, or
+  a build ID that the host resolves against kept ELFs, as `debug.image` does for
+  the kernel.
 
 Revisit with the next invisible native failure, or before the fault reporting
 work in [control, events and faults](wip/control-events-faults.md).
