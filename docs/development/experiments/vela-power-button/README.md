@@ -148,3 +148,55 @@ verified timestamped CF/CE Notify, admission and worker dispatch through clean
 power-off. No EC hardware/query delivery is emulated by that check. All task-owned
 QEMU/GDB stopped. No native data writes or behavior fix is authorized by these
 diagnostics; #855 remains draft awaiting the owner capture.
+
+
+### Diagnostic owner run and GPIO audit — 2026-10-14
+
+Owner screen OCR (best effort, incomplete), diagnostic `17acbab9`, roughly ten
+presses of varied lengths: none was seen to cause software power-off. A longer
+hold later produced an unidentified line before power-off; without that line,
+this is not proof of a Pyxis press or shutdown. Periodic heartbeat output could
+also appear during a firmware forced-off gesture.
+
+Preparation recorded BTLD=1, BTS1=0x1f, PBST=0, PWRB Notify 1 and input arming.
+Heartbeat EC status 0x08, GPE 0x6e info 0x19 means software/hardware enabled with
+a handler, no sampled pending GPE status. IO-APIC entry 0x802a is unmasked,
+level/active-high, matching the supplied MADT SCI IRQ9 override flags 0x0d.
+The one captured SCI at t_ms=9530 saw EC status 0x28, dispatched query 0x12,
+and drained to SCI_EVT-clear. `_Q12` processes battery-temperature/platform
+conditions and notifies IETM 0x88; it is not the power path. No query 0x10 or
+HIDD power Notify is reported in this capture. This proves at least one EC SCI
+worked, not that firmware asserted none during every press; the OCR record is
+incomplete and snapshots can miss transient state.
+
+The diagnostic's typed integer evaluation incorrectly rejects Field Units.
+Warnings make OSYS/AEAB/AHDB/HEFE/HEB1/S0ID zero readbacks unusable. OSTP was
+reported as result=0/value=1, but also appears in the Field Unit warning list;
+treat that OCR association as unverified until a proper field read or video
+confirms it. ECAV and other plain integer Names remain readable. A reported
+OSTP value would weaken the unset-byte hypothesis, but does not establish the
+modern OS code without a valid OSYS readback. No manual `_REG` is justified.
+
+Reinspection covers the supplied DSDT plus all 34 SSDTs (raw files match their
+local disassembly inputs). No `_AEI` or `_EVT` NameSeg exists in those tables.
+GpioInt descriptors are G_IN resource templates consumed by touch and Intel CVS devices,
+not an ACPI GPIO event route to HIDD/PWPR/PWRB. The only call to root PWPR is
+EC `_Q10`; release is `_Q11`/PWRR. HPEM's other notification path is the HIDW
+wake index 0x1b, not the power index 9. Conditional CBTS/RBED have no definition
+in the supplied namespace tables. No additional runtime `_Lxx`/`_Exx` power
+route is established. This cannot exclude opaque SMM/EC firmware or dynamically
+supplied tables, but it does not justify a GPIO-controller driver as this fix.
+
+The checksum-valid supplied FADT (276 bytes) has flags 0x20c4f5: PWR_BUTTON=1,
+HW_REDUCED_ACPI=0, SCI IRQ9. Firmware declares a control-method power button,
+not the fixed PM1 power event; Caelum deliberately does not enable that fixed
+source. Nothing in the visible `_Q10`/PWPR chain imposes a hold threshold.
+
+Next evidence: phone video of Caelum before/during release of a short press,
+then a held press only if the owner chooses firmware forced-off. Look for EC
+query 0x10, HIDD CE/CF (or PWRB80), admitted latch, power-worker dispatch and
+ordinary shutdown lines. A heartbeat alone is not a button event. Do not add a
+hold-safe shutdown suppression or a guessed GPIO/GPE enable; neither follows
+from this evidence. Correct Field Unit reads and wider read-only pending-GPE
+observation are diagnostic candidates if another image is requested. #855
+remains draft; native delivery is not qualified.
