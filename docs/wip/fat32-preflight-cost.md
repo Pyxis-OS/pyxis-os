@@ -2,32 +2,22 @@
 
 Owner-assigned investigation, 2026-10-13, before installer task 5 activates
 installed configuration publication. **All three revised defaults accepted, 2026-10-13; implementation authorized.**
-No optimization is implemented yet. The [baseline](../development/experiments/fat32-preflight-cost.md)
+The retained-map engine, bounded windows and native CHECK are implemented and
+qualified on disposable media. The publisher runs CHECK immediately after
+BEGIN; actual 128-MiB editor publication completes under the original lease. The [baseline](../development/experiments/fat32-preflight-cost.md)
 records the exact-main measurements, including the final geometry run after
 the owner lifted the container-build timing hold. No native FAT32 timing is claimed.
 
 ## Evidence
 
-`full_check` validates every chain/directory and retained object; `begin_plan`
-then scans all clusters again for its free vector (`fs/fat32/mounted.c`). Each
-miss reads one 512-byte FAT sector and its mirror separately (`volume.c`);
-operation contexts reset the cache. Native callbacks submit/wait serially.
-
-An empty CREATE's preflight admits about 2,525 / 8,073 / 32,269 reads on dense
-40 / 128 / 512 MiB. Profiled nested-QEMU CREATE ranges are 1.20–1.21 /
-3.99–7.55 / 14.77–14.84 s; only about 15–18 further requests implement creation.
-Explicit sync admits one flush. With 4-KiB clusters, 1-GiB operations succeed
-with about 8,204 preflight requests. Cost follows cluster count, not MiB alone.
-These ranges include debugger/shared-host variation; they are not native rates.
-
-The full free vector and conservative prepared capacity use about 20.35 MiB
-at dense 512 MiB. A tiny write returns LIMIT because old/new overlap exceeds
-32 MiB; dense 1-GiB RW admission requests about 40.66 MiB and refuses LIMIT.
-The editor's [128-MiB qualification](../../userspace/config-editor/qualification/README.md)
-stopped at committed-record sync: admitted work can finish beyond the lease,
-then sync is refused before I/O. The baseline's separate expiry check included
-operator idle and is not a complete editor reproduction. A longer lease fixes
-neither repeated work nor capacity refusals.
+The [baseline and implementation record](../development/experiments/fat32-preflight-cost.md)
+separates the original investigation, exact-main refresh and changed-build runs.
+Main repeats a volume-wide check and free collection on every mutation; dense
+1-GiB admission exceeds the 32-MiB workspace cap. The implementation performs
+one admission check, then local checks: at 128 MiB, empty CREATE uses 20–25
+requests instead of about 8,088–8,093. Dense 1-GiB admission and tiny writes
+succeeded within the then-current cap. These are profiled nested-QEMU results,
+not native hardware rates or complete editor publication.
 
 ## Accepted contract (2026-10-13)
 
@@ -37,11 +27,13 @@ admission, allocation state maintained for the mount lifetime, local mutation
 checks, and an explicit full check at publication start. The owner accepted this contract and authorized its implementation on 2026-10-13.
 
 Consolidate RW admission's existing checks into one full mounted-volume check.
-Read FAT copies through bounded windows, initially up to eight sectors per copy
-when the backing callback permits it. Compare the same valid entries/mirrors;
+Read FAT copies through callback-bounded windows of up to 64 KiB per copy for
+full checks; local mutations keep eight-sector windows. Full-check buffers add
+at most 128 KiB of caller-owned scratch. Compare the same valid entries/mirrors;
 keep chain, namespace, orphan and detached-root validation. Build an exact free
-bitmap/count from the successful sweep; FSInfo remains a hint. Charge this
-retained state to the existing shared 32-MiB backing cap. A dense 1-GiB fixture's
+bitmap/count from the successful sweep. FSInfo signatures remain validated, but
+free-count/next-free hints are advisory even when out of range; derive allocation
+from the FAT and correct hints with the next confirmed mutation. A dense 1-GiB fixture's
 2,064,848 clusters need about 252 KiB for the free bitmap, rather than an
 8-MiB vector of every cluster.
 
@@ -70,17 +62,29 @@ Expose that explicit full check on the bound RW mount control. Accepted authorit
 require both WRITE and INTERVAL, plus the calling process's active delivered
 interval. The installer/config publisher calls it once immediately after its
 existing BEGIN, before publication effects, inside the same non-extending
-30-second lease. A successful check publishes replacement allocation state
-atomically; failure preserves recovery and leaves proof invalid. Neither BEGIN
-nor SYNC silently becomes a check or renews the lease. The engine already has
-`fat32_mounted_check`; the native control operation/helper and publisher call
-are new work, coordinated with alpha through the owner.
+30-second lease. CHECK rebuilds in the existing reachability scratch and copies
+into retained backing only after full and held-object validation succeeds. No
+third full map is needed; admission already reserves the full-check scratch.
+Failure preserves allocation bytes/recovery and leaves proof invalid. Neither BEGIN
+nor SYNC silently becomes a check or renews the lease. The native `MOUNT_CHECK` operation and `mount_check` helper are implemented.
+The config-editor publisher calls it once in the same process, stops honestly
+on failure and releases the interval through its existing cleanup path.
 
-Keep operation-sized candidates and sector-and-phase images under 32 MiB:
+Owner update, accepted 2026-10-14: remove the fixed aggregate 32-MiB cap. Charge
+backing to its mount: one retained free map, current workspace and actual held
+chain capacity. Each map is one bit per cluster and legal geometry bounds a
+copy to about 32 MiB. The per-volume sanity ceiling derives from cluster count,
+maximum legal operation sizing and the existing wrapper limit, including real
+replacement overlap; it is not an allocation target or reservation. Machine
+allocation failure returns NO_MEMORY. CHECK needs no additional bitmap allocation.
+The work allowance includes the mandatory FAT sweep in addition to the existing
+namespace allowance; the deadline and lease stay unchanged.
+
+Keep operation-sized candidates and sector-and-phase images:
 new-directory allocation, parent growth, touched/shrunk/reclaimed chains,
 namespace images, dirty marking, FSInfo and sealing all count. Preserve old
 workspace on failed replacement allocation and charge old/new overlap. Large
-actual mutations may legitimately return LIMIT; dense admission and tiny writes
+actual mutations may exhaust memory or finite engine work bounds; tiny writes
 must not reserve every FAT sector. Preserve durable phase ordering, dirty marking,
 failed-state retention, held handles, clean-power sealing and retirement rules.
 
@@ -97,8 +101,9 @@ mounted is unsupported.
 Ordinary mutation work should follow touched chains, parent directories and
 changed sector-and-phase images, plus free-map searches, rather than two full
 FAT sweeps. Explicit check/admission still costs O(volume + namespace/chain work).
-With mirrored FATs and S valid FAT sectors, eight-sector windows reduce the FAT
-sweep's backing requests toward 2*ceil(S/8), plus namespace reads; this is a
+With mirrored FATs and S valid FAT sectors, W-sector callback-bounded windows
+reduce the FAT sweep's backing requests toward 2*ceil(S/W), plus namespace reads;
+W is at most 128 for full checks. This is a
 projection, not a speedup measurement. Complete 128-MiB editor publication must
 fit the original lease, including its explicit check, read-back and cleanup.
 
@@ -111,9 +116,11 @@ fit the original lease, including its explicit check, read-back and cleanup.
    explicit bound-control CHECK requiring WRITE|INTERVAL and its active owner;
    publisher invokes it after BEGIN once per publication. CHECK may rebuild after
    known pre-effect invalidation, but never resets an uncertain stopped writer.
-3. **Backing budget. Accepted:** retained allocation map and operation-sized
-   candidates/prepared images share the unchanged 32-MiB ceiling, including
-   replacement overlap and complete uncertainty retention. No volume-size-driven
+3. **Backing budget. Accepted 2026-10-14:** per-volume geometry-derived accounting
+   and sanity bounds replace the arbitrary aggregate cap; maps use one bit per
+   cluster, with two copies needed for admission/CHECK. Charge operation-sized
+   candidates/images, retained chain capacity, replacement overlap and complete
+   uncertainty retention; actual allocation failure is NO_MEMORY. No volume-size-driven
    prepared capacity for tiny writes and no larger lease.
 
 After this task the owner can: publish configuration on supported large scratch
@@ -128,8 +135,8 @@ corruption outside touched structures at explicit check/remount. Run the actual
 power seal/resume and fsck, then owner-scheduled native scratch checks if useful.
 No real ESP writes are authorized.
 
-- [ ] Implement and qualify the retained allocation proof and bounded workspaces
+- [x] Implement and qualify the retained allocation proof and bounded workspaces
   in pyxis-fs.
-- [ ] Add observable invalid state and the native bound-control CHECK ABI/helper.
-- [ ] Coordinate the once-per-publication CHECK with alpha and qualify the actual
+- [x] Add observable invalid state and the native bound-control CHECK ABI/helper.
+- [x] Coordinate the once-per-publication CHECK with alpha and qualify the actual
   128-MiB editor publication under the unchanged lease.

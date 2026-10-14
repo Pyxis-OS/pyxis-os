@@ -15,8 +15,10 @@ sectors, power-of-two clusters of 1–128 sectors, and one FAT or two mirrored F
 Legacy/hybrid MBR, bare FAT, FAT12/16, exFAT and active-FAT/nonmirrored layouts
 refuse. Volume bounds, FAT chains, long names, directory tails, labels and FSInfo
 are checked within finite memory, depth, work and I/O budgets; exhaustion returns
-an error without weakening validation. Native mount admission and mutation
-preflight check the whole volume. Raw inspection of one file does not prove unrelated metadata sound.
+an error without weakening validation. Native admission and explicit CHECK
+validate the whole volume; mounted mutations validate touched structures and
+maintain the retained allocation map. Raw inspection of one file does not prove
+unrelated metadata sound.
 
 Enumeration preserves valid UTF-8 names. Lookup accepts ASCII long names and
 short aliases, case-insensitively; mutation uses the supported ASCII profile and
