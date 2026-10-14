@@ -480,8 +480,7 @@ void input_pointer_report(struct input_source *source, int32_t dx, int32_t dy,
 {
   assert_input_owner();
   KASSERT(source && source->pointer_live);
-  if (!source->synthetic && !source->pointer_initial_hold &&
-      (buttons & ~source->pending_buttons & ~source->suppressed_buttons)) {
+  if (!source->synthetic && (buttons & ~source->pending_buttons)) {
     space_boot_focus_cancel();
   }
   source->pending_buttons = buttons;
