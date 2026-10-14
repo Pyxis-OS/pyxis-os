@@ -1,6 +1,7 @@
 # xHCI device/subtree disappearance
 
-2026-10-14. Native motivation: the owner's ThinkPad dock log
+2026-10-14. **Not ready:** the submitted native boot asserts before unplug;
+see [native boot blocker](#native-boot-blocker). Native motivation: the owner's ThinkPad dock log
 `/shared/present/dock-ethernet-log3.txt` reports controller 7:0.3 stopped by
 `device disappeared during interrupt transfer`. This record qualifies local
 retirement in QEMU; the native packet below remains owner work.
@@ -104,6 +105,61 @@ Matching snapshots, SHA256:
 Raw serial/GDB/client logs stay in the task worktree's `build/removal-*` files,
 including the preserved failed active-BOT check and its corrected repeat.
 All owned QEMU/debugger/client jobs are stopped. No native result is claimed.
+
+## Native boot blocker
+
+Owner/luna, 2026-10-14 about 20:50: ThinkPad, dock attached, trace build of
+`63fffdb4`, default PXE entry plus `usb.xhci.diagnose=1`. Verified native ELF
+SHA256 `729d8280a9a803c0ff57fddbeef1b952738482fb2912dbf5cb1b74d44091a77b`,
+archive `fa9887c77f9c8dddf9c2574007af561482179476676408425044aeb737aa1765`.
+Before any unplug, the screen prints only
+`assertion: arch_cpu_index() == 0 (kernel/usb/xhci.c:1179)`.
+PXE is restored to main. No native disappearance pass is claimed.
+
+Source inspection identifies the only listed notify caller without an earlier
+BSP assertion: `bluetooth_hci_revocation_notify()` loads the host atomically but
+calls BSP-only `usb_host_notify()`. `cut_forwarder()` calls it unconditionally;
+CUT and automatic cut on final controller-grant release can run on an AP.
+The other HCI/block callers assert BSP context before reaching this call.
+No task-placement or forwarder/HCI call-site change is present in this PR.
+The exact initiating cut/release and why this boot exposed it are unmeasured.
+QEMU has no AX200 host, so this notification path was not covered there.
+
+Proposed correction: make only the controller notification latch/wait handoff
+safe across CPUs, following the existing network/readiness notifier pattern.
+Keep all controller/device work BSP-owned; do not remove the assertion while
+leaving its currently unprotected state accessible remotely. Not implemented.
+
+The absent backtrace is source-explained: `KASSERT` calls ordinary `panic()`,
+which prints the message and halts without a stack walk, on BSP or AP. It is
+not evidence of a presenter/AP-specific stack-printing failure. See
+[panic diagnostic debt](../../../technical-debt.md#assertion-panic-backtraces).
+
+For runtime attribution, temporarily restage the same exact ELF/archive and add
+`debug.net=t14 debug.wait=1` plus
+`debug.image=729d8280a9a803c0ff57fddbeef1b952738482fb2912dbf5cb1b74d44091a77b`.
+On horse, use the matching ELF with `pyxis-gdb-bridge --target t14 --kernel ELF`
+and `gdb -q ELF`, then:
+
+```gdb
+set may-call-functions off
+set pagination off
+set logging file /tmp/xhci-852-native-gdb.txt
+set logging enabled on
+target remote 127.0.0.1:1235
+info threads
+continue
+info threads
+thread apply all bt 12
+p 'kernel/bluetooth/hci.c'::adapter.host
+```
+
+The terminal AP's backtrace should identify the notify caller and cut/release
+site. No breakpoint, injected call or target write. Attach requires active
+net0/IPv4; the readiness checkpoint may occur after this early assertion, and
+AP panic entry is not guaranteed if the BSP is outside the safe handoff context.
+If unavailable, retain UDP output rather than interpreting bridge silence as
+no panic. This packet is unrun; see the [debugger contract](../../../kernel/network-debugger.md).
 
 ## Native ThinkPad packet
 

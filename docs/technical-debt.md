@@ -44,6 +44,16 @@ now preserves unrelated devices when hardware fences succeed. Reattachment still
 only admits low/full-speed HID leaves on surviving supported hubs; displaced hubs,
 storage and HCI need reboot. Revisit with a concrete broader hotplug requirement.
 
+## Assertion panic backtraces
+
+`KASSERT` calls ordinary `panic()`, which prints its message and halts without a
+stack walk. The owner's ThinkPad boot of #852 (`63fffdb4`, 2026-10-14) showed only
+the xHCI notification assertion, leaving its caller unavailable on screen.
+This applies to BSP and AP assertions; it is not an observed presenter failure.
+Use the opt-in [network debugger](kernel/network-debugger.md) where entry is
+available. Revisit with a concrete panic-diagnostics task; no assertion-stack
+reporting change is part of USB retirement.
+
 ## Remote transfer memory and staging limits
 
 [Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer) stream with constant memory and no size limit
