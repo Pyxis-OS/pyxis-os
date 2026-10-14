@@ -13,6 +13,7 @@
 
 struct environment_cell {
   struct kernel_object object;
+  atomic_size_t references; /* Logical cell owners; storage retires separately. */
   char name[ENVIRONMENT_NAME_MAX + 1];
   uint64_t kind;
   uint64_t flags;
@@ -100,10 +101,38 @@ static size_t find_index(const struct environment_table *table, const char *name
   return ENVIRONMENT_ENTRIES_LIMIT;
 }
 
+static bool cell_retain(struct environment_cell *cell)
+{
+  size_t count = atomic_load_explicit(&cell->references, memory_order_relaxed);
+  for (;;) {
+    KASSERT(count);
+    if (count == SIZE_MAX) {
+      return false;
+    }
+    if (atomic_compare_exchange_weak_explicit(&cell->references, &count, count + 1,
+        memory_order_relaxed, memory_order_relaxed)) {
+      return true;
+    }
+  }
+}
+
+/* Outside every table guard. Last capture ends logical authority synchronously;
+ * only storage reclamation waits for the BSP object reaper. */
+static void cell_release(struct environment_cell *cell)
+{
+  size_t count = atomic_fetch_sub_explicit(&cell->references, 1, memory_order_acq_rel);
+  KASSERT(count);
+  if (count == 1) {
+    capability_grant_release(&cell->grant);
+    object_release(&cell->object);
+  }
+}
+
 static void destroy_cell(struct kernel_object *object)
 {
   struct environment_cell *cell = (struct environment_cell *)object;
-  capability_grant_release(&cell->grant);
+  KASSERT(!atomic_load_explicit(&cell->references, memory_order_relaxed));
+  KASSERT(!cell->grant.object);
   kfree(cell);
 }
 
@@ -123,6 +152,7 @@ static struct environment_cell *cell_create(const char *name, uint64_t kind,
   }
   memset(cell, 0, sizeof(*cell) + text_bytes);
   object_init(&cell->object, OBJECT_ENVIRONMENT_CELL, destroy_cell);
+  atomic_init(&cell->references, 1);
   memcpy(cell->name, name, strlen(name) + 1);
   cell->kind = kind;
   cell->flags = flags;
@@ -151,7 +181,7 @@ void environment_table_destroy(struct environment_table *table)
   }
   for (size_t i = 0; i < ENVIRONMENT_ENTRIES_LIMIT; ++i) {
     if (table->cells[i]) {
-      object_release(&table->cells[i]->object);
+      cell_release(table->cells[i]);
     }
   }
   kfree(table);
@@ -180,7 +210,7 @@ static void staging_destroy(struct environment_staging *staging)
   }
   for (size_t i = 0; i < staging->count; ++i) {
     if (staging->cells[i]) {
-      object_release(&staging->cells[i]->object);
+      cell_release(staging->cells[i]);
     }
   }
   kfree(staging);
@@ -245,7 +275,7 @@ static enum call_status commit_set(struct environment_table *table,
   spin_unlock(&table->lock);
   for (size_t i = 0; i < staging->count; ++i) {
     if (old[i]) {
-      object_release(&old[i]->object);
+      cell_release(old[i]);
     }
   }
   return status;
@@ -257,7 +287,7 @@ static enum call_status seed_cell_owned(struct environment_table *table,
   struct environment_staging staging = {.count = 1, .cells = {cell}};
   enum call_status status = commit_set(table, &staging);
   if (staging.cells[0]) {
-    object_release(&staging.cells[0]->object);
+    cell_release(staging.cells[0]);
   }
   return status;
 }
@@ -279,7 +309,7 @@ enum call_status environment_table_seed_owned(struct environment_table *table,
     *grant = (struct capability_grant){0};
   } else {
     cell->grant = (struct capability_grant){0};
-    object_release(&cell->object);
+    cell_release(cell);
   }
   return status;
 }
@@ -300,7 +330,7 @@ enum call_status environment_table_seed_text(struct environment_table *table,
   }
   for (size_t i = 0; i < length; ++i) {
     if (!text[i]) {
-      object_release(&cell->object);
+      cell_release(cell);
       return CALL_BAD_REQUEST;
     }
   }
@@ -314,7 +344,7 @@ static void destroy_snapshot(struct kernel_object *object)
 {
   struct environment_snapshot *snapshot = (struct environment_snapshot *)object;
   for (size_t i = 0; i < snapshot->info.count; ++i) {
-    object_release(&snapshot->cells[i]->object);
+    cell_release(snapshot->cells[i]);
   }
   kfree(snapshot);
 }
@@ -344,7 +374,7 @@ enum call_status environment_snapshot_capture(struct environment_table *table,
         ((flags & ENVIRONMENT_SNAPSHOT_TEXT_ONLY) && cell->kind != ENVIRONMENT_TEXT)) {
       continue;
     }
-    if (!object_retain(&cell->object)) {
+    if (!cell_retain(cell)) {
       status = CALL_LIMIT;
       break;
     }
@@ -467,7 +497,7 @@ static enum call_status commit_unset(struct environment_request *request)
   spin_unlock(&table->lock);
   for (size_t i = 0; i < request->count; ++i) {
     if (old[i]) {
-      object_release(&old[i]->object);
+      cell_release(old[i]);
     }
   }
   return CALL_OK;
@@ -703,7 +733,7 @@ static enum call_status capture_cell(struct kernel_object *object, const char *n
     for (size_t i = 0; i < snapshot->info.count; ++i) {
       struct environment_cell *cell = snapshot->cells[i];
       if ((enumerate && i == index) || (!enumerate && names_equal(cell->name, name))) {
-        if (!object_retain(&cell->object)) {
+        if (!cell_retain(cell)) {
           return CALL_LIMIT;
         }
         *result = cell;
@@ -718,7 +748,7 @@ static enum call_status capture_cell(struct kernel_object *object, const char *n
   size_t found = find_index(table, name);
   enum call_status status = CALL_NOT_FOUND;
   if (found != ENVIRONMENT_ENTRIES_LIMIT) {
-    if (object_retain(&table->cells[found]->object)) {
+    if (cell_retain(table->cells[found])) {
       *result = table->cells[found];
       status = CALL_OK;
     } else {
@@ -936,6 +966,6 @@ struct syscall_result environment_call(struct kernel_object *object, uint64_t ri
   }
   struct syscall_result result = return_cell(cell, generation, text_address, text_capacity,
       reply_address);
-  object_release(&cell->object);
+  cell_release(cell);
   return result;
 }
