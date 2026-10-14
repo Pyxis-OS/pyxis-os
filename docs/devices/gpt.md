@@ -85,6 +85,24 @@ comparison of the declared arrays. Comparing array CRCs alone is insufficient.
 Two individually valid but differing copies are ambiguous; neither wins by
 position or preference.
 
+### Larger-device image recovery scope
+
+Owner-approved task, 2026-10-14; implementation pending. A copied image may
+record its backup before the physical device end and/or retain a shorter
+protective MBR. The exception requires a valid primary, a valid reciprocal
+backup at the primary's recorded alternate, and matching declared arrays and
+header fields. The protective MBR remains structurally strict; its extent must
+cover the primary array and every used partition, or have the standard
+`UINT32_MAX` saturated coverage. A header found at the physical end when the
+recorded alternate is earlier refuses this exception rather than choosing
+between layouts. All reads remain bounded by the existing scan deadline.
+
+Publish the primary as read-only `GPT_DEGRADED`, with one warning naming
+`sgdisk --move-second-header`. Never repair or expand partitions automatically.
+Bad CRCs, disagreement, overlaps, unsupported or unexamined metadata do not
+qualify for this exception. Existing full-sized single-copy degraded recovery
+and filesystem write-authority rules remain unchanged.
+
 ## Published results
 
 Only `GPT_HEALTHY` and `GPT_DEGRADED` carry a partition map. All other results
