@@ -255,7 +255,10 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.display_timing_metrics = display_timing_metrics &&
     flag_option("display.timing.metrics", display_timing_metrics);
   options.display_inventory = display_inventory && flag_option("display.inventory", display_inventory);
-  options.display_flip = !display_flip || flag_option("display.flip", display_flip);
+  if (display_flip && !same_text(display_flip, "0") && !same_text(display_flip, "1")) {
+    panic("kernel option display.flip accepts only 0 or 1");
+  }
+  options.display_flip = !display_flip || same_text(display_flip, "1");
   options.display_flip_metrics = display_flip_metrics &&
     flag_option("display.flip.metrics", display_flip_metrics);
   if (ps2_synaptics && !same_text(ps2_synaptics, "0") && !same_text(ps2_synaptics, "1")) {
