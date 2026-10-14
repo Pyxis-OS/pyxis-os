@@ -322,11 +322,43 @@ inferred observation authority; entry spelling is routine layout work.
    fails before making any child runnable. These are explicit policy limits,
    not ABI or the namespace's former 64-binding contract.
 
-Capture the unchanged-main local baseline before code,
-then qualify owned lookup, concurrent mutation/snapshots, exported-only launch,
+The [unchanged-code local baseline](../development/experiments/process-environment/README.md)
+is captured on 1/4-CPU QEMU before code; the ordinary image build and existing
+IPC/OPEN/launch/pipe commands passed. Then qualify owned lookup, concurrent mutation/snapshots, exported-only launch,
 overrides, slot replacement/cleanup and live/remote mux on 1/4-CPU QEMU/GDB.
 The owner's native baseline remains the reference for matched after-A/C runs.
 Delivery includes dependent userland/ports changes before the parent pin and
 updated interface references. Startup/launch representation changes require
 all target binaries to rebuild against the matching SDK, including separately
-published toolchain-volume binaries; no compiler-container rebuild is expected.
+published toolchain-volume binaries. The pinned LLVM fork still uses the retired
+startup/launch APIs, so it also needs a target-runtime source migration. No
+code-generation change is expected, but the existing hosted build requires its
+source, SDK provenance and installed compiler revision to match. Under that
+unchanged workflow the owner must publish a matching compiler image after the
+fork change is qualified; provide the exact commit and commands before adoption.
+
+### Remaining lifetime decision: standard streams
+
+The existing startup stream grants have one descriptor owner; `close(1)` can
+release the final pipe writer while the process remains alive. A normal owned
+environment entry plus an owned LOOKUP capture would retain two grants, keeping
+that writer alive after close. This is a behaviour choice, not ABI layout.
+
+**Proposed default:** stdio captures the original `stdin`, `stdout`, `stderr`
+and optional `stdin.status` entries with non-reused publication identities.
+Closing/replacing an original standard descriptor conditionally removes its
+still-matching entries, then releases the local descriptor alias. A changed or
+absent entry is untouched; each companion is checked independently in one
+atomic cleanup. Duplicate descriptors have their ordinary independent lifetime;
+reused descriptor numbers carry no original-entry cleanup identity. `dup2` does
+not implicitly SET an environment name: child redirection uses the existing
+explicit descriptor overrides. Table cleanup runs outside descriptor locks,
+and native release is still attempted if cleanup fails, preserving close's
+invalidates/no-retry rule. Captured snapshots deliberately retain authority and
+must be released before application execution or unrelated waits.
+
+**Alternative:** keep the entries until explicit UNSET/process exit, accepting
+that closing a standard pipe descriptor alone no longer signals EOF/EPIPE.
+This changes the existing descriptor contract and is not the recommended profile.
+Stop before code for this lifetime decision; the two decisions above remain
+accepted. Baseline capture can proceed on unchanged code.
