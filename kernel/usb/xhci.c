@@ -1530,8 +1530,7 @@ static bool async_bulk_deadlines(struct usb_host_controller *controller)
         task_deadline_expired(bulk->tx.deadline)) {
       bulk->tx.state = CONTROL_HELD;
       bulk->tx.result = USB_TIMEOUT;
-      controller->failure = "async bulk OUT deadline expired";
-      return false;
+      mark_subtree_retiring(bulk->device);
     }
   }
   return true;
@@ -3012,8 +3011,7 @@ static bool control_deadlines(struct usb_host_controller *controller)
         task_deadline_expired(device->request.deadline)) {
       device->request.state = CONTROL_HELD;
       device->request.result = USB_TIMEOUT;
-      controller->failure = "control transfer deadline expired";
-      return false;
+      mark_subtree_retiring(device);
     }
   }
   return async_bulk_deadlines(controller);
@@ -3991,8 +3989,7 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
       break;
     }
     if (timed_out) {
-      controller->failure = "bulk transfer timeout";
-      stop_controller(controller);
+      mark_subtree_retiring(device);
       break;
     }
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
