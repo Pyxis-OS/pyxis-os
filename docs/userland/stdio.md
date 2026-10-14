@@ -152,8 +152,18 @@ flush/final close fail with EIO. Transport, framing and deadline failure fail in
 both modes. Generic transaction code never interprets HTTP codes.
 
 Lua uses ordinary `io.open`, `f:write`, `f:flush`, `f:read` and explicit `f:close`;
-its separate HTTP adapter is removed. Automatic Lua cleanup of a pending request
-remains an owner decision in the [A4 scope](../wip/capability-model-implementation.md#task-4-scope-accepted-2026-10-14).
+its separate HTTP adapter is removed. Accepted 2026-10-14: Lua GC and error-unwind
+cleanup abandon pending transactions without submission; observers retain failure.
+Explicit closes and clean normal shutdown retain commit behavior. Real cleanup
+errors are reported and retained by the Lua state; an otherwise successful
+standalone exit fails. Both shipped Lua versions use this rule.
+
+`pyxis_fclose_abandon(FILE*)` in `<pyxis/resource.h>` is the explicit native cleanup
+operation: discard a pending producer's queued output, request ABORT under the
+held right, and release the FILE without COMMIT. Successful abandonment/release
+reports zero; a real ABORT or release failure reports EOF/errno. Other aliases
+retain the failed transaction; ordinary close/exit do not turn it into success.
+Nonpending FILEs use normal close. This adds no authority or retry.
 
 ## Provider response metadata
 
