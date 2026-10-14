@@ -65,7 +65,9 @@ directory operations, cwd changes, removal and rename are unsupported.
 
 `handle_query()` reports resource rights, transport rights, immutable protocol
 and native/exported kind. It exposes no object identity and does not promise
-liveness: querying a withdrawn export still describes its interface.
+continued liveness after a successful query. Querying a cut grant or its
+descendants returns DENIED; a live export whose receiver has closed returns
+ENDPOINT_CLOSED. Forwarded holders retain the target's attested interface.
 
 FILE helpers select native syscall dispatch or exported endpoint CALL from that
 query. Both routes use the same [copied FILE payloads](../../include/abi/file.h): at
@@ -91,9 +93,14 @@ client.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
 Each libc descriptor keeps its own offset. Namespace replacement affects future
-opens; existing grants remain attached to the original provider. Withdrawal or
-provider exit makes affected invocations fail. RETIRE and its acknowledgment
-govern provider state reclamation and object-ID reuse.
+opens; existing grants remain attached to the original provider. OPEN results
+inherit their source service's revocation lineage; ordinary COPY, IPC and launch
+preserve it. Cutting the source therefore denies later use of its opened files,
+including handle queries. Independent reply attachments keep their own lineage.
+Bytes already read remain available. CUT denies queued work; work already delivered
+under the endpoint lock may complete. A live export whose receiver closes reports
+ENDPOINT_CLOSED. RETIRE and its acknowledgment govern provider state reclamation
+and object-ID reuse.
 
 Launch permits exported FILE standard streams with exactly the stream's READ or
 WRITE resource right and CALL transport; native streams keep zero transport.
@@ -125,13 +132,18 @@ performs no network operations.
 
 Each OPEN creates one export. A receiver can hold 64 exports, including its OPEN
 service, so a published instance supports at most 63 simultaneous file exports;
-copies share an export. The provider drops its own client handles after successful
-handoff. File state remains until RETIRE, then the provider acknowledges it before
+copies share an export. Creation returns a client and a separate CUT controller.
+The provider drops its own client handles after successful handoff and retains
+each controller until export retirement or provider teardown. A last logical
+controller release cuts its revocable export automatically. Controller storage
+alone does not delay natural retirement. File state remains until RETIRE, then
+the provider releases its controller and acknowledges it before
 reusing the ID. Canceled or timed-out calls finish their receipts without stopping
 unrelated service work. Failed OPEN reply transfer releases the provisional file.
 
 Removing or replacing the service binding can retire its OPEN export once all
-lookup references close. The old process continues serving already-open files
+lookup references and derived child authority close. The old process continues
+serving already-open files
 and exits after their exports retire too. There is no process-kill facility or
 supervisor; this is capability-driven shutdown, not forced cancellation.
 

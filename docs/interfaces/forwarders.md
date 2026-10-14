@@ -1,7 +1,7 @@
 # Capability forwarders
 
-Status: accepted contract for capability-model task 1; implementation and
-qualification are in progress. See the
+Status: capability-model task 1 implementation is under qualification. The
+native/exported RETARGET boundary below still needs owner review. See the
 [task scope](../wip/capability-model-implementation.md#task-1-scope-delta-2026-10-14).
 
 A forwarder owns a target grant. Holders use its kernel-attested type and
@@ -10,11 +10,44 @@ slots, RETARGET. Retargeting accepts the same type and cannot widen existing
 holder authority. Retargeting a service slot to nothing returns NOT_FOUND on
 later use. CUT is terminal and returns DENIED instead.
 
+## Creation and authority
+
+[`forwarder.h`](../../include/abi/forwarder.h) defines the native
+`FORWARDER_CREATE` syscall. It accepts a held target, REVOCABLE or SLOT, resource
+and transport masks, and the COPY-style SAME_RIGHTS flag (explicit masks must
+then be zero). It publishes two handles or neither: the holder and a controller.
+No ambient service grant is needed to attenuate already-held authority.
+Allocation, target ownership and both destination slots are preflighted.
+
+The controller uses `PROTOCOL_FORWARDER`: CUT requires CUT authority and no
+payload; RETARGET requires RETARGET authority and a replacement handle (zero
+empties the slot). Controllers carry no target authority. COPY can attenuate
+management rights; zero-right controller copies do not count as managers.
+Insufficient replacement authority returns DENIED; wrong type returns
+WRONG_TYPE; cycles are BAD_REQUEST. A cut slot cannot be retargeted.
+
+Holder metadata is fixed at creation. Today native and exported handles use
+different invocation envelopes, and implementation checks both the kernel
+object type and protocol when retargeting. Consequently a native FILE cannot
+yet replace an exported FILE (or conversely), despite their matching protocol.
+This is an unresolved implementation restriction, **not an accepted design
+limitation**; the [scope proposal](../wip/capability-model-implementation.md#retarget-transport-boundary-pending)
+records the requested resolution. Removing the check alone is incorrect.
+
 Ordinary COPY, launch and IPC preserve an existing revocation lineage.
 Explicit revocable copies add derivation tracking; plain grants require none.
 Capabilities opened through a revocable copy inherit its lineage, so opening
 a file does not escape a directory cut. Independent reply attachments retain
 their own lineage. Bytes already read are not revocable.
+
+New descendant grants also own logical holder references to their ancestors,
+so replacing a namespace binding cannot naturally retire its provider while
+opened files remain held. These are not controller references: last-controller
+auto-CUT still applies. A delivered OPEN that completes after CUT may publish
+an already-denied child handle, preserving the operation's delivery outcome
+without allowing the child to escape revocation. Provider OPEN/PREPARE replies
+inherit the invoking lineage; HTTP COMMIT's new response reader does too. Its
+existing observation attachment retains its own lineage.
 
 ## Controller lifetime (accepted 2026-10-14)
 
@@ -31,8 +64,8 @@ their own lineage. Bytes already read are not revocable.
 CUT denies new operations and fails queued operations. Already-delivered
 provider work may complete, subject to ordinary deadline, caller-stop and
 provider/receiver lifetime rules. The delivery boundary is RECEIVE under the
-endpoint lock. Existing WITHDRAW cancels received work, so its replacement
-must change that behaviour rather than reuse it unchanged. Export IDs and
+endpoint lock. CUT replaces the public WITHDRAW operation; unlike the old
+implementation, it does not cancel RECEIVED work. Export IDs and
 RETIRE/ACK remain provider-storage lifetime machinery, not a second public
 revocation operation.
 
@@ -41,6 +74,25 @@ must observe cut. Creation and returned-child derivation must preflight
 allocation before effects. BSP owns allocation and destruction; guards never
 span allocation, callbacks or waits. Admitted operations own storage separately
 from logical grant authority. No shared-memory unmapping is introduced.
+
+Ordinary COPY/launch/attachment capture preserves the wrapper. Operation
+resolution instead pins a target and flattened ancestors; RETARGET cannot
+redirect a captured operation. Native operations elect start immediately
+before effects or output publication. CUT winning denies pending operations
+and wakes interruptible/readiness waits; start winning preserves the real
+result, including late output failure and uncertain mutations. Queued SEND
+owns its context after sender exit. Native completions report DENIED when cut
+before start. Cleanup still drains buffers, returned handles and backend
+ownership. Short leases and BSP VM-mutation transactions remain unchanged.
+
+The implementation currently bounds distinct ancestors/hops at 32 and reports
+LIMIT on exhaustion; this is tunable policy, not ABI. Plain grants allocate no
+lineage and take a null-context path. Final destruction is BSP-owned. CUT
+detaches logical targets before callbacks; its queued receipt pins prevent
+record reuse during cancellation. Caretaker storage keeps management metadata
+safe without delaying natural provider RETIRE; admitted leaf references do
+delay RETIRE until accepted work drains. RETIRE/ACK remains provider-private
+storage lifecycle, not another revocation authority.
 
 ## Takeover authority (accepted 2026-10-14)
 

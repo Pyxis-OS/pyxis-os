@@ -16,15 +16,18 @@ use the same namespace and IPC without exposing a FILE interface.
 | Interface | Implemented contract |
 | --- | --- |
 | [Endpoints](endpoints.md) | CALL/SEND, copied payloads and capability attachments, receipts, absolute call deadlines and lifecycle notifications |
-| [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, withdrawal and acknowledged retirement |
+| [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, separate CUT controllers and acknowledged retirement |
 | [Namespaces](namespaces.md) | Flat exact-name bindings, separate LOOKUP and MANAGE rights, atomic replacement and explicit startup delegation |
 | [File providers](file-providers.md) | Full-URI OPEN, validated FILE grants and byte representation, shared native/exported file helpers |
 | [HTTP fetching](../userland/http-fetch.md) | Streamed HTTP/verified HTTPS GET, prepared POST, explicit snapshots and final diagnostics |
 
 Endpoint creation requires a service grant; it supplies no namespace-publication,
-file or network authority. Each receiver and its export control belong to one
-process. Receiver and receipt handles cannot be copied or delegated; client
-handles can, with equal or reduced resource and transport masks independently.
+file or network authority. Each receiver belongs to one process. Receiver and
+receipt handles cannot be copied or delegated; client handles can, with equal
+or reduced resource and transport masks independently. Export creation returns
+a revocable client and a separate CUT controller. Controllers can be copied
+explicitly; receiving a client never grants management authority. Providers
+retain controllers until their exports retire or the provider tears down.
 
 SEND requires SEND transport authority. CALL requires SEND and RECEIVE, with
 client RECEIVE authorizing only that call's response. It grants no access to the
@@ -62,14 +65,18 @@ reserved until RETIRE acknowledgment. Three lifetime actions have distinct effec
 
 - Namespace removal or replacement changes future discovery; held grants keep
   their original target.
-- Withdrawal stops further invocation of that export and cancels pending work;
-  delivered receipts still need completion.
-- Retirement follows drained operations and either final client closure or
-  withdrawal. The provider releases its state and acknowledges before reusing
-  the ID. Stale withdrawn handles never bind to a new object with that ID.
+- Forwarder CUT permanently denies new invocation and handle queries, and fails
+  queued work. Already-delivered work keeps its receipt and may complete under
+  ordinary deadline, caller-stop and receiver/provider lifetime rules. Releasing
+  the last logical controller grant also cuts a revocable export automatically.
+- Retirement follows drained operations and either final client closure or CUT.
+  Controller storage alone does not delay natural retirement. The provider
+  releases its state and controller, and acknowledges before reusing the ID.
+  Stale cut handles never bind to a new object with that ID.
 
-Receiver closure or provider exit invalidates every export without waiting for
-client closure. A dead binding remains unavailable until explicitly removed or
+Receiver closure or provider exit closes every still-live export without waiting
+for client closure; such operations report ENDPOINT_CLOSED. A cut lineage reports
+DENIED instead. A dead binding remains unavailable until explicitly removed or
 replaced. There is no automatic restart, reconnect or rebinding.
 
 ## File opens and snapshots
@@ -78,7 +85,11 @@ Libpyxis selects the complete URI scheme in userspace. Directory roots retain
 native traversal; provider schemes use OPEN with the full URI and requested
 READ/WRITE rights. A scheme present in both routes is an error, with no fallback.
 Successful OPEN returns an owned FILE grant with matching authority and byte
-representation metadata; failed OPEN returns no resource.
+representation metadata; failed OPEN returns no resource. Returned children
+inherit the source service's revocation lineage, so source CUT also denies later
+use of its opened files. Ordinary COPY, IPC and launch preserve lineage;
+independent reply attachments keep their own authority and already-read bytes
+are unaffected. See [forwarders](forwarders.md).
 
 Native `provider_open()` separates transport/validation status from the provider's
 operation result and diagnostic status, and accepts an optional caller deadline.
@@ -95,7 +106,8 @@ Text and explicit legacy HTTP/HTTPS OPEN produce immutable snapshots with stable
 size and bytes. Ordinary HTTP URL opens instead use prepared STREAMs; copies
 share consumption, and independent opens fetch independently.
 Each provider has 63 file-export slots beside its OPEN service. Removing the
-binding does not close existing files: the provider serves retained exports and
+binding does not close existing files: derived child authority retains its
+ancestor, and the provider serves retained exports and
 exits naturally after all its exports retire.
 
 ## Boot and use

@@ -470,6 +470,9 @@ static struct syscall_result call_object(handle_t handle,
   struct syscall_result result = dispatch_object(handle, reference.object,
       reference.rights, reference.transport, message_address, message_size,
       reply_address, reply_capacity);
+  if (result.status == CALL_OK && !task_operation_start()) {
+    result = (struct syscall_result){CALL_DENIED, 0};
+  }
   capability_release(&reference);
   if (task_operation_denied()) {
     result = (struct syscall_result){CALL_DENIED, 0};

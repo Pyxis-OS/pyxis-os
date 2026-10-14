@@ -300,6 +300,19 @@ and releases its detached grant outside that guard. These storage references
 drain during syscall cleanup before `task_syscall_leave` and retirement; they do
 not prolong controller authority or pipe open directions. Grant-producing capture
 additionally retains logical authority and rechecks the source generation/masks.
+For a forwarder, source acquisition also pins the selected leaf under the
+table-to-forwarder guard order, using atomic storage retention only. The
+forwarder guard never acquires a table or subsystem guard; CUT detaches targets
+and queued-receipt notifications before invoking logical release or endpoint
+cancellation outside it. Endpoint guards may nest the forwarder guard for
+operation election and record teardown, never the reverse. Controller grants
+carry management lifetime; admitted and caretaker storage references do not.
+Native BSP workers borrow the parked caller's operation context, while queued
+provider messages and asynchronous completions own a cloned context. Every
+before-effects election competes with CUT; already-started work retains its
+real outcome. Deriving returned grants allocates on BSP before publication;
+private VM mutations retain the existing quiescence transaction. See
+[forwarders](../interfaces/forwarders.md).
 Shared-table delivery, VM admission and native sibling entry are implemented;
 ordinary thread-safe libc remains a [later thread gate](../interfaces/threads.md).
 

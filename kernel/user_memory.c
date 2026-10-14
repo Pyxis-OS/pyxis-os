@@ -3,6 +3,7 @@
 #include <kernel/process.h>
 #include <kernel/process_vm.h>
 #include <kernel/user_memory.h>
+#include <kernel/task.h>
 
 bool user_buffer_lease_acquire(struct user_buffer_lease *lease)
 {
@@ -129,6 +130,9 @@ bool copy_reply_to_user_leased(const struct user_buffer_lease *lease,
 {
   bool valid = user_buffer_check_leased(lease, reply_address, reply_size, USER_BUFFER_WRITE) &&
       user_buffer_check_leased(lease, data_address, data_size, USER_BUFFER_WRITE);
+  if (valid && (reply_size || data_size)) {
+    valid = task_operation_start();
+  }
   if (valid) {
     if (data_size) {
       memcpy((void *)data_address, data, data_size);

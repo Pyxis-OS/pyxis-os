@@ -237,8 +237,8 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Task 1 scope (delta, 2026-10-14)
 
-**Implementation assigned.** Branch `kernel/capability-forwarders`, initially
-based on `777f9b73`. The two lifetime rules below were accepted by the owner on
+**Implementation assigned.** Branch `kernel/capability-forwarders`, based on
+`3b714754`. The lifetime rules below were accepted by the owner on
 2026-10-14. Beta's native baseline record must be linked here before task 1 merges.
 
 The kernel forwarder owns its target grant and exposes the target's
@@ -263,9 +263,8 @@ CUT denies new operations and cancels matching queued work. Provider delivery
 is the endpoint's locked transition to RECEIVED; already-delivered work keeps
 its receipt and may complete, subject to the existing deadline, caller stop,
 receiver closure and provider-exit rules. This follows the accepted design
-literally: today's `ENDPOINT_WITHDRAW` cancels RECEIVED work and rejects its
-reply (`kernel/object/endpoint.c`, `control_export` and
-`reply_endpoint_owned`), so that cancellation path cannot be reused unchanged.
+literally: the removed `ENDPOINT_WITHDRAW` implementation canceled RECEIVED
+work, whereas forwarder CUT leaves its receipt valid.
 Native worker queues need the equivalent before-effects check, and readiness
 waits must wake with DENIED on cut rather than retain a bare unrevocable target.
 Data already read and committed effects are not rolled back.
@@ -309,6 +308,35 @@ capability** and no implicit management authority from holding the slot or
 belonging to a group/space. If every controller copy is gone, the slot stays
 unmanaged and retains its last target for holders. The accepted contract is
 also recorded in the [forwarder interface](../interfaces/forwarders.md).
+
+### RETARGET transport boundary (pending)
+
+Inspection during task 1 found a public-type/carrier mismatch: native FILE and
+exported FILE share address-free payloads and the attested FILE protocol, but
+libpyxis selects direct FILE calls versus ENDPOINT envelopes using handle kind.
+Native transport is zero; exported invocation requires CALL transport. A
+protocol-only RETARGET check therefore cannot safely switch them, and querying
+the old target's kind creates a framing race. Current code refuses the switch.
+Task 3's typed OPEN/describe scope does not explicitly settle this boundary.
+
+**Proposed default:** complete task 1 with a bounded FILE protocol-call bridge:
+keep holder framing stable, dispatch to its captured target in the kernel,
+and treat native implicit call versus exported CALL as delivery authority for
+the same FILE operation while preserving resource ceilings. Qualify both
+retarget directions, provider errors and mutation uncertainty. This adds no
+new authority to a holder and cannot use a userspace query/retry adapter.
+Coordinate the resulting stable interface with beta before task 3.
+
+**Alternative:** explicitly accept matching native/exported representation as
+an interim task-1 restriction, and assign common FILE invocation before
+provider-independent service replacement is used. This would be a limitation
+requiring owner acceptance, not a previously accepted task-3 deferral.
+
+Implementation is checkpointed pending this decision; task 1 remains unchecked.
+No separate recovery capability was added. Controller copies are the accepted
+takeover authority. Native baseline is still a merge prerequisite.
+Checkpoint qualification is recorded in
+[the experiment summary](../development/experiments/capability-forwarders/README.md).
 
 ### Task 2 coordination
 

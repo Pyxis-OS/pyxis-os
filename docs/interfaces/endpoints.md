@@ -11,8 +11,8 @@ name or implicit discovery.
 
 Creation and export use typed requests on the common
 [BSP executor](../kernel/smp.md#scheduling-and-ownership) FIFO. Creation claims
-both result slots before publication; export claims one and carries an owned
-receiver snapshot plus copied descriptor. The sole caller keeps process/owner-list
+both result slots before publication; export also claims two (client and CUT
+controller) and carries an owned receiver snapshot plus copied descriptor. The caller keeps process/owner-list
 storage alive until completion, without exclusive table ownership. An early
 completion records notification without enqueueing a still-running caller.
 Neither operation changes private mappings or needs a VM handoff.
@@ -31,8 +31,8 @@ and CLOSE syscalls:
 | Helper | Handle | Behavior |
 | --- | --- | --- |
 | `endpoint_create()` | Service grant | Create a receiver and callable handle |
-| `endpoint_export()` | Service and owned receiver | Create an exported client with an ID, protocol and authority ceiling |
-| `endpoint_withdraw()` | Owned receiver | Stop an export and cancel its pending work |
+| `endpoint_export()` | Service and owned receiver | Create a revocable client and copyable CUT controller with an ID, protocol and authority ceiling |
+| `forwarder_cut()` | CUT controller | Deny new and queued work; received work may complete |
 | `endpoint_retire_ack()` | Owned receiver | Release a retired export ID after its notification |
 | `endpoint_invoke()` / `endpoint_notify()` | Exported client | CALL / SEND a provider protocol operation |
 | `endpoint_request()` | Callable handle | Admit a request with an optional deadline, then wait for its result or transport failure |
@@ -131,7 +131,7 @@ console, pipe and TCP interests.
 READABLE is level-triggered while an ordinary message, cancellation or retirement
 notice is queued. RECEIVE preserves its cancellation/retirement/message priority.
 Receiver shutdown reports CLOSED automatically with READABLE, suppresses READABLE
-and adds no ERROR. Export withdrawal or final-client closure does not close the
+and adds no ERROR. Forwarder CUT or final-client closure does not close the
 receiver; retirement remains a receivable notice.
 
 Readiness consumes and reserves nothing. A queued CALL can expire between the
@@ -210,8 +210,10 @@ An endpoint supports up to 64 live or unacknowledged exports, independently of
 its sixteen delivery slots. EXPORT requires service CREATE authority and the
 process's own receiver with CONTROL authority. It fixes a nonzero object ID,
 nonzero protocol, resource-rights ceiling and transport ceiling. IDs are unique
-within that receiver until retirement acknowledgment. The receiver owns control;
-it is not a client reference.
+within that receiver until retirement acknowledgment. The receiver owns
+retirement acknowledgment; the separate forwarder controller owns revocation.
+Neither is a logical client reference. Controller copies support supervision;
+last-controller release automatically cuts the export.
 
 Exported invocation uses the endpoint CALL/SEND envelope with an inner protocol
 and operation. Raw endpoint traffic and replies set both to zero. A mismatched
@@ -223,19 +225,22 @@ Libpyxis FILE helpers select this exported route using the authenticated handle
 interface/kind; native FILE calls retain their existing syscall dispatch. See
 [userspace file providers](file-providers.md).
 
-WITHDRAW denies new operations with `CALL_ENDPOINT_CLOSED`, removes queued work
-and wakes callers with their delivery state. Delivered work retains its receipt
-and attachments; CANCEL reports closure, including for SEND with deadline zero.
-An already-expired CALL retains its timeout result. Providers must finish retained
-receipts before reclaiming state. Withdrawal affects one export, not its siblings.
+Public WITHDRAW is replaced by [forwarder CUT](forwarders.md). CUT denies new
+operations with `CALL_DENIED`, removes queued work and wakes callers with
+NOT_DELIVERED. An already-expired CALL retains its timeout. RECEIVE elects
+delivery atomically against CUT; received work retains its receipt and
+attachments and may REPLY normally. CUT does not emit CANCEL for delivered
+work. Ordinary expiry, caller stop and receiver/provider closure still apply.
+Revocation affects this lineage, not independent sibling exports.
 
-RETIRE becomes pending after accepted operations drain and either the last client
-reference disappears or the export is withdrawn. Client references include local
-copies, launch grants and retained attachments. Keeping the original exported
-client open prevents natural retirement; provider control does not. RETIRE has no
+RETIRE becomes pending after accepted operations drain and the last logical
+client plus admitted leaf references disappear (including after CUT detaches
+the target). Client ownership includes local copies, launch grants, retained
+attachments and derived children. Keeping the original exported client open
+prevents natural retirement; controller/caretaker storage does not. RETIRE has no
 receipt, payload or attachments and consumes no delivery slot. It supplies the
-export ID and protocol; explicit ACK releases the ID. A withdrawn client can
-outlive ACK, but remains attached to an invalid old object even if its ID is
+export ID and protocol; explicit ACK releases the ID. A cut client can
+outlive ACK, but remains denied even if its ID is
 reused. Receiver closure or provider exit invalidates every export and discards
 control records without waiting for clients or ACKs. Remaining references keep
 only safe backing storage until their final BSP release.
@@ -245,12 +250,12 @@ only safe backing storage until their final BSP release.
 The exported counter example runs with `session boot://counter.pxe`. Two objects
 share a receiver and demonstrate authenticated identity/rights, COPY, launch and
 attachment attenuation, protocol rejection, provider-side denial, SEND and
-acknowledged retirement. `--withdraw` cancels a delivered call, finishes its
-receipt, acknowledges retirement and reuses the ID while a stale grant remains
-closed to invocation. `--exit` demonstrates provider teardown with retained
-client grants and accepted work. `--queued-withdraw` parks the provider before
-withdrawal so a CALL can queue; debugger inspection can confirm admission.
-`--retire-full` withdraws an idle export and receives its retirement notice while
+acknowledged retirement. `--cut` completes a delivered call after CUT,
+acknowledges retirement and reuses the ID while a stale grant remains denied.
+`--exit` demonstrates provider teardown with retained client grants and accepted
+work. `--queued-cut` parks the provider before CUT so a CALL can queue; debugger
+inspection can confirm admission. `--retire-full` cuts an idle export and
+receives its retirement notice while
 all sixteen normal slots remain occupied.
 
 The packaged example runs from the interactive shell with

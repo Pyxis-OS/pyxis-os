@@ -1,4 +1,6 @@
 #include <abi/endpoint.h>
+#include <abi/provider.h>
+#include <abi/http_transaction.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -1708,6 +1710,33 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
   return result;
 }
 
+static enum call_status derive_reply_children(struct endpoint_delivery_record *record,
+    struct capability_grant *grants, size_t count)
+{
+  if (!record->target) {
+    return CALL_OK;
+  }
+  size_t children;
+  if (record->target->protocol == PROTOCOL_PROVIDER &&
+      (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE)) {
+    children = count;
+  } else if (record->target->protocol == PROTOCOL_HTTP_TRANSACTION &&
+      record->operation == HTTP_TRANSACTION_COMMIT) {
+    children = count ? 1 : 0;
+  } else {
+    return CALL_OK;
+  }
+  /* The sender's started operation owns the ancestor storage throughout REPLY.
+   * COMMIT's observation is existing authority; only its new reader derives. */
+  for (size_t i = 0; i < children; ++i) {
+    enum capability_result result = forwarder_request_derivation_from(&grants[i], &record->origin);
+    if (result != CAP_OK) {
+      return grant_status(result);
+    }
+  }
+  return CALL_OK;
+}
+
 static struct syscall_result reply_endpoint_owned(struct endpoint_delivery_record *record,
     handle_t handle, uintptr_t request_address, size_t request_size, uint8_t *data)
 {
@@ -1739,6 +1768,11 @@ static struct syscall_result reply_endpoint_owned(struct endpoint_delivery_recor
   if (!copy_from_user(data, message.buffer, message.size)) {
     release_grants(grants, message.grant_count);
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  status = derive_reply_children(record, grants, message.grant_count);
+  if (status != CALL_OK) {
+    release_grants(grants, message.grant_count);
+    return (struct syscall_result){status, 0};
   }
   ready_before = begin_endpoint_update(state);
   if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {

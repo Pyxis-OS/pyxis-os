@@ -38,7 +38,7 @@ struct forwarder_request {
   struct capability_grant target;
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
-  struct forwarder_operation *lineage;
+  const struct forwarder_operation *lineage;
   uint64_t kind;
   struct forwarder_reply reply;
   enum call_status result;
@@ -86,6 +86,9 @@ enum capability_result forwarder_derive_grant(struct capability_grant *grant,
     const struct forwarder_operation *lineage);
 /* Current user, no locks; BSP allocation when lineage is present. */
 enum capability_result forwarder_request_derivation(struct capability_grant *grant);
+/* Explicit delivered-operation lineage remains owned across the BSP wait. */
+enum capability_result forwarder_request_derivation_from(struct capability_grant *grant,
+    const struct forwarder_operation *lineage);
 /* BSP creation for endpoint exports; consumes target on success only. */
 enum call_status forwarder_create_owned(struct capability_grant *target,
     uint64_t kind, struct capability_grant *holder, struct capability_grant *controller);

@@ -121,11 +121,12 @@ enum hci_initialization {
   HCI_INIT_READY,
 };
 
-/* All shared state is BSP-owned with IF=0. USB calls require the owning worker
+/* Adapter state is BSP-owned with IF=0, except atomic host publication used by
+ * revocation wakeups. USB calls require the owning worker
  * with IF=1; static entries remain reserved across those calls and preemption.
  * The core owns logical sessions; retained USB spans never belong to a process. */
 static struct {
-  struct usb_host_controller *host;
+  _Atomic(struct usb_host_controller *) host;
   struct usb_host_device *device;
   struct usb_host_interrupt *event;
   unsigned attachments;
@@ -584,8 +585,9 @@ void bluetooth_hci_process_exit(struct process *process)
 
 void bluetooth_hci_revocation_notify(void)
 {
-  if (adapter.host) {
-    usb_host_notify(adapter.host);
+  struct usb_host_controller *host = atomic_load_explicit(&adapter.host, memory_order_acquire);
+  if (host) {
+    usb_host_notify(host);
   }
 }
 
