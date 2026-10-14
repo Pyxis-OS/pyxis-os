@@ -1447,9 +1447,9 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
     }
     return true;
   }
-  if (interrupt->kind == USB_INTERRUPT_HID && residue <= interrupt->receive_bytes &&
+  if (residue <= interrupt->receive_bytes &&
       (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
-    mark_device_retiring(interrupt->device);
+    mark_subtree_retiring(interrupt->device);
     return true;
   }
   interrupt->result = USB_IO;
@@ -1565,6 +1565,11 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
       return true;
     }
     bulk->tx.result = USB_IO;
+    if (residue <= bulk->tx.requested &&
+        (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+      mark_subtree_retiring(bulk->device);
+      return true;
+    }
     controller->failure = "failed or invalid async bulk OUT transfer completion";
     return false;
   }
@@ -1649,6 +1654,11 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
     return true;
   }
   bulk->result = USB_IO;
+  if (residue <= bulk->receive_bytes &&
+      (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+    mark_subtree_retiring(bulk->device);
+    return true;
+  }
   controller->failure = "failed or invalid async bulk IN transfer completion";
   return false;
 }
@@ -1688,6 +1698,11 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
   }
   bulk->result = USB_IO;
   bulk->state = CONTROL_HELD;
+  if (residue <= bulk->requested &&
+      (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+    mark_subtree_retiring(device);
+    return true;
+  }
   controller->failure = "failed or invalid bulk transfer completion";
   return false;
 }
@@ -1796,9 +1811,9 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
   /* An early error does not retire the rest of the control TD sequence. */
   device->request.result = USB_IO;
   device->request.state = CONTROL_HELD;
-  if ((device->hid || device->retiring) && residue <= device->request.requested &&
+  if (residue <= device->request.requested &&
       (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
-    mark_device_retiring(device);
+    mark_subtree_retiring(device);
     return true;
   }
   controller->failure = "failed or invalid control transfer completion";
