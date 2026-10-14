@@ -3,6 +3,7 @@
 
 #include <abi/endpoint.h>
 #include <abi/file.h>
+#include <abi/describe.h>
 
 #define PROVIDER_OPEN UINT64_C(1)
 #define PROVIDER_PREPARE UINT64_C(2)
@@ -35,17 +36,19 @@ struct provider_open_request {
 
 #define PROVIDER_TARGET_MAX_BYTES (ENDPOINT_DATA_MAX - sizeof(struct provider_open_request))
 
-/* Transitional FILE adapter for task 3 integration, not the completed typed
- * result/describe ABI. Success transfers one FILE and printable media type;
- * failure has a zero prefix and no attachments or strings. */
+/* A typed resource reply transfers one owned resource when protocol is nonzero,
+ * otherwise none. The kernel attests its actual protocol and masks. Outcome is
+ * independent of protocol: failure is not empty data. Error bodies are obtained
+ * from the resource's published native snapshot via DESCRIBE, never attached
+ * provider-served capabilities. Local/admission failure carries no typed reply.
+ * Descriptions contain no provider identity or protocol-specific status. */
 struct provider_open_reply {
   uint64_t protocol;
-  uint64_t representation;
-  uint64_t media_type_size;
+  struct resource_description description;
 };
 
 _Static_assert(sizeof(struct provider_open_request) == 32, "provider open request layout");
-_Static_assert(sizeof(struct provider_open_reply) == 24, "provider open reply layout");
+_Static_assert(sizeof(struct provider_open_reply) == 432, "provider open reply layout");
 _Static_assert(FILE_PAYLOAD_MAX <= ENDPOINT_DATA_MAX, "file payload fits endpoint delivery");
 
 #endif
