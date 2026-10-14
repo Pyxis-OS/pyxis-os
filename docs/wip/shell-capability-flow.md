@@ -126,22 +126,39 @@ child can open, such as `env://job`, plus a grant of that entry. Every program
 that opens files can then use it, not only shell redirections. The separate
 `@name` table goes away.
 
-## Open questions
+## Owner answers to the open questions (2026-10-14)
 
-1. **Inheritance.** Do capability variables reach children automatically or only
-   when exported? The rule must hold for any capability, not only read-only
-   replies.
-2. **Facets passed downstream.** The proposed default for pipes and expansion is
-   read-only (reader and status), never control or commit, unless granted
-   explicitly.
-3. **Move or copy.** A pipe moves the capability, so the producer no longer holds
-   it. Fan-out such as `tee` makes explicit, narrowed copies.
-4. **Lifetime.** Overwriting or unsetting a variable releases its capability.
-   Shell and job exit follow the existing cleanup rules.
-5. **Retention bounds.** Backing, limits and failure behaviour for `x = { … }`
-   and for re-readable replies.
-6. **Generic write-open.** The intent and request shape providers implement, and
-   how PREPARE becomes one case of it.
+Owner direction, still part of this parked proposal; nothing is implemented.
+
+1. **Every variable holds a capability.** There are no separate string and
+   capability variables: `foo = "true"` binds a capability whose content is the
+   text `true`. No ambiguity, no type check before use. Variables reach children
+   exactly as variables do today: `export foo = "true"` exports, a plain
+   assignment stays local. Exporting a writable capability therefore delegates
+   that write authority to children; that's the explicit control.
+2. **The issuer decides the rights.** A capability carries whatever its producer
+   issued: `cat`, `echo` and `printf` hand out read-only output; a request
+   preparer (today's `request prepare`, perhaps an `http prepare` program) hands
+   out a read-write request that can be staged and committed. Pipes and
+   expansion pass on what was issued and add nothing.
+3. **A pipe moves the capability**; the producer no longer holds it. Fan-out such
+   as `tee` makes explicit copies, narrowed where wanted.
+4. **Lifetime:** overwriting or unsetting a variable releases its capability;
+   shell and job exit follow the existing cleanup rules.
+5. **Retention:** bound values and re-readable replies use a bounded backing
+   policy like today's private RAM staging, with explicit opt-in for large
+   values.
+6. **Write-open follows from 2:** opening a target returns whatever capability its
+   provider issues. Transaction semantics come from a provider or preparer that
+   issues a transaction, not from a separate client-chosen PREPARE path.
+
+Implementation notes for when this is picked up:
+
+- A text value only needs to behave as a read-only capability. It may be held as
+  an immutable inline value (for example in the startup record) rather than as a
+  separate kernel object per variable, so large environments stay cheap.
+- Ports keep working: libc `getenv`/`setenv` read and write text-content
+  capabilities as strings; a non-text capability is not presented as a string.
 
 ## Relation to current work
 
