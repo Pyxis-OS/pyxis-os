@@ -14,7 +14,10 @@ not a terminal.
    starts the console through Limine's write-combining direct map. Earlier
    failures are serial-only: an unsupported base revision, missing responses,
    executable placement and an invalid memory map. An absent framebuffer is
-   accepted; malformed supplied metadata remains fatal.
+   accepted; malformed supplied metadata remains fatal. Limine reports the
+   framebuffer's exact bytes, so its memory map entries must cover exactly
+   those. The partial pages at either end must hold no usable, loader or
+   kernel RAM, because they are mapped whole.
 2. **Rebind.** `paging_init` switches the console to the kernel's own
    framebuffer mapping immediately after the CR3 write, before the next log
    line. The direct map no longer exists at that point.

@@ -8,6 +8,11 @@
 void arch_clock_prepare(const struct boot_info *boot);
 uint64_t arch_clock_physical_address(void);
 void arch_clock_init(void);
+/* Intel's CPUID 0x15 core crystal in Hz, or zero when it is not enumerated
+ * (always on AMD). Valid after arch_clock_init. */
+uint64_t arch_clock_crystal_hz(void);
+/* HPET time in nanoseconds, for calibration before the TSC is selected. */
+uint64_t arch_clock_hpet_ns(void);
 
 /* Any CPU after initialization: incorporate a counter sample when software
  * extension is selected. No MMIO read on the direct 64-bit path. Boot callers

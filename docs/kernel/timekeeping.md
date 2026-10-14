@@ -27,9 +27,15 @@ of at most 100,000,000 fs and a usable sampling interval when extension is neede
 it fails explicitly otherwise.
 
 HPET supplies elapsed time only. Its comparator interrupts and legacy replacement
-mode are disabled. Each local APIC uses its existing PIT channel 2 calibration
-to target both sleep deadlines and nominal 120 Hz preemption. No PCI or VirtIO
-device support is involved.
+mode are disabled. Before AP startup the BSP sets the local APIC timer rate once,
+and every CPU uses it to target both sleep deadlines and nominal 120 Hz
+preemption:
+- on Intel, when CPUID `0x15` reports the core crystal, the rate is that crystal
+  divided by the timer's divide-by-16, with no measurement;
+- otherwise (AMD), one 50 ms measurement against the HPET.
+
+The legacy 8254 PIT is not used; recent Intel platforms such as vela gate it. No
+PCI or VirtIO device support is involved.
 
 ## Software-extension sampling and support limit
 
@@ -50,7 +56,7 @@ or longer, without rounding the comparison or using 128-bit division helpers.
 The configured interval must leave room for interrupt delays; nominal validation
 alone does not establish the actual sampling bound.
 
-Before BSP interrupts are enabled, explicit samples cover boot phases, PIT/PS2
+Before BSP interrupts are enabled, explicit samples cover boot phases, PS/2
 polling, AP startup waits, initrd mapping/validation, PCI devices, spaces and
 initial task launches. This avoids accumulating the time of an entire long boot
 without sampling. Individual operations between these samples, runtime execution
@@ -106,10 +112,15 @@ and with interrupts off, the BSP requires:
 It then measures the TSC against the HPET for 100 ms. Each end of the interval
 pairs one HPET read with the midpoint of the narrowest of eight TSC brackets
 around it. The error bound is half of each bracket plus one HPET period, over
-the interval. A bound above 100 ppm, or a frequency below 100 MHz, rejects the
-TSC. The 100 ms is spent on every boot whose BSP qualifies, including boots
-that later fall back. CPUID `0x15` is read for comparison only and logged when
-complete.
+the interval. The 100 ms is spent on every boot whose BSP qualifies, including
+boots that later fall back.
+
+- **Intel with a complete CPUID `0x15`** (ratio and crystal): the frequency is
+  crystal × numerator ÷ denominator. The HPET measurement only cross-checks it,
+  and a disagreement above 1000 ppm is logged without changing the choice. A
+  failed or uncertain measurement does not reject the TSC.
+- **Otherwise** (AMD, or no crystal): the measured frequency is used. A bound
+  above 100 ppm, or a frequency below 100 MHz, rejects the TSC.
 
 **Checks on each AP.** Startup brings APs online one at a time. Each AP
 repeats the CPU checks, including its own `DE_CFG`, and must support the
