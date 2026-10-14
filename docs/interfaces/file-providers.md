@@ -16,34 +16,41 @@ cat text://guide > home://guide.txt
 
 ## Discovery and OPEN
 
-**Task A3 checkpoint, incomplete.** The private HTTP wire split and native/text
-request replacement are implemented here. Owned typed results, held-capability
-OPEN, describe and A2 environment routing still need integration and validation;
-this checkpoint does not mark task 3 complete or ready to merge.
-
-Libpyxis selects the complete `scheme://` prefix. Directory roots retain their
-existing component-walking rules; exported provider entries use provider OPEN.
-One exact-name lookup chooses the capability; there is no second binding map. Provider failure never causes a fallback to directory lookup or creation.
-Relative paths still use the retained native working directory.
+**Task A3 integration in progress.** Typed OPEN and provider-free descriptions
+are implemented on this branch; name routing awaits the single environment
+view. The milestone is not complete or ready to merge until integration and
+qualification finish.
 
 The [generic OPEN ABI](../../include/abi/provider.h) carries READ/WRITE intent,
-CREATE, EXCLUSIVE, TRUNCATE and APPEND flags, the bounded opaque remainder and
-an absolute deadline. The 32-byte prefix contains no HTTP fields. Target bytes
-are bounded to 4,064; longer requests fail with FILE_TOO_LARGE. The provider
-interprets the remainder without decoding, normalization or component walking.
-The copied deadline must match endpoint delivery; zero means unlimited.
+CREATE, EXCLUSIVE, TRUNCATE and APPEND flags, an opaque target remainder and an
+absolute deadline. The 32-byte prefix has no HTTP fields. Targets are bounded to
+4,064 bytes; longer requests fail with FILE_TOO_LARGE. The original deadline is
+also the endpoint deadline; it is never restarted. CREATE needs OPEN_WRITE even
+with READ-only intent, EXCLUSIVE requires CREATE, and TRUNCATE/APPEND need WRITE.
+Targets refuse unsupported intents. Text remains read-only.
 
-Intent needs the matching service OPEN right. CREATE also requires OPEN_WRITE;
-EXCLUSIVE requires CREATE, and TRUNCATE/APPEND require WRITE intent. Targets
-refuse unsupported intents rather than emulating success. Text is read-only and
-refuses creation, exclusivity, truncation and append.
+A 432-byte typed reply declares protocol and bounded generic description, with
+one owned resource grant when a protocol is supplied. Type and both masks are
+checked against the kernel; issuers may attenuate authority. A resource failure
+has an outcome rather than successful empty bytes. Kernel-cached failed FILE and
+STREAM outcomes reject byte READ before provider delivery. Text's failed FILEs
+also refuse SIZE/INFO rather than fabricate an empty size.
 
-The temporary FILE adapter has a 24-byte reply prefix. Success returns exactly
-one owned exported FILE with the intent's exact FILE rights and CALL transport,
-plus optional printable ASCII media type of at most 127 bytes. Libpyxis checks
-these declarations against the kernel-authenticated handle query. Metadata grants
-no authority or proof of content. Malformed replies close provisional grants;
-failure zeroes the prefix and carries no resource or strings.
+`provider_open_typed()` owns the resource and any independently copied native
+error body. Malformed extents, strings, counts, types or descriptions release all
+provisional grants; actual query errors stay errors. The narrow `provider_open()`
+FILE adapter uses this same wire for current FILE-only callers; it reports other
+types as unsupported. There is no second generic ABI or legacy fallback.
+
+`resource_open_held()` borrows a FILE, native DIRECTORY or provider capability.
+A held FILE requires an empty remainder; CREATE without a name is unsupported,
+TRUNCATE needs WRITE, and APPEND remains consumer intent over positioned I/O.
+A directory walk cannot cross the held root, follows no symlinks and resolves the
+final component once through [typed native lookup](directories.md). Native lookup,
+creation and resize retain their synchronous native wait contract; exported
+OPEN and truncation use the supplied endpoint deadline. CREATE races return
+ALREADY_EXISTS without re-lookup or replay. Libc dispatch/transaction close belong
+to task A4, and shell syntax belongs to A5.
 
 `provider_open(provider, target, intent, flags, deadline_ns, &result, &file)`
 returns transport/local-validation status. CALL_OK makes `result.status` the

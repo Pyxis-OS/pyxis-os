@@ -18,7 +18,7 @@ use the same environment and IPC without exposing a FILE interface.
 | [Endpoints](endpoints.md) | CALL/SEND, copied payloads and capability attachments, receipts, absolute call deadlines and lifecycle notifications |
 | [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, separate CUT controllers and acknowledged retirement |
 | [Environment](environment.md) | Owned CAP/TEXT entries, immutable captures, exported-only child selection and explicit private delegation |
-| [File providers](file-providers.md) | Full-URI OPEN, validated FILE grants and byte representation, shared native/exported file helpers |
+| [File providers](file-providers.md) | Intent-based typed OPEN, attested grants, cached describe and immutable native error bodies |
 | [HTTP fetching](../userland/http-fetch.md) | Streamed HTTP/verified HTTPS GET, prepared POST, explicit snapshots and final diagnostics |
 
 Endpoint creation requires a service grant; it supplies no environment-mutation,
