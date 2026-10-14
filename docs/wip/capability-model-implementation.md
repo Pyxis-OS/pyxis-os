@@ -234,3 +234,85 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 - `rm` on held capabilities as well as names.
 - The provider-side open questions in the design: provider lifecycle and the
   cost of interposition, shared memory, and provider policy.
+
+## Task 1 scope (delta, 2026-10-14)
+
+**Implementation not started.** Branch `kernel/capability-forwarders`, base
+`777f9b73`. The accepted revocation design stays settled; the two lifetime
+questions below need owner answers before code. Beta's native baseline record
+must be linked here before task 1 merges.
+
+The kernel forwarder owns its target grant and exposes the target's
+kernel-attested protocol and attenuated authority to holders. A separate
+controller carries CUT and, for service slots, RETARGET; holders never gain
+these management rights merely by receiving the forwarded grant. Retargeting
+requires a held replacement of the same attested type and sufficient authority
+for the slot's fixed ceiling. It cannot widen an existing holder's grant.
+An empty service slot reports NOT_FOUND; CUT reports DENIED and is terminal,
+distinct from reversible retargeting to an empty slot.
+
+Explicit revocable copies create lineage; ordinary COPY, IPC attachments and
+launch preserve that lineage instead of extracting a bare target. Creating a
+further revocable copy beneath one preserves its ancestors, so cutting an
+ancestor cuts its descendants. Plain grants acquire no derivation metadata.
+Grant capture retains prospective authority and rechecks the exact source
+generation outside/under the existing table guard, as today. Resolution for an
+operation retains target storage separately from grant ownership; neither a
+blocking call nor a queued request borrows a capability-table entry.
+
+CUT denies new operations and cancels matching queued work. Provider delivery
+is the endpoint's locked transition to RECEIVED; already-delivered work keeps
+its receipt and may complete, subject to the existing deadline, caller stop,
+receiver closure and provider-exit rules. This follows the accepted design
+literally: today's `ENDPOINT_WITHDRAW` cancels RECEIVED work and rejects its
+reply (`kernel/object/endpoint.c`, `control_export` and
+`reply_endpoint_owned`), so that cancellation path cannot be reused unchanged.
+Native worker queues need the equivalent before-effects check, and readiness
+waits must wake with DENIED on cut rather than retain a bare unrevocable target.
+Data already read and committed effects are not rolled back.
+
+The public WITHDRAW revocation operation is replaced by forwarder CUT, with
+its in-tree helpers and consumers migrated in the same task. Export IDs,
+receipt ownership, RETIRE/ACK and provider-exit cleanup remain necessary for
+provider-private storage lifetime. Stable service slots use the same forwarder
+with both controller rights; task 2 replaces namespace publication and makes
+`service start` return the slot, without a second revocation mechanism.
+
+Allocation, growth and final destruction stay BSP-owned. Creation preflights
+table reservations and owned target grants before publication; failure unwinds
+without publishing either handle. Short guards cover structural changes only,
+never allocation, user copies, worker waits or callbacks. Retarget/CUT detach
+owned grants before releasing their logical authority outside guards. Private
+VM mutation keeps the existing activity/lease transaction; this task introduces
+no shared-memory mapping revocation. Deferred destruction keeps the existing
+execution-group cleanup accounting and waits for admitted storage references.
+No new ordinary klog diagnostics are planned.
+
+### Unresolved lifetime rules (proposed defaults)
+
+1. **Last controller release: cut automatically.** Default: explicit CUT is
+   terminal, and releasing the last logical controller grant performs CUT too,
+   including process teardown. Admitted storage references do not keep controller
+   authority alive. This prevents orphaned revocable access and lets a session's
+   owned controllers withdraw its grants on cleanup. Alternative: only explicit
+   CUT revokes; losing all controllers leaves holders usable until their last
+   release, and teardown must explicitly cut its controller registry first.
+2. **New child capabilities: inherit derivation.** Default: OPEN/LOOKUP/CREATE
+   results granting access beneath a forwarded directory/resource retain the
+   source lineage as well, so opening a file cannot escape a directory cut.
+   Existing unrelated grants returned as reply attachments keep their own
+   lineage; returned bytes are not revocable. Alternative: track only COPY,
+   launch, IPC and explicitly requested revocable copies; capabilities newly
+   opened through them remain independent. This boundary is not stated by the
+   accepted rule about copies and must be explicit before handler integration.
+
+### Task 2 coordination
+
+Beta's required lookup contract is confirmed: each name yields a retained
+capability with unchanged rights/transport, or owned immutable text, never a
+pointer into movable table backing. One process-local table serves mutation
+and exported child snapshots. The proposed caller-bound environment service
+provides LOOKUP/SET/UNSET/SNAPSHOT; launch captures exported entries only, with
+no whole-map namespace grant. Header layout and bounded text-copy replies are
+being agreed directly with beta before task 2, rather than treated as owner
+policy decisions.
