@@ -159,7 +159,7 @@ log stays outside the repository.
 
 ## Vela NVMe 2.0 scope — assigned 2026-10-14
 
-Proposal first; no driver change yet. The owner reported a SanDisk SN7100S
+Implementation authorized after both defaults were accepted on 2026-10-14. The owner reported a SanDisk SN7100S
 (`15b7:5044`): VER `0x20000`, MDTS 7, CTRATT `0x20014`, CNTRLTYPE 1,
 OACS `0x17`, ONCS `0xdf`, NN 1. Linux used 16 queues and a 32 MiB HMB.
 These are owner-supplied Linux facts, not a Pyxis qualification. No serials
@@ -178,9 +178,9 @@ escape stay unchanged.
 | PCIe registers, queues, PRPs, Read/Write/Flush | Their used layouts remain compatible. Keep BAR/MSI-X validation, one queue pair and captured slots. No additional queues, data commands or power features. |
 | CAP.CSS / CC.CSS | Prefer NVM-only `CC.CSS=0` when CAP.CSS bit 0 exists. Otherwise use `6` only when bit 6 exists and NVM is proven. Bit 7 permits an admin-only configuration; it is not a veto when NVM also exists. Never select `7` or publish an admin-only controller as a block device. |
 | Identify / namespace type | Keep CNS 1 controller, CNS 2 complete active list and CNS 0 geometry. Require I/O CNTRLTYPE 1; unreported type 0 remains allowed only before 1.4. Where multiple command sets are advertised, parse bounded CNS 3 descriptors and require one CSI descriptor identifying NVM (CSI 0); successful CNS 0 alone does not exclude ZNS. CNS 5/6 describe optional protection/other command limits not used by this metadata-free, PI-free Read/Write/Flush path. |
-| IOCSS profile | With CSS 6, CNS `1Ch` vectors plus Get Features `19h` must show that the selected profile enables NVM. See owner decision 2 below before choosing whether to alter it. No namespace formatting or attachment. |
+| IOCSS profile | With CSS 6, CNS `1Ch` vectors plus Get Features `19h` must show that the selected profile enables NVM. The accepted rule refuses an unsuitable profile without altering it. No namespace formatting or attachment. |
 | Namespace layout | Decode the six-bit FLBAS index and bounds in the supported table rather than aliasing a newer format to its low four bits. Do not refuse solely because additional formats are advertised. Still require selected metadata size zero, no PI, 512/4096-byte blocks and dense valid capacity; check the thin-provisioning flag as well as capacity. |
-| CAP.CRMS / CC.CRIME | Keep ready-with-media (`CRIME=0`), and qualify the advertised readiness modes. Use inherited CRIME for the firmware-ready wait. After writing the disabled configuration, re-read CAP: changing CRIME can legitimately change CAP.TO, so runtime equality must compare the resulting snapshot. CRTO supplies the ready-with-media enable interval; disable/reset uses CAP.TO. See decision 1 for the software ceiling. |
+| CAP.CRMS / CC.CRIME | Keep ready-with-media (`CRIME=0`), and qualify the advertised readiness modes. Use inherited CRIME for the firmware-ready wait. After writing the disabled configuration, re-read CAP: changing CRIME can legitimately change CAP.TO, so runtime equality must compare the resulting snapshot. CRTO supplies the ready-with-media enable interval; disable/reset uses CAP.TO. The accepted software ceiling is 127.5 seconds. |
 | Reset, shutdown, HMB | Confirm firmware halt before BAR sizing/DMA handoff. Controller reset clears inherited HMB enablement. Do not allocate or enable HMB. Existing drained queue deletion, normal CC.SHN/CSTS.SHST acknowledgement and retained ownership on failure apply; a completed shutdown alone would not authorize freeing a future enabled HMB. |
 
 No specification or external driver implementation is vendored. References:
@@ -192,33 +192,26 @@ No specification or external driver implementation is vendored. References:
 [Linux v6.19 readiness and namespace handling](https://github.com/torvalds/linux/blob/v6.19/drivers/nvme/host/core.c)
 provides a separate implementation cross-check, not code to copy.
 
-### Owner decisions — pending
+### Owner decisions — accepted 2026-10-14
 
-1. **Readiness ceiling. Default: retain a 127.5-second maximum wait.** Use the
-   advertised ready interval, including CRTO, within that ceiling (and the
-   existing 500 ms minimum). A larger advertised maximum does not itself refuse
-   an otherwise compatible controller: try it within the software budget and
-   report unavailable/retain ownership if it actually times out. The inherited
-   CAP.TO field currently bounds this wait to 127.5 s; the wider CRTO can imply
-   hours. Alternative: honor the entire advertised CRTO, permitting much longer
-   boot stalls. This ceiling covers initial firmware-ready/enable/disable waits;
-   existing five-second admin/I/O and bounded clean-power deadlines do not change.
-2. **IOCSS profile. Default: read/validate the current profile, refuse if it
-   excludes NVM.** Prefer CSS 0 where offered. In the CSS-6-only path, require
-   the active namespace's CSI 0 and NVM in the selected profile vector before
-   geometry/I/O publication. Alternative: select a supported NVM combination
-   using volatile Set Features `19h` (Save=0), with no persistent profile change.
-   The first default adds no profile write beyond existing queue configuration;
-   either choice keeps the data-write gate unchanged.
+1. **Readiness waits are capped at 127.5 seconds**, with the existing 500 ms
+   minimum. Honor the advertised interval, including CRTO, within that ceiling.
+   A larger advertised maximum does not itself refuse a compatible controller:
+   try within the budget and report unavailable/retain ownership if it times out.
+   This covers initial firmware-ready/enable/disable waits; five-second admin/I/O
+   and bounded clean-power deadlines are unchanged.
+2. **Validate the current IOCSS profile; refuse if it excludes NVM.** Prefer
+   CSS 0 where offered. With CSS 6, require CSI 0 and NVM in the selected profile
+   vector before geometry/I/O publication. Never change the profile.
 
-Neither pending default is agreed or implemented. Stop before driver code until
-both have owner answers. HMB is optional for this command profile, with a
-possible DRAM-less performance consequence recorded as
+HMB remains disabled and writes remain off by default. HMB is optional for this
+command profile; its possible DRAM-less performance consequence is recorded as
 [debt](../../../technical-debt.md#nvme-host-memory-buffer).
 
 ### Qualification plan
 
-Capture the unchanged `75d9b7b7` baseline before driver edits. Use stock local
+Capture the unchanged driver on `e5e995f0` (only target documentation differs
+from the planned `75d9b7b7` control) before driver edits. Use stock local
 QEMU 10.2.2, Q35/KVM, four CPUs, a disposable 512-byte-block NVMe GPT image,
 MDTS 7 and one/several offered queues; keep `nvme.write=0`. Exercise ready/GPT
 reads and clean shutdown and inspect selected CC/CAP, namespace and read-only
