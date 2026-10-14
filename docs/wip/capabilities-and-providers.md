@@ -112,11 +112,17 @@ There is no separate endpoint mechanism.
   Each uses the same URL, headers and credentials. The client does the same
   thing in every case and dispatches only on what it gets back. `unset x`
   removes the variable; `rm $x` acts on what it holds.
-- **Protocol options belong to preparers.** Write methods, extra headers,
-  credentials and trust profiles come from a preparer such as `http prepare`,
-  which issues a capability carrying them. DELETE is always remove, never a
-  prepared write method. Generic OPEN carries no protocol fields: today's HTTP
-  origin, flags and budgets leave its request header.
+- **Protocol options belong to preparers.** A preparer such as `http prepare`
+  configures a request and issues a capability carrying it: request headers,
+  including authorization such as a bearer token, the write method (POST, PUT
+  or PATCH; DELETE is always remove) and the trust profile. The headers apply
+  to every operation on that capability, read and remove included. Generic OPEN
+  carries no protocol fields: today's HTTP origin, flags and budgets leave its
+  request header.
+- **Credential store: out of scope.** How a credential is retrieved from a
+  credential store and handed to a preparer is deliberately left open (owner,
+  2026-10-14); see [credentials](credentials-and-biometrics.md). This model
+  only requires that a preparer can hold one without exposing it.
 - **Redirects are transparent.** Providers follow them, including 307 and 308
   with the request body. Credentials are dropped when a redirect crosses to
   another origin, so a protected service that redirects elsewhere fails as
@@ -243,8 +249,9 @@ cat $api                                    # GET on the same URL
 rm $api                                     # DELETE on the same URL
 ```
 
-- A prepared request is a configured resource (URL, headers, credentials,
-  write method, deadline policy, backing), not a one-shot request. Writing
+- A prepared request is a configured resource (URL, request headers such as
+  authorization, write method, deadline policy, backing), not a one-shot
+  request. Writing
   never consumes it, and concurrent writes are separate transactions.
 - Replies are independent of the endpoint: each has its own outcome, media type
   and lifetime.
