@@ -280,9 +280,9 @@ the table guard; ordinary TEXT lookup performs no eager file copy or second look
 
 ## Task 2 scope (delta, 2026-10-14)
 
-**Implementation assigned; defaults accepted 2026-10-14.** Fresh branch
-`kernel/process-environment` from main `4db9e431`, rebased onto `30fb8888`;
-task 1 is already checked. One process-owned environment replaces
+**Implemented; defaults accepted 2026-10-14.** Branch
+`kernel/process-environment`; the qualification record identifies its baseline
+and final inputs. Task 1 is already checked. One process-owned environment replaces
 startup resources, roots, stream bindings, string variables and kernel
 namespaces. A caller-bound native object supplies the agreed owned
 LOOKUP/SET/UNSET/SNAPSHOT view. Table growth, replacement and teardown stay
@@ -333,12 +333,11 @@ The owner's native baseline remains the reference for matched after-A/C runs.
 Delivery includes dependent userland/ports changes before the parent pin and
 updated interface references. Startup/launch representation changes require
 all target binaries to rebuild against the matching SDK, including separately
-published toolchain-volume binaries. The pinned LLVM fork still uses the retired
-startup/launch APIs, so it also needs a target-runtime source migration. No
-code-generation change is expected, but the existing hosted build requires its
-source, SDK provenance and installed compiler revision to match. Under that
-unchanged workflow the owner must publish a matching compiler image after the
-fork change is qualified; provide the exact commit and commands before adoption.
+published toolchain-volume binaries. LLVM #9 migrates the target runtime to this environment, without code-generation
+changes. The existing hosted build requires source, SDK provenance and installed
+compiler revision to match. The owner has published the matching `df87791` image;
+it is adopted with the qualified fork pin. Merge that fork fast-forward before
+the userland/ports dependencies and parent integration.
 
 ### Accepted lifetime decision: standard streams (owner, 2026-10-14)
 

@@ -231,8 +231,18 @@ resources/sysroot/linker authority came from bundle declarations. No wrapper,
 crash helper or runtime/source adaptation was used. Raw runs are
 `build/environment-df-*`; no faults were observed.
 
-Rebase `96c4cecf` adds main's presenter console change. Diffing its public ABI,
-environment/launch implementation, userland, ports and toolchain against the
-qualified `0295a8d2` finds no change; source/SDK inputs for the frozen payload
-remain identified above. Final ordinary build, smoke and exact-head CI are
-reported on #832. The owner's native after-A/C measurements remain separate.
+Final code head `67756f44` is rebased onto main `9326bb5e`; userland
+`f26690d5` contains main `e3ba6e3d`, ports remain `2c49e86c`. The rebase retains
+main's boot-focus and check-script changes, with no environment or libc/libpyxis
+runtime source change. The current SDK adds the unrelated `SPACE_CREATE_BOOT_FOCUS`
+flag without changing its request layout. Its archives differ from the frozen SDK
+in debug data and compiler `.comment` provenance (old producer `e0801c2`, new
+`df877910`); every archive member and CRT object is identical after removing those
+sections for comparison. The frozen payload's original inputs remain identified
+above; the SDK inventories are not byte-identical.
+
+The final ordinary image build and stock 1/4-CPU smoke passed CAP alias copy/unset,
+provider reads, a checked pipeline and `threadprobe runtime` (distinct TLS/errno,
+once, join, cross-thread free). CI #2442 passed build/filesystem/pins/changes on
+`67756f44`; exact submitted-head CI is reported on #832. Own jobs were stopped.
+The owner's native after-A/C measurements remain separate.
