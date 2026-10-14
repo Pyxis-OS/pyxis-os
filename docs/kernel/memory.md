@@ -126,9 +126,11 @@ Unmapping clears a run of leaf entries per page-table visit, and mapping
 installs a run per visit; checking that a reservation is bare skips absent
 tables and reads each present leaf table once.
 
-ALLOCATE backs its region in steps of at most 256 pages with interrupts off:
-allocate, zero and map. Between steps the executing BSP kernel task enables
-interrupts and yields to runnable work. The process VM transaction stays
+ALLOCATE larger than 256 pages backs its region in steps of at most 256 pages
+with interrupts off: allocate, zero and map. Between steps the VM worker
+enables interrupts and yields to runnable work. A smaller ALLOCATE, and its
+unwind after a failure, completes in one interrupts-off step and never yields,
+so the executor can run it inline. The process VM transaction stays
 exclusive throughout: admission is closed, the mutator is parked and sibling
 threads are held, so no RELEASE, DISPLAY change or teardown of the same process
 can interleave. The result stays all-or-nothing. On failure, the mapped prefix

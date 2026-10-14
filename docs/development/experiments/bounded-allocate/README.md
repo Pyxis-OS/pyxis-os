@@ -84,6 +84,15 @@ Failure and stop, after image, 4 CPUs:
   was the task terminated. A following allocation succeeded.
 - threadprobe `exhaust` (guarded allocations until NO_MEMORY, then reuse) and
   `lifecycle` pass on the PR head without diagnostics.
+- Inline allocation failure (review finding): GDB at boot zeroed the PMM's
+  free-frame count for one run of an inline allocation (256 pages, 192 mapped)
+  and restored it at the first unwind step. Before the fix, the unwind drew on
+  the leftover forward budget, and `back_private()` yielded inside
+  `service_request()` on the request executor. Allocations within one step now
+  use the synchronous `vm_back()`. The same forced failure in a Lua run (138
+  pages, 128 mapped) unwound in one call, Lua printed `not enough memory`, and
+  the next two runs succeeded. All 540 yields in that boot came from the VM
+  worker's later stepped allocations; none came from the executor.
 
 ## Chocolate Quake demo end
 
@@ -106,4 +115,18 @@ reaper queue delay (median 4.6 ms) is its input.
 
 ## Native run
 
-Pending: owner run on the ThinkPad with base and after diagnostic images.
+ThinkPad on AC power, owner session 2026-10-14, after image `101c8b3f`
+(this change plus diagnostics, before the inline-failure fix, which only
+changes a near-exhaustion failure path). The comparison is that morning's
+teardown run on the same allocation path: 6 audio recoveries, all after
+ALLOCATEs of about 80 ms.
+
+| | Result |
+| --- | --- |
+| Audio recoveries | 0 |
+| 136 MiB ALLOCATE | 52 ms total, 137 steps, longest step 0.75 ms |
+| 272 MiB ALLOCATE | 105 ms total, 273 steps, longest step 0.38 ms |
+| Longest step anywhere | 1.42 ms |
+
+The owner heard no stop during the three Lua runs. Quake and EDuke32 were
+fine; the pop at Quake's demo end is the game stopping its sounds.
