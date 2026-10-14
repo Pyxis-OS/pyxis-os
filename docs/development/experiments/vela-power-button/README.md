@@ -1,5 +1,10 @@
 # Vela power button
 
+**Native qualified, owner 2026-10-14.** Vela firmware rejects short taps, as
+observed on Fedora; a held press reaches Pyxis and runs orderly power-off. The
+final video result below supersedes earlier delivery-failure interpretations.
+Diagnostics are excluded from #855 and their branch has been deleted.
+
 ## Contract and source evidence
 
 Owner event-route decision accepted 2026-10-14: retain existing event sources;
@@ -88,19 +93,20 @@ press after startup. Never-merged diagnostic branch
 `diag/vela-power-on-75a8aaac` at `45c61551`: stick base `75a8aaac`, existing #847
 boot fix, #853 NVMe code, then #855 and this follow-up. Kernel-only info build;
 keep the stick's initrd/Limine, `nvme.write=0`, and no #848/newer ABI/pins.
-Native firmware and disks are untouched by Codex. Physical button delivery is intermittent in the owner retest below; detailed
-shutdown logs are not yet supplied.
+Native firmware and disks are untouched by Codex. That retest was initially interpreted as intermittent; the final held-press
+video below established native delivery and orderly power-off.
 
 The same owner boot confirmed Vela NVMe 2.0 namespace readiness; see the
 [NVMe record](../nvme-task1/README.md#vela-native-readiness--2026-10-14).
 
 
-## Intermittent native delivery — 2026-10-14
+## Earlier interpretation of native delivery — superseded 2026-10-14
 
 The owner retested diagnostic kernel `45c61551`. PNP0C0C and HIDD registered;
 the Intel array request reported capabilities `0x1f`. Five or six short presses
 (0.5–1 s) did nothing at least a minute after the shell appeared; a later short
-press did power off. **Delivery is intermittent, not qualified.** Earlier reports
+press did power off. This was initially interpreted as intermittent delivery; the Fedora comparison
+and final held-press video supersede that interpretation. Earlier reports
 of a native pass or a 30-second startup-only window were corrected; a long press
 may have been the firmware forced-off gesture. No post-press log yet identifies
 where short presses were lost. NVMe shutdown confirmation is not inferred.
@@ -114,8 +120,8 @@ status and query numbers, PWRB/HIDD Notify values, and the power latch/worker
 handoff. It does not change query draining, enables, event handling or shutdown
 policy. Firmware
 prerequisites and missed-edge/queue hypotheses remain under investigation.
-Earlier-readiness changes are not part of #855. Keep this PR draft until the
-intermittence is resolved and owner-verified.
+Earlier-readiness changes are not part of #855. At that checkpoint the PR stayed draft pending further evidence; the final
+held-press result below closes that qualification gate.
 
 
 ### Diagnostic packet and prerequisite audit
@@ -147,7 +153,7 @@ synthetic button AML in Q35/KVM, four CPUs, 2 GiB, fresh OVMF/VirtIO-SCSI ISO bo
 verified timestamped CF/CE Notify, admission and worker dispatch through clean
 power-off. No EC hardware/query delivery is emulated by that check. All task-owned
 QEMU/GDB stopped. No native data writes or behavior fix is authorized by these
-diagnostics; #855 remains draft awaiting the owner capture.
+diagnostics. The final owner result below completes qualification.
 
 
 ### Diagnostic owner run and GPIO audit — 2026-10-14
@@ -197,6 +203,29 @@ then a held press only if the owner chooses firmware forced-off. Look for EC
 query 0x10, HIDD CE/CF (or PWRB80), admitted latch, power-worker dispatch and
 ordinary shutdown lines. A heartbeat alone is not a button event. Do not add a
 hold-safe shutdown suppression or a guessed GPIO/GPE enable; neither follows
-from this evidence. Correct Field Unit reads and wider read-only pending-GPE
-observation are diagnostic candidates if another image is requested. #855
-remains draft; native delivery is not qualified.
+from this evidence. Correct Field Unit reads were queued, but canceled after the successful video;
+no further diagnostic image or behavior change was delivered.
+
+
+### Final native qualification — owner, 2026-10-14 ~23:20
+
+Fedora on the same Vela ignored several short taps (no dialog/shutdown), while a
+longer press produced an orderly shutdown. The BIOS exposed no button setting.
+The owner identifies this as firmware accidental-press rejection on the
+side-mounted button, rather than a Pyxis-specific loss of short presses.
+
+Slow-motion video of a held press on the existing `17acbab9` diagnostic kernel
+showed `power: power button pressed`, `power: flushing pools; powering off` and
+`power: stopping NVMe controllers`, followed by power-off. The owner accepts this
+as native held-press delivery and orderly power-off. It establishes the Pyxis
+worker path rather than relying solely on a blackout during a firmware hold.
+No complete query/Notify trace or per-controller shutdown status was supplied;
+the EC `_Q10` → PWPR → HIDD CE chain remains independently established by AML.
+
+#855 is natively qualified and ready for review/merge. Firmware-ignored short
+taps are an accepted platform behavior, matching the Fedora reference. No new
+hold threshold, debounce, GPIO driver, GPE enable or shutdown policy was added.
+The Field Unit diagnostic repair was not staged; further diagnosis stopped when
+the owner qualified the existing image. The never-merged diagnostic branch was
+deleted locally/remotely; historical captures/packets remain local. The PR's
+kernel/arch changes contain no `power-debug` records, diagnostic helper or probe.

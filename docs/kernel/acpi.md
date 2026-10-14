@@ -222,11 +222,11 @@ existing EC query route: `_Q10` → PWPR → HIDD Notify `0xce` after BTNL; `_Q1
 delivers release `0xcf`. The EC worker already evaluates its firmware-selected
 `_GPE` and handles queries. No additional enable is needed. The
 [qualification record](../development/experiments/vela-power-button/README.md)
-separates static AML evidence, QEMU Notify coverage and the owner's intermittent
-physical retest after correcting void BTNL admission. Several short presses were
-lost at steady state before one worked; native delivery is not qualified. A
-never-merged diagnostic kernel traces the query/Notify/power handoff without
-changing behavior.
+separates static AML evidence, QEMU Notify coverage and the owner's native
+qualification (2026-10-14). Vela firmware ignores short taps, also observed on
+Fedora. A held press reaches the Pyxis power worker and runs orderly power-off,
+verified by slow-motion video of its press, pool-flush and NVMe-stop lines. No
+software hold threshold is added. Diagnostic code is excluded from this backend.
 
 The Ctrl+Alt+Delete [power overlay](power-overlay.md) has the same
 physical-access authority. `acpi_power_local()` hands its power-off or restart
