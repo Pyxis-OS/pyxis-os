@@ -42,6 +42,10 @@ struct hda_controller {
   uint32_t fifo_bytes;
   struct hda_irq_event irq;
   bool prepared, link_ready, command_ready, stream_prepared, stream_running, failed, shutdown;
+  /* During an initialization attempt hda_fail() only records the first reason;
+   * the worker then resets the link and retries, or fails with that reason. */
+  bool setup_attempt;
+  const char *setup_failure;
 };
 
 struct hda_route {
@@ -61,6 +65,10 @@ struct hda_stream_position {
 void audio_require_worker(void);
 void hda_prepare(struct hda_controller *controller, const struct boot_info *boot);
 bool hda_link_start(struct hda_controller *controller);
+/* After a failed initialization attempt: masks delivery, stops the command
+ * rings, asserts link reset and disables bus mastering, checking each step.
+ * False means ownership is uncertain and the engine must fail. */
+bool hda_link_reset(struct hda_controller *controller);
 bool hda_commands_start(struct hda_controller *controller);
 bool hda_commands_stop(struct hda_controller *controller);
 bool hda_command(struct hda_controller *controller, uint8_t codec, uint8_t node,

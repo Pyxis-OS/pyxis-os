@@ -14,6 +14,8 @@
 #define QEMU_SERVICE_LIMIT_NS UINT64_C(20000000)
 #define AUDIO_RECOVERY_STREAK_NS UINT64_C(2000000000)
 #define AUDIO_RECOVERY_LOG_NS UINT64_C(10000000000)
+/* Initialization attempts, each after a checked link reset. Tuning, not ABI. */
+#define AUDIO_SETUP_ATTEMPTS 3
 #define HDA_BYTES_PER_SECOND (HDA_RATE * HDA_FRAME_BYTES)
 #define QEMU_COMMIT_LIMIT_NS UINT64_C(1000000)
 #define NATIVE_COMMIT_MS 20
@@ -453,15 +455,40 @@ static bool recover_output(void)
   return hda_stream_prepare(&controller) && run_output();
 }
 
+/* Codec setup can miss a readiness window on a busy BSP. Like Linux, reset
+ * the link and try again a bounded number of times; fail only when the reset
+ * cannot be verified or every attempt fails. */
+static bool initialize_controller(void)
+{
+  for (unsigned attempt = 1;; ++attempt) {
+    controller.setup_attempt = true;
+    controller.setup_failure = NULL;
+    bool ready = hda_link_start(&controller) && hda_commands_start(&controller) &&
+        hda_codec_discover(&controller, &route) && hda_commands_stop(&controller);
+    controller.setup_attempt = false;
+    if (ready) {
+      return true;
+    }
+    const char *reason = controller.setup_failure ? controller.setup_failure :
+        "initialization failed";
+    if (attempt == AUDIO_SETUP_ATTEMPTS) {
+      hda_fail(&controller, reason);
+      return false;
+    }
+    klog("hda: setup attempt %u failed: %s; resetting link\n", attempt, reason);
+    if (!hda_link_reset(&controller)) {
+      hda_fail(&controller, "link reset after failed setup not verified");
+      return false;
+    }
+  }
+}
+
 static void audio_worker(void *argument)
 {
   (void)argument;
   audio_require_worker();
   if (controller.prepared) {
-    if (!hda_link_start(&controller) || !hda_commands_start(&controller) ||
-        !hda_codec_discover(&controller, &route) || !hda_commands_stop(&controller)) {
-      hda_fail(&controller, "initialization failed");
-    } else {
+    if (initialize_controller()) {
       available = true;
       audio_volume_available(true);
       if (controller.model == HDA_MODEL_AMD) {

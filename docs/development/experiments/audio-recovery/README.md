@@ -96,3 +96,25 @@ the BSP-pinning inventory.
 For later native audio checks, use `pcm 440 220 SECONDS` (A4 left, A3 right)
 at moderate volume, not the 1000/500 Hz tones of the nested runs above (owner
 request).
+
+## Codec setup retry
+
+The native boot that failed with `native codec identity/graph/idle setup
+failed` spent its single 100 ms discovery deadline before the subsystem read.
+Now each readiness wait has its own budget, and a failed initialization gets
+up to two more attempts after a checked link reset
+([initialization](../../../devices/hda.md#ownership-and-initialization)).
+
+Nested QEMU (horse VM, KVM, 4 CPUs, main `dbbf9dd5` plus this change, image
+sha256 `6cab9b005f7376a5`), using GDB at boot without code changes to force
+each failure:
+
+| Forced failure | Result |
+| --- | --- |
+| Codec mask cleared after the STATESTS acknowledgement, attempt 1 | `setup attempt 1 failed: no codec reported after link reset`; attempt 2 saw the codec latched again after the reset; `audio: ready` |
+| Same on all three attempts | two attempt lines, then `no codec reported after link reset; engine unavailable until reboot` and a fully checked shutdown |
+| Codec mask cleared inside discovery, with command rings running | `setup attempt 1 failed: initialization failed`; the reset stopped both rings; `audio: ready`, then `pcm 440 220 5` played 5.1 s |
+
+Ordinary boots log no attempt line. A native boot (`audio: ready`, a short
+`pcm 440 220` tone) is pending in the owner's next ThinkPad session; the
+native failure itself was rare and is not forced there.
