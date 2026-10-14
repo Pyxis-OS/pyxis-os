@@ -1,11 +1,10 @@
 # xHCI device/subtree disappearance
 
-2026-10-14. **Native retest pending:** the first submitted boot exposed a latent
-main notification bug, fixed separately in #856; see
-[native boot blocker](#native-boot-blocker). Native motivation: the owner's ThinkPad dock log
+2026-10-14. **Native dock check passed** on the ThinkPad at `11b335dd`;
+see [native result](#native-result). The first submitted boot exposed a latent
+main notification bug, fixed separately in #856. Native motivation: the owner's
 `/shared/present/dock-ethernet-log3.txt` reports controller 7:0.3 stopped by
-`device disappeared during interrupt transfer`. This record qualifies local
-retirement in QEMU; the native packet below remains owner work.
+`device disappeared during interrupt transfer`.
 
 ## Scope and build
 
@@ -105,7 +104,8 @@ Matching snapshots, SHA256:
 
 Raw serial/GDB/client logs stay in the task worktree's `build/removal-*` files,
 including the preserved failed active-BOT check and its corrected repeat.
-All owned QEMU/debugger/client jobs are stopped. No native result is claimed.
+All owned QEMU/debugger/client jobs are stopped. These QEMU checks are separate
+from the owner-run native result below.
 
 ## Native boot blocker
 
@@ -115,7 +115,8 @@ SHA256 `729d8280a9a803c0ff57fddbeef1b952738482fb2912dbf5cb1b74d44091a77b`,
 archive `fa9887c77f9c8dddf9c2574007af561482179476676408425044aeb737aa1765`.
 Before any unplug, the screen prints only
 `assertion: arch_cpu_index() == 0 (kernel/usb/xhci.c:1179)`.
-PXE is restored to main. No native disappearance pass is claimed.
+PXE was restored to main after that failed boot. The successful retest below
+uses the separate main fix.
 
 Source inspection identifies the only listed notify caller without an earlier
 BSP assertion: `bluetooth_hci_revocation_notify()` loads the host atomically but
@@ -133,7 +134,7 @@ handoff across CPUs while all controller work stays BSP-owned. Its
 CUT with the owner's authorized local HCI-host stand-in on current main, then
 checks AP CUT/final-controller release and queued cancellation with the fix.
 #852 is rebased on #856; no stand-in patch is present in either submitted tree.
-Native retest is still required. No native debugger attribution is needed for
+The native retest below passed. No native debugger attribution is needed for
 this established source/runtime mismatch.
 
 The absent backtrace is source-explained: `KASSERT` calls ordinary `panic()`,
@@ -155,7 +156,34 @@ child-first. ELF SHA256
 `3ad7967d45ce1e012b046043315791da409ae31a363f03fedff83f0806669b31`,
 ISO `322ed7c3ea4227885da0f338c40775dc406c9894a61cb42b5d52160be66ad10e`.
 Only this record was dirty when built; kernel code matches that rebased head.
-All owned jobs stopped; native boot/unplug retest remains pending.
+All owned jobs stopped; native boot/unplug retest follows below.
+
+## Native result
+
+Owner/Claude/luna, ThinkPad, 2026-10-14 about 21:55: `11b335dd`, trace build
+`LOG_LEVEL=trace REMOTE_BEACON=t14 LOG_UDP=1`, default PXE entry plus
+`usb.xhci.diagnose=1`. Dock attached on USB-C with Ethernet. Verified ELF SHA256
+`8099511ec4be884e94af3278039247663c50862c96f7750b958d8065d8bda562`,
+archive `e3122e9c2dc2e89db1cedf39371f1842b8c2308fab8de0ca7da26ff596f02aab`.
+Captures: `/shared/present/xhci-852-native/{before,unplugged,replugged}.txt`.
+PXE was restored afterward.
+
+At boot, the dock blip retires locally: slots 4/2/3/1 fenced, root port 1
+retired, old backing retained, no disappearance halt. These slots cover the
+dock hubs, Billboard device and AX88179A. The owner unplugs, then replugs after
+about ten seconds: system and Remote continue; IPC CALL passes succeed before,
+between and after; all three controllers report `running=1 failed=0` with
+interrupts advancing. No assertion or panic. Other-controller BOT stick, AX200
+and camera remain in the immutable inventory; that listing alone does not
+prove new device I/O. Expected runtime attachment refusal is observed, since
+readmission of hubs/non-HID devices is outside this change.
+
+The trace/diagnostic volume wraps the log ring, so per-event lines around the
+manual unplug are not retained. The boot fences, controller samples and
+continued workloads meet this packet's success criteria. The accepted
+[log-level direction](https://git.internal/PyxisOS/pyxis-os/pulls/857) addresses capture noise;
+no logging redesign belongs to this fix. Native AX200 removal and proof of
+unfinished bulk DMA remain unqualified.
 
 ## Native ThinkPad packet
 
