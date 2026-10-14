@@ -183,7 +183,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
   only) and *cut* rights, held by its creator; revocable copies with
   derivation tracking, so a cut also cuts copies made through it; holders see
   *denied*. Service slots are forwarders with both rights.
-- [ ] **2. One environment table.** The startup record's standard streams, named
+- [x] **2. One environment table.** The startup record's standard streams, named
   resources, scheme roots, namespace grant and string environment become one
   table of named entries, each a capability or an inline text value. Launch
   passes exported entries only. `name://rest` resolves through it; libc keeps
@@ -355,7 +355,8 @@ and native release is still attempted if cleanup fails, preserving close's
 invalidates/no-retry rule. Captured snapshots deliberately retain authority and
 must be released before application execution or unrelated waits.
 
-All three task-2 decisions are settled. Implementation and ordinary image builds
-are in #832; matched 1/4-CPU qualification and the LLVM/container dependency remain
-recorded separately. The temporary shell HTTP `@name` registry remains private
+All three task-2 decisions are implemented in #832. The matching df87791 compiler
+image is adopted; full Clang/LLD links, 1/4-CPU environment stress and hosted driver
+qualification are recorded in the
+[task record](../development/experiments/process-environment/README.md). The temporary shell HTTP `@name` registry remains private
 operation state until A5/B6, not a generic resolver or second process environment.

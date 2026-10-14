@@ -152,20 +152,87 @@ table guard, zero VM borrowers/reserved capability slots, one logical owner of
 the inspected cell and an empty completed queue. No injected calls or user-data
 writes. These are selected observations, not instruction-level concurrency proofs.
 
-Source review covered SET/UNSET/snapshot exclusion and lifetime; concurrent
-mutation versus snapshot and policy-exhaustion races were not runtime-stressed.
 First boot exposed cleanup exceeding the 16-mutation admission policy; exact
 per-publication cleanup fixed it. Equal-generation TEXT readers now reuse their
-cache publication, preserving borrowed pointers without mutation. No new tests,
-boot automation or klog lines. All own QEMU/GDB/client jobs stopped.
+cache publication, preserving borrowed pointers without mutation. These earlier
+checks used existing programs; the explicitly requested stress follow-up below
+uses temporary qualification material only. No new repository test infrastructure
+or klog lines. Own jobs were stopped at each checkpoint.
 
-## Remaining dependency
+## Adopted compiler and stress follow-up
 
-All three owner decisions are accepted. Userland #261 and ports #116 are published;
-LLVM #9 at `df87791031b9b81060d99b7fb3c797aae6e68efb` object-compiles all five
-affected target units against this ABI. Full hosted linking/runtime qualification
-is pending the owner-published matching builder and a fresh immutable payload.
-The registry currently reports manifest unknown for the df87791 tag. Owner build
-branch `toolchain/process-environment-container` at `7fe4e887` prepares pin/tag
-adoption; production provenance matching remains unchanged. Task 2 stays unchecked
-and #832 stays draft until that dependency and remaining qualification are complete.
+Owner image `pyxis-llvm23.1.3-df87791` contains exact fork
+`df87791031b9b81060d99b7fb3c797aae6e68efb` (LLVM #9). Parent `0295a8d2`
+adopted it and rebased on main `dabfc7ca`; ordinary complete image and CI passed.
+SDK inputs were frozen as `build/sdk-hosted-0295` before a fresh
+`LLVM_SOURCE=/home/chronium/src/pyxis-llvm-environment JOBS=16
+ toolchain/build-hosted.sh SDK OUTPUT WORKDIR` build. Both complete target links,
+resource staging and before/after source/SDK inventories passed. LLVM workers
+remain off; the real matching C/C++ runtimes and static TLS are used.
+
+| Tool | Serialized P1F bytes | Mapped/backed span bytes | Eager stack bytes |
+| --- | --- | --- | --- |
+| Clang | 90,386,214 | 90,980,352 | 8,388,608 |
+| LLD | 55,777,370 | 56,389,632 | 8,388,608 |
+
+Payload revision `hosted-bd2dbff32a8909875dacfd2e5c1535f0a9836bfbcc20855b8467c7a09e32091b`,
+archive SHA-256 `87c25029a9efe7e3a739a8f77fce0149ac2a24009d0305c454be2efd0854c45b`.
+Existing image/span/stack ceilings remain unchanged. No new peak-memory or timing
+measurement is claimed. This payload replaces old-ABI toolchain-volume revisions;
+native publication remains an owner action.
+
+Fresh nested 1/4-CPU KVM boots used a private config with read-only HOST and a
+read-only virtio-fs daemon, writable tmp/home, network-owner local mux and Remote.
+No packaged defaults changed. Temporary probe source/ELF/PXE, compile command,
+expectations and SHA256SUMS are at
+`/shared/present/capability-environment/runtime-stress/`.
+Source SHA-256 `4d7d588a8bbab28c7f83b216df374bcef63f675276122dd1990e147edae85ace`;
+PXE `ff2672f11adcab7afe9c3a5f72453cabcc1e59dfb38ef791f0dc82c24dfc60d8`.
+The probe is local qualification material and is not merged or installed.
+
+Manual commands, each in a fresh Remote session:
+
+```text
+session host://env-stress.pxe concurrent
+session host://env-stress.pxe policy 1024 1048576 16
+session host://env-stress.pxe stdio
+```
+
+All six runs reported zero failures, exited 0 and completed FINAL drainage.
+Three siblings performed 128 retained-capture rounds plus 128 concurrent churn
+rounds; snapshot pairs remained atomic and owned CAP/TEXT values survived UNSET.
+Spontaneous present/absent snapshot observations were 42/43 and 86/85 on one CPU,
+44/39 and 84/89 on four CPUs; synchronized retention independently forces the
+held-authority cases. Copied snapshot CLOSE and caller-bound ENV sharing were
+checked. Policy inputs are current tunable values, not ABI assertions: filling
+1,024 entries and 1 MiB name/text charge refused mixed mutations atomically,
+preserved generation/values, left short TEXT output untouched and recovered
+capacity. A 1,048,217-byte value copied fully.
+
+Both stdio cases proved original-pipe EOF with the producer still live via native
+TRY_READ and completion polling. Closing the original fd preserved dup lifetime;
+a newer stdout publication survived original close and reused fd1 close, then
+explicit exact-identity UNSET released its final writer. A delegated ENV handle
+could mutate only the child's table, not read or alter the parent's private marker.
+Control acknowledgements establish ordering; sleeps are not admission evidence.
+GDB used matching ELF and CR3-qualified hardware breakpoints on both CPU counts:
+zero failures/VM borrowers/reserved slots, restored 37 entries/323 bytes, unlocked
+ENV guard and one owner of the inspected cell. One CPU also showed one linked task
+and one task-storage owner after joins; the completed queue was empty. No injected
+calls or user-data writes. Bounded exercised interleavings are not a race proof.
+
+The rebuilt bundles passed `clang -c`, standalone LLD and driver-invoked LLD;
+both linked programs printed `hello 5`. The driver loop also passed on one CPU.
+Syntax failure produced a caret diagnostic, exit 1 and no object. Undefined-symbol
+links exited 1, preserved pre-existing output and left no absent-output partial
+or compiler temporary. A private fixture removing only the launch declaration
+still compiled with `-c` and refused linking explicitly. HOST writes were denied;
+resources/sysroot/linker authority came from bundle declarations. No wrapper,
+crash helper or runtime/source adaptation was used. Raw runs are
+`build/environment-df-*`; no faults were observed.
+
+Rebase `96c4cecf` adds main's presenter console change. Diffing its public ABI,
+environment/launch implementation, userland, ports and toolchain against the
+qualified `0295a8d2` finds no change; source/SDK inputs for the frozen payload
+remain identified above. Final ordinary build, smoke and exact-head CI are
+reported on #832. The owner's native after-A/C measurements remain separate.
