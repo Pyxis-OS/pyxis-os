@@ -30,6 +30,12 @@ No result buffer is retained or needed on SUBMIT. Successful return means admiss
 only. IDs are consumed on acceptance; earlier or zero IDs are `CALL_BAD_REQUEST`,
 and exhausting the receiver's ID range returns `CALL_LIMIT`.
 
+Forwarded SUBMIT elects admission against CUT immediately before consuming the
+correlation ID. Accepted admission keeps its real result; the cloned backend
+lineage stays pending until its separate effects boundary. CUT before backend
+start therefore produces a DENIED completion rather than rewriting successful
+SUBMIT as a refusal after commitment.
+
 ## First operation profile
 
 Submission metadata is separate from the bounded 4,096-byte payload. All integers

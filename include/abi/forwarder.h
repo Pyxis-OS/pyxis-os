@@ -30,7 +30,9 @@ struct forwarder_reply {
 };
 
 /* An invalid target empties a service slot without changing its fixed type or
- * ceiling. CUT is permanent. RETARGET is unavailable on a revocable copy. */
+ * ceiling. Replacement needs the same attested protocol and representation
+ * (native or exported); crossing representations returns WRONG_TYPE.
+ * CUT is permanent. RETARGET is unavailable on a revocable copy. */
 struct forwarder_retarget {
   struct message_header header;
   handle_t target;

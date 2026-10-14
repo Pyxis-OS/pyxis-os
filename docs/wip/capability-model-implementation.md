@@ -309,32 +309,18 @@ belonging to a group/space. If every controller copy is gone, the slot stays
 unmanaged and retains its last target for holders. The accepted contract is
 also recorded in the [forwarder interface](../interfaces/forwarders.md).
 
-### RETARGET transport boundary (pending)
+### RETARGET representation (accepted owner decision, 2026-10-14)
 
-Inspection during task 1 found a public-type/carrier mismatch: native FILE and
-exported FILE share address-free payloads and the attested FILE protocol, but
-libpyxis selects direct FILE calls versus ENDPOINT envelopes using handle kind.
-Native transport is zero; exported invocation requires CALL transport. A
-protocol-only RETARGET check therefore cannot safely switch them, and querying
-the old target's kind creates a framing race. Current code refuses the switch.
-Task 3's typed OPEN/describe scope does not explicitly settle this boundary.
+Retargeting requires the same attested protocol and representation: native to
+native or exported to exported. Native/exported switches return WRONG_TYPE
+without changing the slot. Current envelopes and transport masks differ, so
+this slice provides no kernel FILE bridge. Revisit with the interchangeable-
+providers prerequisite **provider-backed device handles**, designed with the
+compositor; see [technical debt](../technical-debt.md#forwarder-retarget-representation).
 
-**Proposed default:** complete task 1 with a bounded FILE protocol-call bridge:
-keep holder framing stable, dispatch to its captured target in the kernel,
-and treat native implicit call versus exported CALL as delivery authority for
-the same FILE operation while preserving resource ceilings. Qualify both
-retarget directions, provider errors and mutation uncertainty. This adds no
-new authority to a holder and cannot use a userspace query/retry adapter.
-Coordinate the resulting stable interface with beta before task 3.
-
-**Alternative:** explicitly accept matching native/exported representation as
-an interim task-1 restriction, and assign common FILE invocation before
-provider-independent service replacement is used. This would be a limitation
-requiring owner acceptance, not a previously accepted task-3 deferral.
-
-Implementation is checkpointed pending this decision; task 1 remains unchecked.
-No separate recovery capability was added. Controller copies are the accepted
-takeover authority. Native baseline is still a merge prerequisite.
+The owner's native baseline is complete and recorded in
+[#825](https://git.internal/PyxisOS/pyxis-os/pulls/825). Its merge satisfies
+the task-1 baseline prerequisite; implementation qualification continues here.
 Checkpoint qualification is recorded in
 [the experiment summary](../development/experiments/capability-forwarders/README.md).
 

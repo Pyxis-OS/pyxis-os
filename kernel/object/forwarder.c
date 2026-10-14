@@ -961,8 +961,9 @@ struct syscall_result forwarder_controller_call(struct kernel_object *object,
     if (result != CAP_OK) {
       return (struct syscall_result){call_status(result), 0};
     }
-    if (object_effective_type(target.object) != forwarder->type ||
-        object_protocol(target.object) != forwarder->protocol) {
+    bool exported = object_effective_type(target.object) == OBJECT_ENDPOINT_EXPORT;
+    bool slot_exported = forwarder->type == OBJECT_ENDPOINT_EXPORT;
+    if (exported != slot_exported || object_protocol(target.object) != forwarder->protocol) {
       capability_grant_release(&target);
       return (struct syscall_result){CALL_WRONG_TYPE, 0};
     }

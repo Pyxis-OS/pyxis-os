@@ -1,8 +1,8 @@
 # Capability forwarders: task 1 checkpoint
 
-This is qualification in progress, not task completion. The native/exported
-RETARGET choice is pending in the
-[milestone](../../../wip/capability-model-implementation.md#retarget-transport-boundary-pending).
+This is qualification in progress, not task completion. The owner accepted
+same-representation RETARGET and no FILE bridge; see the
+[milestone](../../../wip/capability-model-implementation.md#retarget-representation-accepted-owner-decision-2026-10-14).
 
 ## Inputs and baseline
 
@@ -18,9 +18,10 @@ RETARGET choice is pending in the
   123.927 ms, range 87.598–805.372 ms. The VM/host was not isolated and a build
   overlapped part of the run; this does not support performance attribution or
   replace the required native baseline. No matched after timing is claimed.
-- Beta's native gate is pending in
-  [#825](https://git.internal/PyxisOS/pyxis-os/pulls/825). Its record is a merge
-  prerequisite; only the local functional baseline is complete.
+- The owner's native baseline is complete and recorded by beta in
+  [#825](https://git.internal/PyxisOS/pyxis-os/pulls/825); merging that record
+  satisfies the task-1 gate. Repeat its profile after milestones A and C;
+  this task's local functional checks do not claim a native performance result.
 
 ## Manual qualification
 

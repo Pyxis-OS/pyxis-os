@@ -1,7 +1,6 @@
 # Capability forwarders
 
-Status: capability-model task 1 implementation is under qualification. The
-native/exported RETARGET boundary below still needs owner review. See the
+Status: capability-model task 1 implementation is under qualification. See the
 [task scope](../wip/capability-model-implementation.md#task-1-scope-delta-2026-10-14).
 
 A forwarder owns a target grant. Holders use its kernel-attested type and
@@ -27,13 +26,14 @@ do not count as managers.
 Insufficient replacement authority returns DENIED; wrong type returns
 WRONG_TYPE; cycles are BAD_REQUEST. A cut slot cannot be retargeted.
 
-Holder metadata is fixed at creation. Today native and exported handles use
-different invocation envelopes, and implementation checks both the kernel
-object type and protocol when retargeting. Consequently a native FILE cannot
-yet replace an exported FILE (or conversely), despite their matching protocol.
-This is an unresolved implementation restriction, **not an accepted design
-limitation**; the [scope proposal](../wip/capability-model-implementation.md#retarget-transport-boundary-pending)
-records the requested resolution. Removing the check alone is incorrect.
+Holder metadata is fixed at creation. **Accepted owner restriction,
+2026-10-14:** RETARGET requires the same attested protocol and representation:
+native to native or exported to exported. Native/exported switches return
+WRONG_TYPE without changing the target, even for matching FILE protocols.
+Their current invocation envelopes and transport masks differ; no FILE bridge
+is provided in this slice. Resource and transport ceilings remain fixed. The
+[debt entry](../technical-debt.md#forwarder-retarget-representation)
+records the consequence and revisit point.
 
 Ordinary COPY, launch and IPC preserve an existing revocation lineage.
 Explicit revocable copies add derivation tracking; plain grants require none.

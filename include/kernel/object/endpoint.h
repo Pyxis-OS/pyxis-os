@@ -73,6 +73,8 @@ void endpoint_receipt_release(struct kernel_object *object);
 enum call_status endpoint_completion_reserve(struct endpoint *receiver,
     struct native_completion *operation, struct capability_reservation *reservation,
     struct capability_reserved_slot *slots);
+/* BSP, borrowed submitter context installed. Elects admission against CUT;
+ * the completion's cloned backend context remains pending until effects. */
 enum call_status endpoint_completion_commit(struct native_completion *operation);
 void endpoint_completion_discard(struct native_completion *operation);
 /* BSP, IF=0, after worker loans end. May acknowledge and release operation;

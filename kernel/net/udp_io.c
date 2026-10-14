@@ -453,6 +453,9 @@ static bool service_receives(void)
     cpu_restore_interrupts(flags);
     if (status == CALL_OK && denied) {
       status = CALL_DENIED;
+      if (call->completion) {
+        native_completion_request_cancel(call->completion, CALL_DENIED);
+      }
     }
     if (status == CALL_OK) {
       status = endpoint_status(endpoint);
