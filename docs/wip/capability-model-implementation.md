@@ -40,9 +40,10 @@ task that owns the area is delivered.
 ## Integration checkpoint (2026-10-14)
 
 The [native baseline run sheet](../development/experiments/capability-model-baseline.md)
-uses current main `3b714754` and existing tools. It is prepared, **not measured**;
-the owner selects its measurement boundaries, Luna builds and the owner runs the
-batch. Task 1's merge gate remains open. No implementation checkbox is completed
+uses fresh main `09a51b9a` and existing tools. The owner accepted its boundaries
+and hands-free Remote method on 2026-10-14; Luna builds, stages and runs the host
+runner. A partial pilot on `3b714754` is recorded separately; the complete gate
+is **pending**. Task 1's merge gate remains open. No implementation checkbox is completed
 by this scope note.
 
 Merge and qualify A1 → A2 → A3 → A4 → A5, then B6 → B7 → B8, then C9.
@@ -146,14 +147,14 @@ A4 owns libc dispatch and transaction close; A5 owns shell syntax. Neither is
 quietly delivered by A3. Two transition questions below need an owner decision
 before code; ABI field ordering and helper spelling do not.
 
-### Scope decisions still needed
+### Scope decisions
 
-1. **Baseline method.** Default: the run sheet's existing-tool Lua OPEN intervals,
-   launch-through-exit interval and an identified live process's checkpoint
-   startup allocation, with descriptor OPEN and pipe throughput separately.
-   Alternative: require isolated launch or a particular child's startup size;
-   existing tools cannot reliably supply those, so a narrow measurement extension
-   needs authorization. All measurements remain native and pending.
+1. **Baseline method — accepted 2026-10-14.** Existing-tool Lua OPEN,
+   launch-through-exit, descriptor OPEN and pipe throughput, plus the full
+   checkpoint-observed startup allocation of an identified live process.
+   The gate and after-A/after-C repeats are hands-free in the stock Remote space
+   via beacon/listen `t14`; debug inspection is driven from horse. The complete
+   native gate remains pending; the pilot does not close task 1's merge gate.
 2. **Non-blocking exported describe.** Default: the issuer publishes a bounded
    description stored with its exported object; describe reads the latest
    published snapshot without waiting for the provider. Type/rights and cut
