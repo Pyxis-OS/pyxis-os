@@ -9,6 +9,7 @@
 #include <abi/process.h>
 
 struct space;
+struct environment_table;
 struct vm_space;
 struct private_allocation;
 struct process_control;
@@ -37,6 +38,7 @@ struct process {
   struct vm_space *address_space;
   struct process_vm_activity vm;
   struct capability_table capabilities;
+  struct environment_table *environment; /* Owns named grants/text after activity drains. */
   struct process_control *control; /* Owned reference through final reclamation. */
   struct execution_group *execution_group; /* Owned storage through member completion. */
   struct execution_group_member group_member;

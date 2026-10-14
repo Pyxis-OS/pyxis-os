@@ -1,6 +1,5 @@
 #include <abi/file.h>
 #include <abi/console.h>
-#include <abi/namespace.h>
 #include <abi/pipe.h>
 #include <abi/http_transaction.h>
 #include <arch/cpu.h>
@@ -15,6 +14,7 @@
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/string.h>
 #include <kernel/task.h>
 #include <kernel/user/launch.h>
 #include <kernel/user_memory.h>
@@ -381,148 +381,37 @@ static const char *capture_string(struct launch_capture *capture, uintptr_t addr
   return text;
 }
 
-static struct process_binding *capture_bindings(struct launch_capture *capture,
+static struct process_environment_entry *capture_entries(struct launch_capture *capture,
     uintptr_t address, size_t count)
 {
-  /* The wire record and kernel record have equal size/alignment on x86_64.
-   * Copy each through a local wire value before replacing it with pointers;
-   * never dereference a caller-supplied address as a kernel string. */
-  _Static_assert(sizeof(struct launch_binding) == sizeof(struct process_binding),
-                 "binding capture storage");
-  struct process_binding *bindings = launcher_capture_array(capture, address, count, sizeof(*bindings));
-  if (!bindings) {
+  _Static_assert(sizeof(struct launch_environment_entry) == sizeof(struct process_environment_entry),
+                 "environment capture storage");
+  struct process_environment_entry *entries = launcher_capture_array(capture, address,
+      count, sizeof(*entries));
+  if (!entries) {
     return NULL;
   }
   for (size_t i = 0; i < count && capture->error == CALL_OK; ++i) {
-    struct launch_binding wire;
-    memcpy(&wire, &bindings[i], sizeof(wire));
-    if (wire.grant >= capture->grant_count) {
+    struct launch_environment_entry wire;
+    memcpy(&wire, &entries[i], sizeof(wire));
+    if ((wire.flags & ~ENVIRONMENT_EXPORTED) ||
+        (wire.kind != ENVIRONMENT_CAP && wire.kind != ENVIRONMENT_TEXT) ||
+        (wire.kind == ENVIRONMENT_CAP && (wire.value >= capture->grant_count || wire.length))) {
       capture->error = CALL_BAD_REQUEST;
       break;
     }
-    bindings[i].name = capture_string(capture, wire.name);
-    bindings[i].handle = wire.grant;
-  }
-  return bindings;
-}
-
-static bool stream_grant_distinct(const struct process_startup *startup,
-    uint64_t grant, size_t index)
-{
-  for (size_t i = 0; i < index; ++i) {
-    const struct startup_stream *stream = &startup->streams[i];
-    if ((stream->protocol && grant == stream->handle) ||
-        (stream->observation_protocol && grant == stream->observation)) {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < startup->resource_count; ++i) {
-    if (grant == startup->resources[i].handle) {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < startup->root_count; ++i) {
-    if (grant == startup->roots[i].handle) {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < startup->working_directory_count; ++i) {
-    if (grant == startup->working_directories[i]) {
-      return false;
-    }
-  }
-  return !startup->namespace || grant != startup->namespace - 1;
-}
-
-static void capture_streams(struct launch_capture *capture,
-                            const struct launch_request *source)
-{
-  if (capture->error != CALL_OK) {
-    return;
-  }
-  struct process_startup *startup = &capture->startup;
-  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
-    const struct launch_stream *stream = &source->streams[i];
-    if (stream->protocol == STARTUP_STREAM_NONE) {
-      if (stream->grant || stream->observation_protocol || stream->observation_grant) {
-        capture->error = CALL_BAD_REQUEST;
-        return;
-      }
-      continue;
-    }
-
-    uint64_t rights;
-    if (stream->protocol == PROTOCOL_CONSOLE) {
-      rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
-    } else if (stream->protocol == PROTOCOL_FILE) {
-      rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
-    } else if (stream->protocol == PROTOCOL_PIPE) {
-      rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
-    } else if (stream->protocol == PROTOCOL_STREAM && i == STARTUP_STDIN) {
-      rights = STREAM_RIGHT_READ;
-    } else {
+    entries[i].name = capture_string(capture, wire.name);
+    entries[i].kind = wire.kind;
+    entries[i].flags = wire.flags;
+    entries[i].length = wire.length;
+    entries[i].value = wire.kind == ENVIRONMENT_TEXT ?
+        (uintptr_t)capture_string(capture, wire.value) : wire.value;
+    if (wire.kind == ENVIRONMENT_TEXT && capture->error == CALL_OK &&
+        strlen((const char *)(uintptr_t)entries[i].value) != wire.length) {
       capture->error = CALL_BAD_REQUEST;
-      return;
     }
-    bool response = stream->protocol == PROTOCOL_STREAM;
-    if ((response && stream->observation_protocol != PROTOCOL_HTTP_TRANSACTION) ||
-        (!response && (stream->observation_protocol || stream->observation_grant)) ||
-        stream->grant >= capture->grant_count ||
-        capture->grants[stream->grant].rights != rights ||
-        !stream_grant_distinct(startup, stream->grant, i)) {
-      capture->error = CALL_BAD_REQUEST;
-      return;
-    }
-    if (!object_stream_valid(capture->owned_grants[stream->grant].object,
-          stream->protocol, capture->grants[stream->grant].transport)) {
-      capture->error = CALL_WRONG_TYPE;
-      return;
-    }
-    if (response) {
-      uint64_t observation = stream->observation_grant;
-      if (observation >= capture->grant_count || observation == stream->grant ||
-          capture->grants[observation].rights != HTTP_TRANSACTION_RIGHT_STATUS ||
-          !stream_grant_distinct(startup, observation, i)) {
-        capture->error = CALL_BAD_REQUEST;
-        return;
-      }
-      if (!object_stream_valid(capture->owned_grants[observation].object,
-            stream->observation_protocol, capture->grants[observation].transport)) {
-        capture->error = CALL_WRONG_TYPE;
-        return;
-      }
-    }
-    startup->streams[i] = (struct startup_stream){
-      .protocol = stream->protocol,
-      .handle = stream->grant,
-      .observation_protocol = stream->observation_protocol,
-      .observation = stream->observation_grant,
-    };
   }
-}
-
-static void capture_namespace(struct launch_capture *capture, uint64_t namespace_grant)
-{
-  if (!namespace_grant || capture->error != CALL_OK) {
-    return;
-  }
-  uint64_t index = namespace_grant - 1;
-  if (index >= capture->grant_count) {
-    capture->error = CALL_BAD_REQUEST;
-    return;
-  }
-
-  const struct launch_grant *grant = &capture->grants[index];
-  if (!(grant->rights & NAMESPACE_RIGHT_LOOKUP) || grant->transport) {
-    capture->error = CALL_BAD_REQUEST;
-    return;
-  }
-  bool valid = object_effective_type(capture->owned_grants[index].object) == OBJECT_NAMESPACE;
-  if (!valid) {
-    capture->error = CALL_WRONG_TYPE;
-    return;
-  }
-  capture->startup.namespace = namespace_grant;
+  return entries;
 }
 
 static void capture_startup(struct launch_capture *capture, const struct launch_request *source)
@@ -540,10 +429,8 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
     }
   }
   struct process_startup *startup = &capture->startup;
-  startup->resource_count = source->resource_count;
-  startup->resources = capture_bindings(capture, source->resources, source->resource_count);
-  startup->root_count = source->root_count;
-  startup->roots = capture_bindings(capture, source->roots, source->root_count);
+  startup->entry_count = source->entry_count;
+  startup->entries = capture_entries(capture, source->entries, source->entry_count);
   startup->working_directory_count = source->working_directory_count;
   startup->working_directories = launcher_capture_array(capture, source->working_directories,
       source->working_directory_count, sizeof(handle_t));
@@ -552,23 +439,8 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
       capture->error = CALL_BAD_REQUEST;
     }
   }
-  capture_namespace(capture, source->namespace_grant);
-  capture_streams(capture, source);
   if (source->working_path) {
     startup->working_path = capture_string(capture, source->working_path);
-  }
-
-  _Static_assert(sizeof(struct startup_variable) == sizeof(struct process_variable),
-                 "environment capture storage");
-  startup->environment_count = source->environment_count;
-  struct process_variable *environment = launcher_capture_array(capture, source->environment,
-      source->environment_count, sizeof(*environment));
-  startup->environment = environment;
-  for (size_t i = 0; i < source->environment_count && capture->error == CALL_OK; ++i) {
-    struct startup_variable wire;
-    memcpy(&wire, &environment[i], sizeof(wire));
-    environment[i].name = capture_string(capture, wire.name);
-    environment[i].value = capture_string(capture, wire.value);
   }
 
   startup->argc = source->argc;

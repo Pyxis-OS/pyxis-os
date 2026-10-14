@@ -1,4 +1,3 @@
-#include <kernel/object/namespace.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/endpoint.h>
 #include <abi/pipe.h>
@@ -102,7 +101,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct kernel_object *threads = NULL;
-  struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
+  struct kernel_object *terminal_service = NULL;
   struct kernel_object *system_info = NULL;
   struct kernel_object *input_policy = NULL;
   struct kernel_object *log = NULL;
@@ -156,16 +155,15 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   profile = profile_create();
   pipe = pipe_service_create();
   service = endpoint_service_create();
-  namespace_service = namespace_service_create();
   terminal_service = terminal_service_create();
-  if (!memory || !threads || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !namespace_service || !terminal_service) {
+  if (!memory || !threads || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !terminal_service) {
     goto fail;
   }
 
   handle_t memory_handle, launcher_handle, boot, tmp, ram;
   handle_t threads_handle;
   handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
-  handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
+  handle_t profile_handle, pipe_handle, service_handle, terminal_service_handle;
   handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
   handle_t bluetooth_hci_handle;
   handle_t input_policy_handle = HANDLE_INVALID;
@@ -185,7 +183,6 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     input_policy = NULL;
   }
   if (capability_install(&process->capabilities, terminal_service, TERMINAL_SERVICE_RIGHT_CREATE, 0, &terminal_service_handle) != CAP_OK ||
-      capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
       capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_HOST, 0, &profile_handle) != CAP_OK ||
       capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
@@ -302,8 +299,6 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   }
   object_release(terminal_service);
   terminal_service = NULL;
-  object_release(namespace_service);
-  namespace_service = NULL;
   object_release(service);
   service = NULL;
   object_release(profile);
@@ -339,52 +334,57 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[30] = {
-    {"memory", memory_handle},
-    {"threads", threads_handle},
-    {"launcher", launcher_handle},
-    {"clock", clock_handle},
-    {"system_info", system_info_handle},
-    {"log", log_handle},
-    {"echo", echo_handle},
-    {"udp", udp_handle},
-    {"tcp", tcp_handle},
-    {"random", random_handle},
-    {"net_config", net_config_handle},
-    {"profile", profile_handle},
-    {"pipe", pipe_handle},
-    {"service", service_handle},
-    {"namespace_service", namespace_service_handle},
-    {"terminal", terminal_service_handle},
-    {"power", power_handle},
-    {"screen_capture", screen_capture_handle},
-    {"bluetooth_hci", bluetooth_hci_handle},
-    {"fat_mounts", fat_mounts_handle},
+  struct process_environment_entry entries[40] = {
+    {"memory", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, memory_handle, 0},
+    {"threads", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, threads_handle, 0},
+    {"launcher", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, launcher_handle, 0},
+    {"clock", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, clock_handle, 0},
+    {"system_info", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, system_info_handle, 0},
+    {"log", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, log_handle, 0},
+    {"echo", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, echo_handle, 0},
+    {"udp", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, udp_handle, 0},
+    {"tcp", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, tcp_handle, 0},
+    {"random", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, random_handle, 0},
+    {"net_config", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, net_config_handle, 0},
+    {"profile", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, profile_handle, 0},
+    {"pipe", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, pipe_handle, 0},
+    {"service", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, service_handle, 0},
+    {"terminal", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, terminal_service_handle, 0},
+    {"power", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, power_handle, 0},
+    {"screen_capture", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, screen_capture_handle, 0},
+    {"bluetooth_hci", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, bluetooth_hci_handle, 0},
+    {"fat_mounts", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, fat_mounts_handle, 0},
   };
-  size_t resource_count = 20;
+  size_t entry_count = 19;
   if (input_policy_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"input_policy", input_policy_handle};
+    entries[entry_count++] = (struct process_environment_entry){"input_policy", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, input_policy_handle, 0};
   }
-  resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
-  resources[resource_count++] = (struct process_binding){"ram", ram};
+  entries[entry_count++] = (struct process_environment_entry){"space_factory", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, factory_handle, 0};
+  entries[entry_count++] = (struct process_environment_entry){"ram", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, ram, 0};
   if (script_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"script", script_handle};
+    entries[entry_count++] = (struct process_environment_entry){"script", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, script_handle, 0};
   }
   if (mount_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"host_mount", mount_handle};
+    entries[entry_count++] = (struct process_environment_entry){"host_mount", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, mount_handle, 0};
   }
   if (esp_mount_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"esp_mount", esp_mount_handle};
+    entries[entry_count++] = (struct process_environment_entry){"esp_mount", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, esp_mount_handle, 0};
   }
   if (native_mount_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"native_mount", native_mount_handle};
+    entries[entry_count++] = (struct process_environment_entry){"native_mount", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, native_mount_handle, 0};
   }
   if (disks_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"disks", disks_handle};
-    resources[resource_count++] = (struct process_binding){"boot_kernel", kernel_handle};
-    resources[resource_count++] = (struct process_binding){"boot_archive", archive_handle};
+    entries[entry_count++] = (struct process_environment_entry){"disks", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, disks_handle, 0};
+    entries[entry_count++] = (struct process_environment_entry){"boot_kernel", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, kernel_handle, 0};
+    entries[entry_count++] = (struct process_environment_entry){"boot_archive", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, archive_handle, 0};
   }
-  const struct process_binding roots[] = {{"boot", boot}, {"tmp", tmp}};
+  entries[entry_count++] = (struct process_environment_entry){"boot", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, boot, 0};
+  entries[entry_count++] = (struct process_environment_entry){"tmp", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, tmp, 0};
+  entries[entry_count++] = (struct process_environment_entry){"stdout", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, standard_output, 0};
+  entries[entry_count++] = (struct process_environment_entry){"stderr", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, standard_error, 0};
+  entries[entry_count++] = (struct process_environment_entry){
+    "OS_NAME", ENVIRONMENT_TEXT, ENVIRONMENT_EXPORTED, (uintptr_t)"Pyxis OS", sizeof("Pyxis OS") - 1,
+  };
   /* Boot init learns the bound disk and the rescue selection from its arguments. */
   const char *arguments[6] = {script.data ? interpreter : image_uri, image_uri};
   size_t argument_count = script.data ? 2 : 1;
@@ -398,21 +398,12 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     arguments[argument_count++] = "--remote-beacon";
     arguments[argument_count++] = remote_beacon;
   }
-  const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
-    .streams = {
-      [STARTUP_STDOUT] = {.protocol = PROTOCOL_CONSOLE, .handle = standard_output},
-      [STARTUP_STDERR] = {.protocol = PROTOCOL_CONSOLE, .handle = standard_error},
-    },
-    .resources = resources,
-    .resource_count = resource_count,
-    .roots = roots,
-    .root_count = sizeof(roots) / sizeof(roots[0]),
+    .entries = entries,
+    .entry_count = entry_count,
     .working_directories = &tmp,
     .working_directory_count = 1,
     .working_path = "tmp://",
-    .environment = environment,
-    .environment_count = sizeof(environment) / sizeof(environment[0]),
     .argc = argument_count,
     .argv = arguments,
   };
@@ -424,7 +415,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     goto fail;
   }
   /* The scheduler owns the process. Its eventual cleanup leaves the space,
-   * terminal contents and namespace roots alive; there is no init restart. */
+   * terminal contents and filesystem roots alive; there is no init restart. */
   return;
 
 fail:
@@ -457,9 +448,6 @@ fail:
   }
   if (terminal_service) {
     object_release(terminal_service);
-  }
-  if (namespace_service) {
-    object_release(namespace_service);
   }
   if (service) {
     object_release(service);

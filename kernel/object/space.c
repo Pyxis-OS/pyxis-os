@@ -162,7 +162,7 @@ static enum call_status copy_text(uint64_t address, uint64_t length, size_t max,
 static bool reserved_resource(const char *name)
 {
   static const char *const reserved[] = {
-    "input", "output", "keyboard", "pointer", "display", "audio", "space",
+    "input", "output", "stdin", "stdout", "stderr", "keyboard", "pointer", "display", "audio", "space",
     "terminal_pointer", "clipboard_local", "clipboard_shared",
   };
   size_t length = strlen(name);
@@ -186,18 +186,13 @@ static enum call_status capture_launch(uint64_t launch_address, uint64_t cpus,
   if (!copy_from_user(&launch, launch_address, sizeof(launch))) {
     return CALL_BAD_BUFFER;
   }
-  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
-    if (launch.streams[i].protocol != STARTUP_STREAM_NONE) {
-      return CALL_BAD_REQUEST;
-    }
-  }
   struct launch_capture *capture;
   enum call_status status = launcher_capture_request(&launch, &capture);
   if (status != CALL_OK) {
     return status;
   }
-  for (size_t i = 0; i < capture->startup.resource_count; ++i) {
-    if (reserved_resource(capture->startup.resources[i].name)) {
+  for (size_t i = 0; i < capture->startup.entry_count; ++i) {
+    if (reserved_resource(capture->startup.entries[i].name)) {
       launcher_capture_discard(capture);
       return CALL_BAD_REQUEST;
     }

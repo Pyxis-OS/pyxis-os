@@ -337,14 +337,14 @@ source, SDK provenance and installed compiler revision to match. Under that
 unchanged workflow the owner must publish a matching compiler image after the
 fork change is qualified; provide the exact commit and commands before adoption.
 
-### Remaining lifetime decision: standard streams
+### Accepted lifetime decision: standard streams (owner, 2026-10-14)
 
 The existing startup stream grants have one descriptor owner; `close(1)` can
 release the final pipe writer while the process remains alive. A normal owned
 environment entry plus an owned LOOKUP capture would retain two grants, keeping
 that writer alive after close. This is a behaviour choice, not ABI layout.
 
-**Proposed default:** stdio captures the original `stdin`, `stdout`, `stderr`
+**Accepted:** stdio captures the original `stdin`, `stdout`, `stderr`
 and optional `stdin.status` entries with non-reused publication identities.
 Closing/replacing an original standard descriptor conditionally removes its
 still-matching entries, then releases the local descriptor alias. A changed or
@@ -357,8 +357,5 @@ and native release is still attempted if cleanup fails, preserving close's
 invalidates/no-retry rule. Captured snapshots deliberately retain authority and
 must be released before application execution or unrelated waits.
 
-**Alternative:** keep the entries until explicit UNSET/process exit, accepting
-that closing a standard pipe descriptor alone no longer signals EOF/EPIPE.
-This changes the existing descriptor contract and is not the recommended profile.
-Stop before code for this lifetime decision; the two decisions above remain
-accepted. Baseline capture can proceed on unchanged code.
+The owner accepted this profile to preserve EOF after `close(1)`; implementation
+is assigned with the baseline captured. All three task-2 decisions are settled.

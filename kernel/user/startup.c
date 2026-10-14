@@ -1,17 +1,12 @@
 #include <abi/startup.h>
-#include <abi/console.h>
-#include <abi/file.h>
-#include <abi/namespace.h>
-#include <abi/pipe.h>
-#include <abi/http_transaction.h>
 #include <arch/smp.h>
-#include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/memory.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/object/directory.h>
-#include <kernel/object/namespace.h>
+#include <kernel/object/environment.h>
 #include <kernel/object/thread.h>
 #include <kernel/string.h>
 #include <kernel/user/startup.h>
@@ -35,151 +30,68 @@ static bool add_string_size(const char *text, size_t *size)
   return true;
 }
 
-static bool same_name(const char *left, const char *right)
+static bool entry_name_valid(const char *name)
 {
-  size_t length = strlen(left);
-  return strlen(right) == length && memcmp(left, right, length) == 0;
+  if (!name || !*name) {
+    return false;
+  }
+  size_t length = 0;
+  for (; name[length] && length <= ENVIRONMENT_NAME_MAX; ++length) {
+    char c = name[length];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') || c == '_' || c == '+' || c == '-' || c == '.')) {
+      return false;
+    }
+  }
+  return length <= ENVIRONMENT_NAME_MAX;
 }
 
-static bool measure_bindings(struct process *process,
-    const struct process_binding *bindings, size_t count, bool directories,
-    struct kernel_object *namespace, size_t *size)
+static bool measure_startup(struct process *process,
+    const struct process_startup *source, struct startup_sizes *sizes)
 {
-  for (size_t i = 0; i < count; ++i) {
-    const struct process_binding *binding = &bindings[i];
-    if (!add_string_size(binding->name, size) || !binding->name[0]) {
-      return false;
-    }
-    if (directories) {
-      for (const char *name = binding->name; *name; ++name) {
-        if (*name == ':' || *name == '/') {
-          return false;
-        }
-      }
-      if (namespace && namespace_has_name(namespace, binding->name)) {
-        return false;
-      }
-    }
-    struct capability_reference reference;
-    if (capability_acquire(&process->capabilities, binding->handle, 0, 0,
-          &reference) != CAP_OK) {
-      return false;
-    }
-    bool valid = !directories || object_effective_type(reference.object) == OBJECT_DIRECTORY;
-    capability_release(&reference);
-    if (!valid) {
+  if (!source || source->entry_count > STARTUP_MAX_SIZE / sizeof(*source->entries) ||
+      (source->entry_count && !source->entries) ||
+      source->working_directory_count > STARTUP_MAX_SIZE / sizeof(handle_t) ||
+      (source->working_directory_count && !source->working_directories) ||
+      (!source->working_directory_count && source->working_path) ||
+      source->argc >= STARTUP_MAX_SIZE / sizeof(uint64_t) ||
+      (source->argc && !source->argv)) {
+    return false;
+  }
+  sizes->metadata = sizeof(struct startup_info) +
+      source->working_directory_count * sizeof(handle_t);
+  sizes->arguments = (source->argc + 1) * sizeof(uint64_t);
+  size_t environment = source->entry_count * sizeof(struct process_environment_entry);
+  for (size_t i = 0; i < source->entry_count; ++i) {
+    const struct process_environment_entry *entry = &source->entries[i];
+    if (!entry_name_valid(entry->name) || (entry->flags & ~ENVIRONMENT_EXPORTED) ||
+        !add_string_size(entry->name, &environment)) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
-      if (same_name(binding->name, bindings[j].name)) {
+      if (strlen(entry->name) == strlen(source->entries[j].name) &&
+          !memcmp(entry->name, source->entries[j].name, strlen(entry->name))) {
         return false;
       }
     }
-  }
-  return true;
-}
-
-static bool stream_handle_distinct(const struct process_startup *source,
-    handle_t handle, size_t index)
-{
-  for (size_t i = 0; i < index; ++i) {
-    if (handle == source->streams[i].handle || handle == source->streams[i].observation) {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < source->resource_count; ++i) {
-    if (handle == source->resources[i].handle) {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < source->root_count; ++i) {
-    if (handle == source->roots[i].handle) {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < source->working_directory_count; ++i) {
-    if (handle == source->working_directories[i]) {
-      return false;
-    }
-  }
-  return handle != HANDLE_INVALID && (!source->namespace || handle != source->namespace);
-}
-
-static bool validate_stream_handle(struct process *process, handle_t handle,
-    uint64_t protocol, uint64_t rights)
-{
-  struct capability_reference reference;
-  if (capability_acquire(&process->capabilities, handle, rights, 0, &reference) != CAP_OK) {
-    return false;
-  }
-  bool valid = object_stream_valid(reference.object, protocol, reference.transport) &&
-      reference.rights == rights;
-  capability_release(&reference);
-  return valid;
-}
-
-static bool validate_streams(struct process *process,
-                             const struct process_startup *source)
-{
-  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
-    const struct startup_stream *stream = &source->streams[i];
-    if (stream->protocol == STARTUP_STREAM_NONE) {
-      if (stream->handle || stream->observation_protocol || stream->observation) {
+    if (entry->kind == ENVIRONMENT_TEXT) {
+      const char *text = (const char *)(uintptr_t)entry->value;
+      if (entry->length >= STARTUP_MAX_SIZE || !text ||
+          strnlen(text, entry->length + 1) != entry->length ||
+          !add_string_size(text, &environment)) {
         return false;
       }
-      continue;
-    }
-
-    uint64_t rights;
-    if (stream->protocol == PROTOCOL_CONSOLE) {
-      rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
-    } else if (stream->protocol == PROTOCOL_FILE) {
-      rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
-    } else if (stream->protocol == PROTOCOL_PIPE) {
-      rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
-    } else if (stream->protocol == PROTOCOL_STREAM && i == STARTUP_STDIN) {
-      rights = STREAM_RIGHT_READ;
+    } else if (entry->kind == ENVIRONMENT_CAP && !entry->length) {
+      struct capability_reference reference;
+      if (capability_acquire(&process->capabilities, entry->value, 0, 0,
+            &reference) != CAP_OK) {
+        return false;
+      }
+      capability_release(&reference);
     } else {
       return false;
     }
-    bool response = stream->protocol == PROTOCOL_STREAM;
-    if ((response && stream->observation_protocol != PROTOCOL_HTTP_TRANSACTION) ||
-        (!response && (stream->observation_protocol || stream->observation)) ||
-        !stream_handle_distinct(source, stream->handle, i) ||
-        !validate_stream_handle(process, stream->handle, stream->protocol, rights)) {
-      return false;
-    }
-    if (response && (stream->observation == stream->handle ||
-        !stream_handle_distinct(source, stream->observation, i) ||
-        !validate_stream_handle(process, stream->observation,
-          stream->observation_protocol, HTTP_TRANSACTION_RIGHT_STATUS))) {
-      return false;
-    }
   }
-  return true;
-}
-
-static bool measure_startup_contents(struct process *process,
-    const struct process_startup *source, struct kernel_object *namespace,
-    struct startup_sizes *sizes)
-{
-  sizes->metadata = sizeof(struct startup_info) +
-                    source->resource_count * sizeof(struct startup_binding) +
-                    source->root_count * sizeof(struct startup_binding) +
-                    source->working_directory_count * sizeof(handle_t) +
-                    source->environment_count * sizeof(struct startup_variable);
-  sizes->arguments = (source->argc + 1) * sizeof(uint64_t);
-  if (sizes->metadata > STARTUP_MAX_SIZE) {
-    return false;
-  }
-
-  if (!measure_bindings(process, source->resources, source->resource_count, false,
-        NULL, &sizes->metadata) ||
-      !measure_bindings(process, source->roots, source->root_count, true,
-        namespace, &sizes->metadata)) {
-    return false;
-  }
-
   for (size_t i = 0; i < source->working_directory_count; ++i) {
     struct capability_reference reference;
     if (capability_acquire(&process->capabilities, source->working_directories[i],
@@ -195,77 +107,50 @@ static bool measure_startup_contents(struct process *process,
   if (source->working_path && !add_string_size(source->working_path, &sizes->metadata)) {
     return false;
   }
-
-  for (size_t i = 0; i < source->environment_count; ++i) {
-    const struct process_variable *variable = &source->environment[i];
-    if (!add_string_size(variable->name, &sizes->metadata) || !variable->name[0] ||
-        !add_string_size(variable->value, &sizes->metadata)) {
-      return false;
-    }
-    for (const char *cursor = variable->name; *cursor; ++cursor) {
-      if (*cursor == '=') {
-        return false;
-      }
-    }
-    for (size_t j = 0; j < i; ++j) {
-      if (same_name(variable->name, source->environment[j].name)) {
-        return false;
-      }
-    }
-  }
-
   for (size_t i = 0; i < source->argc; ++i) {
     if (!add_string_size(source->argv[i], &sizes->arguments)) {
       return false;
     }
   }
-
-  sizes->metadata = (sizes->metadata + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  sizes->arguments = (sizes->arguments + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  return sizes->arguments <= STARTUP_MAX_SIZE - sizes->metadata;
-}
-
-static bool measure_startup(struct process *process,
-    const struct process_startup *source, struct startup_sizes *sizes)
-{
-  if (!source ||
-      source->working_directory_count > STARTUP_MAX_SIZE / sizeof(handle_t) ||
-      (source->working_directory_count && !source->working_directories) ||
-      (!source->working_directory_count && source->working_path) ||
-      source->resource_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
-      source->root_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
-      source->environment_count > STARTUP_MAX_SIZE / sizeof(struct startup_variable) ||
-      source->argc >= STARTUP_MAX_SIZE / sizeof(uint64_t) ||
-      (source->resource_count && !source->resources) ||
-      (source->root_count && !source->roots) ||
-      (source->environment_count && !source->environment) ||
-      (source->argc && !source->argv) ||
-      !validate_streams(process, source)) {
+  if (environment > STARTUP_MAX_SIZE - sizes->metadata) {
     return false;
   }
+  size_t charged_metadata = (sizes->metadata + environment + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  sizes->metadata = (sizes->metadata + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  sizes->arguments = (sizes->arguments + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  return charged_metadata <= STARTUP_MAX_SIZE &&
+      sizes->arguments <= STARTUP_MAX_SIZE - charged_metadata;
+}
 
-  struct capability_reference namespace = {0};
-  if (source->namespace) {
-    if (capability_acquire(&process->capabilities, source->namespace,
-          NAMESPACE_RIGHT_LOOKUP, 0, &namespace) != CAP_OK) {
-      return false;
+static enum mm_result seed_environment(struct process *process,
+    const struct process_startup *source)
+{
+  for (size_t i = 0; i < source->entry_count; ++i) {
+    const struct process_environment_entry *entry = &source->entries[i];
+    enum call_status status;
+    if (entry->kind == ENVIRONMENT_CAP) {
+      struct capability_grant grant;
+      enum capability_result captured = capability_grant_acquire_same(
+          &process->capabilities, entry->value, &grant);
+      if (captured != CAP_OK) {
+        return captured == CAP_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
+      }
+      status = environment_table_seed_owned(process->environment, entry->name,
+          entry->flags, &grant);
+      capability_grant_release(&grant);
+    } else {
+      status = environment_table_seed_text(process->environment, entry->name,
+          entry->flags, (const char *)(uintptr_t)entry->value, entry->length);
     }
-    if (object_effective_type(namespace.object) != OBJECT_NAMESPACE) {
-      capability_release(&namespace);
-      return false;
-    }
-    if (capability_reference_resolve(&namespace) != CAP_OK) {
-      capability_release(&namespace);
-      return false;
+    if (status != CALL_OK) {
+      return status == CALL_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
     }
   }
-  bool valid = measure_startup_contents(process, source, namespace.object, sizes);
-  capability_release(&namespace);
-  return valid;
+  return MM_OK;
 }
 
 static uint64_t copy_string(uint8_t *buffer, size_t *offset, uintptr_t address,
-                            const char *text)
+    const char *text)
 {
   size_t length = strlen(text) + 1;
   uint64_t result = address + *offset;
@@ -275,69 +160,31 @@ static uint64_t copy_string(uint8_t *buffer, size_t *offset, uintptr_t address,
 }
 
 static void fill_startup(uint8_t *buffer, uintptr_t address,
-                         const struct process_startup *source,
-                         const struct startup_sizes *sizes)
+    const struct process_startup *source, const struct startup_sizes *sizes,
+    handle_t environment, handle_t thread_fs)
 {
   struct startup_info *info = (struct startup_info *)buffer;
   *info = (struct startup_info){
-    .version = STARTUP_VERSION,
-    .size = sizes->metadata + sizes->arguments,
-    .read_only_size = sizes->metadata,
-    .resource_count = source->resource_count,
-    .root_count = source->root_count,
+    .version = STARTUP_VERSION, .size = sizes->metadata + sizes->arguments,
+    .read_only_size = sizes->metadata, .environment_handle = environment,
     .working_directory_count = source->working_directory_count,
-    .environment_count = source->environment_count,
-    .argc = source->argc,
-    .argv = address + sizes->metadata,
-    .namespace_handle = source->namespace,
+    .argc = source->argc, .argv = address + sizes->metadata, .thread_fs = thread_fs,
   };
-  memcpy(info->streams, source->streams, sizeof(info->streams));
-
   size_t offset = sizeof(*info);
-  struct startup_binding *resources = (struct startup_binding *)(buffer + offset);
-  if (source->resource_count) {
-    info->resources = address + offset;
-    offset += source->resource_count * sizeof(*resources);
-  }
-  struct startup_binding *roots = (struct startup_binding *)(buffer + offset);
-  if (source->root_count) {
-    info->roots = address + offset;
-    offset += source->root_count * sizeof(*roots);
-  }
   if (source->working_directory_count) {
     info->working_directories = address + offset;
     size_t bytes = source->working_directory_count * sizeof(handle_t);
     memcpy(buffer + offset, source->working_directories, bytes);
     offset += bytes;
   }
-  struct startup_variable *environment = (struct startup_variable *)(buffer + offset);
-  if (source->environment_count) {
-    info->environment = address + offset;
-    offset += source->environment_count * sizeof(*environment);
-  }
-
-  for (size_t i = 0; i < source->resource_count; ++i) {
-    resources[i].name = copy_string(buffer, &offset, address, source->resources[i].name);
-    resources[i].handle = source->resources[i].handle;
-  }
-  for (size_t i = 0; i < source->root_count; ++i) {
-    roots[i].name = copy_string(buffer, &offset, address, source->roots[i].name);
-    roots[i].handle = source->roots[i].handle;
-  }
   if (source->working_path) {
     info->working_path = copy_string(buffer, &offset, address, source->working_path);
   }
-  for (size_t i = 0; i < source->environment_count; ++i) {
-    environment[i].name = copy_string(buffer, &offset, address, source->environment[i].name);
-    environment[i].value = copy_string(buffer, &offset, address, source->environment[i].value);
-  }
-
   uint64_t *argv = (uint64_t *)(buffer + sizes->metadata);
   offset = sizes->metadata + (source->argc + 1) * sizeof(*argv);
   for (size_t i = 0; i < source->argc; ++i) {
     argv[i] = copy_string(buffer, &offset, address, source->argv[i]);
   }
-  /* The zeroed buffer supplies argv[argc] and all page padding. */
 }
 
 static enum mm_result copy_startup_pages(struct vm_space *space, uintptr_t address,
@@ -368,61 +215,87 @@ static enum mm_result copy_startup_pages(struct vm_space *space, uintptr_t addre
 }
 
 enum mm_result process_prepare_startup(struct process *process,
-                                       const struct process_startup *source)
+    const struct process_startup *source)
 {
   KASSERT(arch_cpu_index() == 0);
   struct startup_sizes sizes;
   if (!process || process->startup_address || !measure_startup(process, source, &sizes)) {
     return MM_INVALID;
   }
-
+  enum mm_result result = seed_environment(process, source);
+  if (result != MM_OK) {
+    return result;
+  }
   size_t total = sizes.metadata + sizes.arguments;
   uint8_t *buffer = kmalloc(total);
   if (!buffer) {
     return MM_NO_MEMORY;
   }
   memset(buffer, 0, total);
-
-  /* This intrinsic service acts only on the calling thread/process. It carries
-   * no optional thread-management authority from the launcher. */
   struct kernel_object *threads = thread_service_create();
-  handle_t thread_fs;
-  enum capability_result installed = threads ?
+  struct kernel_object *environment = environment_create();
+  handle_t thread_fs = HANDLE_INVALID, environment_handle = HANDLE_INVALID;
+  enum capability_result installed = threads && environment ?
       capability_install(&process->capabilities, threads, THREAD_RIGHT_SET_FS, 0,
           &thread_fs) : CAP_NO_MEMORY;
+  if (installed == CAP_OK) {
+    installed = capability_install(&process->capabilities, environment,
+        ENVIRONMENT_RIGHTS, 0, &environment_handle);
+  }
   if (threads) {
     object_release(threads);
   }
+  if (environment) {
+    object_release(environment);
+  }
   if (installed != CAP_OK) {
+    if (thread_fs) {
+      KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
+    }
     kfree(buffer);
     return MM_NO_MEMORY;
   }
-
   uintptr_t address;
-  enum mm_result result = vm_alloc(process->address_space, total, PAGE_SIZE,
-                                    PAGE_USER, &address);
-  if (result != MM_OK) {
-    KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
-    kfree(buffer);
-    return result;
-  }
-  fill_startup(buffer, address, source, &sizes);
-  ((struct startup_info *)buffer)->thread_fs = thread_fs;
-  result = copy_startup_pages(process->address_space, address, buffer, total);
-  kfree(buffer);
-
+  result = vm_alloc(process->address_space, total, PAGE_SIZE, PAGE_USER, &address);
   if (result == MM_OK) {
-    for (size_t offset = sizes.metadata; offset < total; offset += PAGE_SIZE) {
-      result = vm_protect(process->address_space, address + offset, PAGE_USER | PAGE_WRITE);
-      if (result != MM_OK) {
-        break;
+    fill_startup(buffer, address, source, &sizes, environment_handle, thread_fs);
+    result = copy_startup_pages(process->address_space, address, buffer, total);
+    if (result == MM_OK) {
+      for (size_t offset = sizes.metadata; offset < total; offset += PAGE_SIZE) {
+        result = vm_protect(process->address_space, address + offset, PAGE_USER | PAGE_WRITE);
+        if (result != MM_OK) {
+          break;
+        }
       }
     }
+    if (result != MM_OK) {
+      KASSERT(vm_free(process->address_space, address, total) == MM_OK);
+    }
   }
+  kfree(buffer);
   if (result != MM_OK) {
-    KASSERT(vm_free(process->address_space, address, total) == MM_OK);
+    KASSERT(capability_close(&process->capabilities, environment_handle) == CAP_OK);
     KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
     return result;
+  }
+  /* ENV now owns each named logical grant. Retire its initial local source
+   * handle exactly once; only the independently owned cwd handles survive. */
+  for (size_t i = 0; i < source->entry_count; ++i) {
+    const struct process_environment_entry *entry = &source->entries[i];
+    if (entry->kind != ENVIRONMENT_CAP) {
+      continue;
+    }
+    bool keep = false;
+    for (size_t j = 0; j < source->working_directory_count; ++j) {
+      keep |= entry->value == source->working_directories[j];
+    }
+    for (size_t j = 0; j < i; ++j) {
+      keep |= source->entries[j].kind == ENVIRONMENT_CAP &&
+          source->entries[j].value == entry->value;
+    }
+    if (!keep) {
+      KASSERT(capability_close(&process->capabilities, entry->value) == CAP_OK);
+    }
   }
   process->startup_address = address;
   return MM_OK;

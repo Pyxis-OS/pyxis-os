@@ -83,29 +83,15 @@ static enum call_status install_grants(struct launch_capture *capture, struct pr
     capture->grants[i].source = capture->child_handles[i];
   }
 
-  struct process_binding *resources = (void *)capture->startup.resources;
-  for (size_t i = 0; i < capture->startup.resource_count; ++i) {
-    resources[i].handle = capture->grants[resources[i].handle].source;
-  }
-  struct process_binding *roots = (void *)capture->startup.roots;
-  for (size_t i = 0; i < capture->startup.root_count; ++i) {
-    roots[i].handle = capture->grants[roots[i].handle].source;
+  struct process_environment_entry *entries = (void *)capture->startup.entries;
+  for (size_t i = 0; i < capture->startup.entry_count; ++i) {
+    if (entries[i].kind == ENVIRONMENT_CAP) {
+      entries[i].value = capture->grants[entries[i].value].source;
+    }
   }
   handle_t *directories = (void *)capture->startup.working_directories;
   for (size_t i = 0; i < capture->startup.working_directory_count; ++i) {
     directories[i] = capture->grants[directories[i]].source;
-  }
-  if (capture->startup.namespace) {
-    capture->startup.namespace = capture->grants[capture->startup.namespace - 1].source;
-  }
-  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
-    struct startup_stream *stream = &capture->startup.streams[i];
-    if (stream->protocol != STARTUP_STREAM_NONE) {
-      stream->handle = capture->grants[stream->handle].source;
-      if (stream->observation_protocol) {
-        stream->observation = capture->grants[stream->observation].source;
-      }
-    }
   }
   return CALL_OK;
 }
@@ -147,13 +133,13 @@ enum capability_result launcher_batch_reserve(struct launch_preparation *group, 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
 static enum call_status install_space_devices(struct process *child, struct space *space,
-    struct process_startup *startup, struct process_binding **owned)
+    struct process_startup *startup, struct process_environment_entry **owned)
 {
   struct kernel_object *console = &space->console->object;
   handle_t input, output, keyboard, pointer, display, audio, control;
   handle_t terminal_pointer = HANDLE_INVALID;
   handle_t local_clipboard = HANDLE_INVALID, shared_clipboard = HANDLE_INVALID;
-  handle_t streams[STARTUP_STREAM_COUNT];
+  handle_t streams[3];
   enum capability_result result = capability_install(&child->capabilities, console,
       CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, 0, &input);
   if (result == CAP_OK) {
@@ -161,15 +147,15 @@ static enum call_status install_space_devices(struct process *child, struct spac
   }
   if (result == CAP_OK) {
     result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_READ, 0,
-        &streams[STARTUP_STDIN]);
+        &streams[0]);
   }
   if (result == CAP_OK) {
     result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_WRITE, 0,
-        &streams[STARTUP_STDOUT]);
+        &streams[1]);
   }
   if (result == CAP_OK) {
     result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_WRITE, 0,
-        &streams[STARTUP_STDERR]);
+        &streams[2]);
   }
   if (result == CAP_OK) {
     result = capability_install(&child->capabilities, &space->keyboard->object,
@@ -212,37 +198,40 @@ static enum call_status install_space_devices(struct process *child, struct spac
     return capability_status(result);
   }
 
-  size_t count = startup->resource_count;
-  struct process_binding *resources = kmalloc((count + SPACE_DEVICE_RESOURCES) *
-      sizeof(*resources));
-  if (!resources) {
+  size_t count = startup->entry_count;
+  struct process_environment_entry *entries = kmalloc((count + SPACE_DEVICE_RESOURCES + 3) *
+      sizeof(*entries));
+  if (!entries) {
     return CALL_NO_MEMORY;
   }
   if (count) {
-    memcpy(resources, startup->resources, count * sizeof(*resources));
+    memcpy(entries, startup->entries, count * sizeof(*entries));
   }
-  resources[count++] = (struct process_binding){"input", input};
-  resources[count++] = (struct process_binding){"output", output};
-  resources[count++] = (struct process_binding){"keyboard", keyboard};
-  resources[count++] = (struct process_binding){"pointer", pointer};
-  resources[count++] = (struct process_binding){"display", display};
-  resources[count++] = (struct process_binding){"audio", audio};
-  resources[count++] = (struct process_binding){"space", control};
+  entries[count++] = (struct process_environment_entry){"input", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, input, 0};
+  entries[count++] = (struct process_environment_entry){"output", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, output, 0};
+  entries[count++] = (struct process_environment_entry){"keyboard", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, keyboard, 0};
+  entries[count++] = (struct process_environment_entry){"pointer", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, pointer, 0};
+  entries[count++] = (struct process_environment_entry){"display", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, display, 0};
+  entries[count++] = (struct process_environment_entry){"audio", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, audio, 0};
+  entries[count++] = (struct process_environment_entry){"space", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, control, 0};
   if (terminal_pointer != HANDLE_INVALID) {
-    resources[count++] = (struct process_binding){"terminal_pointer", terminal_pointer};
+    entries[count++] = (struct process_environment_entry){"terminal_pointer", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, terminal_pointer, 0};
   }
   if (local_clipboard != HANDLE_INVALID) {
-    resources[count++] = (struct process_binding){"clipboard_local", local_clipboard};
+    entries[count++] = (struct process_environment_entry){"clipboard_local", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, local_clipboard, 0};
   }
   if (shared_clipboard != HANDLE_INVALID) {
-    resources[count++] = (struct process_binding){"clipboard_shared", shared_clipboard};
+    entries[count++] = (struct process_environment_entry){"clipboard_shared", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, shared_clipboard, 0};
   }
-  startup->resources = resources;
-  startup->resource_count = count;
-  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
-    startup->streams[i] = (struct startup_stream){.protocol = PROTOCOL_CONSOLE, .handle = streams[i]};
+  static const char *const stream_names[] = {"stdin", "stdout", "stderr"};
+  for (size_t i = 0; i < 3; ++i) {
+    entries[count++] = (struct process_environment_entry){
+      stream_names[i], ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, streams[i], 0,
+    };
   }
-  *owned = resources;
+  startup->entries = entries;
+  startup->entry_count = count;
+  *owned = entries;
   return CALL_OK;
 }
 
@@ -293,19 +282,40 @@ static enum call_status prepare_child(struct launch_preparation *group,
   if (status != CALL_OK) {
     goto fail;
   }
-  struct process_binding *resources = NULL;
+  struct process_startup startup = capture->startup;
+  struct process_environment_entry *entries = NULL;
   if (new_space) {
-    status = install_space_devices(child, space, &capture->startup, &resources);
+    status = install_space_devices(child, space, &startup, &entries);
     if (status != CALL_OK) {
       goto fail;
     }
   }
-  enum mm_result prepared = process_prepare_startup(child, &capture->startup);
-  kfree(resources);
+  enum mm_result prepared = process_prepare_startup(child, &startup);
   if (prepared != MM_OK) {
+    kfree(entries);
     status = prepared == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;
   }
+
+  /* Provisioning grants are only capture sources. Named grants moved into
+   * ENV; cwd keeps its independent installed chain. Unnamed sources convey no
+   * extra hidden child authority. */
+  for (size_t i = 0; i < capture->grant_count; ++i) {
+    handle_t handle = capture->child_handles[i];
+    bool kept = false, named = false;
+    for (size_t j = 0; j < startup.working_directory_count; ++j) {
+      kept |= handle == startup.working_directories[j];
+    }
+    for (size_t j = 0; j < startup.entry_count; ++j) {
+      const struct process_environment_entry *entry = &startup.entries[j];
+      named |= entry->kind == ENVIRONMENT_CAP && entry->value == handle;
+    }
+    if (!kept && !named) {
+      KASSERT(capability_close(&child->capabilities, handle) == CAP_OK);
+    }
+  }
+
+  kfree(entries);
 
   struct task *task;
   /* Publication places the child; equal loads favour the preferred CPU. */

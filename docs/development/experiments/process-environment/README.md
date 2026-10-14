@@ -91,8 +91,8 @@ sample variation prevent fine-grained native cost attribution.
 
 ## Checkpoint
 
-Both task-2 scope defaults are accepted. The stream-entry retirement proposal
-in the [milestone](../../../wip/capability-model-implementation.md#remaining-lifetime-decision-standard-streams)
-remains an owner decision before code. No implementation or task-2 qualification
-is claimed by this baseline. Follow with the matching kernel/userland/ports and
+Both task-2 scope defaults and the stream-entry retirement profile are accepted
+(owner, 2026-10-14), in the
+[milestone](../../../wip/capability-model-implementation.md#accepted-lifetime-decision-standard-streams-owner-2026-10-14).
+No task-2 qualification is claimed by this baseline. Follow with the matching kernel/userland/ports and
 LLVM target-source migration, build and interactive 1/4-CPU QEMU/GDB checks.
