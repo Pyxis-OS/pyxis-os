@@ -108,10 +108,43 @@ The reported HID spellings differ from the saved ELF/AML; no additional device
 match is inferred from that transcription.
 
 The worker arms after namespace/device setup and disarmed startup-work drain;
-this cannot explain steady-state lost presses. A separate, never-merged kernel
-on the same diagnostic base will timestamp SCI dispatch, EC GPE status and query
-numbers, PWRB/HIDD Notify values, and the power latch/worker handoff. It will not
-change query draining, enables, event handling or shutdown policy. Firmware
+this cannot explain steady-state lost presses. The never-merged diagnostic kernel
+`17acbab9`, on the same `45c61551` retest base, timestamps SCI dispatch, EC GPE
+status and query numbers, PWRB/HIDD Notify values, and the power latch/worker
+handoff. It does not change query draining, enables, event handling or shutdown
+policy. Firmware
 prerequisites and missed-edge/queue hypotheses remain under investigation.
 Earlier-readiness changes are not part of #855. Keep this PR draft until the
 intermittence is resolved and owner-verified.
+
+
+### Diagnostic packet and prerequisite audit
+
+Staged at `/shared/present/vela-power-button/diag/`, with verified ELF/config
+hashes, owner `lsblk`-first `/dev/sdc1` copy/restore commands and a short-press
+run sheet. The existing info/trace-only logging system is unchanged: this image
+contains targeted `power-debug` records rather than enabling broad trace output.
+It reads EC status/GPE info and the IO-APIC SCI entry, counts SCI/GPE hits and
+already-queued query work, logs every query number/time and drain stop reason,
+and records every device Notify plus press admission/drop state. Five-second
+heartbeats expose silence and pending state; they introduce diagnostic wakes,
+not query polling/retries. Logging may perturb the intermittent race.
+
+Direct startup readbacks include OSYS, ECAV/OSTP, HIDD BTLD/BTS1 and advertised
+flags. `_Q10`/PWPR has no press-duration gate: HIDD is selected for modern OSYS
+with BTLD set; PWRB requires PBST otherwise. uACPI supports `_OSI("Windows
+2015")` by default, and the supplied `_SB._INI` sets OSYS accordingly. The
+firmware's EC `_REG(3,1)` writes OSTP (OS code 6 for that OSYS), but the supplied
+EC fields are SystemMemory and no EmbeddedControl OperationRegion was found.
+uACPI's handler registration does not appear to invoke that orphan `_REG`.
+Whether OSTP is unset, and whether that affects event generation, remain
+hypotheses. The diagnostic only reads it; it does not call `_REG`, change `_OSI`
+or execute additional enable commands. HDEM/BTNS are not used as readbacks
+because they have AML side effects.
+
+Default/info diagnostic build passed. A matching-base75a8aaac archive and local
+synthetic button AML in Q35/KVM, four CPUs, 2 GiB, fresh OVMF/VirtIO-SCSI ISO boot
+verified timestamped CF/CE Notify, admission and worker dispatch through clean
+power-off. No EC hardware/query delivery is emulated by that check. All task-owned
+QEMU/GDB stopped. No native data writes or behavior fix is authorized by these
+diagnostics; #855 remains draft awaiting the owner capture.
