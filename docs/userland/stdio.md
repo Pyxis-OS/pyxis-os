@@ -29,8 +29,7 @@ Providers, missing components and unavailable identity fail. Descriptive cwd tex
 alone is not proof, and a successful result freezes no later lookup or contents.
 
 Only the final file may be created; intermediate directories must exist. Lookup
-of an existing writable file does not require CREATE. A competing creator is
-handled by opening the entry it published. Temporary path storage is allocated
+of an existing writable file does not require CREATE. A competing creator after a missing lookup reports EEXIST; it is not reopened. Temporary path storage is allocated
 from the path length and initial chain depth, without a fixed path/depth limit.
 The FILE wrapper, open object and descriptor storage are reserved before opening
 or truncating the file. Path workspace allocation and authority resolution also
@@ -63,7 +62,9 @@ failures preserve the target. An existing target FILE association and its
 selected access remain, while pushback and EOF are cleared on success. The
 error indicator remains. Selected access grants no new rights: a readable FILE redirected to a write-only object
 later reads with EBADF. Source cursor and read-ahead remain shared. Pending
-target FILE output rejects replacement with EBUSY; flush it first. A failed
+ordinary target FILE output rejects replacement with EBUSY; flush it first. A pending
+transaction target stages its buffer before replacement and its final alias
+commits once; a producer error abandons it and reports failure. A failed
 native target close leaves the target invalidated and reports its error without
 retrying release. Source equal to target validates and returns unchanged.
 
@@ -82,50 +83,77 @@ Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
 atomic append guarantee; see [technical debt](../technical-debt.md#non-atomic-stdio-append).
 
-## HTTP streams and explicit submission
+## Typed resources and transactions
 
-`fopen(uri, "r")` for HTTP(S), including `json+http(s)`, prepares and commits GET
-through the shared typed transaction helper and follows its
-[redirect policy](http-fetch.md#redirect-chains). It returns after final headers;
-the body is a forward-only response STREAM. There is no 16 MiB body cap. Reads
-use at most 4,088 bytes per native call, with ordinary FILE loops and read-ahead.
-A zero-byte response read performs one final STATUS query: only COMPLETE phase,
-COMPLETE framing and CALL_OK establish EOF. Failure sets `ferror` and errno;
-the backend retains that terminal failure, so `clearerr` cannot turn it into EOF
-or restart the transfer. Delivered bytes remain a prefix until completion.
-Response seeking, positioned I/O and byte/wide pushback (`ungetc`/`ungetwc`)
-fail with ESPIPE; SIZE is unavailable. Refused pushback sets the error indicator
-without clearing EOF or changing consumption.
+`fopen` dispatches on the attested result of [typed OPEN](../interfaces/file-providers.md).
+FILE keeps positioned I/O; STREAM is forward-only; native PIPE and CONSOLE use
+their existing paths. DIRECTORY fails with EISDIR and unsupported types with
+ENOTSUP. Name lookup captures one environment entry; an existing held FILE may
+be truncated without inventing CREATE authority. Generic OPEN never falls back
+to HTTP URI handling.
 
-`fopen(uri, "w")` and `fopen(uri, "w+")` prepare POST staging without network
-submission. They require the caller's delegated preparation/write authority and
-provider-private staging. Append and `r+` are unsupported. `<pyxis/http.h>` adds
-the explicit transaction operations:
+A [transaction](../interfaces/transactions.md) provides independently delegated
+STAGE, COMMIT and ABORT rights. Writable open obtains a staging FILE, with no
+submission. `fflush(f)` on that exact request drains successful output and
+commits once. `w+` then reads the same FILE's reply; `w` consumes/discards the
+reply and reports a failed result. Later writes fail with EBADF. Reads before
+commit fail with EBUSY and set the error indicator; `clearerr` permits recovery
+from a local argument/read refusal, while native staging failures remain latched.
+A lost delivered commit is uncertain and is never replayed.
 
-| Operation | Behavior |
+Implicit full-buffer drains, `fflush(NULL)` and launch flush helpers only stage.
+The final owning descriptor-alias close stages and commits a clean transaction;
+earlier aliases only stage. Normal exit stages all FILE buffers before finalizing
+transactions. Finalization failure changes exit zero to EXIT_FAILURE, preserves
+an already nonzero status, and reports through available stderr. FILE errors
+block submission until explicitly cleared. `_Exit`, crash and abort never
+submit. An abandoned transaction fails; closing is not a success-shaped abort.
+
+`<pyxis/resource.h>` adds explicit failure inspection. Ordinary `fopen` returns
+NULL/errno and releases provisional handles. `pyxis_fopen(path, mode, &result)`
+uses a fresh zeroed `pyxis_open_result` to retain a failure description/body;
+`pyxis_open_result_close` releases it. `pyxis_open_error_body(&result)` and
+`pyxis_error_body(FILE*)` return independent read FILEs over immutable copied
+bytes, without another OPEN. Close those FILEs normally. `pyxis_describe(FILE*,
+&description)` queries metadata without moving the cursor, changing indicators
+or capturing a body handle. Unknown description fields stay unknown; a failed
+commit retains its result detail and copied body through the stream's lifetime.
+
+| Resource outcome | errno |
 | --- | --- |
-| `pyxis_http_prepare(uri, mode, options)` | Prepare `r` GET or `w`/`w+` POST without DNS/connect/send. Options supply copied header lines, flags and an absolute monotonic deadline. |
-| `pyxis_http_commit(request)` | Flush this FILE's successful staged output, freeze and submit once. `r`/`w+` return the same FILE as a response reader; `w` returns a distinct read FILE. |
-| `pyxis_http_status(stream, status)` | Copy phase, submission, HTTP status, framing, native failure and progress from the observation facet. |
-| `pyxis_http_abort(request)` | Explicitly abort through the control facet; leave the FILE open for status/close. |
+| not-found | ENOENT |
+| denied | EACCES |
+| I/O failure, incomplete/deadline failure | EIO |
+| too-large | EFBIG |
+| aborted | ECANCELED |
+| uncertain | EIO; inspect description to distinguish it |
 
-Zero/omitted deadline selects one 30-second budget starting at preparation,
-including staging and response consumption. Supply a later absolute deadline
-for slow producers. Explicit preparation does not follow redirects or replay
-POST; a fully framed 4xx/5xx response can complete, with its HTTP code separate
-from transfer success. Header/credential flags retain the
-[native transaction policy](../interfaces/http-transactions.md).
+STREAM READ uses at most 4,088 bytes per native call. Only a final cached
+DESCRIBE with COMPLETE and an OK outcome establishes EOF. A failed transfer sets
+`ferror`/errno and retains its terminal failure; `clearerr` cannot turn it into
+EOF or restart it. Seek, positioned I/O and byte/wide pushback fail with ESPIPE;
+SIZE is unavailable. A received prefix is not a complete result.
 
-Reading a readable prepared request before commit fails with EBUSY and sets the
-FILE error indicator; it neither reads staging nor submits. A pure precommit
-read refusal does not poison the producer or prevent commit, although the error
-indicator still needs `clearerr`. Producer failures or uncertain writes prevent
-commit even after `clearerr`. Flush, close and exit never submit a request.
-After a submission attempt the object cannot submit again, including after a
-lost reply; failure can leave the remote outcome unknown. For `w`, close both
-the request and the distinct response when finished. Libc implements this
-adapter with native grants and does not link TLS; the provider owns transport
-and certificate verification.
+## Private HTTP transition
+
+Until capability-model B6/B8, an explicitly isolated legacy route selects HTTP(S)
+URI names, including `json+http(s)`. It uses the generic transaction control and
+private HTTP preparation/observation. TLS stays solely in the provider. Ordinary
+GET retains the [redirect/trust/error policy](http-fetch.md#redirect-chains), one
+30-second budget and no total-body cap. `w`/`w+` prepare POST with the declared
+provider/private staging grants; append and `r+` are unsupported.
+
+`<pyxis/http.h>` retains only optional `pyxis_http_prepare` (copied headers,
+flags and absolute deadline), `pyxis_http_status` and `pyxis_http_abort` on the
+same FILE. There is no separate commit helper. Explicit preparation does not
+redirect or replay POST. In this transitional HTTP adapter, `w+` exposes complete
+4xx/5xx bodies and the status code separately; `w` has no reader, so non-2xx makes
+flush/final close fail with EIO. Transport, framing and deadline failure fail in
+both modes. Generic transaction code never interprets HTTP codes.
+
+Lua uses ordinary `io.open`, `f:write`, `f:flush`, `f:read` and explicit `f:close`;
+its separate HTTP adapter is removed. Automatic Lua cleanup of a pending request
+remains an owner decision in the [A4 scope](../wip/capability-model-implementation.md#task-4-scope-accepted-2026-10-14).
 
 ## Provider response metadata
 
@@ -139,18 +167,18 @@ retain their errno. NULL arguments use EINVAL and closed/invalid streams EBADF.
 Failure clears the output; success
 preserves errno. Metadata belongs to the shared open object and is freed on its
 final descriptor close.
-Failed fopen exposes errno only. See the [redirect contract](http-fetch.md#redirect-chains).
+Ordinary failed fopen exposes errno only; the optional result API above retains failure facets. See the [redirect contract](http-fetch.md#redirect-chains).
 
 ## Concurrent operations
 
 The [libc thread profile](threads.md) serializes each whole FILE operation and
 the cursor/read-ahead shared by descriptor aliases. Blocking pipe/console input
 and output use separate direction guards. An admitted operation holds stable
-libc storage across blocking calls, without copying native grants or delaying
-final native CLOSE. Raw close invalidates associations before number reuse.
+libc storage across blocking calls, without copying native grants. Ordinary native CLOSE invalidates authority promptly;
+transaction finalization holds FILE/cursor exclusion through staging and commit. Raw close invalidates associations before number reuse.
 Callers exclude new use during FILE destruction; already admitted operations
-retain storage until return. `dup2` refuses an active or buffered associated FILE
-with EBUSY before replacement. Global fflush retains a registry snapshot and
+retain storage until return. `dup2` refuses an active associated FILE with EBUSY before replacement; pending
+transaction buffers are staged under the retained FILE exclusion. Global fflush retains a registry snapshot and
 performs I/O after releasing registry exclusion.
 
 ## Descriptor I/O
@@ -541,9 +569,10 @@ read-ahead so later reads refetch; pipe read-ahead remains. ISO C leaves input
 `fflush` undefined, so this is a Pyxis guarantee. `fflush(NULL)` attempts all
 registered output queues, reports the first error after trying the others, and
 leaves input alone. No flush clears an earlier error indicator.
-Normal exit calls it, closes each live descriptor once, then disposes of FILE
-metadata, including invalid associations. Cleanup errors do not replace the
-requested exit status. Exit handlers and `.fini_array` run before this cleanup,
+Normal exit stages all buffers, closes each live descriptor once (committing final
+clean transactions), then disposes of FILE metadata, including invalid associations.
+Cleanup failure changes requested exit zero to EXIT_FAILURE; a nonzero status
+is preserved. Exit handlers and `.fini_array` run before this cleanup,
 so they can still write to the streams; see
 [startup and exit](../development/sdk.md#startup-exit-and-layout). `_Exit` and
 fatal faults bypass libc cleanup; the kernel still reclaims process resources.

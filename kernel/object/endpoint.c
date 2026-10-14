@@ -3,6 +3,7 @@
 #include <abi/stream.h>
 #include <abi/provider.h>
 #include <abi/http_transaction.h>
+#include <abi/transaction.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -2054,14 +2055,14 @@ static enum call_status derive_reply_children(struct endpoint_delivery_record *r
       (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE ||
       record->operation == PROVIDER_LEGACY_HTTP_OPEN)) {
     children = count;
-  } else if (record->target->protocol == PROTOCOL_HTTP_TRANSACTION &&
-      record->operation == HTTP_TRANSACTION_COMMIT) {
+  } else if (record->target->protocol == PROTOCOL_TRANSACTION &&
+      (record->operation == TRANSACTION_STAGE || record->operation == TRANSACTION_COMMIT)) {
     children = count;
   } else {
     return CALL_OK;
   }
   /* The sender's started operation owns the ancestor storage throughout REPLY.
-   * COMMIT creates both its reader and handoff observation through that origin.
+   * STAGE and COMMIT derive their returned resources through that origin.
    * Unrelated pre-existing attachments on other operations retain their lineage. */
   for (size_t i = 0; i < children; ++i) {
     enum capability_result result = forwarder_request_derivation_from(&grants[i], &record->origin);

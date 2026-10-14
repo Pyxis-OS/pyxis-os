@@ -1,9 +1,9 @@
 # Userspace file providers
 
 A generic provider publishes an OPEN service through its process
-[environment](environment.md). Opening a provider URI returns an exported FILE
-capability. Ordinary libpyxis file helpers, libc, `cat`, `cksum`, `tee` and shell
-input redirection use it without provider-specific code. HTTP additionally offers
+[environment](environment.md). Opening a provider URI returns an attested typed
+resource. FILE helpers and current shell redirection require FILE; libc dispatches
+supported returned types. HTTP additionally offers
 [prepared transactions](http-transactions.md), used by libc URL reads for
 forward-only response streams.
 
@@ -43,15 +43,18 @@ provisional grants; actual query errors stay errors. The narrow `provider_open()
 FILE adapter uses this same wire for current FILE-only callers; it reports other
 types as unsupported. There is no second generic ABI or legacy fallback.
 
-`resource_open_held()` borrows a FILE, native DIRECTORY or provider capability.
+`resource_open_held()` borrows a FILE, native DIRECTORY or provider capability;
+empty-tail held STREAM, TRANSACTION, native PIPE and CONSOLE opens also retain
+only the rights required by the consumer. TRANSACTION needs STAGE/COMMIT for a
+writable libc stream and preserves separately held ABORT authority.
 A held FILE requires an empty remainder; CREATE without a name is unsupported,
 TRUNCATE needs WRITE, and APPEND remains consumer intent over positioned I/O.
 A directory walk cannot cross the held root, follows no symlinks and resolves the
 final component once through [typed native lookup](directories.md). Native lookup,
 creation and resize retain their synchronous native wait contract; exported
 OPEN and truncation use the supplied endpoint deadline. CREATE races return
-ALREADY_EXISTS without re-lookup or replay. Libc dispatch/transaction close belong
-to task A4, and shell syntax belongs to A5.
+ALREADY_EXISTS without re-lookup or replay. [Libc](../userland/stdio.md) dispatches
+the attested type; shell syntax remains task A5.
 
 `provider_open(provider, target, intent, flags, deadline_ns, &result, &file)`
 returns transport/local-validation status. CALL_OK makes `result.status` the
@@ -63,7 +66,8 @@ retries, rebinds or falls back to HTTP continuation.
 result. The name helper never falls back to private HTTP continuation. Existing
 `path_resolve()`/`path_open_file()` FILE consumers adapt that result, while native
 filesystem-only callers reject actual exported resources rather than a URI name.
-Libc returned-type dispatch/transaction close belong to A4 and shell syntax to A5.
+Libc's transaction close follows the [generic contract](transactions.md); shell
+syntax remains A5.
 
 The [private HTTP continuation ABI](../../include/abi/provider_http_private.h)
 uses operation `PROVIDER_LEGACY_HTTP_OPEN` (3), independently of generic OPEN (1)
@@ -105,7 +109,8 @@ can supply a deadline explicitly; an unresponsive generic provider can block its
 client.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
-Each libc descriptor keeps its own offset. Environment replacement affects future
+Libc aliases share an open object's cursor; separate opens have separate cursors.
+Environment replacement affects future
 opens; existing grants remain attached to the original provider. OPEN results
 inherit their source service's revocation lineage; ordinary COPY, IPC and launch
 preserve it. Cutting the source therefore denies later use of its opened files,
