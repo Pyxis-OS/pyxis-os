@@ -420,6 +420,28 @@ and 684.7 fps. Acquisition without PRESENT, repeated PRESENT while hidden, captu
 Super and device/queue-loss propagation were source-inspected only; revisit them when changing the session, input or teardown paths or
 when a failure appears.
 
+
+## Backtraces and symbols
+
+A kernel panic or assertion prints its message but no stack: `panic()` walks
+no frames. On 2026-10-14 a ThinkPad assertion in `usb_host_notify()` showed one
+line, and the cause had to be found from the code. Userspace programs are P1F,
+which carries loadable bytes only ([P1F output](development/llvm-toolchain.md#p1f-output)),
+so a user fault cannot be named by function either; an ELF with symbols exists
+only when a build asks for one.
+
+Consequence: native failures that can't be reproduced in QEMU need the network
+debugger or a diagnostic build. Directions, none decided (owner, 2026-10-14):
+
+- Kernel: walk frames in `panic()` and name them from the kernel ELF, which boot
+  already keeps mapped read-only with its symbol table.
+- Programs: a later P2F revision with an optional, strippable symbol table; or
+  symbol files shipped beside the program in its bundle; or a build ID that the
+  host resolves against kept ELFs, as `debug.image` does for the kernel.
+
+Revisit with the next invisible native failure, or before the fault reporting
+work in [control, events and faults](wip/control-events-faults.md).
+
 ## Renoir inherited pitch and firmware reservations
 
 [Native flip inventory](development/experiments/renoir-flip-inventory/README.md)
