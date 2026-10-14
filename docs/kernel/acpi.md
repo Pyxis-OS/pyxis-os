@@ -222,8 +222,11 @@ existing EC query route: `_Q10` → PWPR → HIDD Notify `0xce` after BTNL; `_Q1
 delivers release `0xcf`. The EC worker already evaluates its firmware-selected
 `_GPE` and handles queries. No additional enable is needed. The
 [qualification record](../development/experiments/vela-power-button/README.md)
-separates static AML evidence, QEMU Notify coverage and the pending physical
-retest after correcting void BTNL admission.
+separates static AML evidence, QEMU Notify coverage and the owner's successful
+physical retest after correcting void BTNL admission. On Vela the owner reports
+roughly 30 s before buttons become usable during startup. The worker arms them
+after namespace/device setup and disarmed startup-work drain; the delay's cause
+is not yet established. Earlier readiness is a separate follow-up.
 
 The Ctrl+Alt+Delete [power overlay](power-overlay.md) has the same
 physical-access authority. `acpi_power_local()` hands its power-off or restart

@@ -88,8 +88,46 @@ press after startup. Never-merged diagnostic branch
 `diag/vela-power-on-75a8aaac` at `45c61551`: stick base `75a8aaac`, existing #847
 boot fix, #853 NVMe code, then #855 and this follow-up. Kernel-only info build;
 keep the stick's initrd/Limine, `nvme.write=0`, and no #848/newer ABI/pins.
-Native firmware and disks are untouched by Codex. Physical Notify delivery and
-clean power-off remain **retest pending**.
+Native firmware and disks are untouched by Codex. Physical button delivery/power-off passed the owner retest below; detailed
+shutdown confirmation logs are not yet supplied.
 
 The same owner boot confirmed Vela NVMe 2.0 namespace readiness; see the
 [NVMe record](../nvme-task1/README.md#vela-native-readiness--2026-10-14).
+
+
+## Native pass and startup window — 2026-10-14
+
+The owner retested diagnostic kernel `45c61551`. PNP0C0C and HIDD registered;
+the Intel array request reported capabilities `0x1f`. After startup, a short
+physical press powers off. **Native button delivery passed.** The corrected
+observation is an approximately 30-second window after boot during which presses
+do nothing, not a 30-second delay after an admitted press. No post-press log is
+yet supplied, so NVMe shutdown confirmation is not inferred from power-off.
+The reported HID spelling differs from the saved ELF/AML; no additional device
+match or firmware identity is inferred from that transcription.
+
+The diagnostic kernel creates the ACPI worker before scheduling userspace, but
+its initialization runs asynchronously with boot-init. The worker completes
+namespace load/initialization (`_STA`/`_INI`, region setup), starts the EC,
+discovers batteries/adapters, prepares buttons, drains startup SCI/Notify work
+while disarmed, then sets `button_armed` and `ready`. A per-device “Notify ready”
+line precedes that final drain; it is not the worker's final arming timestamp.
+First battery sampling occurs after arming. EC queries are SCI-driven, not on
+an NPFS or battery timer. HIDD `0xce` only sets the press latch; no debounce,
+30-second hold or power-overlay confirmation is involved.
+
+Code inspection finds one exact 30-second candidate: uACPI's default AML While
+loop watchdog. Its failure prints `ACPI: error: loop time out after running for
+30 seconds`. The existing namespace summary prints its elapsed microseconds;
+compare it with boot-init and button preparation lines. Individual EC byte
+waits are 500 ms, unclaimed SCI retry is 1 s, battery cadence is 5 s. Slow AML,
+repeated EC waits, queued startup work or BSP starvation can delay readiness,
+but no supplied timestamp/log establishes which occurred on Vela.
+
+Separate proposed follow-up (not implemented or authorized by #855): prioritize
+power readiness ahead of unrelated slow startup work where firmware ordering
+allows it. Recommended default: first locate the delay using the namespace
+summary and startup errors; retain namespace/EC initialization and the disarmed
+startup drain. Do not blindly move handlers ahead of `_INI` or merely reorder
+battery discovery (its first data poll already follows arming). This is worth a
+focused readiness investigation, not a reason to hold the working Notify fix.
