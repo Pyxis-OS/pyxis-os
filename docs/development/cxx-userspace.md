@@ -74,7 +74,7 @@ Choices made while implementing:
 - **fmt follows libc++'s feature macros.** Two patches turn off its locale
   support and leave out one `std::wstring` helper.
 
-The hosted-Clang [task 2](../wip/hosted-clang.md)
+The hosted-Clang [task 2](hosted-tools.md#delivery)
 extends the fork with a real C-only locale, streams, wide UTF-8/FILE facilities
 and grant-backed random_device. The published gate 7 compiler (`2d234435`)
 adopts those changes and static local-exec TLS. Gate 8 enables external threading

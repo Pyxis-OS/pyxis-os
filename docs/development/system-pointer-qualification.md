@@ -1053,7 +1053,7 @@ report is not upgraded to mux coverage. Native checks remain open even with
 QEMU milestone closure.
 
 Clipboard export/publication/paste and encoding remain in the
-[clipboard proposal](../wip/clipboard.md). Multi-source Bluetooth integration,
+[clipboard proposal](../interfaces/clipboard.md#direction). Multi-source Bluetooth integration,
 USB HID, absolute-mode scrolling, broader host frontends, damage tracking,
 recovery and advanced selection remain separately scoped work; the references
 and [technical debt](../technical-debt.md#system-pointer-selection-and-input-limits)

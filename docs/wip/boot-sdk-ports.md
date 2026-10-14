@@ -12,6 +12,11 @@ proposals or investigations, and no new tasks in existing milestones. Ideas go i
 [later OS directions](later-os-directions.md) as short entries. Bugs and hardware
 problems found in use are still fixed.
 
+**Sequencing (owner, 2026-10-14):** finish the open work, then resolve the
+[capability model](shell-capability-flow.md), then continue. No new libc, shell,
+web/HTTP or Git work starts until then; independent tracks (storage and drivers,
+kernel) may run alongside.
+
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
 and are listed in [completed milestones](completed.md).
@@ -38,12 +43,6 @@ Developing inside Pyxis, the Java virtual machine: the owner, see
 investigation (2026-10-13) before installed configuration publication; whole-volume
 read/workspace costs are proposed for reduction without extending the lease.
 
-[Hosted Clang and LLD](hosted-clang.md): tasks 1–5 delivered; installed bundles
-compile, separately link and run natively ([#772](https://git.internal/PyxisOS/pyxis-os/pulls/772)).
-Clang driving LLD is assigned to Codex delta, after the accepted minimal nested
-groups prerequisite ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788),
-[#789](https://git.internal/PyxisOS/pyxis-os/pulls/789)).
-
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
 publication/installed-activation proposal is assigned to Codex alpha; owner
@@ -51,23 +50,16 @@ decisions are pending. Activation waits for FAT32 preflight cost, and internal
 coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 
 [Native HTTP requests](native-http-requests.md): tasks 1–4 delivered, including
-prepared transactions, streaming and libc/Lua adapters. Task 5's accepted shell
-coordinator is in progress ([#780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
-draft [#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)).
-
-[Nested execution groups](nested-execution-groups.md): the minimal Clang-driver
-prerequisite is accepted and assigned to Codex delta as a planning-freeze exception,
-2026-10-13 ([#788](https://git.internal/PyxisOS/pyxis-os/pulls/788)). Implementation
-is draft [#789](https://git.internal/PyxisOS/pyxis-os/pulls/789); broader nesting remains parked.
+prepared transactions, streaming and libc/Lua adapters, and task 5a's interactive
+shell bindings ([#780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
+[#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)). Tasks 5b (standalone
+scripts) and 5c (plain stdio submission) are parked by the owner (2026-10-14) until
+the capability model is resolved.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
-
-[USB storage read throughput](usb-read-throughput.md): owner-assigned scoped
-freeze exception (2026-10-13); native baseline complete, bounded npfs read
-aggregation proposed. Implementation awaits a separate go.
 
 ## Open
 
@@ -75,15 +67,6 @@ aggregation proposed. Implementation awaits a separate go.
 installed ThinkPad is open.
 
 [Everyday gaps](everyday-gaps.md): small things noticed in use.
-
-[File transfer through the remote terminal](remote-file-transfer.md): drag-and-drop
-upload awaits the owner's GUI-drop check from Linux and macOS.
-
-[Threads and SDL consumers](threads.md#delivery-gates): gates 1–8 delivered;
-SDL workers/timers and audio callbacks merged (#778, #784), with the
-[Chocolate Quake sound bundle](../userland/chocolate-quake.md)
-([#787](https://git.internal/PyxisOS/pyxis-os/pulls/787)). Libuv pool, Hax and Go
-adapters await separate assignments.
 
 ## Candidates for the next milestone
 
@@ -97,15 +80,11 @@ files and shell API testing now depend on [native HTTP requests](native-http-req
 then the Lua harness, Hax after). Each delivery task
 needs a separate go-ahead.
 
-[Developer tools](later-os-directions.md#developer-tools): a capability inspector
-and `top`.
+[Developer tools](later-os-directions.md#developer-tools): a capability inspector,
+`top` and the network debugger's unassigned task 4.
 
 [Git on Pyxis](git-on-pyxis.md): libc source-fetch prerequisites and the native
 CLI/HTTP investigation (#711) are merged. Port tasks are proposed, not assigned.
-
-[Network kernel debugger](network-debugger.md): tasks 1–3 are implemented and
-natively qualified for read-only LAN attach on the RTL8111
-([reference](../kernel/network-debugger.md)); task 4 is unassigned.
 
 [NVMe coexistence](nvme-coexistence.md): task 1's NVMe driver is merged (#710) and
 was qualified natively read-only on 2026-10-11. The shared
@@ -131,7 +110,7 @@ direction; the owner's dock firmware PXE check passed. No implementation task is
 
 System layout follow-ups: network configuration on the pool instead of the archive
 ([technical debt](../technical-debt.md#archive-only-network-configuration)) and the
-[boot configuration checker](boot-configuration-checker.md).
+[boot configuration checker](installer-tui.md#configuration-checker).
 
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
@@ -162,10 +141,10 @@ tied to Continuum.
 [Desktop and graphics](desktop-graphics.md), including where to start on the
 owner's compositor.
 
-[Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
-[Go runtime investigation](go-runtime.md) and the
-[Neovim milestone](neovim-libuv.md): tasks 1–6 delivered, task 7 (owner native
-qualification) open.
+[Host development overlay](host-development-overlay.md): postponed experiment.
+
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) and the
+[Go runtime investigation](go-runtime.md).
 
 [Interchangeable providers](interchangeable-providers.md): programs depend on
 protocols and launchers choose who serves them, so a compositor can serve the same
@@ -175,6 +154,10 @@ display, pointer and keyboard interfaces as the kernel.
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,
 storage.
 
+[Nested execution groups](nested-execution-groups.md): the minimum subgroup
+foundation is delivered ([#789](https://git.internal/PyxisOS/pyxis-os/pulls/789));
+the broader required direction is parked.
+
 [Program bundles and ZIP archives](program-bundles.md): ZIP 2b/2c parked by the
 owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and
 qualified on draft #717/#213/#98, with authority and admission fixes required
@@ -182,9 +165,6 @@ before any merge. Revisit for package distribution or the Clang build loop.
 The merged host packer/checker (2a, #706) stays; bin placement is merged
 ([reference](../userland/program-bundles.md)) and its
 [future command index](program-bundles.md#future-command-index) awaits a separate go.
-
-[Selecting existing build artifacts](build-artifact-reuse.md) and the postponed
-[host development overlay](host-development-overlay.md).
 
 [Shell capability flow](shell-capability-flow.md): proposal (2026-10-14) that
 typed capabilities, not URI spellings, carry semantics through redirects, blocks,

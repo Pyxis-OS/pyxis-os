@@ -113,7 +113,7 @@ values are preserved unless the owner approves replacement. Do not execute
 arbitrary migration scripts or reinterpret unsupported Lua as a writable table.
 
 Share parsing/schema/merge validation with boot init and the
-[configuration checker](boot-configuration-checker.md); machine keys use the
+[configuration checker](#configuration-checker); machine keys use the
 [machine-settings validator](../userland/machine-settings.md) and its planned
 [validating writer](machine-settings.md#later-writer-and-authority).
 Separate static validity from checks requiring CPU/volume authority, reporting
@@ -135,6 +135,23 @@ editor, which compares the chosen revision's declarations with the current ESP
 state and preserved previous files. Old defaults in the archive provide rescue,
 not automatic restoration of owner edits. Multi-file publication can be partial;
 validation/fallback and a reported recovery path are mandatory.
+
+## Configuration checker
+
+The shared static checker was accepted within task 4 (2026-10-13) and is
+implemented for scratch validation. The ordinary `config validate` bundle shares
+the startup schemas and reports merged provenance and available CPU checks
+([reference](../userland/configuration-editor.md)). Applying a change to a live
+system stays deferred; in the [Asterism](spaces.md#asterism) direction the checker
+is the validation half of **Polaris**, which later also applies configuration
+changes to the Continuum supervisor. The checker reads the
+[boot configuration](../userland/init.md#boot-configuration) without blocking
+anything, for use while editing `system://config/boot.lua`, and reports problems
+such as more than one network owner, invalid volumes, a `start` outside a space's
+roots and CPUs that are not present. It shares parsing and validation with boot
+init so the two cannot disagree, separates static checks from checks against this
+machine's CPUs and volumes (saying "not checked" where it lacks the authority to
+look), and shows the merged result: replaced entries and which spaces would start.
 
 ## Task 2 choices — accepted 2026-10-11
 

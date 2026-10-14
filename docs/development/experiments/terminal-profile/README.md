@@ -1,6 +1,6 @@
 # Terminal profile for a full-screen editor
 
-Qualification for task 3 of the [Neovim milestone](../../../wip/neovim-libuv.md):
+Qualification for task 3 of the [Neovim milestone](../../../userland/neovim.md#milestone-and-delivery):
 the alternate screen, scroll regions, insert/delete line, reverse index, saved
 cursor and charset designations in the kernel TTY and the multiplexer's pane
 terminal, as listed in the [sequence table](../../../userland/terminal.md#tty-output-controls),

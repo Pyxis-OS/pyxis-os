@@ -2,7 +2,7 @@
 
 The image includes BusyBox vi at `boot://vi.pxe`, with its GPL-2.0-only license
 at `boot://share/licenses/busybox/LICENSE`. The shell resolves `vi` to it. It is
-the first modal editor, ahead of [Neovim](../wip/neovim-libuv.md); Kilo remains
+the first modal editor, ahead of [Neovim](neovim.md#milestone-and-delivery); Kilo remains
 available. The [recipe notes](../../ports/busybox/README.md) record the source
 pin, both patches and the adapter.
 

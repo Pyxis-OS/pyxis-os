@@ -82,8 +82,8 @@ thread-local exception state, static guards, once and unwinder locks. C++ once
 exceptions reset the initializer state before rethrow. `std::thread::detach`
 throws while retaining joinability. Detached async workers (`std::async`) are not
 qualified by this profile. Wider non-lock-free compiler atomic helpers are not
-supplied; the thread probes use lock-free integral atomics. Consumer adapters such as SDL and libuv remain separate
-[gates](../wip/threads.md#delivery-gates).
+supplied; the thread probes use lock-free integral atomics. SDL's adapters are delivered; libuv, Hax and Go adapters remain separate
+[assignments](../interfaces/threads.md#delivery).
 
 [Gate 8 qualification](../development/experiments/threads-task8/README.md)
 records builds, interactive QEMU/GDB and measured limits separately.

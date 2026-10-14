@@ -1,6 +1,6 @@
 # Pipe readiness task 1 qualification
 
-Recorded 2026-10-10 for [Neovim task 1](../../../wip/neovim-libuv.md#tasks).
+Recorded 2026-10-10 for [Neovim task 1](../../../userland/neovim.md#milestone-and-delivery).
 These are nested-KVM observations, not physical-host performance. Scratch
 fixtures, screenshots, serial output and debugger captures remain under ignored
 `build/pipe-baseline`, `build/pipe-after` and `build/pipe-qualification`.

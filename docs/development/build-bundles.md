@@ -85,4 +85,4 @@ Normal source builds still use their existing dependencies. A TCC source/patch
 change requires rebuilding TCC; CI reuse avoids repeating an already completed
 build locally. There is no implicit network access or upstream checkout update
 in `make run`. Automatic artifact discovery, local cache selection and reuse
-across workflow runs remain [follow-up work](../wip/build-artifact-reuse.md).
+across workflow runs remain [follow-up work](../wip/later-os-directions.md#package-manager).

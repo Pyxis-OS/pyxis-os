@@ -1,6 +1,6 @@
 # Threads task 1: process lifetime qualification
 
-Matched before/after record for [task 1](../../../wip/threads.md), recorded on 2026-10-09.
+Matched before/after record for [task 1](../../../interfaces/threads.md), recorded on 2026-10-09.
 These are nested-KVM observations, not owner-host or physical-hardware results.
 Raw JSONL, timing, serial and debugger captures stay in ignored
 `build/task1-baseline` and `build/task1-after`; no in-tree test, probe or benchmark

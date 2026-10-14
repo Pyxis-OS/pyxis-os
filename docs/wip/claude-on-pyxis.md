@@ -125,7 +125,7 @@ Accepted 2026-10-09; not implemented.
 
    On **live/PXE**, `home://` is RAM: bind a separate private RAM directory as
    the trusted provisioning process's `home://` and upload `anthropic-key` once
-   per boot with [xfer](remote-file-transfer.md), before starting the harness.
+   per boot with [xfer](../userland/remote-terminal.md#explicit-file-transfer), before starting the harness.
    End the provisioning transfer, then delegate only the read-only FILE; no
    ordinary shared-home view may reach that directory. Never bake the key into
    an init script, archive or staged image. The remote transfer is not encrypted;
@@ -266,7 +266,7 @@ inventory, not a compile or runtime result.
 | [HTTP transport](https://github.com/OleksandrChekhovskyi/hax/blob/9fe48c4a3a1469b63c27b9d1c83ff0539fb459f0/src/transport/http.c) | Curl easy API, JSON POST, headers/body callbacks, SSE, cancellation, timeouts, keepalive and content decoding. | Real curl port over shared libc networking, verified TLS/trust and streaming; completed GET FILE snapshots cannot replace it. |
 | JSON | Jansson creation/parsing/serialization and reference ownership; objects/arrays and recursive updates. | A separately pinned Jansson port; the Lua JSON library does not replace this C dependency. |
 | [Spawning](https://github.com/OleksandrChekhovskyi/hax/blob/9fe48c4a3a1469b63c27b9d1c83ff0539fb459f0/src/system/spawn.c) | fork/exec, pipe/dup2/fdopen, waits, signals, detached helpers and `/dev/null`. | Native argv/launcher, explicit FILE/PIPE streams and process/group supervision; no successful fork/signal stubs. |
-| [Background tasks](https://github.com/OleksandrChekhovskyi/hax/blob/9fe48c4a3a1469b63c27b9d1c83ff0539fb459f0/src/tools/task_registry.c) | pthread workers, mutex/condition/timed waits, output drainers and task lifetime beyond one call. | Depend on the separately assigned [native threads/runtime plan](threads.md), or explicitly scope a native serial adaptation; current one-task libc is insufficient. |
+| [Background tasks](https://github.com/OleksandrChekhovskyi/hax/blob/9fe48c4a3a1469b63c27b9d1c83ff0539fb459f0/src/tools/task_registry.c) | pthread workers, mutex/condition/timed waits, output drainers and task lifetime beyond one call. | Depend on the separately assigned [native threads/runtime plan](../interfaces/threads.md), or explicitly scope a native serial adaptation; current one-task libc is insufficient. |
 | [Terminal](https://github.com/OleksandrChekhovskyi/hax/blob/9fe48c4a3a1469b63c27b9d1c83ff0539fb459f0/src/terminal/input.c) | termios raw mode, ioctl size, poll, ANSI, timed escapes/paste and threaded interrupt watcher. | Adapt to native console/readiness/resize/interrupt contracts and restore terminal ownership on exit. `isatty` exists; the other interfaces are not implemented. |
 | [Files/sessions](https://github.com/OleksandrChekhovskyi/hax/blob/9fe48c4a3a1469b63c27b9d1c83ff0539fb459f0/src/session.c) | modes including 0600, locks, link counts/timestamps, symlinks, staged fsync/rename and atomic-append assumptions. | Native stat has type/size, creation supports 0666, and append is SIZE then WRITE. Specify privacy/concurrency/durability; do not fabricate Unix metadata or locking. |
 | Optional integration | Git queries, host clipboard helpers/OSC52 and monotonic clock. | Explicit supported features or unavailability. Missing standard functions with real native semantics belong in libc; optional Git metadata does not authorize a Git port. |

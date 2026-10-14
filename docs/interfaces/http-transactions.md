@@ -8,8 +8,8 @@ protocols;
 [STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
 [Libc streaming](../userland/stdio.md) uses these facets; the [shell coordinator](../userland/shell.md#prepared-http-requests)
 uses the same facets for interactive and trusted-bootstrap requests.
-[Standalone scripts](../wip/native-http-requests.md#task-5-split--accepted-2026-10-13)
-wait for scoped descendant cancellation and are not delivered.
+[Standalone scripts](../wip/native-http-requests.md#parked-tasks-5b-and-5c)
+are parked by the owner until the capability model is resolved and are not delivered.
 
 ## Authority and preparation
 

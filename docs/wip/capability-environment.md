@@ -38,7 +38,7 @@ configuration documents (session and space Lua). Examples:
   capabilities later.
 - [Prepared native HTTP requests](../interfaces/http-transactions.md) transfer real
   body/control/response/observation grants. Task 5's
-  [accepted shell contract](native-http-requests.md#task-5-accepted-shell-contract--2026-10-13)
+  [delivered shell contract](../userland/shell.md#prepared-http-requests)
   uses one typed capability-entry table as an interim shell-local adapter beneath
   this direction, not printed handles or a separate HTTP registry. It explicitly
   leaves environment/configuration entries and automatic inheritance unimplemented;

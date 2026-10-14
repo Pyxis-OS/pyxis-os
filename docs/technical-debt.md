@@ -626,7 +626,7 @@ character insert/delete/erase, horizontal margins and colon colours remain
 absent; the kernel/mux sequence parsers must stay in step. Scheme configuration
 and the Neovim Unicode profile follow-up are separate work. Revisit with a
 consumer needing broader text or missing controls. The owner's
-[far-future scalable-font direction](wip/neovim-libuv.md#later-tasks)
+[far-future scalable-font direction](wip/later-os-directions.md#neovim-follow-ups)
 is unassigned.
 
 ## Initial terminal multiplexer limits
@@ -844,7 +844,7 @@ writable configuration location and review of its parser and formatting.
 
 ## Manual toolchain publication
 
-The owner accepted opt-in [toolchain-volume publication](wip/hosted-clang.md#accepted-task-5-profile-2026-10-13)
+The owner accepted opt-in [toolchain-volume publication](development/hosted-tools.md#manual-immutable-publication)
 by hand: every native toolchain revision must be staged and published manually.
 The [package manager](wip/later-os-directions.md#package-manager) is parked with
 multiple dependencies; revisit this annoyance when it is unparked.
@@ -861,6 +861,19 @@ one remaining deferred cost. Bounded npfs read aggregation has
   launch cost. Revisit for launch-heavy native builds when image reuse, its
   authority and invalidation rules are assigned. Task 5 adds no cache or reuse
   mechanism.
+- **Optional native checks not run:** the launcher-withheld (compile-only) driver
+  configuration and the memory probe's peaks were not run on the ThinkPad
+  ([native driver results](development/hosted-tools.md#native-driver-results)).
+  The probe stays unmerged; run them when a native session has time.
+
+## USB read aggregation responsiveness
+
+[Bulk npfs read aggregation](devices/usb-storage.md#bulk-read-aggregation) holds the
+shared BSP worker for each grouped transfer of up to 64 KiB. Whether a large capture
+read delays other users of the shared worker is not qualified: the native concurrent
+check never ran (its second session never became ready), and the QEMU observation is
+not a native substitute. Revisit with the next native session that can hold two
+sessions, or before adding further bulk consumers.
 
 ## Clang code generation and predefines
 
@@ -1955,7 +1968,7 @@ APIs are omitted (the `uv_os_*` queries Pyxis can answer are listed in the
 priority, CPU, memory and load queries stay refused). Luv consumes the native exit reasons and reports unsupported
 PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
 Neovim must still consume native stat validity and close remaining libc/API gaps
-in [task 6](wip/neovim-libuv.md#tasks). Serving providers in a libuv loop needs a
+in [task 6](userland/neovim.md#milestone-and-delivery). Serving providers in a libuv loop needs a
 receiver adapter. Shared-process threads require a separate milestone.
 
 ## Calendar and encoding profile
@@ -1976,7 +1989,7 @@ The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle with
 folds ([calendar limits](#calendar-and-encoding-profile)). luv reports TCP, UDP, DNS, watches, signals, work queues,
 callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
 descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
-[task 6](wip/neovim-libuv.md#tasks), which may need some of these, and with sockets or threads in libuv.
+[task 6](userland/neovim.md#milestone-and-delivery), which may need some of these, and with sockets or threads in libuv.
 
 ## Directory moves outside RAM and npfs
 

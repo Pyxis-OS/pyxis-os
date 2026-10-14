@@ -96,7 +96,7 @@ process-shared synchronization remain unsupported; the
 dynamic modules and other TLS models.
 Growth and installation use the shared-table
 protocols below; teardown requires drained activity and claims.
-See the [thread gates](../wip/threads.md#shared-capability-and-vm-ownership).
+See the [native threads](threads.md#shared-capability-and-vm-ownership).
 
 Each space would have a capability table describing resources available to its
 environment. A process would receive an explicit subset with equal or reduced
@@ -310,7 +310,7 @@ execution-group membership independently of any one user task. Each task owns
 its execution storage and borrows that process. Preparation admits exactly one
 prepared/submitted initial task, including blocked tasks. Native sibling tasks
 are created later in the same address space through the `threads` resource
-([threads](../wip/threads.md), tasks 5 and 6); process retirement waits for the
+([threads](threads.md), tasks 5 and 6); process retirement waits for the
 whole task set.
 
 The ownership walkthrough for the example is:
@@ -540,7 +540,7 @@ including overlapping buffers. Read output is validated and copied under a short
 mapping lease after acquiring file ownership; no lease crosses that wait. Late
 output failure is BAD_BUFFER and does not undo committed effects. A process has one
 initial user task; siblings use the same operations, and the
-[thread gates](../wip/threads.md) refuse unsupported concurrency with BUSY
+[native threads](threads.md) refuse unsupported concurrency with BUSY
 before effects.
 
 [Libpyxis wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) return native status for all four

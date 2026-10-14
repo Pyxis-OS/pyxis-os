@@ -65,5 +65,5 @@ consumer such as DHCP re-announcing a rename; do not silently add polling.
    registration remains the network's choice.
 
 Narrow writer grants, directory notification, user settings,
-`config validate` as Polaris's [configuration checker](boot-configuration-checker.md),
+`config validate` as Polaris's [configuration checker](installer-tui.md#configuration-checker),
 mDNS `NAME.local` and Tailscale naming await their own proposals/assignment.

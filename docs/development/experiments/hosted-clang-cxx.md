@@ -1,6 +1,6 @@
 # Hosted Clang C++ closure (2026-10-11)
 
-[Contract](../../wip/hosted-clang.md#parallel-delivery-tasks),
+[Contract](../hosted-tools.md#delivery),
 [userland #216](https://git.internal/PyxisOS/pyxis-userland/pulls/216),
 [fork #5](https://git.internal/PyxisOS/pyxis-llvm/pulls/5),
 [Pyxis #714](https://git.internal/PyxisOS/pyxis-os/pulls/714).

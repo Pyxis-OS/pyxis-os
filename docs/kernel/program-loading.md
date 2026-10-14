@@ -69,7 +69,7 @@ reservations before publishing the final process-control result. See
 
 The guard catches accesses into its page, but a large stack adjustment can skip
 it. There is no stack growth or demand paging. P1F contains no stack-size field.
-Later [threads](../wip/threads.md) need their own disjoint guarded stack ranges;
+Later [threads](../interfaces/threads.md) need their own disjoint guarded stack ranges;
 this layout reserves no thread stack arena and adds no public thread or TLS API.
 
 ## File capture and costs

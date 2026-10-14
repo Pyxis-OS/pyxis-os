@@ -20,6 +20,12 @@ and libunwind in the SDK, with fmt as the first C++ port.
 2026-10-10: fewer clock reads per timer event (#571) and the TSC with HPET
 fallback (#577), natively qualified; [measurements](../development/experiments/tsc-clock/README.md).
 
+[Clipboard](../interfaces/clipboard.md), 2026-10-09: per-space and shared stores with
+terminal and multiplexer Copy and Paste (#619) and the SDL2 text adapter (#644),
+with the [first-delivery qualification](../development/clipboard-first-delivery-qualification.md)
+and [limits](../technical-debt.md#initial-clipboard-delivery-limits). Typed objects
+and converters stay in [later directions](later-os-directions.md#clipboard-typed-objects-and-converters).
+
 [Deadline sleep wakeups](../kernel/timekeeping.md), 2026-10-08: per-CPU one-shot
 LAPIC deadlines, [checked natively](../technical-debt.md#sleep-wake-granularity).
 
@@ -43,6 +49,12 @@ QEMU probes that identified the ALC257 and led to the playback milestone below.
 [up to eight PCM sessions](../interfaces/audio.md), one per space. Open debt:
 [live jack switching](../technical-debt.md#hd-audio-jack-routing-at-playback-start)
 and the [nested-QEMU limit](../technical-debt.md#hd-audio-sustained-eight-session-playback).
+
+[Hosted Clang and LLD](../development/hosted-tools.md), 2026-10-13: Clang and LLD
+compile, link and run a C program inside Pyxis from pool-volume bundles, and the
+driver runs LLD itself (`clang hello.c -o hello.pxe`), natively qualified on the
+ThinkPad (#708, #714, #718, #763, #772, #793). Optional native checks and image
+reuse remain [technical debt](../technical-debt.md#hosted-tool-launch-loading).
 
 [HTTP redirects](../userland/http-fetch.md#redirect-chains), 2026-10-09: bounded
 delegated-provider chains with the final URL adopted by Links;
@@ -69,6 +81,18 @@ adapters (#745, #749, #754, #757, #760). Shell syntax is unchanged; surviving
 cleanup supervision and descendants remain with Continuum/nested groups.
 [Qualification](../userland/native-jobs.md#adapter-qualification-2026-10-12).
 
+[Native threads](../interfaces/threads.md), 2026-10-13: native siblings, address
+parking, static TLS, the thread-safe libc and C11/pthread profile, and the SDL
+workers, timers and audio callbacks (gates 1–9). The libuv pool, Hax and Go
+adapters need separate assignments.
+
+[Neovim](../userland/neovim.md), 2026-10-14: tasks 1–6 delivered and used natively on
+the ThinkPad; [follow-ups](later-os-directions.md#neovim-follow-ups) are separate.
+
+[Network kernel debugger](../kernel/network-debugger.md), 2026-10-09: tasks 1–3, read-only
+LAN attach on the RTL8111, natively qualified (#652). Task 4 (mutation and execution
+control) is unassigned.
+
 [Network throughput](../development/network-throughput.md), 2026-10-09: on-link
 segments, larger windows and Nagle off, natively measured; see the
 [remaining limits](../technical-debt.md#tcp-throughput-limits).
@@ -84,17 +108,23 @@ typing, paired scroll/physical drag (#739/#773), and calibrated-profile-only
 default activation. Owner T14 qualification passes; other profiles, USB axes
 and terminal application reporting remain in technical debt.
 
-[Presentation timing and pacing](presentation-timing.md), 2026-10-09: RAM staging
-and the completed-frame handoff (#610, #618); step 3 is unassigned.
+[Presentation timing and pacing](../kernel/display.md#presentation-timing), 2026-10-09: RAM staging
+and the completed-frame handoff (#610, #618), the Renoir timing observer and the
+page-flip backend; [timing for programs](later-os-directions.md#presentation-timing-for-programs)
+is unassigned.
 
 [Program image and initial stack capacity](../kernel/program-loading.md),
 2026-10-09: 256 MiB image span and 1 MiB guarded stacks, with
 [matched costs](../development/experiments/program-capacity/README.md). Native
 sibling lifecycle, address parking, static language TLS and the selected
 thread-safe libc profile are delivered; consumer adapters remain in
-[threads](threads.md).
+[threads](../interfaces/threads.md).
 
 [Remote debugging without serial](../development/remote-debugging.md), 2026-10-07.
+
+[File transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer),
+2026-10-14: explicit `xfer` transfer, streaming and drag-and-drop upload, with the
+owner's GUI-drop check passed.
 
 [Remote multiplexer](../userland/remote-terminal.md#remote-multiplexer), 2026-10-11:
 brokered panes, [splits/cwd/focus](../userland/multiplexer.md) and live host resize
@@ -136,7 +166,7 @@ Clipboard and other input sources are separate milestones.
 
 [System power overlay](../kernel/power-overlay.md), 2026-10-10 (#659, #710): the
 installed-system flush check is pending, with parked follow-ups in
-[system-power-overlay.md](system-power-overlay.md).
+[system-power-overlay.md](later-os-directions.md#power-and-acpi).
 
 [Terminal multiplexer](../userland/multiplexer.md), 2026-10-08: up to eight panes
 with colored scrollback.
@@ -145,6 +175,11 @@ with colored scrollback.
 
 [USB HID boot keyboards and mice](../devices/usb-hid.md), 2026-10-10 (#654): QEMU
 and ThinkPad input qualified, with [native coverage still open](../technical-debt.md#usb-hid-native-coverage).
+
+[USB storage read throughput](../devices/usb-storage.md#bulk-read-aggregation),
+2026-10-13 (#804): bounded npfs read aggregation took the native Clang compile from
+about 4.3 s to 1.1 s. The shared-worker responsiveness check is still
+[open](../technical-debt.md#usb-read-aggregation-responsiveness).
 
 [Volume controls](../userland/audio-volume.md), 2026-10-09: master and per-space
 gain; see the [remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).

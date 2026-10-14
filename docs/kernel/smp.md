@@ -100,7 +100,7 @@ transfer. Initially there is one task; native CREATE adds siblings in the same
 address space and capability table. Each task borrows its process; the process
 owns its lifetime, task set, terminal result and execution-group member record
 independently of task storage. Native stack/FS reservations remain pinned through
-retirement. See [threads](../wip/threads.md#native-lifecycle).
+retirement. See [threads](../interfaces/threads.md#lifecycle).
 
 ### Placement and migration
 
@@ -301,7 +301,7 @@ drain during syscall cleanup before `task_syscall_leave` and retirement; they do
 not prolong controller authority or pipe open directions. Grant-producing capture
 additionally retains logical authority and rechecks the source generation/masks.
 Shared-table delivery, VM admission and native sibling entry are implemented;
-ordinary thread-safe libc remains a [later thread gate](../wip/threads.md).
+ordinary thread-safe libc remains a [later thread gate](../interfaces/threads.md).
 
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.

@@ -9,7 +9,7 @@ the NVMe shutdown gate (#710). The
 records the QEMU and native ThinkPad checks; the NVMe force path is checked in
 the [NVMe task 1 record](../development/experiments/nvme-task1/README.md). The
 installed-system flush has not been checked natively; it waits for the next stick
-update. Parked follow-ups are in the [WIP note](../wip/system-power-overlay.md).
+update. Parked follow-ups are in [later directions](../wip/later-os-directions.md#power-and-acpi).
 
 ## Authority and drawing
 

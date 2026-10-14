@@ -34,8 +34,8 @@ together.
 ## Multiple user threads
 
 User threads are a separate milestone, needed by native consumers including
-[Neovim/libuv](neovim-libuv.md) and [Go](go-runtime.md). The
-[multiple-threads plan](threads.md) holds the native contract and ordered
+[Neovim/libuv](../userland/neovim.md#milestone-and-delivery) and [Go](go-runtime.md). The
+[multiple-threads plan](../interfaces/threads.md) holds the native contract and ordered
 safety/runtime gates; tasks 1–5 (process lifetime through native sibling
 lifecycle) are merged and tasks 6–9 are open.
 

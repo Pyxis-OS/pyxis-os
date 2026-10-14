@@ -20,4 +20,4 @@ focused root shell's cwd and Ctrl+B digit focus (owner requests, 2026-10-11).
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
-[boot configuration checker](boot-configuration-checker.md).
+[boot configuration checker](installer-tui.md#configuration-checker).

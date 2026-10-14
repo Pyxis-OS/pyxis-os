@@ -118,7 +118,7 @@ rather than a hard-coded match on the board name. GPU scanout rotation is not
 used: no GPU driver exists. Known limits: panic output writes the front buffer
 directly and would appear sideways; Limine's own menu stays portrait; the
 transposed copy costs more than the linear one, so measure it against the
-[presentation baseline](presentation-timing.md) and the
+[presentation baseline](../kernel/display.md#presentation-timing) and the
 [frame skipping](../kernel/presenter-frame-skipping.md) already in place.
 
 **After this task the owner can:** use the shell and graphics applications
@@ -209,7 +209,7 @@ the CDC-NCM transfer-block framing, and a NIC provider under the existing
 Firmware PXE does not depend on this task (see [the first check](#first-check-pxe-through-the-dock)),
 since the firmware fetches the boot files with its own driver. Pyxis networking
 is still what the Deck needs for the UDP log, the remote terminal, the
-[network debugger](network-debugger.md) and hands-free A/B runs; without it a
+[network debugger](../kernel/network-debugger.md) and hands-free A/B runs; without it a
 stick-only Deck has none of them.
 
 **After this task the owner can:** get a DHCP lease and reach the network from

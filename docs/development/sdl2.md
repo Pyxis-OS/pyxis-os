@@ -118,7 +118,7 @@ refusal; it retains other video drivers' behavior.
 ## Threads and timers
 
 SDL threads use libc's joinable [thread profile](../userland/threads.md); the
-contract was accepted by the owner on 2026-10-13 ([threads task 9](../wip/threads.md#delivery-gates)).
+contract was accepted by the owner on 2026-10-13 ([threads task 9](../interfaces/threads.md#delivery)).
 
 - **Authority.** Creation needs the program's declared `threads/manage` grant
   (plus `memory/manage`; timed waits use the `clock` grant). Without it libc
@@ -158,7 +158,7 @@ contract was accepted by the owner on 2026-10-13 ([threads task 9](../wip/thread
 ## Audio
 
 SDL audio callbacks use the space's native [PCM session](../interfaces/audio.md).
-The contract was accepted by the owner on 2026-10-13 ([threads task 9](../wip/threads.md#delivery-gates)).
+The contract was accepted by the owner on 2026-10-13 ([threads task 9](../interfaces/threads.md#delivery)).
 SDL gains callbacks, not real-time guarantees.
 
 - **Ownership.** One SDL output device holds the space's one native session

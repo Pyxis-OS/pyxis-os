@@ -6,8 +6,7 @@ registers, guarded RAM and documented device registers, at a boot checkpoint or
 after a panic. The route is a kernel stub with preallocated, polled NIC transport
 and small reliable UDP framing, plus a host TCP bridge for `target remote`.
 Writes, breakpoints, stepping, running Ctrl+C and detach/kill are not
-implemented; the accepted contract for them is in the
-[WIP document](../wip/network-debugger.md). Qualification is in the
+implemented ([task 4](#decisions-and-unimplemented-task-4)). Qualification is in the
 [task 3 record](../development/experiments/network-debugger/README.md),
 with the earlier [checkpoint](../development/experiments/debug-checkpoint/README.md)
 and [guarded inspection](../development/experiments/debug-inspection/README.md)
@@ -216,9 +215,29 @@ follow existing failure and retention rules.
 - Early boot, IF-clear hangs and a failed NIC are outside coverage; neither
   timer nor NIC interrupt can break into them. Keep physical reset available.
 - Running Ctrl+C, writes, software breakpoints, stepping and detach/kill are
-  refused or unadvertised: see the [WIP task 4 contract](../wip/network-debugger.md).
+  refused or unadvertised ([task 4](#decisions-and-unimplemented-task-4)).
 - Task 3 entry happens only at checkpoints and panic/fault, not arbitrary
   interrupted contexts.
+
+## Decisions and unimplemented task 4
+
+Accepted by the owner on 2026-10-09: polled UDP plus a localhost TCP bridge to one
+opt-in, name- or MAC-selected same-LAN peer after net0 is up; BSP-serviced
+all-stop with NMI peers, where a panic or fault stop is terminal and read-only;
+recoverable stops auto-resume on the defined idle loss, safe detach resumes
+ordinary stops and kill resets. There is no authentication or encryption on this
+opt-in home LAN: any peer that can reach the enabled endpoint can stop the kernel,
+read all memory and reset the laptop, and name, MAC or session filters are not
+security. Keep it default off with the host bridge on localhost.
+
+Task 4, mutation and execution control, is unassigned. Its drafted contract
+(commit `043f95f7`, `docs/wip/network-debugger.md`) covers running break-in from a
+bounded debug-frame peek on the BSP timer path, controlled register, RAM and typed
+physical, MMIO and PCI writes, owned software breakpoints through a RAM alias of
+read-only text, step and detach/kill with restoration. Arbitrary traps need each
+NIC to supply a reversible receive handoff first. Hardware watchpoints are a
+separate assignment, and a task 4 import of GDB stub code needs the licence steps
+below.
 
 ## Licence
 
