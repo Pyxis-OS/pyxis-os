@@ -161,7 +161,7 @@ yields its own reply.
 ```sh
 endpoint = { http prepare POST json+https://ci.example/jobs }
 
-{ printf '{}' > $endpoint }                 # submit, discard the reply
+printf '{}' > $endpoint                     # a plain command: submit, discard the reply
 first = { printf '{"ref":"main"}' > $endpoint }
 second = { printf '{"ref":"next"}' > $endpoint }
 
@@ -182,7 +182,8 @@ first_id = { cat $first | jq .id }          # values flow like any other capabil
 - **Deriving values:** `first_id = { cat $first | jq .id }` binds new read-only
   content. Like any text value it is a capability; it no longer carries the
   reply's outcome facet, which stays on `$first`.
-- Syntax: assignment always uses braces (`x = { … }`), and a variable is always
+- Syntax: braces belong only to assignment (`x = { … }`); a plain command such as
+  `printf '{}' > $endpoint` needs none. A variable is always
   referenced with `$`, including as a redirection target (`> $endpoint`); a bare
   word stays an ordinary path.
 
