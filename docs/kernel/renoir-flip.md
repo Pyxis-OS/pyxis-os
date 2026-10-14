@@ -202,8 +202,8 @@ optc blank helpers are not vendored.
 
 ## Limits
 
-- Opt-in, Renoir only, one firmware layout; any other layout or reservation
-  refuses.
+- Default-on only for qualifying Renoir hardware and one firmware layout; any
+  other layout or reservation refuses.
 - QEMU has no DCN 2.1: it checks refusal, the unchanged boot, Bochs and VirtIO
   paths, lifetimes and input, not register writes, VRAM ownership, completion,
   native panic or tearing.

@@ -416,7 +416,8 @@ capability, no unconditional 60 Hz cap and no pretend SDL vsync. Delivered:
   [measurements](../development/experiments/frame-handoff/README.md)).
 - The [read-only Renoir timing observer](#read-only-renoir-firmware-timing), which
   failed native qualification, and the natively qualified
-  [page-flip backend](#opt-in-renoir-flips) that replaces beam-racing there.
+  [page-flip backend](#renoir-flips), default-on where qualified, that replaces
+  beam-racing there.
 
 What each backend can promise:
 

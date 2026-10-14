@@ -411,7 +411,7 @@ unsynchronized `observe`. Run the
 [two-boot safety recheck](development/experiments/renoir-presentation/README.md#native-safety-recheck)
 before claiming the scheduling/logging regression resolved. The observer’s
 tearing effect and counter-derived timing remain unqualified. The separately qualified
-opt-in flip backend does not qualify the observer; revisit its safety recheck
+flip backend does not qualify the observer; revisit its safety recheck
 without default timed-copy enablement.
 
 Register-window identity bounds access without PCI sizing writes; native BAR
