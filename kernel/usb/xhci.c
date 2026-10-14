@@ -89,6 +89,7 @@ struct xhci_bulk {
   size_t requested, actual;
   enum control_state state;
   enum usb_result result;
+  bool configured;
 };
 enum interrupt_receive_state { INTERRUPT_FREE, INTERRUPT_POSTED, INTERRUPT_HELD };
 struct xhci_interrupt_receive {
@@ -1281,7 +1282,7 @@ static bool publish_interrupt_receive(struct usb_host_interrupt *interrupt,
   return true;
 }
 
-static void mark_hid_retiring(struct usb_host_device *device)
+static void mark_device_retiring(struct usb_host_device *device)
 {
   device->retiring = true;
   for (unsigned i = 0; i < USB_HID_ENDPOINTS_PER_DEVICE; ++i) {
@@ -1294,16 +1295,54 @@ static void mark_hid_retiring(struct usb_host_device *device)
     device->request.state = CONTROL_HELD;
     device->request.result = USB_IO;
   }
+  if (device->bulk && (device->bulk->state == CONTROL_ACTIVE || device->bulk->state == CONTROL_HALTED)) {
+    device->bulk->state = CONTROL_HELD;
+    device->bulk->result = USB_IO;
+  }
+  if (device->async_bulk) {
+    struct xhci_async_bulk *bulk = device->async_bulk;
+    if (bulk->result == USB_OK) {
+      bulk->result = USB_IO;
+    }
+    if (bulk->tx.state == CONTROL_ACTIVE || bulk->tx.state == CONTROL_HALTED) {
+      bulk->tx.state = CONTROL_HELD;
+      bulk->tx.result = USB_IO;
+    }
+  }
 }
 
-static bool interrupt_pending(const struct usb_host_interrupt *interrupt)
+static bool in_subtree(const struct usb_host_device *device, const struct usb_host_device *ancestor)
 {
-  for (unsigned i = 0; i < USB_INTERRUPT_RECEIVES; ++i) {
-    if (interrupt->receive[i].state != INTERRUPT_FREE) {
+  if (!ancestor->parent) {
+    return device->port == ancestor->port;
+  }
+  for (const struct usb_host_device *parent = device; parent; parent = parent->parent) {
+    if (parent == ancestor) {
       return true;
     }
   }
   return false;
+}
+
+static void mark_subtree_retiring(struct usb_host_device *ancestor)
+{
+  struct usb_host_controller *controller = ancestor->controller;
+  /* Command waits drain events and rearm other streams. Close admission on the
+   * complete branch before the first endpoint fence can yield. */
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *device = device_at(controller, i);
+    if (!device->removed && (device->slot || device->hid) && in_subtree(device, ancestor)) {
+      mark_device_retiring(device);
+    }
+  }
+}
+
+static void mark_disconnected(struct usb_host_device *device)
+{
+  while (device->parent) {
+    device = device->parent;
+  }
+  mark_subtree_retiring(device);
 }
 
 static bool rearm_interrupts(struct usb_host_controller *controller)
@@ -1314,17 +1353,7 @@ static bool rearm_interrupts(struct usb_host_controller *controller)
       continue;
     }
     if (!device_present(interrupt->device)) {
-      if (interrupt->kind == USB_INTERRUPT_HID) {
-        mark_hid_retiring(interrupt->device);
-        continue;
-      }
-      if (interrupt_pending(interrupt)) {
-        controller->failure = "device disappeared during interrupt transfer";
-        return false;
-      }
-      if (interrupt->result == USB_OK) {
-        interrupt->result = USB_IO;
-      }
+      mark_disconnected(interrupt->device);
       continue;
     }
     if (interrupt->result != USB_OK) {
@@ -1403,9 +1432,14 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
     return true;
   }
   receive->state = INTERRUPT_HELD;
+  if (interrupt->device->retiring && residue <= interrupt->receive_bytes &&
+      (completion == XHCI_EVENT_STALL || completion == XHCI_EVENT_TRANSACTION_ERROR ||
+       completion == XHCI_EVENT_BABBLE)) {
+    return true;
+  }
   if (completion == XHCI_EVENT_STALL && residue <= interrupt->receive_bytes) {
     if (interrupt->kind == USB_INTERRUPT_HID) {
-      mark_hid_retiring(interrupt->device);
+      mark_device_retiring(interrupt->device);
       return true;
     }
     if (interrupt->result == USB_OK) {
@@ -1413,26 +1447,13 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
     }
     return true;
   }
-  if (interrupt->kind == USB_INTERRUPT_HID && residue <= interrupt->receive_bytes &&
+  if (residue <= interrupt->receive_bytes &&
       (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
-    mark_hid_retiring(interrupt->device);
+    mark_subtree_retiring(interrupt->device);
     return true;
   }
   interrupt->result = USB_IO;
   controller->failure = "failed or invalid interrupt transfer completion";
-  return false;
-}
-
-static bool async_bulk_pending(const struct xhci_async_bulk *bulk)
-{
-  if (bulk->tx.state == CONTROL_ACTIVE || bulk->tx.state == CONTROL_HELD) {
-    return true;
-  }
-  for (unsigned i = 0; i < USB_ASYNC_BULK_RECEIVES; ++i) {
-    if (bulk->receive[i].state != ASYNC_BULK_FREE) {
-      return true;
-    }
-  }
   return false;
 }
 
@@ -1477,17 +1498,11 @@ static bool rearm_async_bulk(struct usb_host_controller *controller)
 {
   for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
-    if (!bulk->started) {
+    if (!bulk->started || bulk->device->removed || bulk->device->retiring) {
       continue;
     }
     if (!device_present(bulk->device)) {
-      if (async_bulk_pending(bulk)) {
-        controller->failure = "device disappeared during async bulk transfer";
-        return false;
-      }
-      if (bulk->result == USB_OK) {
-        bulk->result = USB_IO;
-      }
+      mark_disconnected(bulk->device);
       continue;
     }
     if (bulk->result != USB_OK || bulk->boot_state != ASYNC_BULK_BOOT_NONE) {
@@ -1507,14 +1522,15 @@ static bool async_bulk_deadlines(struct usb_host_controller *controller)
 {
   for (unsigned i = 0; i < USB_ASYNC_BULK_DEVICE_BUDGET; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
+    if (bulk->device && !bulk->device->removed && !bulk->device->retiring &&
+        !device_present(bulk->device)) {
+      mark_disconnected(bulk->device);
+    }
     if (bulk->tx.state == CONTROL_ACTIVE &&
-        (task_deadline_expired(bulk->tx.deadline) || !device_present(bulk->device))) {
-      bool expired = task_deadline_expired(bulk->tx.deadline);
+        task_deadline_expired(bulk->tx.deadline)) {
       bulk->tx.state = CONTROL_HELD;
-      bulk->tx.result = expired ? USB_TIMEOUT : USB_IO;
-      controller->failure = expired ? "async bulk OUT deadline expired" :
-        "device disappeared during async bulk OUT transfer";
-      return false;
+      bulk->tx.result = USB_TIMEOUT;
+      mark_subtree_retiring(bulk->device);
     }
   }
   return true;
@@ -1526,9 +1542,15 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
   if (endpoint == bulk->out.dci) {
-    if (bulk->tx.state != CONTROL_ACTIVE || event->parameter != bulk->tx.trb) {
+    if ((bulk->tx.state != CONTROL_ACTIVE &&
+         !(bulk->device->retiring && bulk->tx.state == CONTROL_HELD)) || event->parameter != bulk->tx.trb) {
       controller->failure = "unowned async bulk OUT transfer event";
       return false;
+    }
+    if (bulk->device->retiring && residue <= bulk->tx.requested &&
+        ((completion == XHCI_EVENT_SUCCESS && !residue) || completion == XHCI_EVENT_STALL ||
+         completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+      return true;
     }
     if (completion == XHCI_EVENT_SUCCESS && !residue) {
       bulk->tx.actual = bulk->tx.requested;
@@ -1542,6 +1564,11 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
       return true;
     }
     bulk->tx.result = USB_IO;
+    if (residue <= bulk->tx.requested &&
+        (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+      mark_subtree_retiring(bulk->device);
+      return true;
+    }
     controller->failure = "failed or invalid async bulk OUT transfer completion";
     return false;
   }
@@ -1555,6 +1582,13 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
   if (endpoint != bulk->in.dci || !receive) {
     controller->failure = "unowned async bulk IN transfer event";
     return false;
+  }
+  if (bulk->device->retiring && residue <= bulk->receive_bytes &&
+      (completion == XHCI_EVENT_SUCCESS || completion == XHCI_EVENT_SHORT_PACKET ||
+       completion == XHCI_EVENT_STALL || completion == XHCI_EVENT_TRANSACTION_ERROR ||
+       completion == XHCI_EVENT_BABBLE)) {
+    receive->state = ASYNC_BULK_HELD;
+    return true;
   }
   bool successful_short = completion == XHCI_EVENT_SUCCESS && residue &&
       residue <= bulk->receive_bytes;
@@ -1619,6 +1653,11 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
     return true;
   }
   bulk->result = USB_IO;
+  if (residue <= bulk->receive_bytes &&
+      (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+    mark_subtree_retiring(bulk->device);
+    return true;
+  }
   controller->failure = "failed or invalid async bulk IN transfer completion";
   return false;
 }
@@ -1627,7 +1666,8 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
                          unsigned endpoint, const struct xhci_trb *event)
 {
   struct xhci_bulk *bulk = device->bulk;
-  if (!bulk || bulk->state != CONTROL_ACTIVE || !bulk->active ||
+  if (!bulk || (bulk->state != CONTROL_ACTIVE &&
+               !(device->retiring && bulk->state == CONTROL_HELD)) || !bulk->active ||
       endpoint != bulk->active->dci || event->parameter != bulk->trb) {
     controller->failure = "unowned bulk transfer event";
     return false;
@@ -1635,6 +1675,12 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
   bool inbound = bulk->active == &bulk->in;
+  if (device->retiring && residue <= bulk->requested &&
+      ((completion == XHCI_EVENT_SUCCESS && !residue) ||
+       (completion == XHCI_EVENT_SHORT_PACKET && inbound) || completion == XHCI_EVENT_STALL ||
+       completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+    return true;
+  }
   if ((completion == XHCI_EVENT_SUCCESS && !residue) ||
       (completion == XHCI_EVENT_SHORT_PACKET && inbound && residue <= bulk->requested)) {
     bulk->actual = bulk->requested - residue;
@@ -1651,8 +1697,43 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
   }
   bulk->result = USB_IO;
   bulk->state = CONTROL_HELD;
+  if (residue <= bulk->requested &&
+      (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
+    mark_subtree_retiring(device);
+    return true;
+  }
   controller->failure = "failed or invalid bulk transfer completion";
   return false;
+}
+
+static const struct dma_buffer *endpoint_ring(struct usb_host_device *device, unsigned dci)
+{
+  if (dci == XHCI_ENDPOINT_ZERO) {
+    return device->addressed ? &device->control_ring : NULL;
+  }
+  struct usb_host_interrupt *interrupt = device_interrupt(device, dci);
+  if (interrupt && interrupt->configured) {
+    return &interrupt->ring;
+  }
+  struct xhci_bulk *bulk = device->bulk;
+  if (bulk && bulk->configured) {
+    if (dci == bulk->in.dci) {
+      return &bulk->in.ring;
+    }
+    if (dci == bulk->out.dci) {
+      return &bulk->out.ring;
+    }
+  }
+  struct xhci_async_bulk *async = device->async_bulk;
+  if (async && async->configured) {
+    if (dci == async->in.dci) {
+      return &async->in.ring;
+    }
+    if (dci == async->out.dci) {
+      return &async->out.ring;
+    }
+  }
+  return NULL;
 }
 
 static bool consume_transfer(struct usb_host_controller *controller, const struct xhci_trb *event)
@@ -1670,15 +1751,16 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
     controller->failure = "unowned transfer event";
     return false;
   }
+  if (!device->retiring && !device_present(device)) {
+    mark_disconnected(device);
+  }
   unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
   bool stopped = completion == XHCI_EVENT_STOPPED || completion == XHCI_EVENT_STOPPED_LENGTH_INVALID ||
     completion == XHCI_EVENT_STOPPED_SHORT;
   if (stopped && device->retiring && device->stopping_dci == endpoint &&
       controller->command.pending && controller->command.type == XHCI_TRB_STOP_ENDPOINT &&
       controller->command.slot == slot) {
-    struct usb_host_interrupt *interrupt = device_interrupt(device, endpoint);
-    const struct dma_buffer *ring = endpoint == XHCI_ENDPOINT_ZERO ? &device->control_ring :
-      interrupt ? &interrupt->ring : NULL;
+    const struct dma_buffer *ring = endpoint_ring(device, endpoint);
     if (!ring || event->parameter < ring->physical || event->parameter >= ring->physical + ring->bytes ||
         (event->parameter - ring->physical) % XHCI_TRB_BYTES || device->stopped_trb) {
       controller->failure = "invalid stopped endpoint event identity";
@@ -1721,16 +1803,16 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
     return true;
   }
   if (completion == XHCI_EVENT_STALL && residue <= device->request.requested) {
-    device->request.result = USB_STALL;
-    device->request.state = CONTROL_HALTED;
+    device->request.result = device->retiring ? USB_IO : USB_STALL;
+    device->request.state = device->retiring ? CONTROL_HELD : CONTROL_HALTED;
     return true;
   }
   /* An early error does not retire the rest of the control TD sequence. */
   device->request.result = USB_IO;
   device->request.state = CONTROL_HELD;
-  if (device->hid && residue <= device->request.requested &&
+  if (residue <= device->request.requested &&
       (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
-    mark_hid_retiring(device);
+    mark_subtree_retiring(device);
     return true;
   }
   controller->failure = "failed or invalid control transfer completion";
@@ -2004,32 +2086,8 @@ static bool retire_root_devices(struct usb_host_controller *controller, unsigned
 {
   for (unsigned i = 0; i < device_capacity(controller); ++i) {
     struct usb_host_device *device = device_at(controller, i);
-    if (device->slot && !device->removed && device->port == port && !device->hid &&
-        (device->request.state == CONTROL_ACTIVE ||
-         (device->bulk && device->bulk->state == CONTROL_ACTIVE) ||
-         (device->async_bulk && async_bulk_pending(device->async_bulk)) ||
-         ((device->interrupt[0] && interrupt_pending(device->interrupt[0])) ||
-          (device->interrupt[1] && interrupt_pending(device->interrupt[1]))))) {
-      controller->failure = "root subtree disappeared during transfer";
-      return false;
-    }
-  }
-  /* Children are reserved after their parents. Disable them first, retaining
-   * every slot identity and DMA object rather than allowing reuse this boot. */
-  for (unsigned i = device_capacity(controller); i; --i) {
-    struct usb_host_device *device = device_at(controller, i - 1);
     if (device->slot && !device->removed && device->port == port) {
-      if (device->hid) {
-        if (usb_host_hid_retire(device, task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS)) != USB_OK) {
-          return false;
-        }
-        continue;
-      }
-      device->removed = true;
-      if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, device->slot, 0,
-                       task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS))) {
-        return false;
-      }
+      return usb_host_device_retire(device, task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS)) == USB_OK;
     }
   }
   return true;
@@ -2700,7 +2758,7 @@ static const uint32_t *output_endpoint(const struct usb_host_device *device, uns
   return (const uint32_t *)(device->output.address + dci * device->controller->context_bytes);
 }
 
-static bool fence_hid_endpoint(struct usb_host_device *device, unsigned dci, uint64_t deadline)
+static bool fence_endpoint(struct usb_host_device *device, unsigned dci, uint64_t deadline)
 {
   struct usb_host_controller *controller = device->controller;
   dma_read_barrier();
@@ -2711,13 +2769,13 @@ static bool fence_hid_endpoint(struct usb_host_device *device, unsigned dci, uin
     return true;
   }
   if (state != XHCI_ENDPOINT_STATE_RUNNING) {
-    controller->failure = "HID endpoint retirement found invalid state";
+    controller->failure = "endpoint retirement found invalid state";
     return false;
   }
   device->stopping_dci = dci;
   device->stopped_trb = 0;
   if (!endpoint_command(device, XHCI_TRB_STOP_ENDPOINT, dci, 0, deadline)) {
-    controller->failure = "HID Stop Endpoint fence failed";
+    controller->failure = "Stop Endpoint fence failed";
     return false;
   }
   dma_read_barrier();
@@ -2727,54 +2785,29 @@ static bool fence_hid_endpoint(struct usb_host_device *device, unsigned dci, uin
     (state == XHCI_ENDPOINT_STATE_HALTED || state == XHCI_ENDPOINT_STATE_ERROR);
   phys_addr_t dequeue = ((uint64_t)context[3] << 32) | (context[2] & ~0xfu);
   if ((!success && !halted_race) || (device->stopped_trb && device->stopped_trb != dequeue)) {
-    controller->failure = "HID Stop Endpoint completion did not prove retirement";
+    controller->failure = "Stop Endpoint completion did not prove retirement";
     return false;
   }
   device->stopping_dci = 0;
   return true;
 }
 
-enum usb_result usb_host_hid_retire(struct usb_host_device *device, uint64_t deadline)
+static bool retire_device(struct usb_host_device *device, uint64_t deadline)
 {
-  assert_device_owner(device);
   struct usb_host_controller *controller = device->controller;
-  if (device->removed) {
-    return USB_OK;
-  }
-  if (!controller->running || controller->failed) {
-    return USB_IO;
-  }
-  bool non_hid_active = !device->hid &&
-    (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_HALTED ||
-     (device->bulk && device->bulk->state != CONTROL_IDLE) ||
-     (device->async_bulk && async_bulk_pending(device->async_bulk)) ||
-     (device->interrupt[0] && interrupt_pending(device->interrupt[0])) ||
-     (device->interrupt[1] && interrupt_pending(device->interrupt[1])));
-  if (device->hub_ports || non_hid_active) {
-    controller->failure = "unsupported hub subtree or non-HID active device removal";
-    stop_controller(controller);
-    return USB_IO;
-  }
-  mark_hid_retiring(device);
   if (!device->slot) {
     device->removed = true;
-    return USB_OK;
+    return true;
   }
-  for (unsigned i = 0; i < USB_HID_ENDPOINTS_PER_DEVICE; ++i) {
-    struct usb_host_interrupt *interrupt = device->interrupt[i];
-    if (interrupt && interrupt->configured && !fence_hid_endpoint(device, interrupt->dci, deadline)) {
-      stop_controller(controller);
-      return USB_IO;
+  for (unsigned dci = XHCI_ENDPOINT_ZERO; dci <= XHCI_EVENT_ENDPOINT_MASK; ++dci) {
+    if (endpoint_ring(device, dci) && !fence_endpoint(device, dci, deadline)) {
+      return false;
     }
   }
-  if (device->addressed && !fence_hid_endpoint(device, XHCI_ENDPOINT_ZERO, deadline)) {
-    stop_controller(controller);
-    return USB_IO;
-  }
-  if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, device->slot, 0, deadline)) {
-    controller->failure = "HID Disable Slot fence failed";
-    stop_controller(controller);
-    return USB_IO;
+  if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, device->slot, 0, deadline) ||
+      controller->command.completion != XHCI_EVENT_SUCCESS) {
+    controller->failure = "Disable Slot fence failed";
+    return false;
   }
   /* Command waits publish ERDP before returning. Numeric slot ownership ends
    * here; old contexts, rings, buffers and TD identities remain retained. */
@@ -2789,13 +2822,56 @@ enum usb_result usb_host_hid_retire(struct usb_host_device *device, uint64_t dea
       }
     }
   }
+  if (device->async_bulk) {
+    struct xhci_async_bulk *bulk = device->async_bulk;
+    for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
+      if (bulk->receive[j].state == ASYNC_BULK_POSTED) {
+        bulk->receive[j].state = ASYNC_BULK_HELD;
+      }
+    }
+  }
   if (!device->parent && controller->ports[device->port].slot == device->slot) {
     controller->ports[device->port].slot = 0;
     controller->ports[device->port].state = PORT_REMOVED;
   }
-  ktrace("xHCI %x:%x.%u: HID leaf slot %u fenced; backing retained until reboot\n",
+  ktrace("xHCI %x:%x.%u: device slot %u fenced; backing retained until reboot\n",
          controller->address.bus, controller->address.device, controller->address.function, device->slot);
+  return true;
+}
+
+enum usb_result usb_host_device_retire(struct usb_host_device *device, uint64_t deadline)
+{
+  assert_device_owner(device);
+  struct usb_host_controller *controller = device->controller;
+  if (device->removed) {
+    return USB_OK;
+  }
+  if (!controller->running || controller->failed) {
+    return USB_IO;
+  }
+  mark_subtree_retiring(device);
+  /* Descendants are prepared after their parents. No backing is recycled. */
+  for (unsigned i = device_capacity(controller); i; --i) {
+    struct usb_host_device *child = device_at(controller, i - 1);
+    if (!child->removed && child->retiring && in_subtree(child, device) &&
+        !retire_device(child, deadline)) {
+      stop_controller(controller);
+      return USB_IO;
+    }
+  }
   return USB_OK;
+}
+
+static bool retire_pending_devices(struct usb_host_controller *controller)
+{
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *device = device_at(controller, i);
+    if (device->retiring && !device->removed &&
+        usb_host_device_retire(device, task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS)) != USB_OK) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void usb_host_interrupt_ack_loss(struct usb_host_interrupt *stream)
@@ -2929,16 +3005,14 @@ static bool control_deadlines(struct usb_host_controller *controller)
 {
   for (unsigned i = 0; i < device_capacity(controller); ++i) {
     struct usb_host_device *device = device_at(controller, i);
-    if (device->hid && !device_present(device) && !device->removed) {
-      mark_hid_retiring(device);
+    if (device->slot && !device->retiring && !device->removed && !device_present(device)) {
+      mark_disconnected(device);
     }
     if (!device->retiring && device->request.state == CONTROL_ACTIVE &&
-        (task_deadline_expired(device->request.deadline) || !device_present(device))) {
-      bool expired = task_deadline_expired(device->request.deadline);
+        task_deadline_expired(device->request.deadline)) {
       device->request.state = CONTROL_HELD;
-      device->request.result = expired ? USB_TIMEOUT : USB_IO;
-      controller->failure = expired ? "control transfer deadline expired" : "device disappeared during control transfer";
-      return false;
+      device->request.result = USB_TIMEOUT;
+      mark_subtree_retiring(device);
     }
   }
   return async_bulk_deadlines(controller);
@@ -3249,11 +3323,8 @@ static enum usb_result interrupt_result(struct usb_host_interrupt *interrupt)
   struct usb_host_device *device = interrupt->device;
   struct usb_host_controller *controller = device->controller;
   bool ready = device_ready(device);
-  if (!ready && interrupt->kind == USB_INTERRUPT_HID && controller->running && !controller->failed) {
-    mark_hid_retiring(device);
-  } else if (!ready && controller->running && !controller->failed && interrupt_pending(interrupt)) {
-    controller->failure = "device disappeared during interrupt transfer";
-    stop_controller(controller);
+  if (!ready && !device->retiring && !device->removed && controller->running && !controller->failed) {
+    mark_disconnected(device);
   }
   return interrupt->result != USB_OK ? interrupt->result : ready ? USB_OK : USB_IO;
 }
@@ -3494,9 +3565,8 @@ static enum usb_result async_bulk_result(struct usb_host_device *device)
   if (controller->running && !controller->failed) {
     if (!async_bulk_deadlines(controller)) {
       stop_controller(controller);
-    } else if (!ready && async_bulk_pending(bulk)) {
-      controller->failure = "device disappeared during async bulk transfer";
-      stop_controller(controller);
+    } else if (!ready && !device->retiring && !device->removed) {
+      mark_disconnected(device);
     }
   }
   return bulk->result != USB_OK ? bulk->result : ready ? USB_OK : USB_IO;
@@ -3573,6 +3643,9 @@ static bool recover_boot_bulk(struct usb_host_controller *controller)
       continue;
     }
     struct usb_host_device *device = bulk->device;
+    if (device->retiring || device->removed) {
+      continue;
+    }
     uint64_t deadline;
     bool resume;
     if (!device_ready(device) || bulk->result != USB_OK || bulk->queue_count ||
@@ -3756,7 +3829,11 @@ enum usb_result usb_host_configure_bulk(struct usb_host_device *device,
     (entries << XHCI_SLOT_ENTRIES_SHIFT);
   set_bulk_endpoint(device, &bulk->in, USB_BULK_BYTES);
   set_bulk_endpoint(device, &bulk->out, USB_BULK_BYTES);
-  return context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  if (result == USB_OK) {
+    bulk->configured = true;
+  }
+  return result;
 }
 
 static struct xhci_bulk_endpoint *bulk_endpoint(struct xhci_bulk *bulk, uint8_t address)
@@ -3908,9 +3985,12 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
       break;
     }
     timed_out = task_deadline_expired(deadline);
-    if (timed_out || !device_present(device)) {
-      controller->failure = "bulk transfer timeout or device removal";
-      stop_controller(controller);
+    if (!device_present(device)) {
+      mark_disconnected(device);
+      break;
+    }
+    if (timed_out) {
+      mark_subtree_retiring(device);
       break;
     }
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
@@ -4006,7 +4086,7 @@ static void controller_worker(void *argument)
       controller->diagnostic_stage = "events";
     }
     if (!controller_healthy(controller) || !drain_events(controller) ||
-        !control_deadlines(controller) || !update_ports(controller)) {
+        !control_deadlines(controller) || !update_ports(controller) || !retire_pending_devices(controller)) {
       stop_controller(controller);
       return;
     }

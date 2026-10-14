@@ -104,10 +104,10 @@ inspection and interface accounting use private runtime records and scratch
 storage rather than writing the published inventory. Enumeration/control and
 class setup share a bounded deadline, with report collection progressing during
 command waits. Failed or retired generations consume the attachment budget until
-reboot. Ordinary HID leaf removal releases that input source and fences its host
-slot independently; unsupported subtree removal or an unproven fence can
-quarantine the controller. No runtime reconfiguration or DMA recycling is
-provided.
+reboot. Device/subtree removal releases affected input and fences each host
+slot child-first, leaving unrelated devices running. An unproven fence still
+quarantines the controller. Reattachment remains limited to the existing HID
+profile; no runtime hub/class reconfiguration or DMA recycling is provided.
 
 ## Snapshot publication
 
@@ -145,12 +145,12 @@ Wait timeout does not consume or cancel the request. Abandonment removes client
 ownership while active hardware work retains its ring span/data buffer; successful
 terminal completion can later retire it. An owned STALL can safely retire the
 old sequence through Reset Endpoint, TT cleanup and Set TR Dequeue before reuse.
-Request deadlines and unowned/corrupt completions stop the controller and retain
-unresolved spans. Active non-HID removal retains that policy. An admitted HID
-leaf can instead enter per-device retirement: rearm stops, EP0 and interrupt
-endpoints are fenced, and Disable Slot retires numeric slot ownership. A failed
-fence quarantines the controller. Halt, interrupt masking or disabling bus
-mastering alone cannot justify recycling backing; all old DMA and TD records
+Owned request deadlines, known disappearance and owned transaction-error/babble
+events close device/subtree admission and retain unresolved spans. Command
+failure or unowned/corrupt completions still stop the controller. EP0, configured interrupt and synchronous/
+asynchronous bulk endpoints are fenced before child-first Disable Slot; only
+a failed fence quarantines the controller for that removal. Halt, interrupt
+masking or disabling bus mastering alone cannot justify recycling backing; all old DMA and TD records
 remain until reboot. Ordinary idle unbound leaf removal can also disable its
 slot independently.
 

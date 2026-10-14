@@ -552,7 +552,8 @@ enum usb_bot_io_result usb_bot_flush(struct usb_bot *bot, void *scratch, size_t 
     uint64_t overall, bool *submitted)
 {
   if (!bot || !bot->host || !bot->configuration || !scratch || scratch_bytes < SCSI_SENSE_BYTES ||
-      bot->state != USB_BOT_READY || !bot->writable || !bot->flush_supported) {
+      bot->state != USB_BOT_READY || !bot->writable || !bot->flush_supported ||
+      !usb_host_device_present(bot->host)) {
     return USB_BOT_IO_FAILED;
   }
   /* The block worker still orders this barrier after earlier admitted I/O. */

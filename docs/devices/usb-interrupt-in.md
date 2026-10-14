@@ -87,25 +87,31 @@ its class consumer for interpretation.
 
 FIFO overflow latches `USB_DISCONTINUITY` and stops rearm. Terminal failure takes
 precedence over queued bytes. HCI/hub STALL retains the stalled span without
-automatic stream recovery. An owned HID STALL, transaction error or babble
-retires that device's input source; unrelated or corrupt completions quarantine
-the controller. Class source loss releases only that source's held input, then
+automatic stream recovery. An owned HID STALL or any owned transaction
+error/babble retires the affected device/subtree; invalid ownership/residue and
+corrupt completions quarantine the controller. Class source loss releases only that source's held input, then
 acknowledges the terminal stream. Pending reports and unresolved source loss
 remain visible to input freshness checks.
 
-Ordinary HID leaf removal suppresses rearm and fences each configured interrupt
-endpoint and EP0 before Disable Slot. Stop Endpoint completion must agree with
-the hardware endpoint state and any stopped event's retained ring/dequeue
-identity, including a stop at the ring frontier. A Context State Error is
+Device/subtree removal suppresses all affected rearm before any command wait.
+The BSP worker fences EP0 and every configured interrupt, synchronous bulk and
+asynchronous bulk IN/OUT endpoint, then disables slots child-first. Stop Endpoint
+completion must agree with the hardware endpoint state and any stopped event's
+retained ring/dequeue identity, including a stop at the ring frontier. A Context State Error is
 accepted only when the output context proves the endpoint raced into Halted or
 Error. Numeric slot ownership ends after Disable Slot completion and event
 retirement; old DMA and TD owners remain retained, and reconnection uses fresh
 records.
 
-Unprovable retirement, malformed/unowned events and unsupported hub-subtree
-removal fail closed by quarantining the controller, which can stop unrelated
-storage and Bluetooth. Active non-HID removal retains the existing quarantine
-policy. Halt, interrupt masking or disabled bus mastering alone do not permit
-recycling DMA. The immutable boot inventory remains an observation snapshot,
-not runtime transfer authority. Broader hotplug, recovery and reclamation limits
+Known non-HID disappearance uses the same local retirement, including hub
+notifications and HCI's posted bulk work. Held requests keep their physical
+identities while fences drain events; affected clients receive failure, never
+a fabricated successful transfer. Owned EP0/bulk request deadlines also retire
+the affected branch after returning failure; caller wait timeouts retain their
+existing non-cancellation semantics. Class records and queued disk requests retire
+locally; a write-through flush also checks liveness. Unprovable retirement or
+malformed/unowned events still quarantine the controller. Halt, interrupt
+masking or disabled bus mastering alone do not permit recycling DMA. The
+immutable boot inventory remains an observation snapshot, not runtime transfer
+authority. Broader hotplug, recovery and reclamation limits
 remain in [technical debt](../technical-debt.md#usb-interrupt-in-initial-profile-and-failure-retention).

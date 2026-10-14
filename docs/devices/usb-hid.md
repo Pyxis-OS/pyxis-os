@@ -55,8 +55,9 @@ Bluetooth and storage completions; input publication briefly holds BSP IF=0.
 Ordinary HID-leaf removal stops its endpoints, proves completion/context fencing
 and disables its slot before numerical slot reuse. Source state is lost
 immediately; a replacement gets fresh software and DMA records. Unprovable
-retirement, hardware errors or hub-subtree removal may quarantine the entire
-controller until reboot, including its other classes. See
+retirement or controller corruption may quarantine the entire controller until
+reboot. Proven device/subtree removal leaves unrelated classes running, with
+existing low/full-speed HID reattachment only. See
 [USB switch debt](../technical-debt.md#usb-switch-subtree-removal).
 Attach/detach diagnostics use ktrace.
 
