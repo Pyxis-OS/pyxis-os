@@ -1205,8 +1205,11 @@ release, but there is no hotplug, external-mutation detection or automatic repai
 and health does not track later transport failure or changes during raw writes; external host writers are unsupported. Revisit generation
 tracking and broader replacement lifetimes with a concrete consumer. The supported profile is GPT 1.0 on 512-byte or 4 KiB blocks, at most 256
 entries and 64 KiB per array; unsupported revisions, larger layouts, reserved attributes and legacy or hybrid MBRs expose no map, and one valid
-copy gives a read-only degraded map only when the other is absent or invalid (I/O errors, timeouts and unsupported metadata prevent fallback).
+copy gives a read-only degraded map when the other is absent or invalid; the documented larger-device exception also admits two agreeing
+copies as degraded (I/O errors, timeouts and unsupported metadata prevent fallback).
 These bounds can exclude usable media; revisit only for a consumer with explicit resource limits and a recovery policy.
+
+A native tool to relocate the backup GPT and protective MBR under explicit write authority is deferred: larger-device sticks remain read-only on Pyxis and need `sgdisk --move-second-header` on another OS until then; revisit when installer/disk tooling lands.
 
 ## Installer authority and retained pools
 

@@ -272,6 +272,9 @@ static enum call_status open_pool(struct npfs_store_context *context,
     return status;
   }
   bool writable = mutation_rights(job->rights);
+  if (writable && degraded) {
+    return CALL_READ_ONLY;
+  }
   for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
     if (pool->device == job->device &&
         pool->partition.entry_number == partition.entry_number &&
