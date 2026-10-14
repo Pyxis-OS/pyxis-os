@@ -185,8 +185,9 @@ samples, so their command wall times also include preparation and reporting.
 
 The 32 MiB cat median implies 12.60 MB/s for A and 5.47 MB/s for B, excluding
 its following sync. For paired cat+sync samples, medians are 3744 and 6458 ms
-(8.96 and 5.20 MB/s). This is a native regression, not acceptance of the larger
-cap. One A1/B1 order and large outliers leave media-state/order effects unresolved.
+(8.96 and 5.20 MB/s). That campaign regressed; the wider sweep below does not establish a persistent
+regression or acceptance of the larger cap. One A1/B1 order and large outliers
+leave media-state/order effects unresolved.
 The single-copy and many-sync medians are exceptions to the write regression.
 
 Internal iobench timings narrow the picture: prepared 65536 writes rise from
@@ -213,6 +214,90 @@ branch `probe/usb-write-size-sweep` at `dc82a033` implements the sweep;
 its packet is `/shared/present/usb-large-bot/write-sweep-packet/README.md`.
 QEMU validates all four WRITE bounds, hashes and cleanup; the complete 120 KiB
 packet passes all 37 diagnostic snapshots. Backing/staging are fixed. Native
-sweep execution is pending; no permanent cap or performance acceptance follows
-from these functional checks. Raw A1/B1 and diagnostic captures remain private;
-all owned jobs are stopped.
+results follow; the functional checks do not select a permanent cap. Raw A1/B1 and diagnostic captures remain private.
+
+## Native WRITE sweep, 2026-10-14
+
+Owner-run 16:58–17:22 on the same ThinkPad/SanDisk and `usb-test` partition.
+Original A `4db9e431` above and private D `dc82a033` (ELF SHA-256
+`0021259d4bd196ad529e46b41c1eda19ea84ab1659adf3a1f3110cd3d2665b78`);
+all eleven boots use the same common archive `70695f91` and commands. D changes
+only the effective WRITE cap between modes; 1 MiB backing, 512 KiB npfs staging,
+read limits and queue depth stay fixed. All packets exit zero, verify payloads
+and report cleanup; the owner restored the menu and ordinary boot. No ESP writes.
+
+`cat` writes 32 MiB from 32 copies of the boot fixture, then directory sync,
+hash, unlink and sync. One packet per boot, three samples per packet. Host wall
+milliseconds, median (min..max), in execution order:
+
+| Boot | 32 MiB cat |
+| --- | ---: |
+| A0 | 11212 (8566..12694) |
+| D64-r1 | 5297 (3488..18062) |
+| D120-r1 | 12130 (6515..15260) |
+| D256-r1 | 4803 (3244..15059) |
+| D512-r1 | 14147 (2763..17890) |
+| A1 | 6858 (3320..13021) |
+| D256-r2 | 12392 (3008..15126) |
+| D512-r2 | 5380 (1437..6264) |
+| D64-r2 | 15013 (3383..16316) |
+| D120-r2 | 6611 (3390..8756) |
+| A2 | 4336 (2525..8112) |
+
+Pooled cat medians: A 8112 ms (n=9), D64 10155, D120 7683, D256 8597,
+D512 5822 (n=6 each). These correlated samples are descriptive: cap rankings
+reverse between passes, including D64 with unchanged large backing. No cap
+wins repeatably; the earlier 2.30x A/B difference cannot establish a firmware
+size preference or a persistent software regression. Media history/internal
+housekeeping is plausible, not directly measured.
+
+Device 3 reports SuperSpeed, no recoveries/rejected commands or TD errors.
+Observed full-packet WRITE histograms verify each cap. Across the two boots per
+cap, the largest-bin calls/bytes are: D64 4,726 / 278.820 MiB; D120 2,176 /
+252.191 MiB; D256 1,088 / 263.734 MiB; D512 544 / 262.906 MiB. Bins are disjoint
+upper bounds, not exact sizes. Each mode also issues about 15,210 small 4 KiB
+WRITEs / 59.4 MiB across its two packets. All-mode total WRITE bytes are within
+0.03%; batching changes command counts, not the amount written. Full histograms
+and offline analysis stay with the private packet and the [PR summary](https://git.internal/PyxisOS/pyxis-os/pulls/831).
+Executed file commands still do not exceed 512 KiB.
+
+Diagnostic deltas bracket **cat plus its following sync**, including observer
+and background work. Representative WRITE phase totals in seconds:
+
+| Interval | Cat + sync | CBW | Data | CSW | WRITE total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| D64-r1 sample 3 | 18.465 | 0.076 | 14.810 | 2.858 | 17.745 |
+| D512-r1 sample 3 | 18.229 | 0.050 | 14.835 | 2.662 | 17.548 |
+| D512-r2 sample 1 | 1.669 | 0.014 | 0.914 | 0.279 | 1.208 |
+
+In the slow D512 interval, 1,244 small 4 KiB WRITEs consume 11.995 s total
+(9.910 s in data); the 64 largest-bin WRITEs consume 2.983 s. In the fast
+interval, the same 64 largest-bin commands/31.25 MiB consume 0.496 s. Small
+WRITEs are not tagged by purpose. Source inspection shows unlink reclamation
+is deferred in bounded transactions; directory sync flushes dirty files but
+does not drain it (`npfs_store_sync`, `cleanup_one`, `npfs_store_maintain`). Thus
+previous samples' reclamation can overlap later writes; this is not isolated
+raw-media throughput.
+
+The slow D64 interval records 18.076 s of xHCI waiting, versus 3.939 ms copying,
+1.017 ms publishing, 31.727 ms block queue delay and 5.465 ms block copy time.
+No TD crosses the Link. Slow D512 has 17.909 s waiting, 4.455 ms copying and
+0.832 ms publishing. Its two largest-bin crossing TDs average 24.356 ms versus
+44.845 ms for 62 plain TDs; the buckets mix lengths/chronology, so these means
+show no observed crossing penalty, not a controlled comparison. Write-through
+flushes issue no SYNCHRONIZE CACHE. The dominant delay is transfer completion
+waiting, not measured copy/publication CPU time. That wait includes device,
+controller, IRQ notification and BSP dispatch: it cannot prove a firmware cause
+or exclude delayed host notification. Timers overlap and must not be added.
+Active commands can cross snapshot boundaries; cumulative maxima are not
+interval maxima. D probes add overhead; A has no phase counters.
+
+Recommendation awaiting owner decision: **close #831 unmerged, retaining the
+current 64 KiB limit**. There is no repeatable end-to-end benefit to justify the
+measured 11.09 MiB/controller QEMU backing cost and larger-TD complexity;
+executed 1 MiB/rejected-large paths remain unqualified. Do not infer a SanDisk
+120/256 KiB rule. If publication throughput remains a priority, attribute its
+small-WRITE/metadata/reclamation work and completion waiting before proposing
+another change. No new task or timing run starts from this recommendation.
+#831 remains draft; the private probe and raw results are retained. All owned
+jobs are stopped.
