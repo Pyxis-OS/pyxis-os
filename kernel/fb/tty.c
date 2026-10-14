@@ -3,6 +3,7 @@
 //
 
 #include <kernel/fb/tty.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <arch/cpu.h>
@@ -93,7 +94,7 @@ static struct terminal_cell styled_cell(const struct tty *tty, uint16_t characte
   };
 }
 
-static void draw_cell(struct tty *tty, struct terminal_cell cell, size_t x, size_t y)
+static void draw_cell(const struct tty *tty, struct terminal_cell cell, size_t x, size_t y)
 {
   uint32_t fg = terminal_color_rgb(cell.foreground, tty->scheme->palette,
       tty->scheme->foreground);
@@ -108,30 +109,39 @@ static void draw_cell(struct tty *tty, struct terminal_cell cell, size_t x, size
       y * tty->font->height, fg, bg, cell.attributes);
 }
 
-/* Record and draw one cell of the active screen. */
+static struct terminal_cell *row_cells(struct tty *tty, size_t y)
+{
+  return tty->cells + (size_t)(tty->origin + y) % tty->height * tty->width;
+}
+
+const struct terminal_cell *tty_row(const struct tty *tty, size_t row)
+{
+  KASSERT(row < tty->height);
+  return tty->cells + (size_t)(tty->origin + row) % tty->height * tty->width;
+}
+
+/* Record one cell of the active screen for the presenter. */
 static void put_cell(struct tty *tty, struct terminal_cell cell, size_t x, size_t y)
 {
-  bool changed = true;
-  if (tty->cells) {
-    KASSERT(x < tty->width && y < tty->height);
+  KASSERT(tty->cells && x < tty->width && y < tty->height);
+  struct terminal_cell *slot = row_cells(tty, y) + x;
+  struct terminal_cell previous = *slot;
+  bool changed = previous.character != cell.character ||
+      previous.foreground != cell.foreground ||
+      previous.background != cell.background ||
+      previous.attributes != cell.attributes;
+  if ((tty->selection_valid || tty->selection_dragging) &&
+      previous.character != cell.character) {
     size_t index = y * tty->width + x;
-    struct terminal_cell previous = tty->cells[index];
-    changed = previous.character != cell.character ||
-        previous.foreground != cell.foreground ||
-        previous.background != cell.background ||
-        previous.attributes != cell.attributes;
-    if ((tty->selection_valid || tty->selection_dragging) &&
-        previous.character != cell.character) {
-      size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
-      size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
-      if (index >= first && index <= last) {
-        tty_selection_clear(tty);
-      }
+    size_t first = MIN(tty->selection_anchor, tty->selection_endpoint);
+    size_t last = MAX(tty->selection_anchor, tty->selection_endpoint);
+    if (index >= first && index <= last) {
+      tty_selection_clear(tty);
     }
-    tty->cells[index] = cell;
   }
-  draw_cell(tty, cell, x, y);
+  *slot = cell;
   if (changed) {
+    tty->dirty[y] = 1;
     ++tty->visual_generation;
   }
 }
@@ -146,30 +156,70 @@ static void blank_rows(struct tty *tty, size_t first, size_t end)
   }
 }
 
-/* Move rows [source, source + count) to destination, cells and raster. */
-static void move_rows(struct tty *tty, size_t destination, size_t source, size_t count)
+static void redraw_all(struct tty *tty)
 {
-  size_t row_bytes = tty->fb->pitch * tty->font->height;
-  uint8_t *pixels = (uint8_t *)tty->fb->address;
-
-  memmove(pixels + destination * row_bytes, pixels + source * row_bytes, count * row_bytes);
-  if (tty->cells) {
-    memmove(tty->cells + destination * tty->width, tty->cells + source * tty->width,
-        count * tty->width * sizeof(*tty->cells));
-  }
-  if (count && destination != source) {
-    ++tty->visual_generation;
-  }
+  tty->redraw = true;
+  tty->scrolled = 0;
+  ++tty->visual_generation;
 }
 
-/* Scroll rows top..bottom (inclusive) up by count, blanking the bottom. */
+/* The raster can follow by moving pixels while the net scroll stays within
+ * the screen; beyond that every row is drawn again. */
+static void note_scroll(struct tty *tty, int32_t rows)
+{
+  if (tty->redraw) {
+    return;
+  }
+  int64_t scrolled = (int64_t)tty->scrolled + rows;
+  if (scrolled >= tty->height || -scrolled >= tty->height) {
+    redraw_all(tty);
+    return;
+  }
+  tty->scrolled = (int32_t)scrolled;
+  ++tty->visual_generation;
+}
+
+/* Move rows [source, source + count) to destination by copying cells. */
+static void move_rows(struct tty *tty, size_t destination, size_t source, size_t count)
+{
+  if (!count || destination == source) {
+    return;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    /* Copy away from the overlap, as memmove would. */
+    size_t row = destination < source ? i : count - 1 - i;
+    memcpy(row_cells(tty, destination + row), row_cells(tty, source + row),
+        tty->width * sizeof(*tty->cells));
+    tty->dirty[destination + row] = 1;
+  }
+  ++tty->visual_generation;
+}
+
+static bool whole_screen(const struct tty *tty, size_t top, size_t bottom)
+{
+  return top == 0 && bottom == tty->height - 1u;
+}
+
+/* Scroll rows top..bottom (inclusive) up by count, blanking the bottom. The
+ * whole screen rotates the row ring; a narrower region copies its rows. */
 static void scroll_up(struct tty *tty, size_t top, size_t bottom, size_t count)
 {
   size_t rows = bottom - top + 1;
   count = MIN(count, rows);
   tty_selection_clear(tty);
-  move_rows(tty, top, top + count, rows - count);
+  bool rotate = whole_screen(tty, top, bottom);
+  if (rotate) {
+    tty->origin = (uint16_t)((tty->origin + count) % tty->height);
+    memmove(tty->dirty, tty->dirty + count, rows - count);
+    note_scroll(tty, (int32_t)count);
+  } else {
+    move_rows(tty, top, top + count, rows - count);
+  }
   blank_rows(tty, bottom + 1 - count, bottom + 1);
+  if (rotate) {
+    /* The raster moves too, so these rows show whatever scrolled off. */
+    memset(tty->dirty + bottom + 1 - count, 1, count);
+  }
 }
 
 /* Scroll rows top..bottom (inclusive) down by count, blanking the top. */
@@ -178,8 +228,18 @@ static void scroll_down(struct tty *tty, size_t top, size_t bottom, size_t count
   size_t rows = bottom - top + 1;
   count = MIN(count, rows);
   tty_selection_clear(tty);
-  move_rows(tty, top + count, top, rows - count);
+  bool rotate = whole_screen(tty, top, bottom);
+  if (rotate) {
+    tty->origin = (uint16_t)((tty->origin + tty->height - count) % tty->height);
+    memmove(tty->dirty + count, tty->dirty, rows - count);
+    note_scroll(tty, -(int32_t)count);
+  } else {
+    move_rows(tty, top + count, top, rows - count);
+  }
   blank_rows(tty, top, top + count);
+  if (rotate) {
+    memset(tty->dirty + top, 1, count);
+  }
 }
 
 /* LF: the bottom margin scrolls the region; below it the screen edge stops. */
@@ -250,19 +310,9 @@ static void reset_region(struct tty *tty)
   tty->region_bottom = tty->height - 1u;
 }
 
-static void redraw_screen(struct tty *tty)
-{
-  for (size_t y = 0; y < tty->height; ++y) {
-    for (size_t x = 0; x < tty->width; ++x) {
-      size_t index = y * tty->width + x;
-      draw_cell(tty, tty->cells[index], x, y);
-    }
-  }
-}
-
 /* CSI ? 1049 h/l. Entering saves the primary cursor and shows a cleared
- * alternate screen; leaving redraws the primary from its cells and restores
- * the cursor. The scroll region resets either way. */
+ * alternate screen; leaving shows the primary's cells again and restores the
+ * cursor. The scroll region resets either way. */
 static void select_screen(struct tty *tty, bool alternate)
 {
   if (!tty->storage || tty->alternate == alternate) {
@@ -274,8 +324,11 @@ static void select_screen(struct tty *tty, bool alternate)
   struct terminal_cell *cells = tty->cells;
   tty->cells = tty->other_cells;
   tty->other_cells = cells;
+  uint16_t origin = tty->origin;
+  tty->origin = tty->other_origin;
+  tty->other_origin = origin;
   tty->alternate = alternate;
-  ++tty->visual_generation;
+  redraw_all(tty);
   tty_selection_clear(tty);
   reset_region(tty);
   tty->wrap_pending = false;
@@ -284,7 +337,6 @@ static void select_screen(struct tty *tty, bool alternate)
     tty->x = 0;
     tty->y = 0;
   } else {
-    redraw_screen(tty);
     restore_cursor(tty);
   }
 }
@@ -560,13 +612,28 @@ void tty_put_char(struct tty *tty, char c)
   }
 }
 
+size_t tty_storage_bytes(size_t width, size_t height)
+{
+  size_t cells;
+  if (__builtin_mul_overflow(width, height, &cells) ||
+      cells > (SIZE_MAX - height) / TTY_STORAGE_BYTES_PER_CELL) {
+    return 0;
+  }
+  return cells * TTY_STORAGE_BYTES_PER_CELL + height;
+}
+
 void tty_attach_storage(struct tty *tty, uint8_t *storage)
 {
   size_t cells = (size_t)tty->width * tty->height;
   tty->storage = storage;
   tty->cells = (struct terminal_cell *)storage;
   tty->other_cells = tty->cells + cells;
+  tty->dirty = storage + cells * TTY_STORAGE_BYTES_PER_CELL;
+  memset(tty->dirty, 0, tty->height);
+  tty->origin = 0;
+  tty->other_origin = 0;
   tty->alternate = false;
+  redraw_all(tty);
   reset_region(tty);
   reset_saved_cursor(&tty->saved[0]);
   reset_saved_cursor(&tty->saved[1]);
@@ -605,17 +672,19 @@ void tty_fresh_line(struct tty *tty)
   }
 }
 
-/* Copy a screen's cells into new storage, keeping the rows from first_row. */
+/* Copy a screen's cells into new storage, keeping the rows from first_row of
+ * the old ring that starts at old_origin. */
 static void copy_screen(struct terminal_cell *cells, size_t width, size_t height,
-    const struct terminal_cell *old_cells, size_t old_width, size_t first_row,
-    size_t rows, size_t columns, struct terminal_cell blank)
+    const struct terminal_cell *old_cells, size_t old_width, size_t old_height,
+    size_t old_origin, size_t first_row, size_t rows, size_t columns,
+    struct terminal_cell blank)
 {
   for (size_t i = 0; i < width * height; ++i) {
     cells[i] = blank;
   }
   for (size_t y = 0; y < rows; ++y) {
-    memcpy(cells + y * width, old_cells + (first_row + y) * old_width,
-        columns * sizeof(*cells));
+    size_t source = (old_origin + first_row + y) % old_height;
+    memcpy(cells + y * width, old_cells + source * old_width, columns * sizeof(*cells));
   }
 }
 
@@ -637,21 +706,6 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
   size_t first_row = kept_first_row(tty->y, height);
   size_t rows = MIN((size_t)tty->height - first_row, height);
   size_t columns = MIN((size_t)tty->width, width);
-  uint32_t background = framebuffer_color(fb, terminal_color_rgb(tty->style.background,
-      tty->scheme->palette, tty->scheme->background));
-  for (size_t y = 0; y < fb->height; ++y) {
-    uint32_t *pixels = (uint32_t *)(fb->address + y * fb->pitch);
-    for (size_t x = 0; x < fb->width; ++x) {
-      pixels[x] = background;
-    }
-  }
-
-  size_t source_y = first_row * tty->font->height;
-  size_t row_bytes = columns * tty->font->width * sizeof(uint32_t);
-  for (size_t y = 0; y < rows * tty->font->height; ++y) {
-    memcpy((void *)(fb->address + y * fb->pitch),
-        (const void *)(tty->fb->address + (source_y + y) * tty->fb->pitch), row_bytes);
-  }
 
   /* The hidden screen keeps the rows around its saved cursor. */
   size_t cells = width * height;
@@ -660,16 +714,21 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
   struct terminal_cell blank = styled_cell(tty, ' ', 0);
   const struct tty_saved_cursor *hidden = &tty->saved[!tty->alternate];
   size_t other_first_row = kept_first_row(hidden->y, height);
-  copy_screen(new_cells, width, height, tty->cells, tty->width,
-      first_row, rows, columns, blank);
-  copy_screen(new_other_cells, width, height, tty->other_cells, tty->width,
-      other_first_row, MIN((size_t)tty->height - other_first_row, height), columns, blank);
+  copy_screen(new_cells, width, height, tty->cells, tty->width, tty->height,
+      tty->origin, first_row, rows, columns, blank);
+  copy_screen(new_other_cells, width, height, tty->other_cells, tty->width, tty->height,
+      tty->other_origin, other_first_row, MIN((size_t)tty->height - other_first_row, height),
+      columns, blank);
 
   tty_selection_clear(tty);
   tty->fb = fb;
   tty->storage = storage;
   tty->cells = new_cells;
   tty->other_cells = new_other_cells;
+  tty->origin = 0;
+  tty->other_origin = 0;
+  tty->dirty = storage + cells * TTY_STORAGE_BYTES_PER_CELL;
+  memset(tty->dirty, 0, height);
   tty->width = width;
   tty->height = height;
   tty->x = MIN((size_t)tty->x, width - 1);
@@ -683,7 +742,79 @@ void tty_resize(struct tty *tty, const struct framebuffer *fb, uint8_t *storage)
   reset_region(tty);
   tty->wrap_pending = false;
   ++tty->geometry_generation;
-  ++tty->visual_generation;
+  redraw_all(tty);
+}
+
+bool tty_lock(struct tty *tty)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  while (atomic_exchange_explicit(&tty->output_locked, true, memory_order_acquire)) {
+    if (log_panic_started()) {
+      return false;
+    }
+    __asm__ volatile("pause");
+  }
+  return true;
+}
+
+void tty_unlock(struct tty *tty)
+{
+  atomic_store_explicit(&tty->output_locked, false, memory_order_release);
+}
+
+bool tty_render_collect(struct tty *tty, struct tty_render *render)
+{
+  KASSERT(tty->height <= render->row_capacity &&
+      (size_t)tty->width * tty->height <= render->cell_capacity);
+  bool changed = tty->redraw || tty->scrolled;
+  render->redraw = tty->redraw;
+  render->scrolled = tty->scrolled;
+  render->background = terminal_color_rgb(tty->style.background,
+      tty->scheme->palette, tty->scheme->background);
+  for (size_t y = 0; y < tty->height; ++y) {
+    render->rows[y] = tty->redraw || tty->dirty[y];
+    if (render->rows[y]) {
+      memcpy(render->cells + y * tty->width, row_cells(tty, y),
+          tty->width * sizeof(*tty->cells));
+      changed = true;
+    }
+  }
+  memset(tty->dirty, 0, tty->height);
+  tty->scrolled = 0;
+  tty->redraw = false;
+  return changed;
+}
+
+void tty_render_draw(const struct tty *tty, const struct tty_render *render)
+{
+  const struct framebuffer *fb = tty->fb;
+  uint8_t *pixels = (uint8_t *)fb->address;
+  size_t row_bytes = fb->pitch * tty->font->height;
+  if (render->redraw) {
+    /* Margins right of and below the cell grid take the TTY background. */
+    uint32_t background = framebuffer_color(fb, render->background);
+    for (size_t y = 0; y < fb->height; ++y) {
+      uint32_t *line = (uint32_t *)(pixels + y * fb->pitch);
+      for (size_t x = 0; x < fb->width; ++x) {
+        line[x] = background;
+      }
+    }
+  } else if (render->scrolled > 0) {
+    size_t rows = (size_t)render->scrolled;
+    memmove(pixels, pixels + rows * row_bytes, (tty->height - rows) * row_bytes);
+  } else if (render->scrolled < 0) {
+    size_t rows = (size_t)-render->scrolled;
+    memmove(pixels + rows * row_bytes, pixels, (tty->height - rows) * row_bytes);
+  }
+  for (size_t y = 0; y < tty->height; ++y) {
+    if (!render->rows[y]) {
+      continue;
+    }
+    const struct terminal_cell *cells = render->cells + y * tty->width;
+    for (size_t x = 0; x < tty->width; ++x) {
+      draw_cell(tty, cells[x], x, y);
+    }
+  }
 }
 
 void tty_selection_clear(struct tty *tty)

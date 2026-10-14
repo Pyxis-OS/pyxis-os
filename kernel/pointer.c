@@ -200,20 +200,22 @@ static struct pointer_object *destination_pointer(struct pointer_destination tar
 
 static void cancel_local_drag(struct space *space)
 {
-  bool locked = log_begin();
-  if (locked) {
+  uint64_t flags = cpu_save_interrupts();
+  if (tty_lock(space->tty)) {
     tty_selection_cancel_drag(space->tty);
+    tty_unlock(space->tty);
   }
-  log_end(locked);
+  cpu_restore_interrupts(flags);
 }
 
 static void clear_local_selection(struct space *space)
 {
-  bool locked = log_begin();
-  if (locked) {
+  uint64_t flags = cpu_save_interrupts();
+  if (tty_lock(space->tty)) {
     tty_selection_clear(space->tty);
+    tty_unlock(space->tty);
   }
-  log_end(locked);
+  cpu_restore_interrupts(flags);
 }
 
 static void update_hover(struct pointer_destination target)
@@ -504,13 +506,13 @@ void pointer_handle_input(const struct pointer_input_report *event)
       drag_buttons = pointer->accepted;
     }
   } else if (recipient.kind == DESTINATION_TERMINAL && !recipient_pointer->owner) {
-    bool locked = log_begin();
-    if (locked) {
-      tty_selection_input(recipient.space->tty, position_x,
+    struct tty *tty = recipient.space->tty;
+    if (tty_lock(tty)) {
+      tty_selection_input(tty, position_x,
           position_y - (int64_t)space_pointer_content_y(),
           pressed & POINTER_BUTTON_LEFT, buttons & POINTER_BUTTON_LEFT);
+      tty_unlock(tty);
     }
-    log_end(locked);
     if (drag.space) {
       drag_buttons = (drag_buttons & buttons) | (pressed & buttons);
     }

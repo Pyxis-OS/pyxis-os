@@ -18,7 +18,7 @@ void log_set_tty(struct tty *tty)
 {
   uint64_t flags = cpu_save_interrupts();
   bool locked = log_begin();
-  if (locked) {
+  if (locked && tty_lock(tty)) {
     if (!early_log_replayed) {
       struct log_snapshot snapshot = {0};
       if (log_ring_snapshot(&snapshot)) {
@@ -42,6 +42,7 @@ void log_set_tty(struct tty *tty)
       }
       early_log_replayed = true;
     }
+    tty_unlock(tty);
     log_tty = tty;
   }
   log_end(locked);
@@ -55,6 +56,11 @@ void klog_panic_begin(void)
   atomic_store_explicit(&panic_output, true, memory_order_relaxed);
   net_log_udp_panic_begin();
   early_console_panic_begin();
+}
+
+bool log_panic_started(void)
+{
+  return atomic_load_explicit(&panic_output, memory_order_relaxed);
 }
 
 bool log_begin(void)
@@ -95,6 +101,9 @@ void log_putc(char c)
     return;
   }
   early_console_putc(c);
-  if (log_tty && log_tty->initialized)
+  /* Log lock, then the TTY's output lock: the documented order. */
+  if (log_tty && log_tty->initialized && tty_lock(log_tty)) {
     tty_put_char(log_tty, c);
+    tty_unlock(log_tty);
+  }
 }
