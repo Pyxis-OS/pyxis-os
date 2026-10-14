@@ -112,4 +112,22 @@ native run).
 
 ## Native run
 
-Pending: owner run on the ThinkPad with the same diagnostic pair, see the PR.
+ThinkPad on AC power, owner session 2026-10-14, images `base` `96fd8332`
+(main plus diagnostics) and `after` `33524d02` (#819 plus diagnostics).
+Development space, `pcm 440 220 90 &`, three Lua 128 MiB runs, a Chocolate
+Quake timedemo and quit, and EDuke32 for about 10 s and a quit.
+
+| | Base | After |
+| --- | --- | --- |
+| Interrupts off at exit | one 21.8–39.8 ms span | longest step 0.012 ms |
+| Largest total release | (same) | 2.5 ms (up to 284 steps) |
+| Reaper queue delay | — | median 4.61 ms, max 6.67 ms (21 exits) |
+| Audio recoveries | 4 | 6 |
+| ...following a teardown | 0 | 0 |
+| ...following a large ALLOCATE (about 80 ms) | 4 | 6 |
+
+The owner heard each Lua run interrupt the tone and Quake glitch when its demo
+ended, on both images; EDuke32 was clean start to end on `after`. The
+remaining restarts are the startup side, addressed by
+[bounded ALLOCATE](../bounded-allocate/README.md); the Quake demo-end cut is
+the game's own (see there).

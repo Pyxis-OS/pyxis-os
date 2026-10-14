@@ -223,7 +223,7 @@ approaches the arena. Revisit when `heap_stats` shows arena use or retired bytes
 Since SMP task 7b, user tasks run on the BSP beside the kernel workers (presentation, BSP request executor, network, native
 filesystem, USB, ACPI). Ties go to the APs first and the BSP pulls only while none of its workers is runnable; a woken worker preempts
 a BSP user task at the next interrupt, but there are no priorities and user syscalls run with interrupts masked, so a long BSP user
-syscall (a large private allocation zeroing its pages) delays workers and device interrupts. With all four CPUs loaded in the nested
+syscall delays workers and device interrupts (large private allocations now yield between bounded steps on the VM worker). With all four CPUs loaded in the nested
 VM ttcp and RAM-file writes stayed within their spread ([7b record](development/experiments/smp-task7b/README.md)), and the SMP
 task 8 native check saw no dropped keystrokes or frames under load ([record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)),
 though display smoothness and input latency were judged by feel, not measured. Revisit if interactive use shows worker or
@@ -970,13 +970,19 @@ releases it in bounded steps; nested, the longest interrupts-off step is under
 0.25 ms and quits no longer trip
 ([record](development/experiments/bounded-teardown/README.md)).
 
-Two causes remain. A large ALLOCATE zeroes and maps its whole region in one
-interrupts-off BSP service: nested, up to 269 ms at EDuke32 startup and
-100–300 ms for a growing 128 MiB Lua table, and natively the likely cause of
-the restart when Chocolate Quake starts. A woken BSP kernel worker still waits
-behind user tasks in round-robin; precedence for it is a separate measured
-follow-up ([BSP inventory](wip/bsp-pinning-inventory.md#owner-decisions--accepted-2026-10-13)).
-Revisit with native `audio:` restart counts at game start and during play.
+Natively, every remaining restart followed a large ALLOCATE (about 80 ms
+interrupts-off for 128 MiB). ALLOCATE is now stepped the same way on the VM
+worker; nested, no restart falls inside an allocation
+([record](development/experiments/bounded-allocate/README.md)).
+
+A woken BSP kernel worker still waits behind user tasks in round-robin;
+precedence for it is a separate measured follow-up
+([BSP inventory](wip/bsp-pinning-inventory.md#owner-decisions--accepted-2026-10-13)).
+Its native input: the reaper waited a median 4.6 ms (max 6.7 ms, 21 exits) in
+the BSP ready queue. RELEASE, image loading and DISPLAY services still run as
+single interrupts-off spans (DISPLAY 7–20 ms natively at Chocolate Quake
+start). Revisit with native `audio:` restart counts at game start and during
+play.
 
 ## HD Audio request batching
 
