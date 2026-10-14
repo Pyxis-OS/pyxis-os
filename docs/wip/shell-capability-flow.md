@@ -106,6 +106,15 @@ The same model applies to C programs, through ordinary stdio:
   (for example an HTTP code) and content type. This is how a C program reads
   the status and content type of a reply handed to it as stdin by a
   capability-passing pipe. Programs that ignore it keep reading bytes.
+- **Receivers stay provider-blind.** Every readable capability offers the same
+  byte reader, so a program that only reads cannot tell an HTTP reply, a file, a
+  SQLite result or a Git object apart, and does not need to. The facet API
+  exposes **protocol facets only**: generic outcome (succeeded or failed, with an
+  optional provider-defined detail for display), media type (`application/json`
+  rather than `json+https`), length when known, and whether it can be re-read.
+  It never reveals the provider, scheme or URI. Branching on the source would
+  recreate the spelling problem one layer down;
+  [interchangeable providers](interchangeable-providers.md) depend on it.
 - **`$job`-style expansion needs nothing new in libc**: the child opens the
   expanded name (such as `env://job`) like any other path, through its grant.
 
