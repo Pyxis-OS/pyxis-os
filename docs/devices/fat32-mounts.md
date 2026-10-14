@@ -202,17 +202,29 @@ also applies when its controller faults. Unpublished failure instead releases
 backing and reservations after all owned/escaped references drain. No user buffer,
 AP stack or held lock crosses storage waits.
 
-Admission settings in the [adapter](../../kernel/fs/fat32.c) are four active
-instances, 32 MiB aggregate FAT allocation maps/workspace/chain storage, the shared 1 MiB/1024
-native-wrapper budget, depth 64, 67,108,864 work steps and 16,777,216 sectors per
-engine operation. The existing serial worker admits at most 32 jobs with a
+The [adapter](../../kernel/fs/fat32.c) charges backing to each mount. There is no
+fixed aggregate FAT workspace cap. A map needs `ceil((clusters + 2) / 8)` bytes;
+RW admission retains one free map and full-check scratch containing one bitmap.
+CHECK rebuilds in that scratch and copies only after complete validation, so it
+needs no third map or new allocation. Legal FAT32 geometry bounds each bitmap
+to about 32 MiB. The per-volume sanity ceiling derives from its cluster count,
+the engine's maximum legal operation sizing, and retained chain capacities for
+the existing wrapper limit; it includes old/new replacement overlap but reserves
+none of that ceiling. Actual allocation failure returns NO_MEMORY. Ordinary
+operations allocate only their needed candidates/images/chains; retained capacity
+after shrink and failed uncertain-operation backing remain charged.
+
+Other admission settings are four active instances, the shared 1 MiB/1024
+native-wrapper budget, depth 64 and 16,777,216 sectors per engine operation.
+The work allowance is 67,108,864 steps plus one mandatory full-FAT sweep's
+cluster count, so geometry alone does not exhaust the namespace/work allowance.
+The existing serial worker admits at most 32 jobs with a
 cooperative 30-second deadline. Pending charges count before allocation; LIMIT
 and NO_MEMORY remain distinct. Growing a workspace or retained chain charges both
 old and replacement backing until the replacement succeeds. Operation candidates
 and prepared images follow the actual change, rather than reserving every FAT
 sector for a tiny mutation. Failed uncertain-operation backing remains charged.
-These are implementation settings, not FAT format
-limits or a total-memory guarantee.
+These admission settings are not FAT format limits or a total-memory guarantee.
 
 ## Trusted browsing profiles
 
