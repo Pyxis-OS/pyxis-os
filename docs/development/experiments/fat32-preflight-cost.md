@@ -142,7 +142,12 @@ A separate functional clean-power run holds an attached RW FILE and active
 publication interval. Physical Ctrl+Alt+Delete and clean shutdown complete;
 GDB observes seal OK and the owned dirty mark cleared while both objects,
 backing and the same interval/deadline remain held. Detached host fsck is clean
-and reads the written bytes. This is QEMU, not physical power-loss evidence.
+and reads the written bytes. A second run holds a removed allocated FILE and
+active interval: clean shutdown also succeeds, seal performs one flush and
+retains the dirty mark, views and deadline. Both FAT copies remain dirty;
+read-only fsck reports the expected orphan/dirty warnings without changing
+partition bytes. No repair was performed. These are QEMU observations, not
+physical power-loss evidence.
 
 The allocation proof is not an ownership proof for unrelated objects. Coherent
 in-session cross-links may be detected only at CHECK/remount. Actual kernel
