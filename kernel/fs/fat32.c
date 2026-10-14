@@ -1067,8 +1067,9 @@ static enum call_status root(struct fat32_mount *mount, uint64_t rights,
   struct fat32_entry entry;
   struct fat32_locator locator;
   enum call_status status = format_status(mount,
-      fat32_root(mount->writable ? &mount->writer.volume : &mount->volume,
-          &mount->workspace, &entry, &locator));
+      mount->writable ? fat32_mounted_root(&mount->writer,
+          &mount->workspace, &entry, &locator) :
+          fat32_root(&mount->volume, &mount->workspace, &entry, &locator));
   return status == CALL_OK ? wrap(mount, OBJECT_DIRECTORY, &locator, rights, out) : status;
 }
 
