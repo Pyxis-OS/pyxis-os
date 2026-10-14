@@ -18,7 +18,7 @@
 #include <kernel/string.h>
 #include <kernel/task.h>
 
-/* NVM Express 1.3, controller registers and command formats. No vendor code. */
+/* NVM Express 1.3 / Base 2.0c register and command contracts. No vendor code. */
 #define NVME_CAP 0x00u
 #define NVME_VS 0x08u
 #define NVME_CC 0x14u
@@ -26,8 +26,15 @@
 #define NVME_AQA 0x24u
 #define NVME_ASQ 0x28u
 #define NVME_ACQ 0x30u
+#define NVME_CRTO 0x68u
 #define NVME_DOORBELLS 0x1000u
 #define NVME_CAP_NVM (UINT64_C(1) << 37)
+#define NVME_CAP_IO_COMMAND_SETS (UINT64_C(1) << 43)
+#define NVME_CAP_TIMEOUT_MASK (UINT64_C(255) << 24)
+#define NVME_CAP_READY_WITH_MEDIA (UINT64_C(1) << 59)
+#define NVME_CAP_READY_INDEPENDENT (UINT64_C(1) << 60)
+#define NVME_CC_IO_COMMAND_SETS (6u << 4)
+#define NVME_CC_READY_INDEPENDENT (1u << 24)
 #define NVME_CC_ENABLE 1u
 #define NVME_CC_SHUTDOWN (1u << 14)
 #define NVME_CC_SHUTDOWN_MASK (3u << 14)
@@ -39,6 +46,7 @@
 #define NVME_ADMIN_IDENTIFY 0x06u
 #define NVME_ADMIN_GET_LOG 0x02u
 #define NVME_ADMIN_FEATURES 0x09u
+#define NVME_ADMIN_GET_FEATURES 0x0au
 #define NVME_ADMIN_CREATE_CQ 0x05u
 #define NVME_ADMIN_CREATE_SQ 0x01u
 #define NVME_ADMIN_DELETE_SQ 0x00u
@@ -46,9 +54,18 @@
 #define NVME_NVM_WRITE 0x01u
 #define NVME_NVM_READ 0x02u
 #define NVME_NVM_FLUSH 0x00u
+#define NVME_IDENTIFY_NAMESPACE 0u
 #define NVME_IDENTIFY_CONTROLLER 1u
 #define NVME_IDENTIFY_ACTIVE_NS 2u
+#define NVME_IDENTIFY_NS_DESCRIPTORS 3u
+#define NVME_IDENTIFY_IO_COMMAND_SETS 0x1cu
+#define NVME_IDENTIFY_CURRENT_CONTROLLER (0xffffu << 16)
 #define NVME_FEATURE_QUEUE_COUNT 7u
+#define NVME_FEATURE_IO_PROFILE 0x19u
+#define NVME_IO_PROFILE_INDEX_MASK 0x1ffu
+#define NVME_IO_PROFILE_NVM UINT64_C(1)
+#define NVME_NS_DESCRIPTOR_CSI 4u
+#define NVME_CSI_NVM 0u
 #define NVME_SMART_LOG 2u
 #define NVME_LOG_RETAIN_EVENTS (1u << 15)
 #define NVME_QUEUE_CONTIGUOUS 1u
@@ -59,6 +76,8 @@
 #define NVME_SLOT_LIMIT 8u
 #define NVME_TRANSFER_LIMIT 65536u
 #define NVME_COMMAND_TIMEOUT_NS UINT64_C(5000000000)
+#define NVME_READY_UNIT_NS UINT64_C(500000000)
+#define NVME_READY_LIMIT_UNITS 255u
 #define NVME_SHUTDOWN_LIMIT_US 5000000u
 #define NVME_SHUTDOWN_BUDGET_NS UINT64_C(20000000000)
 #define NVME_POLL_NS UINT64_C(1000000)
@@ -67,12 +86,17 @@
 #define NVME_PAGE_BYTES 4096u
 #define NVME_ID_MDTS 77u
 #define NVME_ID_RTD3E 88u
+#define NVME_ID_CONTROLLER_TYPE 111u
+#define NVME_CONTROLLER_IO 1u
 #define NVME_ID_SQES 512u
 #define NVME_ID_CQES 513u
+#define NVME_NS_FEATURES 24u
+#define NVME_NS_THIN_PROVISIONING 1u
 #define NVME_NS_NLBAF 25u
 #define NVME_NS_FLBAS 26u
 #define NVME_NS_DPS 29u
 #define NVME_NS_LBA_FORMATS 128u
+#define NVME_NS_LBA_FORMAT_COUNT 64u
 
 struct nvme_command {
   uint8_t opcode, flags;
@@ -120,7 +144,7 @@ struct nvme_controller {
   uint64_t shutdown_deadline;
   unsigned stride, namespace, shutdown_us;
   uint16_t next_cid;
-  uint32_t cc;
+  uint32_t cc, version;
   struct task_wait *worker_wait;
   enum call_status shutdown_result;
   bool initialized, prepared, accepting, interrupt_ready, notified, stopped;
@@ -164,9 +188,44 @@ static void pause_poll(bool boot)
     kernel_task_sleep_until(arch_monotonic_ns() + NVME_POLL_NS);
   }
 }
+static uint64_t bounded_ready_timeout(unsigned units)
+{
+  if (!units) {
+    units = 1;
+  } else if (units > NVME_READY_LIMIT_UNITS) {
+    units = NVME_READY_LIMIT_UNITS;
+  }
+  return (uint64_t)units * NVME_READY_UNIT_NS;
+}
+static uint64_t enable_timeout(struct nvme_controller *disk, uint32_t cc)
+{
+  if (!(disk->cap & NVME_CAP_READY_WITH_MEDIA)) {
+    return disk->reset_timeout;
+  }
+  uint32_t crto = read_register(disk, NVME_CRTO);
+  unsigned units = cc & NVME_CC_READY_INDEPENDENT ? crto >> 16 : crto & 0xffffu;
+  return bounded_ready_timeout(units);
+}
+static bool refresh_capabilities(struct nvme_controller *disk)
+{
+  uint64_t cap = read_register64(disk, NVME_CAP);
+  /* Reset/CRIME may change CAP.TO, but none of the resource-layout fields. */
+  if (cap == UINT64_MAX || (cap & ~NVME_CAP_TIMEOUT_MASK) !=
+      (disk->cap & ~NVME_CAP_TIMEOUT_MASK)) {
+    return false;
+  }
+  disk->cap = cap;
+  disk->reset_timeout = bounded_ready_timeout((cap >> 24) & 255);
+  return true;
+}
 static bool wait_ready(struct nvme_controller *disk, bool ready)
 {
-  uint64_t deadline = arch_monotonic_ns() + disk->reset_timeout;
+  uint32_t cc = read_register(disk, NVME_CC);
+  if (cc == UINT32_MAX) {
+    return false;
+  }
+  uint64_t deadline = arch_monotonic_ns() +
+      (ready ? enable_timeout(disk, cc) : disk->reset_timeout);
   for (;;) {
     uint32_t status = read_register(disk, NVME_CSTS);
     if (status == UINT32_MAX || (ready && (status & NVME_CSTS_FATAL))) {
@@ -422,12 +481,66 @@ static const char *unsupported_geometry(struct nvme_controller *disk, const char
   disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
   return reason;
 }
+static const char *identify_command_set(struct nvme_controller *disk)
+{
+  if (!(disk->cap & NVME_CAP_IO_COMMAND_SETS)) {
+    return NULL;
+  }
+  if (disk->cc & NVME_CC_IO_COMMAND_SETS) {
+    if (!identify(disk, 0, NVME_IDENTIFY_CURRENT_CONTROLLER | NVME_IDENTIFY_IO_COMMAND_SETS)) {
+      return "I/O command set combinations identify failed";
+    }
+    uint32_t profile;
+    if (!admin_command(disk, (struct nvme_command){
+        .opcode = NVME_ADMIN_GET_FEATURES, .cdw10 = NVME_FEATURE_IO_PROFILE,
+      }, true, &profile)) {
+      return "current I/O command set profile read failed";
+    }
+    unsigned index = profile & NVME_IO_PROFILE_INDEX_MASK;
+    const uint8_t *data = (void *)disk->identify.address;
+    for (unsigned i = 0; i <= index; ++i) {
+      uint64_t vector = get64(data + i * 8);
+      if (!vector || (i == index && !(vector & NVME_IO_PROFILE_NVM))) {
+        return unsupported_geometry(disk, "current I/O command set profile excludes NVM");
+      }
+    }
+  }
+  if (!identify(disk, disk->namespace, NVME_IDENTIFY_NS_DESCRIPTORS)) {
+    return "namespace command set descriptors identify failed";
+  }
+  const uint8_t *data = (void *)disk->identify.address;
+  bool nvm = false;
+  for (unsigned offset = 0; offset < NVME_PAGE_BYTES;) {
+    if (NVME_PAGE_BYTES - offset < 4) {
+      return unsupported_geometry(disk, "truncated namespace descriptor");
+    }
+    unsigned kind = data[offset], length = data[offset + 1];
+    if (!length) {
+      break;
+    }
+    if (length > NVME_PAGE_BYTES - offset - 4) {
+      return unsupported_geometry(disk, "truncated namespace descriptor payload");
+    }
+    if (kind == NVME_NS_DESCRIPTOR_CSI) {
+      if (nvm || length != 1 || data[offset + 4] != NVME_CSI_NVM) {
+        return unsupported_geometry(disk, "namespace requires one NVM command set identifier");
+      }
+      nvm = true;
+    }
+    offset += 4 + length;
+  }
+  return nvm ? NULL : unsupported_geometry(disk, "namespace lacks NVM command set identifier");
+}
 static const char *identify_geometry(struct nvme_controller *disk)
 {
   if (!identify(disk, 0, NVME_IDENTIFY_CONTROLLER)) {
     return "controller identify failed";
   }
   const uint8_t *data = (void *)disk->identify.address;
+  unsigned type = data[NVME_ID_CONTROLLER_TYPE];
+  if (type != NVME_CONTROLLER_IO && (type || disk->version >= 0x10400u)) {
+    return unsupported_geometry(disk, "requires an I/O controller");
+  }
   unsigned sqes = data[NVME_ID_SQES], cqes = data[NVME_ID_CQES];
   if ((sqes & 15) > 6 || (sqes >> 4) < 6 || (cqes & 15) > 4 || (cqes >> 4) < 4) {
     return unsupported_geometry(disk, "unsupported command entry sizes");
@@ -454,12 +567,17 @@ static const char *identify_geometry(struct nvme_controller *disk)
       return unsupported_geometry(disk, "malformed active namespace list");
     }
   }
-  if (!identify(disk, disk->namespace, 0)) {
+  const char *failure = identify_command_set(disk);
+  if (failure) {
+    return failure;
+  }
+  if (!identify(disk, disk->namespace, NVME_IDENTIFY_NAMESPACE)) {
     return "namespace identify failed";
   }
   data = (void *)disk->identify.address;
-  unsigned format = data[NVME_NS_FLBAS] & 15;
-  if (data[NVME_NS_NLBAF] >= 16 || (data[NVME_NS_FLBAS] & 0xe0) ||
+  unsigned flbas = data[NVME_NS_FLBAS];
+  unsigned format = (flbas & 15) | ((flbas & 0x60) >> 1);
+  if (data[NVME_NS_NLBAF] >= NVME_NS_LBA_FORMAT_COUNT || (flbas & 0x80) ||
       format > data[NVME_NS_NLBAF] || (data[NVME_NS_DPS] & 7)) {
     return unsupported_geometry(disk, "unsupported namespace protection or format index");
   }
@@ -470,7 +588,8 @@ static const char *identify_geometry(struct nvme_controller *disk)
   disk->info.block_size = 1u << lbaf[2];
   disk->info.block_count = get64(data);
   uint64_t capacity = get64(data + 8);
-  if (!capacity || capacity != disk->info.block_count ||
+  if ((data[NVME_NS_FEATURES] & NVME_NS_THIN_PROVISIONING) ||
+      !capacity || capacity != disk->info.block_count ||
       disk->info.block_count > UINT64_MAX / disk->info.block_size ||
       disk->info.max_transfer < disk->info.block_size) {
     return unsupported_geometry(disk, "invalid or thin-provisioned namespace capacity");
@@ -1044,15 +1163,21 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
     return "cannot map controller register prefix";
   }
   disk->cap = read_register64(disk, NVME_CAP);
-  uint32_t version = read_register(disk, NVME_VS);
+  disk->version = read_register(disk, NVME_VS);
   unsigned minimum_page = (disk->cap >> 48) & 15, maximum_page = (disk->cap >> 52) & 15;
-  if (disk->cap == UINT64_MAX || !(disk->cap & NVME_CAP_NVM) || minimum_page ||
-      maximum_page < minimum_page || version < 0x10300u || version >= 0x10500u) {
+  if (disk->cap == UINT64_MAX || disk->version == UINT32_MAX ||
+      !(disk->cap & (NVME_CAP_NVM | NVME_CAP_IO_COMMAND_SETS)) || minimum_page ||
+      maximum_page < minimum_page || disk->version < 0x10300u) {
     disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
-    return "requires NVMe 1.3/1.4, NVM commands and 4 KiB pages";
+    return "requires NVMe 1.3 or newer, an NVM-capable command set and 4 KiB pages";
   }
-  unsigned timeout = (disk->cap >> 24) & 255;
-  disk->reset_timeout = (uint64_t)(timeout ? timeout : 1) * UINT64_C(500000000);
+  if ((disk->cap & NVME_CAP_READY_INDEPENDENT) && !(disk->cap & NVME_CAP_READY_WITH_MEDIA)) {
+    return unsupported_geometry(disk, "invalid controller-ready mode capabilities");
+  }
+  if (disk->version >= 0x20000u && !(disk->cap & NVME_CAP_READY_WITH_MEDIA)) {
+    return unsupported_geometry(disk, "NVMe 2.0 controller lacks ready-with-media capability");
+  }
+  disk->reset_timeout = bounded_ready_timeout((disk->cap >> 24) & 255);
   disk->stride = 4u << ((disk->cap >> 32) & 15);
   unsigned maximum_depth = (disk->cap & 0xffff) + 1;
   unsigned depth = NVME_IO_DEPTH;
@@ -1066,7 +1191,8 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
   disk->info.request_slots = depth - 1 < NVME_SLOT_LIMIT ? depth - 1 : NVME_SLOT_LIMIT;
   /* Firmware DMA stays enabled until the controller's own halt confirms the
    * ownership handoff. BAR sizing must not run before that confirmation. */
-  if (!halt_controller(disk, true) || !pci_complete_claim(&disk->claim)) {
+  if (!halt_controller(disk, true) || !refresh_capabilities(disk) ||
+      !pci_complete_claim(&disk->claim)) {
     return "firmware controller did not halt";
   }
   uint16_t command = pci_read16(device->address, PCI_COMMAND);
@@ -1116,10 +1242,19 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
   if (result != MM_OK || !pci_msix_prepare(&disk->msix, APIC_NVME_VECTOR)) {
     return "DMA allocation or MSI-X preparation failed";
   }
+  disk->cc = NVME_CC_QUEUE_SIZES;
+  if (!(disk->cap & NVME_CAP_NVM)) {
+    disk->cc |= NVME_CC_IO_COMMAND_SETS;
+  }
+  write_register(disk, NVME_CC, disk->cc);
+  if (!refresh_capabilities(disk) || read_register(disk, NVME_CC) != disk->cc ||
+      (read_register(disk, NVME_CSTS) & NVME_CSTS_READY)) {
+    return "controller changed during disabled configuration";
+  }
   write_register(disk, NVME_AQA, ((NVME_ADMIN_DEPTH - 1) << 16) | (NVME_ADMIN_DEPTH - 1));
   write_register64(disk, NVME_ASQ, disk->admin.sq.physical);
   write_register64(disk, NVME_ACQ, disk->admin.cq.physical);
-  disk->cc = NVME_CC_QUEUE_SIZES | NVME_CC_ENABLE;
+  disk->cc |= NVME_CC_ENABLE;
   pci_write16(&disk->claim, PCI_COMMAND, command | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
   write_register(disk, NVME_CC, disk->cc);
   disk->initialized = true;

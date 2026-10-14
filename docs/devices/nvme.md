@@ -8,7 +8,8 @@ remain inventoried without disabling a working controller.
 
 ## Supported controller profile
 
-The driver requires NVMe 1.3 or 1.4, NVM commands, 4 KiB controller pages,
+The driver requires NVMe 1.3 or newer with no version ceiling, an I/O controller,
+NVM commands, 4 KiB controller pages,
 MSI-X, and one active namespace with 512-byte or 4 KiB logical blocks. Metadata,
 protection information, thin capacity, multiple namespaces and advertised normal
 shutdown times above five seconds are refused. Transfers are at most 64 KiB,
@@ -21,7 +22,22 @@ pair of up to 16 entries, reduced to CAP.MQES. At most eight captured request
 slots fit that pair. Each slot has separate data and a page of PRP entries;
 64 KiB requests use PRP1 plus a list of the remaining 15 pages.
 
-Controller readiness uses CAP.TO's 500 ms units (a conservative 500 ms minimum).
+When CAP.CSS offers NVM-only operation, CC.CSS selects it. Otherwise the driver
+selects the I/O-command-set mode only after Identify/Get Features prove the
+current profile includes NVM; it never changes that profile. Command-set-capable
+controllers must identify the active namespace as CSI 0. Admin-only controllers
+and ZNS namespaces refuse. Format indices use all six FLBAS bits within the
+64-entry bounds; additional advertised formats alone do not refuse admission.
+Legacy unreported controller type is accepted only before NVMe 1.4.
+
+Ready-with-media is selected (CC.CRIME=0). Enable/initial firmware readiness
+uses CRTO when CAP.CRMS supplies it; the inherited firmware wait honors its
+CRIME mode. Disable uses CAP.TO. Every ready wait uses a conservative 500 ms
+minimum and a 127.5-second software ceiling even if CRTO advertises more.
+Reset/CRIME may change CAP.TO: it is re-read before enabling, while changes to
+other capabilities refuse preparation. Runtime checks use that final snapshot.
+NVMe 2.0 requires the advertised ready-with-media capability. HMB stays disabled;
+controllers must operate without it, with possible DRAM-less performance cost.
 Admin and published I/O commands have five-second deadlines. One BSP worker
 owns queue processing; MSI-X only wakes workers. A completion must match the
 queue, phase, live CID and consumed submission sequence before returning DMA.
@@ -79,6 +95,11 @@ require separate owner authorization. No compiler/container rebuild or userspace
 ABI change is needed.
 
 Register/command formats follow [NVM Express 1.3](https://nvmexpress.org/wp-content/uploads/NVM_Express_Revision_1.3.pdf)
-(queues/completions, PRPs, Identify, SMART and normal shutdown). Development uses
+(queues/completions, PRPs, Identify, SMART and normal shutdown), plus
+[Base 2.0c](https://nvmexpress.org/wp-content/uploads/NVM-Express-Base-Specification-2.0c-2022.10.04-Ratified.pdf)
+(readiness, controller/namespace type and I/O profiles) and
+[NVM command set 1.0c](https://nvmexpress.org/wp-content/uploads/NVM-Express-NVM-Command-Set-Specification-1.0c-2022.10.03-Ratified-1.pdf)
+(namespace layout). Specifications © 2008 to 2022 NVM Express, Inc. ALL RIGHTS RESERVED.
+Development uses
 [QEMU 10.2.2's documented NVMe device](https://github.com/qemu/qemu/blob/v10.2.2/docs/system/devices/nvme.rst).
 The driver is original MPL-2.0 code; no external driver code is vendored.
