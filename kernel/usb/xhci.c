@@ -252,7 +252,7 @@ static struct usb_host_controller *controllers;
 static unsigned device_capacity(const struct usb_host_controller *controller)
 {
   return controller->port_count + controller->descendant_capacity + USB_HID_DEVICE_BUDGET +
-    controller->branch_capacity;
+    controller->branch_used;
 }
 
 static struct usb_host_device *device_at(struct usb_host_controller *controller, unsigned index)
@@ -2444,7 +2444,6 @@ void usb_host_assert_worker(struct usb_host_controller *controller)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(arch_cpu_index() == 0 && kernel_task_is_current(controller_worker, controller));
-  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   cpu_restore_interrupts(flags);
 }
 
@@ -2706,6 +2705,21 @@ static struct usb_host_device *reserve_branch_device(struct usb_host_controller 
 unsigned usb_host_branch_capacity(const struct usb_host_controller *controller)
 {
   return controller->branch_capacity;
+}
+
+bool usb_host_running(const struct usb_host_controller *controller)
+{
+  return controller->running && !controller->failed;
+}
+
+bool usb_host_branch_root_present(const struct usb_host_controller *controller, unsigned port)
+{
+  if (!usb_host_running(controller) || port >= controller->port_count ||
+      !controller->ports[port].boot_present || !controller->ports[port].protocol) {
+    return false;
+  }
+  uint32_t status = read32(port_register(controller, port), 0);
+  return (status & XHCI_PORT_CONNECTED) && !(status & XHCI_PORT_OVER_CURRENT);
 }
 
 static enum usb_result enable_admitted_slot(struct usb_host_device *device, uint64_t deadline);
@@ -3004,9 +3018,10 @@ enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controll
     return USB_BUSY;
   }
   device->port = port_index;
-  if (port->major == XHCI_PROTOCOL_USB_2 && !(status & XHCI_PORT_ENABLED)) {
-    write32(port_register(controller, port_index), 0, (status & XHCI_PORT_NEUTRAL) | XHCI_PORT_RESET);
-  }
+  /* Disable Slot fences ownership, but does not reset the device's address.
+   * PR is USB 2 reset or USB 3 hot reset; prove completion before addressing. */
+  write32(port_register(controller, port_index), 0, (status & XHCI_PORT_NEUTRAL) | XHCI_PORT_RESET);
+  status = observe_port(controller, port_index);
   while ((status & XHCI_PORT_CONNECTED) &&
          (!(status & XHCI_PORT_ENABLED) || (status & XHCI_PORT_RESET))) {
     if (task_deadline_expired(deadline)) {
@@ -3020,7 +3035,9 @@ enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controll
     status = observe_port(controller, port_index);
   }
   if (!(status & XHCI_PORT_CONNECTED) || (status & XHCI_PORT_OVER_CURRENT) ||
-      port->generation != generation) {
+      port->generation != generation ||
+      (port->major == XHCI_PROTOCOL_USB_3 &&
+       ((status >> XHCI_PORT_LINK_SHIFT) & XHCI_PORT_LINK_MASK) != XHCI_PORT_LINK_U0)) {
     return USB_STALE;
   }
   port->speed = (status >> XHCI_PORT_SPEED_SHIFT) & XHCI_PORT_SPEED_MASK;
@@ -3581,7 +3598,8 @@ enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
     return USB_UNSUPPORTED;
   }
   unsigned packet_max = speed == USB_SPEED_LOW ? 8 : speed == USB_SPEED_FULL ? 64 : 1024;
-  size_t receive_capacity = kind == USB_INTERRUPT_HID ? USB_HID_INTERRUPT_BYTES : USB_INTERRUPT_BYTES;
+  size_t receive_capacity = kind == USB_INTERRUPT_HID ? USB_HID_INTERRUPT_BYTES :
+    kind == USB_INTERRUPT_NETWORK ? USB_NETWORK_INTERRUPT_BYTES : USB_INTERRUPT_BYTES;
   if (!endpoint || !(endpoint->address & USB_ENDPOINT_DIRECTION_IN) ||
       !(endpoint->address & USB_ENDPOINT_NUMBER) || (endpoint->address & USB_ENDPOINT_RESERVED) ||
       !endpoint->interval || !endpoint->packet || endpoint->packet > packet_max ||

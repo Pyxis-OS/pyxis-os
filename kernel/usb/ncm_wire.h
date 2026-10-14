@@ -2,8 +2,9 @@
 #define USB_NCM_WIRE_H
 
 #include "host.h"
+#include "settings.h"
 
-#define USB_NCM_NTB_BYTES 16384u
+#define USB_NCM_NTB_BYTES USB_NETWORK_BULK_BYTES
 #define USB_NCM_FRAME_BYTES 1514u
 #define USB_NCM_TX_FRAMES 8u
 #define USB_NCM_RX_FRAMES 64u

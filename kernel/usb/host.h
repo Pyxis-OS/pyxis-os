@@ -141,6 +141,8 @@ enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsign
  * reconstruction use fresh prepared contexts; unrelated class admission stays
  * closed. The root connection generation must still match before attachment. */
 unsigned usb_host_branch_capacity(const struct usb_host_controller *controller);
+bool usb_host_running(const struct usb_host_controller *controller);
+bool usb_host_branch_root_present(const struct usb_host_controller *controller, unsigned port);
 enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controller,
     unsigned port, uint64_t generation, uint64_t deadline, struct usb_host_device **device);
 enum usb_result usb_host_branch_attach_child(struct usb_host_device *parent,

@@ -2,8 +2,9 @@
 #define USB_NCM_PROVIDER_H
 
 #include <kernel/net/usb_ncm.h>
+#include "settings.h"
 
-#define USB_NCM_CANDIDATES 2u
+#define USB_NCM_CANDIDATES USB_NETWORK_CANDIDATES
 #define USB_NCM_FRAME_QUEUE 16u
 #define USB_NCM_SERVICE_BUDGET 8u
 

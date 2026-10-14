@@ -141,6 +141,9 @@ void usb_ncm_discovery_finish(struct usb_ncm_pool *pool, bool inspected)
 struct usb_ncm_nic *usb_ncm_admit(struct usb_ncm_pool *pool, const uint8_t mac[6])
 {
   assert_bsp_disabled();
+  if (pool) {
+    usb_host_assert_worker(pool->host);
+  }
   if (!pool || !mac || !net_ethernet_is_unicast(mac) ||
       pool->count == USB_NCM_CANDIDATES || sources[pool->index].finished) {
     return NULL;
@@ -198,6 +201,9 @@ void usb_ncm_publish(struct usb_ncm_nic *nic,
 void usb_ncm_withdraw(struct usb_ncm_nic *nic, bool retry_pending)
 {
   assert_bsp_disabled();
+  if (nic) {
+    usb_host_assert_worker(nic->pool->host);
+  }
   KASSERT(nic);
   invalidate_frames(nic);
   nic->prepared = retry_pending;
@@ -306,6 +312,9 @@ void usb_ncm_start(struct usb_ncm_nic *nic)
 bool usb_ncm_bound(const struct usb_ncm_nic *nic)
 {
   assert_bsp_enabled();
+  if (nic) {
+    usb_host_assert_worker(nic->pool->host);
+  }
   uint64_t flags = cpu_save_interrupts();
   bool result = nic && nic->bound && !net_log_udp_panicking();
   cpu_restore_interrupts(flags);
@@ -387,6 +396,9 @@ enum net_result usb_ncm_transmit(struct usb_ncm_nic *nic,
 bool usb_ncm_receive(struct usb_ncm_nic *nic, const void *frame, size_t length)
 {
   assert_bsp_enabled();
+  if (nic) {
+    usb_host_assert_worker(nic->pool->host);
+  }
   return nic && enqueue_frame(nic, &nic->receive, frame, length, false) == NET_OK;
 }
 
@@ -394,6 +406,9 @@ bool usb_ncm_take_transmit(struct usb_ncm_nic *nic,
     void *destination, size_t capacity, size_t *length)
 {
   assert_bsp_enabled();
+  if (nic) {
+    usb_host_assert_worker(nic->pool->host);
+  }
   if (!length) {
     return false;
   }
