@@ -1,5 +1,8 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <abi/console.h>
+#include <abi/execution_group.h>
+#include <abi/terminal.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/mm/heap.h>
@@ -305,6 +308,32 @@ enum call_status forwarder_status(const struct kernel_object *object)
   return status;
 }
 
+static bool holder_keeps_target(const struct forwarder *forwarder, uint64_t rights)
+{
+  /* Storage-only observers must not preserve the native close-bearing grant.
+   * Exported clients and pipes count even zero-right grants. Native console
+   * ARMED/PASSTHROUGH handles carry that right alone, never alongside READ. */
+  if (forwarder->type == OBJECT_ENDPOINT_EXPORT) {
+    return true;
+  }
+  if (forwarder->protocol == PROTOCOL_CONSOLE) {
+    return rights & (CONSOLE_RIGHT_READ | CONSOLE_RIGHT_WRITE |
+        CONSOLE_RIGHT_ARMED | CONSOLE_RIGHT_PASSTHROUGH);
+  }
+  switch (forwarder->type) {
+  case OBJECT_FORWARDER_CONTROLLER:
+    return rights & FORWARDER_RIGHTS;
+  case OBJECT_EXECUTION_GROUP:
+    return rights & EXECUTION_GROUP_RIGHT_CONTROL;
+  case OBJECT_TERMINAL_ATTACHMENT:
+    return rights & TERMINAL_RIGHT_HANGUP;
+  case OBJECT_TERMINAL_EVENTS:
+    return rights & TERMINAL_EVENTS_RIGHT_EMIT;
+  default:
+    return true;
+  }
+}
+
 static bool grant_retain_depth(struct kernel_object *object, uint64_t rights,
     size_t depth, size_t *budget)
 {
@@ -318,8 +347,7 @@ static bool grant_retain_depth(struct kernel_object *object, uint64_t rights,
     --*budget;
     spin_lock(&forwarders_lock);
     size_t *count = object->type == OBJECT_FORWARDER ? &forwarder->holders : &forwarder->controllers;
-    bool holder = object->type == OBJECT_FORWARDER &&
-        (forwarder->type != OBJECT_FORWARDER_CONTROLLER || (rights & FORWARDER_RIGHTS));
+    bool holder = object->type == OBJECT_FORWARDER && holder_keeps_target(forwarder, rights);
     bool counted = holder || controller;
     if (counted && *count == SIZE_MAX) {
       spin_unlock(&forwarders_lock);
@@ -394,8 +422,7 @@ void forwarder_grant_release(struct kernel_object *object, uint64_t rights)
 {
   struct forwarder *forwarder = object->type == OBJECT_FORWARDER ? (struct forwarder *)object :
       ((struct forwarder_controller *)object)->forwarder;
-  if (object->type == OBJECT_FORWARDER && forwarder->type == OBJECT_FORWARDER_CONTROLLER &&
-      !(rights & FORWARDER_RIGHTS)) {
+  if (object->type == OBJECT_FORWARDER && !holder_keeps_target(forwarder, rights)) {
     return;
   }
   struct capability_grant detached = {0};
