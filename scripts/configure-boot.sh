@@ -80,11 +80,11 @@ case "$display_inventory" in
   1) command_line="$command_line display.inventory=1" ;;
   *) echo 'DISPLAY_INVENTORY must be 0 or 1.' >&2; exit 1 ;;
 esac
-display_flip=${DISPLAY_FLIP:-0}
+display_flip=${DISPLAY_FLIP:-}
 case "$display_flip" in
-  0) ;;
-  1) command_line="$command_line display.flip=1" ;;
-  *) echo 'DISPLAY_FLIP must be 0 or 1.' >&2; exit 1 ;;
+  '') ;;
+  0|1) command_line="$command_line display.flip=$display_flip" ;;
+  *) echo 'DISPLAY_FLIP must be empty, 0 or 1.' >&2; exit 1 ;;
 esac
 display_flip_metrics=${DISPLAY_FLIP_METRICS:-0}
 case "$display_flip_metrics" in
@@ -139,7 +139,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     timing = ENVIRON["PYXIS_DISPLAY_TIMING"]
     timing_metrics = ENVIRON["PYXIS_DISPLAY_TIMING_METRICS"] == "1"
     inventory = ENVIRON["PYXIS_DISPLAY_INVENTORY"] == "1"
-    flip = ENVIRON["PYXIS_DISPLAY_FLIP"] == "1"
+    flip = ENVIRON["PYXIS_DISPLAY_FLIP"]
     flip_metrics = ENVIRON["PYXIS_DISPLAY_FLIP_METRICS"] == "1"
     cursor_probe = ENVIRON["PYXIS_DISPLAY_CURSOR_PROBE"] == "1"
     normal_bytes = length(normal)
@@ -150,7 +150,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (display != "") install_bytes += length(" display.size=") + length(display)
     if (timing != "") install_bytes += length(" display.timing=") + length(timing)
     if (timing_metrics) install_bytes += length(" display.timing.metrics=1")
-    if (flip) install_bytes += length(" display.flip=1")
+    if (flip != "") install_bytes += length(" display.flip=") + length(flip)
     if (flip_metrics) install_bytes += length(" display.flip.metrics=1")
     if (inventory) install_bytes += length(" display.inventory=1")
     if (cursor_probe) install_bytes += length(" display.cursor.probe=1")
@@ -178,7 +178,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (display != "") line = line " display.size=${PYXIS_DISPLAY_SIZE}"
     if (timing != "") line = line " display.timing=" timing
     if (timing_metrics) line = line " display.timing.metrics=1"
-    if (flip) line = line " display.flip=1"
+    if (flip != "") line = line " display.flip=" flip
     if (flip_metrics) line = line " display.flip.metrics=1"
     if (inventory) line = line " display.inventory=1"
     if (cursor_probe) line = line " display.cursor.probe=1"
