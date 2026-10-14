@@ -274,3 +274,63 @@ the parent. Canonical headers are `abi/environment.h` and userland `environment.
 helpers are `environment_lookup`, `environment_set_capability`,
 `environment_set_text`, `environment_unset` and `environment_snapshot`.
 Exact bounded replies/layout remain task-2 scope work, not placeholder APIs.
+
+## Task 2 scope (delta, 2026-10-14)
+
+**Assigned; scope only so far.** Fresh branch `kernel/process-environment` from
+main `4db9e431`; task 1 is already checked. One process-owned environment replaces
+startup resources, roots, stream bindings, string variables and kernel
+namespaces. A caller-bound native object supplies the agreed owned
+LOOKUP/SET/UNSET/SNAPSHOT view. Table growth, replacement and teardown stay
+BSP-owned; guards cover capture/publication, not allocation, grant callbacks,
+user copies or waits. Siblings share this table. Immutable captures keep their
+values across replacement/unset; live-table authority is not delegated to children.
+
+Launch captures exported entries, then applies explicit child-only overrides
+and attenuation without changing the parent. Bundle required/optional entries
+and trusted handoffs preserve their current grant restrictions; private entries
+are not inherited implicitly. Cwd remains an owned directory chain; argv and
+the caller-only FS bootstrap remain startup machinery, not new name channels.
+Libc uses the same table for text mutation and caches only immutable captures,
+preserving its borrowed `getenv` and descriptor ownership contracts. Namespace
+ABI/objects/helpers/commands are removed, with in-tree callers migrated together.
+The service publication handshake yields a task-1 SLOT/controller pair; this
+does not implement task 5's assignment/capture syntax.
+
+### Remaining scope decisions (proposed defaults)
+
+1. **Service-controller ownership.** Keep the existing interim
+   `service start NAME IMAGE` / `service replace NAME IMAGE` interface. Start
+   publishes exported `NAME` as the slot and private, non-exported `NAME.control`
+   as its controller, atomically; reject either-name collision without partial
+   publication. Replace uses that held controller to RETARGET, not a new slot.
+   Trusted session successors explicitly stage controller copies as private
+   child entries; ordinary jobs do not receive them. These are ordinary,
+   unprotected names in the one table, not a second management-name map.
+   **Default:** this profile. Alternative: retain anonymous controller records
+   in the creator and remove the name-based replace interface until task 5.
+2. **Interim HTTP response stdin.** The shipped STREAM reader still needs its
+   separately owned STATUS observer until the HTTP migration. **Default:**
+   ordinary `stdin` and `stdin.status` entries, captured together from a snapshot;
+   explicit child stream overrides replace/remove the companion in the staged
+   child only. No protected names or inferred observation authority. Libc checks
+   the pair when using response stdin. Alternative: add a compound stream entry,
+   expanding the agreed capability-or-text value model for this interim need.
+3. **Admission policy.** **Default:** tunable 1,024 entries and 1 MiB aggregate
+   owned name/text bytes per live table or snapshot, with no additional per-value
+   cap. Values beyond endpoint payload size use the native buffer interface.
+   Mutation/snapshot exhaustion fails before publication and preserves old
+   values; child capture/serialization retains its existing 64 KiB budget and
+   fails before making any child runnable. These are explicit policy limits,
+   not ABI or the namespace's former 64-binding contract. Alternative: retain
+   only allocator/overflow failure for live tables and snapshots, with the same
+   launch budget.
+
+After these choices, capture the unchanged-main local baseline before code,
+then qualify owned lookup, concurrent mutation/snapshots, exported-only launch,
+overrides, slot replacement/cleanup and live/remote mux on 1/4-CPU QEMU/GDB.
+The owner's native baseline remains the reference for matched after-A/C runs.
+Delivery includes dependent userland/ports changes before the parent pin and
+updated interface references. Startup/launch representation changes require
+all target binaries to rebuild against the matching SDK, including separately
+published toolchain-volume binaries; no compiler-container rebuild is expected.
