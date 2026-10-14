@@ -224,6 +224,37 @@ registers, including virtual dimensions, offsets and byte order. Failure
 restores and verifies firmware state. Unverified restoration stops boot with
 a serial panic instead of publishing an uncertain direct target.
 
+## Kernel terminal rendering
+
+Every local space has a kernel TTY: cells for its primary and alternate screens
+and a full-screen RAM raster that only the presenter draws. The Remote space and
+Multiplexer panes use terminal objects instead, which the kernel does not draw.
+
+- **Writers change cells only.** Console writes from programs, `klog` on the
+  Caelum TTY and space reports update cells, the cursor and a handoff record
+  under that TTY's output lock, with interrupts off. They never touch pixels.
+- **Scrolling.** Each screen's rows form a ring, so a whole-screen scroll moves
+  the ring's origin and blanks the new rows: about one row of work. A narrower
+  scroll region (`ESC [ t ; b r`, insert and delete lines) copies its own cell
+  rows.
+- **Handoff.** The record holds the changed rows, the net whole-screen scroll the
+  raster has not yet applied, and a full-redraw flag. Switching screens, resizing
+  and scrolling a screen height or more since the last frame set the flag.
+- **Drawing.** Once per frame the presenter collects the visible space's changed
+  rows into staging under the lock. Then, with interrupts on, it moves the raster
+  by the net scroll and draws those rows; a full redraw also fills the margins
+  with the TTY background.
+- **Hidden spaces.** A hidden space draws nothing while its changes accumulate,
+  and is drawn once when shown. The same holds while a space shows graphics.
+- **Locks.** Each TTY has its own output lock. The log lock (kernel log ring,
+  serial and early console) may be held while taking it, never the reverse.
+  Serial-mirrored console output takes both, so it stays ordered with kernel
+  lines. Nothing logs, allocates or takes another TTY's lock under a TTY's lock.
+
+A writer's cost no longer depends on resolution or visibility. During a flood the
+presenter redraws the visible terminal at most once per frame. Measurements are
+in the [console rendering record](../development/experiments/console-rendering/README.md).
+
 ## Transactional local resizing
 
 Between frame leases, the BSP stages a GPU surface plus every local TTY,
@@ -233,13 +264,13 @@ after the device wait. A newly created space causes rollback and preparation
 against the new registry. Device switching leaves the old logical geometry
 published until confirmed success.
 
-The output lock protects copying the latest raster and committing all local
-pixel pointers, dimensions and geometry generations together. Stable TTY and
-console objects keep their identity. No allocation or device wait occurs under
-this lock. Every CPU's console and kernel-log writes wait during the multi-space
-copy; its cost grows with screen size and number of spaces.
+Under the log lock, each TTY's output lock in turn protects copying its cells
+and committing its raster, dimensions and geometry generation; the presenter
+then redraws the new raster. Stable TTY and console objects keep their identity.
+No allocation or device wait occurs under these locks. A TTY's writers wait only
+while its own cells are copied.
 
-TTY resizing preserves whole rasterized cells around the cursor, without
+TTY resizing preserves whole cells around the cursor, without
 reflow or scrollback. Height shrink drops enough top rows to retain the cursor;
 growth preserves surviving positions. Cropped columns and rows are lost.
 New cells and margins use the TTY background. Colors, tab width, parser state,
@@ -247,8 +278,8 @@ space identity, focus and capture survive; cursor position is translated and
 clamped, and pending wrap is cleared. Columns are `width / font_width`; rows
 are `(height - bar_height) / font_height`.
 
-Old AP-visible pixel mappings remain intact until writers and the presenter
-have relinquished them. The BSP then requires
+Old raster mappings remain intact until the presenter, their only user, has
+relinquished them. The BSP then still requires
 [acknowledged TLB retirement](smp.md#memory-and-output-boundaries) on every
 online CPU before unmapping or reusing pages or virtual addresses. The handler
 takes no locks and performs no logging, allocation or device work. A bounded

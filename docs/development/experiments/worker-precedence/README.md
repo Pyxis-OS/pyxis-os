@@ -66,6 +66,10 @@ reproduced either.
 
 ## Kernel console rendering cost
 
+Replaced on 2026-10-14 by rendering in the presenter
+([console rendering](../console-rendering/README.md)). This section measures
+the earlier behaviour.
+
 Every `klog` line, and every write by a program in a local space's console, is
 drawn into that terminal's full-screen RAM image while the caller holds the
 global output lock (`log_begin()`).

@@ -214,14 +214,14 @@ ones. It verifies the space registry before switching scanout and again after
 the device wait; a newly created space causes rollback and fresh preparation.
 Refused dimensions or failed allocation leave the last valid geometry usable.
 
-After confirmed scanout success, the output lock protects copying the latest
-TTY raster and committing every local geometry and generation together. TTY
-objects retain their identity. Whole cells survive without reflow: shrinking
+After confirmed scanout success, each TTY's output lock in turn protects copying
+its cells and committing its geometry and generation; the presenter redraws the
+new rasters. TTY objects retain their identity. Whole cells survive without reflow: shrinking
 height drops enough top rows to keep the cursor visible; growing keeps existing
 positions. Only whole columns that fit are copied, and new cells and margins
 use the TTY background. The cursor is translated/clamped and pending wrap is
 cleared; colors, parser state and tab width survive. No allocation or device wait
-occurs under the output lock.
+occurs under these locks.
 
 SIZE observes the new destination, while an existing application mapping keeps
 its original layout. Presentation copies the top-left intersection using each

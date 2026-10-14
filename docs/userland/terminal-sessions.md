@@ -58,8 +58,9 @@ DATA record from the available bytes after accounting for its header, or returns
 WOULD_BLOCK without enqueueing. A validated zero-length write is a no-op. Output
 WRITABLE/WRITE_CLOSED interests require WRITE; readiness reserves no capacity.
 Hangup reports ERROR and writes fail ENDPOINT_CLOSED. Framebuffer consoles have
-no output queue or close operation: try-write renders a bounded chunk under the
-shared output lock, and WRITABLE means the output TTY is initialized.
+no output queue or close operation: try-write applies a bounded chunk to the
+TTY's cells under that TTY's output lock, and WRITABLE means the output TTY is
+initialized.
 
 Libpyxis exposes creation, `terminal_try_inject`, `terminal_try_drain`,
 `terminal_end_input`, `terminal_hangup` and `terminal_command_complete` in

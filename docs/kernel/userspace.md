@@ -86,8 +86,9 @@ input on Caelum is discarded on every CPU count. See [keyboard input](../devices
 and [libterm](../userland/terminal.md) for input and editing behavior.
 
 The [console wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/console.h) reports bytes written and
-its helpers finish partial writes. The kernel renders bounded chunks under the
-output lock. Terminal input is blocking; the local framebuffer console has no
+its helpers finish partial writes. The kernel applies bounded chunks to the
+terminal's cells under that terminal's output lock; the presenter draws them
+([kernel terminal rendering](display.md#kernel-terminal-rendering)). Terminal input is blocking; the local framebuffer console has no
 input EOF operation, while remote END_INPUT drains queued bytes before EOF. See
 [stdin behavior](../userland/shell.md#file-redirection-and-stdin).
 

@@ -423,9 +423,11 @@ Extra reply capacity is unused. A zero-length source is not dereferenced, but
 still requires a valid capability, request and reply. Errors leave the reply
 and TTY untouched and return zero reply bytes.
 
-Each call stages at most 256 source bytes on the syscall stack and writes them
-under the existing output lock, then writes the count reply last. This limits
-each rendering batch; validation still covers the full requested source range.
+Each call stages at most 256 source bytes on the syscall stack and applies them
+to the TTY's cells under its output lock, then writes the count reply last. This
+limits each batch; validation still covers the full requested source range. The
+presenter draws the cells later
+([kernel terminal rendering](../kernel/display.md#kernel-terminal-rendering)).
 The payload is captured before any overlapping reply is written. Callers that
 overlap reply and source storage must account for that overwrite before retrying.
 The userspace console wrapper checks status, reply size and progress.

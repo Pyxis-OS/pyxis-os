@@ -246,7 +246,7 @@ contains `console_tab_width_request`; there is no reply payload.
 
 Each TTY starts at eight columns. The setting is shared by its writers, survives
 clearing the screen and process exit, and changes only subsequent tabs. Updating
-it uses the output lock and preserves existing pixels, cursor position, pending
+it uses the output lock and preserves existing cells, cursor position, pending
 wrap and escape-parser state. Other TTYs retain their own settings. Startup
 selection comes from [session configuration](session-configuration.md); the
 packaged file explicitly selects eight columns.
