@@ -1377,13 +1377,8 @@ static void reap_completed(void)
       bool finalized = process_task_reclaimed(process);
       if (faulted) {
         klog("userspace: CPU %zu faulted task released\n", cpu_index);
-      } else if (finalized) {
-        if (result.kind == PROCESS_TERMINATED) {
-          klog("userspace: CPU %zu terminated task released\n", cpu_index);
-        } else if (result.kind == PROCESS_EXITED) {
-          ktrace("userspace: CPU %zu exited with status %d; address space retiring\n",
-               cpu_index, (int)result.exit_status);
-        }
+      } else if (finalized && result.kind == PROCESS_TERMINATED) {
+        klog("userspace: CPU %zu terminated task released\n", cpu_index);
       }
     } else {
       free_task(task);
