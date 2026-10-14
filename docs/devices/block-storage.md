@@ -155,7 +155,11 @@ the request. A failed write or flush latches `write_failed` until reboot. Furthe
 writes and flushes, including admitted work not yet published, fail with
 `BLOCK_WRITE_FAILED`; reads can continue while the transport is healthy. Requests
 already published retain their own completion outcomes. There is no automatic
-retry or successful later flush that clears the latch. Abandoning a published
+retry or successful later flush that clears the latch. USB may renegotiate a
+large unsupported command into smaller commands only with validated zero
+processing and current unsupported-command sense, before reporting completion;
+see [BOT fallback](usb-storage.md#superspeed-command-size-and-rejection-fallback).
+Abandoning a published
 mutation also latches failure. USB records publication at the original CBW and
 preserves its slot until the owning exchange returns.
 

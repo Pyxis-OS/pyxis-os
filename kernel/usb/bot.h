@@ -20,7 +20,9 @@ struct usb_bot {
   enum usb_bot_state state;
   const char *detail, *write_detail;
   uint8_t configuration, interface, alternate;
-  uint32_t tag, block_bytes, transfer_bytes, command_bytes;
+  uint32_t tag, block_bytes;
+  /* Capture admission is stable; only the worker narrows physical commands. */
+  uint32_t transfer_bytes, command_bytes;
   uint64_t blocks, read_bytes, write_bytes;
   uint32_t commands, reads, writes, flushes, recoveries;
   bool wide, sense_valid, timed_out, writable, flush_supported;
