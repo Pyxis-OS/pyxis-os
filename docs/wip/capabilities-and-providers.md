@@ -20,8 +20,11 @@ resolved**; independent tracks such as drivers, storage and kernel work continue
    provider issues, never from the text of the name.
 3. **Programs depend on protocols, not on providers.** The launcher decides who
    serves each resource; a program cannot tell, and does not need to.
-4. **Receivers stay provider-blind.** They see protocol facets, never the
-   provider, scheme or URI that produced what they hold.
+4. **Providers are transparent.** A program cannot tell which provider served
+   what it holds: it sees protocol facets, never the provider, scheme or URI.
+   Protocol knowledge lives in three places only: the provider itself, the
+   preparer that configures requests for it, and human-readable failure detail.
+   Every other decision in this document follows from that.
 5. **Side effects are explicit.** Writing stages; a commit submits. There are no
    blind retries, and a lost reply never causes a mutation to run again.
 6. **Representations are chosen, never guessed.** A prefix such as `json+`
@@ -167,8 +170,52 @@ and exits non-zero; nothing is turned into empty output.
 Libc maps these outcomes to the matching `errno` values, so ports need no change.
 Writes follow the same rule: a rejected submission fails like writing to a file
 that refuses the write. A failed capability still carries its status and a
-bounded error body, which failure-aware tools read through the facet API; plain
+bounded error body, which failure-aware tools read through `describe` (see Facets); plain
 readers never see error bodies as data.
+
+## Facets (decided)
+
+**`describe` is a universal operation on any readable capability.** It is
+answered by the capability's issuer: the kernel for native files, the provider
+for exported ones. It does not block; a read open has already waited for its
+reply to begin.
+
+| Facet | Meaning | Example |
+|---|---|---|
+| type, rights | kernel-attested, not the issuer's claim | FILE, read |
+| outcome | ok, not found, denied, I/O error, aborted or uncertain | not found |
+| detail | text for people only; programs never parse it | `404 Not Found` |
+| error body | bounded, handed out as its own readable capability | an API's JSON error |
+| media type | declared by the producer, never guessed | `application/json` |
+| length | when known | 5120 |
+| re-readable | a snapshot rather than a one-pass stream | yes |
+| complete | fully arrived, or still arriving | yes |
+
+- **Programs branch only on the outcome class.** Protocol numbers such as 404
+  live in the detail text, so an HTTP 404 and a SQLite "no such view" both
+  arrive as *not found*.
+- **No URI, scheme or provider identity.** Today's METADATA reply, which returns
+  the endpoint URI, goes away. An error message names the target because its
+  reader knows what it opened: `grep: https://bla: not found (404)`.
+- **Uncertain** means a write may or may not have taken effect, as when its
+  reply was lost (today's submission certainty: not started, attempted, sent).
+  Nothing retries it automatically. Libc reports it as an I/O error.
+- **Response headers are not facets.** A caller that needs them (ETag,
+  pagination links, rate limits) asks its preparer for a reply representation
+  that includes them, such as a JSON envelope with status, headers and body,
+  read with ordinary tools.
+- **Producers declare the media type of their output**, and only that: `jq`
+  marks its output `application/json`, and the type travels through pipes to
+  whatever reads it, later including a terminal that renders it. Nothing infers
+  a type from content or names.
+- **Facets declare; they do not prove.** A provider can mislabel content, as
+  OPEN metadata can today. Length and completeness on a live stream describe its
+  current state, not a promise.
+
+Surfaces: `pyxis_describe(FILE *, struct pyxis_facets *)` in `<pyxis/…>`, with a
+call that returns the error body as a `FILE *`; `pyxis.describe(f)` in Lua,
+returning a table; and a native `describe` command in the shell, chosen over
+`stat`, whose familiar meaning differs.
 
 ## Data flow in the shell
 
@@ -266,11 +313,8 @@ rm $api                                     # DELETE on the same URL
 - **Commit follows the transaction rules above:** `fclose` and exit commit, an
   explicit `fflush` commits earlier, implicit drains only stage, and `"w+"`
   reads the reply. This replaces task 5c's "`fclose` only stages".
-- **A small Pyxis facet API** (in `<pyxis/…>`, not stdio) lets a program ask what
-  a stream is: generic outcome (succeeded or failed, with a provider-defined
-  detail and bounded error body), media type (`application/json`, not
-  `json+https`), length when known, and whether it can be re-read. It never
-  reveals the provider, scheme or URI. Programs that ignore it read bytes.
+- **Facets** come through `pyxis_describe()`, described below. Programs that
+  ignore them read bytes.
 - **Ports keep working.** Failures arrive as ordinary `errno` values; `getenv`
   and `setenv` read and write text-content variables as strings, and a non-text
   capability is not presented as a string. Expanded names such as `env://job`
@@ -363,19 +407,18 @@ Partial bodies never satisfy another open.
 
 ## Open questions
 
-1. **The facet API.** Its exact facets, errors and how it reaches Lua.
-2. **Configuration documents** that name a capability they don't hold: who
+1. **Configuration documents** that name a capability they don't hold: who
    resolves the name, with what authority.
-3. **Revocation:** how a capability is revoked and what a holder sees.
-4. **Launch grants and namespaces:** whether capability variables, launch grants
+2. **Revocation:** how a capability is revoked and what a holder sees.
+3. **Launch grants and namespaces:** whether capability variables, launch grants
    and namespace bindings are one mechanism or three that overlap.
-5. **Retention numbers:** default and maximum backing for bound values.
-6. **Providers:** how a provider learns its client exited and a client sees its
+4. **Retention numbers:** default and maximum backing for bound values.
+5. **Providers:** how a provider learns its client exited and a client sees its
    provider gone; whether a client may hold both a provider's and the kernel's
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
-7. **Shared memory:** the capability type, mapping and lifetime rules.
-8. **Provider policy:** caller isolation, credentials and cache reuse for any
+6. **Shared memory:** the capability type, mapping and lifetime rules.
+7. **Provider policy:** caller isolation, credentials and cache reuse for any
    shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
 
