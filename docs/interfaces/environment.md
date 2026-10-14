@@ -87,6 +87,11 @@ wrapper identity and does not freeze its current target. Explicit CUT and ordina
 resource lifetime continue to apply. A snapshot that includes controllers owns
 those controller grants; use TEXT_ONLY for caches that must not prolong them.
 
+Native snapshots, including proxies retaining snapshot ancestry, cannot be targets
+of explicit forwarder creation or slot RETARGET. Those operations return WRONG_TYPE
+before publication, preventing a captured slot from retaining its own snapshot.
+Normal snapshot COPY, lookup and automatic immutable revocation lineage still work.
+
 The last logical snapshot owner releases its cells synchronously. Storage-only
 operation references cannot keep their authority alive. An admitted LOOKUP retains
 its selected cell before capability growth or copying, so snapshot CLOSE or live

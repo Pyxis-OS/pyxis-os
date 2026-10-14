@@ -15,6 +15,9 @@
 #include <kernel/net/interface.h>
 #include <kernel/bluetooth.h>
 
+/* Bounded admission walk: forwarder, controller and leaf storage per node. */
+#define FORWARDER_TARGET_GRAPH_MAX (3 * FORWARDER_LINEAGE_MAX + 1)
+
 struct forwarder {
   struct kernel_object object;
   struct forwarder *next;
@@ -683,6 +686,61 @@ void forwarder_operation_delivery_owner(struct forwarder_operation *operation,
   spin_unlock(&forwarders_lock);
 }
 
+/* Forwarder guard held. Target/controller storage and immutable ancestry remain
+ * owned throughout the walk. Do not follow snapshot cells: a mutable forwarder
+ * may not retain a snapshot, including through an immutable derived proxy. */
+static enum call_status target_admission_status(struct forwarder *root,
+    struct kernel_object *target)
+{
+  struct kernel_object *objects[FORWARDER_TARGET_GRAPH_MAX];
+  size_t count = target ? 1 : 0;
+  objects[0] = target;
+  for (size_t index = 0; index < count; ++index) {
+    struct kernel_object *object = objects[index];
+    if (root && object == &root->object) {
+      return CALL_BAD_REQUEST;
+    }
+    if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
+      return CALL_WRONG_TYPE;
+    }
+    struct forwarder *forwarder;
+    if (object->type == OBJECT_FORWARDER_CONTROLLER) {
+      forwarder = ((struct forwarder_controller *)object)->forwarder;
+    } else if (object->type == OBJECT_FORWARDER) {
+      forwarder = (struct forwarder *)object;
+    } else {
+      continue;
+    }
+    bool controller = object->type == OBJECT_FORWARDER_CONTROLLER;
+    size_t children = controller ? 1 : forwarder->ancestor_count + 1;
+    for (size_t child = 0; child < children; ++child) {
+      struct kernel_object *next;
+      if (controller) {
+        next = &forwarder->object;
+      } else if (child) {
+        next = &forwarder->ancestors[child - 1]->object;
+      } else {
+        next = forwarder->target.object;
+      }
+      if (!next) {
+        continue;
+      }
+      size_t seen = 0;
+      while (seen < count && objects[seen] != next) {
+        ++seen;
+      }
+      if (seen < count) {
+        continue;
+      }
+      if (count == sizeof(objects) / sizeof(objects[0])) {
+        return CALL_LIMIT;
+      }
+      objects[count++] = next;
+    }
+  }
+  return CALL_OK;
+}
+
 static enum call_status allocate_forwarder(struct capability_grant *target,
     uint64_t kind, const struct forwarder_operation *lineage, struct forwarder **out)
 {
@@ -742,6 +800,9 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
   if (status == CALL_OK && already_cut && kind) {
     status = CALL_DENIED;
   }
+  if (status == CALL_OK && kind) {
+    status = target_admission_status(NULL, target->object);
+  }
   if (status == CALL_OK && !target_depth_valid(forwarder, target->object, &forwarder->object)) {
     status = CALL_LIMIT;
   }
@@ -787,12 +848,18 @@ enum call_status forwarder_create_owned(struct capability_grant *target, uint64_
     struct capability_grant *holder, struct capability_grant *control)
 {
   *holder = *control = (struct capability_grant){0};
+  spin_lock(&forwarders_lock);
+  enum call_status status = target_admission_status(NULL, target->object);
+  spin_unlock(&forwarders_lock);
+  if (status != CALL_OK) {
+    return status;
+  }
   struct forwarder_controller *controller = kmalloc(sizeof(*controller));
   if (!controller) {
     return CALL_NO_MEMORY;
   }
   struct forwarder *forwarder;
-  enum call_status status = allocate_forwarder(target, kind, NULL, &forwarder);
+  status = allocate_forwarder(target, kind, NULL, &forwarder);
   if (status != CALL_OK) {
     kfree(controller);
     return status;
@@ -931,27 +998,6 @@ struct syscall_result forwarder_create_call(uintptr_t input_address, uintptr_t r
   return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
 }
 
-static bool target_cycles(struct forwarder *root, struct kernel_object *target)
-{
-  size_t depth = 0;
-  while (target && (target->type == OBJECT_FORWARDER || target->type == OBJECT_FORWARDER_CONTROLLER)) {
-    if (target->type == OBJECT_FORWARDER_CONTROLLER) {
-      target = &((struct forwarder_controller *)target)->forwarder->object;
-    }
-    struct forwarder *forwarder = (struct forwarder *)target;
-    if (forwarder == root || ++depth > FORWARDER_LINEAGE_MAX) {
-      return true;
-    }
-    for (size_t i = 0; i < forwarder->ancestor_count; ++i) {
-      if (forwarder->ancestors[i] == root) {
-        return true;
-      }
-    }
-    target = forwarder->target.object;
-  }
-  return false;
-}
-
 struct syscall_result forwarder_controller_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t address, size_t size)
 {
@@ -1015,8 +1061,10 @@ struct syscall_result forwarder_controller_call(struct kernel_object *object,
   }
   spin_lock(&forwarders_lock);
   enum call_status status = lineage_cut(forwarder) ? CALL_DENIED :
-      target_cycles(forwarder, target.object) ? CALL_BAD_REQUEST :
-      !retarget_depth_valid(forwarder, target.object) ? CALL_LIMIT : CALL_OK;
+      target_admission_status(forwarder, target.object);
+  if (status == CALL_OK && !retarget_depth_valid(forwarder, target.object)) {
+    status = CALL_LIMIT;
+  }
   struct capability_grant previous = {0};
   bool previous_owned = false, retain_target = false;
   if (status == CALL_OK) {
