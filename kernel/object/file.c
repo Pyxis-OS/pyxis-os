@@ -265,6 +265,28 @@ static void unlock_file(struct file_object *file)
   atomic_store_explicit(&file->locked, false, memory_order_release);
 }
 
+bool file_cached_length(struct file_object *file, uint64_t *length)
+{
+  if (!length) {
+    return false;
+  }
+  *length = 0;
+  if (file->backing == FILE_INITRD) {
+    *length = file->size;
+    return true;
+  }
+  if (file->backing != FILE_RAM ||
+      atomic_exchange_explicit(&file->locked, true, memory_order_acquire)) {
+    return false;
+  }
+  bool known = !file->busy;
+  if (known) {
+    *length = file->size;
+  }
+  unlock_file(file);
+  return known;
+}
+
 bool file_begin_operation(struct file_object *file)
 {
   KASSERT(file->backing == FILE_INITRD || file->backing == FILE_RAM);

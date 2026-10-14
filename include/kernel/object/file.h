@@ -77,6 +77,10 @@ void file_init_fat32(struct file_object *file, struct fat32_node *node);
 bool file_begin_operation(struct file_object *file);
 void file_end_operation(struct file_object *file);
 
+/* IF=0, retained file. No operation wait or backend request: a busy RAM file
+ * or worker-owned backing leaves length unknown for a description snapshot. */
+bool file_cached_length(struct file_object *file, uint64_t *length);
+
 /* BSP, RAM only, IF=0, with operation ownership lent by the parked caller.
  * Copies the selected file into bounded reclaimable capture pages. Caller ends
  * the operation on every result. Failure leaves the capture empty. */
