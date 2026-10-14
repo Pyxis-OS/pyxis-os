@@ -128,6 +128,33 @@ updater (one executor) and does not wait for the curses TUI:
   under the same quiet progress line, and the selection is shown again before
   the next prompt.
 
+### Quiet progress implementation scope — assigned 2026-10-14
+
+Codex alpha implements this revision in today's line-mode installer/Update,
+without changing planning, consent, storage I/O, verification or installed
+activation gates. Keep the shared progress records; replace their screen sink
+with one in-place bar/activity line, hide short checks, retain finished major
+steps, add `-v`, summarize Review, and re-show the selected target before any
+post-scan question. Printed plan bytes remain data-only on stdout; human output
+remains on stderr. QEMU qualification uses disposable Install/Update targets.
+
+**One authority decision pending:** the existing `log` resource is read-only
+([LOG_RIGHT_READ](../../include/abi/log.h)); it cannot accept phase records.
+Trusted `init-install` already holds Caelum's console WRITE grant, whose writes
+enter the kernel log ring and serial output
+([console_write](../../kernel/object/console.c)).
+
+**Recommended default:** explicitly delegate that existing console with WRITE
+alone to the trusted installer as `installer_diagnostics`. Send detailed phase
+boundaries and coalesced counters there; never expose the grant to ordinary
+programs. Local progress and errors still use the install space's own output.
+Diagnostic failure disables that observer without changing confirmed I/O or
+results; Review-output failure still prevents apply. This adds no kernel API or
+LOG write right. The alternative is a separately designed kernel log writer,
+which would expand this presentation task's public authority surface.
+
+No implementation until this delegation choice is accepted.
+
 ## Configuration delta model
 
 Archive defaults are read-only today; installed boot already merges
