@@ -106,6 +106,11 @@ laptop. They depend on the actual sensor, its firmware and its configuration.
 
 ### Later
 
+- Face unlock on the third hardware target, the IdeaPad Slim 5 16IPH11 (vela):
+  its Windows Hello-class IR + RGB camera already does face unlock with gaze
+  detection under Linux, including in low light (owner, 2026-10-14). A
+  candidate reference device; IR and RGB together are the usual basis for
+  rejecting photo spoofs. No work is assigned.
 - Remote attestation of a Pyxis machine's measured state, for example to an
   identity provider or a homelab service. This is a natural extension of the
   same measurements but adds no requirement now.
