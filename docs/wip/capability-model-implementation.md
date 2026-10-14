@@ -297,6 +297,12 @@ ABI/objects/helpers/commands are removed, with in-tree callers migrated together
 The service publication handshake yields a task-1 SLOT/controller pair; this
 does not implement task 5's assignment/capture syntax.
 
+The interim HTTP stdin pair uses ordinary `stdin` and `stdin.status` entries,
+captured together from a snapshot. Explicit child stream overrides replace/remove
+the companion in child staging only; libc checks it when using response stdin.
+This preserves the shipped pair without compound values, protected names or
+inferred observation authority; entry spelling is routine layout work.
+
 ### Remaining scope decisions (proposed defaults)
 
 1. **Service-controller ownership.** Keep the existing interim
@@ -309,14 +315,7 @@ does not implement task 5's assignment/capture syntax.
    unprotected names in the one table, not a second management-name map.
    **Default:** this profile. Alternative: retain anonymous controller records
    in the creator and remove the name-based replace interface until task 5.
-2. **Interim HTTP response stdin.** The shipped STREAM reader still needs its
-   separately owned STATUS observer until the HTTP migration. **Default:**
-   ordinary `stdin` and `stdin.status` entries, captured together from a snapshot;
-   explicit child stream overrides replace/remove the companion in the staged
-   child only. No protected names or inferred observation authority. Libc checks
-   the pair when using response stdin. Alternative: add a compound stream entry,
-   expanding the agreed capability-or-text value model for this interim need.
-3. **Admission policy.** **Default:** tunable 1,024 entries and 1 MiB aggregate
+2. **Admission policy.** **Default:** tunable 1,024 entries and 1 MiB aggregate
    owned name/text bytes per live table or snapshot, with no additional per-value
    cap. Values beyond endpoint payload size use the native buffer interface.
    Mutation/snapshot exhaustion fails before publication and preserves old
