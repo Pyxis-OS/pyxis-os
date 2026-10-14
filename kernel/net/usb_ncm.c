@@ -1,5 +1,6 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/ethernet.h>

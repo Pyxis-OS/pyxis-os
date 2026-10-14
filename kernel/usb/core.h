@@ -24,6 +24,8 @@ void usb_storage_process(struct usb_discovery *discovery);
  * one retained hotplug state-machine step. Failure releases input ownership. */
 void usb_hid_drain_progress(struct usb_host_controller *host);
 void usb_hid_process(struct usb_discovery *discovery);
+void usb_network_process(struct usb_discovery *discovery);
+bool usb_network_next_deadline(const struct usb_discovery *discovery, uint64_t *deadline);
 void usb_hid_controller_failed(struct usb_host_controller *host);
 /* BSP/IF=0 physical-input admission check; no USB operations. */
 bool usb_hid_input_complete(void);

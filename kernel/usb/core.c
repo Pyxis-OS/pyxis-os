@@ -12,6 +12,7 @@
 #include "block.h"
 #include "bluetooth.h"
 #include "hid.h"
+#include "ncm.h"
 #include "../storage/block_registry.h"
 #include "host.h"
 #include "settings.h"
@@ -151,6 +152,8 @@ struct usb_device_record {
   struct usb_bot storage;
   struct usb_bluetooth_binding bluetooth;
   struct usb_hid_binding hid;
+  struct usb_ncm_function ncm;
+  struct usb_ncm_transport *network_transport;
   struct system_info_usb_device info;
   enum usb_speed speed;
   const char *detail;
@@ -160,7 +163,7 @@ struct usb_device_record {
   uint8_t hub_pending[USB_BITSET_BYTES], hub_rebind[USB_BITSET_BYTES], hub_ports;
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
-  bool present, incomplete, runtime, monitor_failed, retired;
+  bool present, incomplete, runtime, monitor_failed, retired, network_branch;
 };
 
 enum usb_runtime_stage {
@@ -187,7 +190,9 @@ struct usb_runtime {
 struct usb_discovery {
   struct usb_host_controller *host;
   struct usb_device_record *devices;
-  struct usb_device_record *runtime_devices;
+  struct usb_device_record *runtime_devices, *network_devices;
+  struct usb_ncm_pool *network_pool;
+  struct usb_ncm_transports *network_transports;
   uint64_t *root_generation;
   struct usb_runtime runtime;
   struct system_info_usb_interface *interfaces;
@@ -195,7 +200,7 @@ struct usb_discovery {
   struct usb_block_pool *storage_pool;
   size_t capacity, interface_count, device_count, registry_index;
   unsigned port_count, device_capacity;
-  unsigned runtime_count, next_root, next_hub;
+  unsigned runtime_count, next_root, next_hub, network_count, network_capacity;
   bool started, hardware_failed, runtime_ready;
 };
 
@@ -276,7 +281,7 @@ static bool request_ok(struct usb_device_record *device, enum usb_result result)
   }
   device->incomplete = true;
   device->detail = "descriptor/control request failed";
-  if (result == USB_IO || result == USB_TIMEOUT) {
+  if ((result == USB_IO || result == USB_TIMEOUT) && !usb_host_running(device->owner->host)) {
     device->owner->hardware_failed = true;
   }
   return false;
@@ -346,6 +351,11 @@ static void select_hub_configuration(struct usb_device_record *device, size_t to
           .address = part[2], .packet = packet & USB_PACKET_SIZE_MASK,
           .interval = part[6], .transactions = (packet & USB_PACKET_TRANSACTIONS) >> 11,
         };
+        if (usb_speed_is_enhanced(device->speed)) {
+          const uint8_t *companion = part + part[0];
+          device->hub_endpoint.burst = companion[2];
+          device->hub_endpoint.bytes_per_interval = read16(companion + 4);
+        }
       }
       return;
     }
@@ -700,6 +710,7 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       device->detail = "malformed or changing configuration descriptors";
     } else {
       select_hub_configuration(device, total);
+      usb_ncm_wire_select(&device->ncm, device->owner->descriptors, total, device->speed);
       device->storage.host = device->host;
       usb_bot_select(&device->storage, device->owner->descriptors, total, device->speed);
       usb_hid_select(&device->hid, device->owner->descriptors, total, device->speed,
@@ -786,6 +797,7 @@ void usb_inventory_prepare(void)
   }
   inventory.prepared = true;
   if (pci_inventory_state() == PCI_INVENTORY_UNAVAILABLE) {
+    usb_ncm_inventory_prepare(0);
     return;
   }
   atomic_store_explicit(&inventory.state, SYSTEM_INFO_USB_INITIALIZING, memory_order_release);
@@ -796,6 +808,7 @@ void usb_inventory_prepare(void)
       ++count;
     }
   }
+  usb_ncm_inventory_prepare(count);
   if (count) {
     if (count <= SIZE_MAX / sizeof(*inventory.controllers)) {
       inventory.controllers = kmalloc(count * sizeof(*inventory.controllers));
@@ -808,6 +821,9 @@ void usb_inventory_prepare(void)
           kerror("usb: %x:%x.%u registry allocation failed; controller not retained\n",
                  device->address.bus, device->address.device, device->address.function);
         }
+      }
+      for (size_t index = 0; index < count; ++index) {
+        usb_ncm_discovery_finish_at(index, false);
       }
       publish_inventory();
       return;
@@ -827,6 +843,7 @@ void usb_inventory_prepare(void)
       controller->pending = true;
       ++inventory.pending;
     } else {
+      usb_ncm_discovery_finish_at(inventory.controller_count - 1, true);
       controller->info.state = SYSTEM_INFO_USB_CONTROLLER_UNSUPPORTED;
       inventory.incomplete = true;
       kdebug("usb: %x:%x.%u host interface %x unsupported\n", device->address.bus,
@@ -880,13 +897,19 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->descriptors = kmalloc(capacity);
   discovery->storage_scratch = kmalloc(USB_BULK_BYTES);
   discovery->storage_pool = usb_block_prepare(host, discovery->device_capacity);
+  discovery->network_capacity = usb_host_branch_capacity(host);
+  discovery->network_devices = kmalloc(discovery->network_capacity * sizeof(*discovery->network_devices));
+  discovery->network_pool = usb_ncm_prepare(host, index);
+  discovery->network_transports = usb_ncm_transports_prepare(host);
   discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
   if (!discovery->devices || !discovery->runtime_devices || !discovery->root_generation ||
-      !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces) {
+      !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces ||
+      !discovery->network_devices || !discovery->network_pool || !discovery->network_transports) {
     usb_release_prepared(discovery);
     return NULL;
   }
   memset(discovery->devices, 0, discovery->device_capacity * sizeof(*discovery->devices));
+  memset(discovery->network_devices, 0, discovery->network_capacity * sizeof(*discovery->network_devices));
   memset(discovery->runtime_devices, 0, USB_HID_DEVICE_BUDGET * sizeof(*discovery->runtime_devices));
   memset(discovery->root_generation, 0, ports * sizeof(*discovery->root_generation));
   controller->discovery = discovery;
@@ -905,6 +928,9 @@ void usb_release_prepared(struct usb_discovery *discovery)
   if (controller->discovery == discovery) {
     controller->discovery = NULL;
   }
+  usb_ncm_transports_release(discovery->network_transports);
+  usb_ncm_release_prepared(discovery->network_pool);
+  kfree(discovery->network_devices);
   kfree(discovery->interfaces);
   usb_block_release_prepared(discovery->storage_pool);
   kfree(discovery->storage_scratch);
@@ -1353,7 +1379,7 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
     return false;
   }
   hub->hub_ports = *ports;
-  if (!enhanced && usb_host_device_depth(hub->host) < 5) {
+  if (usb_host_device_depth(hub->host) < 5) {
     size_t bitmap_bytes = (*ports + 8) / 8;
     size_t receive_bytes = hub->hub_endpoint.packet > bitmap_bytes ?
       hub->hub_endpoint.packet : bitmap_bytes;
@@ -1410,7 +1436,7 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
    * later insertions as part of this hub's boot observation. */
   uint16_t initial_status[UINT8_MAX + 1];
   struct usb_discovery *discovery = hub->owner;
-  size_t first = discovery->device_count;
+  size_t first = hub->network_branch ? discovery->network_count : discovery->device_count;
   for (unsigned port = 1; port <= ports; ++port) {
     uint16_t change;
     if (!hub_port_status(hub, port, &initial_status[port], &change, deadline)) {
@@ -1425,16 +1451,19 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       hub->detail = "hub port power unavailable";
     }
     if (initial_status[port] & USB_HUB_PORT_CONNECTION) {
-      if (discovery->device_count == discovery->device_capacity) {
+      if (hub->network_branch ? discovery->network_count == discovery->network_capacity :
+          discovery->device_count == discovery->device_capacity) {
         hub->incomplete = true;
         hub->detail = "hub reserved device budget exhausted";
       } else {
-        struct usb_device_record *child = &discovery->devices[discovery->device_count++];
+        struct usb_device_record *child = hub->network_branch ?
+          &discovery->network_devices[discovery->network_count++] : &discovery->devices[discovery->device_count++];
         child->owner = discovery;
         child->parent = hub;
         child->present = true;
+        child->runtime = child->network_branch = hub->network_branch;
         child->info.root_port = hub->info.root_port;
-        child->info.parent_index = hub - discovery->devices;
+        child->info.parent_index = hub->network_branch ? SYSTEM_INFO_USB_NO_PARENT : (size_t)(hub - discovery->devices);
         child->info.parent_port = port;
       }
     }
@@ -1444,9 +1473,10 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       goto capture_failed;
     }
   }
-  size_t last = discovery->device_count;
+  size_t last = hub->network_branch ? discovery->network_count : discovery->device_count;
   for (size_t index = first; index < last; ++index) {
-    struct usb_device_record *child = &discovery->devices[index];
+    struct usb_device_record *child = hub->network_branch ? &discovery->network_devices[index] :
+      &discovery->devices[index];
     unsigned port = child->info.parent_port;
     if (discovery->hardware_failed || task_deadline_expired(deadline)) {
       child->incomplete = true;
@@ -1461,8 +1491,9 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
     child->speed = link.speed;
     child->info.speed = observation_speed(link.speed);
     if (link.speed != USB_SPEED_UNKNOWN &&
-        !request_ok(child, usb_host_attach_child(hub->host, port, &link,
-                                                deadline, &child->host))) {
+        !request_ok(child, hub->network_branch ?
+          usb_host_branch_attach_child(hub->host, port, &link, deadline, &child->host) :
+          usb_host_attach_child(hub->host, port, &link, deadline, &child->host))) {
       child->host = NULL;
     }
     inspect_record(child, deadline);
@@ -1492,9 +1523,12 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
   return;
 
 capture_failed:
-  for (size_t index = first; index < discovery->device_count; ++index) {
-    discovery->devices[index].incomplete = true;
-    discovery->devices[index].detail = "hub snapshot failed before child setup";
+  size_t captured = hub->network_branch ? discovery->network_count : discovery->device_count;
+  for (size_t index = first; index < captured; ++index) {
+    struct usb_device_record *child = hub->network_branch ? &discovery->network_devices[index] :
+      &discovery->devices[index];
+    child->incomplete = true;
+    child->detail = "hub snapshot failed before child setup";
   }
 }
 
@@ -1522,6 +1556,7 @@ static void capture_ports(struct usb_discovery *discovery)
 void usb_inventory_controller_failed(size_t index)
 {
   uint64_t flags = cpu_save_interrupts();
+  usb_ncm_discovery_finish_at(index, false);
   if (index < inventory.controller_count && inventory.controllers[index].discovery) {
     usb_block_fail(inventory.controllers[index].discovery->storage_pool);
     usb_hid_controller_failed(inventory.controllers[index].discovery->host);
@@ -1564,7 +1599,7 @@ static void log_device(const struct usb_device_record *device)
   *cursor = '\0';
   const struct usb_device_record *ancestor = device;
   for (;;) {
-    bool root = ancestor->info.parent_index == SYSTEM_INFO_USB_NO_PARENT;
+    bool root = !ancestor->parent;
     unsigned port = root ? ancestor->info.root_port : ancestor->info.parent_port;
     do {
       *--cursor = '0' + port % 10;
@@ -1574,7 +1609,7 @@ static void log_device(const struct usb_device_record *device)
       break;
     }
     *--cursor = '.';
-    ancestor = &device->owner->devices[ancestor->info.parent_index];
+    ancestor = ancestor->parent;
   }
   const struct system_info_pci_function *pci =
     &inventory.controllers[device->owner->registry_index].info.pci;
@@ -1663,6 +1698,15 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       }
     }
     struct usb_bot *storage = &device->storage;
+    if (device->ncm.selected && !device->ncm.invalid && !device->ncm.ambiguous &&
+        !ax200 && !storage->configuration && !device->hid.configuration &&
+        !device->incomplete && !discovery->hardware_failed) {
+      enum usb_result result = usb_ncm_setup(discovery->network_transports, discovery->network_pool,
+          device->host, &device->ncm, NULL, deadline, &device->network_transport);
+      if (result != USB_OK) {
+        device->detail = "NCM class preparation refused";
+      }
+    }
     if (device->hid.configuration && (ax200 || storage->configuration)) {
       kdebug("usb HID: interface left unbound on existing class-owned device\n");
     } else if (device->hid.configuration && !device->incomplete && !discovery->hardware_failed) {
@@ -1691,7 +1735,18 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
     discovery->root_generation[port] = usb_host_port_generation(discovery->host, port);
   }
   discovery->runtime_ready = !discovery->hardware_failed;
+  bool network_inspected = !discovery->hardware_failed;
+  for (size_t index = 0; index < discovery->device_count; ++index) {
+    struct usb_device_record *device = &discovery->devices[index];
+    if ((device->ncm.selected && !device->ncm.invalid && !device->ncm.ambiguous &&
+         !device->network_transport && !device->storage.configuration && !device->hid.configuration) ||
+        (device->incomplete && (!device->info.device_class ||
+         (device->info.flags & SYSTEM_INFO_USB_DEVICE_HUB)))) {
+      network_inspected = false;
+    }
+  }
   uint64_t flags = cpu_save_interrupts();
+  usb_ncm_discovery_finish(discovery->network_pool, network_inspected);
   struct usb_controller_record *controller = &inventory.controllers[discovery->registry_index];
   controller->info.state = discovery->hardware_failed ? SYSTEM_INFO_USB_CONTROLLER_FAILED :
     incomplete ? SYSTEM_INFO_USB_CONTROLLER_INCOMPLETE : SYSTEM_INFO_USB_CONTROLLER_COMPLETE;
@@ -1737,8 +1792,12 @@ static struct usb_discovery *hid_discovery(const struct usb_host_controller *hos
 
 static struct usb_device_record *live_record(struct usb_discovery *discovery, size_t index)
 {
-  return index < discovery->device_count ? &discovery->devices[index] :
-    &discovery->runtime_devices[index - discovery->device_count];
+  if (index < discovery->device_count) {
+    return &discovery->devices[index];
+  }
+  index -= discovery->device_count;
+  return index < discovery->runtime_count ? &discovery->runtime_devices[index] :
+    &discovery->network_devices[index - discovery->runtime_count];
 }
 
 static bool descendant_of(const struct usb_device_record *device,
@@ -1755,10 +1814,11 @@ static bool descendant_of(const struct usb_device_record *device,
 static void lose_subtree(struct usb_device_record *ancestor)
 {
   struct usb_discovery *discovery = ancestor->owner;
-  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
     if (descendant_of(device, ancestor)) {
       usb_hid_lost(&device->hid);
+      usb_ncm_transport_lost(device->network_transport, true);
     }
   }
 }
@@ -1770,9 +1830,10 @@ void usb_hid_controller_failed(struct usb_host_controller *host)
     return;
   }
   discovery->hardware_failed = true;
-  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
     usb_hid_lost(&device->hid);
+    usb_ncm_transport_lost(device->network_transport, false);
     if (device->hub_stream) {
       usb_host_interrupt_ack_loss(device->hub_stream);
     }
@@ -1785,13 +1846,14 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
   if (!discovery || discovery->hardware_failed) {
     return;
   }
-  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
     if (device->retired) {
       continue;
     }
     usb_hid_collect(&device->hid);
-    if (!device->hub_stream || device->monitor_failed) {
+    if (!device->hub_stream || device->monitor_failed || device->network_branch ||
+        usb_speed_is_enhanced(device->speed)) {
       continue;
     }
     if (!usb_host_device_present(device->host)) {
@@ -1823,7 +1885,7 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
       }
       if (discovery->runtime_ready) {
         for (size_t child_index = 0;
-             child_index < discovery->device_count + discovery->runtime_count; ++child_index) {
+             child_index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++child_index) {
           struct usb_device_record *child = live_record(discovery, child_index);
           unsigned port = child->info.parent_port;
           if (child->parent != device || child->retired || !port || port / 8 >= bytes ||
@@ -1852,9 +1914,8 @@ bool usb_hid_input_complete(void)
       continue;
     }
     bool active = false;
-    for (size_t device = 0; device < discovery->device_count + discovery->runtime_count; ++device) {
-      const struct usb_device_record *record = device < discovery->device_count ?
-        &discovery->devices[device] : &discovery->runtime_devices[device - discovery->device_count];
+    for (size_t device = 0; device < discovery->device_count + discovery->runtime_count + discovery->network_count; ++device) {
+      const struct usb_device_record *record = live_record((struct usb_discovery *)discovery, device);
       active |= record->hid.active;
       if (record->hub_stream) {
         for (unsigned port = 0; port <= record->hub_ports; ++port) {
@@ -1914,7 +1975,7 @@ static bool retire_record(struct usb_device_record *device)
     return false;
   }
   struct usb_discovery *discovery = device->owner;
-  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *descendant = live_record(discovery, index);
     if (!descendant_of(descendant, device)) {
       continue;
@@ -1978,7 +2039,7 @@ static enum usb_result runtime_request(struct usb_discovery *discovery,
 static struct usb_device_record *find_child(struct usb_discovery *discovery,
                                              struct usb_device_record *hub, unsigned port)
 {
-  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
     if (!device->retired && device->present && device->host && device->parent == hub &&
         device->info.parent_port == port) {
@@ -2276,7 +2337,7 @@ void usb_hid_process(struct usb_discovery *discovery)
   if (!discovery || !discovery->runtime_ready || discovery->hardware_failed) {
     return;
   }
-  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
     if (!device->retired && (device->hid.retirement_pending || device->monitor_failed ||
         (device->host && !usb_host_device_present(device->host)))) {
@@ -2290,7 +2351,7 @@ void usb_hid_process(struct usb_discovery *discovery)
     uint64_t generation = usb_host_port_generation(discovery->host, root);
     if (generation != discovery->root_generation[root]) {
       discovery->root_generation[root] = generation;
-      for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+      for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
         struct usb_device_record *old = live_record(discovery, index);
         if (old->present && !old->parent && old->info.root_port == root + 1 && !old->retired &&
             !retire_record(old)) {
@@ -2305,7 +2366,8 @@ void usb_hid_process(struct usb_discovery *discovery)
     size_t records = discovery->device_count;
     for (size_t count = 0; count < records; ++count) {
       struct usb_device_record *hub = &discovery->devices[discovery->next_hub++ % records];
-      if (!hub->hub_stream || hub->monitor_failed || hub->retired) {
+      if (!hub->hub_stream || hub->monitor_failed || hub->retired ||
+          usb_speed_is_enhanced(hub->speed)) {
         continue;
       }
       for (unsigned port = 0; port <= hub->hub_ports; ++port) {
@@ -2378,6 +2440,31 @@ void usb_hid_process(struct usb_discovery *discovery)
     return;
   }
   runtime_descriptor_step(discovery);
+}
+
+void usb_network_process(struct usb_discovery *discovery)
+{
+  if (!discovery || discovery->hardware_failed) {
+    return;
+  }
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    usb_ncm_transport_process(device->network_transport);
+  }
+}
+
+bool usb_network_next_deadline(const struct usb_discovery *discovery, uint64_t *deadline)
+{
+  bool found = false;
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
+    struct usb_device_record *device = live_record((struct usb_discovery *)discovery, index);
+    uint64_t candidate;
+    if (usb_ncm_transport_deadline(device->network_transport, &candidate) && (!found || candidate < *deadline)) {
+      *deadline = candidate;
+      found = true;
+    }
+  }
+  return found;
 }
 
 static bool inventory_published(void)

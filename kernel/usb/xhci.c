@@ -4503,6 +4503,7 @@ static void controller_worker(void *argument)
       controller->diagnostic_stage = "hid";
     }
     usb_hid_process(controller->discovery);
+    usb_network_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;
     }
@@ -4513,7 +4514,11 @@ static void controller_worker(void *argument)
     if (boot_options_get()->usb_xhci_diagnose) {
       controller->diagnostic_stage = "wait";
     }
-    wait_activity(controller, task_deadline_after_ms(USB_WORKER_POLL_MS));
+    uint64_t wake = task_deadline_after_ms(USB_WORKER_POLL_MS), network_deadline;
+    if (usb_network_next_deadline(controller->discovery, &network_deadline) && network_deadline < wake) {
+      wake = network_deadline;
+    }
+    wait_activity(controller, wake);
   }
 }
 
