@@ -212,6 +212,15 @@ is still what the Deck needs for the UDP log, the remote terminal, the
 [network debugger](../kernel/network-debugger.md) and hands-free A/B runs; without it a
 stick-only Deck has none of them.
 
+The same driver serves the IdeaPad (vela), which has no Ethernet port: through
+this dock, and through the RTL8156 USB 2.5G adapters arriving 2026-10-16, which
+are expected to offer a CDC-NCM configuration beside Realtek's vendor mode
+(confirm from their descriptors). A class driver covers both; a Realtek vendor
+driver stays a later option if NCM proves slow. First step (owner, 2026-10-14):
+plug the dock into the ThinkPad with Ethernet attached and record `lsusb -n` from
+Pyxis, then write the scope note. It cannot help with a hang before the early
+console, because network logging starts late in boot.
+
 **After this task the owner can:** get a DHCP lease and reach the network from
 the Deck through the dock, and use the UDP log and remote terminal on it.
 
