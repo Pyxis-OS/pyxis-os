@@ -12,10 +12,11 @@ proposals or investigations, and no new tasks in existing milestones. Ideas go i
 [later OS directions](later-os-directions.md) as short entries. Bugs and hardware
 problems found in use are still fixed.
 
-**Sequencing (owner, 2026-10-14):** finish the open work, then resolve the
-[capability model](capabilities-and-providers.md), then continue. No new libc, shell,
-web/HTTP or Git work starts until then; independent tracks (storage and drivers,
-kernel) may run alongside.
+**Sequencing (owner, 2026-10-14):** the [capability model](capabilities-and-providers.md)
+is settled and its [implementation](capability-model-implementation.md) is assigned.
+Libc, shell, web/HTTP and Git work happens only through that milestone until the
+task owning the area is delivered; independent tracks (storage and drivers,
+kernel) continue alongside.
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
@@ -31,6 +32,11 @@ without conflict.
 ## Assigned
 
 Chosen by the owner, each starting with a proposal.
+
+[Capability model implementation](capability-model-implementation.md): owner-assigned
+2026-10-14; Codex beta owns it, with Codex delta on the kernel tasks. Milestone A
+(forwarders, one environment table, typed open, libc, shell), then B (HTTP on the
+model), then C (capability pipes).
 
 [BSP pinning inventory](bsp-pinning-inventory.md): owner-requested freeze exception,
 assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
@@ -131,11 +137,11 @@ tasks 1 to 3 are complete (#545, #552, #564).
 non-rescue userland build from source on the installed system until a package
 manager exists.
 
-[Capabilities and providers](capabilities-and-providers.md): **the active design
-track (owner-led, 2026-10-14).** Typed capabilities instead of URI spellings,
-capability-valued variables, pipes and redirects that carry capabilities,
-endpoints, interchangeable providers and representations. It gates new libc,
-shell, web/HTTP and Git work.
+[Capabilities and providers](capabilities-and-providers.md): the capability model,
+settled with the owner on 2026-10-14: typed capabilities instead of URI spellings,
+universal operations, one environment, revocation, facets and retention. Its
+provider-side questions remain open; its
+[implementation](capability-model-implementation.md) is assigned.
 
 [Control, events and faults](control-events-faults.md): Pyxis's answer to signals,
 tied to Continuum.

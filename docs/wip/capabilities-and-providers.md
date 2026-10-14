@@ -114,7 +114,8 @@ There is no separate endpoint mechanism.
 
   Each uses the same URL, headers and credentials. The client does the same
   thing in every case and dispatches only on what it gets back. `unset x`
-  removes the variable; `rm $x` acts on what it holds.
+  removes the variable; `rm $x` acts on what it names. Removing through a held
+  FILE capability without a name is refused for now.
 - **Protocol options belong to preparers.** A preparer such as `http prepare`
   configures a request and issues a capability carrying it: request headers,
   including authorization such as a bearer token, the write method (POST, PUT
@@ -387,8 +388,12 @@ unmaps it, which waits for the shared-memory rules.
   - **Sharing:** exporting or copying a retained value shares its backing.
     It stays charged to whoever retained it, not to the readers, and is
     released when the last holder lets go.
-- **Expansion.** `cat $job` passes the child `job://` with that entry (see One
-  environment), so every program that opens files can use it.
+- **Expansion (decided).** Text values from literal assignments expand to their
+  text, as in bash: `f="home://notes.txt"; echo hi > $f` writes to
+  `home://notes.txt`, resolved through the caller's own environment. Every
+  other value passes as `x://` with its entry, so `cat $job` reads the reply
+  and `echo $job` prints `job://`. Inline `$(…)` used as an argument passes a
+  capability, as bash's `<(…)` does.
 - **Cheap text values.** A text value only has to behave as a read-only
   capability; it can live as an immutable inline value (for example in the
   startup record) rather than as a kernel object per variable.
