@@ -56,15 +56,16 @@ explicit implementation limits; exceeding a supported bound does not establish
 that a disk is corrupt.
 
 The protective MBR is a gate for exposing any map. It must have the MBR signature
-and exactly one `0xee` entry starting at logical block 1 and covering the disk
-through its last block, with the size field saturated at `UINT32_MAX` when
-necessary. Other entries must be zero. On 4 KiB media, bytes after the first 512
+and exactly one `0xee` entry starting at logical block 1. Normally it covers the
+disk through its last block, with the size field saturated at `UINT32_MAX` when
+necessary; the bounded larger-device exception below permits a shorter extent. Other entries must be zero. On 4 KiB media, bytes after the first 512
 bytes of the MBR block must also be zero. Legacy and hybrid MBR partition types
 are unsupported. A valid GPT copy cannot bypass an absent or invalid protective
 MBR; the scanner never repairs it.
 
-The primary header is read at logical block 1 and the backup at the disk's final
-logical block. For each copy, validation checks:
+The primary header is read at logical block 1. After full primary validation,
+its recorded alternate selects the backup; otherwise the backup is inspected at
+the disk's final logical block. For each copy, validation checks:
 
 - Signature, supported revision, header length and CRC32 with the checksum field
   zeroed, plus reserved fields and zero padding beyond the defined header.
@@ -85,10 +86,9 @@ comparison of the declared arrays. Comparing array CRCs alone is insufficient.
 Two individually valid but differing copies are ambiguous; neither wins by
 position or preference.
 
-### Larger-device image recovery scope
+### Images copied onto larger devices
 
-Owner-approved task, 2026-10-14; scanner implementation is draft and unqualified.
-The NPFS read-only enforcement scope awaits the owner. A copied image may
+A copied image may
 record its backup before the physical device end and/or retain a shorter
 protective MBR. The exception requires a valid primary, a valid reciprocal
 backup at the primary's recorded alternate, and matching declared arrays and
@@ -98,15 +98,13 @@ cover the primary array and every used partition, or have the standard
 recorded alternate is earlier refuses this exception rather than choosing
 between layouts. All reads remain bounded by the existing scan deadline.
 
-Publish the primary as read-only `GPT_DEGRADED`, with one warning naming
+The scanner publishes the primary as read-only `GPT_DEGRADED`, with one warning naming
 `sgdisk --move-second-header`. Never repair or expand partitions automatically.
 Bad CRCs, disagreement, overlaps, unsupported or unexamined metadata do not
 qualify for this exception. Existing full-sized single-copy degraded recovery
-and filesystem write-authority rules remain unchanged.
-Source review found that NPFS currently derives pool writability from requested
-rights and device flags without enforcing degraded GPT health. The draft's
-read-only map status therefore does not yet guarantee read-only NPFS operation;
-the owner must choose whether this PR adds that guard or defers the gap.
+remains unchanged. NPFS refuses writable initial opens and upgrades of degraded
+maps with `READ_ONLY`, before pool opening or writable journal recovery (owner
+decision, 2026-10-14). Filesystem rights never override degraded discovery.
 
 ## Published results
 
@@ -115,8 +113,8 @@ have zero selected copy and no exposed partitions.
 
 | Status | Meaning |
 | --- | --- |
-| `GPT_HEALTHY` | Valid protective MBR and two valid, agreeing GPT copies. The primary supplies the map. |
-| `GPT_DEGRADED` | Valid protective MBR and exactly one valid copy; the other is absent or invalid. The surviving map is read-only. |
+| `GPT_HEALTHY` | Full protective MBR coverage and two valid, agreeing GPT copies at the device endpoints. The primary supplies the map. |
+| `GPT_DEGRADED` | A surviving full-sized copy, or two agreeing copies with smaller-image placement/MBR coverage under the exception above. Read-only map. |
 | `GPT_AMBIGUOUS` | Both GPT copies validate independently but disagree. No map is selected. |
 | `GPT_ABSENT` | No protective MBR and neither GPT header is present. |
 | `GPT_INVALID` | Metadata is malformed, the protective MBR gate fails, or neither copy can supply a valid map. |
@@ -127,9 +125,10 @@ have zero selected copy and no exposed partitions.
 | `GPT_TIMED_OUT` | The scan's deadline expired during admission or read completion. |
 
 A read timeout or I/O error prevents map publication even if the other copy is
-valid. Unsupported metadata also prevents degraded fallback. Degraded discovery
-is specifically for one valid copy paired with an absent or invalid copy; it
-does not treat an unexamined or uninterpretable copy as evidence of agreement.
+valid. Unsupported metadata also prevents degraded fallback. Ordinary full-sized degraded discovery is for one valid copy paired with an
+absent or invalid copy. The larger-device exception requires two valid agreeing
+copies; neither path treats an unexamined or uninterpretable copy as evidence of
+agreement.
 
 The snapshot records disk geometry and GUID, inclusive usable bounds, selected
 copy (`1` primary, `2` backup) and used partitions in entry order. Each partition
