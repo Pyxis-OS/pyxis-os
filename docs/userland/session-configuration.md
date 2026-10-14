@@ -62,12 +62,11 @@ configuration set them. A configured variable replaces an inherited one of the
 same name. There is no separate size limit; launch fails with a diagnostic if
 the environment exceeds the 64 KiB startup metadata limit.
 
-Values are strings for now. Environment variables are expected to carry
-capabilities later, as in the
-[capability-valued shell variables](../wip/capabilities-and-providers.md#variables-and-the-environment)
-idea, so string-only is not a permanent property of this table. The parked
-[capability-valued environment](../wip/capabilities-and-providers.md) direction
-records the invariants and open questions.
+This Lua configuration field supplies TEXT entries. The native
+[process environment](../interfaces/environment.md) also supports real capability
+entries; it never encodes grants as strings. Capability-valued configuration and
+[shell assignment](../wip/capabilities-and-providers.md#variables-and-the-environment)
+remain separate work in the accepted capability-model milestone.
 
 Timezone names follow libc's IANA-name syntax: slash-separated components of
 ASCII letters, digits, underscore, hyphen and plus. UTC needs no file; other

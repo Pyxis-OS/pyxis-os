@@ -273,7 +273,10 @@ launch captures exported entries and explicit child overrides without mutating
 the parent. Canonical headers are `abi/environment.h` and userland `environment.h`;
 helpers are `environment_lookup`, `environment_set_capability`,
 `environment_set_text`, `environment_unset` and `environment_snapshot`.
-Exact bounded replies/layout remain task-2 scope work, not placeholder APIs.
+The concrete layouts and ownership rules are in the
+[environment reference](../interfaces/environment.md). A3 can add optional native
+immutable-FILE materialization from an already captured TEXT generation, outside
+the table guard; ordinary TEXT lookup performs no eager file copy or second lookup.
 
 ## Task 2 scope (delta, 2026-10-14)
 
@@ -339,11 +342,6 @@ fork change is qualified; provide the exact commit and commands before adoption.
 
 ### Accepted lifetime decision: standard streams (owner, 2026-10-14)
 
-The existing startup stream grants have one descriptor owner; `close(1)` can
-release the final pipe writer while the process remains alive. A normal owned
-environment entry plus an owned LOOKUP capture would retain two grants, keeping
-that writer alive after close. This is a behaviour choice, not ABI layout.
-
 **Accepted:** stdio captures the original `stdin`, `stdout`, `stderr`
 and optional `stdin.status` entries with non-reused publication identities.
 Closing/replacing an original standard descriptor conditionally removes its
@@ -357,5 +355,7 @@ and native release is still attempted if cleanup fails, preserving close's
 invalidates/no-retry rule. Captured snapshots deliberately retain authority and
 must be released before application execution or unrelated waits.
 
-The owner accepted this profile to preserve EOF after `close(1)`; implementation
-is assigned with the baseline captured. All three task-2 decisions are settled.
+All three task-2 decisions are settled. Implementation and ordinary image builds
+are in #832; matched 1/4-CPU qualification and the LLVM/container dependency remain
+recorded separately. The temporary shell HTTP `@name` registry remains private
+operation state until A5/B6, not a generic resolver or second process environment.

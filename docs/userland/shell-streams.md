@@ -14,17 +14,20 @@ cat missing 2> home://errors | cat > home://empty
 
 ## Stream authority and ownership
 
-Launch selects dedicated stream grants with explicit protocol tags. Each stdin
+Launch stages ordinary `stdin`, `stdout`, `stderr` and optional `stdin.status`
+environment entries with explicitly selected grant authority. Each stdin
 handle has READ authority; stdout and stderr have WRITE authority. A stream's
 FILE grant may be native or [exported by a provider](../interfaces/file-providers.md); exported
 streams additionally carry CALL transport, while native streams carry zero.
 HTTP response stdin selects a trusted STREAM READ/STATUS-only observation pair;
 launch copies only those declared facets, never control or body authority.
-The kernel checks the interface and both authority masks. A stream's
-grant index cannot also be used by another stream or an ordinary startup binding.
-Libc descriptors adopt those handles directly, without leaving unused startup
-copies. Each FILE has a non-owning association that is invalidated before the
-descriptor closes or its number is reused; the wrapper cannot keep a pipe alive.
+The kernel validates the selected source grants. Libc checks each captured stream
+interface and its masks, adopting owned LOOKUP grants and releasing the temporary
+snapshot before application execution. Each FILE has a non-owning descriptor
+association invalidated before close or number reuse. An original standard
+descriptor conditionally removes its still-matching environment publications;
+newer bindings and dup aliases are preserved. A FILE wrapper keeps no extra pipe
+owner alive.
 Missing bindings remain unavailable with EBADF; they do not become EOF or fall
 back to another output or the terminal. Named terminal capabilities are separate.
 See [stdio](stdio.md#standard-streams-formatting-and-exit) and
@@ -41,10 +44,9 @@ input may read ahead on file, pipe and response streams; those bytes stay in the
 process and do not accompany a delegated stream. See
 [input read-ahead](stdio.md#input-read-ahead).
 
-`startup_stream()` returns an immutable borrowed snapshot. It keeps no native
-reference alive. After its owning descriptor closes, the snapshot must not be
-used or forwarded to a child; descriptor-number reuse does not refresh it.
-Existing launch consumers may borrow it only while that owner remains live.
+Native launch consumers use `pyxis_stdio_stream` to borrow the current live
+FILE binding while its owner remains live. No immutable startup stream snapshot
+exists. Descriptor-number reuse does not reconnect a closed FILE wrapper.
 
 ## Pipe and launch lifetime
 

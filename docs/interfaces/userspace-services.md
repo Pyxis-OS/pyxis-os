@@ -35,10 +35,10 @@ provider's incoming queue; that uses the separate owned receiver. Providers
 check the kernel-authenticated resource rights for each operation. Payload bytes,
 embedded pointers and numeric handles do not confer authority across processes.
 
-Namespace lookup exposes every binding in the delegated map. A restricted child
-receives a separately populated namespace. Ordinary shell children receive LOOKUP
-only; trusted session handoff can preserve held management authority. Namespace
-membership is never inferred from the caller's space.
+LOOKUP captures an exact entry from the caller's own process environment.
+A restricted child receives an explicitly selected independent table; private
+controllers are excluded unless a trusted handoff deliberately delegates them.
+Space membership supplies no implicit environment authority.
 
 ## Delivery and lifetime
 
@@ -112,7 +112,7 @@ exits naturally after all its exports retire.
 
 ## Boot and use
 
-Development and read-only init create separate namespaces and publish `textfs`
+Development and read-only init publish separate `textfs` instances
 as `text`. They launch `boot://session.pxe` with `--start-services`, which applies
 configuration before running `boot://init-services`. That script publishes `httpfs`
 as `http` with the configured DNS server, then optionally publishes a separate

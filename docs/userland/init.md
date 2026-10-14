@@ -412,7 +412,7 @@ The userland repository supplies shebang scripts using `boot://shell.pxe`:
   interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
   and permits that handoff. It runs only when session selects `--start-services`.
 - `init/remote.pxs`, installed as `boot://init-remote`, receives optional HOST
-  read-write, creates the service namespace and hands off through
+  read-write and hands off through
   `session boot://session.pxe --start-remote-services`.
 - `init/installed.pxs`, installed as `boot://init-installed`, receives
   `system://` read-write from `installed.lua` and hands off like the
@@ -626,7 +626,7 @@ Failure to load boot init stops the boot. A space init that cannot be opened
 or launched leaves its space unstarted, with the reason on its tab. A running
 script stops on its first failed command; EOF exits without opening a prompt.
 Inits and sessions are not restarted. Their space, terminal contents and shared
-namespace roots survive exit. A space whose init is `boot://shell.pxe` opens a
+filesystem trees survive exit. A space whose init is `boot://shell.pxe` opens a
 shell directly, as the `rescue` space does. See [later lifecycle work](../wip/later-os-directions.md#execution-lifecycle)
 for deferred supervision and process replacement.
 

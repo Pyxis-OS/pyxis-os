@@ -82,12 +82,13 @@ transfer; both return bytes a FILE read ahead before any backend transfer.
 Supported operations, selected mode and granted native rights remain separate;
 an adapter preserves authority and reports denied or unsupported operations.
 
-Startup entries adopt the exclusive standard-stream handles before heap
-initialization without copying or changing their rights. Missing bindings have
-no fallback authority. `startup_stream()` is an immutable borrowed snapshot:
-it retains no reference, becomes stale when its owning descriptor closes, and
-must then neither be used nor forwarded to a child. Number reuse does not
-refresh it. See [stdio](stdio.md) and [stream delegation](shell-streams.md).
+Libc captures owned standard-stream grants from one environment snapshot before
+heap initialization, without changing their rights, then releases the snapshot.
+Original descriptor close/replacement conditionally removes only its matching
+publications. Missing entries have no fallback authority; newer entries and
+duplicate descriptors retain their independent lifetime. Native child delegation
+uses the live FILE accessor. See [stdio](stdio.md) and
+[stream delegation](shell-streams.md).
 
 ## Temporary files and live stream delegation
 
@@ -101,7 +102,7 @@ buffer-control functions are exported.
 
 The native `<pyxis/stdio.h>` accessor borrows a current FILE-owned stream for
 launch delegation. It adds no descriptor alias or native reference and preserves
-private stdio state. Closed standard streams are NONE even after descriptor
+private stdio state. Closed standard streams return an empty binding even after descriptor
 reuse; allocated invalid streams fail with EBADF. See
 [live stream delegation](stdio.md).
 

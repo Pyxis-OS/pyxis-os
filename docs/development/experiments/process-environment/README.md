@@ -89,10 +89,83 @@ Lua wrapper 36,094.7 / 37,681.69 ns per call on 1/4 CPUs; descriptor benchmark
 clock references remain in each raw header. These large nested clock costs and
 sample variation prevent fine-grained native cost attribution.
 
-## Checkpoint
+## Implementation qualification, 2026-10-14
 
-Both task-2 scope defaults and the stream-entry retirement profile are accepted
-(owner, 2026-10-14), in the
-[milestone](../../../wip/capability-model-implementation.md#accepted-lifetime-decision-standard-streams-owner-2026-10-14).
-No task-2 qualification is claimed by this baseline. Follow with the matching kernel/userland/ports and
-LLVM target-source migration, build and interactive 1/4-CPU QEMU/GDB checks.
+Built code revision `c9f25f5f64919e84fc760da5a971f4e8d079222e`, rebased on
+main `97a5c556a7ec`; userland `6f9276aa034b`, ports `2c49e86c8989`, unchanged
+fs/lwIP. Complete ordinary image build passed with the existing e0801c2 builder.
+Fresh 1-CPU then 4-CPU boots used the baseline configuration and exact commands.
+All 12 measured connections exited 0 with complete FINAL drain; every IPC pass
+and every 1 MiB transfer verified. No build, debugger or profiler overlapped
+sampling. Host contention was not controlled; this is a separated nested before/
+after, not interleaved native evidence. Retain all samples.
+
+Raw captures, screenshots, GDB record and exact images:
+`/shared/present/capability-environment/implementation-c9f25f5f/`;
+SHA256SUMS hash `4d510f3cb6c74482c1e4b984f55c34f34fb6f71d3d7c622c2f8dc0208c174719`.
+ELF `a916976e551b55c3ea44c0de60b3d3f29080e9fbe168555b156fbc26b6c59cb4`,
+initrd `d31fb99a465d168a3812c02946c55f74718d77056a4e113d8b63f314f0c7f5c3`,
+ISO `5b123ff098aac8a8216037f64a5cd478c82387dff34b2df4b1ae5ab2007b3d77`.
+
+| IPC workload, ms: median (range), 100 verified passes | 1 CPU | 4 CPUs |
+| --- | --- | --- |
+| CALL64 completion | 84.743 (83.838–89.477) | 100.921 (70.572–126.360) |
+| CALL4096 completion | 85.745 (84.067–123.942) | 102.355 (75.209–141.229) |
+| SEND64 completion | 11.989 (11.651–23.509) | 16.130 (11.778–23.644) |
+| SEND64 admission | 1.113 (1.085–2.043) | 1.227 (1.195–2.416) |
+| SEND4096 completion | 13.202 (12.918–14.036) | 15.756 (11.904–28.856) |
+| SEND4096 admission | 1.264 (1.238–1.469) | 1.315 (1.266–2.577) |
+
+| OPEN/launch/pipe, µs: median (range), 10 samples | 1 CPU | 4 CPUs |
+| --- | --- | --- |
+| Native descriptor OPEN | 37 (36–40) | 44 (39–138) |
+| Lua boot FILE creation | 35.870 (35.660–40.380) | 40.910 (40.020–47.190) |
+| Lua text FILE creation | 2061.465 (974.650–2946.930) | 1584.265 (696.520–2788.320) |
+| Echo launch through exit | 8080.800 (2764.620–8916.800) | 10219.985 (2430.600–16824.960) |
+| Pipe acceptance, verified 1 MiB | 1404 (1389–1440) | 1060 (278–3434) |
+| Pipe completion, verified 1 MiB | 1776 (1764–1845) | 1845 (764–3752) |
+
+Lua clock reference was 34,734.6 / 36,991.77 ns per call (1/4 CPUs), not subtracted.
+The slower launch medians and 4-CPU CALL4096 median remain observations with
+broad overlapping ranges, not a native attribution. Source inspection identifies
+new environment allocation/capture/lookup work on launch/OPEN; ordinary IPC has
+no new environment lookup per message. Startup mapped bytes now exclude kernel
+heap table/cells, so a smaller startup mapping cannot establish lower total memory.
+The owner's matched native after-A/C runs remain due.
+
+Interactive 1/4-CPU checks passed CAP alias lookup/removal, service pair collision
+refusal, replacement through an already-held slot and use after publication/
+controller removal. Four CPUs also passed exported TEXT inheritance into Lua.
+The jobs-enabled local Multiplexer passed an explicit child TEXT override and
+unchanged parent value, with captured output and confirmed job close. Remote's
+unconfigured job profile honestly returned UNAVAILABLE; a mistaken standalone
+`bin://lua.pxe` image returned NOT_FOUND. The successful native job used the
+held content path `bin://lua.pxb/app/bin/lua.pxe`, without bundle expansion.
+
+Existing `threadprobe runtime-io` reported PASS on both configurations, including
+shared/dup FILE operations, positioned data, CLOSE/reuse and EOF/EPIPE. Its blocked
+CALL checkpoints were not inspected in this run. Local and remote mux split,
+numeric focus, pane teardown, reconnect and disconnect worked; Neovim opened and
+quit in a remote mux pane. GDB inspected environment operations on both CPU counts:
+after removals the shell returned to 39 entries/355 name-text bytes, with unlocked
+table guard, zero VM borrowers/reserved capability slots, one logical owner of
+the inspected cell and an empty completed queue. No injected calls or user-data
+writes. These are selected observations, not instruction-level concurrency proofs.
+
+Source review covered SET/UNSET/snapshot exclusion and lifetime; concurrent
+mutation versus snapshot and policy-exhaustion races were not runtime-stressed.
+First boot exposed cleanup exceeding the 16-mutation admission policy; exact
+per-publication cleanup fixed it. Equal-generation TEXT readers now reuse their
+cache publication, preserving borrowed pointers without mutation. No new tests,
+boot automation or klog lines. All own QEMU/GDB/client jobs stopped.
+
+## Remaining dependency
+
+All three owner decisions are accepted. Userland #261 and ports #116 are published;
+LLVM #9 at `df87791031b9b81060d99b7fb3c797aae6e68efb` object-compiles all five
+affected target units against this ABI. Full hosted linking/runtime qualification
+is pending the owner-published matching builder and a fresh immutable payload.
+The registry currently reports manifest unknown for the df87791 tag. Owner build
+branch `toolchain/process-environment-container` at `7fe4e887` prepares pin/tag
+adoption; production provenance matching remains unchanged. Task 2 stays unchecked
+and #832 stays draft until that dependency and remaining qualification are complete.

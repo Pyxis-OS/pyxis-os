@@ -23,7 +23,7 @@ exit
 ```
 
 On ordinary exit, process cleanup logs completion in Caelum and releases the shell's
-resources. Its space, tab, framebuffer contents and shared namespace roots
+resources. Its space, tab, framebuffer contents and shared filesystem trees
 remain alive. There is no automatic restart or new input consumer in that
 space, but tab switching and kernel presentation continue. In the single-CPU
 fallback, Caelum logs and shell output share a TTY and can disrupt line editing.
@@ -598,7 +598,7 @@ It reads one command per line with the same parser, `cd`, `exit` and foreground
 execution as interactive mode, without prompts or command echo. Terminal input
 stays available to foreground children.
 
-Pyxis shell scripts are not sh-compatible (`namespace` and `service` commands,
+Pyxis shell scripts are not sh-compatible (`env` and `service` commands,
 `=> name` and `@name` operands), so by convention they use the `.pxs` extension,
 not `.sh`; the packaged init scripts are `init/*.pxs` in the userland repository.
 The shell does not check the extension: a script runs through its shebang.
