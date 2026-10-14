@@ -124,10 +124,12 @@ The kernel comes from the live boot's original immutable source file. The
 installed archive is the live archive without the moved program roots and bundle
 descendants, filtered in memory. Descendant matching respects path components:
 removing `nvim.pxb/` leaves an unrelated name such as `nvim.pxb-extra` intact.
-The configuration comes from the packaged template, using the
-existing disk GUID, the three-second menu and the normal and rescue entries,
-with no Install entry. The revision
-record comes from the running live kernel's SYSTEM_INFO. Install and Update
+The installer generates the configuration from an explicit allowlist: exactly the
+normal and rescue entries, a three-second timeout and the existing disk GUID.
+Live-media installer and FAT32 tool entries are never imported. Update rewrites
+the ESP menu even when the program revision is unchanged, removing extra entries
+from older installations. The revision record comes from the running live
+kernel's SYSTEM_INFO. Install and Update
 share the fresh-ESP writer; Update invokes neither GPT writing nor pool formatting.
 The writer clears and flushes the reserved area, including both FAT boot sectors,
 before replacing metadata or file data. It keeps boot geometry invalid until
