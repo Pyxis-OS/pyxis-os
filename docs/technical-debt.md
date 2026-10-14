@@ -1877,6 +1877,20 @@ write or flush, or an abandoned published mutation, latches write failure for th
 writeback error), with no replay or later successful flush clearing either uncertainty; revisit recovery only with an error-acknowledgment and ownership contract. Mutation
 failure and abandonment, MODE SENSE fallback, unsupported flush and malformed qualification responses are source-reviewed only.
 
+## USB stick write throughput
+
+On the ThinkPad's SanDisk 32 GB USB 3.2 stick, Pyxis writes a 32 MiB file at
+about 3–12 MB/s, varying widely between samples and boots, while Linux writes
+25–60 MB/s on the same stick. Larger SuperSpeed WRITE commands (up to 512 KiB)
+gave no repeatable gain ([sweep record](development/experiments/usb-superspeed-transfers.md#native-write-sweep-2026-10-14)).
+Each workload issues about 15,200 small 4 KiB WRITEs at every command size, and
+slow samples spend their time waiting for the device in the data and status
+phases. The likely cause is the filesystem's small-write pattern (metadata,
+journal and reclamation) on media that handles scattered small writes poorly;
+this is unproven. Consequence: copying to USB sticks is several times slower than
+on Linux. Revisit with the next storage task: attribute the small WRITEs to
+their npfs sources before proposing a change.
+
 ## USB controller and transport coverage
 
 xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers (such as the ThinkPad's Realtek DASH EHCI) remain unsupported inventory records, `lsusb`

@@ -71,7 +71,7 @@ struct usb_block_pool *usb_block_prepare(struct usb_host_controller *host, size_
   memset(pool->devices, 0, capacity * sizeof(*pool->devices));
   for (unsigned i = 0; i < USB_STORAGE_DEVICE_BUDGET; ++i) {
     for (unsigned j = 0; j < USB_BLOCK_SLOTS; ++j) {
-      pool->buffers[i][j] = kmalloc(USB_SUPER_BULK_BYTES);
+      pool->buffers[i][j] = kmalloc(USB_BULK_BYTES);
     }
   }
   return pool;
@@ -112,7 +112,7 @@ struct usb_block_device *usb_block_bind(struct usb_block_pool *pool, struct usb_
       device->preparation = BLOCK_DEVICE_READY;
       device->info = (struct block_info){
         .block_count = bot->blocks, .block_size = bot->block_bytes,
-        .max_transfer = bot->transfer_bytes, .request_slots = USB_BLOCK_SLOTS,
+        .max_transfer = USB_BULK_BYTES, .request_slots = USB_BLOCK_SLOTS,
         .writable = bot->writable, .flush_supported = bot->flush_supported,
       };
     }
@@ -359,12 +359,12 @@ void usb_block_process(struct usb_block_pool *pool)
       enum usb_bot_io_result outcome;
       if (slot->operation == BLOCK_READ) {
         outcome = usb_bot_read(device->bot, slot->first_block, slot->block_count,
-            slot->data, device->info.max_transfer, deadline, &slot->completion.submitted);
+            slot->data, USB_BULK_BYTES, deadline, &slot->completion.submitted);
       } else if (slot->operation == BLOCK_WRITE) {
         outcome = usb_bot_write(device->bot, slot->first_block, slot->block_count,
-            slot->data, device->info.max_transfer, deadline, &slot->completion.submitted);
+            slot->data, USB_BULK_BYTES, deadline, &slot->completion.submitted);
       } else {
-        outcome = usb_bot_flush(device->bot, slot->data, device->info.max_transfer,
+        outcome = usb_bot_flush(device->bot, slot->data, USB_BULK_BYTES,
             deadline, &slot->completion.submitted);
       }
       flags = cpu_save_interrupts();
