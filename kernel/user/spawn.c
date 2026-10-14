@@ -450,6 +450,9 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
     space_report_unstarted(space, reason);
     return status;
   }
+  if (request->boot_focus) {
+    space_boot_focus_arm(space);
+  }
   klog("userspace: space %s started\n", space->name);
   return CALL_OK;
 }

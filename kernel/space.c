@@ -60,6 +60,10 @@ static const struct framebuffer *screen;
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
 static void handle_space_input(void);
+static void switch_space(struct space *next);
+static struct space *boot_focus_space;
+static bool boot_focus_nominated, boot_focus_cancelled, boot_focus_checked;
+static uint64_t boot_focus_tty_generation;
 /* Registry index of the leftmost visible tab. Presenter-owned. */
 static size_t viewport_first;
 /* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
@@ -1032,6 +1036,67 @@ static bool present_power_overlay(const struct pointer_frame *pointer)
   return presented;
 }
 
+void space_boot_focus_arm(struct space *space)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(space && space != caelum_space);
+  if (boot_focus_nominated) {
+    return;
+  }
+  boot_focus_nominated = true;
+  if (!boot_focus_cancelled) {
+    boot_focus_space = space;
+    boot_focus_checked = false;
+  }
+}
+
+void space_boot_focus_cancel(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  boot_focus_cancelled = true;
+  boot_focus_space = NULL;
+}
+
+/* Inspect retained content under the output lock, before snapshotting the new
+ * active space and its pointer. No handshake with a particular application. */
+static void try_boot_focus(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct space *space = boot_focus_space;
+  if (!space || power_overlay_shown()) {
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  if (active_space != caelum_space) {
+    space_boot_focus_cancel();
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  bool locked = log_begin();
+  if (!locked) {
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  bool ready = space->display->presented && space->display->visible;
+  struct tty *tty = space->tty;
+  if (!ready && (!boot_focus_checked || boot_focus_tty_generation != tty->visual_generation)) {
+    boot_focus_checked = true;
+    boot_focus_tty_generation = tty->visual_generation;
+    for (size_t i = 0; i < (size_t)tty->width * tty->height; ++i) {
+      if (tty->cells[i].character != ' ') {
+        ready = true;
+        break;
+      }
+    }
+  }
+  log_end(locked);
+  if (ready) {
+    boot_focus_space = NULL;
+    switch_space(space);
+  }
+  cpu_restore_interrupts(flags);
+}
+
 /* Sample under each input's existing owner. Only the captured generations are
  * acknowledged after successful completion; intervening writers stay dirty. */
 static bool presentation_snapshot(struct presentation_generations *generation,
@@ -1094,6 +1159,7 @@ void space_present()
   if (!presenting && !begin_presenting()) {
     return;
   }
+  try_boot_focus();
   struct presentation_generations generation;
   struct pointer_frame pointer_snapshot;
   bool capture;

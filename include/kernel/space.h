@@ -77,6 +77,11 @@ void space_report(struct space *space, const char *text);
  * "space NAME not started: REASON" on its tab and in the log. */
 void space_report_unstarted(struct space *space, const char *reason);
 
+/* BSP/IF=0. Trusted successful startup nominates at most one boot selection.
+ * Physical key presses/clicks cancel it permanently, even before nomination. */
+void space_boot_focus_arm(struct space *space);
+void space_boot_focus_cancel(void);
+
 /* Copies a validated title without allocation. Preserves IF. */
 bool space_set_title(struct space *space, const char *title, size_t length);
 

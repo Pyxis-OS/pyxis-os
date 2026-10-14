@@ -294,6 +294,7 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
   capture->space.terminal_control = request.flags & SPACE_CREATE_TERMINAL_CONTROL;
   capture->space.clipboard_local = request.flags & SPACE_CREATE_CLIPBOARD_LOCAL;
   capture->space.clipboard_shared = request.flags & SPACE_CREATE_CLIPBOARD_SHARED;
+  capture->space.boot_focus = request.flags & SPACE_CREATE_BOOT_FOCUS;
   memcpy(capture->space.name, name, request.name_length + 1);
   memcpy(capture->space.title, title, request.title_length + 1);
 

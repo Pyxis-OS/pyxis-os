@@ -12,6 +12,7 @@
 #include <kernel/mouse.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
+#include <kernel/space.h>
 #include <kernel/memory.h>
 #include <stdatomic.h>
 #include "usb/core.h"
@@ -166,6 +167,9 @@ static void change_key(struct input_source *source, enum key_code key, bool down
   }
   source->keys[key] = down;
   if (down) {
+    if (!source->synthetic) {
+      space_boot_focus_cancel();
+    }
     source->suppressed_keys[key] = false;
     record_typing(source, key, now);
     if (!held[key]++) {
@@ -476,6 +480,10 @@ void input_pointer_report(struct input_source *source, int32_t dx, int32_t dy,
 {
   assert_input_owner();
   KASSERT(source && source->pointer_live);
+  if (!source->synthetic && !source->pointer_initial_hold &&
+      (buttons & ~source->pending_buttons & ~source->suppressed_buttons)) {
+    space_boot_focus_cancel();
+  }
   source->pending_buttons = buttons;
   queue_pointer((struct pending_pointer){.source = source,
       .report = {.dx = dx, .dy = dy,
