@@ -450,13 +450,13 @@ static bool service_receives(void)
     }
     flags = cpu_save_interrupts();
     bool denied = forwarder_operation_denied(call->context);
-    cpu_restore_interrupts(flags);
     if (status == CALL_OK && denied) {
       status = CALL_DENIED;
       if (call->completion) {
         native_completion_request_cancel(call->completion, CALL_DENIED);
       }
     }
+    cpu_restore_interrupts(flags);
     if (status == CALL_OK) {
       status = endpoint_status(endpoint);
     }
