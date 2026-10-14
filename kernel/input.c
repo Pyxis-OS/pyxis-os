@@ -250,6 +250,7 @@ void input_keyboard_snapshot(struct input_source *source, const bool keys[KEY_CO
   KASSERT(source && source->keyboard_live && keys);
   drain_ps2_keyboard();
   if (source->keyboard_initial_hold) {
+    bool unresolved = source->keyboard_unresolved;
     source->keyboard_unresolved = false;
     bool any_held = false;
     for (size_t key = 1; key < KEY_COUNT; ++key) {
@@ -257,6 +258,9 @@ void input_keyboard_snapshot(struct input_source *source, const bool keys[KEY_CO
       if (source->keys[key] && !keys[key]) {
         change_key(source, key, false, false, 0);
       } else if (keys[key]) {
+        if (!source->keys[key] && !source->synthetic && !unresolved) {
+          space_boot_focus_cancel();
+        }
         source->keys[key] = true;
         source->suppressed_keys[key] = true;
       }
@@ -406,6 +410,7 @@ void input_source_initial_pointer(struct input_source *source, uint32_t buttons)
   assert_input_owner();
   KASSERT(source && source->pointer_live);
   source->pending_buttons = buttons;
+  source->focus_suppressed_buttons = buttons;
   source->suppressed_buttons = source->pending_buttons;
   source->pointer_initial_hold = source->pending_buttons != 0;
   queue_pointer((struct pending_pointer){.source = source,
@@ -480,7 +485,9 @@ void input_pointer_report(struct input_source *source, int32_t dx, int32_t dy,
 {
   assert_input_owner();
   KASSERT(source && source->pointer_live);
-  if (!source->synthetic && (buttons & ~source->pending_buttons)) {
+  source->focus_suppressed_buttons &= buttons;
+  if (!source->synthetic &&
+      (buttons & ~source->pending_buttons & ~source->focus_suppressed_buttons)) {
     space_boot_focus_cancel();
   }
   source->pending_buttons = buttons;
@@ -618,6 +625,7 @@ static void lose_ps2_pointer(void)
   for (size_t i = 0; i < sizeof(ps2_sources) / sizeof(ps2_sources[0]); ++i) {
     input_source_lost(ps2_sources[i]);
     ps2_sources[i]->suppressed_buttons = PS2_BUTTONS;
+    ps2_sources[i]->focus_suppressed_buttons = PS2_BUTTONS;
   }
   if (touchpad_initialized) {
     touchpad_reset();
