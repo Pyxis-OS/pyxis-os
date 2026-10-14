@@ -140,3 +140,67 @@ No real ESP writes are authorized.
 - [x] Add observable invalid state and the native bound-control CHECK ABI/helper.
 - [x] Coordinate the once-per-publication CHECK with alpha and qualify the actual
   128-MiB editor publication under the unchanged lease.
+
+
+## Assigned follow-up: FAT mirror repair
+
+Owner direction accepted 2026-10-14: when mirrored FATs disagree, FAT1 is
+primary; a mismatch alone must not refuse RW admission. Report the mismatch
+once and repair FAT2 from FAT1 with the next confirmed mutation. CHECK still
+validates FAT1's own structure. **This follow-up is not implemented.**
+
+Inspected baseline: Pyxis `dabfc7ca`, fs `d84f8084` (also dependency main).
+`fat32_fat_entry` in [volume.c](../../fs/fat32/volume.c) currently compares the
+valid 28-bit entries and returns CORRUPT on disagreement, including during
+geometry admission. The mounted engine subsequently uses the same reader for
+CHECK, chain reads and local mutations. Its
+[write planner](../../fs/fat32/mounted.c) writes both mirrors and durably marks
+dirty before effects. Those dirty/seal, allocation-proof, interval, retained
+handle and uncertain-writer contracts stay in force. FAT1 corruption, bad
+geometry or actual backing I/O failure must still refuse honestly; no choosing
+a more convenient FAT or reconstructing chains from FAT2.
+
+Small scope: a mounted-view policy in the shared engine and kernel adapter,
+with no new authority or public mount operation. Retain a bounded map of
+mismatching sectors containing valid FAT entries, charged to the mount from
+geometry; unused overprovisioned FAT sectors must not inflate it. Reader and
+CHECK results expose pending mismatch information to the adapter, which logs
+once per mount without putting logging in the freestanding engine. Repair
+uses bounded caller-owned buffers, not a whole-FAT image or extra allocation
+bitmap. Allocate/charge needed backing before effects; failure remains honest
+NO_MEMORY/LIMIT. Healthy mirrors keep their ordinary mutation path.
+
+Two proposed defaults await the owner before code:
+
+1. **Where tolerance applies. Default:** native mounted RO and RW views read
+   FAT1 and retain/report a mismatching FAT2. RO never repairs, including CHECK,
+   sync or release. Keep the standalone strict inspector and raw scratch writer
+   strict, preserving their independent validation role; the installer's lenient
+   recovery reader remains separate. This confines the accepted mounted recovery
+   policy without silently changing every shared-engine caller.
+2. **Repair boundary. Default:** finish ordinary local validation and resource
+   preparation first. On the first effective mutation, durably mark dirty, repair
+   only the mismatching FAT2 sectors from current FAT1 through bounded buffers,
+   and flush the repair before publishing file/namespace effects. Prepared
+   mirrored updates must derive from the repaired primary image, not stale FAT2.
+   Clear pending state only after confirmed repair; unconfirmed repair write or
+   flush freezes the writer with its phase/sector and recovery backing, as today.
+   A rejected/no-op operation, CHECK, ordinary sync, power seal or retirement
+   does not initiate repair. No fallback, automatic retry or lease extension.
+
+After this task the owner can: mount a structurally valid FAT1 despite a stale
+mirror, read it without repair, and have its first authorized mutation reconcile
+the mirror durably. This is not general fsck, dirty-volume recovery or native
+ESP write authorization.
+
+Delivery: fs dependency PR first, then the parent pin/kernel integration. No
+userland/ports dependency is expected unless inspection finds a real helper
+consumer change. Baseline the healthy admission/CHECK/tiny-write path before
+code and repeat matched runs after. Qualification uses disposable GPT VirtIO
+images: mismatched allocation/chain and reserved clean-bit entries, valid FAT1
+with invalid FAT2, invalid FAT1 with valid FAT2, one-FAT media, RO no-write
+comparison, first-mutation repair/independent fsck, later mutation/CHECK,
+held-file and clean-power behaviour, and repair failure retention through the
+existing inspection tools. Keep validation/work bounds and confined extents;
+no writes to a real ESP or native stick. Timing hold is lifted, but no baseline
+or implementation starts before the two scope defaults are settled.
