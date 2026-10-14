@@ -179,3 +179,26 @@ transfers need a separate ownership contract.
 [Prepared HTTP transactions](http-transactions.md) add a separate PREPARE and
 forward-only STREAM contract. Private HTTP continuation returns snapshots and keeps
 its redirect/budget semantics; it does not implicitly commit a POST.
+
+## Describe and error-body contract
+
+**Owner accepted, 2026-10-14; implementation in progress.** Issuers publish a
+bounded immutable description on their owned receiver; describe reads the latest
+kernel-held snapshot without provider calls. Kernel-attested protocol and both
+authority masks are separate from declared outcome/detail/media/length fields.
+Unknown native backing length remains unknown rather than waiting for I/O.
+
+Error bodies are copied once into kernel-held native immutable FILE snapshots.
+Publication takes bytes, never a provider-served capability. Returned READ-only
+bodies remain readable after provider exit or revocation; they are independent
+copied data, not newly opened children of the source. Replacing or clearing a
+description releases only its ownership; returned body grants survive. This
+prevents description/body reference cycles. Ordinary OPEN still preserves source
+lineage. No writable body grant is published, and no subsequent write/resize is
+allowed.
+
+The [description ABI](../../include/abi/describe.h) bounds detail to 255 bytes,
+media type to 127, and each copied error body to 64 KiB (a starting storage
+budget). Empty bodies are distinguishable from absent bodies. Metadata-only
+queries need no handle slot; including a body requires one immediately available
+slot and returns LIMIT rather than waiting for allocation when full.

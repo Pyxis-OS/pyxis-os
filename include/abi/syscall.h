@@ -10,6 +10,7 @@
 #define SYSCALL_HANDLE_INFO UINT64_C(5)
 #define SYSCALL_WAIT_MANY UINT64_C(6)
 #define SYSCALL_FORWARDER_CREATE UINT64_C(7)
+#define SYSCALL_DESCRIBE UINT64_C(8)
 #define SYSCALL_EXIT UINT64_C(-1)
 
 enum call_status {
@@ -60,6 +61,8 @@ enum call_status {
  * It exposes no object identity and requires no right beyond holding the handle.
  * FORWARDER_CREATE takes forwarder_create and forwarder_reply addresses in
  * RDI/RSI; it publishes both holder/controller handles or neither (forwarder.h).
+ * DESCRIBE takes handle, flags and describe_reply address in RDI/RSI/RDX;
+ * the provider-free query and optional owned snapshot are defined in describe.h.
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
  * returns its fixed reply on operation failure too, with status still in RAX.
