@@ -27,9 +27,21 @@ text result's NOT_FOUND/ERROR_BODY backed by a sealed 33-byte native RAM FILE,
 with no host/npfs/FAT32 node. This establishes construction and native-body
 attestation, not a read after provider exit.
 
-Daybreak qualification requested on #833: handed-out body read after provider
-exit; empty/max bodies; invalid publication preserving the old cache; immediate
-full-table CALL_LIMIT; typed held-directory/cwd-chain and captured-value lifetime.
-Those remain pending runtime results; source inspection is not a pass. Task 3
-remains unchecked. Native after-A/after-C repeats remain due in the
-[baseline record](capability-model-baseline.md). Raw captures stay local in `build/`.
+## Exact-head lifetime and admission checks
+
+Four-CPU QEMU qualification at parent `24c2d820`, userland `8ac71538` and
+ports `efe8d877` found no confirmed contract violation.
+
+| Check | Observed result |
+| --- | --- |
+| Empty and 65,536-byte error bodies handed out before provider exit | Both remained readable afterward |
+| Invalid description publication; sealed body WRITE/RESIZE | Prior body preserved; both mutations refused |
+| All 64 handle slots occupied | Describe with body returned CALL_LIMIT; metadata-only describe succeeded; freeing a slot allowed body capture |
+| TEXT/CAP name opens, capture across replacement, held-directory traversal | Passed, including refusal to cross the `..` boundary |
+| 300 concurrent CREATE rounds | 294 CALL_ALREADY_EXISTS, 6 found the created file; no unexpected result |
+| Expired provider deadline; five malformed provider replies | CALL_TIMED_OUT; malformed replies rejected or explicit failure without a handle |
+
+These are observed behaviour, not a heap-leak proof: no GDB post-close object
+counts were collected. Raw output remains outside the repository in the review
+workspace. Task A3 is qualified; native after-A/after-C repeats remain due in the
+[baseline record](capability-model-baseline.md).

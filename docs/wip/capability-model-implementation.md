@@ -203,7 +203,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
   declared required or optional entries. Kernel namespaces, the namespace grant
   and the `namespace` commands are removed; `service start` returns a slot from
   task 1.
-- [ ] **3. Typed open and `describe`.** The generic OPEN with intent flags and no
+- [x] **3. Typed open and `describe`.** The generic OPEN with intent flags and no
   protocol fields, open on held capabilities, typed results checked against the
   kernel's protocol, the `describe` operation and the outcome classes (ok, not
   found, denied, I/O error, too large, aborted, uncertain) with their `errno`
