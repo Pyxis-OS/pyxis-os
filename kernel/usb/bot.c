@@ -555,7 +555,7 @@ enum usb_bot_io_result usb_bot_write(struct usb_bot *bot, uint64_t lba, uint32_t
   return transfer_blocks(bot, true, lba, count, scratch, scratch_bytes, overall, submitted);
 }
 
-static enum usb_bot_io_result synchronize_cache(struct usb_bot *bot, void *scratch,
+static enum usb_bot_io_result synchronize_cache(struct usb_bot *bot,
     uint64_t overall, bool *submitted)
 {
   /* IMMED=0 waits for completion; zero LBA/count covers even wide media. */
@@ -581,7 +581,7 @@ enum usb_bot_io_result usb_bot_flush(struct usb_bot *bot, void *scratch, size_t 
   if (bot->write_through) {
     return USB_BOT_IO_OK;
   }
-  return synchronize_cache(bot, scratch, overall, submitted);
+  return synchronize_cache(bot, overall, submitted);
 }
 
 static bool command_unsupported(const struct usb_bot *bot)
@@ -649,7 +649,7 @@ static bool qualify_writes(struct usb_bot *bot, void *scratch, uint64_t overall)
     bot->write_detail = "medium write-protected; read-only";
     return true;
   }
-  outcome = synchronize_cache(bot, scratch, overall, NULL);
+  outcome = synchronize_cache(bot, overall, NULL);
   if (outcome == USB_BOT_IO_CLEAN_REJECTED) {
     if (!command_unsupported(bot)) {
       bot->write_detail = "cache synchronization rejected; read-only";

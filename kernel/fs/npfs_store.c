@@ -112,6 +112,7 @@ struct npfs_store_pool {
   uintptr_t scratch;
   size_t scratch_bytes;
   uintptr_t write_run;
+  size_t write_run_bytes;
   /* Retained mount storage; journal images overlay this durable bitmap base. */
   uintptr_t bitmap;
   size_t bitmap_bytes;
@@ -1879,7 +1880,20 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
   }
   if (!pool->write_run && next_dirty(inode)) {
     /* Batching is optional; allocation pressure keeps the single-block path. */
-    (void)store_vm_allocate(STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE, &pool->write_run);
+    unsigned blocks = pool->device.max_transfer / NPFS_BLOCK_SIZE;
+    if (blocks > STORE_IMAGES_MAX) {
+      blocks = STORE_IMAGES_MAX;
+    }
+    if (blocks < STORE_WRITE_RUN_BLOCKS) {
+      blocks = STORE_WRITE_RUN_BLOCKS;
+    }
+    size_t bytes = (size_t)blocks * NPFS_BLOCK_SIZE;
+    if (store_vm_allocate(bytes, &pool->write_run) == CALL_OK) {
+      pool->write_run_bytes = bytes;
+    } else if (blocks > STORE_WRITE_RUN_BLOCKS &&
+        store_vm_allocate(STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE, &pool->write_run) == CALL_OK) {
+      pool->write_run_bytes = STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE;
+    }
   }
   while (inode->size_dirty || next_dirty(inode)) {
     status = checkpoint(context, pool);
@@ -1906,7 +1920,7 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
     for (unsigned i = 0; status == CALL_OK && i < written_count;) {
       unsigned count = 1;
       if (pool->write_run) {
-        while (count < written_count - i && count < STORE_WRITE_RUN_BLOCKS &&
+        while (count < written_count - i && count < pool->write_run_bytes / NPFS_BLOCK_SIZE &&
           physical_blocks[i + count] == physical_blocks[i] + count) {
           count++;
         }
@@ -3264,8 +3278,9 @@ enum call_status npfs_store_maintain(struct npfs_store_context *context, struct 
     status = flush_files(context, pool);
   }
   if (pressure) {
-    store_vm_free(pool->write_run, STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE);
+    store_vm_free(pool->write_run, pool->write_run_bytes);
     pool->write_run = 0;
+    pool->write_run_bytes = 0;
     for (unsigned chunk = 0; chunk < STORE_METADATA_CHUNKS; chunk++) {
       store_vm_free((uintptr_t)pool->metadata_cache[chunk], sizeof(struct store_metadata_chunk));
       pool->metadata_cache[chunk] = NULL;
