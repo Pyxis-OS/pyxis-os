@@ -89,3 +89,11 @@ contexts, and reports `_PRW` candidates explicitly as additional-GPE
 exists in this workspace. There is no guessed route, general GPE finalization,
 HDSM/BTNE enable or copied driver implementation. Native qualification remains
 pending, including whether the supported EC path carries vela's button.
+
+Native packet: `/shared/present/vela-power-button/`, verified ELF/config hashes
+and owner `/dev/sdb1` copy/restore/run sheet. Never-merged diagnostic branch
+`diag/vela-power-on-75a8aaac` at `755d3d96`: stick main `75a8aaac`, existing
+#847 boot fix, #853 NVMe code (`65fa0dec`), then #855 button code. No #848 or
+newer ABI/pins; keep the stick's initrd/Limine and `nvme.write=0`. Kernel-only
+info build; native disk writes and native staging by Codex remain unauthorized.
+The owner runs the NVMe test first. All local QEMU/debugger jobs are stopped.
