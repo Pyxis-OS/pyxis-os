@@ -55,9 +55,17 @@ struct kernel_object *environment_create(void);
  * short table guard; grant callbacks, allocation and copies are outside it. */
 enum call_status environment_snapshot_capture(struct environment_table *table,
     uint64_t flags, struct kernel_object **snapshot);
+/* Consumes the provisional logical owner returned by capture, independently
+ * of admitted storage references. IF=0, no held guards, any CPU. */
+void environment_snapshot_release(struct kernel_object *snapshot);
+/* Object grant hooks; logical CLOSE releases captured cells synchronously. */
+bool environment_snapshot_grant_retain(struct kernel_object *snapshot);
+void environment_snapshot_grant_release(struct kernel_object *snapshot);
 void environment_snapshot_info(struct kernel_object *snapshot,
     struct environment_info_reply *info);
-/* Borrowed cell lives as long as the snapshot; name/text are immutable. Clone
+/* Borrowed cell requires an owned logical snapshot grant or the provisional
+ * capture owner throughout its use; a storage reference alone is insufficient.
+ * Name/text are immutable. Clone
  * a CAP grant explicitly before delegation. No live table pointer is exposed. */
 const struct environment_cell *environment_snapshot_cell(struct kernel_object *snapshot,
     size_t index);

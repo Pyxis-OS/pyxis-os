@@ -40,6 +40,7 @@
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/forwarder.h>
+#include <kernel/object/environment.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdint.h>
@@ -431,6 +432,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
   bool retained;
   if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
     retained = forwarder_grant_retain(object, rights);
+  } else if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
+    retained = environment_snapshot_grant_retain(object);
   } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
     retained = endpoint_export_grant_retain(object);
   } else if (object->type == OBJECT_EXECUTION_GROUP) {
@@ -453,6 +456,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
   if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
     forwarder_grant_release(object, rights);
+  } else if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
+    environment_snapshot_grant_release(object);
   } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
     endpoint_export_grant_release(object);
   } else if (object->type == OBJECT_EXECUTION_GROUP) {

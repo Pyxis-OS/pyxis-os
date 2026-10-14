@@ -36,6 +36,10 @@ struct environment_table {
 
 struct environment_snapshot {
   struct kernel_object object;
+  /* IF=0. Logical-owner election and bounded cell retains only. No nesting,
+   * callbacks, allocation, user copies or waits. */
+  struct spinlock lock;
+  size_t owners;
   struct environment_info_reply info;
   struct environment_cell *cells[];
 };
@@ -340,12 +344,46 @@ enum call_status environment_table_seed_text(struct environment_table *table,
   return seed_cell_owned(table, cell);
 }
 
+bool environment_snapshot_grant_retain(struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_ENVIRONMENT_SNAPSHOT);
+  struct environment_snapshot *snapshot = (struct environment_snapshot *)object;
+  spin_lock(&snapshot->lock);
+  bool retained = snapshot->owners && snapshot->owners != SIZE_MAX;
+  if (retained) {
+    ++snapshot->owners;
+  }
+  spin_unlock(&snapshot->lock);
+  return retained;
+}
+
+void environment_snapshot_grant_release(struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_ENVIRONMENT_SNAPSHOT);
+  struct environment_snapshot *snapshot = (struct environment_snapshot *)object;
+  spin_lock(&snapshot->lock);
+  KASSERT(snapshot->owners);
+  bool last = --snapshot->owners == 0;
+  spin_unlock(&snapshot->lock);
+  if (last) {
+    /* Closed captures cannot admit a new cell reference. The immutable array
+     * remains storage for admitted calls, but no longer owns its cells. */
+    for (size_t i = 0; i < snapshot->info.count; ++i) {
+      cell_release(snapshot->cells[i]);
+    }
+  }
+}
+
+void environment_snapshot_release(struct kernel_object *object)
+{
+  environment_snapshot_grant_release(object);
+  object_release(object);
+}
+
 static void destroy_snapshot(struct kernel_object *object)
 {
   struct environment_snapshot *snapshot = (struct environment_snapshot *)object;
-  for (size_t i = 0; i < snapshot->info.count; ++i) {
-    cell_release(snapshot->cells[i]);
-  }
+  KASSERT(!snapshot->owners);
   kfree(snapshot);
 }
 
@@ -363,6 +401,8 @@ enum call_status environment_snapshot_capture(struct environment_table *table,
     return CALL_NO_MEMORY;
   }
   object_init(&snapshot->object, OBJECT_ENVIRONMENT_SNAPSHOT, destroy_snapshot);
+  atomic_init(&snapshot->lock.locked, false);
+  snapshot->owners = 1;
   snapshot->info = (struct environment_info_reply){0};
   enum call_status status = CALL_OK;
   spin_lock(&table->lock);
@@ -383,7 +423,7 @@ enum call_status environment_snapshot_capture(struct environment_table *table,
   }
   spin_unlock(&table->lock);
   if (status != CALL_OK) {
-    object_release(&snapshot->object);
+    environment_snapshot_release(&snapshot->object);
     return status;
   }
   *result = &snapshot->object;
@@ -402,7 +442,11 @@ const struct environment_cell *environment_snapshot_cell(struct kernel_object *o
 {
   KASSERT(object->type == OBJECT_ENVIRONMENT_SNAPSHOT);
   struct environment_snapshot *snapshot = (struct environment_snapshot *)object;
-  return index < snapshot->info.count ? snapshot->cells[index] : NULL;
+  spin_lock(&snapshot->lock);
+  const struct environment_cell *cell = snapshot->owners &&
+      index < snapshot->info.count ? snapshot->cells[index] : NULL;
+  spin_unlock(&snapshot->lock);
+  return cell;
 }
 
 const char *environment_cell_name(const struct environment_cell *cell)
@@ -730,17 +774,26 @@ static enum call_status capture_cell(struct kernel_object *object, const char *n
   if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
     struct environment_snapshot *snapshot = (struct environment_snapshot *)object;
     *generation = snapshot->info.generation;
-    for (size_t i = 0; i < snapshot->info.count; ++i) {
-      struct environment_cell *cell = snapshot->cells[i];
-      if ((enumerate && i == index) || (!enumerate && names_equal(cell->name, name))) {
-        if (!cell_retain(cell)) {
-          return CALL_LIMIT;
+    enum call_status status = CALL_NOT_FOUND;
+    spin_lock(&snapshot->lock);
+    if (!snapshot->owners) {
+      status = CALL_ENDPOINT_CLOSED;
+    } else {
+      for (size_t i = 0; i < snapshot->info.count; ++i) {
+        struct environment_cell *cell = snapshot->cells[i];
+        if ((enumerate && i == index) || (!enumerate && names_equal(cell->name, name))) {
+          if (cell_retain(cell)) {
+            *result = cell;
+            status = CALL_OK;
+          } else {
+            status = CALL_LIMIT;
+          }
+          break;
         }
-        *result = cell;
-        return CALL_OK;
       }
     }
-    return CALL_NOT_FOUND;
+    spin_unlock(&snapshot->lock);
+    return status;
   }
   struct environment_table *table = process_current()->environment;
   spin_lock(&table->lock);
@@ -852,7 +905,7 @@ static struct syscall_result snapshot_call(uint64_t flags, uintptr_t reply_addre
   }
   capability_grant_release(&grant);
   if (object) {
-    object_release(object);
+    environment_snapshot_release(object);
   }
   capability_reservation_release(&reservation, &slot);
   if (status != CALL_OK) {
