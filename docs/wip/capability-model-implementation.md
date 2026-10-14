@@ -237,10 +237,9 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Task 1 scope (delta, 2026-10-14)
 
-**Implementation not started.** Branch `kernel/capability-forwarders`, base
-`777f9b73`. The accepted revocation design stays settled; the two lifetime
-questions below need owner answers before code. Beta's native baseline record
-must be linked here before task 1 merges.
+**Implementation assigned.** Branch `kernel/capability-forwarders`, initially
+based on `777f9b73`. The two lifetime rules below were accepted by the owner on
+2026-10-14. Beta's native baseline record must be linked here before task 1 merges.
 
 The kernel forwarder owns its target grant and exposes the target's
 kernel-attested protocol and attenuated authority to holders. A separate
@@ -288,23 +287,19 @@ no shared-memory mapping revocation. Deferred destruction keeps the existing
 execution-group cleanup accounting and waits for admitted storage references.
 No new ordinary klog diagnostics are planned.
 
-### Unresolved lifetime rules (proposed defaults)
+### Accepted lifetime rules (owner, 2026-10-14)
 
-1. **Last controller release: cut automatically.** Default: explicit CUT is
-   terminal, and releasing the last logical controller grant performs CUT too,
+1. **Last controller release:** revocable copies are cut automatically,
    including process teardown. Admitted storage references do not keep controller
-   authority alive. This prevents orphaned revocable access and lets a session's
-   owned controllers withdraw its grants on cleanup. Alternative: only explicit
-   CUT revokes; losing all controllers leaves holders usable until their last
-   release, and teardown must explicitly cut its controller registry first.
-2. **New child capabilities: inherit derivation.** Default: OPEN/LOOKUP/CREATE
+   authority alive. **Service slots retain their last target** when the last
+   manager goes away, following the owner's recovery-over-shutdown principle,
+   until a new authorized manager takes over. This does not grant management
+   rights to ordinary holders; explicit CUT remains terminal for either kind.
+2. **New child capabilities: inherit derivation.** OPEN/LOOKUP/CREATE
    results granting access beneath a forwarded directory/resource retain the
    source lineage as well, so opening a file cannot escape a directory cut.
    Existing unrelated grants returned as reply attachments keep their own
-   lineage; returned bytes are not revocable. Alternative: track only COPY,
-   launch, IPC and explicitly requested revocable copies; capabilities newly
-   opened through them remain independent. This boundary is not stated by the
-   accepted rule about copies and must be explicit before handler integration.
+   lineage; returned bytes are not revocable.
 
 ### Task 2 coordination
 
