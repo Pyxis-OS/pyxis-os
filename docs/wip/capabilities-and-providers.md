@@ -4,7 +4,7 @@ Status: **design in progress, owner-led, from 2026-10-14.** This is the
 capability-model track. It replaces four earlier documents: the capability-valued
 environment (parked 2026-10-11), shell capability flow (#809), interchangeable
 providers (2026-10-08) and userspace scheme providers (2026-09-24). Points marked
-**decided** are owner direction; nothing here is implemented or authorizes code.
+**decided** are owner direction, settled in discussion on 2026-10-14; nothing here is implemented or authorizes code.
 
 The owner's sequencing (2026-10-14): finish open work, resolve this model, then
 continue. **No new libc, shell, web/HTTP or Git work starts until it is
@@ -70,109 +70,140 @@ gets plain-file behaviour, and a namespace serving `https://` from something
 else is still treated as HTTP. Each task took the narrowest correct path for its
 own contract; the model was never checked against the founding intent.
 
-## Typed capabilities
+## Typed capabilities (decided)
 
-- **Opening returns a typed capability (decided).** A client opens a target with
-  an intent, such as read or write. The provider issues a capability, and its
-  kernel-attested type determines what the client does with it:
+- **Opening returns a typed capability.** A client opens a target with an
+  intent. The target issues a capability, and its kernel-attested type
+  determines what the client can do with it:
   - a FILE: ordinary reads and writes;
-  - a transaction: it stages, commits and produces a reply;
+  - a transaction: it accepts a body, commits and yields a reply;
   - later types (queues, row sets, sessions) bring their own rules.
 
   There is one open and no separate "what are you" exchange.
-- **The issuer decides the rights (decided).** A capability carries whatever its
-  producer issued: `cat`, `echo` and `printf` hand out read-only output; a
-  request preparer hands out a request that can be staged and committed. Passing
-  a capability on adds nothing.
-- **Write-open follows (decided).** Opening a target for writing returns
-  whatever its provider issues. Transaction semantics come from a provider or
-  preparer that issues a transaction, not from a client-chosen PREPARE path.
+- **The issuer decides the rights.** A capability carries whatever its producer
+  issued: `cat`, `echo` and `printf` hand out read-only output; a request
+  preparer hands out a request that can be read, written and removed. Passing a
+  capability on adds nothing.
 
-## Universal operations (decided 2026-10-14)
+## Universal operations (decided)
 
-**Operations are the same for every capability.** Read, write and open mean the
-same thing whatever is being read, written or opened; each capability defines
-what its operations do. There is no separate endpoint mechanism.
+**Operations are the same for every capability.** Open, read, write and remove
+mean the same thing whatever they act on; each capability defines what they do.
+There is no separate endpoint mechanism.
 
 - **One open.** `open(target, intent, deadline)` takes a target that is either a
   URI, resolved through the caller's namespace to a provider, or a capability
   the caller already holds. The intent is read, write or both, with file-style
   create, truncate and append, which a target may refuse. The result is
-  whatever capability the target issues, typed by the kernel.
-- **Each target defines its default write.** Writing to `https://…` performs
-  the HTTP provider's default write, a one-shot POST. Writing to a prepared
-  request performs the write that request was prepared with: POST, PUT, PATCH
-  or DELETE. Writing to a FILE stores bytes. The client does the same thing in
-  every case and dispatches only on what it gets back.
-- **Protocol options belong to preparers.** Methods, extra headers,
-  credentials and trust profiles come from a preparer such as `http prepare`,
-  which issues a capability carrying them. Generic OPEN carries no protocol
-  fields; today's HTTP origin, flags and budgets leave its request header.
-- **Providers follow redirects** under their own policy. The REDIRECT reply kind
-  and its Location leave generic OPEN. One provider serves `http` and `https`;
-  a redirect to a scheme it does not serve fails honestly, with the Location in
-  the outcome detail.
-- **A transaction** accepts a body, commits, aborts and yields a reply. The
-  reply is an ordinary readable capability with facets, so any reader can use
-  it. What triggers the commit is client policy keyed on the type: the producer
-  closing its output in the shell, `fflush` in C.
+  whatever capability the target issues.
 - **Names and held capabilities differ only in reach.** A URI is resolved
-  through the caller's namespace binding, which may reach any URL that provider
+  through the caller's namespace binding, which may reach anything its provider
   serves. A held capability reaches only what it was issued for, so handing a
   program one prepared request delegates calling that one service.
+- **Each target defines its operations:**
+
+  | Target | Read | Write | Remove |
+  |---|---|---|---|
+  | FILE (`home://notes.txt`, or `$x` holding a writable file) | bytes | `>` truncates, `>>` appends | deletes |
+  | HTTP URI (`https://…`) | GET | one-shot POST | DELETE |
+  | Prepared request (`$api`) | GET | its prepared method: POST, PUT or PATCH | DELETE |
+  | Read-only value (`$x` holding text or a reply) | its content | error | error |
+
+  Each uses the same URL, headers and credentials. The client does the same
+  thing in every case and dispatches only on what it gets back. `unset x`
+  removes the variable; `rm $x` acts on what it holds.
+- **Protocol options belong to preparers.** Write methods, extra headers,
+  credentials and trust profiles come from a preparer such as `http prepare`,
+  which issues a capability carrying them. DELETE is always remove, never a
+  prepared write method. Generic OPEN carries no protocol fields: today's HTTP
+  origin, flags and budgets leave its request header.
+- **Redirects are transparent.** Providers follow them, including 307 and 308
+  with the request body. Credentials are dropped when a redirect crosses to
+  another origin, so a protected service that redirects elsewhere fails as
+  unauthorized instead of leaking the token. The REDIRECT reply kind and its
+  Location leave generic OPEN. One provider serves `http` and `https`; a
+  redirect to a scheme it does not serve fails, with the Location in the
+  failure detail.
 
 The FILE-only path helpers stop refusing `http(s)` names: a program asks for an
 intent, receives a typed capability, and handles that type or reports it as
 unsupported.
 
-## Writes and transactions
+## Transactions and commit (decided)
 
-The owner's 2026-09-24 direction for HTTP still holds, expressed through types:
-reading a URI is GET; a write stages a body and an explicit commit submits it;
-`"w+"` reads the reply after the commit. Ordinary writes, flush on close, exit
-and editor autosave never submit. PUT, PATCH and DELETE are writes to a prepared
-request; other providers' mutations need their own commit, cancel, ownership and
-uncertain-outcome contracts. A newly opened URI is read with GET, never by replaying an earlier
-response.
+- A transaction accepts a body, commits, aborts and yields a reply. The reply is
+  an ordinary readable capability.
+- **Close commits, everywhere.** Closing a transaction commits it, whether the
+  closer is the shell (after its producer succeeded), `fclose`, or exit. An
+  explicit `fflush` commits earlier; `"w+"` then reads the reply from the same
+  FILE. Implicit buffer drains only stage.
+- **Abandoning fails loudly.** A transaction released without a commit (a
+  failed producer, a crash, an explicit abort) reports a failure; it never
+  turns silently into nothing.
+- Editors that autosave do not hold transactions: a write that should not
+  submit does not open one.
+- No blind retries, and a lost reply never causes a mutation to run again. Other
+  providers' mutations need their own commit, cancel, ownership and
+  uncertain-outcome contracts.
+
+## Failure (decided)
+
+**A failure is part of the capability, and reading it behaves like reading a
+file that does not exist.** The reading program reports the error at the source
+and exits non-zero; nothing is turned into empty output.
+
+| Outcome | Behaves like | Example |
+|---|---|---|
+| 404, 410 | missing file | `grep: https://bla: not found (404)` |
+| 401, 403 | permission denied | `cat: https://bla: permission denied (403)` |
+| 5xx, timeout, body cut off | I/O error, possibly mid-read | `cat: https://bla: I/O error (503)` |
+
+Libc maps these outcomes to the matching `errno` values, so ports need no change.
+Writes follow the same rule: a rejected submission fails like writing to a file
+that refuses the write. A failed capability still carries its status and a
+bounded error body, which failure-aware tools read through the facet API; plain
+readers never see error bodies as data.
 
 ## Data flow in the shell
 
 - **Writing to a target produces the target's response.** `>` sends a stage's
   output into the target, and the target's response becomes the stage's output.
-  A FILE responds with nothing, as today; a transaction responds with its reply,
-  committing when the producer closes its output:
+  A FILE responds with nothing, as today; a transaction responds with its reply:
 
   ```sh
   printf '{}' > json+https://ci.example/jobs | jq .id
   ```
 
-- **Blocks bind their output as a capability.** `x = { … }` binds a block's
-  output, not a string. Several transactional writes in one block reply in
-  order; bind each one to keep them separate.
-
-  ```sh
-  job = { printf '{}' > json+https://ci.example/jobs }
-  files = { ls home:// }
-  cat $job
-  ```
-
 - **Pipes move capabilities (decided).** `A | B` hands A's output capability to
   B as stdin instead of copying bytes; the producer no longer holds it. Fan-out
   such as `tee` makes explicit, optionally narrowed copies. A byte stream stays
-  the base type, so byte-only programs are unaffected, while a reply arrives
-  with its facets (reader, outcome, media type) and large replies need no copy.
-  Outcome travels with the data, so no pipe rule has to fail a stage on an
-  HTTP error; the consumer or the shell decides.
-- **Syntax.** Braces belong only to assignment; a plain command such as
-  `printf '{}' > $endpoint` needs none. Variables are always referenced with
-  `$`, including as redirection targets; a bare word is always a path.
+  the base type, so byte-only programs are unaffected, and large replies need no
+  copy. A failed capability fails its reader as described above.
+- **Command substitution binds a capability (decided).** `x=$(…)` binds the
+  output capability of the command, not a string:
+
+  ```sh
+  api=$(http prepare PUT json+https://ci.example/jobs/42)
+  job=$(printf '{}' > json+https://ci.example/jobs)
+  id=$(cat $job | jq .id)
+  ```
+
+  As in POSIX, the assignment happens and the status reports any failure. If
+  the failed capability passed through unchanged (`foo=$(cat https://bla)`),
+  `foo` holds it and later reads of `$foo` fail the same way. If a program
+  consumed it (`foo=$(grep foo https://bla)`), that program reported the error,
+  and `foo` holds its output, exactly as with a missing file today.
+- **Syntax.** Assignment is `name=value` with no spaces, and `$(…)` is command
+  substitution. Variables are always referenced with `$`, including as
+  redirection targets; a bare word is always a path. The shell has no
+  assignment, expansion or substitution today, so all of this is new.
 
 ## Variables and the environment
 
 - **Every variable holds a capability (decided).** There are no separate string
-  and capability variables: `foo = "true"` binds a read-only capability whose
+  and capability variables: `foo="true"` binds a read-only capability whose
   content is `true`.
-- **Inheritance as today (decided).** `export foo = …` exports to children; a
+- **Inheritance as today (decided).** `export foo=…` exports to children; a
   plain assignment stays local. Exporting a writable capability delegates its
   write authority, and that explicit export is the control. Inheritance can
   narrow rights, never widen them.
@@ -195,47 +226,48 @@ response.
 
 ## Endpoints
 
-"Endpoint" is a name for usage, not a separate kind: any capability whose write
+"Endpoint" names a usage, not a separate kind: any capability whose write
 starts a transaction, whether reached by URI or held as a prepared request
-(decided). Bound to a variable, it is reusable: every write starts a new,
+(decided). Held in a variable, it is reusable: every write starts a new,
 independent transaction and yields its own reply.
 
 ```sh
-endpoint = { http prepare POST json+https://ci.example/jobs }
+api=$(http prepare POST json+https://ci.example/jobs)
 
-printf '{}' > $endpoint                     # submit, discard the reply
-first = { printf '{"ref":"main"}' > $endpoint }
-second = { printf '{"ref":"next"}' > $endpoint }
+printf '{}' > $api                          # submit, discard the reply
+first=$(printf '{"ref":"main"}' > $api)
+second=$(printf '{"ref":"next"}' > $api)
 
-first_id = { cat $first | jq .id }
+first_id=$(cat $first | jq .id)
+cat $api                                    # GET on the same URL
+rm $api                                     # DELETE on the same URL
 ```
 
-- It is a template (method, URI, headers, deadline policy, backing), not a
-  one-shot request. Writing never consumes it, each write is an explicit new
-  submission, and concurrent writes are separate transactions.
+- A prepared request is a configured resource (URL, headers, credentials,
+  write method, deadline policy, backing), not a one-shot request. Writing
+  never consumes it, and concurrent writes are separate transactions.
 - Replies are independent of the endpoint: each has its own outcome, media type
   and lifetime.
-- Holding an endpoint is the authority to call it. Private headers such as
-  credentials can live inside it, so the holder can call the service without
-  being able to read the token.
-- A derived value such as `first_id` is plain read-only content; the outcome
-  facet stays on `$first`.
+- Holding it is the authority to call it. Private headers such as credentials
+  live inside it, so the holder can call the service without being able to read
+  the token.
 
 ## Libc
 
 - **`fopen` dispatches on the capability type**, not the spelling;
   `descriptor_open()` stops classifying HTTP by name.
-- **`fflush(f)` commits because the FILE is transactional.** The task 5c rules
-  carry over, keyed on type: an explicit flush commits once, implicit drains,
-  `fclose` and exit only stage, and `"w+"` reads the reply from the same FILE.
+- **Commit follows the transaction rules above:** `fclose` and exit commit, an
+  explicit `fflush` commits earlier, implicit drains only stage, and `"w+"`
+  reads the reply. This replaces task 5c's "`fclose` only stages".
 - **A small Pyxis facet API** (in `<pyxis/…>`, not stdio) lets a program ask what
-  a stream is: generic outcome (succeeded or failed, with an optional
-  provider-defined detail for display), media type (`application/json`, not
+  a stream is: generic outcome (succeeded or failed, with a provider-defined
+  detail and bounded error body), media type (`application/json`, not
   `json+https`), length when known, and whether it can be re-read. It never
   reveals the provider, scheme or URI. Programs that ignore it read bytes.
-- **Ports keep working.** `getenv` and `setenv` read and write text-content
-  variables as strings; a non-text capability is not presented as a string.
-  Expanded names such as `env://job` open like any other path.
+- **Ports keep working.** Failures arrive as ordinary `errno` values; `getenv`
+  and `setenv` read and write text-content variables as strings, and a non-text
+  capability is not presented as a string. Expanded names such as `env://job`
+  open like any other path.
 
 ## Interchangeable providers
 
@@ -336,8 +368,8 @@ Partial bodies never satisfy another open.
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
 7. **Shared memory:** the capability type, mapping and lifetime rules.
-8. **Provider policy:** caller isolation, credentials, redirects and cache reuse
-   for any shared provider; asynchronous provider work and cancellation (see
+8. **Provider policy:** caller isolation, credentials and cache reuse for any
+   shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
 
 ## Migration from today's interim
