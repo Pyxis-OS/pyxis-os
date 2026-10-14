@@ -7,8 +7,14 @@ emulation over the [native TTY subset](terminal.md#tty-output-controls).
 
 ## Startup
 
-Add `multiplexer = true` to a local space in `userspace/config/live.lua` or
-`userspace/config/installed.lua`, then rebuild the image. It defaults to false:
+The live image includes a **Multiplexer** space immediately after Development.
+It shares Development's flags, grants and writable roots, except Development
+retains network configuration ownership. Its `boot://init-readonly` startup skips
+network setup without restricting those roots; panes use the network after
+Development configures it. Installed configuration is unchanged.
+
+For other spaces, add `multiplexer = true` in `userspace/config/live.lua` or
+`userspace/config/installed.lua`, then rebuild the image. The flag defaults to false:
 
 ```lua
 { name = "development", title = "Development", init = "boot://init",
