@@ -22,6 +22,8 @@ and [program bundles](../userland/program-bundles.md).
 - **Progress everywhere:** every I/O phase reports counters or a phase line,
   including inventory, reads, hashing, copy verification, sync and cleanup.
   Existing copy counters/phase lines are a starting point, not full coverage.
+  **Revised 2026-10-14 (owner): progress means a progress bar, not a log** — see
+  [progress display](#progress-display--accepted-2026-10-14).
 - **Mounted read-write FAT32 is delivered independently** by
   [shared FAT32 volumes](../devices/fat32-volumes.md), including trusted selection
   and declared editor grants. The native backend is not a scheme provider or
@@ -95,6 +97,36 @@ Back/navigation edits only the plan. Progress/error output remains usable withou
 curses as plain records for replay; UI redraw/output failure must not bypass
 consent or suppress executor failures. Do not use invented percentages for a
 blocking flush whose completion cannot be measured.
+
+## Progress display — accepted 2026-10-14
+
+Task 1's records print one line per phase, so an ordinary Update scrolls dozens
+of `Inspecting … bytes` lines, an inventory scan scrolls the disk selection out
+of view, and the review lists every program's old and new sizes. The owner
+wanted a progress bar for long work and detail only on request.
+Accepted, not implemented; it applies to today's line-mode installer and
+updater (one executor) and does not wait for the curses TUI:
+
+- **One live line per long operation, redrawn in place:** phase name, a bar and
+  completed/total files or bytes, plus a rate where known, for example
+  `Copying programs [#########-----] 412/980 files 38 MB/s`. Without a known
+  total it shows the phase and an activity indicator, never an invented
+  percentage.
+- **Short checks print nothing unless they fail.** The major steps (inspect,
+  copy, verify, switch the ESP, clean up) each leave one finished line.
+- **Detailed phase records move to the kernel log** (`log`) instead of the
+  screen, so diagnosis keeps the same detail. The curses TUI later draws its
+  progress page from the same records.
+- **Verbose output is opt-in.** Per-phase records, the per-program old/new
+  list and similar detail print only with a verbose flag (`-v`) or the existing
+  **print plan** action, never in the normal flow.
+- **The review is a summary that fits on one screen:** the target disk, counts
+  of updated, new and removed programs with total sizes, what is kept and what
+  is replaced, the recovery limits and the action prompt.
+- **Nothing scrolls a choice out of view.** A question asked during selection,
+  such as the read-only inventory scan of a revision without a manifest, runs
+  under the same quiet progress line, and the selection is shown again before
+  the next prompt.
 
 ## Configuration delta model
 
