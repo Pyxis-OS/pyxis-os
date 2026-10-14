@@ -347,7 +347,7 @@ bool endpoint_export_available(struct kernel_object *object)
   KASSERT(object->type == OBJECT_ENDPOINT_EXPORT);
   struct endpoint_export *export = (struct endpoint_export *)object;
   lock_endpoint(export->endpoint);
-  bool available = !export->withdrawn && !export->endpoint->closed;
+  bool available = export->client_live && !export->withdrawn && !export->endpoint->closed;
   unlock_endpoint(export->endpoint);
   return available;
 }
@@ -1205,7 +1205,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   lock_endpoint(state);
   if (wait && deadline_expired(message->deadline_ns)) {
     status = CALL_TIMED_OUT;
-  } else if (state->closed || (target && target->withdrawn)) {
+  } else if (state->closed || (target && (!target->client_live || target->withdrawn))) {
     status = CALL_ENDPOINT_CLOSED;
   } else {
     /* Reject before admission: an incompatible SEND at the FIFO head must not
@@ -1255,10 +1255,11 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   uint64_t ready_before = begin_endpoint_update(state);
   bool expired = wait && deadline_expired(message->deadline_ns);
-  if (expired || state->closed || (target && target->withdrawn) ||
+  if (expired || state->closed || (target && (!target->client_live || target->withdrawn)) ||
       forwarder_operation_denied(&record->origin) || !task_operation_start()) {
     record->state = DELIVERY_FREE;
-    status = expired ? CALL_TIMED_OUT : state->closed || (target && target->withdrawn) ?
+    status = expired ? CALL_TIMED_OUT : state->closed ||
+        (target && (!target->client_live || target->withdrawn)) ?
         CALL_ENDPOINT_CLOSED : CALL_DENIED;
     forwarder_operation_release(&record->origin);
     end_endpoint_update(state, ready_before);

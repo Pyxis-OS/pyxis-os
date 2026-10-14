@@ -100,7 +100,9 @@ detaches logical targets before callbacks; its queued receipt pins prevent
 record reuse during cancellation. Caretaker storage keeps management metadata
 safe without delaying natural provider RETIRE; admitted leaf references do
 delay RETIRE until accepted work drains. RETIRE/ACK remains provider-private
-storage lifecycle, not another revocation authority.
+storage lifecycle, not another revocation authority. Selecting a new target
+after its natural retirement returns ENDPOINT_CLOSED; caretaker storage cannot
+revive a retired export or enqueue fresh work after its RETIRE notice.
 
 ## Takeover authority (accepted 2026-10-14)
 
