@@ -26,7 +26,7 @@ Hello and the client/server examples remain explicit build targets, outside the
 normal initrd. Their demonstration flows require the grants described below.
 
 Hello receives output through a named resource and the boot archive directory
-through the `boot` startup scheme binding, plus a shared RAM root under `home`. It lists that directory, looks up and
+through the `boot` environment entry, plus a shared RAM directory under `home`. It lists that directory, looks up and
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
 The [path helpers](../userland/paths.md) compose lookups and retain working-directory handles.
 Hello reads through an explicit scheme path and again after changing directory.
@@ -115,88 +115,63 @@ its space. This matters to the containment goals in the spaces draft.
 ## Startup record
 
 Entry receives a pointer in `RDI` to a process-owned startup region. The
-[shared header](../../include/abi/startup.h) defines its layout; all embedded
-addresses refer to that child's virtual memory. The total budget is 64 KiB,
-including page padding. Only the required pages are allocated. Version remains
-1, with the old layout replaced outright; rebuild in-tree programs together with
-the kernel. The fixed header is 216 bytes, including three 32-byte stream records.
+[shared header](../../include/abi/startup.h) defines its layout; embedded addresses
+refer to the child's virtual memory. The fixed header is 72 bytes. Version remains
+1; the replaced layout requires rebuilding programs with the kernel.
 
-The read-only portion contains the header with three standard-stream bindings,
-named resource bindings, scheme-root
-bindings, working-directory context and environment. The writable portion holds
-`argv`, its final NULL and argument strings. Both portions are non-executable
-and survive until address-space destruction. Read-only metadata records the
-argument count and writable-area address; no userspace heap is needed for entry.
+The read-only portion holds the header, a caller-bound
+[environment handle](environment.md), the independently owned cwd directory chain
+and an optional descriptive path. The writable portion holds `argv`, its final
+NULL and argument strings. Both mappings are NX and survive until address-space
+destruction. Arguments require no userspace heap at entry. Zero arguments are
+valid and still provide `argv[0] == NULL`; the kernel parses no command line.
 
-Resource names are nonempty, case-sensitive and unique within their table.
-Each binding names a handle already installed in the child's capability table.
-No new reference is acquired when recording or looking up a binding. Different
-names may alias a handle; close each owned handle once. Missing resources are
-omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
-immutable snapshot, so a later lookup can return its stale value.
+The environment owns each named CAP or TEXT entry. Exact directory names such as
+`boot`, `home` and `tmp` use the same table as services, native resources and text.
+LOOKUP captures an owned grant or copies complete text; it never borrows a handle
+from immutable startup bindings. There are no separate stream, root, resource,
+string-environment or namespace arrays. Sibling tasks share the process table;
+children receive only the explicitly staged selection.
 
-Standard streams are fixed stdin/stdout/stderr slots with explicit console, file,
-[pipe](pipes.md) or response STREAM protocol tags. Response STREAM is stdin only:
-it pairs exactly STREAM READ with an HTTP_TRANSACTION STATUS-only observation,
-both with CALL transport. Other protocols have no observation companion. Absent
-slots use `STARTUP_STREAM_NONE` with every field zero.
-Each 32-byte slot records its stream protocol/handle and observation
-protocol/handle. The pair owns distinct handles, disjoint from other streams,
-named resources, roots, working directories and the namespace. Plain streams
-carry exactly their protocol's READ right for stdin or WRITE right for output.
-Libc adopts these handles directly before heap initialization; startup lookup
-borrows them and creates no extra reference. Closing a FILE releases its owned
-facets, leaving the startup entries stale. The kernel still reclaims remaining
-handles on exit or fault. See [stdio](../userland/stdio.md).
+Standard streams are `stdin`, `stdout` and `stderr` CAP entries. Libc selects their
+kernel-attested protocol and direction authority, supporting native CONSOLE/PIPE,
+native or exported FILE, and exported response STREAM for stdin. Response stdin
+explicitly pairs with an HTTP_TRANSACTION STATUS observation named `stdin.status`.
+Libc owns its lookup grants and releases its initialization snapshot before
+constructors or main. Closing/replacing an original standard descriptor
+conditionally removes only its recorded publication identities, preserving later
+native replacements. See [environment ownership](environment.md) and
+[stdio](../userland/stdio.md).
 
-Scheme roots have their own name/handle table. Preparation checks that each root
-is an installed directory capability and that root names are nonempty, unique
-and contain neither ':' nor '/'.
-The shell receives the read-only boot archive root under `boot` and a shared RAM
-root under `tmp`. No lookup right is added by the startup binding.
-Startup also copies a launcher-ordered chain of installed directory handles,
-boundary first and current last, plus an optional descriptive path. The kernel
-validates their types without inferring ancestry or granting parent access. The
-shell starts at home; libpyxis retains an independently owned context.
+Cwd is a launcher-ordered chain of installed directory handles, boundary first and
+current last. Preparation validates directory types without inferring ancestry or
+granting parent access. The optional path describes the initial chain and confers
+no authority. URI prefixes resolve through the caller's live environment; relative
+paths use the retained cwd chain. Libpyxis retains its own cwd context.
 
-Startup also carries an optional explicit [service namespace](namespaces.md)
-handle. It is borrowed by `startup_namespace()` and has no ambient association
-with the process's space. Launch selects a LOOKUP-authorized namespace through
-`namespace_grant` (zero absent, otherwise grant index plus one). A namespace entry
-cannot also supply a standard stream. Known directory-root/name conflicts reject
-launch; runtime resolution checks again because bindings can change.
+The kernel separately installs an owned `thread_fs` grant with
+`THREAD_RIGHT_SET_FS` only. It applies to the caller, is distinct from selected
+grants, and adds no thread-management authority. Libc closes it after once-only
+FS bootstrap; the read-only field then becomes stale. Native entries may ignore
+it. Early memory lookup uses allocation-free environment helpers before TLS and
+heap initialization.
 
-The kernel separately installs an owned startup `thread_fs` grant with
-`THREAD_RIGHT_SET_FS` only. It applies to the caller, is distinct from all
-launcher-selected bindings, and adds no thread-management authority. Libc closes
-it after once-only FS bootstrap; the read-only startup snapshot then becomes stale.
-Native entries may ignore it. Startup-preparation failure releases this provisional
-grant along with partial backing.
+[Startup preparation](../../include/kernel/user/startup.h) accepts stable borrowed
+kernel inputs under exclusive ownership of an inactive process on the BSP. It
+validates names, grants, cwd and size, seeds the environment with owned CAP/TEXT
+cells, and copies startup mappings before publishing the address. Initial named
+source handles are closed once after seeding unless they also own cwd positions;
+there is no hidden original named-handle copy. Failure keeps the process
+unpublished for cleanup. Inputs may be released after preparation.
 
-The launcher supplies argument strings, including argv[0] when present; neither
-the kernel nor startup parses a command line. Zero arguments are valid and still
-provide argv[0] == NULL. Environment names are nonempty, case-sensitive, unique
-and cannot contain '='; values may be empty. The initial environment is a copied,
-read-only snapshot with allocation-free lookup. Libc copies it into mutable
-process-local storage for `getenv`, `setenv` and `unsetenv`
-([process state](../userland/process-state.md)); the snapshot itself never changes.
-Environment strings confer no authority.
-
-[Startup preparation](../../include/kernel/user/startup.h) accepts stable, borrowed
-kernel inputs under exclusive ownership of an inactive process on the BSP.
-It validates names, installed handles and the total size, copies data through a
-borrowed kernel mapping, and publishes the startup address only after completion.
-Failure releases partial backing without changing capability ownership. Inputs
-are never retained; source storage may be released after the call.
-
-The shared assembly entry calls the native C startup routine, which checks the
-record's bounds and initializes accessors before invoking `main(argc, argv)`.
-Its return value goes to exit. Programs use
-[the startup helpers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/startup.h) instead of decoding the
-record. The boot launcher supplies three dedicated console stream handles in
-addition to the shell's named terminal input/output, memory,
-launcher, [display](graphics.md), [clock](../kernel/timekeeping.md) and
-[keyboard](../devices/keyboard.md) resources, boot/tmp roots, a tmp directory chain, argv[0] and an OS_NAME environment entry.
+The combined startup admission budget is 64 KiB including mapping padding and
+selected environment entry metadata/names/text, even though values reside in the
+native table. Only the actual startup mapping pages are allocated. The shared
+assembly entry calls native C startup, which validates the record and initializes
+[accessors](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/startup.h)
+before `main(argc, argv)`; its return value goes to exit. Boot preparation stages
+explicit terminal, memory, launcher, display, clock, keyboard, directory and text
+entries, plus its cwd chain and arguments.
 
 ## First operation shapes
 
@@ -469,12 +444,12 @@ The [shared syscall header](../../include/abi/syscall.h) and
 reply length for CALL; the diagnostic log call preserves its previous value.
 No endpoint queues or general object-operation table are involved.
 
-Hello closes its startup grants after printing through the
-[handle wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/handle.h). The native close wrapper accounts
-for the RDX result; the one-argument syscall wrapper cannot be used for
-close because it assumes RDX is preserved. Closing leaves the startup record
-unchanged, so its output binding then contains a stale handle. Exit releases any
-entries still open, while the space keeps its own console reference.
+The native [handle wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/handle.h)
+accounts for the CLOSE result; the one-argument syscall wrapper cannot be used for
+close because it assumes RDX is preserved. Closing a looked-up grant releases that
+local ownership without removing its environment publication. Exit releases the
+process table and remaining handles, while the space retains its own console
+reference.
 
 ### Implemented file calls
 
@@ -673,42 +648,38 @@ there is no target-space or CPU argument. Holding a launcher does not grant
 implicit access to files or other resources. A launcher can itself be delegated
 through an explicit grant, authorizing the recipient to launch in its own space.
 
-The [request](../../include/abi/launcher.h) supplies a READ file handle for the P1F
-image, source handles with resource/transport masks, arguments, environment,
-standard streams, named resources, an optional namespace, scheme roots and
-working-directory context. Source grants retain or reduce each authority mask. Bindings and working-directory entries refer to grant-list
-indices; repeated references share one child handle, while separate grant-list
-entries produce separate handles. No resources, roots, environment or launcher
-are inherited implicitly. The image handle is not passed unless listed.
-The request is 224 bytes, including its three 32-byte stream records.
+The [88-byte request](../../include/abi/launcher.h) supplies a READ file handle for
+the P1F image, source grants with resource/transport masks, exact named CAP/TEXT
+entries, arguments and cwd. A CAP entry's value is a grant-list index and its
+length is zero. A TEXT entry's value is a caller string address and its byte
+length excludes NUL. Names form one unique table; flags select EXPORTED or an
+explicitly staged private value. Source grants preserve or reduce each authority
+mask. The image is not delegated unless selected explicitly.
 
-Each present standard stream references an exclusive grant-list index. Response
-stdin additionally selects a distinct HTTP_TRANSACTION observation index with
-exactly STATUS rights and CALL transport, alongside STREAM READ with CALL.
-Neither index can be shared with another stream or companion, a named resource,
-a root, a working directory or the namespace. The trusted caller declares the
-pair; the kernel validates types, masks and exclusivity, without inferring their
-transaction association or adding control/body/ABORT authority. Plain streams
-have zero observation fields; NONE requires all four fields zero.
-The existing grant installation creates exactly one child handle for each
-entry, and startup records it directly; there is no second retained copy.
-Separate entries may deliberately copy the same source object, as for console
-stdout/stderr and explicit terminal resources. No terminal grants are synthesized
-from stream metadata.
+Each named capability owns its logical grant in the child's environment. Cwd
+indices select independently owned directory handles. Repeated indices can name
+the same selected source; separate list entries can copy the same object. Named
+source handles are retired after environment seeding, except handles retained by
+the cwd chain. There is no implicit environment, directory, service or launcher
+inheritance. Ordinary capture selects exported entries; trusted handoff stages
+selected private controllers without broadening its native resource allowlist.
 
-Unknown protocols, nonzero indices for absent streams, out-of-range/aliased
-indices and masks other than the exact direction right fail with BAD_REQUEST.
-Missing source authority reports BAD_HANDLE or DENIED; an object/protocol
-mismatch reports WRONG_TYPE. Validation precedes child submission. An absent
-stream is valid and does not cause implicit inheritance.
+Standard streams and an optional `stdin.status` observation are ordinary named
+entries. Protocol and authority remain kernel-attested; libc validates supported
+stream facets when adopting them. Child redirection and pipeline selection modify
+staging only. A supplied capability/text name overrides that child's selection
+without temporarily mutating the parent's table. There are no protocol-tagged
+stream slots or namespace/root selectors in the request.
 
-All nested addresses belong to the caller. Arrays, copied strings and alignment
-have a combined 64 KiB capture budget; the final startup region separately has
-the existing 64 KiB budget including page padding. Array counts and arithmetic
-are checked before copying. Names, duplicate bindings, directory types and
-startup layout use the existing startup validation. Empty arrays are ignored;
-working_path is optional and requires a nonempty directory chain. argv contains
-argc string addresses; the kernel adds the child's final NULL.
+All nested addresses belong to the caller. Arrays, strings and alignment share
+a 64 KiB capture budget. Startup admission separately charges its 64 KiB budget,
+including selected environment names/text and mapping padding. Counts and address
+arithmetic are checked before copying; exact names, duplicate entries, CAP
+indices, TEXT lengths and directory types are validated before submission.
+Empty arrays are ignored; working_path is optional and requires a nonempty cwd
+chain. `argv` contains `argc` string addresses; the kernel adds the final NULL.
+Missing source authority reports BAD_HANDLE or DENIED; malformed metadata reports
+BAD_REQUEST. No absent stream or omitted entry gains ambient authority.
 
 The caller obtains launch metadata storage from BSP, then captures metadata on
 its own CPU/root. Source grants gain prospective logical ownership and an exact
@@ -869,8 +840,8 @@ commits; failure must not lose it. Neither operation automatically transfers
 ownership or accounting for the underlying object.
 
 Future IPC work must define moves, waitable conditions, cancellation and
-resource accounting. The namespace and named-endpoint ideas
-in the spaces draft remain separate from the current transport.
+resource accounting. Later space-level service discovery remains separate from
+the process environment and current transport.
 
 Only an explicitly selected worklist task is an implementation assignment.
 The later ideas here call for no placeholder APIs or object-manager framework.
