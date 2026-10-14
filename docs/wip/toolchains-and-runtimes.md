@@ -3,10 +3,11 @@
 Status: LLVM/Clang is the chosen toolchain direction as of 2026-09-29, including
 Clang as the first large hosted C toolchain. Since the
 [host milestone](../development/llvm-toolchain.md), Pyxis builds with its Clang and LLD on the
-host and GCC/binutils are retired. No hosted compiler runs yet; the native Support,
-C++ and libc prerequisites are delivered ([hosted Clang](hosted-clang.md)). Other
-language runtimes below are future candidates, not implementation assignments or a
-fixed schedule.
+host and GCC/binutils are retired. Clang and LLD now run natively: `clang hello.c -o
+hello.pxe` compiles, links and runs on the ThinkPad from an installed pool-volume
+bundle ([native Clang and LLD](../development/hosted-tools.md)). Other language
+runtimes below are future candidates, not implementation assignments or a fixed
+schedule.
 
 ## Distinct results
 
@@ -41,13 +42,12 @@ pinned probe:
    compiles C. Completed 2026-10-08:
    [C++ in userspace](../development/cxx-userspace.md) puts libc++, libc++abi and
    libunwind in the SDK. The reached C-only locale, wide FILE and entropy closure
-   and the libc operations are delivered under [hosted Clang](hosted-clang.md)
-   tasks 2-3. Still open: real synchronization, TLS and threads, tracked by the
-   [shared-process thread investigation](threads.md#delivery-gates). Do not bury
-   missing OS behavior in compiler-specific stubs.
-3. **Clang hosted on Pyxis.** [Hosted Clang](hosted-clang.md) holds the accepted
-   decisions, remaining tasks, resource proxies and process boundary. First
-   completion: compile, link and run one small C program entirely inside Pyxis.
+   and the libc operations are delivered ([hosted tools](../development/hosted-tools.md#delivery)),
+   with real synchronization, TLS and [native threads](../interfaces/threads.md). Do
+   not bury missing OS behavior in compiler-specific stubs.
+3. **Clang hosted on Pyxis.** Completed 2026-10-13:
+   [native Clang and LLD](../development/hosted-tools.md) compile, link and run a
+   small C program entirely inside Pyxis, and the driver runs LLD itself.
    Rebuilding LLVM itself in the guest is a later result, with its own build tools,
    resource requirements and dependencies.
 

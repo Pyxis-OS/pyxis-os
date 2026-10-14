@@ -1,7 +1,7 @@
 # LLVM Support on Pyxis
 
 The [native Support fork PR](https://git.internal/PyxisOS/pyxis-llvm/pulls/4)
-implements the first [hosted Clang task](../wip/hosted-clang.md#parallel-delivery-tasks).
+implements the first [hosted Clang task](hosted-tools.md#delivery).
 The installed compiler and SDK still use `49e2c1a1518b`; adopting this backend
 requires the owner's matching container publication. This is platform groundwork,
 not a runnable native Clang or LLD. See the

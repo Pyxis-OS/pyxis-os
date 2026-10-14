@@ -324,7 +324,7 @@ need no new thread API; their libc cwd/environment/descriptors/allocator state i
 process-local. Smart transport still needs non-fork sideband execution, which
 serial pack workers do not remove; a native sideband helper or event-pump
 adaptation can proceed without claiming pthread support. Parallel workers
-require all [thread gates](threads.md#delivery-gates): 5 lifecycle/join/guarded
+require all [native threads](../interfaces/threads.md#delivery): 5 lifecycle/join/guarded
 stacks; 6 real parking/wakeup; 7 static TLS/per-thread errno and compiler
 support; 8 synchronized libc allocator/descriptors/FILE/caches and a real
 pthread/C11 profile. All four were unchecked at the October 11 investigation

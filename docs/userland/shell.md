@@ -878,6 +878,7 @@ provider startup. Exceeding it refuses with a private-NPFS hint. Large uploads
 explicitly select isolated NPFS; missing/refused backing never silently changes
 backend. No staging grant enters ordinary shells/programs. See
 [transaction authority/limits](../interfaces/http-transactions.md) and the
-[task 5 contract and qualification](../wip/native-http-requests.md#task-5-accepted-shell-contract--2026-10-13).
-Standalone shell script delivery is still the owner question in that contract;
-interactive/trusted-bootstrap qualification does not claim it is implemented.
+[milestone decisions](../wip/native-http-requests.md#accepted-owner-decisions) and
+[qualification](../development/experiments/http-shell.md). Standalone shell script
+delivery (5b) is parked by the owner until the capability model is resolved;
+interactive and trusted-bootstrap qualification does not claim it is implemented.

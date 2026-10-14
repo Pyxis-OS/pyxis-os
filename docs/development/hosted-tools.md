@@ -8,9 +8,10 @@ Each bundle contains its own resource/sysroot roots, notices and provenance.
 The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
 root. Clang's manifest requests optional `launcher/launch`; withholding it keeps
 compile-only available and linking refuses. LLD never receives a launcher.
-The first compile, standalone link and PXE run passed on the ThinkPad on
-2026-10-13. Driver-invoked linking is qualified in 1/4-CPU QEMU; its native
-run is pending. Both retain honest diagnostics and failure results.
+The first compile, standalone link and PXE run, and then the one-command
+driver link, passed on the ThinkPad on 2026-10-13
+([native driver results](#native-driver-results)). Both retain honest
+diagnostics and failure results.
 
 ## Pool and authority
 
@@ -153,7 +154,100 @@ in the [task 5 record](experiments/hosted-clang-task5/README.md).
 The current driver [qualification](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13)
 measures 101,888,000/70,451,200 bytes per compiler/linker VM in QEMU, and an
 actual simultaneous VM+capture peak of 238,833,664 bytes including other guest
-processes. Cleanup returns each VM and capture to zero. Its native measurements
-are pending; this total excludes kernel/cache and is not a minimum-RAM claim.
+processes. Cleanup returns each VM and capture to zero. No native driver peak
+was measured; this total excludes kernel/cache and is not a minimum-RAM claim.
+The probe that produced the peaks stays unmerged and its images are never staged
+as ordinary builds.
+
+The allocator grows TLSF pools from eager zeroed private memory, at least 64 KiB
+each with slack for large requests; there is no fixed pool count or measured
+total-heap limit, and a single request above 2 GiB fails. Pools are retained
+until exit and `realloc` growth allocates and copies before freeing. Threads-off
+`RunSafelyOnNewStack` runs inline. Large C/C++/LTO inputs, malloc exhaustion in a
+started tool and arbitrary stack depth remain unqualified; refusal of an
+oversized capture or image was checked in QEMU only.
 A failed ordinary link preserves pre-existing requested output and leaves no
 partial output; the driver cleans its owned temporary files.
+
+## Process boundary and driver contracts
+
+Default integrated cc1 and integrated assembly run one single-source `-c` in
+process. Multiple jobs or process statistics disable cc1 integration, and the
+Pyxis toolchain constructs an external LLD command instead of embedding LLD. The
+fork disables child crash helpers and recovery, so a fatal compiler or library
+fault ends the process. LLVM worker threads stay off, but the real runtime
+primitives and static TLS are linked ([native threads](../interfaces/threads.md)).
+Objects and archives stay ELF and LLD writes P1F directly.
+
+The driver follows these owner-accepted contracts (2026-10-13):
+
+- **Containment.** A contained job profile extends the [native job core](../userland/native-jobs.md):
+  Clang holds sole, non-forwarded CONTROL of a private subgroup for its LLD child.
+  Release on Clang's exit or fault requests subtree stop. Normal completion waits
+  for process retirement and subgroup cleanup, and unknown admission is never
+  replayed. `PROCESS_WAIT` stays process-only, so on a Clang fault its observer can
+  complete before LLD's deferred cleanup; the parent group's completion is the
+  transitive observation.
+- **Creation.** Scoped group construction comes from LAUNCH with bounded trees, as
+  described in [execution groups](../interfaces/execution-groups.md#creation-and-launch-authority).
+  The LLD leaf deliberately receives no launcher.
+- **Bundle profile.** One self-contained Clang bundle with a declared read-only
+  `linker://` root holding `lld.pxb`. Clang's optional `launcher/launch` keeps
+  compile-only usable when withheld; linking then refuses honestly. The LLVM
+  adapter is a thin core client using the shared SDK bundle preparation, explicit
+  working-directory and environment snapshots and inherited descriptors.
+  Statistics and other unsupported policies remain explicit refusals, and cc1
+  integration, temporary-file cleanup and honest exit, fault and termination
+  results are preserved. A failed link no longer deletes a requested output that
+  already existed.
+- **Memory.** Image and span ceilings and stacks are unchanged; overlapping
+  Clang and LLD and capture backing are measured, not summed from independent peaks.
+
+Nothing in these generic groups, jobs and manifests carries x86 register, APIC or
+ELF-machine policy, and executable selection stays on the common launcher and
+loader path, with no foreign syscalls, `fork` or per-space compiler setting. See
+[subsystems per space](../wip/subsystems-per-space.md).
+
+## Delivery
+
+| Step | Pull requests | Record |
+| --- | --- | --- |
+| LLVM Support platform and header fixes | fork 4, #708 | [LLVM Support](llvm-support.md), [record](experiments/hosted-clang-support.md) |
+| SDK C++ source closure | userland #216, fork 5, #714 | [C++ in userspace](cxx-userspace.md), [record](experiments/hosted-clang-cxx.md) |
+| Remaining reached libc operations | userland #217, #718 | [record](experiments/hosted-clang-libc.md) |
+| Thread-gated Clang/LLD integration | fork 7, userland #242, #763 | [record](experiments/hosted-clang-integration.md) |
+| Installed tools: pool bundles, compile, separate link, run | #772 | [task 5](experiments/hosted-clang-task5/README.md) |
+| Nested subgroup foundation | #789, userland #248 | [driver record](experiments/hosted-clang-driver/README.md#native-subgroup-foundation-2026-10-13) |
+| Contained core and one-command driver | fork 8, userland #251, #793 | [driver record](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13) |
+
+The compiler container follows the single pin contract in
+[LLVM toolchain](llvm-toolchain.md#changing-the-pin); the driver adopted
+`pyxis-llvm23.1.3-e0801c2`. Rebuilding LLVM inside Pyxis is a later result with
+its own build tools and dependencies (see [source builds](../wip/source-builds.md)).
+
+## Native driver results
+
+Owner session, 2026-10-13, ThinkPad T14 Gen 1 AMD booted over PXE with the
+write-through USB build and the toolchain stick, read-only for the consumer.
+Publication of the 293,416,960-byte payload verified its SHA-256, and the extract
+took 332.9 s.
+
+- `clang --version` reports 23.1.3 from the fork.
+- `clang hello.c -o hello.pxe` exits 0 and the PXE prints `hello 5`, as does the
+  separate `-c` plus standalone LLD path. Object and PXE hashes match the
+  expected values exactly.
+- Failures exit 1 honestly and leave no output: a syntax error with caret and
+  fix-it, an undefined symbol reported through the LLD failure, an unknown linker
+  option, output into the read-only volume (Permission denied),
+  `-fproc-stat-report` (statistics unavailable) and an oversized response file
+  (capture capacity).
+- An existing output stays byte-identical after a failed explicit and a failed
+  default link.
+
+Not run natively: the launcher-withheld configuration and the memory probe's peaks.
+Writing the 280 MiB payload ran at about 0.9 MB/s, far below what the stick should
+sustain; this is the write-side counterpart of
+[bounded read aggregation](../devices/usb-storage.md#bulk-read-aggregation) and
+is recorded under [later directions](../wip/later-os-directions.md#persistent-storage-and-installation).
+Selected-image reuse remains [technical debt](../technical-debt.md#hosted-tool-launch-loading).
+

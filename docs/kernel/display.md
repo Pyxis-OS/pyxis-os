@@ -2,8 +2,8 @@
 
 Caelum presents one software-rendered screen through a boot framebuffer,
 VirtIO GPU 2D or Bochs driver. The navigation bar, every local TTY and selected
-application graphics share its native 32-bit pixel layout. The [presentation-timing plan](../wip/presentation-timing.md) records buffering,
-vblank and native flip limits and the remaining steps. Pixel dimensions are
+application graphics share its native 32-bit pixel layout. [Presentation timing](#presentation-timing) records buffering,
+vblank and native flip limits. Pixel dimensions are
 distinct from terminal cell dimensions. Remote terminal sessions keep their
 creation dimensions and generation one.
 
@@ -396,6 +396,39 @@ The 50 ms/50-poll bound, 1 ms sleep, primary/earliest confirmation and retained
 surfaces are unchanged. The [poll-cost record](../development/experiments/renoir-poll-cost/README.md)
 records the qualified guard split and owner-run native A–B–A–B costs: BSP
 observation elapsed per frame fell about 67%, with no timeout/FAILED or tearing.
+
+## Presentation timing
+
+The investigation began on 2026-10-09 with the owner's report of a tear line in
+ordinary Quake at about 72 fps on the ThinkPad's 60 Hz panel. Three decisions
+followed: software staging first, a read-only Renoir probe next with page flips as
+a separate contract, and optional low-latency pacing with truthful timing
+capability, no unconditional 60 Hz cap and no pretend SDL vsync. Delivered:
+
+- [RAM staging](#ram-staging) for boot and Bochs (#610,
+  [measurements](../development/experiments/presentation-staging/README.md)).
+- Completed-frame handoff (#618): three slots per session, the newest pending
+  frame wins and SUBMIT never waits
+  ([graphics](../interfaces/graphics.md#slots-and-frame-handoff),
+  [measurements](../development/experiments/frame-handoff/README.md)).
+- The [read-only Renoir timing observer](#read-only-renoir-firmware-timing), which
+  failed native qualification, and the natively qualified
+  [page-flip backend](#opt-in-renoir-flips) that replaces beam-racing there.
+
+What each backend can promise:
+
+- **VirtIO/QEMU:** transfer, flush and resource selection, but no vblank or
+  vsync-latched flip. Completion is command completion, never a monitor timestamp,
+  and host tearing depends on the frontend and compositor.
+- **Bochs:** DISPI offset panning selects VRAM pages but is not a retrace-latched
+  flip, and VGA status polling establishes no vblank.
+- **ThinkPad GOP:** the framebuffer descriptor carries memory, format and geometry,
+  not vertical timing. Only the Renoir flip backend adds a synchronized flip.
+
+Neither RAM double buffering nor a 60 Hz sleep alone promises tear-free output.
+Software cadence, command completion and verified hardware timing must stay
+distinct in anything reported to programs. Observation and pacing for programs
+are not started ([later directions](../wip/later-os-directions.md#presentation-timing-for-programs)).
 
 ## Qualification and cost
 

@@ -2,7 +2,7 @@
 
 2026-10-09, ThinkPad T14 Gen 1 AMD, Ryzen 5 PRO 4650U; Fedora 44,
 Linux 6.19.10-300.fc44.x86_64. Linux reference for
-[accepted presentation step 2](../../../wip/presentation-timing.md), not a Pyxis
+[presentation step 2](../../../kernel/display.md#presentation-timing), not a Pyxis
 implementation. **Complete: panel mode, active OTG, idle/animation counters and WC copy reference.** No Pyxis code, dependency pin or display configuration changed.
 
 ## Panel and blank interval

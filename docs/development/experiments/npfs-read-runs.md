@@ -112,4 +112,4 @@ The successful two-session QEMU observation is not a native substitute. Allocati
 fallback, cancellation and real failed-ticket qualification retain the limits above.
 The owner restored ordinary main `50e5411f` afterwards. Private clean and discarded
 captures remain in the staging packet; no real GUID or host account path is in
-repository records. See the [accepted scope](../../wip/usb-read-throughput.md).
+repository records. See the [implemented change](../../devices/usb-storage.md#bulk-read-aggregation).

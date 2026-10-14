@@ -95,6 +95,41 @@ Unsafe host recovery, timeout, removal during active work or corrupt events
 quarantine that controller and retain unresolved DMA. A class failure abandons
 its device; other controllers continue independently.
 
+## Bulk read aggregation
+
+The ThinkPad's BOT/xHCI path read 32 MiB at 16 to 22 MB/s with 4 KiB requests and
+113 to 115 MB/s with 64 KiB requests, so the path already moves large requests
+efficiently. The npfs store used to read one cache page per miss, and BOT
+serializes a CBW, data and CSW exchange per command. Capturing Clang's
+90,347,866-byte image therefore issued about 22,100 4 KiB READs and took 4.3 s,
+while image loading itself took about 128 ms.
+
+`kernel/fs/npfs_store.c` now groups consecutive clean misses inside a multi-page
+read into one request, up to the device's reported cap and a 64 KiB staging
+buffer owned by the BSP worker. A successful run is scattered into the ordinary
+cache entries, and nothing is published before the transfer succeeds. Runs stop
+at cached or dirty pages, holes, physical discontinuities, request boundaries,
+EOF, metadata that is not resident, or the cap. Cached and dirty precedence,
+metadata and journal overlays, sparse zero handling, cancellation, deadlines and
+capture rollback are unchanged. If staging cannot be allocated the single-page
+path is used, and staging is released on every exit. A failed aggregated ticket
+confirms no bytes within that ticket and is never retried. Only aligned interiors
+with at least two full requested pages aggregate; partial heads and tails and
+small FILE reads keep the original path. No ABI, authority, USB transfer size or
+image reuse changed, and Limine reads before Caelum are outside it.
+
+Native A/B on the same stick and port (2026-10-13, interleaved ordinary runs)
+took the Clang hello compile from 4.29 to 4.31 s down to 1.12 to 1.13 s, about
+3.8 times faster, with the same gain on repeated version launches and no material
+change in empty and small-read controls. The [matched record](../development/experiments/npfs-read-runs.md#native-ab-2026-10-13)
+and the [baseline](../development/experiments/usb-read-throughput.md) separate
+first launches from repetitions and instrumented attribution from ordinary
+timings. The native check of shared-worker responsiveness during a large read did
+not run: its second session never became ready, so it is **not qualified**
+([technical debt](../technical-debt.md#usb-read-aggregation-responsiveness)).
+Write-side throughput has not been investigated
+([later directions](../wip/later-os-directions.md#persistent-storage-and-installation)).
+
 ## Write and cache qualification
 
 After the required readable-media probe, MODE SENSE (6) requests current mode

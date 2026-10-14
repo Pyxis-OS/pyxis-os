@@ -2,10 +2,13 @@
 
 Working ideas, not an implementation assignment or settled window protocol.
 
-The initial desktop could combine Windows 9x-inspired controls and window
-decoration with a more modern treatment, a global application menu bar, a dock
-and desktop widgets. GrafX2 is a future port candidate: creating graphical
-assets inside Pyxis would complement the existing edit/build/run workflow.
+**Visual direction (owner, 2026-10-13):** inspired by the Westworld interfaces,
+replacing the earlier Windows 9x-inspired idea. Typography leads, with thin lines,
+sparse accents and no fluff; frosted glass is a later addition. Text uses grayscale
+anti-aliasing by default, with per-display subpixel geometry later. A global
+application menu bar, a dock and desktop widgets remain ideas for the initial
+desktop. GrafX2 is a future port candidate: creating graphical assets inside Pyxis
+would complement the existing edit/build/run workflow.
 
 The Steam Deck is the intended development device for a touch interface, with
 touch as its own contact input rather than pointer emulation; see the

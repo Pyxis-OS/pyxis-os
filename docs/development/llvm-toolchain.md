@@ -59,7 +59,7 @@ readable load segment and omitted from P1F. Its zero tail is a template size,
 not another mapped segment; the matching SDK linker exports its bounds and
 alignment for libc bootstrap. P1F and the kernel loader retain their format.
 Compiler support alone does not provide a TCB: language TLS needs the
-[gate 7 SDK/startup integration](../wip/threads.md#tls-and-runtime-synchronization).
+[gate 7 SDK/startup integration](../interfaces/threads.md#tls-and-runtime-keys).
 Before `elf2pxe` was removed, LLD's output was byte-identical to its conversion
 for all 50 executables then built.
 

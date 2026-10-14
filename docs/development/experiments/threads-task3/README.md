@@ -3,7 +3,7 @@
 Threads task 3, 2026-10-10. Owner accepted prospective grant capture with exact
 source recheck and precommit REPLY policy validation/move delivery. Exactly one
 user task remains; no public ABI change, new klog lines or new test infrastructure.
-Implemented behavior is documented in [threads](../../../wip/threads.md#shared-capability-and-vm-ownership).
+Implemented behavior is documented in [threads](../../../interfaces/threads.md#shared-capability-and-vm-ownership).
 This record separates the frozen comparison from later integration and native evidence.
 
 ## Pre-code baseline

@@ -3,7 +3,7 @@
 Baseline captured 2026-10-09 before implementation at Pyxis `c1e5f3be`,
 userland `72f303d6`, ports `8b918c46`; compiler image
 `pyxis-llvm23.1.3-49e2c1a`. The ordinary `make -j16 image` build passed.
-The accepted contract is in [the clipboard milestone](../wip/clipboard.md).
+The accepted contract is in [the clipboard milestone](../interfaces/clipboard.md#direction).
 
 QEMU 10.2.2: Q35, nested KVM, `-cpu max`, four CPUs (one socket, four cores,
 one thread), 512 MiB, UTC RTC, fresh raw OVMF, modern VirtIO GPU/SCSI CD/RNG,

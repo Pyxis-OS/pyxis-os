@@ -8,7 +8,7 @@ a separate owner go after hosted Clang.
 
 **Owner ordering, 2026-10-11:** Go follows hosted Clang. Clang's decisions are
 accepted; beta is planning its threads-independent line, while delta owns
-[threads gates 5–8](threads.md#delivery-gates). This investigation identifies
+[threads gates 5–8](../interfaces/threads.md#delivery). This investigation identifies
 Go's actual dependencies within those gates; it assigns none of their work.
 The target remains the standard Go compiler/runtime, static amd64/v1, initially
 without cgo. TinyGo, WebAssembly hosting and a replacement runtime are outside

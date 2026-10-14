@@ -1,7 +1,7 @@
 # Completed-frame handoff
 
 Measured on 2026-10-09 for step 2 of the accepted
-[presentation-timing plan](../../../wip/presentation-timing.md): graphics
+[presentation timing](../../../kernel/display.md#presentation-timing): graphics
 programs hand over whole frames through SUBMIT
 ([contract](../../../interfaces/graphics.md#slots-and-frame-handoff)).
 

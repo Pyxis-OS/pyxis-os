@@ -209,7 +209,7 @@ allocation uses or enlarges that budget. Boot's uncopied executable path is
 unchanged.
 
 Estimated repeated-open cost (not measured): the
-[Linux proxy sizes](hosted-clang.md#resources-and-native-limits) sum to about
+[Linux proxy sizes](../development/hosted-tools.md#qualified-capacity) sum to about
 169 MiB (Clang 85.94, LLD 54.59, headers 8.2, sysroot 20), so 170 MiB is the
 planning archive size. With no cache every independent open copies it even when
 selecting only Clang; a 100-source build would copy about 16.6 GiB. Whole-view CRC

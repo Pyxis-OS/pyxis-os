@@ -87,7 +87,7 @@ pages (8 bytes/4096 bytes, about 0.2%, plus the allocation header). A derived
 registration count skips bucket scans when no waits exist; it does not pin mappings.
 BSP mutation drains active roots and short borrowers, so registration holds neither
 through sleep. A successful unmap returns BAD_BUFFER to the detached waiters;
-a failed mutation leaves registrations intact. See [address parking](../wip/threads.md#gate-6-contract-owner-accepted-2026-10-11).
+a failed mutation leaves registrations intact. See [address parking](../interfaces/threads.md#address-parking).
 
 ## Execution
 

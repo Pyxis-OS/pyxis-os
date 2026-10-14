@@ -1,6 +1,6 @@
 # Lua 5.1 with LPeg and luv qualification
 
-QEMU checks for task 5 of the [Neovim milestone](../../../wip/neovim-libuv.md):
+QEMU checks for task 5 of the [Neovim milestone](../../../userland/neovim.md#milestone-and-delivery):
 the [`lua51` recipe](../../../../ports/lua51/README.md) and its
 `boot://share/lua51/lua5.1.pxb` bundle, built from this change on main
 `d01fe599` and rebased onto `441fcd4a` (#674), with userland's six added

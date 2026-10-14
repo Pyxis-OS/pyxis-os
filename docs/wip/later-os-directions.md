@@ -11,7 +11,27 @@ Owner direction (2026-10-11): extend negotiated remote resize to plain interacti
 
 ## Package manager
 
-Parked: a package manager has multiple dependencies and will replace [manual toolchain revision publication](hosted-clang.md#accepted-task-5-profile-2026-10-13); see the related [source-build direction](source-builds.md). No work is assigned.
+Parked: a package manager has multiple dependencies and will replace [manual toolchain revision publication](../development/hosted-tools.md#manual-immutable-publication); see the related [source-build direction](source-builds.md). No work is assigned.
+
+Selecting existing build artifacts, so a developer can consume successful CI work
+without finding and extracting each [bundle](../development/build-bundles.md), is
+part of this direction (owner's call, 2026-10-14) rather than a separate task. The
+rules worth keeping:
+
+- Begin with explicit artifact selection and a local cache. Decide the Forgejo
+  run and artifact selector, authentication source, retention and missing-artifact
+  fallback first, never embedding repository tokens in bundles or updating source
+  checkouts as a side effect of `make run`.
+- Match exact input fingerprints per component: source inputs, compiler and build
+  settings and SDK dependency identity. Never trust a "clean checkout", which can
+  be behind upstream, and never weaken a dependency check to avoid work.
+- Local edits rebuild the affected components and their dependents; unrelated
+  bundles stay reusable.
+- Explain every decision: which components were downloaded, reused or built, and
+  why a candidate was rejected. Document offline behavior.
+
+This is build-product reuse, not a cross-repository dispatch system, which remains
+a separate owner-managed integration.
 
 ## Execution lifecycle
 
@@ -98,9 +118,8 @@ need a bounded native completion prerequisite now: TCP CONNECT, DNS UDP
 SEND/RECEIVE and native FILE/DIRECTORY staging, one pending operation per instance,
 one owned receiver per correlated result, reserved admission before submission,
 and cancel/close/exit ownership drain. Its
-[accepted submission/cancel/collection contract](native-http-requests.md#native-completion-accepted-contract)
-is accepted; the bounded [interface](../interfaces/native-completion.md) is
-delivered for review. The broader completion model remains
+[accepted submission/cancel/collection contract](../interfaces/native-completion.md)
+is accepted and its bounded interface delivered. The broader completion model remains
 parked and unassigned; this permits no general async rewrite or extra per-operation
 capability API. [BSP service requests](../kernel/bsp-service-requests.md) remain
 synchronous outside the separate native completion admission route.
@@ -223,6 +242,10 @@ Owner ideas, 2026-10-07; none is scheduled.
   for per-CPU busy and idle time and per-process CPU time, and a decision on
   which processes a caller may see.
 
+- **Network debugger task 4.** Mutation and execution control (writes, software
+  breakpoints, stepping, running break-in, detach and kill restoration), unassigned;
+  see [decisions and unimplemented task 4](../kernel/network-debugger.md#decisions-and-unimplemented-task-4).
+
 ## Full-screen space
 
 Owner idea, 2026-10-12; not scheduled. A key combination hides the
@@ -250,10 +273,11 @@ and [master/per-space volume](../userland/audio-volume.md) are complete; the
 [remaining limits](../technical-debt.md#hd-audio-volume-control) include media-key
 input and the later native regression.
 
-SDL2 and Quake sound are separate consumer assignments. Conversion/resampling
-belongs in userspace; Quake needs its real mixer and native producer adapter.
-SDL2 needs real audio callback/thread execution under the
-[threads direction](scheduling-and-threads.md); today its port has no audio backend. Recording, HDMI/DP, USB/dock and Bluetooth audio remain later directions.
+[SDL2 audio callbacks](../development/sdl2.md#audio) and the
+[Chocolate Quake sound bundle](../userland/chocolate-quake.md) are delivered;
+Chocolate Doom and EDuke32 sound, music and [SDL latency tuning](../technical-debt.md#sdl-audio-latency)
+remain. Conversion and resampling belong in userspace. Recording, HDMI/DP, USB/dock
+and Bluetooth audio remain later directions.
 
 ## Bluetooth
 
@@ -308,6 +332,12 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
   threshold without AC, as firmware updaters do; the ThinkPad switched itself
   off on low battery just before a planned Update on 2026-10-07. It could also
   hold off power operations while it writes.
+- **Power overlay.** Bounded output-lock waits in the presenter, so a stuck writer
+  drops frames instead of stopping input (it changes ordinary presentation and
+  needs a decision; see [power overlay limits](../technical-debt.md#power-overlay-limits)),
+  a warning that RAM volumes are lost on shutdown from a live image, and other
+  system-overlay entries such as a lock screen or space switch, only with users
+  and sessions.
 - **Low battery.** The widget changes style at a low level, and later a clean
   power-off runs automatically at a critical level, before the firmware cuts
   power.
@@ -351,11 +381,122 @@ Ideas recorded when npfs was planned, none of them agreed:
   replaces it. The [machine settings proposal](machine-settings.md) develops a
   small record (hostname and similar) kept separate from the archive and carried
   across updates and reinstalls; its task 1 is implemented.
+- **USB write throughput.** Extracting 280 MiB to the toolchain stick took 333 s
+  (about 0.9 MB/s) in the native Clang session of 2026-10-13, far below what a USB
+  stick sustains. It is the write-side counterpart of
+  [bulk read aggregation](../devices/usb-storage.md#bulk-read-aggregation): writes are
+  likely 4 KiB-sized, serialized BOT commands, now also without a device cache flush.
+  It needs investigation and is on the owner's shortlist; nothing is assigned.
 - **NVMe.** The [NVMe driver](../devices/nvme.md) is merged (#710) and read-only;
   native writes await qualification. With it, the Fedora disk would appear
   under Read the room as a foreign disk, which the owner accepted. The
   [coexistence proposal](nvme-coexistence.md) develops the driver, FAT32 and a
   non-destructive installer mode beside Fedora.
+
+## Presentation timing for programs
+
+Unassigned. Timing would reach programs through a native display observation and
+wait: a geometry generation, a frame sequence, a monotonic timestamp and period, and
+whether the source is software cadence, command completion or verified hardware
+timing. Buffer retirement and display timing are different events, and there is no
+SDL vsync claim without supported timing and no timer cap presented as vsync. Quake
+could pace to display timing rather than its unrelated 72 Hz sleep, keeping timedemo
+uncapped. Pending frames stay bounded, and nothing queues without limit, waits under
+output locks or with IF=0, or changes hidden-space, focus or input semantics. One
+1920x1080x4 frame is 7.91 MiB, about 498 MB/s of destination writes at 60 Hz before
+source reads; damage-only copies need damage tracking for navigation, cursor, caret
+and every source, which is later work. Qualify before and after on the same ThinkPad
+mode, power and workload (composition and copy P50/P95/max, missed intervals,
+application cadence, input latency); camera clips or owner observation, not FPS or
+screenshots, decide visible tearing. See [presentation timing](../kernel/display.md#presentation-timing).
+
+## Neovim follow-ups
+
+Neovim is delivered ([reference](../userland/neovim.md)); each follow-up needs its own
+proposal and the owner's go.
+
+- **Swap and backup recovery** need a lease policy: the swap creator PID in file bytes
+  must not become control authority, and `flock` is not a basic-editor prerequisite.
+  Change detection by polling needs truthful metadata and timers.
+- **Jobs and `system()`** consume the [native command core](../userland/native-jobs.md);
+  descendant jobs need [nested execution groups](nested-execution-groups.md), and
+  stopping one needs a cooperative-versus-forced policy over held capabilities, not
+  numeric-PID killing.
+- **Terminal input reporting** (xterm mouse modes 1000/1002/1006 and focus `?1004`) in
+  TTY tabs, mux panes and the remote client, enabling `vim.opt.mouse` and
+  `FocusGained`/`FocusLost`; the owner wants optional save on focus loss
+  (`autocmd FocusLost * silent! wall`). Neither reporting path exists.
+- **Richer `pyxis` profile:** advertise indexed and RGB colours and the text styles the
+  terminals already render, then `termguicolors`, with explicit highlight groups. A
+  Neovim Unicode profile is separate.
+- **Netrw** and native scheme handling in runtime path helpers, including the
+  `:checkhealth` frontend; **`:terminal`** (terminal sessions, child attachment, raw
+  and cooked responsibilities, resize, hangup, flow control, with native launch
+  replacing `forkpty`).
+- **Threads and the libuv pool** need the [native threads](../interfaces/threads.md)
+  consumer adapter; separate worker processes cannot replace them.
+- **Dynamic Tree-sitter parsers, C Lua modules and LuaJIT** need relocatable code
+  loading with permissions and executable-memory transitions; the seven bundled
+  grammars are already static.
+- **LSP and networking:** stdio language servers need jobs first, and TCP LSP needs
+  listen and accept. clangd follows [native Clang](../development/hosted-tools.md).
+  Compiler diagnostics as Neovim diagnostics, before clangd, is the owner's preference
+  over jump-to-definition. Universal Ctags is parked (2026-10-10).
+- **Scalable terminal fonts** (far-future, 2026-10-10): TTF, OTF or WOFF chosen by
+  implementation ease, for example an stb_truetype-style rasterizer with a glyph
+  cache. No font source, dependency or contract exists.
+
+Long-term acceptance target (owner, 2026-10-10): the real `chronium/nvim-configs`
+(lazy.nvim, Primeagen-style) should mostly work. The first set is `set.lua`, remaps,
+undotree, a copied-in harpoon and tokyonight once the richer profile lands, with
+explicit errors for unavailable features. Known gaps: lazy.nvim, fugitive and plugin
+updates need [Git](git-on-pyxis.md) and jobs; `<leader>pv` needs netrw; `"+y` needs a
+clipboard provider wired to the [typed clipboard](../interfaces/clipboard.md);
+`:TSUpdate` is replaced by statically bundled parsers; Mason stays out because it
+downloads Linux binaries; telescope needs jobs; tmux-sessionizer is replaced by the
+mux. Replace the config's `os.getenv("HOME")` undo directory with
+`vim.fn.stdpath("state") .. "/undo"` (`home://.local/state/nvim`), since stock launch
+does not set `HOME`.
+
+## Clipboard typed objects and converters
+
+Proposed, not assigned (accepted direction in the [clipboard reference](../interfaces/clipboard.md#direction)).
+An item would hold a MIME representation (canonical lower-case `type/subtype`, at most
+127 bytes, no parameters) beside the mandatory UTF-8 text form, as bounded bytes or
+as a read-only FILE capability. A label is descriptive, never proof of content or
+authority, and a FILE handle's number cannot be pasted in text. Pasting an image whose
+text form is `home://pictures/photo.png` into a terminal inserts only that string,
+with no lookup, mount or authority; an image editor receives the object or an
+attenuated READ grant to its frozen snapshot, never a source directory, WRITE,
+launcher or namespace grant. Mutable or provider-backed data is copied into
+store-owned immutable backing before publication (READ and MIME do not prove
+immutability), a read of a concurrently modified file is refused, and only complete
+validated staging becomes the current item. Proposed bounds, to be measured: 8 MiB per
+item, 64 MiB retained globally and 16 MiB per space, 128 retained versions globally
+and four per receiving space, charging logical bytes once globally and per retaining
+space, never revoking an admitted snapshot.
+
+Converters would be trusted, packaged handlers registered by trusted startup, exact
+MIME matches preferred, one conversion step per request, found through no pasted
+path, environment variable or untrusted namespace. A trusted coordinator gives each
+only a READ input snapshot, private memory, a bounded result channel and the clock;
+no store grant, destination input, roots, network, terminal or general launch. The
+coordinator holds termination in an execution group, validates type and length,
+applies a five-second deadline and owns the output; converters cannot replace the
+current clipboard, a failed conversion preserves it, and a graphics request never
+falls back to text. Hostile plugins, supervision and conversion caches are separate
+work, and retained-result accounting must be settled before any converter code.
+
+## Gallery
+
+Owner request (queued, 2026-10-13), waiting on plain stdio HTTP submission
+([parked 5c](native-http-requests.md#parked-tasks-5b-and-5c)): a clean Pyxis QEMU
+screendump with Neovim on the left editing a short C version of
+[`ci-jobs-server.py`](../../tools/demo/ci-jobs-server.py)'s existing
+[gallery](../gallery/README.md) workflow and the shell on the right running one
+`clang demo.c -o demo.pxe` and its output. It uses plain stdio (`fopen(uri, "w+")`,
+`fputs`, `fflush`, `fgets`), posts a job, reads its reply, polls progress and lists
+jobs. The owner coordinates readiness.
 
 ## References
 

@@ -119,4 +119,48 @@ query's native source.
 and [static-parser qualification](../development/experiments/neovim-static-parsers/README.md)
 record editing, highlighting, safe-save checks, startup time and cleanup,
 including [new-name saves](../development/experiments/neovim-first-slice/README.md#new-name-saves-2026-10-10).
-Owner native qualification is the milestone's remaining [task](../wip/neovim-libuv.md#tasks).
+The owner uses Neovim natively on the ThinkPad, which closes the milestone's
+native qualification (2026-10-14). Further work is listed under
+[Neovim follow-ups](../wip/later-os-directions.md#neovim-follow-ups).
+
+## Milestone and delivery
+
+The owner wants Neovim as the development editor (vi bindings now, clangd later)
+instead of patching BusyBox vi. The first slice is Neovim 0.12.5 in normal
+terminal mode: the client launches an `--embed` server of the same program over
+pipes, so the space needs `launch = true`, and it edits and saves native files in
+a framebuffer tab or a multiplexer pane with Vimscript and Lua configuration under
+`home://`. Decisions accepted on 2026-10-10:
+
+- **Lua:** PUC Lua 5.1.5, which needs no executable memory or JIT. It is slower and
+  plugins needing LuaJIT's `jit` or FFI will not run; LuaJIT waits for a native
+  executable-memory transition.
+- **Event model:** readiness plus try operations extending `wait_many`, as for
+  console, terminals and TCP. There is no second submission and completion model.
+- **Scope:** ASCII input, swap and backup off, and no threads, jobs or `:terminal`.
+  libuv creates its pool only when work is submitted and Neovim's own file calls
+  are synchronous, so the backend refuses pool and thread requests with an error;
+  the source audit found no mandatory pool, worker or callback-style file call in
+  startup, opening and `:w`. Excluded Lua configuration can invoke those APIs.
+- **Save safety:** [saving and limits](#saving-and-limits).
+
+| Task | Delivered | Record |
+| --- | --- | --- |
+| Pipe readiness and try operations | #651 | [pipes](../interfaces/pipes.md#readiness), [record](../development/experiments/pipe-readiness/README.md) |
+| File identity and modification stamp | #656 | [metadata](../interfaces/file-metadata.md), [record](../development/experiments/file-identity/README.md) |
+| Terminal profile for a full-screen editor | #657 | [sequence table](terminal.md#tty-output-controls), [record](../development/experiments/terminal-profile/README.md) |
+| libuv 1.52.1 with a one-thread Pyxis platform layer | #664 | [port notes](../../ports/libuv/README.md), [record](../development/experiments/libuv-native/README.md) |
+| Lua 5.1.5 with luv | #672 | [recipe](../../ports/lua51/README.md), [record](../development/experiments/lua51-luv/README.md) |
+| Neovim recipe and first slice | #680 | [recipe](../../ports/neovim/README.md), [record](../development/experiments/neovim-first-slice/README.md) |
+
+Task 6's shared libc groundwork is the inventory (#667), the working path and
+environment (#674, [reference](process-state.md)), `realpath` and `fdopen`/`dup`
+(#677), `mktime`, `iconv` and the numeric and string closure (#678,
+[record](../development/experiments/calendar-encoding/README.md)). Follow-ups are
+persistent undo (#690), static Tree-sitter parsers (#694), native libuv OS queries
+(#695) and anchored new-file saves (#698). The terminal work Neovim drove is
+delivered separately: shared SGR with 256 colours, RGB, bold, italic and underline
+(#681, [record](../development/experiments/terminal-sgr/README.md)) and a bounded
+UTF-8 repertoire (#699, [record](../development/experiments/terminal-utf8/README.md)),
+both in the [TTY output controls](terminal.md#tty-output-controls). The Neovim
+profile deliberately stays at sixteen colours and ASCII input.

@@ -138,7 +138,7 @@ Owner direction (2026-10-12): surviving private `job_work` cleanup belongs with 
   output and failures are seen, remain open.
 - **Polaris** is the tool that validates space and supervisor configuration and
   applies a change to Continuum, as a migration from the running configuration
-  to the new one. The [boot configuration checker](boot-configuration-checker.md)
+  to the new one. The [boot configuration checker](installer-tui.md#configuration-checker)
   idea is its validation half.
 
 The owner considers supervision, startup and recovery policies and runtime

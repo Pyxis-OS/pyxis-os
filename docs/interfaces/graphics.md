@@ -289,4 +289,4 @@ quotas remain separate work. The single-CPU development fallback can use the sam
 display protocol, while its TTY still shares kernel logs.
 
 Presentation timing and pacing are later steps of
-[presentation timing](../wip/presentation-timing.md).
+[presentation timing](../kernel/display.md#presentation-timing).

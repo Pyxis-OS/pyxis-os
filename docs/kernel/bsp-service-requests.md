@@ -302,4 +302,4 @@ implemented; unsupported competing device operations have scoped native refusals
 Parking, language TLS and ordinary thread-safe runtime remain separately assigned
 gates. Kernel clients likewise need an explicit nesting/dependency contract
 before synchronous submission can be allowed. See the
-[thread follow-ups](../wip/threads.md).
+[thread follow-ups](../interfaces/threads.md).

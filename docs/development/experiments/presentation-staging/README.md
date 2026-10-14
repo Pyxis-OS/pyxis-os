@@ -1,7 +1,7 @@
 # Presentation RAM staging
 
 Measured on 2026-10-09 for step 1 of the accepted
-[presentation-timing plan](../../../wip/presentation-timing.md): boot and Bochs
+[presentation timing](../../../kernel/display.md#presentation-timing): boot and Bochs
 frames compose in a RAM staging frame
 ([behaviour](../../../kernel/display.md#ram-staging)).
 

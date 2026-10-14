@@ -236,7 +236,7 @@ registry exclusion. Required language-destructor registration allocation failure
 terminates the process honestly. Main-thread FS remains alive through atexit,
 .fini_array and stdio shutdown. Forced process stop/fault runs no user destructors.
 See [gate 7 qualification](experiments/threads-task7/README.md) and the remaining
-[thread gates](../wip/threads.md#delivery-gates).
+[native threads](../interfaces/threads.md#delivery).
 
 ## CMake
 

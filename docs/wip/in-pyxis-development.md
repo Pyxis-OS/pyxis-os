@@ -23,7 +23,7 @@ work needs.
 - **Class files:** compiled on a host with `javac --release 8`. Pyxis has no Java
   compiler. Class files arrive over HTTP today, for example
   `cat http://HOST:PORT/Foo.class > Foo.class` from a host file server. Later
-  they can arrive through [remote file transfer](remote-file-transfer.md).
+  they can arrive through [remote file transfer](../userland/remote-terminal.md).
 
 ## Proposed target
 
@@ -38,7 +38,7 @@ Delivered: BusyBox `tar` without compression
 ([reference](../userland/tar.md); `gzip`, `unzip` and zlib wait until jars are
 needed, see [application ports](application-ports.md)), explicit
 [file transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer)
-(drag-and-drop upload awaits the owner's [GUI-drop check](remote-file-transfer.md#open-task)),
+(drag-and-drop upload included),
 and the [Lua build runtime](../userland/lua.md) for the owner's build scripts
 (its limits are in [technical debt](../technical-debt.md#lua-build-runtime-limits)).
 The build tool is the owner's own code in the JVM project; Pyxis supplies only

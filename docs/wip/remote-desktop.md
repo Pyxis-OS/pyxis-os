@@ -71,7 +71,7 @@ records the dependency.
 2. **Remote input.** A remote input source for keys and
    absolute pointer positions, with its own authority decision.
 3. **Efficiency and security.** Capture without whole-frame copies, damage
-   tracking, TLS, and clipboard sync once the [clipboard](clipboard.md) exists.
+   tracking, TLS, and clipboard sync once the [clipboard](../interfaces/clipboard.md#direction) exists.
 
 ## Open questions
 

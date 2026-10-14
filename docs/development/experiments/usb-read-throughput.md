@@ -71,4 +71,4 @@ remote setup failure is excluded. All owned QEMU/GDB/client jobs are stopped.
 
 Private raw records, exact command captures, adapted wrapper and native run
 sheet remain in the owner's staging packet; no real disk GUID or inventory is
-committed. See the [proposal](../../wip/usb-read-throughput.md) for interpretation.
+committed. See the [USB storage reference](../../devices/usb-storage.md#bulk-read-aggregation) for interpretation.

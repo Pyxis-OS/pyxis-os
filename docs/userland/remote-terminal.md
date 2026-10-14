@@ -300,12 +300,25 @@ removed. Atomic rename commits the complete destination, which
 survives a later cancellation, synchronization failure or lost acknowledgement.
 Host publication uses Linux `renameat2(RENAME_NOREPLACE)` or macOS
 `renameatx_np(RENAME_EXCL)`; other host platforms fail publication explicitly.
-Linux behavior is validated; the macOS path requires owner validation.
+Linux behavior is validated; the macOS path is unmeasured.
 
-See the [accepted transfer decisions and remaining drag/drop check](../wip/remote-file-transfer.md)
-and the [native program notes](../../userspace/xfer/README.md) for authority,
-filename limits and the OSC 5113 SHA-256 extension. Stock kitty does not implement
-this required extension and is unsupported.
+The frame format is kitty's [file transfer protocol](https://sw.kovidgoyal.net/kitty/file-transfer-protocol/)
+(OSC 5113), single regular files only, with the mandatory negotiated SHA-256
+extension (`px_xfer=2`). Peers that do not advertise it are refused, and stock
+kitty, which lacks the extension, is unsupported. Every upload and download is
+confirmed on the host, nothing is overwritten without an explicit flag, and names
+arriving from Pyxis are reduced to a plain file name. Directories and projects
+travel as an archive made with [tar](tar.md). Streaming has no size limit, keeps
+unverified bytes only under the private staging name and fails if the source
+changes. HTTP(S) fetch bodies stay out, and provider FILE snapshots keep their
+16 MiB in-memory limit. Resume, compression, a progress display, transfers through
+the local framebuffer console and changes to the remote wire protocol are not
+provided. See the [native program notes](../../userspace/xfer/README.md) for
+authority, filename limits and the extension, and the
+[xfer qualification](../development/experiments/xfer-streaming/README.md) and
+[pipelining](../development/experiments/xfer-pipelining/README.md) measurements.
+Delivered in #445 (explicit transfer), #455 (drop), #551 and #554 (streaming and
+the reply-read fix) and #600 (windowed `px_xfer=2`).
 
 ## Dropping a host file
 
@@ -346,9 +359,12 @@ Default machine sessions preserve the root shell's OSC marker bytes in OUTPUT;
 `--no-shell-echo` uses the quiet editor and emits no prompt markers. No kernel,
 terminal wire frame or filesystem grant is added.
 
-Linux client/guest protocol checks pass; actual macOS terminal drag/drop and
-macOS publication still require owner validation. See the
+The owner confirmed dropping files from host terminals into an idle remote shell
+(2026-10-14, repeated); dropping into a running program or pasting ordinary text
+behaves as a normal paste. Linux client/guest protocol checks are in the
 [drop validation record](../development/experiments/xfer-streaming/README.md#drop-2026-10-07).
+The macOS download-publication path (`renameatx_np(RENAME_EXCL)`) has no recorded
+measurement.
 
 ## Client modes
 

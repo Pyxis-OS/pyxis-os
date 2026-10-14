@@ -10,7 +10,7 @@ Terminal delivery serves local terminals, Caelum log Copy and the
 [multiplexer](../userland/multiplexer.md). Eligible graphics owners also use
 bounded UTF-8 text through the SDL2 adapter below. FILE representations,
 converters and host/remote bridging remain later
-[milestone tasks](../wip/clipboard.md).
+[directions](#direction).
 
 ## Gestures and selection
 
@@ -181,6 +181,23 @@ cancels before its normal interrupt/line-cancel effect; unmodified Escape
 cancels, while Super+Esc retains its kernel priority. Cancellation may leave an
 editable inserted prefix but never submits it. Libterm reports inserted bytes,
 cancellation and native status; nonquiet editors show a cancellation notice.
+
+## Direction
+
+Accepted by the owner on 2026-10-08, with text delivery implemented: a clipboard
+local to each space plus one shared across spaces; the clipboard holds the object,
+so it survives the source program exiting, unlike X11 and Wayland; every object has
+a type (MIME labels such as `image/png`) and a mandatory text representation, so a
+photo pasted into a terminal pastes its path and into a photo editor pastes the
+photo; and conversion handlers live in userspace (Haiku's Translation Kit is a
+precedent). The kernel stores and validates, parses no image formats, opens no
+paths and runs no converters. Moving the stores into supervised services, for
+example under Continuum, needs its own migration proposal, and a broader Paste
+reader than the scoped transaction needs owner review first. The proposed typed
+objects, FILE retention and converters are recorded in
+[later directions](../wip/later-os-directions.md#clipboard-typed-objects-and-converters).
+Remote bridging, USB input, arbitrary plugins, history and persistence are not
+planned.
 
 ## Bounds and qualification
 
