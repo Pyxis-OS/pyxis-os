@@ -23,9 +23,10 @@ preparation remains visible but cannot be selected automatically.
 An optional `prefer = {"MAC", ...}` array ranks currently eligible candidates
 by the first matching entry. Missing or unlinked entries do not delay others;
 duplicates are harmless. After preference rank, ascending boot-local controller
-ID breaks ties, following PCI inventory order. IDs are the retained PCI
-inventory position plus one; that inventory currently stores records in reverse
-scan order, so this is not ascending bus/device/function order.
+ID breaks ties. PCI IDs are the retained inventory position plus one; that
+inventory currently stores records in reverse scan order, so this is not ascending
+bus/device/function order. Prepared USB NCM candidates use collision-free
+boot-local IDs after the PCI inventory.
 There is no driver-family preference. IDs do not depend on MAC
 uniqueness, so two controllers with identical MACs can still be distinguished.
 Use the private [image profile override](../development/configuration.md#image-network-profile)
@@ -36,9 +37,11 @@ for machine-specific addresses; no real MAC belongs in the packaged profile.
 NET_CONFIG READ enumerates retained supported records in ascending ID order,
 reporting inventory completeness, preparation, fresh carrier knowledge/up state,
 binding, family and identity. ID zero ends enumeration; completeness remains
-visible at the end. The worker samples hardware without activating transport,
-DMA or interrupt delivery. The kernel owns observations and binding; preference
-and waiting policy live in the setup session.
+visible at the end. Queries sample existing hardware/state without activating
+transport, DMA or interrupt delivery. For USB NCM, the owning USB worker performs bounded class
+setup and carrier notification preparation independently before BIND; Ethernet
+bulk traffic starts only after BIND. The kernel owns observations and binding;
+preference and waiting policy live in the setup session.
 
 `NET_SELECT_LINKED_CONTROLLER` with WRITE binds an exact candidate after
 checking complete discovery and fresh
@@ -72,3 +75,7 @@ change controllers or revalidate a lease on link-up. The ThinkPad dock-facing
 DASH XID `502` remains unsupported; the built-in XID `541` is supported. Native
 cold/PXE coverage and measured QEMU/VFIO behavior are recorded in
 [qualification](../development/link-selection-qualification.md).
+
+USB NCM integration is in flight in [Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet).
+The boot data path is qualified with a high-speed gadget; bounded branch recovery
+and native SuperSpeed/dock qualification remain pending.

@@ -39,4 +39,50 @@ images and full commands remain in ignored `build/cdc-baseline{,-info}`.
 Baseline ELF SHA256 `2ac7417e9e3ba23926a996f49e1d5f1af8b0285ced502e8eef596de866fe8123`;
 ISO `859c63c2dda6846e6ba5d151f4571f290cb6a9dc0f80a6027e615fb71bd9167b`.
 These are nested observations, not native performance or NCM driver evidence.
-Implementation and native qualification remain pending.
+Matched after-code performance and native qualification remain pending.
+
+
+## In-flight implementation checkpoint, 2026-10-14
+
+Task 9 is incomplete. Kernel code `de624661`, parent pin `ca5fc713`, published
+userland `e9edd5b4` ([#267](https://git.internal/PyxisOS/pyxis-userland/pulls/267));
+other dependencies unchanged. Ordinary integrated image build passes with the
+same builder. No compiler/container change.
+
+Correctness uses the existing Linux 6.19.10 dummy_hcd/configfs NCM function
+through QEMU usb-host: high-speed root function, real descriptor MAC
+`02:77:00:00:00:02`, static guest `192.168.77.2/24`, peer `192.168.77.1`.
+Q35/nested KVM, CPU max, 2 GiB, fresh OVMF variables and VirtIO devices match
+the baseline. This is not an ASIX, SuperSpeed or dock-hub test. Linux's gadget
+is an ordinary fixture, not new Pyxis test infrastructure.
+
+The four-CPU trace build used the same kernel code before its commit and
+userland `b526e4ac` (before the content-preserving rebase). Class negotiation
+selected NTB16/no CRC, 16,384-byte RX/TX and real carrier notifications. GDB
+observed prepared/ready/bound/up, a running nonfailed controller, zero malformed
+NTBs and TX/two RX buffers within one 64 KiB span. Three pings received three
+replies; a plain Remote command exited 0 with complete drain. Interactive xfer
+published 5,848,400 bytes; remote sha256sum matched source ELF
+`11f8cdf7fce6da4ca4639a358283743a3df2810c4111901db704567bda667d5b`.
+
+The one-CPU info build uses `de624661` with rebased userland `e9edd5b4`.
+Three pings received three replies; `echo ncm-one-cpu` through Remote exited 0
+with complete drain. The existing host UDP log receiver observed the NCM MAC's
+stream (3,959 bytes captured). Read-only GDB observed bound/ready/reported-up,
+free copied queue slots, and running/nonfailed xHCI. No target calls or writes.
+
+One-CPU ELF SHA256 `3f8b186e6cc6a11af6453c3af05863ed29604193c0036445decef9517984aa24`;
+ISO `f00a3a795cb3a97fd55b384a6d516e4f2d11b9f8e271475047b7bab5dfe8bb20`.
+Images and captures remain local in `build/ncm-first` and `build/ncm-checkpoint`.
+These are correctness observations, not throughput or matched performance.
+
+The ordinary gadget exposed two interoperability errors, both corrected:
+control OUT completion reports its data-byte count; IN datagram alignment is
+handled by byte-safe copies rather than rejecting the function's layout intent.
+Whole-NTB bounds, overlap, termination and mandatory NDP alignment remain checked.
+
+Remaining: bounded initial retries and known-branch reconstruction coordinator;
+SuperSpeed/hub and hot-unplug/replug qualification; DHCP, malformed-input and
+capacity review; matched after-code baseline; native ThinkPad/dock packet.
+Recovery helpers/resources exist but no coordinator invokes them yet. Do not
+stage this partial image as a normal native build. Both PRs remain draft.

@@ -224,10 +224,10 @@ console, because network logging starts late in boot.
 **After this task the owner can:** get a DHCP lease and reach the network from
 the Deck through the dock, and use the UDP log and remote terminal on it.
 
-#### Task 9 scope before code
+#### Task 9 accepted scope
 
-**Assigned; all three defaults accepted by the owner (2026-10-14), not yet
-implemented.** Branch `usb/cdc-ncm-dock-ethernet` is based on main `8395f988`,
+**Assigned; all three defaults accepted by the owner (2026-10-14). Implementation
+is in flight; task 9 remains incomplete.** Branch `usb/cdc-ncm-dock-ethernet` is based on main `8395f988`,
 which includes [#852](https://git.internal/PyxisOS/pyxis-os/pulls/852) and its
 ThinkPad dock retirement qualification.
 
@@ -297,6 +297,15 @@ selected logical NIC and no failover to a different adapter.
    reporting. See the [emergency USB transport debt](../technical-debt.md#usb-network-emergency-transport);
    the dock-only Deck cannot yet rely on network GDB for driver bring-up.
 
+Task 9 checkpoint (2026-10-14): [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859)
+and [userland #267](https://git.internal/PyxisOS/pyxis-userland/pulls/267) remain
+draft. Ordinary image and one/four-CPU high-speed NCM gadget checks pass for
+ping, plain Remote, file transfer (four CPUs) and normal UDP log (one CPU).
+[The record](../development/experiments/usb-cdc-ncm/README.md) identifies builds
+and limits. Initial/known-branch recovery, SuperSpeed/hub hotplug, DHCP,
+matched performance and native dock qualification remain. Parked for the night;
+no new owner decision is pending and no compiler rebuild is needed.
+
 First concrete implementation step after baseline: validate/capture
 the selected NCM function and class parameters into retained candidate storage,
 with explicit refusal reasons, then qualify the native transport and provider
@@ -306,8 +315,8 @@ record resource counts and negotiated parameters before throughput claims.
 QEMU's [USB network model](https://gitlab.com/qemu-project/qemu/-/blob/master/hw/usb/dev-network.c?ref_type=heads)
 is ECM/RNDIS, not NCM. Qualify ordinary non-NCM boots/hot-unplug in QEMU, and
 evaluate an isolated existing Linux NCM gadget via `dummy_hcd`/configfs and
-QEMU `usb-host` for class traffic; the matching host modules exist, setup is
-unrun. No new emulator or test framework. Native owner checks: dock then Deck
+QEMU `usb-host` for class traffic; the matching host modules exist and the high-speed root fixture passes the
+checks recorded above; SuperSpeed/hub recovery remains unqualified. No new emulator or test framework. Native owner checks: dock then Deck
 and vela/RTL8156 when available, exact MAC selection, DHCP, normal UDP log,
 Remote/xfer integrity, Ethernet cable down/up and USB branch loss/recovery;
 record the emergency limits separately.
