@@ -27,8 +27,9 @@ admission, allocation state maintained for the mount lifetime, local mutation
 checks, and an explicit full check at publication start. The owner accepted this contract and authorized its implementation on 2026-10-13.
 
 Consolidate RW admission's existing checks into one full mounted-volume check.
-Read FAT copies through bounded windows, initially up to eight sectors per copy
-when the backing callback permits it. Compare the same valid entries/mirrors;
+Read FAT copies through callback-bounded windows of up to 64 KiB per copy for
+full checks; local mutations keep eight-sector windows. Full-check buffers add
+at most 128 KiB of caller-owned scratch. Compare the same valid entries/mirrors;
 keep chain, namespace, orphan and detached-root validation. Build an exact free
 bitmap/count from the successful sweep. FSInfo signatures remain validated, but
 free-count/next-free hints are advisory even when out of range; derive allocation
