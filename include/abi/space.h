@@ -47,7 +47,8 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
 #define SPACE_CREATE_TERMINAL_CONTROL (UINT64_C(1) << 0)
 #define SPACE_CREATE_CLIPBOARD_LOCAL (UINT64_C(1) << 1)
 #define SPACE_CREATE_CLIPBOARD_SHARED (UINT64_C(1) << 2)
-#define SPACE_CREATE_FLAGS (SPACE_CREATE_TERMINAL_CONTROL | SPACE_CREATE_CLIPBOARD_LOCAL | SPACE_CREATE_CLIPBOARD_SHARED)
+#define SPACE_CREATE_BOOT_FOCUS (UINT64_C(1) << 3)
+#define SPACE_CREATE_FLAGS (SPACE_CREATE_TERMINAL_CONTROL | SPACE_CREATE_CLIPBOARD_LOCAL | SPACE_CREATE_CLIPBOARD_SHARED | SPACE_CREATE_BOOT_FOCUS)
 #define SPACE_NAME_MAX 31
 #define SPACE_REASON_MAX 96
 
@@ -73,6 +74,10 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  * for its outer terminal, named terminal_pointer. It grants no graphics input
  * or terminal creation and must be withheld from ordinary children.
  * Success replies with one WAIT process-control handle.
+ * BOOT_FOCUS nominates one successful initial launch for the one-time boot
+ * selection, when its first terminal content or submitted graphics frame is
+ * presentable. Physical key presses/button clicks cancel it, including before
+ * creation; later nominations cannot retarget it. It adds no child focus right.
  *
  * A malformed request, a duplicate name or a launch request rejected before
  * loading creates nothing. A failure while preparing the child after the
@@ -84,7 +89,7 @@ struct space_create_request {
   uint64_t cpus, cpu_count;
   uint64_t reason, reason_length;
   uint64_t launch;
-  uint64_t flags; /* Explicit independent UI/clipboard grants; only with LAUNCH. */
+  uint64_t flags; /* Explicit UI/clipboard grants and boot policy; only with LAUNCH. */
 };
 
 _Static_assert(sizeof(struct space_create_request) == 96, "space create request layout");

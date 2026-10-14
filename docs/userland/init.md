@@ -77,7 +77,7 @@ return {
   },
   spaces = {
     { name = "development", title = "Development", init = "boot://init",
-      network = true, launch = true, screenshot = true, cpus = { 1, 2, 3 },
+      network = true, focus = true, launch = true, screenshot = true, cpus = { 1, 2, 3 },
       roots = { host = { access = "read-write", optional = true },
                 system = "read-only", home = "read-write" } },
     { name = "scratch", title = "Scratch", init = "boot://init-readonly",
@@ -111,6 +111,9 @@ return {
   receives `net_config` WRITE and UDP broadcast authority, so only it can run
   `session --configure-network`; the others get READ and ordinary UDP. A
   configuration without an owner is valid and leaves the network unconfigured.
+- **Boot focus.** `focus` is an optional boolean, defaulting to false. At most
+  one space in the final merged plan may set it. See [boot focus](#boot-focus-space)
+  for readiness and input cancellation.
 - **Ordinary child launch.** `launch` is an optional boolean, defaulting to
   `false`. With `launch = true`, boot init supplies a separate `child_launcher`
   resource with LAUNCH alone. Trusted init and session handoff preserve it;
@@ -278,6 +281,29 @@ Read-only the same root read-only. Remote has it read-write and starts in
 `boot://init-readonly` to leave network setup with Development; its other flags,
 grants and roots match Development. Installed disks omit the installer
 entry; enter install mode through live media.
+
+## Boot focus space
+
+Caelum starts active and stays the pinned first tab. The shipped live configuration
+sets `focus = true` on Development; the installed configuration sets it on `pyxis`.
+After successful initial launch, the presenter selects that space once it has
+nonblank terminal content or a validated submitted graphics frame. A silent
+startup stays on Caelum. Creation or initial-launch failure leaves Caelum active
+with the reason; a later runtime failure does not switch back. Panic still takes
+over the display.
+
+Physical key presses and pointer button clicks cancel the automatic selection,
+even before the space is created. Pointer motion, wheel-only reports, releases
+and tagged synthetic input do not cancel it. Held input discovered at attachment
+or after lost continuity is not a fresh press. Manual tab/layer choices win and
+there is no retry. This boot policy grants no focus right to ordinary children.
+
+The shared `libconfig` schema and final merged-plan validation admit `focus` for
+boot init and the configuration editor's validate/plan/apply paths. The generated
+installed catalog carries the default. More than one `focus = true` is a
+configuration error: the settings are ignored and automatic focus is disabled for
+that boot, including when an invalid installed override falls back to archive
+defaults. Omitting focus keeps Caelum active.
 
 ## Native disk configuration and mounting
 

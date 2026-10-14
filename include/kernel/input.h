@@ -19,6 +19,8 @@ struct input_source {
   enum key_code repeat_key;
   uint64_t repeat_deadline;
   uint32_t buttons, pending_buttons, suppressed_buttons;
+  /* Admission-side unknown/initial holds, independent of routing's drain. */
+  uint32_t focus_suppressed_buttons;
   enum input_pointer_kind pointer_kind;
   uint32_t scroll_numerator_x, scroll_denominator_x;
   uint32_t scroll_numerator_y, scroll_denominator_y;
