@@ -179,7 +179,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Milestone A: the core, with files and text
 
-- [ ] **1. Kernel forwarders.** A forwarder object with *retarget* (same type
+- [x] **1. Kernel forwarders.** A forwarder object with *retarget* (same protocol/representation
   only) and *cut* rights, held by its creator; revocable copies with
   derivation tracking, so a cut also cuts copies made through it; holders see
   *denied*. Service slots are forwarders with both rights.

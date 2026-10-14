@@ -5,8 +5,8 @@ Status: capability-model task 1 implementation. See the
 
 A forwarder owns a target grant. Holders use its kernel-attested type and
 attenuated authority; a separate controller carries CUT and, for service
-slots, RETARGET. Retargeting accepts the same protocol/representation and cannot widen existing
-holder authority. Retargeting a service slot to nothing returns NOT_FOUND on
+slots, RETARGET. Retargeting accepts the same protocol/representation and
+cannot widen existing holder authority. Retargeting a service slot to nothing returns NOT_FOUND on
 later use. CUT is terminal and returns DENIED instead.
 
 ## Creation and authority

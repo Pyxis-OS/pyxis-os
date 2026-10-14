@@ -1,58 +1,76 @@
-# Capability forwarders: task 1 checkpoint
-
-This is qualification in progress, not task completion. The owner accepted
-same-representation RETARGET and no FILE bridge; see the
-[milestone](../../../wip/capability-model-implementation.md#retarget-representation-accepted-owner-decision-2026-10-14).
+# Capability forwarders: task 1 qualification
 
 ## Inputs and baseline
 
-- Baseline: unchanged main `3b714754`. Code checkpoint: `71129776`, rebased
-  onto main `e0644943` including bounded private allocation. Userland dependency:
-  `3e1e4e87c0ba4b3b7ed48a38e57d23c3575496b2`, PR #259.
-- Existing compiler image: `pyxis-llvm23.1.3-e0801c2`; no compiler change.
-- Ordinary `make -j16 image`; nested KVM Q35, 2 GiB, 1/4 CPUs, VirtIO-net/rng,
-  standard VGA, OVMF. Host remote client connects to guest TCP 2323 through
-  localhost 24084. No measurement instrumentation or new klog lines.
-- Unchanged-main image build and 4-CPU boot passed. One local CALL64 baseline
-  (`256` messages, `100` rounds) returned 100 verified samples: median
-  123.927 ms, range 87.598–805.372 ms. The VM/host was not isolated and a build
-  overlapped part of the run; this does not support performance attribution or
-  replace the required native baseline. No matched after timing is claimed.
-- The owner's native baseline is complete and recorded by beta in
-  [#825](https://git.internal/PyxisOS/pyxis-os/pulls/825); merging that record
-  satisfies the task-1 gate. Repeat its profile after milestones A and C;
-  this task's local functional checks do not claim a native performance result.
+- Qualified code/image: `ed1cc1605cc7b6ede2a09935480a645b200d5922`,
+  based on main `be055891` (includes #825). Userland #259:
+  `fafaddaeac04d472dcdb2865fac7cc0f64803d64`.
+- Existing compiler image `pyxis-llvm23.1.3-e0801c2`; no compiler change.
+  Ordinary `make -j16 image` passed. Nested KVM Q35, 2 GiB, 1/4 CPUs,
+  VirtIO-net/rng, standard VGA, OVMF; remote TCP 2323 through localhost 24084.
+  No measurement instrumentation or new ordinary klog lines.
+- Unchanged-main `3b714754` build/4-CPU boot passed before implementation.
+  One local CALL64 baseline (256 messages, 100 rounds) returned 100 verified
+  samples: median 123.927 ms, range 87.598–805.372 ms. A build overlapped part
+  of this non-isolated run; it supports no performance attribution.
+- The [owner's native baseline](../capability-model-baseline.md) is merged in
+  #825, closing task 1's prerequisite. Repeat its matched profile after A and C.
+  No native forwarder results or matched after timing are claimed here.
 
-## Manual qualification
+## Manual checks
 
-Run each existing counter mode in its own remote session:
+Run each in its own plain Remote session:
 
 ```text
 session bin://counter.pxe --forwarders bin counter.pxe textfs.pxe
+session bin://counter.pxe --provider-forwarders text bin counter.pxe
+session bin://counter.pxe --completion-cut bin counter.pxe
+session bin://counter.pxe --authority-close
 session bin://counter.pxe --queued-cut
 session bin://counter.pxe --cut
 session bin://counter.pxe --retire-full
 session bin://counter.pxe --exit
 ```
 
-The code checkpoint passed all five on both 1 and 4 CPUs: nested directory/file lineage,
-COPY, explicit/last-controller CUT, supervisor-copy takeover, slot retarget,
-empty-slot NOT_FOUND, authority/type refusals, unmanaged-slot persistence,
-queued DENIED/NOT_DELIVERED, delivered REPLY after CUT, stale cut handles after
-ID reuse, RETIRE with a full queue and provider-exit cleanup. Every remote
-session returned status 0 and complete group drainage. Interactive GDB found
-no outstanding operation context or temporary derived nodes after cleanup,
-only the twelve live bootstrap provider roots. Global target-depth checks,
-bounded status traversal and restoration keep caretaker chains within the
-tunable 32-node budget, including after retargeting an existing tail slot.
+All eight passed on both 1 and 4 CPUs; every session returned exit status 0
+and complete group drainage. They cover native directory/file derivation and
+COPY; explicit/last-controller CUT; supervisor-copy takeover, unmanaged slots,
+empty slots and terminal slot CUT; queued DENIED/NOT_DELIVERED; delivered
+REPLY after CUT; stale cut handles after export reuse; full-queue retirement
+and provider exit.
 
-On the preceding code checkpoint `c3f650e0`, `cat text://guide` passed. A Lua
-program held that file while awaiting input; GDB found its derived grant with
-both provider-service and file-export ancestors. Reading after input returned
-the expected first byte; closing drained the derived nodes. A service-replace
-attempt in the packaged Remote space returned management DENIED, so it did
-not qualify held files across replacement; that needs a management-enabled
-session. Provider PREPARE/HTTP COMMIT lineage, cut-during-OPEN and asynchronous
-completion denial still need direct runtime checks. No native forwarder
-results, allocation-failure injection or cross-carrier FILE retarget are
-claimed. Raw JSONL/GDB captures remain local under `build/`.
+The provider mode also covers exported FILE retargeting, both native/exported
+WRONG_TYPE refusals without changing targets, provider-open child/COPY lineage,
+powerless controller copies, and recovering a slot after its private current
+provider loses its last controller. Old opened children remain denied; explicit
+slot CUT denies its new children. Independent provider grants remain usable.
+The authority mode observes empty-group cleanup through WAIT-only forwarding
+while retaining wrapper control and its bound launcher: neither prolongs the
+closed native CONTROL authority.
+
+The completion mode receives UDP DENIED with reason DENIED and flags
+NOT_STARTED|CANCEL_REQUESTED (3), then acknowledges it. A started archive FILE
+read retains OK, reason 0 and PROGRESS_KNOWN (4) after CUT, with the independently
+checked byte intact. At `start_backend`, interactive 4-CPU GDB observed committed
+SUBMIT's original context STARTED while its owned backend context was PENDING.
+After all cases, GDB on each CPU configuration found `operations == NULL`,
+12 live bootstrap provider roots and no temporary derived nodes. No injected
+calls or guest-memory edits were used; raw JSONL/GDB captures remain in `build/`.
+
+## Source findings and limits
+
+Source audits corrected post-commit SUBMIT denial, UDP cancellation metadata,
+slot identity inherited from its first provider, fresh admission after natural
+RETIRE, and narrowed observers prolonging native close-bearing authority.
+The runtime cases above qualify the corresponding representative behavior;
+the caretaker-after-RETIRE race is source-reviewed, not directly reproduced.
+BSP allocation, short guards, source generations and cleanup ownership remain
+unchanged; lineage/hop bounds are tunable at 32, not ABI.
+
+A preceding checkpoint also read `text://guide` and inspected a held FILE with
+both provider-service and file-export ancestors. Packaged Remote deliberately
+denies namespace management; its replacement attempt did not qualify global
+namespace replacement. Cut during OPEN/PREPARE/HTTP COMMIT, held files across
+global service replacement, allocation-failure injection and hardware-specific
+native effects were not run. The accepted same-representation restriction has
+no FILE bridge; see [debt](../../../technical-debt.md#forwarder-retarget-representation).
