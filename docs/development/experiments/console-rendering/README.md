@@ -104,5 +104,23 @@ whole-raster copy was not measured in this run.
   including spaces that were hidden during the resize.
 - **No assertion or panic** in any boot.
 
-The native check is an owner-typed sheet (Development space, base against after,
-30 s A4/A3 tone).
+## Native run
+
+ThinkPad, owner-typed in the Development space, 2026-10-14: main `97a5c556`
+against this change (`580a0b74`), with a 30 s A4/A3 tone. One 256-line write took
+530 ms on main and 255 µs with the change. Other figures from that run were not
+recorded here.
+
+To repeat it on an image that includes the
+[check scripts](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/checks/README.md),
+type in the Development space, waiting for each prompt:
+
+```text
+pcm 440 220 30 &
+lua boot://share/checks/console-burst.lua
+pcm 440 220 30 &
+lua boot://share/checks/console-flood.lua
+```
+
+Listen for gaps in each tone while the screen fills, and note each script's
+summary line (`us_per_write`, `lines`). Then collect `log | grep audio:`.

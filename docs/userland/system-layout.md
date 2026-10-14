@@ -20,6 +20,10 @@ Spaces receive `boot://`, `tmp://` and `bin://` from boot init, plus the roots
 their configuration names. They start in `home://` unless their configuration's
 `start` names another root; a space without that root starts in `tmp://`.
 
+`boot://share/checks/` holds Lua scripts for hand-run checks, such as native run
+sheets: `lua boot://share/checks/console-burst.lua`. See the
+[checks README](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/checks/README.md).
+
 ## Boot
 
 The kernel starts one trusted boot init from the archive, in Caelum's space.
