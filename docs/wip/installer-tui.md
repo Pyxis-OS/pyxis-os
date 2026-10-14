@@ -138,22 +138,15 @@ steps, add `-v`, summarize Review, and re-show the selected target before any
 post-scan question. Printed plan bytes remain data-only on stdout; human output
 remains on stderr. QEMU qualification uses disposable Install/Update targets.
 
-**One authority decision pending:** the existing `log` resource is read-only
-([LOG_RIGHT_READ](../../include/abi/log.h)); it cannot accept phase records.
-Trusted `init-install` already holds Caelum's console WRITE grant, whose writes
-enter the kernel log ring and serial output
-([console_write](../../kernel/object/console.c)).
-
-**Recommended default:** explicitly delegate that existing console with WRITE
-alone to the trusted installer as `installer_diagnostics`. Send detailed phase
-boundaries and coalesced counters there; never expose the grant to ordinary
-programs. Local progress and errors still use the install space's own output.
-Diagnostic failure disables that observer without changing confirmed I/O or
-results; Review-output failure still prevents apply. This adds no kernel API or
-LOG write right. The alternative is a separately designed kernel log writer,
-which would expand this presentation task's public authority surface.
-
-No implementation until this delegation choice is accepted.
+**Delegation accepted by the owner, 2026-10-14.** Trusted `init-install`
+explicitly delegates its existing Caelum console with WRITE alone as
+`installer_diagnostics`. Only the trusted installer receives it. Detailed phase
+boundaries and coalesced counters enter the existing kernel log ring/serial
+path, while local progress and errors use the install space's own output.
+Diagnostic failure disables that observer without affecting confirmed I/O;
+Review-output failure still prevents apply. No LOG write right or new kernel API
+is added. A general authority-scoped userspace log writer remains
+[technical debt](../technical-debt.md#userspace-kernel-log-writer).
 
 ## Configuration delta model
 

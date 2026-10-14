@@ -2128,3 +2128,10 @@ Private NPFS provisioning leaves can remain as empty linked directories after
 startup/provider death; closing/unlinking payloads is not secure erasure.
 Revisit directory lifecycle cleanup before frequent service restarts or long-lived
 HTTP-heavy deployments. RAM leaves disappear with the boot's private tree.
+
+## Userspace kernel log writer
+
+Only holders of an explicitly delegated Caelum console grant can add userspace
+records to the kernel log today; the installer uses WRITE alone for diagnostics.
+Revisit a properly designed, authority-scoped record writer when other trusted
+services need structured log output.
