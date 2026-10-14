@@ -43,6 +43,12 @@ enum call_status acpi_power_run(enum acpi_power_action action, bool force);
 void acpi_ec_load_ecdt(void);
 void acpi_ec_start(void);
 
+/* Power buttons. Start installs firmware-declared Notify sources and the
+ * fixed event where present. Press runs on this worker, either SCI service or
+ * deferred Notify delivery; startup and in-operation presses are dropped. */
+void acpi_buttons_start(void);
+void acpi_button_press(void);
+
 /* Batteries and the AC adapter. Start finds the devices after acpi_ec_start.
  * Poll reads them when NOW has reached the next poll, and returns that next
  * poll time, UINT64_MAX without any device. Worker only, top level. */

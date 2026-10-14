@@ -46,8 +46,8 @@ static struct acpi_work *work_head, *work_tail;
 static bool running_work;
 static uint64_t sci_rearm_at;
 static size_t unclaimed_scis;
-/* Set by the power button's fixed event, which runs in SCI service. */
-static bool button_pressed;
+/* Fixed events and deferred Notify delivery share this worker-owned latch. */
+static bool button_pressed, button_armed;
 /* A local power operation from acpi_power_local(), pending until it fails. */
 static bool local_pending, local_failed;
 static bool local_force, local_force_allowed;
@@ -363,9 +363,7 @@ static bool load_namespace(void)
   return true;
 }
 
-/* Deferred work. Nothing acts on notifications yet; this root handler sees
- * every one, which also stops uACPI warning in the log about each one that
- * has no listener. */
+/* Root tracing also sees notifications with a device-specific handler. */
 static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *node,
                                  uacpi_u64 value)
 {
@@ -382,9 +380,14 @@ static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *nod
  * operation is serviced here and dropped, so it does not start another. */
 static enum call_status run_power(enum acpi_power_action action, bool force)
 {
+  button_armed = false;
   enum call_status status = acpi_power_run(action, force);
   service_sci();
+  run_work();
+  uint64_t flags = cpu_save_interrupts();
   button_pressed = false;
+  button_armed = true;
+  cpu_restore_interrupts(flags);
   return status;
 }
 
@@ -436,13 +439,14 @@ static void run_local_request(void)
   cpu_restore_interrupts(flags);
 }
 
-/* SCI service, IF=0. The press itself needs no authority (decision 16); the
- * worker runs the same power-off as a request. */
-static uacpi_interrupt_ret power_button(uacpi_handle context)
+void acpi_button_press(void)
 {
-  (void)context;
-  button_pressed = true;
-  return UACPI_INTERRUPT_HANDLED;
+  acpi_require_worker();
+  uint64_t flags = cpu_save_interrupts();
+  if (button_armed && !power_running && !power_request && !local_pending) {
+    button_pressed = true;
+  }
+  cpu_restore_interrupts(flags);
 }
 
 static void run_button_press(void)
@@ -462,20 +466,6 @@ static void run_button_press(void)
   cpu_restore_interrupts(flags);
 }
 
-/* A press latched before boot, such as the one that powered the machine on,
- * is cleared first so that it does not power off at once. */
-static void start_power_button(void)
-{
-  uacpi_status status = uacpi_clear_fixed_event(UACPI_FIXED_EVENT_POWER_BUTTON);
-  if (status == UACPI_STATUS_OK) {
-    status = uacpi_install_fixed_event_handler(UACPI_FIXED_EVENT_POWER_BUTTON, power_button,
-                                               UACPI_NULL);
-  }
-  if (status != UACPI_STATUS_OK) {
-    klog("ACPI: error: power button not enabled: %s\n", uacpi_status_to_string(status));
-  }
-}
-
 static void acpi_worker(void *argument)
 {
   (void)argument;
@@ -489,8 +479,13 @@ static void acpi_worker(void *argument)
   }
   acpi_ec_start();
   acpi_battery_start();
-  start_power_button();
+  acpi_buttons_start();
+  /* Registration/setup can queue boot-latched Notify work. Drain while disarmed. */
+  service_sci();
+  run_work();
   uint64_t flags = cpu_save_interrupts();
+  button_pressed = false;
+  button_armed = true;
   ready = true;
   cpu_restore_interrupts(flags);
   for (;;) {
