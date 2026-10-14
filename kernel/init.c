@@ -20,6 +20,7 @@
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/pci.h>
 #include <kernel/gpt.h>
 #include <kernel/fs/npfs.h>
@@ -102,6 +103,7 @@
 
   task_init();
   bsp_requests_init();
+  process_reaper_init();
   klog("tasks: scheduler and BSP request queues ready\n");
   arch_clock_maintain();
 

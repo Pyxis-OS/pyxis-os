@@ -55,6 +55,11 @@ struct process {
   bool stopping;
   /* One packed first-event election, including fault entry without lifetime_lock. */
   atomic_uint_fast64_t terminal_result;
+  /* RETIRED and owned by the BSP reaper: its queue link, and the detached
+   * control and group membership completed after release. */
+  struct process *retired_next;
+  struct process_control *retired_control;
+  struct execution_group *retired_group;
 };
 
 /* Borrow the executing user task's process; NULL for scheduler/kernel tasks.
@@ -111,12 +116,18 @@ void process_set_result(struct process *process, struct process_result result);
 bool process_result_committed(struct process *process);
 bool process_result_get(struct process *process, struct process_result *result);
 
-/* BSP reaper after the task has left its root/stack and returned every loan.
+/* BSP scheduler after the task has left its root/stack and returned every loan.
  * Detach the stop target, reclaim task storage, release context pins and publish
  * native thread completion, then call reclaimed. The last detach elects EXITED/0
- * only when no process-wide event exists and closes VM admission. Reclaimed
- * returns true after final process destruction/completion; no access after true. */
+ * only when no process-wide event exists and closes VM admission. For the last
+ * storage, reclaimed marks the process RETIRED, detaches its control and group
+ * membership and queues it for the reaper without allocating; it returns true
+ * and the caller must not access the process afterwards. The reaper releases
+ * the address space in bounded interrupts-off steps, then the remaining
+ * resources, and only then publishes control and group completion. */
 void process_task_detach(struct process *process, struct process_task_member *member);
 bool process_task_reclaimed(struct process *process);
+/* BSP, IF=0, after task_init(). Starts the BSP process reaper task. */
+void process_reaper_init(void);
 
 #endif

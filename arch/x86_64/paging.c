@@ -1453,6 +1453,43 @@ enum mm_result arch_page_unmap(struct arch_address_space *space,
   return MM_OK;
 }
 
+size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
+                           size_t count, phys_addr_t *physical)
+{
+  if (!count || !physical || !mutable_address(space, virtual)) {
+    return 0;
+  }
+  unsigned first = index_at(virtual, LEVEL_PT);
+  if (count > TABLE_INDEX_MASK + 1 - first) {
+    count = TABLE_INDEX_MASK + 1 - first;
+  }
+  if (!mutable_address(space, virtual + (count - 1) * PAGE_SIZE)) {
+    return 0;
+  }
+
+  phys_addr_t table;
+  unsigned allowed;
+  if (walk_to_leaf(space, virtual, false, &table, &allowed) != MM_OK) {
+    return 0;
+  }
+  volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
+  for (size_t i = 0; i < count; ++i) {
+    if (!(entries[first + i] & PTE_PRESENT)) {
+      count = i;
+      break;
+    }
+    physical[i] = entries[first + i] & PTE_ADDRESS_MASK;
+    entries[first + i] = 0;
+  }
+  unmap_scratch(SCRATCH_TABLE);
+  if (affects_active_space(space, virtual)) {
+    for (size_t i = 0; i < count; ++i) {
+      invlpg(virtual + i * PAGE_SIZE);
+    }
+  }
+  return count;
+}
+
 enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions)
 {
@@ -1607,32 +1644,83 @@ enum mm_result arch_space_activate(struct arch_address_space *space)
   return MM_OK;
 }
 
-static void free_private_tables(phys_addr_t physical, unsigned level)
+static uintptr_t next_boundary(uintptr_t address, unsigned shift)
 {
-  if (level > LEVEL_PT) {
-    unsigned entries = level == LEVEL_PML4 ?
-      index_at(HIGHER_HALF_BASE, LEVEL_PML4) : TABLE_INDEX_MASK + 1;
-
-    for (unsigned i = 0; i < entries; ++i) {
-      uint64_t entry = read_table_entry(physical, i);
-      if (entry & PTE_PRESENT) {
-        KASSERT(!(entry & PTE_LARGE));
-        free_private_tables(entry & PTE_ADDRESS_MASK, level - 1);
-      }
-    }
-  }
-  pmm_free(physical, 1);
+  return (address | ((UINT64_C(1) << shift) - 1)) + 1;
 }
 
-enum mm_result arch_space_destroy(struct arch_address_space *space)
+/* Index of the first present entry in [index, end), or end. */
+static unsigned next_present(phys_addr_t table, unsigned index, unsigned end,
+                             uint64_t *entry)
 {
-  if (!space_valid(space) || space == &kernel_space || arch_space_active(space)) {
-    return MM_INVALID;
+  volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
+  while (index < end && !(entries[index] & PTE_PRESENT)) {
+    ++index;
   }
+  if (index < end) {
+    *entry = entries[index];
+    KASSERT(!(*entry & PTE_LARGE));
+  }
+  unmap_scratch(SCRATCH_TABLE);
+  return index;
+}
 
-  free_private_tables(space->root, LEVEL_PML4);
-  space->root = 0;
-  return MM_OK;
+bool arch_space_release_step(struct arch_address_space *space, size_t *budget)
+{
+  KASSERT(space_valid(space) && space != &kernel_space && !arch_space_active(space));
+  /* Only lower-half roots are private; the kernel half and recursive slot are shared. */
+  const unsigned root_end = index_at(HIGHER_HALF_BASE, LEVEL_PML4);
+  const unsigned table_end = TABLE_INDEX_MASK + 1;
+
+  /* Tables are freed bottom-up behind the cursor without clearing their parent
+   * entries; nothing walks a released space. */
+  while (*budget) {
+    --*budget;
+    uintptr_t cursor = space->release_cursor;
+    uint64_t entry;
+    unsigned index = next_present(space->root, index_at(cursor, LEVEL_PML4), root_end, &entry);
+    if (index == root_end) {
+      pmm_free(space->root, 1);
+      *space = (struct arch_address_space){0};
+      return true;
+    }
+    if (index != index_at(cursor, LEVEL_PML4)) {
+      cursor = (uintptr_t)index << PML4_INDEX_SHIFT;
+    }
+
+    phys_addr_t pdpt = entry & PTE_ADDRESS_MASK;
+    index = next_present(pdpt, index_at(cursor, LEVEL_PDPT), table_end, &entry);
+    if (index == table_end) {
+      pmm_free(pdpt, 1);
+      space->release_cursor = next_boundary(cursor, PML4_INDEX_SHIFT);
+      continue;
+    }
+    if (index != index_at(cursor, LEVEL_PDPT)) {
+      cursor = (cursor & ~((UINT64_C(1) << PML4_INDEX_SHIFT) - 1)) |
+          ((uintptr_t)index << PDPT_INDEX_SHIFT);
+    }
+
+    /* Each leaf table freed counts against the budget. PMM frees use no scratch slot. */
+    phys_addr_t pd = entry & PTE_ADDRESS_MASK;
+    index = index_at(cursor, LEVEL_PD);
+    volatile uint64_t *entries = map_scratch(pd, SCRATCH_TABLE);
+    for (; index < table_end && *budget; ++index) {
+      if (entries[index] & PTE_PRESENT) {
+        KASSERT(!(entries[index] & PTE_LARGE));
+        pmm_free(entries[index] & PTE_ADDRESS_MASK, 1);
+        --*budget;
+      }
+    }
+    unmap_scratch(SCRATCH_TABLE);
+    if (index < table_end) {
+      space->release_cursor = (cursor & ~((UINT64_C(1) << PDPT_INDEX_SHIFT) - 1)) |
+          ((uintptr_t)index << PD_INDEX_SHIFT);
+      return false;
+    }
+    pmm_free(pd, 1);
+    space->release_cursor = next_boundary(cursor, PDPT_INDEX_SHIFT);
+  }
+  return false;
 }
 
 uintptr_t arch_vm_base(void)

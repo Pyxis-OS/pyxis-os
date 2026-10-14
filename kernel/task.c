@@ -1307,7 +1307,7 @@ static void reap_completed(void)
         if (result.kind == PROCESS_TERMINATED) {
           klog("userspace: CPU %zu terminated task released\n", cpu_index);
         } else if (result.kind == PROCESS_EXITED) {
-          ktrace("userspace: CPU %zu exited with status %d; address space released\n",
+          ktrace("userspace: CPU %zu exited with status %d; address space retiring\n",
                cpu_index, (int)result.exit_status);
         }
       }
