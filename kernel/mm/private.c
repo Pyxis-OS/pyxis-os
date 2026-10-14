@@ -6,6 +6,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/process_vm.h>
+#include <kernel/task.h>
 
 struct private_allocation {
   struct private_allocation *next;
@@ -17,6 +18,28 @@ struct private_allocation {
 
 /* BSP-owned and never reused, including across processes and address reuse. */
 static uint64_t next_identity = 1;
+
+/* Backs a bare reservation in bounded interrupts-off steps. The process VM
+ * transaction stays exclusive across the yields between them. A size within
+ * one step completes, or unwinds, in a single call and never yields, so the
+ * request executor can run it inline. */
+static enum mm_result back_private(struct process *process, uintptr_t base, size_t size)
+{
+  if (!private_memory_stepped(size)) {
+    return vm_back(process->address_space, base, size, PAGE_USER | PAGE_WRITE);
+  }
+  struct vm_backing backing;
+  enum mm_result result = vm_back_begin(process->address_space, base, size,
+      PAGE_USER | PAGE_WRITE, &backing);
+  if (result != MM_OK) {
+    return result;
+  }
+  while (!vm_back_step(process->address_space, &backing, PRIVATE_MEMORY_STEP_PAGES)) {
+    kernel_task_yield_masked();
+    process_vm_require_mutation(process);
+  }
+  return backing.status;
+}
 
 enum mm_result private_memory_allocate(struct process *process, size_t size,
                                         uintptr_t *address)
@@ -31,8 +54,14 @@ enum mm_result private_memory_allocate(struct process *process, size_t size,
   if (!allocation) {
     return MM_NO_MEMORY;
   }
-  enum mm_result result = vm_alloc(process->address_space, size, PAGE_SIZE,
-      PAGE_USER | PAGE_WRITE, address);
+  enum mm_result result = vm_reserve(process->address_space, size, PAGE_SIZE, address);
+  if (result == MM_OK) {
+    result = back_private(process, *address, size);
+    if (result != MM_OK) {
+      KASSERT(vm_release(process->address_space, *address, size) == MM_OK);
+      *address = 0;
+    }
+  }
   if (result != MM_OK) {
     kfree(allocation);
     return result;
@@ -90,8 +119,7 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
     kfree(allocation);
     return CALL_NO_MEMORY;
   }
-  result = vm_back(process->address_space, address + PAGE_SIZE, size,
-      PAGE_USER | PAGE_WRITE);
+  result = back_private(process, address + PAGE_SIZE, size);
   if (result != MM_OK) {
     KASSERT(result == MM_NO_MEMORY);
     KASSERT(vm_release(process->address_space, address, span) == MM_OK);

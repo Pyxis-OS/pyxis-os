@@ -1387,6 +1387,14 @@ void kernel_task_yield_if_runnable(void)
   cpu_restore_interrupts(flags);
 }
 
+void kernel_task_yield_masked(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  cpu_enable_interrupts();
+  kernel_task_yield_if_runnable();
+  cpu_save_interrupts();
+}
+
 [[noreturn]] void task_schedule(void)
 {
   size_t cpu_index = arch_cpu_index();

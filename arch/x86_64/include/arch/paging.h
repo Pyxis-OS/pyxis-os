@@ -49,6 +49,16 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget);
 enum mm_result arch_page_map(struct arch_address_space *space,
                              uintptr_t virtual, phys_addr_t physical,
                              unsigned permissions);
+/* MM_OK when no page in the range is mapped, MM_COLLISION when one is.
+ * Skips absent tables and reads each present leaf table once. */
+enum mm_result arch_range_vacant(const struct arch_address_space *space,
+                                 uintptr_t virtual, size_t pages);
+/* Maps consecutive pages from virtual to the supplied frames, at most count
+ * and never past the end of its leaf table, reporting how many in *mapped.
+ * The whole run is checked before any entry is installed. */
+enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t virtual,
+                                 size_t count, const phys_addr_t *physical,
+                                 unsigned permissions, size_t *mapped);
 /* Supervisor RW/NX/UC mapping in the kernel allocation area. */
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical);
 /* BSP IF=0 before AP startup, caller-proven driver-owned scanout page.

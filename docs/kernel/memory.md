@@ -101,6 +101,9 @@ a blocked staged I/O call holds no mapping lease.
 
 An already quiescent process is serviced in the BSP executor. Otherwise a
 separate VM worker scans pending processes without blocking that executor.
+An ALLOCATE larger than one step (256 pages, tuning) always goes to the VM
+worker, so the executor keeps forwarding other requests, including PCM
+writes, while it runs.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings
 and backing. Competing mutation also returns BUSY. Final retirement requires
@@ -109,7 +112,8 @@ closed admission and zero root/borrow/request activity before reclamation.
 BSP revalidates allocation output before effects, then admits only the mutator's
 root until its final reply copy and cleanup finish. Allocation adds a disjoint
 region; release touches no user memory after unmapping its captured request.
-Stop/group termination still takes effect after the synchronous call unwinds.
+Stop/group termination still takes effect after the synchronous call unwinds,
+including a stepped allocation, which first completes or unwinds.
 Context pins protect registered backing independently of root/copy drainage.
 
 The heap, physical allocator and per-CPU scratch mappings retain their
@@ -118,10 +122,27 @@ scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
 The VM owns one full guarded reservation and one eager backed suffix. Whole
 release and destruction free only that suffix; failure unmaps/frees only the
 provisional backed prefix, leaving the full reservation bare for unwind.
-Unmapping clears a run of leaf entries per page-table visit. Final destruction
-of a retired space releases backing, range records and page tables in bounded
-steps on the [BSP reaper](smp.md#scheduling-and-ownership). ALLOCATE
-still zeroes and maps its whole region in one interrupts-off BSP service.
+Unmapping clears a run of leaf entries per page-table visit, and mapping
+installs a run per visit; checking that a reservation is bare skips absent
+tables and reads each present leaf table once.
+
+ALLOCATE larger than 256 pages backs its region in steps of at most 256 pages
+with interrupts off: allocate, zero and map. Between steps the VM worker
+enables interrupts and yields to runnable work. A smaller ALLOCATE, and its
+unwind after a failure, completes in one interrupts-off step and never yields,
+so the executor can run it inline. The process VM transaction stays
+exclusive throughout: admission is closed, the mutator is parked and sibling
+threads are held, so no RELEASE, DISPLAY change or teardown of the same process
+can interleave. The result stays all-or-nothing. On failure, the mapped prefix
+is unmapped and freed from its end in the same bounded steps before NO_MEMORY
+is returned, leaving the reservation bare for release. RELEASE still frees its
+whole region in one step.
+
+Final destruction of a retired space releases backing, range records and page
+tables in bounded steps on the [BSP reaper](smp.md#scheduling-and-ownership).
+Its memory therefore returns to the PMM some milliseconds after the last task
+exits, not at once. A process that waits for the exit sees the memory freed,
+but a concurrent large allocation elsewhere can briefly find it still in use.
 
 ## Native use
 

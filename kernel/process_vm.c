@@ -204,9 +204,12 @@ void process_vm_mutation_forward(struct bsp_request *request)
   }
   spin_unlock(&process->vm.lock);
   request->state = BSP_REQUEST_FORWARDED;
-  if (drained) {
+  bool stepped = request->service == BSP_SERVICE_MEMORY &&
+      memory_request_stepped((struct memory_request *)request);
+  if (drained && !stepped) {
     /* Admission is closed and every departure already acknowledged. Execute
-     * the bounded service here; only waiting for drainage needs a worker. */
+     * the bounded service here; only waiting for drainage or a stepped
+     * allocation needs the worker. */
     finish_mutation(process, false);
     return;
   }
@@ -288,10 +291,12 @@ static struct process *select_pending(uint64_t now, uint64_t *deadline, bool *ex
   while (*link) {
     struct process *process = *link;
     spin_lock(&process->vm.lock);
-    bool drained = !process->vm.roots && !process->vm.borrowers;
+    /* A stepped allocation can arrive already drained and MUTATING. */
+    bool mutating = process->vm.phase == PROCESS_VM_MUTATING;
+    bool drained = mutating || (!process->vm.roots && !process->vm.borrowers);
     *expired = !drained && now >= process->vm.deadline;
     if (drained || *expired) {
-      KASSERT(process->vm.phase == PROCESS_VM_DRAINING);
+      KASSERT(mutating || process->vm.phase == PROCESS_VM_DRAINING);
       if (drained) {
         process->vm.phase = PROCESS_VM_MUTATING;
       }

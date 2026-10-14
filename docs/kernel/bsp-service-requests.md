@@ -13,7 +13,7 @@ kernel; each service defines its own public operation contract.
 | [Request mechanism](../../kernel/service/request.c) | Storage sizing, reservation, publication, dispatch and completion |
 | Subsystem | Typed inputs/results, authority checks, resource loans, actual operation and rollback |
 | BSP executor | Nonblocking operations under the existing allocation and VM contracts |
-| VM worker | Pending process quiescence; ready mutations can complete directly in the executor |
+| VM worker | Pending process quiescence and stepped (large) ALLOCATE; other ready mutations can complete directly in the executor |
 | HOST worker | Blocking filesystem transport and final completion of forwarded requests |
 | Native filesystem worker | Policy/view operations, block waits and final completion of forwarded requests |
 | Network worker | TCP/mixed readiness observation and final completion of forwarded waits |
@@ -89,8 +89,10 @@ MEMORY and every DISPLAY operation use DEFERRED publication after the caller
 leaves its stack/root and establishes parking. MEMORY and DISPLAY mapping
 mutations close process VM admission, drain acknowledged roots/short borrowers,
 and retain exclusive mutator reply access through the final copy. Ready mutation
-runs directly in the executor; pending drainage transfers FORWARDED ownership to
-the VM worker without blocking the executor. SIZE/SUBMIT do not mutate mappings.
+runs directly in the executor; pending drainage, or an ALLOCATE larger than one
+256-page step, transfers FORWARDED ownership to the VM worker without blocking
+the executor. The worker runs that allocation in interrupts-off steps and
+yields between them ([private memory](memory.md#execution)). SIZE/SUBMIT do not mutate mappings.
 Unsubmitted loading and final reclamation retain their separate exclusive/drained
 ownership. See [private memory](memory.md#execution).
 

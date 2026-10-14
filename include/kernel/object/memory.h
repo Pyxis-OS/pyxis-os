@@ -28,6 +28,10 @@ void memory_request_execute(struct memory_request *request);
  * object owns no process or mappings, and may be shared/transferred normally. */
 struct kernel_object *memory_create(void);
 
+/* An allocation larger than one private-memory step; the VM worker runs it
+ * so the request executor stays free while it yields. */
+bool memory_request_stepped(const struct memory_request *request);
+
 /* Current user task, IF=0, live service reference and resolved rights. Captures
  * the payload and checks the allocation reply, then changes the caller's own
  * private address space through a BSP quiescent mutation transaction. RELEASE has

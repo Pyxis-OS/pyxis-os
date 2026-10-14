@@ -17,11 +17,24 @@ struct private_context {
   size_t usable_size;
 };
 
+/* Pages zeroed and mapped per interrupts-off allocation step. Tuning, not ABI. */
+#define PRIVATE_MEMORY_STEP_PAGES 256
+
+/* Larger allocations are stepped, yield between steps and run on the VM worker.
+ * Smaller ones, including any failure unwind, finish in one step. */
+static inline bool private_memory_stepped(size_t size)
+{
+  return size > PRIVATE_MEMORY_STEP_PAGES * PAGE_SIZE;
+}
+
 /* BSP, IF=0, holding the process's drained VM mutation transaction. Sizes are
  * nonzero whole pages. Only allocations made here are releasable here; image,
  * startup and initial stack mappings never enter this process-owned list.
  * Allocation sets address to zero on failure. Release requires an exact
- * current address/size. */
+ * current address/size. A stepped allocation runs in a BSP kernel task that
+ * enables interrupts and yields between steps; the result stays
+ * all-or-nothing, and failure unwinds the partial backing in steps. Other
+ * allocations never yield. */
 enum mm_result private_memory_allocate(struct process *process, size_t size,
                                         uintptr_t *address);
 enum mm_result private_memory_release(struct process *process, uintptr_t address,
