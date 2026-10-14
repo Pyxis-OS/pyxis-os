@@ -29,12 +29,26 @@ as unsupported. Incomplete PCI discovery makes the USB snapshot incomplete but
 does not prevent inspecting retained controllers. The initial profile requires
 PCI xHCI 1.x,
 a firmware-assigned, page-aligned memory BAR0 with decoding already enabled,
-64-bit DMA, 4 KiB pages and disabled firmware MSI/MSI-X. It records the advertised
+64-bit DMA, 4 KiB pages, and MSI-X or 64-bit MSI left disabled by firmware; there
+is no INTx fallback. It records the advertised
 32- or 64-byte context stride for device input/output contexts.
 
 A staged [PCI claim](pci.md#driver-owned-resources) leaves firmware command state
-intact for provisional access to BAR0's first 4 KiB. Every interpreted extended
-capability body must fit that prefix and avoid defined register regions. Supported
+intact for provisional access to BAR0's first 4 KiB. The extended capability list
+can start well beyond that prefix: Intel's Panther Lake controllers put it 32 KiB
+into the BAR. The walk maps its own bootstrap window from the list's first page and
+grows it only as far as the list reaches, at most 256 KiB into BAR0; after BAR
+sizing the controller is refused if anything read lay beyond the BAR. Each
+capability body must fit the window and avoid defined register regions.
+
+- **Unknown IDs** (vendor, debug, power management) are skipped.
+- **A malformed Supported Protocol capability** (bad name, port range or speed
+  entries, or ports already described) is logged and skipped. Its ports stay
+  unusable and the rest of the controller works.
+- **Refused:** a list that leaves the window or overlaps the register regions, a
+  next pointer inside the current body, or a second legacy capability.
+
+With trace logging each capability's ID and offset is logged. Supported
 Protocol capabilities associate root ports with protocol versions, Slot Type and
 speed identities. With PSIC zero, exact BCD versions select the specification's
 speed-ID defaults: USB 2.0 IDs 1–3, USB 3.0 ID 4, USB 3.1 IDs 4–5 and USB 3.2
@@ -57,8 +71,9 @@ clearing bus mastering, reset, disable decoding and probe BAR sizes. Validate th
 bootstrap extent and sized register/MSI-X regions before mapping them. Initial
 handoff, halt and reset waits each have a one-second deadline. Unsafe failure
 retains the claim; safe boot failure unwinds unpublished resources.
-If BIOS release times out, the OS-owned request remains asserted; firmware may
-release ownership later, but this boot does not retry controller preparation.
+If BIOS release times out, the controller is taken anyway, as Linux does: the
+BIOS-owned semaphore is cleared, the time-out is logged and SMI sources are
+disabled as usual.
 
 Preparation allocates port records, DCBAA, scratchpads when advertised, one
 command-ring page, one event-ring page and an ERST allocation. All backing and
@@ -75,8 +90,9 @@ buffers. Device helpers derive their controller from the device; caller validati
 checks both the worker entry and its borrowed controller argument. Each worker enables bus
 mastering before programming rings: a halted controller may fetch the ERST as
 soon as its base is written. It then enables interrupter zero, MSI-X entry zero
-on shared static vector 39 and Run/Stop. IRQ work acknowledges and notifies every
-active controller, then detaches/wakes its wait. MSI-X may already clear IP, so
+(or the single MSI message) on shared static vector 39 and Run/Stop. IRQ work
+acknowledges and notifies every active controller, then detaches/wakes its wait.
+MSI or MSI-X delivery may already clear IP, so
 it cannot identify the originating controller from that bit. Workers inspect only
 their own cycle-owned events. The worker parses and
 validates cycle-owned events, matches command/transfer completions to admitted
