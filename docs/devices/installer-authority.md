@@ -39,7 +39,8 @@ RESTART right for the [restart offer](../userland/installer.md#restart). The ker
 pointer, display and title grants and the standard streams. SYSTEM_INFO supplies
 the live kernel build revision for display and the installed ESP record.
 It also explicitly delegates an owned WRITE-only copy of its existing Caelum
-console as `installer_diagnostics`. Only this trusted installer child receives
+console as the private environment capability `installer_diagnostics`.
+Only this trusted installer child receives
 it; there is no ordinary-program inheritance or writable LOG resource. Phase
 records/coalesced counters enter the existing kernel log ring/serial path.
 A failed diagnostic write disables that observer independently of confirmed I/O.
