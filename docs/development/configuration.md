@@ -98,6 +98,15 @@ unavailable hardware. Native batches must keep `LOG_LEVEL=info`.
 make -j16 image LOG_LEVEL=info DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1
 ```
 
+Renoir flips default on for qualifying hardware; other display drivers are
+unchanged. Omit `DISPLAY_FLIP` to use the kernel default. `DISPLAY_FLIP=0` adds
+`display.flip=0` to normal, rescue and installer command lines and forces ordinary
+GOP copies; `DISPLAY_FLIP=1` adds an explicit request without bypassing any
+qualification check. For hand-authored PXE entries, remove the old
+`display.flip=1` token to exercise the default, or append `display.flip=0` for
+rollback. `DISPLAY_FLIP_METRICS=1` independently enables info-level metrics;
+metrics stay off by default. See [Renoir flips](../kernel/renoir-flip.md).
+
 For [Renoir flip inventory](experiments/renoir-flip-inventory/README.md),
 `DISPLAY_INVENTORY=1` adds `display.inventory=1`. It emits one read-only numeric
 inventory at info level; default `0` adds no inventory output. Native task 1 uses

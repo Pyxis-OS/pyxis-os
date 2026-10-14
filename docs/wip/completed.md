@@ -132,8 +132,9 @@ brokered panes, [splits/cwd/focus](../userland/multiplexer.md) and live host res
 Neovim edit/save/quit, TCC hello world and instant live resize on main `a59a4ef3`;
 [qualification and limits](../development/experiments/remote-multiplexer-resize.md).
 
-[Renoir flip presentation](../kernel/renoir-flip.md), 2026-10-10: opt-in two-surface
-GOP page flips (#631, #632, #638, #647), natively qualified with default off; see
+[Renoir flip presentation](../kernel/renoir-flip.md), 2026-10-10: two-surface
+GOP page flips (#631, #632, #638, #647), natively qualified; default-on where
+qualified by owner decision 2026-10-14, with `display.flip=0` for rollback. See
 the [remaining qualification](../technical-debt.md#renoir-flip-backend-qualification)
 and [poll-cost qualification](../development/experiments/renoir-poll-cost/README.md).
 

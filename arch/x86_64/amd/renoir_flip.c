@@ -515,7 +515,7 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
   KASSERT(!arch_cpu_count() && !flip.prepared);
   struct pci_device *device;
   if (pci_select_device(RENOIR_VENDOR, RENOIR_DEVICE, &device) != PCI_SELECTION_UNIQUE || device->owner) {
-    klog("renoir-flip: refused: unique unclaimed Renoir absent; keeping GOP copy\n");
+    ktrace("renoir-flip: refused: unique unclaimed Renoir absent; keeping GOP copy\n");
     return false;
   }
   unsigned displays = 0;

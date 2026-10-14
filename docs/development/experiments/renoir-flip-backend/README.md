@@ -1,17 +1,19 @@
 # Renoir two-surface flip backend
 
 The [bounded backend reference](../../../kernel/renoir-flip.md) describes the implemented design; this is its qualification record.
-Default is off. The owner qualified native completion and observed tear-free
+Default is on where qualified (owner decision, 2026-10-14). The owner qualified native completion and observed tear-free
 Quake/Chocolate Quake play on `9254f5c8`, 2026-10-10. Timeout recovery, panic
 visibility and unreported capture/input scenarios remain unqualified; QEMU
 cannot qualify native GPU behavior.
 
 ## Qualification and authority
 
-`DISPLAY_FLIP=1` adds `display.flip=1`; `DISPLAY_FLIP_METRICS=1` independently
-adds `display.flip.metrics=1`. Both default to zero. Metrics work on the disabled
-ordinary path too, permitting paired measurements at info level. Default boot
-adds no new lines. Flip enablement is only attempted on the GOP backend; Bochs
+`DISPLAY_FLIP=0|1` adds the corresponding `display.flip` override; omission
+uses the kernel default. `DISPLAY_FLIP_METRICS=1` independently adds
+`display.flip.metrics=1`; metrics default off. Metrics work on the disabled
+ordinary path too, permitting paired measurements at info level. Absent Renoir
+and non-GOP backend refusals are trace-only. Flip enablement is only attempted
+on the GOP backend; Bochs
 and VirtIO retain their existing paths. Failed preparation retains GOP copies.
 
 Before AP startup, numeric VFCT/ATOM metadata is copied by the bootstrap adapter.
@@ -320,10 +322,10 @@ reboot and existing UDP capture on horse.
 1. Disabled: build `make -j16 image LOG_LEVEL=info LOG_UDP=1 DISPLAY_TIMING=off
    DISPLAY_TIMING_METRICS=0 DISPLAY_INVENTORY=0 DISPLAY_FLIP=0 DISPLAY_FLIP_METRICS=1`.
    Save kernel/initrd/limine.conf and checksum manifest as `build/native-flip-off/`.
-   Confirm `display.flip` is absent, `display.flip.metrics=1 display.timing=off
+   Confirm `display.flip=0` is present, `display.flip.metrics=1 display.timing=off
    log.udp=1` present. Luna stages this set, retaining the previous rollback set.
 2. Enabled: same inputs with `DISPLAY_FLIP=1`, sealed `build/native-flip-on/`.
-   Confirm the only new command-line option is `display.flip=1`; kernel/initrd
+   Confirm only `display.flip=0` changes to `display.flip=1`; kernel/initrd
    checksums must match the disabled set. Luna stages it after the disabled run.
 3. Per boot, capture startup and at least60s idle/moving-pointer metrics. Enabled
    must report prepared with recomputed spare 0x900000, inherited raw0x780/effective
@@ -357,3 +359,43 @@ paths as source-reviewed/QEMU-unexercisable, not measured. Task 3 remains separa
 Native timeout/panic/capture and remaining input checks stay explicit limits;
 task 3 requires separate authorization. The authorized poll-cost follow-up has
 its own outstanding native qualification.
+
+## Default-on smoke check (2026-10-14)
+
+The owner authorized default-on qualifying flips after tear-free DevilutionX
+play on 2026-10-13 (game reports 60–70 fps, presenter at most 60 Hz; two audio
+runs without an engine trip). No qualification predicate or write allowlist changes.
+
+Local functional qualification: baseline main `5fab8d39`, changed code
+`ef9d4799` (explicit-off parser follow-up `60fe1c2b`), builder `pyxis-llvm23.1.3-e0801c2`, unchanged dependency pins and
+matching main CI SDK/userland/ports bundles. Kernel and image builds passed.
+Nested KVM, four CPUs, 1 GiB RAM, QEMU 10.2.2, OVMF and q35: default standard
+VGA kept `DISPLAY_BOOT`; explicit Bochs at 800×600 kept `DISPLAY_BOCHS`; VirtIO
+kept `DISPLAY_VIRTIO_GPU`. GDB showed default flip request true, inactive Renoir
+flips and available display in all three; terminal typing/redraw and pointer
+motion worked. Explicit `display.flip=0` booted with the request false. No
+Renoir info-level refusal lines appeared. Image generation checked omitted,
+`0` and `1` across normal/rescue/installer entries. These are functional checks,
+not cost measurements or native GPU qualification.
+
+Stock q35 AHCI CD-ROM boot crashed in the host before kernel entry; qualification
+used a VirtIO SCSI CD-ROM with the same ISO and display devices. No host-emulator
+workaround was added to the kernel or launcher.
+
+One-minute native check, staged by Luna through the orchestrator: build with
+`LOG_LEVEL=info LOG_UDP=1 DISPLAY_FLIP_METRICS=1 DISPLAY_TIMING=off`, omitting
+`DISPLAY_FLIP`. Remove `display.flip=1` from the existing PXE entry; retain
+`display.flip.metrics=1 display.timing=off log.udp=1`. Keep a same-image rollback
+entry with `display.flip=0`.
+
+1. First 15 s: confirm the prepared HUBP0/two-surface summary without an explicit
+   flip option. Type after idle, move the pointer, select text and change tabs.
+   Expected: prompt redraws immediately and input/cursor work normally.
+2. Next 15 s: visit the configured mux space, select text and browse wheel history.
+   Expected: selection and history redraw correctly, with no freeze or stale frame.
+3. Last 30 s: move in DevilutionX or Quake. Expected: no tearing or perceptible new
+   delay. Report the game, visual/input result, submitted/confirmed counts,
+   timeouts and any FAILED line. Refusal is safe but does not pass this native check;
+   on a regression use the rollback entry and retain the masked UDP log.
+
+This smoke check is prepared, not yet run; it does not qualify timeout recovery.

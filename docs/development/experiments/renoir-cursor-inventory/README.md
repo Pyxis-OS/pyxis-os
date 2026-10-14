@@ -4,7 +4,7 @@ Task 1 of the [accepted cursor track](../../../wip/renoir-hardware-cursor.md),
 2026-10-10. Read-only inventory, optional software counters and the owner-run native
 software baseline are complete. Hardware cursor support remains unimplemented. No cursor
 writes, cursor backing allocation or new GPU write allowlist is implemented.
-Existing opt-in flips still perform their qualified writes.
+Existing qualified flips still perform their bounded writes.
 
 ## Inputs and build
 
