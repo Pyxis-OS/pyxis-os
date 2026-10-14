@@ -361,24 +361,24 @@ raw pitch `0x780` on 2026-10-09. Preserve that register; the Linux convention
 would normally write `0x77f`. Other inherited modes remain unqualified. The owner accepted
 Linux-derived exclusions and pre-OS PSP/SMU residual risk on 2026-10-09. Revisit
 reservations if new firmware/client ranges appear; retain the low prefix and
-last-16-MiB guard. The [flip backend](kernel/renoir-flip.md) is opt-in; its
+last-16-MiB guard. The [flip backend](kernel/renoir-flip.md) defaults on where qualified; its
 [remaining native qualification](#renoir-flip-backend-qualification) is below.
 Interrupts, three surfaces and blanking stay deferred.
 
 ## Renoir flip backend qualification
 
-The [flip backend](kernel/renoir-flip.md) is opt-in and natively qualified for
+The [flip backend](kernel/renoir-flip.md) is natively qualified for
 normal flips and Quake/Chocolate Quake play (`9254f5c8`, owner, 2026-10-10).
 Unqualified on the ThinkPad: timeout recovery, remote screenshots with a visible cursor and selection, and the owner's ordinary input
 checks (tabs, selection, layers, lock and relock) not reported in that run. The
 paired disabled/enabled boots with camera clips, compose/copy costs and poll
-counts were not taken as a set. No native timeout injection is authorized. Revisit when the backend is proposed as a default, or after a change
-to its failure, panic or capture paths; the paired steps are in the
+counts were not taken as a set. No native timeout injection is authorized.
+Revisit after a change to its failure, panic or capture paths; the paired steps are in the
 [backend record](development/experiments/renoir-flip-backend/README.md#paired-native-qualification--luna-stages-owner-judges).
 
-Owner decision, 2026-10-10: flips stay opt-in for now. The prerequisite set for
-a default, one deliberate native panic with flips on showing its message, passed
-the same day; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
+Owner decision, 2026-10-14: qualifying flips default on, with `display.flip=0`
+for rollback, after additional tear-free DevilutionX play. The deliberate native
+panic with flips on showing its message passed on 2026-10-10; see [panic visibility](kernel/renoir-flip.md#failure-fallback-and-panic).
 
 ## Presenter dirty regions
 

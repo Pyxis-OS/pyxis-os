@@ -1,12 +1,16 @@
 # Renoir flip presentation
 
-The opt-in Renoir backend presents a complete frame by changing the existing
+The Renoir backend presents a complete frame by changing the existing
 GOP pipe's scanout address at the display engine's synchronized flip point. It
 keeps the firmware mode, clocks, power and interrupts, and applies to one
 verified Renoir `1002:1636` driving one progressive 1920x1080 pipe. Two linear
 scanout surfaces alternate: the original GOP surface and one kernel-owned spare.
-`DISPLAY_FLIP=1` adds `display.flip=1`; omitting it keeps the ordinary GOP copy.
-Boot, Bochs and VirtIO use their own paths. The [display reference](display.md#opt-in-renoir-flips)
+Flips default on for qualifying hardware (owner decision, 2026-10-14).
+`display.flip=0` forces the ordinary GOP copy; `display.flip=1` explicitly requests
+qualification and never bypasses it. `DISPLAY_FLIP=0|1` adds the corresponding
+option to generated normal, rescue and installer entries; omission uses the kernel
+default. Other boot framebuffers, Bochs and VirtIO keep their own paths. The
+[display reference](display.md#renoir-flips)
 summarizes the backend; the [backend record](../development/experiments/renoir-flip-backend/README.md)
 holds the checks, measurements and native steps, and the
 [inventory](../development/experiments/renoir-flip-inventory/README.md) the
@@ -18,6 +22,10 @@ confirmed flips, no timeouts or failures, negligible perceived latency. Panic
 visibility was qualified natively the same day with a deliberate panic probe
 (below). Timeout recovery and unreported capture and input scenarios are not
 qualified; see [technical debt](../technical-debt.md#renoir-flip-backend-qualification).
+
+The owner also checked DevilutionX with flips on 2026-10-13: no tearing,
+60–70 fps reported by the game with at most 60 Hz presentation, and two audio
+runs without an engine trip. This is a play observation, not a new timing sample.
 
 ## Authority
 
