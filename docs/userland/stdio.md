@@ -162,7 +162,9 @@ standalone exit fails. Both shipped Lua versions use this rule.
 operation: discard a pending producer's queued output, request ABORT under the
 held right, and release the FILE without COMMIT. Successful abandonment/release
 reports zero; a real ABORT or release failure reports EOF/errno. Other aliases
-retain the failed transaction; ordinary close/exit do not turn it into success.
+retain the failed transaction; earlier failures, including an uncertain COMMIT
+outcome, are not relabeled as known cancellation. Ordinary close/exit do not turn
+it into success.
 Nonpending FILEs use normal close. This adds no authority or retry.
 
 ## Provider response metadata
