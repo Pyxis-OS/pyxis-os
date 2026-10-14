@@ -20,7 +20,7 @@ struct usb_bot {
   enum usb_bot_state state;
   const char *detail, *write_detail;
   uint8_t configuration, interface, alternate;
-  uint32_t tag, block_bytes;
+  uint32_t tag, block_bytes, transfer_bytes, command_bytes;
   uint64_t blocks, read_bytes, write_bytes;
   uint32_t commands, reads, writes, flushes, recoveries;
   bool wide, sense_valid, timed_out, writable, flush_supported;
@@ -39,7 +39,9 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t capacity, uint64_t
 
 /* Owning controller worker after geometry setup, during probe or READY service.
  * A clean rejection retains valid sense and leaves the channel usable; it never
- * retries I/O. Scratch is private captured storage and may change on error.
+ * replays uncertain I/O. A large unsupported command with validated zero
+ * processed bytes falls back to 64 KiB commands for this boot. The captured
+ * request bound remains stable. Scratch is private captured storage.
  * submitted becomes true exactly when the original I/O CBW is first published.
  * WRITE and FLUSH require the qualified READY media profile. Write-through
  * FLUSH is an ordered no-op; it publishes no CBW and leaves submitted unchanged. */
