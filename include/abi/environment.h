@@ -18,6 +18,7 @@
 #define ENVIRONMENT_TEXT UINT64_C(2)
 #define ENVIRONMENT_EXPORTED UINT64_C(1)
 #define ENVIRONMENT_SET_NO_REPLACE UINT64_C(1)
+#define ENVIRONMENT_SET_REQUIRE_ABSENT UINT64_C(2)
 #define ENVIRONMENT_SNAPSHOT_INCLUDE_PRIVATE UINT64_C(1)
 #define ENVIRONMENT_SNAPSHOT_TEXT_ONLY UINT64_C(2)
 
@@ -52,7 +53,9 @@ struct environment_entry_reply {
 };
 
 /* One SET atomically applies the complete array. NO_REPLACE keeps an existing
- * entry unchanged. It succeeds when every supplied entry is already present.
+ * entry unchanged. REQUIRE_ABSENT fails the complete mutation if any supplied
+ * name exists. Flags are mutually exclusive. No-replace alone succeeds when
+ * every supplied entry is already present.
  * CAP masks request exact subsets of the supplied handle's authority. */
 struct environment_set_entry {
   char name[ENVIRONMENT_NAME_MAX + 1];

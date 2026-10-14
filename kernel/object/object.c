@@ -1,5 +1,5 @@
 #include <abi/clipboard.h>
-#include <abi/namespace.h>
+#include <abi/environment.h>
 #include <abi/terminal.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
@@ -146,10 +146,10 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_ENDPOINT_RECEIVER;
   case OBJECT_ENDPOINT_RECEIPT:
     return PROTOCOL_ENDPOINT_RECEIPT;
-  case OBJECT_NAMESPACE_SERVICE:
-    return PROTOCOL_NAMESPACE_SERVICE;
-  case OBJECT_NAMESPACE:
-    return PROTOCOL_NAMESPACE;
+  case OBJECT_ENVIRONMENT:
+    return PROTOCOL_ENVIRONMENT;
+  case OBJECT_ENVIRONMENT_SNAPSHOT:
+    return PROTOCOL_ENVIRONMENT_SNAPSHOT;
   case OBJECT_ENDPOINT_EXPORT:
     return endpoint_export_protocol(object);
   default:
@@ -213,10 +213,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   switch (object->type) {
   case OBJECT_CLIPBOARD:
     return !(rights & ~CLIPBOARD_RIGHTS);
-  case OBJECT_NAMESPACE_SERVICE:
-    return !(rights & ~NAMESPACE_SERVICE_RIGHT_CREATE);
-  case OBJECT_NAMESPACE:
-    return !(rights & ~NAMESPACE_RIGHTS);
+  case OBJECT_ENVIRONMENT:
+    return !(rights & ~ENVIRONMENT_RIGHTS);
+  case OBJECT_ENVIRONMENT_SNAPSHOT:
+    return !(rights & ~ENVIRONMENT_RIGHT_READ);
   case OBJECT_PIPE_SERVICE:
     return !(rights & ~PIPE_SERVICE_RIGHT_CREATE);
   case OBJECT_PIPE:

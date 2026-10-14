@@ -31,8 +31,6 @@
 #define PROTOCOL_ENDPOINT_RECEIVER UINT64_C(24)
 #define PROTOCOL_ENDPOINT_RECEIPT UINT64_C(25)
 
-#define PROTOCOL_NAMESPACE_SERVICE UINT64_C(27)
-#define PROTOCOL_NAMESPACE UINT64_C(28)
 #define PROTOCOL_PROVIDER UINT64_C(29)
 #define PROTOCOL_TCP_LISTENER UINT64_C(30)
 #define PROTOCOL_TERMINAL_SERVICE UINT64_C(31)
@@ -59,6 +57,8 @@
 #define PROTOCOL_STREAM UINT64_C(51)
 #define PROTOCOL_HTTP_TRANSACTION UINT64_C(52)
 #define PROTOCOL_FORWARDER UINT64_C(53)
+#define PROTOCOL_ENVIRONMENT UINT64_C(54)
+#define PROTOCOL_ENVIRONMENT_SNAPSHOT UINT64_C(55)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
