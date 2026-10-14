@@ -670,10 +670,11 @@ requires keeping the original mappings and backing until reboot; a late
 acknowledgement does not authorize reclamation. This is not concurrent shared
 unmapping or permission mutation: the flush itself changes no mappings.
 
-Live display resize uses the output lock to finish old AP TTY writes and replace
-all pixel pointers and dimensions. No AP may keep an old pixel pointer beyond
-that lock. The sole presenter starts resize between frame leases, so it also
-relinquishes old TTY backing before flushing. Old buffers remain mapped through
+Live display resize takes each TTY's output lock in turn to finish old AP writes
+to its cells and replace its cell storage, raster and dimensions. APs write only
+cells, never pixels, and keep no cell pointer beyond that lock. The sole
+presenter starts resize between frame leases, so it also relinquishes old TTY
+backing before flushing. Old buffers remain mapped through
 the acknowledgement wait. A timeout retains one old TTY/navigation/cursor batch
 and disables further resize while leaving the committed geometry usable. GPU
 targets and control buffers remain BSP-only and additionally need confirmed

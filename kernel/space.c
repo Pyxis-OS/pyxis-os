@@ -82,6 +82,8 @@ static struct framebuffer *spaces_nav_fb;
  * included, so the screen never shows that row without the cursor. */
 static struct framebuffer *cursor_row_fb;
 static struct terminal_cell *selection_row_cells;
+/* Presenter staging for the active TTY's changed rows; replaced on resize. */
+static struct tty_render tty_render;
 
 static struct framebuffer *fb_try_alloc(const struct framebuffer *layout,
     size_t width, size_t height)
@@ -130,12 +132,39 @@ static void fb_free(struct framebuffer *fb)
 
 static uint8_t *tty_storage_try_alloc(const struct framebuffer *fb)
 {
-  size_t cells, bytes;
-  if (__builtin_mul_overflow(fb->width / bizcat.width, fb->height / bizcat.height, &cells) ||
-      !cells || __builtin_mul_overflow(cells, TTY_STORAGE_BYTES_PER_CELL, &bytes)) {
-    return NULL;
+  size_t bytes = tty_storage_bytes(fb->width / bizcat.width, fb->height / bizcat.height);
+  return bytes ? kmalloc(bytes) : NULL;
+}
+
+/* Staging for a space area of WIDTH x HEIGHT pixels. */
+static bool tty_render_try_alloc(struct tty_render *render, size_t width, size_t height)
+{
+  size_t columns = width / bizcat.width;
+  size_t rows = height / bizcat.height;
+  size_t cells;
+  *render = (struct tty_render){0};
+  if (!rows || __builtin_mul_overflow(columns, rows, &cells) ||
+      cells > SIZE_MAX / sizeof(*render->cells)) {
+    return false;
   }
-  return kmalloc(bytes);
+  render->cells = kmalloc(cells * sizeof(*render->cells));
+  render->rows = kmalloc(rows);
+  if (!render->cells || !render->rows) {
+    kfree(render->cells);
+    kfree(render->rows);
+    *render = (struct tty_render){0};
+    return false;
+  }
+  render->cell_capacity = cells;
+  render->row_capacity = rows;
+  return true;
+}
+
+static void tty_render_free(struct tty_render *render)
+{
+  kfree(render->cells);
+  kfree(render->rows);
+  *render = (struct tty_render){0};
 }
 
 static struct tty *tty_alloc(const struct framebuffer *fb) {
@@ -308,6 +337,9 @@ void space_init(void)
   if (!selection_row_cells) {
     panic("cannot allocate selection row");
   }
+  if (!tty_render_try_alloc(&tty_render, screen->width, screen->height - SPACES_NAV_HEIGHT)) {
+    panic("cannot allocate TTY render staging");
+  }
   pointer_init();
 }
 
@@ -353,11 +385,12 @@ void space_report(struct space *space, const char *text)
 {
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
-  bool locked = log_begin();
-  while (*text) {
-    tty_put_char(space->tty, *text++);
+  if (tty_lock(space->tty)) {
+    while (*text) {
+      tty_put_char(space->tty, *text++);
+    }
+    tty_unlock(space->tty);
   }
-  log_end(locked);
   cpu_restore_interrupts(flags);
 }
 
@@ -743,6 +776,7 @@ struct resize_buffers {
   struct framebuffer *navigation;
   struct framebuffer *cursor;
   struct terminal_cell *cells;
+  struct tty_render render;
 };
 
 /* A missing remote flush acknowledgement keeps one old batch mapped for the
@@ -761,6 +795,7 @@ static void resize_buffers_free(struct resize_buffers *buffers)
   fb_free(buffers->navigation);
   fb_free(buffers->cursor);
   kfree(buffers->cells);
+  tty_render_free(&buffers->render);
   *buffers = (struct resize_buffers){0};
 }
 
@@ -793,7 +828,8 @@ static bool resize_buffers_prepare(struct resize_buffers *buffers,
   buffers->navigation = fb_try_alloc(layout, layout->width, SPACES_NAV_HEIGHT);
   buffers->cursor = fb_try_alloc(layout, layout->width, bizcat.height);
   buffers->cells = kmalloc(layout->width / bizcat.width * sizeof(*buffers->cells));
-  return buffers->navigation && buffers->cursor && buffers->cells;
+  return buffers->navigation && buffers->cursor && buffers->cells &&
+      tty_render_try_alloc(&buffers->render, layout->width, layout->height - SPACES_NAV_HEIGHT);
 }
 
 /* Sole presenter, between frame leases. Device waits retain the published
@@ -865,12 +901,17 @@ static void resize_display(void)
   uint64_t started = arch_monotonic_ns();
   size_t count = 0;
   for (struct resize_space *entry = buffers.spaces; entry; entry = entry->next) {
+    struct tty *tty = entry->space->tty;
+    if (!tty_lock(tty)) {
+      continue; /* Panic output has started; leave this TTY as it was. */
+    }
     struct framebuffer *old = entry->space->fb;
-    uint8_t *old_storage = entry->space->tty->storage;
-    tty_resize(entry->space->tty, entry->fb, entry->storage);
+    uint8_t *old_storage = tty->storage;
+    tty_resize(tty, entry->fb, entry->storage);
     entry->storage = old_storage;
     entry->space->fb = entry->fb;
     entry->fb = old;
+    tty_unlock(tty);
     ++count;
   }
   struct framebuffer *old = spaces_nav_fb;
@@ -882,6 +923,9 @@ static void resize_display(void)
   struct terminal_cell *old_cells = selection_row_cells;
   selection_row_cells = buffers.cells;
   buffers.cells = old_cells;
+  struct tty_render old_render = tty_render;
+  tty_render = buffers.render;
+  buffers.render = old_render;
   display_resize_commit();
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
@@ -910,7 +954,7 @@ static void resize_display(void)
     display_resize_disable();
     klog("display: remote TLB flush timed out; old buffers retained, resizing stopped\n");
   }
-  klog("display: resized to %lux%lu; copied %lu TTYs under output lock in %lu ns\n",
+  klog("display: resized to %lux%lu; copied %lu TTYs' cells in %lu ns\n",
       screen->width, screen->height, count, elapsed);
 }
 
@@ -1017,19 +1061,19 @@ static bool presentation_snapshot(struct presentation_generations *generation,
     generation->navigation = atomic_load(&navigation_generation);
     generation->viewport = viewport_first;
     generation->volume = volume_ui_generation();
-    bool locked = log_begin();
-    if (!locked) {
+    struct tty *tty = active_space->tty;
+    if (!tty_lock(tty)) {
       pointer_frame_release(pointer);
       cpu_restore_interrupts(flags);
       return false;
     }
     if (active_space->display->visible) {
       generation->graphics = active_space->display->visual_generation;
-      generation->background = active_space->tty->background_generation;
+      generation->background = tty->background_generation;
     } else {
-      generation->tty = active_space->tty->visual_generation;
+      generation->tty = tty->visual_generation;
     }
-    log_end(locked);
+    tty_unlock(tty);
   }
   cpu_restore_interrupts(flags);
   return true;
@@ -1108,52 +1152,54 @@ void space_present()
 
   uint64_t output_flags = cpu_save_interrupts();
   bool composed = true;
-  bool output_locked = log_begin();
-  if (!output_locked) {
+  struct tty *tty = space->tty;
+  if (!tty_lock(tty)) {
     cpu_restore_interrupts(output_flags);
     composed = false;
     goto frame_done;
   }
-  uint32_t background = terminal_color_rgb(space->tty->style.background,
-      space->tty->scheme->palette, space->tty->scheme->background);
-  const struct font *font = space->tty->font;
-  const struct color_scheme *scheme = space->tty->scheme;
-  size_t rows = space->tty->height;
-  log_end(output_locked);
+  uint32_t background = terminal_color_rgb(tty->style.background,
+      tty->scheme->palette, tty->scheme->background);
+  const struct font *font = tty->font;
+  const struct color_scheme *scheme = tty->scheme;
+  size_t rows = tty->height;
+  /* Writers only change cells. Bring this space's raster up to date with
+   * interrupts on; other spaces' changes wait until they are shown. */
+  bool draw = !frame && tty_render_collect(tty, &tty_render);
+  tty_unlock(tty);
   cpu_restore_interrupts(output_flags);
+  if (draw) {
+    tty_render_draw(tty, &tty_render);
+  }
 
   if (frame) {
     present_graphics(source, background, pointer);
   } else {
-    const struct tty *tty = space->tty;
     const uint8_t *pixels = (const uint8_t *)source->address;
     size_t copied = 0;
     size_t row_bytes = font->height * source->pitch;
     for (size_t row = 0; row < rows; ++row) {
       flags = cpu_save_interrupts();
-      bool locked = log_begin();
-      if (!locked) {
+      if (!tty_lock(tty)) {
         cpu_restore_interrupts(flags);
         composed = false;
         goto frame_done;
       }
       size_t first = 0, last = 0;
-      bool selected = locked && !space->terminal_pointer->owner &&
+      bool selected = !space->terminal_pointer->owner &&
           tty_selection_row(tty, row, &first, &last);
-      bool caret = locked && tty->cursor_visible && tty->y == row && tty->x < tty->width;
+      bool caret = tty->cursor_visible && tty->y == row && tty->x < tty->width;
       size_t x = tty->x;
-      if (selected || caret) {
-        memcpy((void *)cursor_row_fb->address, pixels + row * row_bytes, row_bytes);
-        if (selected) {
-          memcpy(selection_row_cells + first, tty->cells + row * tty->width + first,
-              (last - first + 1) * sizeof(*selection_row_cells));
-        }
+      if (selected) {
+        memcpy(selection_row_cells + first, tty_row(tty, row) + first,
+            (last - first + 1) * sizeof(*selection_row_cells));
       }
-      log_end(locked);
+      tty_unlock(tty);
       cpu_restore_interrupts(flags);
       if (!selected && !caret) {
         continue;
       }
+      memcpy((void *)cursor_row_fb->address, pixels + row * row_bytes, row_bytes);
       size_t row_start = row * row_bytes;
       volume_ui_present_copy(screen, pointer, dst_offset + copied, pixels + copied,
           row_start - copied);

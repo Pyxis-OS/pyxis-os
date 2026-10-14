@@ -1035,9 +1035,13 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   size_t first, last, length = 0;
   uint64_t geometry;
   size_t anchor, endpoint;
-  bool output_locked = log_begin();
+  uint64_t flags = cpu_save_interrupts();
+  bool output_locked = tty_lock(tty);
   if (!output_locked || !tty->selection_valid || tty->selection_dragging) {
-    log_end(output_locked);
+    if (output_locked) {
+      tty_unlock(tty);
+    }
+    cpu_restore_interrupts(flags);
     ktrace("clipboard copy: no completed selection\n");
     return;
   }
@@ -1053,18 +1057,20 @@ static void local_copy(struct space *space, struct clipboard_store *store)
       ++length;
     }
     previous_row = true;
+    const struct terminal_cell *cells = tty_row(tty, row);
     size_t end = last + 1;
-    while (end > first && tty->cells[row * tty->width + end - 1].character == ' ') {
+    while (end > first && cells[end - 1].character == ' ') {
       --end;
     }
     for (size_t column = first; column < end; ++column) {
       char bytes[3];
-      uint16_t character = tty->cells[row * tty->width + column].character;
+      uint16_t character = cells[column].character;
       length += terminal_character_encode(character, bytes);
       ascii &= character <= 0x7e;
     }
   }
-  log_end(output_locked);
+  tty_unlock(tty);
+  cpu_restore_interrupts(flags);
   if (length > CLIPBOARD_TEXT_MAX) {
     ktrace("clipboard copy: unsupported selection or text limit\n");
     return;
@@ -1074,7 +1080,8 @@ static void local_copy(struct space *space, struct clipboard_store *store)
     ktrace("clipboard copy: storage unavailable\n");
     return;
   }
-  output_locked = log_begin();
+  flags = cpu_save_interrupts();
+  output_locked = tty_lock(tty);
   bool same = output_locked && tty->selection_valid && !tty->selection_dragging &&
       geometry == tty->geometry_generation && anchor == tty->selection_anchor &&
       endpoint == tty->selection_endpoint;
@@ -1089,21 +1096,24 @@ static void local_copy(struct space *space, struct clipboard_store *store)
         item->bytes[offset++] = '\n';
       }
       previous_row = true;
+      const struct terminal_cell *cells = tty_row(tty, row);
       size_t end = last + 1;
-      while (end > first && tty->cells[row * tty->width + end - 1].character == ' ') {
+      while (end > first && cells[end - 1].character == ' ') {
         --end;
       }
       for (size_t column = first; column < end; ++column) {
         char bytes[3];
-        size_t count = terminal_character_encode(
-            tty->cells[row * tty->width + column].character, bytes);
+        size_t count = terminal_character_encode(cells[column].character, bytes);
         memcpy(item->bytes + offset, bytes, count);
         offset += count;
       }
     }
     same = offset == length;
   }
-  log_end(output_locked);
+  if (output_locked) {
+    tty_unlock(tty);
+  }
+  cpu_restore_interrupts(flags);
   if (!same) {
     object_release(&item->object);
     ktrace("clipboard copy: selection changed\n");

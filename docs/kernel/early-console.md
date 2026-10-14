@@ -40,7 +40,8 @@ The [kernel log ring](../interfaces/kernel-log.md) keeps the most recent lines
 in 256 KiB of static storage, continuing after TTY attachment. Replay writes
 retained text directly into the TTY, followed by
 `[early log truncated: N lines dropped]` when needed. The replay and TTY
-selection preserve caller interrupts and share the ordinary presentation lock;
+selection preserve caller interrupts and hold the log lock and the Caelum TTY's
+output lock;
 concurrent normal output cannot interleave at the boundary. Selecting a TTY
 again does not replay it.
 

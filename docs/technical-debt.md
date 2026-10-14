@@ -998,8 +998,8 @@ worker; nested, no restart falls inside an allocation
 Natively the stepped ALLOCATE run had no restarts. The 4.6 ms native reaper
 queue delay recorded earlier was the diagnostic's own log lines. Without them,
 the reaper waits tens of microseconds natively, so CPU 0 worker precedence is
-parked ([record](development/experiments/worker-precedence/README.md)). Every
-kernel log line and local console write can still stop CPU 0 while it renders
+parked ([record](development/experiments/worker-precedence/README.md)). Kernel log
+lines and local console writes no longer draw in the writer
 ([kernel console rendering](#kernel-console-rendering)). RELEASE, image loading
 and DISPLAY services still run as single interrupts-off spans (DISPLAY 7–20 ms
 natively at Chocolate Quake start). Revisit with native `audio:` restart counts
@@ -1007,25 +1007,22 @@ at game start and during play.
 
 ## Kernel console rendering
 
-Every `klog` line, and every write by a program to a local space's console, is
-drawn into that terminal's full-screen RAM image by the writer, on its own CPU,
-with interrupts off and the global output lock held. At the bottom margin each
-new row moves the whole image up by one row. Off-screen spaces pay the same.
-Other CPUs that log or write a console spin on the lock, and so does the CPU 0
-presenter, once per frame and per row. The Remote space and Multiplexer panes
-do not use this path.
+Since 2026-10-14, writers to a kernel TTY (`klog` and local console writes)
+change only its cells under that TTY's own lock, and the CPU 0 presenter draws
+the visible terminal once per frame with interrupts on
+([kernel terminal rendering](kernel/display.md#kernel-terminal-rendering)).
+Before that, each scrolled row moved the whole screen image in the writer, with
+interrupts off and a global lock held, which stopped CPU 0 (about 2.1 ms per row
+natively).
 
-Measured ([record](development/experiments/worker-precedence/README.md#kernel-console-rendering-cost)):
-- **Native ThinkPad:** about 2.1 ms per scrolled row for kernel log lines; a
-  burst of about 30 lines stopped CPU 0 for 130 ms and was followed by two audio
-  restarts.
-- **Nested, 1280×800:** one console write of 256 newlines held the lock for
-  164 ms, and a tone played during such writes had 17–21 gaps.
-
-Consequence: printing many short lines in a local shell, or a burst of kernel log
-lines, can stop audio and every other CPU 0 device. Diagnostics that log per
-event perturb what they measure. Next task (owner, 2026-10-14): a proposal to
-decouple terminal rendering from the writer.
+What remains is presenter work: during an output flood, every frame is a full
+redraw of the visible terminal. Nested at 1280×800 that takes 0.67–0.8 ms on
+average, at most 3.7 ms, with interrupts on. Collecting the changed rows takes
+about 50 µs with interrupts off (one outlier of 1.1 ms)
+([record](development/experiments/console-rendering/README.md)). The native
+cost at 1920×1080 is not yet measured. Revisit if presentation under a flood
+competes with audio or input: draw only changed rows when scrolling by a
+fraction of the screen, or cap redraws per second.
 
 ## HD Audio request batching
 

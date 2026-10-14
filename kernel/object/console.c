@@ -217,24 +217,28 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
 
 bool console_write(struct console_object *console, const char *bytes, size_t size)
 {
-  bool locked = log_begin();
-  if (!locked) {
+  /* Only a serial-mirrored console takes the log lock, which keeps its bytes
+   * ordered with kernel lines; others serialize on their own TTY. */
+  bool serial = console->serial;
+  bool logged = serial && log_begin();
+  if (serial && !logged) {
     return false;
   }
-  if (!console->tty->initialized) {
-    log_end(locked);
+  if (!tty_lock(console->tty)) {
+    log_end(logged);
     return false;
   }
-
-  for (size_t i = 0; i < size; ++i) {
+  bool initialized = console->tty->initialized;
+  for (size_t i = 0; initialized && i < size; ++i) {
     tty_put_char(console->tty, bytes[i]);
-    if (console->serial) {
+    if (serial) {
       log_ring_putc(bytes[i]);
       console_putc(bytes[i]);
     }
   }
-  log_end(locked);
-  return true;
+  tty_unlock(console->tty);
+  log_end(logged);
+  return initialized;
 }
 
 static struct syscall_result write_console(struct console_object *console,
@@ -310,7 +314,7 @@ uint64_t console_ready(struct console_object *console, uint64_t events,
     ready |= console_interrupt_ready(&console->interrupt);
   }
   if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_RESIZED)) {
-    bool locked = log_begin();
+    bool locked = tty_lock(console->tty);
     if (!locked) {
       ready |= WAIT_ERROR;
     } else {
@@ -324,8 +328,8 @@ uint64_t console_ready(struct console_object *console, uint64_t events,
       if ((events & WAIT_RESIZED) && console->tty->geometry_generation != observed_generation) {
         ready |= WAIT_RESIZED;
       }
+      tty_unlock(console->tty);
     }
-    log_end(locked);
   }
   cpu_restore_interrupts(flags);
   return ready;
@@ -599,19 +603,18 @@ static struct syscall_result set_tab_width(struct console_object *console,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
-  bool locked = log_begin();
-  if (!locked) {
+  if (!tty_lock(console->tty)) {
     return (struct syscall_result){CALL_UNAVAILABLE, 0};
   }
   bool initialized = console->tty->initialized;
   if (initialized && !task_operation_start()) {
-    log_end(locked);
+    tty_unlock(console->tty);
     return (struct syscall_result){CALL_DENIED, 0};
   }
   if (initialized) {
     console->tty->tab_width = request->columns;
   }
-  log_end(locked);
+  tty_unlock(console->tty);
   return (struct syscall_result){initialized ? CALL_OK : CALL_UNAVAILABLE, 0};
 }
 
@@ -672,20 +675,18 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   }
 
   if (operation == CONSOLE_FRESH_LINE) {
-    bool locked = log_begin();
-    if (!locked) {
+    if (!tty_lock(console->tty)) {
       return (struct syscall_result){CALL_UNAVAILABLE, 0};
     }
     bool initialized = console->tty->initialized;
     if (initialized) {
       tty_fresh_line(console->tty);
     }
-    log_end(locked);
+    tty_unlock(console->tty);
     return (struct syscall_result){initialized ? CALL_OK : CALL_UNAVAILABLE, 0};
   }
 
-  bool locked = log_begin();
-  if (!locked) {
+  if (!tty_lock(console->tty)) {
     return (struct syscall_result){CALL_UNAVAILABLE, 0};
   }
   struct console_size_reply reply = {
@@ -693,7 +694,7 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
     .rows = console->tty->height,
     .generation = console->tty->geometry_generation,
   };
-  log_end(locked);
+  tty_unlock(console->tty);
   if (reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }

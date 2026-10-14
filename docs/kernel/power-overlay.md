@@ -65,7 +65,8 @@ or without a display it is consumed and ignored.
   activates it, other clicks are consumed, hover outlines a button.
 - **While open:** Super+arrows, Super+Escape, volume chords and clipboard actions
   are ignored and an open volume popup closes. A display resize waits until the
-  overlay closes, because applying one takes the output lock.
+  overlay closes, because applying one takes the log lock and every terminal's
+  output lock.
 - **Cancel** closes the overlay and presents the active space's current content.
   Keyboard focus returns with focus gain; capture was never released and held
   keys stay reset. Relative lock is not restored: the program needs a fresh
@@ -125,8 +126,8 @@ The overlay is meant to work when something else has stopped working.
   shutdown waits are bounded; a reported failure enables the force choices
   without ordinary output locks.
 - **Not covered, a stuck presenter.** The presenter reads the keyboard between
-  frames. If it never returns to that loop (a CPU holding the global output lock
-  forever, the BSP stuck with interrupts off, a kernel fault) the chord is not
+  frames. If it never returns to that loop (a CPU holding the log lock or a
+  terminal output lock forever, the BSP stuck with interrupts off, a kernel fault) the chord is not
   read. Opening the overlay during a terminal selection drag also takes the output
   lock once, to end the drag.
 - **Not covered, a display that stops completing frames.** Nothing can be drawn;

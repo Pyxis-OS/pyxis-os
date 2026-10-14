@@ -8,8 +8,8 @@ once, without changing the framebuffer drawing or presenter handoff.
 
 Console output marked for serial mirroring is also retained, including trusted
 boot-init messages about configuration, missing volumes and space startup.
-It uses the existing presentation lock, so its ordering with kernel lines
-matches serial output. Ordinary local and remote terminal output is not
+It takes the log lock and then the terminal's output lock, so its ordering with
+kernel lines matches serial output. Ordinary local and remote terminal output is not
 serial-mirrored and does not feed back into the ring.
 
 Each retained line costs four bytes of length bookkeeping within the ring.
@@ -62,7 +62,7 @@ preserve existing presentation ordering; this does not change BSP allocation
 or VM ownership.
 
 Fatal entry changes ring acquisition to a single try, independently of GS,
-the presentation lock and scheduler state. If an interrupted writer or reader
+the log lock and scheduler state. If an interrupted writer or reader
 holds the ring lock, fatal bytes skip retention rather than deadlock or mutate
 inconsistent metadata. Serial and early panic-console output continue through
 their existing paths. Panic ring capture is best effort; it is not a guarantee

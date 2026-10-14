@@ -38,4 +38,6 @@ void log_putc(char c);
  * The first panicking CPU may also claim the direct framebuffer console,
  * before or after the presenter's handoff. */
 void klog_panic_begin(void);
+/* True once fatal output has started; ordinary output locks stop waiting. */
+bool log_panic_started(void);
 #endif
