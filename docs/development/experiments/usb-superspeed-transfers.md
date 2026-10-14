@@ -157,9 +157,57 @@ checks pass: Python compilation, dry-run command/96 MiB budget bounds, Lua synta
 trusted archive re-extraction and identical-archive A/B staging in a local fixture.
 Actual GUIDs stay owner-local; staging never edits the served menu automatically.
 
-Native measurement is **pending replacement disposable media or a re-flash**:
-the measured SanDisk now holds Fedora. A different stick gets its own A baseline.
-No native connection/reboot or real ESP write occurred during this task. A later
-diagnostic build is only for whatever gap remains after the owner-run comparison.
-Raw captures and excluded setup attempts stay private; all owned jobs are stopped
-at the submitted checkpoint.
+## Native A1/B1: regression, 2026-10-14
+
+Owner-run, hands-free on ThinkPad and the re-flashed 32 GB SanDisk. The e0644943
+sample image provides entry 2 / `usb-test`; the image's GPT disk GUID selects it.
+Current A/B revisions and kernel hashes above; common private RW archive
+`70695f9135bf73f348809dce93f779893a41e048fa002d24fe6e4f155946c5b2`.
+Same packet commands and 96 MiB live-file budget, A then B on the same pool.
+Both packets exit zero, verify contents, clean owned files and drain normally;
+the owner restored the ordinary menu. No ESP writes. Physical command/phase
+counts and native resident backing were unavailable.
+
+Host wall times in milliseconds; repeated labels show median (min..max), n=3.
+The write/copy groups are one command each containing a warm-up and three timed
+samples, so their command wall times also include preparation and reporting.
+
+| Label | A | B | B/A median or command time |
+| --- | ---: | ---: | ---: |
+| 32 MiB cat | 2663 (1872..9535) | 6133 (5507..14406) | 2.30 |
+| following directory sync | 205 (171..1080) | 325 (286..339) | 1.59 |
+| following hash | 1646 | 1640 | 1.00 |
+| write 4080, grow / prepared | 364 / 485 | 586 / 646 | 1.61 / 1.33 |
+| write 65536, grow / prepared | 588 / 496 | 697 / 678 | 1.19 / 1.37 |
+| copy grow / prepared | 1180 / 2144 | 1446 / 2322 | 1.23 / 1.08 |
+| many-file sync | 488 (477..534) | 477 (477..542) | 0.98 |
+| single 1 MiB copy | 96 (56..1573) | 74 (66..3690) | 0.77 |
+
+The 32 MiB cat median implies 12.60 MB/s for A and 5.47 MB/s for B, excluding
+its following sync. For paired cat+sync samples, medians are 3744 and 6458 ms
+(8.96 and 5.20 MB/s). This is a native regression, not acceptance of the larger
+cap. One A1/B1 order and large outliers leave media-state/order effects unresolved.
+The single-copy and many-sync medians are exceptions to the write regression.
+
+Internal iobench timings narrow the picture: prepared 65536 writes rise from
+6.054 to 9.722 ms transfer and 38.982 to 56.864 ms file sync; growing transfers
+roughly double (35.993 to 71.131 ms). Prepared copy transfer stays 382.806 /
+382.083 ms while sync rises 29.970 / 55.327 ms. Caller buffers do not imply BOT
+sizes: the 65536 write reports 258 file calls and 257 short writes per 1 MiB.
+
+Source inspection: B's npfs staging/transaction limit is 512 KiB, so these file
+workloads cannot establish executed 1 MiB commands. Actual native size counts
+are missing. BOT and the npfs worker still submit/wait serially; normal OUT TDs
+have one final IOC, not one wait per 64 KiB TRB or a Link-wrap drain. Prepared
+backing is allocated/zeroed once, copies use actual lengths, and the additional
+npfs staging is at most 384 KiB beyond A's 128 KiB. The measured QEMU controller
+backing increase above remains a separate cost, not measured native attribution.
+
+Next step is a proposal only: an unmerged diagnostic binary sweeping effective
+WRITE caps of 64, 120, 256 and 512 KiB with identical B backing, read limits and
+npfs staging. Bracket it with A; rotate size order and record bounded command-size,
+CBW/data/CSW, copy/queue-wait and Link-crossing aggregates. The B/64 control
+separates the changed implementation/backing from command size. No permanent
+256 KiB cap or SanDisk-specific rule is selected by this result. The owner must
+authorize this diagnostic before code. Raw captures remain private under the
+packet's `native-A1/` and `native-B1/`; all owned jobs are stopped.
