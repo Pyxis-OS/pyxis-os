@@ -294,6 +294,12 @@ void hda_shutdown(struct hda_controller *controller)
 void hda_fail(struct hda_controller *controller, const char *reason)
 {
   audio_require_worker();
+  if (controller->setup_attempt) {
+    if (!controller->setup_failure) {
+      controller->setup_failure = reason;
+    }
+    return;
+  }
   if (!controller->failed) {
     klog("hda: %s; engine unavailable until reboot\n", reason);
   }
@@ -356,6 +362,35 @@ bool hda_link_start(struct hda_controller *controller)
   controller->link_ready = true;
   ktrace("hda: link ready codec-mask=%x first-output-offset=%x\n",
       (unsigned)controller->codec_mask, controller->stream);
+  return true;
+}
+
+bool hda_link_reset(struct hda_controller *controller)
+{
+  audio_require_worker();
+  KASSERT(!controller->setup_attempt && !controller->stream_prepared &&
+      !controller->stream_running);
+  if (!controller->prepared || controller->failed || controller->shutdown) {
+    return false;
+  }
+  bool interrupts_masked = mask_interrupts(controller);
+  write16(controller, HDA_WAKEEN, 0);
+  write8(controller, HDA_CORBCTL, 0);
+  write8(controller, HDA_RIRBCTL, 0);
+  bool corb_stopped = wait8(controller, HDA_CORBCTL, HDA_RING_DMA, 0);
+  bool rirb_stopped = wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, 0);
+  write32(controller, HDA_GCTL, 0);
+  bool link_reset = wait32(controller, HDA_GCTL, HDA_GCTL_CRST, 0);
+  bool dma_disabled = set_bus_master(controller, false);
+  controller->link_ready = false;
+  controller->command_ready = false;
+  controller->codec_mask = 0;
+  if (!(interrupts_masked && corb_stopped && rirb_stopped && link_reset && dma_disabled)) {
+    klog("hda: link reset IRQ-mask=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u\n",
+        (unsigned)interrupts_masked, (unsigned)corb_stopped, (unsigned)rirb_stopped,
+        (unsigned)link_reset, (unsigned)dma_disabled);
+    return false;
+  }
   return true;
 }
 

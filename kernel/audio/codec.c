@@ -363,10 +363,12 @@ route_matches(struct hda_controller *controller, const struct hda_route *route)
          route->length == selected_route.length;
 }
 
+/* Each readiness wait has its own budget from when it starts, so time spent
+ * earlier in setup on a busy BSP cannot expire it. */
 static bool
-power_d0(struct hda_controller *controller, uint8_t codec, uint8_t node,
-         uint32_t caps, uint64_t deadline)
+power_d0(struct hda_controller *controller, uint8_t codec, uint8_t node, uint32_t caps)
 {
+  uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
   uint32_t response;
   if ((caps & POWER_D0) &&
       !command(controller, codec, node, VERB_SET_POWER, &response))
@@ -407,13 +409,9 @@ set_amp(struct hda_controller *controller, uint8_t codec, uint8_t node,
 }
 
 static bool
-native_subsystem(struct hda_controller *controller, uint64_t deadline, uint32_t *subsystem)
+native_subsystem(struct hda_controller *controller, uint32_t *subsystem)
 {
-  if (task_deadline_expired(deadline))
-    return false;
   uint64_t ready = task_deadline_after_ms(HDA_SUBSYSTEM_READY_MS);
-  if (ready > deadline)
-    ready = deadline;
   for (;;) {
     if (!command(controller, ALC257_CODEC, ALC257_GROUP, VERB_GET_SUBSYSTEM, subsystem))
       return false;
@@ -456,15 +454,13 @@ native_pair_supported(void)
 }
 
 static bool
-native_power(struct hda_controller *controller, const struct hda_route *route,
-             uint64_t deadline)
+native_power(struct hda_controller *controller, const struct hda_route *route)
 {
-  return power_d0(controller, route->codec, route->group, group_power, deadline) &&
-         power_d0(controller, route->codec, route->converter,
-                  widgets[route->converter].power, deadline) &&
-         power_d0(controller, route->codec, route->pin, widgets[route->pin].power, deadline) &&
+  return power_d0(controller, route->codec, route->group, group_power) &&
+         power_d0(controller, route->codec, route->converter, widgets[route->converter].power) &&
+         power_d0(controller, route->codec, route->pin, widgets[route->pin].power) &&
          power_d0(controller, route->codec, route->headphone_pin,
-                  widgets[route->headphone_pin].power, deadline);
+                  widgets[route->headphone_pin].power);
 }
 
 static bool
@@ -514,7 +510,6 @@ native_idle(struct hda_controller *controller, const struct hda_route *route)
 static bool
 discover_native(struct hda_controller *controller, struct hda_route *route)
 {
-  uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
   uint32_t vendor, revision, subnodes, type, subsystem;
   if (!(controller->codec_mask & (1u << ALC257_CODEC)) ||
       !parameter(controller, ALC257_CODEC, 0, PARAM_VENDOR, &vendor) ||
@@ -526,7 +521,7 @@ discover_native(struct hda_controller *controller, struct hda_route *route)
       first != ALC257_GROUP ||
       !parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_FUNCTION_TYPE, &type) ||
       (type & 0xff) != FUNCTION_AUDIO ||
-      !native_subsystem(controller, deadline, &subsystem) || subsystem != ALC257_SUBSYSTEM)
+      !native_subsystem(controller, &subsystem) || subsystem != ALC257_SUBSYSTEM)
     goto failed;
   ktrace("hda-codec: native cad=%u afg=%u vendor=%x revision=%x subsystem=%x\n",
          ALC257_CODEC, ALC257_GROUP, vendor, revision, subsystem);
@@ -541,7 +536,7 @@ discover_native(struct hda_controller *controller, struct hda_route *route)
     goto failed;
   unsigned widget_first, widget_end;
   if (!node_range(subnodes, &widget_first, &widget_end) || widget_first < end ||
-      !power_d0(controller, ALC257_CODEC, ALC257_GROUP, group_power, deadline) ||
+      !power_d0(controller, ALC257_CODEC, ALC257_GROUP, group_power) ||
       !enumerate_widgets(controller, ALC257_CODEC, widget_first, widget_end,
                          pcm, formats, input_amp, output_amp) || !native_pair_supported())
     goto failed;
@@ -550,7 +545,7 @@ discover_native(struct hda_controller *controller, struct hda_route *route)
     .codec = ALC257_CODEC, .group = ALC257_GROUP, .pin = ALC257_SPEAKER,
     .converter = ALC257_DAC, .headphone_pin = ALC257_HEADPHONE, .length = 2,
   };
-  if (!native_power(controller, &candidate, deadline) || !native_idle(controller, &candidate))
+  if (!native_power(controller, &candidate) || !native_idle(controller, &candidate))
     goto failed;
   selected_route = candidate;
   route_controller = controller;
@@ -567,9 +562,8 @@ failed:
 static bool
 enable_native(struct hda_controller *controller, const struct hda_route *route)
 {
-  uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
   uint32_t response, sense;
-  if (!native_power(controller, route, deadline) || !native_mute(controller, route) ||
+  if (!native_power(controller, route) || !native_mute(controller, route) ||
       !native_detach(controller, route) ||
       !command(controller, route->codec, route->headphone_pin, VERB_GET_PIN_SENSE, &sense))
     goto failed;
@@ -700,15 +694,14 @@ hda_codec_enable(struct hda_controller *controller, const struct hda_route *rout
     return enable_native(controller, route);
   uint8_t codec = route->codec;
   uint32_t response;
-  uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
-  if (!power_d0(controller, codec, route->group, group_power, deadline))
+  if (!power_d0(controller, codec, route->group, group_power))
     goto failed;
   for (unsigned i = 0; i < route->length; ++i) {
     uint8_t node = route_nodes[i];
     const struct hda_widget *widget = &widgets[node];
     unsigned type = widget_type(widget);
     if ((widget->caps & WIDGET_POWER) &&
-        !power_d0(controller, codec, node, widget->power, deadline))
+        !power_d0(controller, codec, node, widget->power))
       goto failed;
     if (i + 1 < route->length && type != WIDGET_MIXER && widget->connection_count > 1) {
       if (!command(controller, codec, node, VERB_SET_CONNECTION | route_inputs[i], &response) ||
@@ -784,8 +777,7 @@ hda_codec_disable(struct hda_controller *controller, const struct hda_route *rou
       controller->stream_running)
     return false;
   if (controller->model == HDA_MODEL_AMD) {
-    uint64_t deadline = task_deadline_after_ms(HDA_POWER_TIMEOUT_MS);
-    if (!native_power(controller, route, deadline) || !native_idle(controller, route))
+    if (!native_power(controller, route) || !native_idle(controller, route))
       goto failed;
     return true;
   }
