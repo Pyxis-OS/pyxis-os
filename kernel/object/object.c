@@ -39,6 +39,7 @@
 #include <abi/power.h>
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/environment.h>
 #include <kernel/panic.h>
