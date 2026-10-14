@@ -1787,6 +1787,9 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
   }
   for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
+    if (device->retired) {
+      continue;
+    }
     usb_hid_collect(&device->hid);
     if (!device->hub_stream || device->monitor_failed) {
       continue;
@@ -1885,6 +1888,17 @@ void usb_hid_diagnose_tick(void)
   usb_host_diagnose_tick();
 }
 
+static void runtime_abandon(struct usb_discovery *discovery)
+{
+  struct usb_runtime *runtime = &discovery->runtime;
+  if (runtime->ticket_active && runtime->device) {
+    usb_host_control_abandon(runtime->device->host, runtime->ticket);
+  } else if (runtime->ticket_active && runtime->hub) {
+    usb_host_control_abandon(runtime->hub->host, runtime->ticket);
+  }
+  *runtime = (struct usb_runtime){0};
+}
+
 static bool retire_record(struct usb_device_record *device)
 {
   if (!device || device->retired || !device->host) {
@@ -1894,29 +1908,41 @@ static bool retire_record(struct usb_device_record *device)
     return true;
   }
   lose_subtree(device);
-  enum usb_result result = usb_host_hid_retire(device->host,
+  enum usb_result result = usb_host_device_retire(device->host,
                                                task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS));
   if (result != USB_OK) {
     return false;
   }
-  device->retired = true;
-  device->hid.retirement_pending = false;
+  struct usb_discovery *discovery = device->owner;
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
+    struct usb_device_record *descendant = live_record(discovery, index);
+    if (!descendant_of(descendant, device)) {
+      continue;
+    }
+    descendant->retired = true;
+    descendant->hid.retirement_pending = false;
+    memset(descendant->hub_pending, 0, sizeof(descendant->hub_pending));
+    memset(descendant->hub_rebind, 0, sizeof(descendant->hub_rebind));
+    if (descendant->hub_stream) {
+      usb_host_interrupt_ack_loss(descendant->hub_stream);
+    }
+  }
+  struct usb_runtime *runtime = &discovery->runtime;
+  if ((runtime->device && descendant_of(runtime->device, device)) ||
+      (runtime->hub && descendant_of(runtime->hub, device))) {
+    runtime_abandon(discovery);
+  }
   return true;
 }
 
 static void runtime_end(struct usb_discovery *discovery, bool refused)
 {
-  struct usb_runtime *runtime = &discovery->runtime;
-  if (runtime->ticket_active && runtime->device) {
-    usb_host_control_abandon(runtime->device->host, runtime->ticket);
-  } else if (runtime->ticket_active && runtime->hub) {
-    usb_host_control_abandon(runtime->hub->host, runtime->ticket);
-  }
-  if (refused && runtime->device) {
+  struct usb_device_record *device = discovery->runtime.device;
+  runtime_abandon(discovery);
+  if (refused && device) {
     ktrace("usb HID: runtime attachment refused\n");
-    retire_record(runtime->device);
+    retire_record(device);
   }
-  *runtime = (struct usb_runtime){0};
 }
 
 static enum usb_result runtime_request(struct usb_discovery *discovery,
@@ -2252,7 +2278,8 @@ void usb_hid_process(struct usb_discovery *discovery)
   }
   for (size_t index = 0; index < discovery->device_count + discovery->runtime_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
-    if (device->hid.retirement_pending || (device->monitor_failed && !device->retired)) {
+    if (!device->retired && (device->hid.retirement_pending || device->monitor_failed ||
+        (device->host && !usb_host_device_present(device->host)))) {
       retire_record(device);
       return;
     }
