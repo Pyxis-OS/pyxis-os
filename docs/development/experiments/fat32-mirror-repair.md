@@ -10,7 +10,7 @@ userland `220b8076`, ports `efe8d877`, lwIP `a1aadb91`. Exact-main CI API run
 2578 (UI run 2491) supplies verified kernel/SDK/userland/ports bundles; each
 manifest matches these revisions and payload verification passes. Kernel
 SHA-256 `8a429bc0ac764a481a7d8427a19ba2030bb667ea1e04b1ef4437fea68bdaa208`.
-Existing e0801c2 builder; no compiler rebuild. Earlier artifacts fetched with
+Existing df87791 CI builder; no compiler rebuild. Earlier artifacts fetched with
 the UI number as an API ID were rejected by their revision manifests before
 any FAT operation; they supply no baseline sample.
 
@@ -46,35 +46,47 @@ All baseline QEMU/GDB jobs stopped before implementation.
 
 ## Implementation and matched after-run
 
-Compiled kernel `a28031a0`, fs [#38](https://git.internal/PyxisOS/pyxis-fs/pulls/38)
-`101e1f68`; other pins unchanged. Kernel SHA-256
+Implementation `a28031a0`, fs [#38](https://git.internal/PyxisOS/pyxis-fs/pulls/38)
+`101e1f68`; other pins unchanged. Ordinary kernel and full default-image source
+builds pass, `make -j8`, existing e0801c2 container. No compiler/container or public
+ABI change. Only existing spawn shadow and upstream build warnings remain.
+The local functional kernel SHA-256 is
 `a337c0b58ca5fd95f381c3558dd4e745cd7766f06bba0933cb9c8a8fb80055bc`.
-Ordinary kernel and full default-image source builds pass, `make -j8`, existing
-e0801c2 container. No compiler/container or public ABI change. Only the existing
-spawn shadow and upstream build warnings remain; no new FAT diagnostic warning.
-The controlled QEMU comparison replaces only the kernel in the verified baseline
-archive/ISO; the power checks also boot the freshly source-built complete image.
-Kernel configurations match. The same scratch fixture, machine, observers and
-operation sequence apply. Both use warmed/reused host artifacts without a
-cold-cache reset. No task-owned build was active during the final timings;
-a separate after-run overlapping CI is excluded from timing claims.
 
-| Operation | Before → after admissions | Before milliseconds | After milliseconds |
-| --- | --- | --- | --- |
-| RW admission | 100 → 100 | 58.56 | 58.59 |
-| CREATE (3) | 25/20/20 → 24/20/20 | 28.85 / 30.85 / 31.82 | 32.32 / 30.60 / 29.21 |
-| three-byte WRITE (3) | 24/21/21 → 23/21/21 | 39.52 / 35.28 / 33.67 | 35.29 / 21.87 / 33.58 |
-| FILE sync | 1 → 1 | 4.72 | 5.29 |
-| CHECK (3) | 39/39/39 → 39/39/39 | 30.22 / 30.21 / 30.96 | 31.72 / 29.51 / 29.56 |
-| RETIRE | 12 → 11 | 18.33 | 25.54 |
+The initial record misidentified the baseline CI builder as e0801c2. Its bundle
+manifest actually says df87791. The local e0801c2 after-run therefore remains
+functional/count evidence only; its timings are excluded. For the corrected
+comparison, verified exact-head CI API run 2589 (UI 2501), revision `d0c28bab`
+(only docs after the implementation), supplies a clean df87791 kernel, SHA-256
+`e763842edfaa372dae6fe83307cacea80bfbe20ad09cd60afa7d7eb4c069e713`.
 
-CREATE/WRITE/CHECK ranges overlap. Preparing FAT2 from FAT1 avoids the secondary
-image read on first marking/first touched FAT sector/cleaning. The single sync
-and retirement times do not establish stable changes; retirement is slower in
-this pair despite one fewer request. Debugger/shared-host variation remains
-unresolved; no native speedup or regression attribution is claimed. The new
-128-MiB-volume tracking bitmap costs 253 charged bytes, separate from free-map
-and workspace backing. One-FAT media need no bitmap.
+The controlled comparison replaces only the kernel in the baseline archive/ISO.
+Both kernels use df87791 and identical configurations. The same pristine fixture,
+machine, observers and operation sequence apply; both use reused host artifacts
+without a cold-cache reset. No task-owned build or other QEMU was active during
+these final runs. After B, repeat untouched A as a control. All operations pass;
+both images retire and pass detached `fsck.fat -n`. Raw records are in `ci-after/`
+and `ci-control/` beside the original baseline. Earlier runs overlapping CI or
+using the different compiler are excluded from timing claims.
+
+| Operation | A → B admissions | Original A ms | B ms | Repeated A ms |
+| --- | --- | --- | --- | --- |
+| RW admission | 100 → 100 | 58.56 | 64.25 | 68.64 |
+| CREATE (3) | 25/20/20 → 24/20/20 | 28.85 / 30.85 / 31.82 | 37.56 / 35.20 / 41.23 | 43.64 / 26.50 / 33.84 |
+| three-byte WRITE (3) | 24/21/21 → 23/21/21 | 39.52 / 35.28 / 33.67 | 35.72 / 75.51 / 26.54 | 44.12 / 36.90 / 43.82 |
+| FILE sync | 1 → 1 | 4.72 | 4.91 | 4.57 |
+| CHECK (3) | 39/39/39 → 39/39/39 | 30.22 / 30.21 / 30.96 | 31.12 / 34.42 / 45.42 | 34.33 / 32.41 / 32.23 |
+| RETIRE | 12 → 11 | 18.33 | 16.13 | 16.67 |
+
+Preparing FAT2 from FAT1 avoids the secondary image read on first marking/first
+touched FAT sector/cleaning. The repeated A reproduces the request counts and
+widens the CREATE range to overlap B. B has a 75.51-ms WRITE outlier and a slower
+CHECK sample; neither is attributed. Debugger stops/shared-host variation remain
+unisolated, so these profiled spans establish no native speedup or stable
+regression. The new 128-MiB-volume tracking bitmap costs 253 charged bytes,
+separate from free-map and workspace backing. One-FAT media need no bitmap.
+The functional matrix below uses the local e0801c2 source-built images; the
+power checks also boot its freshly built complete default image.
 
 ## Scratch functional qualification
 
