@@ -21,7 +21,8 @@ source and conversion are recorded in [the asset note](assets/ui/volume/README.m
 
 - `third_party/limine/`: the imported bootloader, protocol header and binaries
   retain [Limine's license](third_party/limine/LICENSE) and the protocol header's
-  own embedded 0BSD notice.
+  own embedded 0BSD notice. Third-party code inside the binaries is covered by
+  Limine's [notices](third_party/limine/3RDPARTY.md), which accompany them.
 - `third_party/tlsf/tlsf.c` and `tlsf.h`: retain the BSD terms and copyright
   notices in [tlsf.h](third_party/tlsf/tlsf.h). The Pyxis integration header and
   provenance documentation are original project material.

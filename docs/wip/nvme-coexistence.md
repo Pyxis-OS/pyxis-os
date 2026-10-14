@@ -121,7 +121,7 @@ copied to the 600 MiB ESP. The owner confirms which it is with
 `findmnt /boot /boot/efi` from Fedora. Loading the kernel through its EFI stub
 (`protocol: efi`) is the alternative; it needs the initramfs handed over by the
 loader, which is unverified, so the Linux protocol is the default. Path syntax and
-keys are checked against Limine 12.9.0's documentation, which this repository does
+keys are checked against the pinned Limine's (12.9.3) documentation, which this repository does
 not carry, before anything is written.
 
 **Kernel updates.** Fedora's versioned kernel names change with every update and

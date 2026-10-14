@@ -192,7 +192,7 @@ Place the macro definition at the top level of the Limine configuration, with
 no spaces around `=`. Limine inserts its value once without recursively
 expanding it, preserving names containing literal `${...}`. Generated entries
 use this form automatically. See the
-[pinned parser](https://raw.githubusercontent.com/Limine-Bootloader/Limine/v12.9.0/common/lib/config.c).
+[pinned parser](https://raw.githubusercontent.com/Limine-Bootloader/Limine/v12.9.3/common/lib/config.c).
 
 On the host:
 
