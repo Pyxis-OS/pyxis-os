@@ -19,8 +19,6 @@
 #define PROVIDER_OPEN_APPEND (UINT64_C(1) << 3)
 #define PROVIDER_OPEN_FLAGS (PROVIDER_OPEN_CREATE | PROVIDER_OPEN_EXCLUSIVE | \
   PROVIDER_OPEN_TRUNCATE | PROVIDER_OPEN_APPEND)
-#define PROVIDER_REPRESENTATION_BYTES UINT64_C(1)
-#define PROVIDER_MEDIA_TYPE_MAX_BYTES 127
 
 /* Followed by bounded opaque target bytes without NUL. The caller captures its
  * environment entry before OPEN; the provider interprets only the remainder.

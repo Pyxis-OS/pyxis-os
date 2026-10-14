@@ -6,6 +6,8 @@
 /* Private continuation bridge until capability-model task B6. Generic OPEN
  * never falls back to this operation; PREPARE remains a separate HTTP path. */
 #define PROVIDER_LEGACY_HTTP_OPEN UINT64_C(3)
+#define PROVIDER_REPRESENTATION_BYTES UINT64_C(1)
+#define PROVIDER_MEDIA_TYPE_MAX_BYTES RESOURCE_MEDIA_TYPE_MAX_BYTES
 #define PROVIDER_HTTP_URI_MAX_BYTES 2048
 #define PROVIDER_HTTP_HOST_MAX_BYTES 255
 #define PROVIDER_LEGACY_HTTP_CONTEXT (UINT64_C(1) << 0)
