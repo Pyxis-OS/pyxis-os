@@ -691,10 +691,11 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
     if (lineage_cut(parent) && kind != 0) {
       status = CALL_DENIED;
     }
-    if (status == CALL_OK) {
+    if (status == CALL_OK && kind != FORWARDER_SLOT) {
       status = add_node(&ancestry, parent);
     }
-    for (size_t i = 0; status == CALL_OK && i < parent->ancestor_count; ++i) {
+    for (size_t i = 0; kind != FORWARDER_SLOT && status == CALL_OK &&
+        i < parent->ancestor_count; ++i) {
       status = add_node(&ancestry, parent->ancestors[i]);
     }
   }

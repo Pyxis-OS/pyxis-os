@@ -60,6 +60,13 @@ existing observation attachment retains its own lineage.
   intended replacement manager still requires explicit management authority;
   ordinary holders gain none from manager loss.
 
+A slot owns its current target without permanently inheriting that target's
+lineage. Cutting a current provider denies use until the supervisor retargets
+the slot using an independently held compatible grant; it does not cut the
+slot itself. Operation resolution captures both the slot and the selected
+provider, so admitted operations and opened children retain their original
+provider's lineage across replacement. Explicit CUT on the slot is terminal.
+
 ## Operation and storage lifetime
 
 CUT denies new operations and fails queued operations. Already-delivered
