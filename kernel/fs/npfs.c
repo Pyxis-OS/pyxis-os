@@ -583,7 +583,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (task_deadline_expired(context->deadline)) {
     return CALL_TIMED_OUT;
   }
-  if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_END)) {
+  if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_CHECK)) {
     return fat32_perform(context, job);
   }
   if (job->operation >= NPFS_RAW_INFO) {

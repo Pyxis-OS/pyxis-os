@@ -17,6 +17,7 @@
 #define MOUNT_RETIRE UINT64_C(6)
 #define MOUNT_BEGIN UINT64_C(7)
 #define MOUNT_END UINT64_C(8)
+#define MOUNT_CHECK UINT64_C(9)
 #define MOUNT_VOLUME_NAME_MAX 255u
 
 #define MOUNT_ACCESS_READ_ONLY UINT64_C(0)
@@ -92,6 +93,12 @@ struct mount_interval_request { uint64_t id; };
 #define MOUNT_STATE_INTERVAL (UINT64_C(1) << 6)
 #define MOUNT_STATE_CLEANUP_PENDING (UINT64_C(1) << 7)
 #define MOUNT_STATE_IDENTITY_VALID (UINT64_C(1) << 8)
+#define MOUNT_STATE_ALLOCATION_INVALID (UINT64_C(1) << 9)
+/* Bound RW CHECK has no request/reply body. It requires WRITE|INTERVAL and
+ * the calling process's active, delivered interval. It fully revalidates and
+ * atomically replaces allocation proof, without renewing the lease or resetting
+ * a failed writer. ALLOCATION_INVALID applies only to RW controls; reads and
+ * flush remain available until an uncertain mutation sets FAILED. */
 /* failure_phase is the shared FAT engine's fat32_mounted_phase when FAILED;
  * failed_sector is the absolute backing sector, or UINT64_MAX for a flush.
  * Names are diagnostic components,

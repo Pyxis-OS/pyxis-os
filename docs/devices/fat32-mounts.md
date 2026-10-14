@@ -129,6 +129,29 @@ charged to the shared wrapper budget. A new owner at capacity gets LIMIT before
 allocation. An expired owner renews its existing record in place; live-owner
 tombstones are never evicted to admit another owner.
 
+Bound RW control CHECK requires both WRITE and INTERVAL and the calling
+process's active, delivered interval. It performs one full validation including
+held detached roots and atomically replaces the mount's allocation proof. It
+has no request/reply body and never extends the lease. Publishers call
+`mount_check(control)` immediately after BEGIN, before publication effects.
+Children cannot use the parent's interval. RO controls and non-FAT mount
+authorities do not expose this operation.
+
+RW admission performs one full check, using bounded FAT windows, and retains
+an exact free-cluster bitmap/count. Mutations check touched chains, parent
+directories and names; successful durable transitions maintain the map. FSInfo
+is a hint. Local checks do not reprove ownership of unrelated chains: silent
+in-session corruption by a Pyxis bug can remain undetected until CHECK or remount.
+Concurrent external modification of a mounted extent is unsupported.
+
+Backing read errors or detected structural inconsistency invalidate this proof,
+reported as ALLOCATION_INVALID by OBSERVE. Mutations and detached reclamation
+then refuse; reads and flush remain available unless FAILED is also set. CHECK
+can rebuild after a known pre-effect failure, but never resets an uncertain
+writer. Authority/capacity refusals before validation starts preserve the old
+proof; a failed validation retains the old map with proof invalid. BEGIN and
+SYNC never implicitly check or rebuild.
+
 ## Failure and clean power
 
 Capacity, budget and authority refusals before effects leave media unchanged.
@@ -142,9 +165,9 @@ records; a later explicit RETIRE may retry that cleanup.
 
 The [clean-power sequence](../kernel/acpi.md#power-off-and-restart) holds user
 tasks, closes storage admission and drains admitted operations and deferred work.
-It flushes each mutated RW instance and, when no detached allocated chains remain,
+It flushes each mutated RW instance and, when allocation proof is valid and no detached allocated chains remain,
 clears only its owned dirty mark and flushes that clear. Views, handles and
-publication intervals remain retained. Detached chains leave the mark dirty after
+publication intervals remain retained. Invalid proof or detached chains leave the mark dirty after
 the flush and never refuse power merely by remaining held. Unresolved mutation
 failure blocks clean power. RO instances never change dirty bits.
 
@@ -180,12 +203,15 @@ backing and reservations after all owned/escaped references drain. No user buffe
 AP stack or held lock crosses storage waits.
 
 Admission settings in the [adapter](../../kernel/fs/fat32.c) are four active
-instances, 32 MiB aggregate FAT workspace/chain storage, the shared 1 MiB/1024
+instances, 32 MiB aggregate FAT allocation maps/workspace/chain storage, the shared 1 MiB/1024
 native-wrapper budget, depth 64, 67,108,864 work steps and 16,777,216 sectors per
 engine operation. The existing serial worker admits at most 32 jobs with a
 cooperative 30-second deadline. Pending charges count before allocation; LIMIT
 and NO_MEMORY remain distinct. Growing a workspace or retained chain charges both
-old and replacement backing until the replacement succeeds. These are implementation settings, not FAT format
+old and replacement backing until the replacement succeeds. Operation candidates
+and prepared images follow the actual change, rather than reserving every FAT
+sector for a tiny mutation. Failed uncertain-operation backing remains charged.
+These are implementation settings, not FAT format
 limits or a total-memory guarantee.
 
 ## Trusted browsing profiles
