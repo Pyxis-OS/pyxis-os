@@ -96,3 +96,37 @@ Select Install Pyxis in Limine, focus Install with Super+Right, then Install /
 Read the room, default journal and typed `wipe`. Boot the installed target and
 sync/power off before saving an Update fixture; boot live again, choose Update
 and type `update`. Restore the target fixture before each measured run.
+
+## Quiet display revision — QEMU, 2026-10-14
+
+The owner accepted quiet progress and WRITE-only Caelum-console delegation to
+the trusted installer. This follow-up changes reporting/Review, not disk I/O,
+consent, verification or installed configuration activation. The general
+userspace log-writer alternative is [technical debt](../../../technical-debt.md#userspace-kernel-log-writer).
+
+Functional baseline: parent `c71f62e8`, userland `e3ba6e3`, successful main CI
+image (Actions API run 2525). The first Limine entry was changed to the existing
+Install-mode command line; packaged payloads were unchanged. Install and Update
+completed on a disposable 2 GiB target. Inspection/Review and dozens of phase
+lines scrolled past the visible screen. No timings were taken.
+
+Reporting image: parent `33add54c`, userland `cec84f4`, fs `d84f8084`, ports
+`2296a06c`, lwIP `a1aadb91`. The full image build passed with pinned builder
+`pyxis-llvm23.1.3-e0801c2`, reusing matching main SDK/ports bundles whose sources
+are unchanged by this applications-only task. Host QEMU 10.2.2, Q35, nested KVM,
+CPU `host`, four vCPUs, 2 GiB, standard VGA/PS2 at 1280×800, VirtIO RNG and a
+VirtIO-SCSI read-only boot CD, no NIC/HDA/xHCI. The disposable 2 GiB VirtIO disk
+uses 512-byte blocks and writeback cache honoring flush. VirtIO-SCSI avoids the
+host QEMU AHCI CD-ROM crash. Manual QMP keyboard input/screenshots and read-only
+GDB inspection were used; raw images/logs/captures stay under local
+`build/qualification/{baseline,quiet}`.
+
+The normal Install Review fits with its prompt on one screen, showing 56 new
+roots, 2,231 selected files and 47,429,393 bytes. A single copying/verification
+row redraws with a bar, files and a measured byte rate. Short checks stay quiet;
+major phases leave final lines. Install reached `installed` after copying and
+comparing all selected files and raw EFI verification at 5/5. Detailed
+BEGIN/END and coalesced UPDATE records appear in the Caelum/serial log, separately
+from the Install console. GDB at the installer's console syscall observed a
+serial-mirrored console capability with rights=1 (WRITE), transport=0, distinct
+from its own non-serial Install console capabilities.
