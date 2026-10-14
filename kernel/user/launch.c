@@ -63,7 +63,7 @@ static struct directory_object *boot_root;
 static struct directory_object *tmp_root;
 /* Boot init's private RAM directory, from which it makes configured RAM volumes. */
 static struct directory_object *ram_root;
-static const char stock_boot_init_uri[] = "boot://boot-init.pxe";
+static const char stock_boot_init_uri[] = USER_DEFAULT_BOOT_INIT;
 
 /* Boot exposes only the immutable archive. Match its exact entry names;
  * userspace path walking and its wider namespace policy stay in libpyxis. */

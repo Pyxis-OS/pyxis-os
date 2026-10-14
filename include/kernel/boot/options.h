@@ -28,8 +28,9 @@ struct boot_options {
 
 /* BSP, IF=0: call once before display/AP initialization. Copies the command
  * line into bounded static storage; returned options and strings live for
- * this boot. Invalid or duplicate options are fatal. The display driver owns
- * display.size value validation and its nonfatal fallback. */
+ * this boot. Unknown/invalid options warn and fall back; duplicates use their
+ * last occurrence. Overflow is fatal: truncation could change authority.
+ * Display backends retain geometry/capacity validation and nonfatal refusal. */
 const struct boot_options *boot_options_parse(const char *command_line);
 const struct boot_options *boot_options_get(void);
 

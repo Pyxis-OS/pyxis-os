@@ -28,6 +28,7 @@ void user_launch_initial(const struct boot_options *options);
 /* Initial inits and their interpreters name boot archive entries by this root. */
 #define USER_BOOT_ROOT_PREFIX "boot://"
 #define USER_BOOT_ROOT_PREFIX_LENGTH (sizeof(USER_BOOT_ROOT_PREFIX) - 1)
+#define USER_DEFAULT_BOOT_INIT USER_BOOT_ROOT_PREFIX "boot-init.pxe"
 
 /* Boot startup only: load boot init, an archive image or script, in Caelum's
  * space with the bootstrap services, the boot and RAM tmp roots, the space
