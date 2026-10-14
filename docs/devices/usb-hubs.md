@@ -88,8 +88,9 @@ One owned DMA arena supplies page-strided contexts, EP0 rings and control buffer
 Children borrow slices; they never own or free the arena. No runtime allocation
 or mapping occurs. Backing remains until reboot. Independently prepared HID
 records allow fenced numeric Slot reuse while retaining old context, ring and
-TD identities. Active non-HID or unsupported hub-subtree removal can quarantine
-the controller under the unresolved-DMA policy.
+TD identities. Device/subtree removal closes all affected rearm before child-first
+fences, preserving the controller and unrelated branches when retirement is
+proved.
 
 ## Bounded HID leaf hotplug
 
@@ -113,10 +114,10 @@ limits, and admission refusal does not imply that the old generation is reusable
 
 Ordinary HID leaf removal suppresses rearm, proves endpoint retirement and
 completes Disable Slot before releasing numeric slot ownership. Old DMA and TD
-owners stay retained until reboot. A failed fence, monitor failure or unsupported
-hub-subtree removal releases affected input and can quarantine the entire
-controller, stopping unrelated storage/HCI. This fail-closed behavior does not
-promise survival across USB switch or mixed-subtree removal; see
+owners stay retained until reboot. Hub loss releases affected input and retires
+all descendant host/class records; a surviving parent keeps its notification
+stream. Failed hardware fences still quarantine the controller. Reinserted hubs
+and non-HID devices remain outside runtime admission; see
 [technical debt](../technical-debt.md#usb-switch-subtree-removal).
 
 Budgets and deadlines are implementation choices, not machine topology. Existing

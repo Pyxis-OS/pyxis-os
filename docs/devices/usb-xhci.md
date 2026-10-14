@@ -128,12 +128,15 @@ pre-AP receive resources and post-event rearm during every controller wait.
 
 A connection change retires that startup candidate. Ordinary HID leaves have
 [device-local endpoint and slot fences](usb-interrupt-in.md#collection-loss-and-retirement),
-with fresh prepared records for bounded low/full-speed reattachment. An idle
-unbound startup device can be disabled without stopping unrelated ports; active
-non-HID removal and unsupported hub-subtree loss retain controller quarantine.
+with fresh prepared records for bounded low/full-speed reattachment.
+Disappearance retires the affected device and its subtree, including active
+non-HID endpoints, without stopping unrelated ports. Admission/rearm closes
+before child-first endpoint and Disable Slot fences; old DMA stays retained.
 Reconnection never inherits an old device's DMA or software state. Writes
 acknowledge only observed PORTSC changes and preserve neutral power/wake fields;
-they never echo PED or reset bits.
+they never echo PED or reset bits. The
+[disappearance qualification record](../development/experiments/xhci-device-removal/README.md)
+separates QEMU evidence from the pending native dock check.
 
 Command timeout, invalid completion/event identity, controller error, failed
 port setup or failed slot retirement stops the controller for this boot. The

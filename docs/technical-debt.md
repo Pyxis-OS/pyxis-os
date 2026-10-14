@@ -39,11 +39,10 @@ controller, descriptors, link speeds and hub path (`lsusb -n` shows only the boo
 
 ## USB switch subtree removal
 
-The accepted [USB HID contract](devices/usb-hid.md#binding-and-ownership) permits controller
-quarantine after hub-subtree removal. A USB switch flip can therefore disable
-devices on that controller until reboot. Surviving the flip without quarantine
-needs proven subtree retirement with mixed storage/Bluetooth DMA ownership;
-the owner deferred it for much later (2026-10-10).
+[Device/subtree removal](devices/usb-interrupt-in.md#collection-loss-and-retirement)
+now preserves unrelated devices when hardware fences succeed. Reattachment still
+only admits low/full-speed HID leaves on surviving supported hubs; displaced hubs,
+storage and HCI need reboot. Revisit with a concrete broader hotplug requirement.
 
 ## Remote transfer memory and staging limits
 
@@ -1874,8 +1873,8 @@ The private [interrupt-IN path](devices/usb-interrupt-in.md) supports boot HID o
 Runtime high-speed/HCI attachment, new hubs, USB 3 periodic input and general HID reports remain unavailable. The 32 retained HID admissions can exhaust until reboot.
 Revisit broader profiles or reusable resources for a concrete device, with a bounded lifetime design.
 
-Ordinary HID leaves have fenced slot retirement. Failed fences, unowned events, active non-HID removal and hub-subtree loss can still disable the whole controller,
-including storage/Bluetooth, until reboot; automatic interrupt STALL recovery is absent. Revisit recovery and subtree retirement separately, preserving DMA ownership.
+Device/subtree loss has fenced local retirement. Failed fences, malformed/unowned events and controller errors can still disable the whole controller until reboot;
+automatic interrupt STALL recovery and DMA reclamation are absent. Revisit for a concrete recovery requirement, preserving ownership.
 The [HID qualification record](development/experiments/usb-hid/README.md) does not establish native periodic-transfer coverage.
 
 ## USB descriptor bounds and per-port preparation

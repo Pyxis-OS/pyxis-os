@@ -91,9 +91,12 @@ failed command into success or replays data or a mutation command.
 Each exchange has a five-second absolute deadline. During boot probing it is
 also bounded by the controller's thirty-second enumeration/media deadline. Reset recovery has its own
 five-second absolute deadline; retries do not restart the exchange deadline.
-Unsafe host recovery, timeout, removal during active work or corrupt events
-quarantine that controller and retain unresolved DMA. A class failure abandons
-its device; other controllers continue independently.
+Owned transfer timeout or known removal closes local block admission, fails
+queued requests and fences the affected device/subtree, retaining unresolved
+DMA. Unproved fences, controller/command failure or corrupt events still
+quarantine that controller. Active exchanges
+retain their submitted/uncertain-effect outcome; even write-through flush refuses
+a removed host. A class failure abandons its device; other controllers continue independently.
 
 ## Bulk read aggregation
 
@@ -229,7 +232,9 @@ facts remain unchanged.
 Controller quarantine independently stops admission and queued
 work on all its disks; the active exchange retires through its worker, and unsafe
 host DMA stays retained until reboot. Other controllers and VirtIO continue.
-Preparation facts and GPT snapshots remain immutable after later I/O failure.
+Device-local loss applies the same queued-request failure to that disk alone;
+other disks on the controller remain admitted. Preparation facts and GPT
+snapshots remain immutable after later I/O failure.
 
 GPT reserves snapshot capacity before AP startup and one shared additional
 scratch buffer for USB. Its coordinator waits for sealed boot discovery, then
