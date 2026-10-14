@@ -182,6 +182,51 @@ unqualified. All owned QEMU/GDB jobs stopped. The
 retains the earlier failure and the new result with its source-reviewed failure
 path; no failing-CHECK injection was added.
 
+## 2026-10-14 review follow-up: advisory hints and geometry-derived backing
+
+Kernel `5c201ecf`, fs `d84f8084`, userland `6f19f494`; ordinary default build
+passes with the same `e0801c2` compiler. The userland rebase changes no publisher
+code. The fixed aggregate 32-MiB setting above describes the earlier revision;
+current mounts charge geometry-derived map/scratch/chain backing and return
+NO_MEMORY on allocation failure. CHECK converts ownership bits into free bits
+in its existing scratch, then copies only on complete success: two full bitmaps,
+not three. Host regression covers retained-map preservation on a failed check,
+restoration and bad-cluster conversion with callback limits 1/8/9/128/256.
+
+Same Q35/nested KVM/four-CPU/1-GiB/VirtIO scratch configuration, fresh OVMF,
+no NIC/USB. Passive GDB observes admitted requests, allocator calls and charged
+backing. These are functional profiled runs on a shared host, not matched/native
+performance measurements. Initial eight-sector full checks time out at the
+unchanged 30-second admission deadline, without writes or retained charges.
+Current full checks use callback/hardware-bounded 64-KiB reads independently of
+the public 4-KiB DISK payload; local mutation windows and writes remain unchanged.
+
+A sparse 49-GiB partition with 512-byte clusters has 101,179,472 clusters and
+790,465 FAT sectors per copy. Each bitmap is 12,647,435 bytes (the former
+three-map total is 37,942,305 bytes). Full-check workspace is 12,794,016 bytes.
+RW admission succeeds with 12,420 requests, no write/flush callbacks. BEGIN →
+CHECK → CREATE → held three-byte WRITE → FILE SYNC → END → DROP → RETIRE all
+succeed. CHECK uses 12,359 requests, zero allocator/write/flush calls and preserves
+the original absolute lease deadline. CREATE/WRITE use 25/24 requests;
+file sync uses one flush. Full/local windows are observed as 128/8 sectors.
+Measured charged-backing peak is 25,441,467 bytes; release leaves mount/global
+charges and instance count zero. This is charged backing, not total resident
+memory. Operator-delayed expiry separately refuses CREATE without I/O.
+
+A fresh 64-MiB partition has 129,022 clusters. Both signed FSInfo copies start
+with free count 129,023 and next-free 1 (both out of range). RW admission succeeds
+with 84 requests, no writes/flushes; CHECK uses 23 requests and no allocation,
+write or flush, preserving the original lease deadline. CREATE, three-byte WRITE,
+FILE SYNC, END, DROP and RETIRE succeed. Measured charged-backing peak is 178,848
+bytes; final charges and instances are zero. Invalid hints do not weaken metadata
+signature, mirrored-FAT, chain or namespace validation. After retirement,
+independent FAT scans find 101,179,470 / 129,020 free clusters respectively;
+both FSInfo copies match those counts and set next-free to UINT32_MAX. Both FAT
+copies match and are clean; fsck succeeds and mtools reads `/a` as `abc` on both.
+Large media/firmware were reused, without a cold-cache reset. Earlier editor and
+power qualifications remain the separately dated results above. No native media,
+real ESP or actual kernel physical-memory-exhaustion run; all owned jobs stopped.
+
 ## Owner-present native follow-up
 
 Native ESP steps require the owner's explicit approval and presence. This sheet

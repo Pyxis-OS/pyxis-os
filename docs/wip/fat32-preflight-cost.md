@@ -101,8 +101,9 @@ mounted is unsupported.
 Ordinary mutation work should follow touched chains, parent directories and
 changed sector-and-phase images, plus free-map searches, rather than two full
 FAT sweeps. Explicit check/admission still costs O(volume + namespace/chain work).
-With mirrored FATs and S valid FAT sectors, eight-sector windows reduce the FAT
-sweep's backing requests toward 2*ceil(S/8), plus namespace reads; this is a
+With mirrored FATs and S valid FAT sectors, W-sector callback-bounded windows
+reduce the FAT sweep's backing requests toward 2*ceil(S/W), plus namespace reads;
+W is at most 128 for full checks. This is a
 projection, not a speedup measurement. Complete 128-MiB editor publication must
 fit the original lease, including its explicit check, read-back and cleanup.
 
