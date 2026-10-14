@@ -318,12 +318,14 @@ static bool grant_retain_depth(struct kernel_object *object, uint64_t rights,
     --*budget;
     spin_lock(&forwarders_lock);
     size_t *count = object->type == OBJECT_FORWARDER ? &forwarder->holders : &forwarder->controllers;
-    bool counted = object->type == OBJECT_FORWARDER || controller;
+    bool holder = object->type == OBJECT_FORWARDER &&
+        (forwarder->type != OBJECT_FORWARDER_CONTROLLER || (rights & FORWARDER_RIGHTS));
+    bool counted = holder || controller;
     if (counted && *count == SIZE_MAX) {
       spin_unlock(&forwarders_lock);
       return false;
     }
-    if (object->type != OBJECT_FORWARDER || forwarder->target_owned ||
+    if (!holder || forwarder->target_owned ||
         !forwarder->target.object || lineage_cut(forwarder)) {
       if (counted) {
         ++*count;
@@ -392,6 +394,10 @@ void forwarder_grant_release(struct kernel_object *object, uint64_t rights)
 {
   struct forwarder *forwarder = object->type == OBJECT_FORWARDER ? (struct forwarder *)object :
       ((struct forwarder_controller *)object)->forwarder;
+  if (object->type == OBJECT_FORWARDER && forwarder->type == OBJECT_FORWARDER_CONTROLLER &&
+      !(rights & FORWARDER_RIGHTS)) {
+    return;
+  }
   struct capability_grant detached = {0};
   bool cut = false;
   spin_lock(&forwarders_lock);
