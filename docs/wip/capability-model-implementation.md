@@ -372,7 +372,7 @@ qualification are recorded in the
 [task record](../development/experiments/process-environment/README.md). The temporary shell HTTP `@name` registry remains private
 operation state until A5/B6, not a generic resolver or second process environment.
 
-## Task 4 scope (owner review, 2026-10-14)
+## Task 4 scope (accepted, 2026-10-14)
 
 A4 dispatches libc opens from A3's attested typed result, adds `pyxis_describe()`
 and explicit error-body access, applies the outcome-to-errno table, and folds in
@@ -386,7 +386,7 @@ Source inspection: current `descriptor_open()` classifies HTTP by spelling;
 `fclose` drains/releases without submission; `stdio_finish` ignores flush errors
 and `exit` preserves the requested status. These paths need replacement.
 
-### Proposed defaults; implementation waits for answers
+### Accepted decisions (owner, 2026-10-14)
 
 1. **Transaction/HTTP boundary.** A4 introduces a protocol-neutral transaction
    interface with independently attenuable staging/commit/abort authority, an
@@ -396,18 +396,15 @@ and `exit` preserves the requested status. These paths need replacement.
    generic OPEN never falls back. The descriptor dispatcher uses attested type.
    Remove `pyxis_http_commit`, migrate C/Lua callers and retire Lua's HTTP adapter
    here as folded 5c. B6 still owns transparent OPEN/GET snapshots/redirects/DELETE,
-   B7 `http prepare`, B8 the remaining interim surface. **Alternative:** deliver
-   only native/text libc now, postponing real transactions and Lua retirement
-   until B6/B8. This settles A4's overlap with B8's Lua item without changing HTTP
-   policy early.
+   B7 `http prepare`, B8 the remaining interim surface. Lua adapter retirement is part of A4
+   through folded 5c, rather than waiting for B8.
 2. **Inspecting failed opens.** Ordinary `fopen` returns NULL/errno and releases
    its provisional result. An opt-in `pyxis_fopen` result output retains failure
    description/body under explicit caller ownership; its body helper yields an
    independent read FILE without another OPEN. `pyxis_describe(FILE *, ...)`
    queries a held stream without moving its cursor. No last-error slot or fresh
-   fetch. **Alternative:** ordinary `fopen` returns a failed FILE whose reads fail,
-   allowing direct inspection. The default preserves ordinary port behaviour.
-3. **Alias close and exit.** Default: final owning descriptor-alias close commits
+   fetch. This preserves ordinary port behaviour.
+3. **Alias close and exit.** final owning descriptor-alias close commits
    the shared transaction once; earlier alias closes only drain/stage. Exact-stream
    flush may commit earlier. Normal exit stages all buffers then commits clean
    transactions; an existing nonzero status is preserved, while finalization
@@ -415,9 +412,7 @@ and `exit` preserves the requested status. These paths need replacement.
    Requested nonzero status alone does not prove producer failure. FILE errors
    block commit until explicitly cleared; native staging failures remain latched.
    `_Exit`, crash and abort do not submit; retained observers see failure.
-   **Alternative:** every alias close commits immediately, and exit retains its
-   requested status on finalization failure, relying on diagnostics/observation.
-   The default respects shared dup ownership and prevents silent exit success.
+   This respects shared dup ownership and prevents silent exit success.
 
 ### Baseline and qualification
 
@@ -435,4 +430,4 @@ matched native comparison to the owner batch. Route alias/exit/abandon, body
 retention, stale/cut grants, staging faults and lost-reply repros to Daybreak
 through the owner. Ordinary builds/QEMU C/Lua checks cover types, errno, flush-all
 and exactly-once submission. Userland/ports PRs precede parent pins/interface docs.
-No implementation or baseline run starts before these answers.
+Task 4 implementation is assigned on 2026-10-14; baseline precedes code.
