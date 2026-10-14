@@ -185,7 +185,9 @@ reply2_value = { cat $reply2 }
   referenced with `$`, including as a redirection target (`> $endpoint`); a bare
   word stays an ordinary path.
 
-Implementation notes for when this is picked up:
+## Implementation notes
+
+For when this is picked up:
 
 - A text value only needs to behave as a read-only capability. It may be held as
   an immutable inline value (for example in the startup record) rather than as a
