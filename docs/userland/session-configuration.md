@@ -15,7 +15,6 @@ init script selects it:
 ```text
 #!boot://shell.pxe
 mount --optional --read-write host
-namespace create
 session boot://session.pxe --configure-network --start-services
 ```
 
@@ -63,12 +62,11 @@ configuration set them. A configured variable replaces an inherited one of the
 same name. There is no separate size limit; launch fails with a diagnostic if
 the environment exceeds the 64 KiB startup metadata limit.
 
-Values are strings for now. Environment variables are expected to carry
-capabilities later, as in the
-[capability-valued shell variables](../wip/capabilities-and-providers.md#variables-and-the-environment)
-idea, so string-only is not a permanent property of this table. The parked
-[capability-valued environment](../wip/capabilities-and-providers.md) direction
-records the invariants and open questions.
+This Lua configuration field supplies TEXT entries. The native
+[process environment](../interfaces/environment.md) also supports real capability
+entries; it never encodes grants as strings. Capability-valued configuration and
+[shell assignment](../wip/capabilities-and-providers.md#variables-and-the-environment)
+remain separate work in the accepted capability-model milestone.
 
 Timezone names follow libc's IANA-name syntax: slash-separated components of
 ASCII letters, digits, underscore, hyphen and plus. UTC needs no file; other
@@ -96,9 +94,9 @@ input/output, memory and launcher grants; app/home and optional
 host roots with their actual queried grants;
 the working-directory chain and display path; and optional display, clock,
 [random](../devices/randomness.md) and keyboard resources, using the same rights as the shell's session handoff.
-The optional service namespace is forwarded with its actual held rights, and
-namespace-creation authority is forwarded explicitly through trusted session
-handoff. Ordinary shell children receive namespace LOOKUP only.
+The selected exported environment entries are captured for each child.
+Trusted session handoff explicitly delegates private service controllers;
+ordinary shell children do not receive them.
 The init shell explicitly delegates `net_config` through session handoff only.
 The launcher applies network settings only with `--configure-network`, then
 passes READ alone to the interactive shell or mux for later child DNS snapshots.

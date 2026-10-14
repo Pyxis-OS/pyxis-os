@@ -479,22 +479,28 @@ locale-free ASCII.
 
 ## Standard streams, formatting and exit
 
-Startup supplies independent stdin, stdout and stderr bindings. Each declares
+The process environment supplies independent `stdin`, `stdout` and `stderr`
+capability entries. Each exposes
 `PROTOCOL_CONSOLE`, `PROTOCOL_FILE` or `PROTOCOL_PIPE` and owns a distinct child
 handle with only READ authority for stdin or WRITE authority for stdout/stderr.
 An exported FILE additionally retains CALL transport; native streams retain zero.
-HTTP stdin instead declares a callable `PROTOCOL_STREAM` READ grant and a
-distinct `PROTOCOL_HTTP_TRANSACTION` STATUS-only observation grant. The trusted
+HTTP stdin instead supplies a callable `PROTOCOL_STREAM` READ grant and a
+distinct `stdin.status` entry with a `PROTOCOL_HTTP_TRANSACTION` STATUS-only
+observation grant. The trusted
 launch adapter delegates the validated pair together; no mutation, COMMIT or
 ABORT authority reaches the child. STATUS also permits read-only METADATA.
 The shared [provider bridge](../interfaces/file-providers.md) supports ordinary
 opens; HTTP redirection uses the typed transaction helper before delegation.
-Runtime adopts these handles into descriptors 0, 1 and 2 before heap
-initialization, using static storage. It retains no hidden startup copy.
+Runtime captures the three streams from one immutable environment snapshot and
+adopts its owned LOOKUP grants into descriptors 0, 1 and 2 before heap
+initialization. The temporary snapshot closes before constructors/main. Closing
+or replacing an original descriptor conditionally removes its matching environment
+publication identities; newer entries and duplicate descriptors remain intact.
+There is no hidden startup stream owner.
 Closing stdout cannot close stderr or a named terminal grant. Normal boot binds
 all three to the space console.
 
-`STARTUP_STREAM_NONE` with `HANDLE_INVALID` makes that stream unavailable without
+An absent entry makes that stream unavailable without
 preventing the process from running. Its first nonempty I/O fails with EBADF and
 sets the error indicator; missing stdin is not EOF. There is no fallback to a
 terminal, another standard stream or the kernel log. Zero-size transfers remain
@@ -514,22 +520,16 @@ sequential and cannot seek, as do HTTP response streams.
 [Pipes](../interfaces/pipes.md) use reference-based EOF and report EPIPE when
 their last reader closes.
 
-`startup_stream(index)` borrows the handle owned by the corresponding descriptor;
-the immutable snapshot retains no reference, and native code must not close its
-handle independently. After the owner closes or its descriptor is replaced by
-`dup2`, the snapshot is stale and must neither be used nor forwarded to a child.
-Descriptor-number reuse does not refresh it. Before owner close, native code may explicitly copy a borrowed handle
-when it needs a separately owned reference, but must close that copy itself.
 For native launch adapters, `<pyxis/stdio.h>` provides
-`pyxis_stdio_stream(FILE *, struct startup_stream *)`. It checks the current FILE
-registry and descriptor association, returning a borrowed protocol/handle and,
-for HTTP responses, the declared observation protocol/handle.
-Closed or absent standard wrappers return NONE; descriptor-number reuse never
+`pyxis_stdio_stream(FILE *, struct pyxis_stdio_binding *)`. It checks the current
+FILE registry and descriptor association, returning a borrowed protocol/handle
+and, for HTTP responses, the declared observation protocol/handle.
+Closed or absent standard wrappers return an empty binding; descriptor-number reuse never
 reconnects them. Success preserves errno, indicators, cursor, pushback and
 read-ahead, and acquires no reference. The caller must not close either handle or
 use it after owner close or descriptor replacement. Flush queued output before
 delegating. This lets [Lua](lua.md) delegate live C streams without reusing the
-stale startup snapshot. HTTP children consume the same forward response and
+original environment binding. HTTP children consume the same forward response and
 validate EOF with their observation grant. Child files begin at offset zero;
 buffered stream bytes, queued output and append state are not transferred.
 

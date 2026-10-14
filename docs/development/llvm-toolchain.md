@@ -30,7 +30,7 @@ how applications use it.
   - libc++ using `timespec_get` for its clocks, no terminal check in `print`,
     and no `ELAST` limit.
 - **The pin:** `toolchain/build.sh` fetches one commit shallowly, currently
-  `4c23a208a023`. The SDK builds its [C++ runtime](sdk.md#c) from the same
+  `df87791031b9`. The SDK builds its [C++ runtime](sdk.md#c) from the same
   commit. Moving to a new LLVM release is a rebase onto its tag in a new
   `pyxis-VERSION` branch.
 

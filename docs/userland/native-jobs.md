@@ -11,50 +11,66 @@ opt-in alongside its ordinary spawn path. The shell retains its existing syntax.
 
 ## Explicit inputs
 
-`pyxis_job_options` selects the image, argv, final grant array, named resources,
-roots, optional namespace, working snapshot, environment snapshot and three live
-libc descriptors. Set an absent stream to `-1`; zero is descriptor zero. A NULL
-working/environment snapshot selects no cwd/an empty environment. Working
-snapshot roots and namespace are ignored: only the options' explicit selections
-are used. Nothing replays immutable startup grants or adds ambient resources.
+`pyxis_job_options` selects the image, argv, final `launch_grant` array,
+`launch_environment_entry` array, optional owned working snapshot and three live
+libc descriptors. CAP and TEXT entries share exact names in the child's process
+environment. A CAP value indexes the grant array and has length zero; its rights
+and transport masks come from that grant. A TEXT value points to a string, with
+length excluding the final NUL. Entry flags select exported or private values.
+Directory capabilities and provider capabilities use this same entry array.
+There are no separate root, resource, namespace or text-variable launch arrays.
 
-The synchronous call owns copies of metadata and attenuated handles until kernel
-capture finishes. Source handles/descriptors survive. Cwd and environment
-snapshots survive later parent mutation; callers may close them after launch
-returns. Directory handles, namespace bindings and executable bytes remain
-mutable objects, so copies do not establish an immutable content snapshot.
+A NULL working snapshot selects no cwd. An empty entry array selects no named
+values beyond the explicit descriptor choices below. Callers capture and stage
+only their intended entries; the core adds no parent environment inheritance or
+live-table authority. [`environment.h`](../../userspace/include/environment.h)
+supplies owned captures and `environment_capture_stage` for borrowing their
+names, values and selected CAP handles through synchronous admission. Libc's
+[`pyxis_environment_snapshot`](../../userspace/libc/include/pyxis/environment.h)
+contains an owned capture of exported TEXT only. A selected cwd is an independent
+owned directory chain, not another name lookup table.
+
+The synchronous call copies metadata and retains attenuated handles until kernel
+capture finishes. Source handles/descriptors survive. Immutable captures and cwd
+snapshots preserve their selected values across later parent mutation; callers
+release preparation captures after launch, before unrelated waits. Directory
+handles, provider targets and executable bytes can still change, so retained
+capabilities do not establish immutable content snapshots.
 
 Every final grant is authenticated and checked, including unnamed grants and
-the appended cwd, namespace and stream entries. The first profile denies all
-launcher, space-factory, power, controller and administrative protocols, and
-rejects management/termination rights on shared namespace, configuration and
-observer objects. Ordinary selected content, input/output, network and local
-runtime resources are allowed according to the explicit masks in
+the appended cwd and stream grants. The first profile denies all launcher,
+space-factory, power, controller and administrative protocols, and rejects
+management/termination rights on configuration and observer objects. Ordinary
+selected content, input/output, network and local runtime capabilities are
+allowed according to the explicit masks in
 [`job_grants.c`](../../userspace/libc/job_grants.c). Unknown protocols refuse.
-Image/roots/cwd/namespace require the native kinds supported by the launcher;
-exported FILEs may supply streams.
+The image and cwd require the native kinds supported by the launcher; exported
+FILEs may supply streams. Unexpected duplicate CAP/TEXT names refuse admission.
 
-The **trusted caller** audits namespace/provider semantics for the entire job.
-LOOKUP cannot enumerate/filter/freeze a namespace, and providers or raw clients
-can broker effects and transferred grants. Metadata authentication does not
-prove those providers lack launch authority. Bundle expansion remains outside
-the core; this contract is not a transitive sandbox or a capability encoded in
-an environment string.
+The **trusted caller** audits provider semantics for the entire job. A captured
+capability does not freeze a provider's behavior or a slot's current target;
+providers or raw clients can broker effects and transferred grants. Metadata
+authentication does not prove those providers lack launch authority. Bundle
+expansion remains outside the core; this contract provides no transitive sandbox.
+TEXT entries convey strings, never capability authority encoded in strings.
 
-Streams get distinct READ (stdin) or WRITE (stdout/stderr) grants, without named
-aliases or interrupt/input ownership added implicitly. FILE positions start at
-zero in the child; the parent's cursor, read-ahead and pushback stay local. The
-core flushes pending output in the FILE associated with each selected output
-descriptor. It leaves other FILEs and input state alone; callers handle other
-writer aliases before mixing I/O. Flush failure returns `CALL_IO` with `errno`
-retained and no launch, but already delivered bytes are not rolled back.
-Descriptor lookup reports `CALL_BAD_HANDLE` for EBADF and `CALL_IO` for other
-descriptor errors. Native operation errors otherwise retain their statuses.
+Set an absent stream to `-1`; zero is descriptor zero. Descriptor choices replace
+or omit `stdin`, `stdout`, `stderr` and the optional `stdin.status` companion in
+child staging only. They do not mutate the parent's environment. Streams get
+READ (stdin) or WRITE (stdout/stderr) grants, without terminal aliases or
+interrupt/input ownership added implicitly. FILE positions start at zero in the
+child; the parent's cursor, read-ahead and pushback stay local. The core flushes
+pending output in the FILE associated with each selected output descriptor. It
+leaves other FILEs and input state alone; callers handle other writer aliases
+before mixing I/O. Flush failure returns `CALL_IO` with `errno` retained and no
+launch, but already delivered bytes are not rolled back. Descriptor lookup
+reports `CALL_BAD_HANDLE` for EBADF and `CALL_IO` for other descriptor errors.
+Native operation errors otherwise retain their statuses.
 
 Arrays/strings obey the existing 64 KiB launch-capture bound and separately
 page-padded 64 KiB startup bound, checked before output flushing. The initial
 stack uses the existing zero/default or page-aligned 1–8 MiB contract. Kernel
-image capture and mutable namespace/root collisions can still refuse later.
+image capture and environment admission can still refuse later.
 An uncertain launch returns `CALL_OUTCOME_UNKNOWN`; never replay it automatically.
 
 ## Observer ownership and retirement
@@ -93,8 +109,8 @@ launch authority is refused, including by the contained leaf profile below.
 short synchronous capture and selected-output flushing. It then creates a root
 or subgroup through the selected launcher, retaining sole non-forwarded CONTROL;
 the creator remains outside the group. One admission attempt is followed by
-subtree SEAL. No launcher is installed in the child. Image, source roots and
-namespace/provider reachability remain the caller's responsibility.
+subtree SEAL. No launcher is installed in the child. Image, selected directory
+entries and provider reachability remain the caller's responsibility.
 
 `terminate` requests stop of the owned subtree. Normal `wait` caches the actual
 process result and additionally confirms group cleanup. Its borrowed process
@@ -119,14 +135,14 @@ job with separate native RAM stdout/stderr FILEs. The trusted caller explicitly
 supplies an exclusively provisioned work root and READ clock. Create/unlink
 happens before either WRITE-only stream is delegated. No stdin is installed;
 the command options must leave all three streams at `-1`. There is no implicit
-cwd, environment, namespace, image lookup, bundle expansion or adapter.
+cwd, named environment entries, image lookup, bundle expansion or adapter.
 
 The capture profile validates the final inventory, including unnamed entries
 and appended cwd. It excludes terminal, keyboard, pointer, display, capture,
 clipboard, audio, space, log, mount and raw-disk bypass, alongside the direct
 core's authority exclusions. Exact private-root handles and valid domain/object
 identity aliases refuse. The caller audits the entire private subtree,
-credentials and namespace/provider reachability throughout the job. Directory
+credentials and provider reachability throughout the job. Directory
 metadata cannot prove RAM backing or exclusive access; shared `tmp://` and
 unpredictable names are insufficient.
 
@@ -213,8 +229,9 @@ guarantee, backing quota or hard admission/retirement wall-time bound is added.
 ## Lua and declared clients
 
 [Lua's owned jobs](lua.md#owned-native-jobs) use this core for one-stage capture
-and pipelines, with exact role/root selection, owned cwd/environment snapshots
-and finite binary input. Strong recovery ownership survives Lua errors and GC;
+and pipelines, with explicit capability profiles, owned cwd and environment
+captures, and finite binary input. Lua selectors stage CAP/TEXT entries into the
+same child environment. Strong recovery ownership survives Lua errors and GC;
 explicit cancellation, observation and once-only close retain the native result
 and cleanup distinctions. `pyxis.commands` supplies argv wrappers for ports;
 ordinary `pyxis.run`, shell syntax and libuv spawn remain unchanged.
@@ -227,8 +244,8 @@ context, provisioning ancestor or descendant launcher in this capture profile.
 A surviving creator cleans after confirmed client/group retirement. Stranded
 named trees remain private until reboot under the accepted
 [cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
-Continuum supervision and nested groups remain parked; no new executor/broker
-or capability-valued environment mechanism is added.
+Continuum supervision and nested groups remain parked; this leaf-job core adds
+no executor or broker.
 
 ## Adapter qualification (2026-10-12)
 

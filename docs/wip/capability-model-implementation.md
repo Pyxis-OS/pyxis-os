@@ -183,7 +183,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
   only) and *cut* rights, held by its creator; revocable copies with
   derivation tracking, so a cut also cuts copies made through it; holders see
   *denied*. Service slots are forwarders with both rights.
-- [ ] **2. One environment table.** The startup record's standard streams, named
+- [x] **2. One environment table.** The startup record's standard streams, named
   resources, scheme roots, namespace grant and string environment become one
   table of named entries, each a capability or an inline text value. Launch
   passes exported entries only. `name://rest` resolves through it; libc keeps
@@ -273,4 +273,89 @@ launch captures exported entries and explicit child overrides without mutating
 the parent. Canonical headers are `abi/environment.h` and userland `environment.h`;
 helpers are `environment_lookup`, `environment_set_capability`,
 `environment_set_text`, `environment_unset` and `environment_snapshot`.
-Exact bounded replies/layout remain task-2 scope work, not placeholder APIs.
+The concrete layouts and ownership rules are in the
+[environment reference](../interfaces/environment.md). A3 can add optional native
+immutable-FILE materialization from an already captured TEXT generation, outside
+the table guard; ordinary TEXT lookup performs no eager file copy or second lookup.
+
+## Task 2 scope (delta, 2026-10-14)
+
+**Implemented; defaults accepted 2026-10-14.** Branch
+`kernel/process-environment`; the qualification record identifies its baseline
+and final inputs. Task 1 is already checked. One process-owned environment replaces
+startup resources, roots, stream bindings, string variables and kernel
+namespaces. A caller-bound native object supplies the agreed owned
+LOOKUP/SET/UNSET/SNAPSHOT view. Table growth, replacement and teardown stay
+BSP-owned; guards cover capture/publication, not allocation, grant callbacks,
+user copies or waits. Siblings share this table. Immutable captures keep their
+values across replacement/unset; live-table authority is not delegated to children.
+
+Launch captures exported entries, then applies explicit child-only overrides
+and attenuation without changing the parent. Bundle required/optional entries
+and trusted handoffs preserve their current grant restrictions; private entries
+are not inherited implicitly. Cwd remains an owned directory chain; argv and
+the caller-only FS bootstrap remain startup machinery, not new name channels.
+Libc uses the same table for text mutation and caches only immutable captures,
+preserving its borrowed `getenv` and descriptor ownership contracts. Namespace
+ABI/objects/helpers/commands are removed, with in-tree callers migrated together.
+The service publication handshake yields a task-1 SLOT/controller pair; this
+does not implement task 5's assignment/capture syntax.
+
+The interim HTTP stdin pair uses ordinary `stdin` and `stdin.status` entries,
+captured together from a snapshot. Explicit child stream overrides replace/remove
+the companion in child staging only; libc checks it when using response stdin.
+This preserves the shipped pair without compound values, protected names or
+inferred observation authority; entry spelling is routine layout work.
+
+### Accepted task-2 decisions (owner, 2026-10-14)
+
+1. **Service-controller ownership.** Keep the existing interim
+   `service start NAME IMAGE` / `service replace NAME IMAGE` interface. Start
+   publishes exported `NAME` as the slot and private, non-exported `NAME.control`
+   as its controller, atomically; reject either-name collision without partial
+   publication. Replace uses that held controller to RETARGET, not a new slot.
+   Trusted session successors explicitly stage controller copies as private
+   child entries; ordinary jobs do not receive them. These are ordinary,
+   unprotected names in the one table, not a second management-name map.
+2. **Admission policy.** Tunable 1,024 entries and 1 MiB aggregate
+   owned name/text bytes per live table or snapshot, with no additional per-value
+   cap. Values beyond endpoint payload size use the native buffer interface.
+   Mutation/snapshot exhaustion fails before publication and preserves old
+   values; child capture/serialization retains its existing 64 KiB budget and
+   fails before making any child runnable. These are explicit policy limits,
+   not ABI or the namespace's former 64-binding contract.
+
+The [unchanged-code local baseline](../development/experiments/process-environment/README.md)
+is captured on 1/4-CPU QEMU before code; the ordinary image build and existing
+IPC/OPEN/launch/pipe commands passed. Then qualify owned lookup, concurrent mutation/snapshots, exported-only launch,
+overrides, slot replacement/cleanup and live/remote mux on 1/4-CPU QEMU/GDB.
+The owner's native baseline remains the reference for matched after-A/C runs.
+Delivery includes dependent userland/ports changes before the parent pin and
+updated interface references. Startup/launch representation changes require
+all target binaries to rebuild against the matching SDK, including separately
+published toolchain-volume binaries. LLVM #9 migrates the target runtime to this environment, without code-generation
+changes. The existing hosted build requires source, SDK provenance and installed
+compiler revision to match. The owner has published the matching `df87791` image;
+it is adopted with the qualified fork pin. Merge that fork fast-forward before
+the userland/ports dependencies and parent integration.
+
+### Accepted lifetime decision: standard streams (owner, 2026-10-14)
+
+**Accepted:** stdio captures the original `stdin`, `stdout`, `stderr`
+and optional `stdin.status` entries with non-reused publication identities.
+Closing/replacing an original standard descriptor conditionally removes its
+still-matching entries, then releases the local descriptor alias. A changed or
+absent entry is untouched; each companion is checked independently in one
+atomic cleanup. Duplicate descriptors have their ordinary independent lifetime;
+reused descriptor numbers carry no original-entry cleanup identity. `dup2` does
+not implicitly SET an environment name: child redirection uses the existing
+explicit descriptor overrides. Table cleanup runs outside descriptor locks,
+and native release is still attempted if cleanup fails, preserving close's
+invalidates/no-retry rule. Captured snapshots deliberately retain authority and
+must be released before application execution or unrelated waits.
+
+All three task-2 decisions are implemented in #832. The matching df87791 compiler
+image is adopted; full Clang/LLD links, 1/4-CPU environment stress and hosted driver
+qualification are recorded in the
+[task record](../development/experiments/process-environment/README.md). The temporary shell HTTP `@name` registry remains private
+operation state until A5/B6, not a generic resolver or second process environment.

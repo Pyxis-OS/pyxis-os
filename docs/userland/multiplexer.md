@@ -46,7 +46,8 @@ and optional description through a private userland endpoint. The new shell
 receives that chain with its rights preserved; no printed text is parsed or path
 description reopened. Later `cd` operations remain independent. Busy, non-shell,
 unavailable or timed-out panes quietly fall back to the space start directory.
-Every pane keeps the space's initial selected roots, namespace and environment.
+Each new pane receives explicitly selected environment entries from the space's
+profile; service controllers remain private to the trusted manager.
 Filesystem grants are shared explicitly, so panes are not filesystem sandboxes.
 `launch = true` independently controls ordinary child-launch delegation.
 

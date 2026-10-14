@@ -80,7 +80,7 @@ different providers, and supporting a protocol does not grant authority to invok
 it. Init is the natural place to start providers, bind names and delegate
 dependencies. Replacing a binding affects future resolution; existing handles keep
 their identity and lifetime; revocation and replacement of held authority need
-separate semantics. This preserves the [namespace contract](../interfaces/namespaces.md).
+separate semantics. This preserves the [environment contract](../interfaces/environment.md).
 
 Inside the kernel, consider small typed operation tables and explicit constructor
 arguments where multiple implementations already justify them (file and directory

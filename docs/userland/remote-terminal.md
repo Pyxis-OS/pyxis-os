@@ -63,7 +63,8 @@ packaged Remote space opts in. A daemon without that resource passes none to
 its shells; connecting remotely does not create capture authority.
 Only the root shell receives the separate `terminal_events` EMIT capability;
 ordinary children, scripts and session successors do not inherit it.
-The service namespace permits LOOKUP only. Shells receive no listener, mount,
+Selected exported service entries preserve their masks. Private controllers stay
+with their trusted manager. Shells receive no listener, mount,
 network configuration, physical keyboard, framebuffer, terminal attachment or
 group supervision authority. Packaged live Remote sets `launch = true` (owner
 accepted, 2026-10-11), supplying a separate `child_launcher` with LAUNCH alone.
@@ -72,7 +73,7 @@ and its cleanup. Installed defaults contain no Remote space; custom installed
 Remote entries can enable the same setting.
 
 For a single-CPU manual boot, select a trusted init which mounts HOST if wanted,
-creates its namespace, and calls
+publishes its environment services, and calls
 `session boot://session.pxe --configure-network --start-remote-services`.
 Do not give multiple init scripts network configuration ownership.
 
@@ -111,7 +112,7 @@ SEND-only broker. Trusted init, shell and session preserve a distinct
 and an unbound LAUNCH launcher. Mux receives its bound LAUNCH-only launcher,
 attachment, process WAIT and group CONTROL|WAIT;
 the daemon retains supervision through cleanup. It freezes initial environment,
-roots, namespace and remote resource masks per connection. Split cwd snapshots
+selected environment entries and remote resource masks per connection. Split cwd snapshots
 preserve actual directory rights, with initial `tmp://` fallback before
 publication. Mux receives scoped subgroup creation through LAUNCH, but no terminal creation, physical input,
 DRAW or clipboard-store grant. Pane shells receive neither broker nor group

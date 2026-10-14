@@ -74,7 +74,7 @@ receive neither the parent namespace nor namespace-creation authority.
 
 ```text
 service replace --read-only https boot://httpfs.pxb --https --ca-bundle home://custom-ca.pem
-namespace remove https
+env unset https
 service start --read-only https boot://httpfs.pxb --https
 ```
 

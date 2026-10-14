@@ -268,7 +268,7 @@ observes a seventeenth caller's queue-full result, then completes the retained
 calls in reverse order. `--close` shows receiver closure after and before
 request delivery; `--exit` leaves a received call to process teardown. The shell
 delegates launch authority through session handoff. Endpoint creation is also
-delegated to providers started through the [publication commands](namespaces.md).
+delegated to providers started through the [publication commands](environment.md#publication).
 The session handoff exits the shell; boot another session to run another mode.
 
 `--send` grants a client SEND-only authority. It sends 4 KiB and four file grants,
@@ -302,7 +302,7 @@ console input together. Type a key at the initial prompt to start clients;
 The option needs input and clock grants; modes without it keep blocking RECEIVE.
 See [qualification](../development/experiments/endpoint-readiness/README.md).
 
-[Namespace publication](namespaces.md) provides explicit discovery and handoff.
+[Environment publication](environment.md#publication) provides explicit discovery and handoff.
 There is no external cancellation API or automatic restart.
 A provider can retain all sixteen slots by leaving delivered receipts unfinished; deadlines release callers, not provider
 work. Calls without a deadline can still wait indefinitely, including self-calls

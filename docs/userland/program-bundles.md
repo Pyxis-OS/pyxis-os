@@ -105,8 +105,8 @@ receive exactly LOOKUP, ENUMERATE and READ_FILES, with no mutation rights or
 parent-navigation escape. Source, output and writable user data stay outside the
 bundle and use explicitly delegated ordinary capabilities.
 
-The launcher preserves explicit streams, cwd, environment, namespace and other
-directory roots. `pipe/create` is an ordinary manifest request available to
+The launcher preserves explicit streams and cwd, selected exported environment entries
+and declared directory grants. `pipe/create` is an ordinary manifest request available to
 foreground bundles when their supplying shell holds the pipe service; plain
 foreground programs still receive no pipe-creation grant. `clipboard_local` and
 `clipboard_shared` (owner decision, 2026-10-13) follow the plain-program rule: the
@@ -178,7 +178,7 @@ client leaf. Ordinary children, captured stages and app views receive neither
 the provisioning ancestor nor implicit context aliases. Existing trusted init
 and session-successor handoffs retain provisioning authority, while mux and
 remote startup create private subtrees for their retained session groups.
-The ancestor is outside public roots, cwd and namespaces. No basename, path or
+The ancestor is outside exported environment entries and cwd. No basename, path or
 environment string authenticates a context.
 
 Ownership is prepared before directory creation and client admission. A retained

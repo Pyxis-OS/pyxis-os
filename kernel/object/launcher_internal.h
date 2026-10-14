@@ -21,8 +21,8 @@ struct launch_space {
   bool terminal_control, clipboard_local, clipboard_shared, boot_focus;
 };
 
-/* Heap storage shared with BSP, never a remote task stack. Bindings/directory
- * entries initially hold grant indices; optional namespace holds index + 1.
+/* Heap storage shared with BSP, never a remote task stack. Capability-valued
+ * environment entries and cwd handles initially hold grant indices.
  * BSP replaces them with child handles.
  * Source grants own logical authority before image capture can wait. The capture
  * owns image storage independently of its optional file operation. */

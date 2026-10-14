@@ -58,7 +58,7 @@ cannot catch a large stack adjustment that skips over it.
 Entry receives a pointer in `RDI` to the
 [startup region](../../include/abi/startup.h), which remains mapped until process
 exit. Its address is chosen by VM allocation; programs must use the pointer.
-The region carries named resources, environment, arguments and optional directory
+The region carries the caller-bound environment handle, arguments and optional directory
 context, within a 64 KiB budget including page padding. Resource/environment
 metadata is read-only; argv and its strings occupy separate writable pages.
 Neither part is executable.

@@ -101,10 +101,16 @@ local status = pyxis.run{"tcc", "-c", "home://src/vm.c", "-o", "tmp://vm.o"}
 ```
 
 `pyxis.run` takes a nonempty dense list of argument strings, without a shell,
-word splitting or expansion. A bare program name resolves to `bin://NAME.pxe`,
-then `boot://NAME.pxe` only if absent. A name containing `/` is an explicit path.
-The child retains cwd, roots, environment and the allowed ordinary-command
-resources, attenuated to the caller's held rights. The required `launcher` is
+word splitting or expansion. Program selection uses the shared
+[command and bundle lookup](program-bundles.md#unpacked-development-lookup).
+The child receives an owned cwd selection and explicitly staged entries from the
+caller's process environment: exported TEXT, exported directory/provider CAPs
+and the allowed ordinary-command capabilities, with the existing attenuation.
+Plain children omit the parent's `app` directory entry. Bundle children receive
+their declared capabilities and read-only app/resource directories. Private
+controllers, configured bundle-source inventory and `job_work` are not inherited
+implicitly. Captures retain authority only through preparation/admission and are
+released before the child wait. The required `launcher` is
 LAUNCH only, supplied to foreground commands only in an opted-in
 [space](init.md#boot-configuration). Missing authority raises a Lua error.
 
@@ -145,20 +151,31 @@ with a nonzero status; never replay it.
 
 Options select a required positive `timeout_ms`, binary finite `input` (nil is
 absent; an empty string supplies EOF), `stdout_limit`/`stderr_limit`, exact
-`resources`, selected `roots`, `cwd`, `environment`, and `namespace`. The
+`resources`, selected `roots`, `cwd`, `environment`, and boolean `providers`. The
 [native job contract](native-jobs.md) defines capture limits, bounded concurrent
 pumping and actual retirement; the timeout becomes one absolute monotonic
 deadline before preparation, not a hard wall-time bound on launch or cleanup.
 
-Omitted runtime roles select present memory/threads/clock/random. Explicit role
+The Lua selectors choose a launch profile, then stage one CAP/TEXT entry array;
+they do not select separate kernel root, resource or namespace channels.
+Omitted `resources` select present memory/threads/clock/random. Explicit role
 names are `memory`, `threads`, `clock`, `random`, `tcp`, `udp`, `pipe`, and
-`system_info`; missing requested authority refuses. Roots default to current
-held roots, or an exact list of `{name="home", access="read"}` / `"read-write"`.
-Read-only selection rebuilds the entire cwd chain under attenuated roots.
-`cwd=false` omits it, and an exact environment table replaces the copied current
-environment. Namespace LOOKUP is omitted unless explicitly selected with true;
-the trusted caller still audits provider reachability. Paths and selector names
-create no authority. Captured children receive no launcher or private context.
+`system_info`; missing requested authority refuses. Omitted `roots` select the
+current exported directory entries, excluding private job/provisioning and
+configured bundle-source inventory. An explicit list selects
+`{name="home", access="read"}` or `"read-write"`; masks intersect held authority.
+Read-only selection rebuilds the entire cwd chain under those attenuated grants.
+`cwd=false` omits it; an incompatible or unspelled cwd refuses admission.
+
+Omitted `environment` captures exported TEXT from the current table. An exact
+string map replaces that text selection, including an empty table for no text.
+`providers` defaults to false; true explicitly stages exported provider CAPs from
+an owned capture, excluding standard streams, private controllers and configured
+bundle sources. The trusted caller still audits provider reachability. CAP and
+TEXT selections share exact names; unexpected collisions refuse before launch.
+The pipeline installs its standard stream entries in child staging only. Paths
+and selector names create no authority. Captured children receive no launcher or
+private context.
 
 `job:step()` pumps a bounded round; `:wait()` drives bounded native waits;
 `:cancel()` requests stop, then normal cleanup still needs wait and close.

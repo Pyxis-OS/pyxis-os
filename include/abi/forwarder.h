@@ -15,7 +15,10 @@
 
 /* Creation delegates only held authority; it returns both handles or neither.
  * Holders preserve the target interface. Controllers never imply target rights.
- * SAME_RIGHTS requires both masks zero, as for ordinary COPY. */
+ * SAME_RIGHTS requires both masks zero, as for ordinary COPY.
+ * Explicit creation refuses native environment snapshots, including targets
+ * retaining one through forwarder/controller/lineage edges, with WRONG_TYPE.
+ * Admission graph-budget exhaustion returns LIMIT before publication. */
 struct forwarder_create {
   handle_t target;
   uint64_t kind;
@@ -32,6 +35,7 @@ struct forwarder_reply {
 /* An invalid target empties a service slot without changing its fixed type or
  * ceiling. Replacement needs the same attested protocol and representation
  * (native or exported); crossing representations returns WRONG_TYPE.
+ * The creation restriction on snapshot-retaining targets applies here too.
  * CUT is permanent. RETARGET is unavailable on a revocable copy. */
 struct forwarder_retarget {
   struct message_header header;

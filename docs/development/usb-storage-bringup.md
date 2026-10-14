@@ -321,7 +321,6 @@ not kernel selection constants. A temporary trusted init contained:
 #!app://shell.pxe
 title --optional "USB read-only"
 mount --partition 2 --volume usb-test --read-only usb://
-namespace create
 service start text app://textfs.pxe
 session app://session.pxe --configure-network --start-remote-services
 ```

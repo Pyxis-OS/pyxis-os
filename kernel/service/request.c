@@ -12,7 +12,7 @@
 #include <kernel/object/launcher.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/forwarder.h>
-#include <kernel/object/namespace.h>
+#include <kernel/object/environment.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
@@ -77,8 +77,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct memory_request, request)},
   [BSP_SERVICE_CAPABILITY_GROW] = {sizeof(struct capability_growth_request), alignof(struct capability_growth_request),
       offsetof(struct capability_growth_request, request)},
-  [BSP_SERVICE_NAMESPACE_CREATE] = {sizeof(struct namespace_create_request), alignof(struct namespace_create_request),
-      offsetof(struct namespace_create_request, request)},
+  [BSP_SERVICE_ENVIRONMENT] = {sizeof(struct environment_request), alignof(struct environment_request),
+      offsetof(struct environment_request, request)},
   [BSP_SERVICE_ENDPOINT_CREATE] = {sizeof(struct endpoint_create_request), alignof(struct endpoint_create_request),
       offsetof(struct endpoint_create_request, request)},
   [BSP_SERVICE_ENDPOINT_EXPORT] = {sizeof(struct endpoint_export_request), alignof(struct endpoint_export_request),
@@ -164,7 +164,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_PIPE_CREATE:
   case BSP_SERVICE_CAPABILITY_GROW:
-  case BSP_SERVICE_NAMESPACE_CREATE:
+  case BSP_SERVICE_ENVIRONMENT:
   case BSP_SERVICE_ENDPOINT_CREATE:
   case BSP_SERVICE_ENDPOINT_EXPORT:
   case BSP_SERVICE_RAMFS:
@@ -338,8 +338,8 @@ static void service_request(struct bsp_request *request)
   case BSP_SERVICE_CAPABILITY_GROW:
     capability_growth_execute((struct capability_growth_request *)request);
     break;
-  case BSP_SERVICE_NAMESPACE_CREATE:
-    namespace_create_execute((struct namespace_create_request *)request);
+  case BSP_SERVICE_ENVIRONMENT:
+    environment_execute((struct environment_request *)request);
     break;
   case BSP_SERVICE_COMPLETION:
     completion_admit_execute((struct completion_admit_request *)request);

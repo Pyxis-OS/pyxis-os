@@ -4,6 +4,7 @@
 #include <abi/handle.h>
 #include <abi/message.h>
 #include <abi/startup.h>
+#include <abi/environment.h>
 
 #define LAUNCHER_RIGHT_LAUNCH (UINT64_C(1) << 0)
 #define LAUNCHER_LAUNCH UINT64_C(1)
@@ -36,33 +37,27 @@ struct launch_grant {
   uint64_t transport;
 };
 
-struct launch_binding {
-  uint64_t name; /* Caller address of a NUL-terminated string. */
-  uint64_t grant; /* Index into grants, not a handle. */
+/* All entries share one exact-name space. CAP value is an index into grants,
+ * with length zero; TEXT value is a caller string address and length excludes
+ * its NUL. Flags currently select EXPORTED only. Explicit private entries are
+ * permitted when their grants/text are staged by the caller; ordinary snapshot
+ * selection copies exported entries only. No implicit ambient inheritance.
+ * CAP masks remain exactly the selected grant's masks. No protected names. */
+struct launch_environment_entry {
+  uint64_t name;
+  uint64_t kind;
+  uint64_t flags;
+  uint64_t value;
+  uint64_t length;
 };
 
-struct launch_stream {
-  uint64_t protocol; /* Same protocol tags as startup_stream. */
-  uint64_t grant; /* Grant-list index; NONE requires all fields zero. */
-  uint64_t observation_protocol; /* Same observation tag as startup_stream. */
-  uint64_t observation_grant; /* Grant-list index, zero when absent. */
-};
-
-/* Each stream facet selects a distinct grant entry, referenced by no resource,
- * root or working-directory binding. Child libc adopts each installed handle.
- * Plain streams select only the protocol's READ (stdin) or WRITE rights.
- * Response STREAM stdin requires READ plus a declared HTTP_TRANSACTION STATUS-only
- * observation entry, both with CALL transport; other streams have no companion.
- * Pairing is supplied by the trusted caller, never inferred from source handles.
- * Repeated source handles in separate entries deliberately create separate
- * grants, including any explicitly delegated terminal resources.
- *
- * All addresses are in the caller. Environment uses startup_variable;
- * argv is an array of string addresses, working_directories an array of grant
- * indices. Empty arrays are ignored. working_path is optional (zero = absent).
- * Arrays, strings and alignment together have a 64 KiB capture budget; the
- * resulting child startup region separately obeys STARTUP_MAX_SIZE including
- * page padding. No implicit grants, environment or directory inheritance. */
+/* Every address is in the caller. Arrays, strings and alignment share a 64 KiB
+ * capture budget, and child serialization separately obeys STARTUP_MAX_SIZE
+ * including page padding and selected environment names/text. Cwd uses grant
+ * indices, boundary first; working_path is only an optional description.
+ * Standard streams are ordinary stdin/stdout/stderr entries; any explicitly
+ * paired response observation uses stdin.status. Child redirection replaces
+ * these entries in staging, never in the parent's live environment. */
 struct launch_request {
   /* READ file grant; not implicitly passed to the child. Host capture accepts
    * positive short reads, rejects early EOF/observed size changes with IO, and
@@ -74,14 +69,10 @@ struct launch_request {
    * or writable aliases; published bundle revisions must remain unchanged. */
   handle_t image;
   uint64_t grants, grant_count;
-  uint64_t resources, resource_count;
-  uint64_t roots, root_count;
+  uint64_t entries, entry_count;
   uint64_t working_directories, working_directory_count;
   uint64_t working_path;
-  uint64_t environment, environment_count;
   uint64_t argv, argc;
-  struct launch_stream streams[STARTUP_STREAM_COUNT];
-  uint64_t namespace_grant; /* Zero = absent; otherwise grant-list index + 1. */
   /* Zero selects 1 MiB. Explicit sizes must be page-aligned, 1..8 MiB inclusive;
    * invalid requests fail with BAD_REQUEST before image capture. Eager backing
    * ends at the fixed high stack top, with one unmapped guard page directly
@@ -120,10 +111,9 @@ struct launch_batch_reply {
  * belongs to the caller's space and runs on the caller's assigned CPU. */
 _Static_assert(sizeof(struct launch_grant) == 24, "launch grant layout");
 _Static_assert(sizeof(struct execution_group_create_reply) == 16, "group creation reply layout");
-_Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
-_Static_assert(sizeof(struct launch_stream) == 32, "launch stream layout");
-_Static_assert(sizeof(struct launch_request) == 224, "launch request layout");
-_Static_assert(sizeof(struct launch_message) == 240, "launch message layout");
+_Static_assert(sizeof(struct launch_environment_entry) == 40, "launch environment entry layout");
+_Static_assert(sizeof(struct launch_request) == 88, "launch request layout");
+_Static_assert(sizeof(struct launch_message) == 104, "launch message layout");
 _Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
 _Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
 _Static_assert(sizeof(struct launch_batch_reply) == 72, "launch batch reply layout");

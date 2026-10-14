@@ -1,4 +1,5 @@
 #include <kernel/object/clipboard.h>
+#include <kernel/object/environment.h>
 #include <kernel/completion.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/keyboard.h>
@@ -49,8 +50,14 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
   atomic_init(&process->terminal_result, 0);
   atomic_init(&process->completion_gate, NULL);
   process->group_member.process = process;
+  process->environment = environment_table_create();
+  if (!process->environment) {
+    kfree(process);
+    return MM_NO_MEMORY;
+  }
   process->control = process_control_create();
   if (!process->control) {
+    environment_table_destroy(process->environment);
     kfree(process);
     return MM_NO_MEMORY;
   }
@@ -84,6 +91,7 @@ static void release_records(struct process *process)
   endpoint_process_exit(process);
   native_completion_process_exit(process);
   private_memory_discard_records(process);
+  environment_table_destroy(process->environment);
   capability_table_destroy(&process->capabilities);
   if (process->control) {
     process_control_detach_process(process->control);

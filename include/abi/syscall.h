@@ -63,6 +63,8 @@ enum call_status {
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
  * returns its fixed reply on operation failure too, with status still in RAX.
+ * ENVIRONMENT LOOKUP/ENUMERATE return their fixed metadata on BUFFER_TOO_SMALL
+ * without publishing text bytes or a handle.
  * ENDPOINT_CALL similarly returns delivery metadata after output validation,
  * including on transport failure; application results are separate. */
 struct syscall_result {

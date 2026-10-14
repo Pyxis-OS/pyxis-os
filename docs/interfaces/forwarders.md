@@ -32,6 +32,16 @@ logical lifetime rules, including zero-right grants.
 Insufficient replacement authority returns DENIED; wrong type returns
 WRONG_TYPE; cycles are BAD_REQUEST. A cut slot cannot be retargeted.
 
+Explicit REVOCABLE/SLOT creation and RETARGET refuse native environment snapshots
+with WRONG_TYPE, including a proxy retaining a snapshot through forwarder targets,
+controllers or lineage ancestors. A bounded admission walk checks those edges
+under the forwarder guard; exhaustion returns LIMIT without publication or changing
+the old target. This prevents snapshot cells and mutable slots from retaining each
+other after every external handle closes. No accepted service uses snapshot targets.
+Ordinary snapshot COPY and automatic immutable lineage derivation remain supported;
+such a derived proxy cannot become an explicit forwarder target. Exported providers
+are identified by their actual representation, not merely an advertised protocol.
+
 Holder metadata is fixed at creation. **Accepted owner restriction,
 2026-10-14:** RETARGET requires the same attested protocol and representation:
 native to native or exported to exported. Native/exported switches return
