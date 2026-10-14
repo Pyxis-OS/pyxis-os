@@ -4,8 +4,10 @@ Prepared 2026-10-14 against main `09a51b9a52d9fa1e3c9c0d7f7c33b75e9e008fa4`,
 userland `077116c3`, ports `2296a06c`, fs `414be0ac`, lwIP `a1aadb91`.
 **Owner accepted the existing-tool method and hands-free gate, 2026-10-14.**
 The gate includes main's packaged Multiplexer tab; the pilot predates it.
-The timed and pipe cohorts are recorded below; the complete gate is **pending
-three matched inspection boots**. Task 1 must not merge before it closes. A partial pilot below does not close that gate.
+**Native baseline gate satisfied, 2026-10-14.** Complete record:
+`/shared/present/capability-baseline/results/A-20261014-124726/` (`DONE`).
+It retains the primary timed/pipe cohort below and three matched inspection
+boots. The older partial pilot is separate; repeats after A and C remain due.
 
 ## Stage and conditions
 
@@ -280,6 +282,41 @@ inspection boots. A single clean combined invocation is not required: valid
 completed cohorts and separately collected inspection boots retain explicit
 provenance. Initial/after-A/after-C timed methods and counts remain identical.
 
-**Complete gate still pending.** The runner fix passed syntax, mocked old-TCP
-hang/boot-epoch checks and full local fresh/resume lifecycle checks; the fixed
-reboot path has not run natively. No physical-device read-back is claimed.
+### Completed inspection and gate
+
+The owner/orchestrator ran `--resume-timed` from horse on 2026-10-14.
+`A-20261014-124726` is `DONE`, with restored original PXE menu and checked raw
+references to the primary `A-20261014-120533` timed/pipe events. Run 2 remains
+corroboration. The rebuilt runner's native reboot path worked: all seven ordinary
+and debug reboots have separate new-clock-epoch verification; all three debug
+boots confirmed image-bound attachment and ordinary continue.
+
+| Inspection | Observed role | Startup state | Pages / backed pages | Full allocation |
+| --- | --- | --- | --- | --- |
+| 1 | `boot://session.pxe`, `development` | RANGE_BACKED | 2 / 2 | 8,192 bytes |
+| 2 | same | RANGE_BACKED | 2 / 2 | 8,192 bytes |
+| 3 | same | RANGE_BACKED | 2 / 2 | 8,192 bytes |
+
+Each checkpoint had 12 CPUs and a unique live selected process. The startup
+range began at `startup_address`; all pages were backed. This is the complete
+legacy startup allocation for that observed session, not the short-lived echo's
+allocation or its serialized content length. Debug boots supply no timing data.
+
+Provenance: Pyxis `09a51b9a52d9fa1e3c9c0d7f7c33b75e9e008fa4`, userland
+`077116c36a6f3d962a39a6d5fa369224a9292550`, ports
+`2296a06c3ff97e92e9f961fb46826e75f56f701e`, fs
+`414be0ac0b06255e376b1b96ed63dd4f41fb3bbb`, lwIP
+`a1aadb91a50360ff5b52864f7cec810b8162ee85`; builder
+`pyxis-llvm23.1.3-e0801c2`. Both profiles share ELF SHA-256
+`ce44340f59b1e307597b164f2983a41dd92171c0d20431b61508ea20ec13c70e`
+and archive SHA-256
+`aa9843128af3f112965211f9bfb57ff389aa8bc841ad26e7ef7db323ad9cfd2a`.
+Kernel configuration, generated ordinary/debug menus, tool/script hashes and
+retained raw-event hashes are in `configuration.json` and `retained-timings.json`
+of the complete record. No raw dumps are committed.
+
+**Task 1's required baseline merge gate is satisfied.** Task 1 implementation
+review/qualification remains its own requirement. Repeat this native profile and
+these timing boundaries after A and C. These are warm boot-archive/native Remote
+measurements, not local-terminal equivalence, isolated launch, cold npfs/storage,
+physical-device read-back or nested-QEMU performance claims.
