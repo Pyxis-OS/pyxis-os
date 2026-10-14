@@ -288,8 +288,11 @@ enum call_status environment_table_seed_text(struct environment_table *table,
     const char *name, uint64_t flags, const char *text, size_t length)
 {
   if (!name_valid(name) || (flags & ~ENVIRONMENT_EXPORTED) ||
-      length > ENVIRONMENT_BYTES_LIMIT || (length && !text)) {
+      (length && !text)) {
     return CALL_BAD_REQUEST;
+  }
+  if (length > ENVIRONMENT_BYTES_LIMIT) {
+    return CALL_LIMIT;
   }
   struct environment_cell *cell = cell_create(name, ENVIRONMENT_TEXT, flags, length);
   if (!cell) {
@@ -372,10 +375,25 @@ const struct environment_cell *environment_snapshot_cell(struct kernel_object *o
   return index < snapshot->info.count ? snapshot->cells[index] : NULL;
 }
 
-const char *environment_cell_name(const struct environment_cell *cell) { return cell->name; }
-uint64_t environment_cell_kind(const struct environment_cell *cell) { return cell->kind; }
-uint64_t environment_cell_flags(const struct environment_cell *cell) { return cell->flags; }
-uint64_t environment_cell_identity(const struct environment_cell *cell) { return cell->identity; }
+const char *environment_cell_name(const struct environment_cell *cell)
+{
+  return cell->name;
+}
+
+uint64_t environment_cell_kind(const struct environment_cell *cell)
+{
+  return cell->kind;
+}
+
+uint64_t environment_cell_flags(const struct environment_cell *cell)
+{
+  return cell->flags;
+}
+
+uint64_t environment_cell_identity(const struct environment_cell *cell)
+{
+  return cell->identity;
+}
 
 const char *environment_cell_text(const struct environment_cell *cell, size_t *length)
 {
@@ -555,8 +573,11 @@ static bool text_valid(const char *text, size_t length)
 static enum call_status set_entries(uintptr_t address, size_t count)
 {
   struct environment_set_entry entries[ENVIRONMENT_MUTATIONS_LIMIT];
-  if (!count || count > ENVIRONMENT_MUTATIONS_LIMIT) {
+  if (!count) {
     return CALL_BAD_REQUEST;
+  }
+  if (count > ENVIRONMENT_MUTATIONS_LIMIT) {
+    return CALL_LIMIT;
   }
   if (!copy_from_user(entries, address, count * sizeof(entries[0]))) {
     return CALL_BAD_BUFFER;
@@ -568,10 +589,12 @@ static enum call_status set_entries(uintptr_t address, size_t count)
         (entry->set_flags != 0 && entry->set_flags != ENVIRONMENT_SET_NO_REPLACE &&
         entry->set_flags != ENVIRONMENT_SET_REQUIRE_ABSENT) ||
         (entry->kind != ENVIRONMENT_CAP && entry->kind != ENVIRONMENT_TEXT) ||
-        entry->text_length > ENVIRONMENT_BYTES_LIMIT ||
         (entry->kind == ENVIRONMENT_CAP && (entry->text_address || entry->text_length)) ||
         (entry->kind == ENVIRONMENT_TEXT && (entry->handle || entry->rights || entry->transport))) {
       return CALL_BAD_REQUEST;
+    }
+    if (entry->text_length > ENVIRONMENT_BYTES_LIMIT) {
+      return CALL_LIMIT;
     }
     for (size_t j = 0; j < i; ++j) {
       if (names_equal(entry->name, entries[j].name)) {
@@ -636,8 +659,11 @@ static enum call_status set_entries(uintptr_t address, size_t count)
 static enum call_status unset_entries(uintptr_t address, size_t count)
 {
   struct environment_unset_entry entries[ENVIRONMENT_MUTATIONS_LIMIT];
-  if (!count || count > ENVIRONMENT_MUTATIONS_LIMIT) {
+  if (!count) {
     return CALL_BAD_REQUEST;
+  }
+  if (count > ENVIRONMENT_MUTATIONS_LIMIT) {
+    return CALL_LIMIT;
   }
   if (!copy_from_user(entries, address, count * sizeof(entries[0]))) {
     return CALL_BAD_BUFFER;
