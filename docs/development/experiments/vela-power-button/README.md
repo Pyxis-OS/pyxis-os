@@ -1,12 +1,12 @@
 # Vela power-button scope — assigned 2026-10-14
 
-Scope checkpoint; no implementation. The owner reported Linux's control-method
+Implementation authorized; event-route default accepted 2026-10-14. The owner reported Linux's control-method
 power button `PNP0C0C` (`PWRB`) and Intel HID `INTC10CC` 5-button array. These are
 enumeration facts, not proof of which event route carries this machine's press.
 This task follows [NVMe compatibility](../nvme-task1/README.md#vela-nvme-20-scope--assigned-2026-10-14)
 and remains a separate PR. Current control: main `0068e4d2`.
 
-## Proposed bounded handling
+## Bounded handling
 
 - Discover present matching devices through uACPI, register worker-owned
   device Notify handlers, and retain their contexts for the namespace lifetime.
@@ -30,24 +30,19 @@ and remains a separate PR. Current control: main `0068e4d2`.
 - Keep all AML, discovery, handlers and method calls on the existing BSP ACPI
   worker. Do not run AML in interrupt entry or bypass ACPI mapping/PCI rules.
 
-## Owner decision — pending
+## Owner decision — accepted 2026-10-14
 
-**Event-route boundary. Recommended: existing event sources plus only a
-firmware-proven additional power-button GPE.** Keep the supported EC route;
-use `_PRW` only as a candidate, then require firmware AML evidence that the
-candidate carries the runtime press before selectively enabling its existing
-handler with `uacpi_enable_gpe()`. If the route cannot be established, report
-that native delivery remains unqualified; never guess a GPE number.
-
-Alternative: finish general runtime-GPE initialization with
-`uacpi_finalize_gpe_initialization()`, enabling every non-wake AML-handled GPE.
-That broadens today's deliberate EC-only rule and may execute unrelated
-firmware event methods. It must not be introduced silently as a button fix.
-Neither choice is accepted. Stop before button code until the owner answers.
+Keep existing event sources and enable only a firmware-proven additional
+runtime power-button GPE. `_PRW` is a candidate, not runtime-route proof:
+require AML evidence that it carries the press, then enable its existing
+handler with `uacpi_enable_gpe()`. Never guess a GPE number and report
+**unqualified** when the route cannot be established. Do not call general
+runtime-GPE finalization. No Vela AML route has yet been provided, so this
+implementation must leave all additional GPEs disabled.
 
 ## Qualification and missing evidence
 
-After acceptance, first capture the unchanged fixed-event QEMU baseline;
+First capture the unchanged fixed-event QEMU baseline;
 repeat the normal QEMU power-button and clean-shutdown checks after the change,
 with GDB inspection of registrations and queued work. Stock QEMU does not model
 vela's Intel HID interface or prove its AML route. No new test framework,
