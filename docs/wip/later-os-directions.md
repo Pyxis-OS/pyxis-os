@@ -33,6 +33,12 @@ rules worth keeping:
 This is build-product reuse, not a cross-repository dispatch system, which remains
 a separate owner-managed integration.
 
+Upgrading the system itself through the package manager, without booting the
+installer (owner idea, 2026-10-14). Today [Update](../userland/system-updates.md)
+runs from the installer; installed program revisions already sit side by side, so a
+new revision could be staged from the running system and activated at the next
+boot, keeping the previous one for rollback.
+
 ## Execution lifecycle
 
 The implemented [init handoff](../userland/init.md) launches a successor and exits. Real
