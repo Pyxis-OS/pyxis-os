@@ -198,6 +198,14 @@ frame is unavailable; this ended the serialization measured in 7a (lock wait abo
 and heap growth take the lock once per frame. Revisit if a workload shows PMM lock waiting again; batching frames per call is the
 next step.
 
+## Extended external interrupt destinations
+
+Local x2APIC IDs/IPIs are 32-bit, but IO-APIC and MSI/MSI-X physical targets are
+limited to 255 and fail explicitly above it. No interrupt remapping is supplied;
+platforms needing extended external destinations cannot use these routes.
+Revisit with native hardware requiring interrupt remapping; the dense-CPU scratch
+window remains separately limited to 256 CPUs. See [SMP](kernel/smp.md#local-apic-and-external-destinations).
+
 ## Scratch-slot false sharing
 
 Each CPU's two scratch slots are adjacent PTEs, so the slots of CPUs 0–3, 4–7 and so on share a 64-byte cache line of the scratch
@@ -206,7 +214,7 @@ concurrent page clients each took about 1.9 times as long as one alone (1.4 time
 line, [record](development/experiments/smp-task7-pmm/README.md#remaining-concurrency-cost-scratch-slot-false-sharing)). Natively
 the cost is small: two clients took 1.15–1.25 times and eight up to 1.5 times ([task 8](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)).
 
-Options: spread the slots one line per CPU (an 8 MiB scratch window instead of 2 MiB for all 256 xAPIC IDs, moving the APIC, I/O APIC
+Options: spread the slots one line per CPU (an 8 MiB scratch window instead of 2 MiB for 256 dense CPU indices, moving the APIC, I/O APIC
 and HPET mappings), or walk the active address space through the recursive mapping, which removes most slot use. The owner prefers
 the recursive walk (2026-10-06) as a later optimization; frame zeroing would still need a slot or a change to the
 "zeroed before mapping" rule. Copy-on-write zero pages were set aside. After topology-aware placement (#451) native page batches
