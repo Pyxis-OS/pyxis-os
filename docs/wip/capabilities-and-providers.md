@@ -15,8 +15,8 @@ resolved**; independent tracks such as drivers, storage and kernel work continue
 1. **Resources are named by URIs and served by providers.** Parsing, TLS, SQL and
    Git stay in userspace providers; the kernel routes, carries IPC and enforces
    capabilities.
-2. **A URI spelling only routes.** It selects a provider in the caller's
-   namespace. What the caller can then do comes from the typed capability the
+2. **A URI spelling only routes.** It selects an entry in the caller's
+   environment. What the caller can then do comes from the typed capability the
    provider issues, never from the text of the name.
 3. **Programs depend on protocols, not on providers.** The launcher decides who
    serves each resource; a program cannot tell, and does not need to.
@@ -69,8 +69,8 @@ The shell and libc decide what a resource is by matching its URI text:
 
 That contradicts principles 2 and 3 in both directions: an alias or another
 request/reply provider (an `api://` name for an HTTP service, an object store)
-gets plain-file behaviour, and a namespace serving `https://` from something
-else is still treated as HTTP. Each task took the narrowest correct path for its
+gets plain-file behaviour, and an environment whose `https` entry is served by
+something else is still treated as HTTP. Each task took the narrowest correct path for its
 own contract; the model was never checked against the founding intent.
 
 ## Typed capabilities (decided)
@@ -95,12 +95,12 @@ mean the same thing whatever they act on; each capability defines what they do.
 There is no separate endpoint mechanism.
 
 - **One open.** `open(target, intent, deadline)` takes a target that is either a
-  URI, resolved through the caller's namespace to a provider, or a capability
+  URI, resolved through the caller's environment to a provider, or a capability
   the caller already holds. The intent is read, write or both, with file-style
   create, truncate and append, which a target may refuse. The result is
   whatever capability the target issues.
 - **Names and held capabilities differ only in reach.** A URI is resolved
-  through the caller's namespace binding, which may reach anything its provider
+  through the caller's environment entry, which may reach anything its provider
   serves. A held capability reaches only what it was issued for, so handing a
   program one prepared request delegates calling that one service.
 - **Each target defines its operations:**
@@ -251,6 +251,75 @@ returning a table; and a native `describe` command in the shell, chosen over
   redirection targets; a bare word is always a path. The shell has no
   assignment, expansion or substitution today, so all of this is new.
 
+## One environment (decided)
+
+**Every name a process has is an entry in one table, its environment, and every
+entry holds a capability.** Today six channels carry names into a process:
+standard streams, named startup resources, scheme roots, the namespace grant,
+bundle grants and string environment variables, each with its own rules and
+checks against the others. They become one.
+
+| Entry | Holds | Used as |
+|---|---|---|
+| `stdin`, `stdout`, `stderr` | streams, pipes, files | libc descriptors 0, 1 and 2 |
+| `home`, `boot`, `tmp`, `bin` | directories | `home://notes.txt` |
+| `https`, `text`, `json+https` | service slots | `https://ci.example/jobs` |
+| `display`, `clock`, `audio` | devices | resolved by libpyxis |
+| `TERM`, `job`, `api` | values, replies, prepared requests | `$TERM`, `$job` |
+
+- **`name://rest` and `$name` refer to the same entry.** `name://rest` looks up
+  `name` and opens `rest` on it, so the spelling only routes. `cat $job` passes
+  the child `job://` together with that entry. The interim `@name` table and the
+  earlier `env://` idea go away.
+- **Children receive exactly what is exported.** Launch passes the exported
+  entries and nothing else, which is the grant list; there is no map that
+  exposes every name to whoever can look one up.
+- **Services sit behind re-targetable slots.** Starting a service outputs a slot
+  capability: `https=$(service start httpfs)`. The slot's manager (the
+  supervisor or session that started it) can point it at a restarted provider,
+  and running programs reach the new one on their next open, as a stable socket
+  path does on Linux. Pointing a slot at nothing makes later opens fail like a
+  missing file. Kernel whole-map namespaces retire in favour of these slots.
+- **Shadowing is allowed.** `https=$(service start mock-http); export https;
+  ./client` runs a program against a different provider, unchanged. That is
+  interchangeable providers in shell form; like overriding `PATH`, it is local
+  unless exported. No names are protected.
+
+### Inversion of control
+
+The model is dependency injection in operating-system form: the environment is
+the container's scope, the launcher (shell, session or supervisor) is the
+container, and a bundle manifest declares the program's dependencies like a
+constructor signature. A program resolves what it needs by name and never by
+ambient default. When libc starts, it asks for whatever backs `stdin`, `stdout`
+and `stderr`; whether the shell bound a terminal, a pipe,
+`2> home://err.log` or a copy of `stdout` for `2>&1`, libc cannot tell. The
+same holds for `clock`, `display` or `https`.
+
+**Absent dependencies:**
+
+- A **required** bundle dependency that cannot be satisfied fails at launch,
+  with a message naming the missing entry.
+- An **optional** dependency may be absent, for example a microphone or camera
+  the user did not grant, or a device that does not exist. The program checks
+  for it and decides what to do, such as disabling a feature. Resolving it
+  reports *not found* (no such device) or *denied* (not granted), using the
+  facet outcome classes.
+- Anything else, including an unbound stream or a name a plain program looks
+  up, is valid until used and then fails like a missing file, as an absent
+  stream does today.
+
+Consequences for the remaining questions:
+
+- A **configuration document** names capabilities by resolving entries in its
+  own environment, so it can hand out only what it holds.
+- **Revocation** is mostly a slot question: a manager points the slot at
+  nothing. Revoking a capability that was handed over directly remains open.
+
+Costs: the startup record (64 KiB budget today) and the 64-binding namespace
+limit become one general table whose limits need revisiting, and every URI open
+does one table lookup first.
+
 ## Variables and the environment
 
 - **Every variable holds a capability (decided).** There are no separate string
@@ -265,15 +334,14 @@ returning a table; and a native `describe` command in the shell, chosen over
 - **Retention (decided).** Bound values and re-readable replies use a bounded
   backing policy like today's private RAM staging, with explicit opt-in for
   large values.
-- **Expansion.** `cat $job` passes the child a name it can open, such as
-  `env://job`, plus a grant of that entry, so every program that opens files can
-  use it. The interim `@name` table goes away.
+- **Expansion.** `cat $job` passes the child `job://` with that entry (see One
+  environment), so every program that opens files can use it.
 - **Cheap text values.** A text value only has to behave as a read-only
   capability; it can live as an immutable inline value (for example in the
   startup record) rather than as a kernel object per variable.
 - **Secrets.** A capability to use a secret is not the secret; credential bytes
   stay out of argv, environment text, history and logs.
-- Configuration documents (session and space Lua) set variables too, so a user
+- Configuration documents (session and space Lua) set entries too, so a user
   directory authorization or a credential-service grant can travel through a
   session.
 
@@ -317,8 +385,8 @@ rm $api                                     # DELETE on the same URL
   ignore them read bytes.
 - **Ports keep working.** Failures arrive as ordinary `errno` values; `getenv`
   and `setenv` read and write text-content variables as strings, and a non-text
-  capability is not presented as a string. Expanded names such as `env://job`
-  open like any other path.
+  capability is not presented as a string. Expanded names such as `job://` open
+  like any other path.
 
 ## Interchangeable providers
 
@@ -390,7 +458,7 @@ The first experiment is read-only; autosave must never commit a database change.
 ## Git scheme
 
 Lowest priority. `git://pyxis` could name a repository registered in the
-caller's namespace, backed by a local repository grant: `ls git://pyxis/branches`,
+caller's environment, backed by a local repository grant: `ls git://pyxis/branches`,
 `cat git://pyxis/commits/main/tree/src/main.c`, `json+git://…` with jq. A branch
 resolves to a commit when a resource opens and stays fixed for consistent
 reads. Names grant no repository authority. It must not drive current
@@ -401,24 +469,21 @@ interfaces.
 A later userspace cache may keep complete, validated responses under a byte
 budget, evicting by LRU and obeying HTTP caching rules (`Cache-Control`,
 validators, `Vary`, authenticated responses; RFC 9111). A local time limit never
-authorizes forbidden reuse, namespace and credentials define the sharing
+authorizes forbidden reuse, the environment and credentials define the sharing
 boundary, and eviction never invalidates storage still held by open handles.
 Partial bodies never satisfy another open.
 
 ## Open questions
 
-1. **Configuration documents** that name a capability they don't hold: who
-   resolves the name, with what authority.
-2. **Revocation:** how a capability is revoked and what a holder sees.
-3. **Launch grants and namespaces:** whether capability variables, launch grants
-   and namespace bindings are one mechanism or three that overlap.
-4. **Retention numbers:** default and maximum backing for bound values.
-5. **Providers:** how a provider learns its client exited and a client sees its
+1. **Revocation of directly held capabilities:** slots cover services; how a
+   capability handed over directly is revoked, and what its holder sees.
+2. **Retention numbers:** default and maximum backing for bound values.
+3. **Providers:** how a provider learns its client exited and a client sees its
    provider gone; whether a client may hold both a provider's and the kernel's
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
-6. **Shared memory:** the capability type, mapping and lifetime rules.
-7. **Provider policy:** caller isolation, credentials and cache reuse for any
+4. **Shared memory:** the capability type, mapping and lifetime rules.
+5. **Provider policy:** caller isolation, credentials and cache reuse for any
    shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
 
