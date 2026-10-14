@@ -275,7 +275,7 @@ bool file_cached_length(struct file_object *file, uint64_t *length)
     return false;
   }
   *length = 0;
-  if (file->backing == FILE_INITRD) {
+  if (file->backing == FILE_INITRD || file->immutable_snapshot) {
     *length = file->size;
     return true;
   }
