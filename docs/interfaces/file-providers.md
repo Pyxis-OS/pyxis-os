@@ -16,10 +16,11 @@ cat text://guide > home://guide.txt
 
 ## Discovery and OPEN
 
-**Task A3 integration in progress.** Typed OPEN and provider-free descriptions
-are implemented on this branch; name routing awaits the single environment
-view. The milestone is not complete or ready to merge until integration and
-qualification finish.
+Exact `name://rest` lookup uses the process's one [environment table](environment.md).
+CAP values retain their masks and lineage; TEXT values become immutable native
+READ FILE snapshots of one captured publication. Directory values walk literal
+components; providers receive only the opaque remainder. Relative paths copy the
+complete held cwd chain. No provider failure falls back to directory creation.
 
 The [generic OPEN ABI](../../include/abi/provider.h) carries READ/WRITE intent,
 CREATE, EXCLUSIVE, TRUNCATE and APPEND flags, an opaque target remainder and an
@@ -58,12 +59,11 @@ provider's operation status. `result.delivery` preserves IPC delivery state even
 on failure; successful copied metadata is in `result.metadata`. No generic call
 retries, rebinds or falls back to HTTP continuation.
 
-`path_resolve()` and `path_open_file()` capture the provider through current
-namespace lookup, pass the opaque URI remainder and use `workspace.deadline_ns`.
-Libc and shell redirects retain their existing FILE adapter. Their URI-spelling
-refusals and provider directory/cwd/mutation limitations remain until the rest of
-A3 replaces them; libc returned-type dispatch and transaction close belong to A4.
-The current namespace/root routing is replaced by A2 environment integration.
+`resource_open_path()` and `resource_open_held()` return the same owned typed
+result. The name helper never falls back to private HTTP continuation. Existing
+`path_resolve()`/`path_open_file()` FILE consumers adapt that result, while native
+filesystem-only callers reject actual exported resources rather than a URI name.
+Libc returned-type dispatch/transaction close belong to A4 and shell syntax to A5.
 
 The [private HTTP continuation ABI](../../include/abi/provider_http_private.h)
 uses operation `PROVIDER_LEGACY_HTTP_OPEN` (3), independently of generic OPEN (1)
@@ -105,7 +105,7 @@ can supply a deadline explicitly; an unresponsive generic provider can block its
 client.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
-Each libc descriptor keeps its own offset. Namespace replacement affects future
+Each libc descriptor keeps its own offset. Environment replacement affects future
 opens; existing grants remain attached to the original provider. OPEN results
 inherit their source service's revocation lineage; ordinary COPY, IPC and launch
 preserve it. Cutting the source therefore denies later use of its opened files,

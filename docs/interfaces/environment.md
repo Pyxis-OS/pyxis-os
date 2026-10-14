@@ -40,6 +40,7 @@ caller buffer and has no endpoint payload limit of 4 KiB. Launch retains its own
 | Operation | Required right | Request and result |
 | --- | --- | --- |
 | `ENVIRONMENT_LOOKUP` | READ | Exact name and caller text buffer; fixed tagged `environment_entry_reply` |
+| `ENVIRONMENT_LOOKUP_FILE` | READ | Same exact lookup; CAP unchanged, TEXT as an owned sealed native READ FILE |
 | `ENVIRONMENT_SET` | WRITE | Address/count of `environment_set_entry`; atomic mutation of the complete array |
 | `ENVIRONMENT_UNSET` | WRITE | Address/count of `environment_unset_entry`; atomic conditional removal |
 | `ENVIRONMENT_INFO` | READ | No payload; `environment_info_reply` with generation, count and byte charge |
@@ -71,14 +72,23 @@ failure. A live-table size retry can observe a newer complete value. Complete
 output ranges are validated together under a short memory lease, and a failed CAP
 reply closes only its unreported returned handle generation.
 
+`ENVIRONMENT_LOOKUP_FILE` uses the same lookup request with zero text address and
+capacity. It captures one immutable cell before leaving the table guard. CAP
+entries retain their original authority and lineage; TEXT entries return a native
+READ-only FILE containing exactly the counted bytes, excluding NUL. Empty text
+is an empty FILE. Allocation and copying run on the BSP outside the guard, with
+the captured cell retained across waits; no second lookup can change the value.
+The reply keeps its CAP/TEXT tag and publication metadata, with an owned handle
+in either case. Admission/allocation failure publishes no handle.
+
 ## Snapshots and capture ownership
 
 SNAPSHOT captures exported entries by default. `ENVIRONMENT_SNAPSHOT_INCLUDE_PRIVATE`
 adds the caller's own private values; `ENVIRONMENT_SNAPSHOT_TEXT_ONLY` excludes all
 capability cells. These flags can be combined. The returned handle has
-`PROTOCOL_ENVIRONMENT_SNAPSHOT` and READ authority. It supports LOOKUP, INFO and
+`PROTOCOL_ENVIRONMENT_SNAPSHOT` and READ authority. It supports LOOKUP, LOOKUP_FILE, INFO and
 zero-based `ENVIRONMENT_ENUMERATE`; an index outside the captured count returns
-`CALL_NOT_FOUND`. LOOKUP and INFO also accept the shared `PROTOCOL_ENVIRONMENT`
+`CALL_NOT_FOUND`. LOOKUP, LOOKUP_FILE and INFO also accept the shared `PROTOCOL_ENVIRONMENT`
 request tag. Mutation operations cannot reach a captured table.
 
 A snapshot fixes the selected cells and generation. Replacement or removal does

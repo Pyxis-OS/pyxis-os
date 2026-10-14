@@ -1,3 +1,4 @@
+#include <abi/file.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
