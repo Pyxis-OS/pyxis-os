@@ -52,9 +52,9 @@ root `.pxb` trees into `bin/REVISION`, as
 it claim the ESP partition and write it. Limine is at `EFI/BOOT/BOOTX64.EFI`;
 the original kernel, the rescue boot archive (the live archive without the
 moved program roots and bundle descendants), the configuration and a newline-terminated kernel
-`revision` record are under `boot`. The installed configuration fills the packaged
-template with a three-second timeout and the new disk GUID, and omits the
-installer entry and any global `default_entry`. It has two entries:
+`revision` record are under `boot`. The installer generates its own configuration
+with a three-second timeout and the new disk GUID. Its explicit allowlist contains
+exactly two entries; live-media installer and FAT32 tool entries are never copied:
 `Pyxis OS (Caelum)`, booted on timeout, with
 `init=boot://boot-init.pxe mount.disk=<GUID>`, and `Pyxis OS (rescue)`, which
 adds `boot.default_config=1` to ignore the pool's boot configuration. Boot init

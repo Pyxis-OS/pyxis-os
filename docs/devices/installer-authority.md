@@ -26,10 +26,10 @@ pointer survives the adapter. Views and physical storage remain valid for the ke
 closing a FILE frees its wrapper, not the source bytes.
 
 The [boot manifest](../../boot/initrd.lua) also packages
-`share/installer/BOOTX64.EFI`, `share/installer/limine.conf.template` and Limine's
-license. The template is the source menu configuration, not the generated
-normal-boot command line or menu timeout; it contains separate placeholders
-for both. These assets are available through read-only `boot`.
+`share/installer/BOOTX64.EFI` and Limine's license through read-only `boot`.
+The installer generates the installed menu from an explicit normal/rescue
+allowlist with the selected disk binding and three-second timeout; it never
+imports entries or authority-bearing command lines from the live menu.
 
 `init-install` opens `boot://installer.pxe` and creates the `install` space
 with it as the first process. It delegates only the disk service, the two

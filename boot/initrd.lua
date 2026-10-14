@@ -17,7 +17,6 @@ return function(inputs)
     { file = "assets/ui/volume/README.md", at = "share/licenses/volume-icons/NOTICE" },
     { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" },
     { file = "third_party/limine/BOOTX64.EFI", at = "share/installer/BOOTX64.EFI" },
-    { file = "boot/limine/limine.conf", at = "share/installer/limine.conf.template" },
     { file = "boot/rescue.list", at = "share/installer/rescue.list" },
     { file = "third_party/limine/LICENSE", at = "share/licenses/limine/LICENSE" },
   }
