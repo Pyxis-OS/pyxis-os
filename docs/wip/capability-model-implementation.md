@@ -301,6 +301,28 @@ No new ordinary klog diagnostics are planned.
    Existing unrelated grants returned as reply attachments keep their own
    lineage; returned bytes are not revocable.
 
+### Remaining service-slot authority choice
+
+**Stopped before kernel code.** Retaining a target after the last management
+grant disappears implements persistence, but creates no authority from which
+a replacement manager can obtain CUT/RETARGET. An ordinary slot holder cannot
+gain management merely by asking; group/space membership is not an object
+management grant. This is a new consequence of the accepted service-slot
+exception, not a request to reconsider its lifetime rule.
+
+**Proposed default:** service-slot creation also returns an explicit recovery
+capability to its creator. It may be delegated to a supervisor and authorizes
+issuing a fresh controller for that same slot, without counting as an active
+CUT/RETARGET controller itself. It never restores a cut slot, increases the
+slot's authority ceiling or grants recovery to ordinary holders. Revocable
+copies have no recovery capability. **Alternative:** defer takeover; retain
+the target for holders, but losing all management grants permanently orphans
+management in task 1. No implicit takeover authority is implemented.
+
+Accepted scope and this proposal are also recorded in the
+[forwarder interface note](../interfaces/forwarders.md); the ABI and kernel
+implementation remain pending this authority choice.
+
 ### Task 2 coordination
 
 Beta's required lookup contract is confirmed: each name yields a retained
