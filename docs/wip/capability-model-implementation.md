@@ -41,11 +41,16 @@ task that owns the area is delivered.
 
 The [native baseline run sheet](../development/experiments/capability-model-baseline.md)
 uses fresh main `09a51b9a` and existing tools. The owner accepted its boundaries
-and hands-free Remote method on 2026-10-14; Luna builds; the orchestrator stages and runs the host runner from horse. Two native timed/pipe cohorts on `09a51b9a` are recorded; the first is
-primary, the second corroboration. One startup inspection observed 8,192 bytes;
-three matched inspection boots remain **pending**. The older `3b714754` pilot is
-separate. Task 1's merge gate remains open. No implementation checkbox is completed
-by this scope note.
+and hands-free Remote method on 2026-10-14; Luna builds; the orchestrator runs
+from horse. **Native baseline gate satisfied, 2026-10-14**: complete record
+`/shared/present/capability-baseline/results/A-20261014-124726/` (`DONE`),
+retaining the first complete timed/pipe cohort as primary and the second as
+corroboration. Three matched inspection boots each measured 2 fully backed
+startup pages, **8,192 bytes**, for `boot://session.pxe` in `development`.
+The run sheet records exact revisions, configuration, medians/ranges and limits.
+Task 1's baseline merge prerequisite is closed; its implementation qualification
+and review remain separate. Repeats after A and C remain due. No implementation
+checkbox is completed by this scope note.
 
 Merge and qualify A1 → A2 → A3 → A4 → A5, then B6 → B7 → B8, then C9.
 Delta owns A1/A2/C9; beta owns the remaining changes and integration. Dependency
@@ -148,7 +153,7 @@ updates all their SDK/provider callers and documents the ABI in
 A4 owns libc dispatch and transaction close; A5 owns shell syntax. Neither is
 quietly delivered by A3. The two transition defaults below are accepted; task 3
 is assigned for implementation on 2026-10-14. Its PR does not merge before task 1,
-whose merge gate still requires the complete baseline; integration retains the
+whose required baseline gate is now satisfied; integration retains the
 A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choices.
 
 ### Scope decisions
@@ -158,7 +163,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
    checkpoint-observed startup allocation of an identified live process.
    The gate and after-A/after-C repeats are hands-free in the stock Remote space
    via beacon/listen `t14`; debug inspection is driven from horse. The complete
-   native gate remains pending; the pilot does not close task 1's merge gate.
+   native gate is satisfied by the completed record above; the pilot is separate.
 2. **Non-blocking exported describe — accepted 2026-10-14.** The issuer
    publishes a bounded description stored with its exported object; describe
    reads the latest published snapshot without calling the provider. Type,
